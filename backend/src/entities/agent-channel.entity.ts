@@ -41,6 +41,10 @@ export enum ChannelType {
   WHATSAPP = 'whatsapp',
   WHATSAPP_CLOUD = 'whatsapp_cloud',
   SMS = 'sms',
+  /** iMessage through the Sendblue relay. */
+  IMESSAGE_SENDBLUE = 'imessage_sendblue',
+  /** iMessage through the LoopMessage relay. */
+  IMESSAGE_LOOPMESSAGE = 'imessage_loopmessage',
   MICROSOFT_TEAMS = 'microsoft_teams',
   GOOGLE_CHAT = 'google_chat',
   EMAIL = 'email',
@@ -58,6 +62,8 @@ export const MESSAGING_CHANNEL_TYPES: readonly ChannelType[] = Object.freeze([
   ChannelType.WHATSAPP,
   ChannelType.WHATSAPP_CLOUD,
   ChannelType.SMS,
+  ChannelType.IMESSAGE_SENDBLUE,
+  ChannelType.IMESSAGE_LOOPMESSAGE,
   ChannelType.MICROSOFT_TEAMS,
   ChannelType.GOOGLE_CHAT,
   ChannelType.EMAIL,
@@ -105,6 +111,11 @@ export interface ChannelBranding {
   primaryColor?: string;
   logoUrl?: string | null;
   iconUrl?: string | null;
+  /**
+   * The app icon uploaded on the branding page: a PNG in this
+   * organization's files. Desktop builds use it before iconUrl.
+   */
+  iconFileId?: string | null;
   greeting?: string;
   theme?: 'dark' | 'light' | 'auto';
   suggestedPrompts?: string[];

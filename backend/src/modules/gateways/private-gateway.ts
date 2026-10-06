@@ -20,8 +20,6 @@ export const PRIVATE_CAPABLE_GATEWAY_TYPES: ReadonlySet<GatewayType> = new Set([
   GatewayType.UTCP,
   GatewayType.SKILLS,
   GatewayType.A2A,
-  GatewayType.ACP,
-  GatewayType.OPENAI_CHAT,
 ]);
 
 interface GatewayVisibilityLike {

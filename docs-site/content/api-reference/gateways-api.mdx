@@ -1,6 +1,6 @@
 # Gateways API
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+This page is for developers who want to manage gateways from their own code. A gateway is a published set of tools with its own address and keys, which AI assistants and coding tools connect to. For example, a setup script can create a gateway for a new team and hand them its key. In the app, gateways live under **Gateways**; see [Gateways](/gateways).
 
 ![Gateway detail in the UI](/screenshots/gateway-detail.png)
 
@@ -11,7 +11,7 @@ REST API reference for managing gateways, tool assignments, and authentication.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/gateways` | List all gateways |
+| `GET` | `/gateways` | List gateways. `?kind=tool` returns the MCP, UTCP and Skills gateways, which is what the Gateways page lists; `?kind=agent` returns the ones an agent's channels stood up |
 | `POST` | `/gateways` | Create a gateway |
 | `GET` | `/gateways/:id` | Get gateway by ID |
 | `PATCH` | `/gateways/:id` | Update a gateway |
@@ -27,7 +27,7 @@ REST API reference for managing gateways, tool assignments, and authentication.
 | `GET` | `/gateways/:id/auth/api-keys` | List API keys |
 | `DELETE` | `/gateways/:id/auth/api-keys/:keyId` | Revoke API key |
 
-## Create a Gateway
+## Create a gateway
 
 ```bash
 curl -X POST https://api.almyty.com/gateways \
@@ -37,7 +37,8 @@ curl -X POST https://api.almyty.com/gateways \
     "name": "Production MCP",
     "type": "mcp",
     "endpoint": "/prod-tools",
-    "description": "Production tool gateway"
+    "description": "Production tool gateway",
+    "configuration": { "transport": "http" }
   }'
 ```
 
@@ -49,7 +50,7 @@ curl -X POST https://api.almyty.com/gateways \
 | `type` | string | Yes | `mcp`, `utcp` or `skills`: the one protocol the gateway serves. A web chat, website widget, messaging channel or A2A endpoint is a channel of an agent, and is refused here (`CHANNEL_GATEWAY_NEEDS_AGENT`) |
 | `endpoint` | string | Yes | URL path (unique within org) |
 | `description` | string | No | Description |
-| `configuration` | object | No | Type-specific config |
+| `configuration` | object | Yes | Type-specific config; `{}` takes the defaults. MCP: `{ "transport": "http" }` (`http`, `sse` or `websocket`) |
 
 ### Response
 
@@ -68,7 +69,7 @@ curl -X POST https://api.almyty.com/gateways \
 }
 ```
 
-## Bulk Assign Tools
+## Bulk assign tools
 
 ```bash
 curl -X POST https://api.almyty.com/gateways/{id}/tools/bulk \
@@ -79,7 +80,7 @@ curl -X POST https://api.almyty.com/gateways/{id}/tools/bulk \
   }'
 ```
 
-## Add Authentication
+## Add authentication
 
 ```bash
 curl -X POST https://api.almyty.com/gateways/{id}/auth \
@@ -98,7 +99,7 @@ Auth types: `none`, `api_key`, `bearer_token`, `basic_auth`, `jwt`, `oauth2`.
 
 See [Gateway Authentication](/gateways/authentication) for detailed docs on each type.
 
-## Generate API Key
+## Generate API key
 
 ```bash
 curl -X POST https://api.almyty.com/gateways/{id}/auth/api-keys \
@@ -126,13 +127,14 @@ Response (key shown once):
 }
 ```
 
-## Gateway Endpoint URLs
+## Gateway endpoint URLs
 
 After creation, the gateway is accessible at:
 
 | Type | URL |
 |------|-----|
 | MCP | `https://api.almyty.com/{org-slug}{endpoint}` |
-| A2A | `https://api.almyty.com/{org-slug}{endpoint}` |
 | UTCP | `https://api.almyty.com/{org-slug}{endpoint}` |
 | Skills | Via `npx @almyty/skills install @{org-slug}{endpoint}` |
+
+An agent's A2A channel answers at the same shape of URL, on the gateway its channel publishes.

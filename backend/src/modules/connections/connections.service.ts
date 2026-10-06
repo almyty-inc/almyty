@@ -19,6 +19,7 @@ import { Organization } from '../../entities/organization.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { generatePkcePair } from '../credentials/oauth2.service';
+import { McpOAuthClientService } from './mcp-oauth/mcp-oauth-client.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import {
   CONNECT_STATE_STORE,
@@ -56,6 +57,8 @@ import {
 export interface ConnectBody {
   method?: ConnectMethodType;
   owner?: ConnectionOwner;
+  /** The team, when owner is 'team'. */
+  teamId?: string;
   mode?: 'browser' | 'headless';
   input?: Record<string, unknown>;
   name?: string;
@@ -93,7 +96,7 @@ export function defaultAllowUserScopedConnections(plan: string | null | undefine
   return !plan || plan === 'free' || plan === 'personal';
 }
 
-const OAUTH_SECRET_KEYS = ['accessToken', 'refreshToken', 'apiKey'];
+const OAUTH_SECRET_KEYS = ['accessToken', 'refreshToken', 'apiKey', 'clientSecret'];
 
 /**
  * Connect, validate, rotate and disconnect. A connection is a Credential
@@ -121,6 +124,8 @@ export class ConnectionsService {
     @Optional() private readonly grants?: GrantsService,
     @Optional() private readonly rotation?: RotationService,
     @Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK) private readonly governance?: ConnectionsGovernanceHook,
+    // Signing in to MCP servers (connections/mcp-oauth). Optional for the positional spec harnesses.
+    @Optional() private readonly mcpOAuth?: McpOAuthClientService,
   ) {
     this.stateStore = stateStore ?? stateStoreFactory.create();
   }
@@ -159,35 +164,42 @@ export class ConnectionsService {
     const connector = await this.catalog.require(organizationId, connectorKey);
     const method = this.pickMethod(connector, body.method);
     const owner: ConnectionOwner = body.owner ?? 'org';
-    await this.assertCanCreate(principal, organizationId, owner);
+    const teamId = owner === 'team' ? body.teamId ?? null : null;
+    await this.assertCanCreate(principal, organizationId, owner, teamId);
     await this.governance?.beforeConnect(organizationId, connector.key, heldBy(owner));
     // Personal and private both belong to the caller; private also takes
-    // the row out of everyone else's reach (admins included).
-    const ownerUserId = owner === 'org' ? null : principal.id;
-    const visibility = owner === 'private' ? 'private' : 'org';
+    // the row out of everyone else's reach (admins included). A team row
+    // is the organization's, for that team alone.
+    const ownerUserId = owner === 'org' || owner === 'team' ? null : principal.id;
+    const visibility = owner === 'private' ? 'private' : owner === 'team' ? 'team' : 'org';
 
     if (REDIRECT_METHODS.includes(method.type)) {
       const plainInput = this.plainInput(method, body.input);
       return this.startRedirect({
-        connector, method, organizationId, userId: principal.id, ownerUserId, visibility,
-        mode: body.mode ?? 'browser', input: plainInput, rotateConnectionId: null, requestBase,
+        connector, method, organizationId, userId: principal.id, ownerUserId, visibility, teamId,
+        mode: body.mode ?? 'browser', input: plainInput, rotateConnectionId: null, requestBase, secretInput: body.input,
       });
     }
 
     const input = this.checkedInput(method, body.input);
     const view = await this.finalize({
-      connector, method, organizationId, userId: principal.id, ownerUserId, visibility,
+      connector, method, organizationId, userId: principal.id, ownerUserId, visibility, teamId,
       config: input, name: body.name, action: AuditAction.CONNECTION_CONNECT,
     });
     return { pending: false, connection: view };
   }
 
-  /** Headless / CLI completion: the user pastes the code the provider printed. */
-  async complete(state: string, code: string): Promise<ConnectionView> {
+  /**
+   * Headless / CLI completion: the user pastes the code the provider printed.
+   * `iss` is the authorization response's issuer (RFC 9207), when the service sent one.
+   */
+  async complete(state: string, code: string, iss?: string): Promise<ConnectionView> {
     if (!state || !code) throw new BadRequestException({ code: 'CONNECT_STATE_INVALID', message: 'state and code are required' });
     const pending = await this.stateStore.take(state);
     if (!pending) throw new UnauthorizedException({ code: 'CONNECT_STATE_INVALID', message: 'unknown or expired connect state; start the connect again' });
 
+    // An MCP server sign-in: endpoints discovered, iss checked (RFC 9207).
+    if (pending.mcpOAuth) return this.completeMcpSignIn(pending, code, iss);
     const connector = await this.catalog.require(pending.organizationId, pending.connectorKey);
     const method = this.pickMethod(connector, pending.methodType as ConnectMethodType);
     const oauth = method.oauth!;
@@ -246,18 +258,18 @@ export class ConnectionsService {
     }
     return this.finalize({
       connector, method, organizationId: pending.organizationId, userId: pending.userId, ownerUserId: pending.ownerUserId,
-      config, existing, expiresAt, scopesGranted, visibility: pending.visibility,
+      config, existing, expiresAt, scopesGranted, visibility: pending.visibility, teamId: pending.teamId ?? null,
       action: pending.rotateConnectionId ? AuditAction.CONNECTION_ROTATE : AuditAction.CONNECTION_CONNECT,
     });
   }
 
   /** Browser completion: the provider redirected here with code and state. Same exchange as `complete`. */
-  async handleCallback(query: { code?: string; state?: string; error?: string; error_description?: string }): Promise<ConnectionView> {
+  async handleCallback(query: { code?: string; state?: string; error?: string; error_description?: string; iss?: string }): Promise<ConnectionView> {
     if (query.error) {
       if (query.state) await this.stateStore.take(query.state);
       throw new BadRequestException({ code: 'CONNECT_DENIED', message: query.error_description ?? query.error });
     }
-    return this.complete(String(query.state ?? ''), String(query.code ?? ''));
+    return this.complete(String(query.state ?? ''), String(query.code ?? ''), typeof query.iss === 'string' ? query.iss : undefined);
   }
 
   // ------------------------------------------------------------------
@@ -315,9 +327,24 @@ export class ConnectionsService {
     await this.governance?.beforeConnect(organizationId, connector.key, row.ownerUserId ? 'user' : 'org');
 
     if (REDIRECT_METHODS.includes(method.type)) {
+      // Signing in to an MCP server again needs its URL (and a client id
+      // entered by hand), which the connection already has.
+      let input = this.plainInput(method, body.input);
+      let secretInput: Record<string, unknown> | undefined;
+      if (method.oauth?.discover === 'mcp') {
+        const current = await this.decryptConfig(row);
+        const handEntered = current.oauthRegistration === 'pre_registered';
+        input = {
+          serverUrl: current.serverUrl,
+          ...(handEntered ? { clientId: current.oauthClientId } : {}),
+          ...(current.oauthScope ? { scope: current.oauthScope } : {}),
+          ...input,
+        };
+        if (handEntered && current.clientSecret) secretInput = { clientSecret: current.clientSecret };
+      }
       return this.startRedirect({
         connector, method, organizationId, userId: principal.id, ownerUserId: row.ownerUserId,
-        mode: body.mode ?? 'browser', input: this.plainInput(method, body.input), rotateConnectionId: row.id, requestBase,
+        mode: body.mode ?? 'browser', input, rotateConnectionId: row.id, requestBase, secretInput,
       });
     }
     // Gate 5: providers with a key-provisioning API rotate in place, no
@@ -388,6 +415,64 @@ export class ConnectionsService {
     }
   }
 
+  /**
+   * Change who can use a credential after it was added, with the rules
+   * a provider connection's scope change has: the caller must be able to
+   * manage the credential as it is (the read rule first, so a hidden one
+   * is not found), and able to make one for the new audience (Everyone
+   * needs connections:manage, One team a member of that team or
+   * connections:manage, Only you the organization's allowance for personal
+   * keys). Only its owner makes an owned credential private. The key a
+   * provider connection keeps for itself follows that connection, so it is
+   * changed there. `assertConsumersCovered` is the save-time check that
+   * whatever uses the credential is still inside its new audience.
+   */
+  async setSharing(
+    principal: ConnectionPrincipal,
+    organizationId: string,
+    id: string,
+    body: { owner: 'org' | 'team' | 'private'; teamId?: string | null },
+    assertConsumersCovered?: (next: Credential) => Promise<void>,
+  ): Promise<ConnectionView> {
+    const row = await this.load(organizationId, id);
+    await this.assertCanManage(principal, row);
+    if ((row.metadata as Record<string, any> | null | undefined)?.managedBy) {
+      throw new BadRequestException({ code: 'CONNECTION_MANAGED', message: 'this key belongs to a connection; change who can use it on that connection' });
+    }
+    const owner = body.owner;
+    if (!['org', 'team', 'private'].includes(owner)) {
+      throw new BadRequestException({ code: 'CONNECTION_OWNER_INVALID', message: 'who can use it is org, team or private' });
+    }
+    const teamId = owner === 'team' ? body.teamId ?? null : null;
+    await this.assertCanCreate(principal, organizationId, owner, teamId);
+    if (owner === 'private' && row.ownerUserId && row.ownerUserId !== principal.id) {
+      throw new ForbiddenException({ code: 'CONNECTION_FORBIDDEN', message: "only its owner can make someone else's credential private" });
+    }
+
+    const before = connectionOwnerOf(row);
+    const next = Object.assign(Object.create(Object.getPrototypeOf(row)), row) as Credential;
+    next.visibility = owner;
+    next.teamId = teamId;
+    next.ownerUserId = owner === 'private' ? principal.id : null;
+    await assertConsumersCovered?.(next);
+
+    row.visibility = next.visibility;
+    row.teamId = next.teamId;
+    row.ownerUserId = next.ownerUserId;
+    const saved = await this.credentials.save(row);
+    this.auditLog.log({
+      organizationId, userId: principal.id, action: AuditAction.CONNECTION_SHARE, resourceType: AuditResource.CONNECTION,
+      resourceId: saved.id, resourceName: saved.name,
+      details: { connectorKey: saved.connectorKey, from: before, to: connectionOwnerOf(saved), teamId: saved.teamId ?? null },
+    });
+    // Everyone and One team are the organization's: members use them
+    // through the default grant (the team gate narrows it to the team), as
+    // when one is added that way.
+    if (owner !== 'private') await this.applyDefaultGrant(saved, principal.id);
+    const connector = await this.catalog.find(organizationId, saved.connectorKey!);
+    return this.view(saved, connector);
+  }
+
   async disconnect(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<{ revoked: boolean; revokeError?: string }> {
     const row = await this.load(organizationId, id);
     await this.assertCanManage(principal, row);
@@ -427,6 +512,12 @@ export class ConnectionsService {
           { userId: actorUserId },
         );
         if (outcome.supported) return { attempted: true, revoked: outcome.revoked, via: 'rotation', error: outcome.error };
+      }
+      // An MCP server sign-in revokes at the authorization server that issued it.
+      if (this.mcpOAuth && typeof secrets.oauthIssuer === 'string') {
+        const outcome = await this.mcpOAuth.revoke(secrets);
+        if (outcome.attempted) return { attempted: true, revoked: outcome.ok, via: 'oauth2', error: outcome.error };
+        return { attempted: false, revoked: false };
       }
       const connector = await this.catalog.find(row.organizationId, row.connectorKey);
       if (connector?.revoke) {
@@ -507,6 +598,7 @@ export class ConnectionsService {
       name: row.name,
       owner: connectionOwnerOf(row),
       ownerUserId: row.ownerUserId ?? null,
+      teamId: row.visibility === 'team' ? row.teamId ?? null : null,
       method: (row.metadata?.connectMethod as ConnectMethodType | undefined) ?? null,
       accountLabel: row.accountLabel ?? null,
       health: { status: row.healthStatus ?? 'unknown', checkedAt: row.healthCheckedAt ?? null, error: row.healthError ?? null },
@@ -584,9 +676,13 @@ export class ConnectionsService {
     }
   }
 
-  private async assertCanCreate(principal: ConnectionPrincipal, organizationId: string, owner: ConnectionOwner): Promise<void> {
+  private async assertCanCreate(principal: ConnectionPrincipal, organizationId: string, owner: ConnectionOwner, teamId?: string | null): Promise<void> {
     if (owner === 'org') {
       this.assertMember(principal, organizationId, CONNECTIONS_MANAGE);
+      return;
+    }
+    if (owner === 'team') {
+      await this.assertCanScopeToTeam(principal, organizationId, teamId);
       return;
     }
     // Personal and private are both a member's own key: the same
@@ -595,6 +691,22 @@ export class ConnectionsService {
     if (!(await this.userScopedAllowed(organizationId))) {
       throw new ForbiddenException({ code: 'USER_CONNECTIONS_DISABLED', message: 'this organization does not allow user-scoped connections; ask an admin to enable allowUserScopedConnections or connect on behalf of the organization' });
     }
+  }
+
+  /**
+   * Who may make a connection for one team: the rule a provider
+   * connection's team scope has (AccessPolicyService.assertCanScopeToTeam).
+   * A member of that team, or whoever manages the organization's
+   * connections, for any active team of this organization. Anyone else
+   * gets the not-found a team that does not exist gets.
+   */
+  private async assertCanScopeToTeam(principal: ConnectionPrincipal, organizationId: string, teamId: string | null | undefined): Promise<void> {
+    if (!teamId) throw new BadRequestException({ code: 'CONNECTION_TEAM_REQUIRED', message: 'pick the team this connection is for' });
+    this.assertMember(principal, organizationId, CONNECTIONS_READ);
+    const who = await this.grantPrincipal(principal, organizationId);
+    if (who.teamIds.includes(teamId)) return;
+    if (principalHasPermission(principal, organizationId, CONNECTIONS_MANAGE) && (await this.grants?.teamInOrganization(teamId, organizationId))) return;
+    throw new NotFoundException({ code: 'TEAM_NOT_FOUND', message: 'team not found' });
   }
 
   private async assertCanManage(principal: ConnectionPrincipal, row: Credential): Promise<void> {
@@ -629,15 +741,107 @@ export class ConnectionsService {
     return row;
   }
 
-  callbackUrl(requestBase?: string): string {
-    const base = (
+  /** The API's public origin: where services send people back, and where the client metadata document is. */
+  apiBase(requestBase?: string): string {
+    return (
       this.configService.get<string>('PUBLIC_API_URL') ||
       this.configService.get<string>('BASE_URL') ||
       this.configService.get<string>('API_BASE_URL') ||
       requestBase ||
       'http://localhost:3000'
     ).replace(/\/$/, '');
-    return `${base}/credentials/oauth/callback`;
+  }
+
+  callbackUrl(requestBase?: string): string {
+    return `${this.apiBase(requestBase)}/credentials/oauth/callback`;
+  }
+
+  /**
+   * Sign in to an MCP server (owner decision 11): the endpoints and who
+   * almyty is there come from the server (connections/mcp-oauth), then the
+   * same PKCE redirect and state as every other sign-in. What the callback
+   * needs -- the token endpoint, the issuer it must come from, the client --
+   * is kept in the state, not in the browser.
+   */
+  private async startMcpSignIn(args: {
+    connector: ConnectorDefinition; method: ConnectMethod; organizationId: string; userId: string; ownerUserId: string | null;
+    mode: 'browser' | 'headless'; input: Record<string, unknown>; rotateConnectionId: string | null; requestBase?: string;
+    visibility?: 'org' | 'team' | 'private';
+    teamId?: string | null;
+    secretInput?: Record<string, unknown>;
+  }): Promise<PendingRedirect> {
+    if (!this.mcpOAuth) throw new BadRequestException({ code: 'CONNECT_METHOD_UNSUPPORTED', message: 'signing in to MCP servers is not available on this API' });
+    const values = { ...args.input, ...(args.secretInput ?? {}) };
+    const serverUrl = typeof values.serverUrl === 'string' ? values.serverUrl.trim() : '';
+    if (!serverUrl) throw new BadRequestException({ code: 'CONNECT_INPUT_INVALID', message: 'serverUrl is required', errors: ['serverUrl is required'] });
+    const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+    const callbackUrl = this.callbackUrl(args.requestBase);
+    const mcpOAuth = await this.mcpOAuth.prepareSignIn({
+      organizationId: args.organizationId,
+      serverUrl,
+      callbackUrl,
+      apiBase: this.apiBase(args.requestBase),
+      frontendUrl: this.configService.get<string>('FRONTEND_URL') ?? null,
+      clientId: text(values.clientId),
+      clientSecret: text(values.clientSecret),
+      scope: text(values.scope),
+    });
+    const pkce = generatePkcePair();
+    const state = newState();
+    const payload: PendingConnect = {
+      organizationId: args.organizationId,
+      userId: args.userId,
+      ownerUserId: args.ownerUserId,
+      visibility: args.visibility ?? 'org',
+      teamId: args.visibility === 'team' ? args.teamId ?? null : null,
+      connectorKey: args.connector.key,
+      methodType: args.method.type,
+      codeVerifier: pkce.codeVerifier,
+      callbackUrl,
+      mode: 'browser',
+      rotateConnectionId: args.rotateConnectionId,
+      input: { serverUrl },
+      mcpOAuth,
+      createdAt: Date.now(),
+    };
+    await this.stateStore.put(state, payload, CONNECT_STATE_TTL_SECONDS);
+    this.logger.log(`MCP sign-in started at ${new URL(mcpOAuth.issuer).host} (${mcpOAuth.registration}) for org ${args.organizationId}${args.rotateConnectionId ? ' (again)' : ''}`);
+    return {
+      pending: true,
+      method: args.method.type,
+      mode: 'browser',
+      authorizeUrl: this.mcpOAuth.authorizeUrl(mcpOAuth, { state, codeChallenge: pkce.codeChallenge, callbackUrl }),
+      state,
+      expiresInSeconds: CONNECT_STATE_TTL_SECONDS,
+      completeWith: 'callback',
+    };
+  }
+
+  /** The code of an MCP sign-in for its tokens, after checking who sent the browser back. */
+  private async completeMcpSignIn(pending: PendingConnect, code: string, iss: string | undefined): Promise<ConnectionView> {
+    if (!this.mcpOAuth || !pending.mcpOAuth || !pending.codeVerifier || !pending.callbackUrl) {
+      throw new UnauthorizedException({ code: 'CONNECT_STATE_INVALID', message: 'this sign-in cannot be finished here; start it again' });
+    }
+    this.mcpOAuth.checkIssuer(pending.mcpOAuth, iss);
+    const tokens = await this.mcpOAuth.exchangeCode(pending.organizationId, pending.mcpOAuth, {
+      code,
+      codeVerifier: pending.codeVerifier,
+      callbackUrl: pending.callbackUrl,
+    });
+    const connector = await this.catalog.require(pending.organizationId, pending.connectorKey);
+    const method = this.pickMethod(connector, pending.methodType as ConnectMethodType);
+    let existing: Credential | undefined;
+    if (pending.rotateConnectionId) {
+      existing = (await this.credentials.findOne({ where: { id: pending.rotateConnectionId, organizationId: pending.organizationId } })) ?? undefined;
+    }
+    return this.finalize({
+      connector, method, organizationId: pending.organizationId, userId: pending.userId, ownerUserId: pending.ownerUserId,
+      config: this.mcpOAuth.connectionConfig(pending.mcpOAuth, tokens),
+      existing, expiresAt: tokens.expiresAt,
+      scopesGranted: (tokens.scope ?? pending.mcpOAuth.scope ?? '').split(/\s+/).filter(Boolean),
+      visibility: pending.visibility, teamId: pending.teamId ?? null,
+      action: pending.rotateConnectionId ? AuditAction.CONNECTION_ROTATE : AuditAction.CONNECTION_CONNECT,
+    });
   }
 
   private platformClient(connectorKey: string): { clientId: string; clientSecret: string } {
@@ -653,9 +857,13 @@ export class ConnectionsService {
   private async startRedirect(args: {
     connector: ConnectorDefinition; method: ConnectMethod; organizationId: string; userId: string; ownerUserId: string | null;
     mode: 'browser' | 'headless'; input: Record<string, unknown>; rotateConnectionId: string | null; requestBase?: string;
-    visibility?: 'org' | 'private';
+    visibility?: 'org' | 'team' | 'private';
+    teamId?: string | null;
+    /** The form's secret values too (an MCP sign-in's client secret); never stored in the state as given. */
+    secretInput?: Record<string, unknown>;
   }): Promise<PendingRedirect> {
     const { connector, method } = args;
+    if (method.oauth?.discover === 'mcp') return this.startMcpSignIn(args);
     const oauth = method.oauth;
     if (!oauth) throw new BadRequestException({ code: 'CONNECT_METHOD_UNSUPPORTED', message: `${connector.key} ${method.type} has no oauth endpoints` });
     const urlCheck = validateUrl(oauth.authorizeUrl);
@@ -694,6 +902,7 @@ export class ConnectionsService {
       userId: args.userId,
       ownerUserId: args.ownerUserId,
       visibility: args.visibility ?? 'org',
+      teamId: args.visibility === 'team' ? args.teamId ?? null : null,
       connectorKey: connector.key,
       methodType: method.type,
       codeVerifier: pkce?.codeVerifier ?? null,
@@ -743,8 +952,9 @@ export class ConnectionsService {
     connector: ConnectorDefinition; method: ConnectMethod; organizationId: string; userId: string; ownerUserId: string | null;
     config: Record<string, unknown>; existing?: Credential; name?: string; expiresAt?: Date | null; scopesGranted?: string[];
     action: AuditAction;
-    /** Only read on create: 'private' makes the new row its owner's alone. */
-    visibility?: 'org' | 'private';
+    /** Only read on create: 'private' makes the new row its owner's alone, 'team' its team's (teamId). */
+    visibility?: 'org' | 'team' | 'private';
+    teamId?: string | null;
   }): Promise<ConnectionView> {
     const { connector, method, organizationId } = args;
     const result = await this.validation.validate(connector, args.config as Record<string, any>, { organizationId });
@@ -768,14 +978,21 @@ export class ConnectionsService {
     row.name = args.name ?? row.name ?? `${connector.displayName}${label ? ` (${label})` : ''}`;
     if (!args.existing) row.description = `${connector.displayName} connection via ${method.type}`;
     // The tier is chosen once, at connect; a rotation keeps it. A private
-    // row always carries its owner (fail closed: no owner, no private row).
+    // row always carries its owner (fail closed: no owner, no private row),
+    // a team row its team and no owner (it is the organization's, for them).
     if (args.existing) {
       row.visibility = row.visibility ?? 'org';
     } else if (args.visibility === 'private') {
       if (!args.ownerUserId) throw new ForbiddenException({ code: 'CONNECTION_OWNER_REQUIRED', message: 'a private connection needs an owner' });
       row.visibility = 'private';
+      row.teamId = null;
+    } else if (args.visibility === 'team') {
+      if (!args.teamId || args.ownerUserId) throw new BadRequestException({ code: 'CONNECTION_TEAM_REQUIRED', message: 'a team connection needs its team' });
+      row.visibility = 'team';
+      row.teamId = args.teamId;
     } else {
       row.visibility = 'org';
+      row.teamId = null;
     }
     row.isActive = true;
     row.accountLabel = label;

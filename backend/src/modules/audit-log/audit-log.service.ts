@@ -4,6 +4,18 @@ import { Repository, In, EntityManager } from 'typeorm';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { User } from '../../entities/user.entity';
 import { AUDIT_STREAM_HOOK, AuditStreamHook } from '../../common/ee-hooks/ee-hooks';
+import { getRequestContext } from '../../common/request-context';
+
+/**
+ * Add the trace context of the request this row is written in (an MCP
+ * client's traceparent, design doc decision 10) as `metadata.trace`, unless
+ * the caller set one. Rows written outside a traced request are unchanged.
+ */
+function withTrace(metadata: Record<string, any> | undefined): Record<string, any> | undefined {
+  const trace = getRequestContext()?.trace;
+  if (!trace || metadata?.trace) return metadata;
+  return { ...(metadata ?? {}), trace };
+}
 
 export interface AuditLogOptions {
   organizationId: string;
@@ -85,7 +97,7 @@ export class AuditLogService {
         status: options.status,
         duration: options.duration,
         cost: options.cost,
-        metadata: options.metadata,
+        metadata: withTrace(options.metadata),
       });
       const saved = await this.auditLogRepository.save(entry);
       this.forwardToStreamHook(saved);
@@ -115,7 +127,7 @@ export class AuditLogService {
       userEmail = user?.email;
     }
     const repository = manager.getRepository(AuditLog);
-    return repository.save(repository.create({ ...options, userEmail }));
+    return repository.save(repository.create({ ...options, userEmail, metadata: withTrace(options.metadata) }));
   }
 
   /** Stream rows written by logInTransaction once their transaction committed. */

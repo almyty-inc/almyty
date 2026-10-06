@@ -1,7 +1,7 @@
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentExecution } from '../../entities/agent-execution.entity';
-import { traceFor } from './strategies/run-trace';
+import { traceFor, traceForRun } from './strategies/run-trace';
 import {
   Controller,
   Optional,
@@ -17,6 +17,7 @@ import {
   HttpStatus,
   HttpException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -28,6 +29,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
+import { CodeModeService } from '../code-mode/code-mode.service';
 
 @Controller('agents')
 @ApiTags('Agents')
@@ -45,6 +47,8 @@ export class AgentRunsController {
     @Optional()
     @InjectRepository(AgentExecution)
     private readonly executions?: Repository<AgentExecution>,
+    // Optional for the same reason: run_code traces (code mode).
+    @Optional() private readonly codeMode?: CodeModeService,
   ) {}
 
   /**
@@ -70,26 +74,25 @@ export class AgentRunsController {
       );
     }
 
-    if (!this.executions) {
-      throw new HttpException(
-        { success: false, message: 'Run traces are not available here', error: 'TRACE_UNAVAILABLE' },
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-
     // Scoped by agent as well as organization: without the agentId any
     // execution in the caller's org would resolve through any agent's URL.
-    const execution = await this.executions.findOne({
-      where: { id: executionId, organizationId, agentId: id },
-    });
-    if (!execution) {
-      throw new HttpException(
-        { success: false, message: 'Run not found', error: 'RUN_NOT_FOUND' },
-        HttpStatus.NOT_FOUND,
-      );
-    }
+    const execution = this.executions
+      ? await this.executions.findOne({ where: { id: executionId, organizationId, agentId: id } })
+      : null;
+    if (execution) return { success: true, data: traceFor(execution) };
 
-    return { success: true, data: traceFor(execution) };
+    // An autonomous run is an agent run, not an execution: its calls are
+    // steps, and each records its routing. Same scoping (org and agent).
+    const run = await this.runtimeService.getRun(executionId, organizationId, id).catch((err) => {
+      if (err instanceof NotFoundException) return null;
+      throw err;
+    });
+    if (run) return { success: true, data: traceForRun(run) };
+
+    throw new HttpException(
+      { success: false, message: 'Run not found', error: 'RUN_NOT_FOUND' },
+      HttpStatus.NOT_FOUND,
+    );
   }
 
   // ── Autonomous Agent Runs ──
@@ -205,6 +208,42 @@ export class AgentRunsController {
         error.status || HttpStatus.NOT_FOUND,
       );
     }
+  }
+
+  /**
+   * The scripts a run ran (code mode): each with its code, logs, return
+   * value, status, CPU time and change set. Access follows the run's agent
+   * (PrivateAgentGuard on :id), and the run must be that agent's.
+   */
+  @Get(':id/runs/:runId/code-executions')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @ApiOperation({ summary: "A run's run_code scripts" })
+  async listCodeExecutions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @Request() req: any,
+  ) {
+    const organizationId = req.user.currentOrganizationId;
+    await this.runtimeService.getRun(runId, organizationId, id);
+    const data = this.codeMode ? await this.codeMode.forRun(runId, organizationId) : [];
+    return { success: true, data };
+  }
+
+  /** One script of a run, with its call tree: the tool executions it made, in order. */
+  @Get(':id/runs/:runId/code-executions/:codeExecutionId')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @ApiOperation({ summary: 'A run_code script and the calls it made' })
+  async getCodeExecution(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @Param('codeExecutionId', ParseUUIDPipe) codeExecutionId: string,
+    @Request() req: any,
+  ) {
+    const organizationId = req.user.currentOrganizationId;
+    await this.runtimeService.getRun(runId, organizationId, id);
+    const found = this.codeMode ? await this.codeMode.withCalls(codeExecutionId, organizationId) : null;
+    if (!found || found.execution.runId !== runId) throw new NotFoundException('Script not found');
+    return { success: true, data: { ...found.execution, calls: found.calls } };
   }
 
   @Get(':id/runs/:runId/stream')

@@ -27,7 +27,7 @@ import { findEffectiveMembership } from '../../common/authorization/membership';
 import { ConnectionsService } from '../connections/connections.service';
 import { ConnectorCatalogService } from '../connections/connector-catalog.service';
 import { CONNECTIONS_MANAGE, CONNECTIONS_READ } from '../connections/connections.permissions';
-import { CompleteConnectDto, ConnectBodyDto, CreateConnectorDto, ListConnectorsQueryDto, RotateBodyDto } from '../connections/dto/connections.dto';
+import { CompleteConnectDto, ConnectBodyDto, CreateConnectorDto, ListConnectorsQueryDto, RotateBodyDto, SharingBodyDto } from '../connections/dto/connections.dto';
 import { ConnectorDefinition } from '../connections/connector.types';
 
 const connectionValidation = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
@@ -236,18 +236,17 @@ export class CredentialsController {
     return { success: true, data, message: data.pending ? 'Replace pending' : 'Key replaced' };
   }
 
-  @Post('credentials/:id/test')
-
+  @Patch('credentials/:id/sharing')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Test a credential connection' })
-  @ApiResponse({ status: 200, description: 'Credential test completed' })
-  async test(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    // Verify the credential exists in the caller's org before reporting.
-    // Without this the endpoint would return success for any UUID,
-    // acting as a membership oracle for other orgs' credential ids.
+  @RequirePermissions(CONNECTIONS_READ)
+  @ApiOperation({ summary: 'Change who can use a credential: everyone (org), one team (team + teamId) or only you (private)' })
+  @UsePipes(connectionValidation)
+  async setSharing(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() body: SharingBodyDto) {
     const organizationId = this.requireOrg(req);
-    await this.credentialsService.findById(id, organizationId, { id: req.user.id });
-    return { success: true, data: { valid: true }, message: 'Credential test passed' };
+    const data = await this.connectionsService().setSharing(req.user, organizationId, id, body, (next) =>
+      this.credentialsService.assertConsumersCovered(next),
+    );
+    return { success: true, data, message: 'Who can use it changed' };
   }
 
   @Get('credentials/:id/usage')

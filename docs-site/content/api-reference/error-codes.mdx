@@ -1,12 +1,12 @@
-# Error Codes
+# Error codes
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+When a program's call to almyty fails, the answer says why in a fixed format: a status number (such as 404 for "not found") and a message. This page lists those answers and what to do about each, for developers handling errors in their own code. For example, a 401 means the key is missing or wrong, so the script should stop and ask for a new one. If you only use the app, you can skip this page; the app shows the same messages in plain words.
 
 
 All almyty API errors follow a consistent format with HTTP status codes
 and structured error responses.
 
-## Error Response Format
+## Error response format
 
 ```json
 {
@@ -24,7 +24,7 @@ and structured error responses.
 | `error` | string | Machine-readable error code |
 | `statusCode` | number | HTTP status code |
 
-## HTTP Status Codes
+## HTTP status codes
 
 ### 400 Bad Request
 
@@ -177,7 +177,7 @@ The backend service is temporarily unavailable.
 
 The service is undergoing maintenance or is overloaded.
 
-## Tool Execution Errors
+## Tool execution errors
 
 Tool executions return errors in a tool-specific format:
 
@@ -198,7 +198,7 @@ Tool executions return errors in a tool-specific format:
 | Sandbox error | JavaScript tool threw an exception |
 | LLM error | LLM provider returned an error |
 
-## Models and Credentials Codes
+## Models and credentials codes
 
 The [Models API](/api-reference/models-api) and [Credentials API](/api-reference/credentials-api) use the same envelope with these codes:
 
@@ -230,7 +230,7 @@ The [Models API](/api-reference/models-api) and [Credentials API](/api-reference
 | `CONNECTION_NOT_GRANTED` | 403 | The run's principal has no way to use this connection; `reason` says which rule refused |
 | `CONNECTION_GRANT_FORBIDDEN`, `GRANT_NOT_FOUND`, `GRANT_PRINCIPAL_NOT_FOUND`, `GRANT_AGENT_NOT_OWNED`, `GRANT_WORKSPACE_NOT_OWNED` | 403, 404, 404, 403, 403 | The caller may not manage grants on this connection; the grant or the principal does not exist; the agent or workspace is not the caller's |
 
-## Handling Errors in Code
+## Handling errors in code
 
 ### JavaScript
 

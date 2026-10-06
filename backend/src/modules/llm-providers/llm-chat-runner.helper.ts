@@ -40,6 +40,7 @@ import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 import { assertModelAllowed } from './allowed-models';
 import { preferredBinding, providerProfile } from './provider-profile';
+import { MessageAttachmentResolver } from './message-attachments.resolver';
 import { type ActingAs, type ExecutionPrincipal, asPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
@@ -62,6 +63,8 @@ export class LlmChatRunnerHelper {
     private readonly defaultModels: DefaultModelResolver,
     @Optional() private readonly router?: ModelRouterService,
     @Optional() private readonly secrets?: LlmProviderSecretsHelper,
+    // Optional for specs that build the runner by hand; the module wires it.
+    @Optional() private readonly attachments?: MessageAttachmentResolver,
   ) {}
 
   /**
@@ -189,6 +192,14 @@ export class LlmChatRunnerHelper {
     });
   }
 
+  /**
+   * The request with the files its messages refer to resolved for this
+   * provider and model (message-attachments.resolver.ts). Shared with the
+   * streaming path, which dispatches without callWithRetries.
+   */
+  async resolveAttachments(organizationId: string | undefined, provider: LlmProvider, request: ChatRequest): Promise<ChatRequest> {
+    return this.attachments ? this.attachments.resolve(organizationId, provider, request) : request;
+  }
   async callWithRetries(
     provider: LlmProvider,
     request: ChatRequest,
@@ -211,6 +222,9 @@ export class LlmChatRunnerHelper {
     }
     // A model the connection's owner unticked is never sent through it.
     assertModelAllowed(provider, request.model);
+    // The files a message refers to, as this model can read them: its own
+    // content parts when its card says it takes them, else their text.
+    request = await this.resolveAttachments(session?.organizationId ?? provider.organizationId, provider, request);
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { useOrganizationRole } from '../use-organization-role'
+import { useCanManageAgent, useOrganizationRole } from '../use-organization-role'
 
 /**
  * Several server routes are `@Roles('admin','owner')` while the screens that
@@ -104,5 +104,23 @@ describe('useOrganizationRole', () => {
     const { result } = renderHook(() => useOrganizationRole())
     expect(result.current.canManage).toBe(false)
     expect(result.current.role).toBeNull()
+  })
+})
+
+describe('useCanManageAgent', () => {
+  beforeEach(() => {
+    currentOrganization = { id: 'org-1' }
+  })
+
+  it('lets an admin or owner manage any agent, as the server does', () => {
+    user = { id: 'u-admin', organizationMemberships: [member('org-1', 'admin')] }
+    expect(renderHook(() => useCanManageAgent('u-someone-else')).result.current).toBe(true)
+  })
+
+  it('lets a member manage the agent they own, and no other', () => {
+    user = { id: 'u-member', organizationMemberships: [member('org-1', 'member')] }
+    expect(renderHook(() => useCanManageAgent('u-member')).result.current).toBe(true)
+    expect(renderHook(() => useCanManageAgent('u-someone-else')).result.current).toBe(false)
+    expect(renderHook(() => useCanManageAgent(null)).result.current).toBe(false)
   })
 })

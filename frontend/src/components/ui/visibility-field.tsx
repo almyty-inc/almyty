@@ -34,14 +34,19 @@ interface Props {
   noun?: string
   /** Which choices to offer; all three when absent. */
   options?: Visibility[]
+  /** The question the picker answers, when it is not who can use something. */
+  label?: string
+  /** What each choice means, when the sharing wording does not fit. */
+  descriptions?: Partial<Record<Visibility, string>>
 }
 
 /**
- * Standard visibility + team picker. Drop into any create dialog.
- * - Private  → teamId=null, visibility='private'. Owner only; the backend
+ * Standard "who can use it" picker, in the one wording sharing has
+ * everywhere: Only you / One team / Everyone.
+ * - Only you → teamId=null, visibility='private'. Owner only; the backend
  *              refuses everyone else, org admins included.
- * - Team     → teamId required; pickable from team list.
- * - Org-wide → teamId=null, visibility='org'.
+ * - One team → teamId required; pickable from team list.
+ * - Everyone → teamId=null, visibility='org'.
  *
  * Reads the org's teams under ['organization-teams', organizationId] --
  * the same key Settings -> Members & Teams writes through, so creating
@@ -49,7 +54,7 @@ interface Props {
  * second key of its own over the same endpoint, which no mutation
  * invalidated, so a team you had just created was missing here.
  */
-export function VisibilityField({ organizationId, value, onChange, teamAdminOf, disabled, noun = 'this', options }: Props) {
+export function VisibilityField({ organizationId, value, onChange, teamAdminOf, disabled, noun = 'this', options, label, descriptions }: Props) {
   const offered = (v: Visibility) => !options || options.includes(v)
   const columns = ['sm:grid-cols-1', 'sm:grid-cols-1', 'sm:grid-cols-2', 'sm:grid-cols-3'][options ? options.length : 3]
   const teamsQuery = useQuery<Team[]>({
@@ -74,7 +79,7 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
   return (
     <div className="space-y-3">
       <div>
-        <Label className="text-sm font-medium" id="visibility-label">Visibility</Label>
+        <Label className="text-sm font-medium" id="visibility-label">{label ?? 'Who can use it'}</Label>
         <div className={`grid grid-cols-1 ${columns} gap-2 mt-2`} role="radiogroup" aria-labelledby="visibility-label">
           {offered('private') && (
             <button
@@ -86,7 +91,7 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
               onClick={() => onChange({ visibility: 'private', teamId: null })}
             >
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Lock className="h-4 w-4" /> Private
+                <Lock className="h-4 w-4" /> Only you
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Only you can see and use {noun}. Not even org admins.
@@ -106,10 +111,10 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
               }}
             >
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Users className="h-4 w-4" /> Team
+                <Users className="h-4 w-4" /> One team
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Only members of the team can see and use {noun}.
+                {descriptions?.team ?? `Only members of the team can see and use ${noun}.`}
                 {pickableTeams.length === 0 && (
                   <span className="block text-amber-600 dark:text-amber-400 mt-1">
                     You're not a team_admin of any team.
@@ -128,10 +133,10 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
               onClick={() => onChange({ visibility: 'org', teamId: null })}
             >
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Globe className="h-4 w-4" /> Org-wide
+                <Globe className="h-4 w-4" /> Everyone
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Everyone in the organization can see and use {noun}.
+                {descriptions?.org ?? `Everyone in the organization can see and use ${noun}.`}
               </p>
             </button>
           )}

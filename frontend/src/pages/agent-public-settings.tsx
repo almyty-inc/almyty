@@ -80,7 +80,7 @@ function PublicSettingsPage({ agent, settings }: { agent: Agent; settings: Publi
       submitDisabled={!dirty || retentionInvalid(form)}
     >
       <SpendNotice agentId={agent.id} />
-      <PublicSettingsFields form={form} onChange={setForm} idPrefix="agent" scope="agent" />
+      <PublicSettingsFields form={form} onChange={setForm} idPrefix="agent" scope="agent" agentId={agent.id} />
     </FormPage>
   )
 }

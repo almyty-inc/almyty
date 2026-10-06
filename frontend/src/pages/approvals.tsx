@@ -15,17 +15,22 @@ import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 import { approvalsApi } from '@/lib/api'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { ChangeSetView } from '@/components/approvals/change-set-view'
+import type { ChangeSetEntry } from '@/types'
 
 interface ApprovalRequest {
   id: string
   organizationId: string
   teamId: string | null
   visibility: 'org' | 'team' | 'private'
-  runId: string
-  agentId: string
+  /** Null for a held tool call from a caller that could not wait (a workflow, a gateway, the Test button). */
+  runId: string | null
+  agentId: string | null
+  /** The agent's name; null once the agent has been deleted. */
+  agentName?: string | null
   toolCallId: string | null
   reason: string
   payload: Record<string, any> | null
@@ -38,6 +43,24 @@ interface ApprovalRequest {
 }
 
 const POLL_MS = 10_000
+
+/** A script's change set (code mode): several calls approved or rejected as a whole. */
+export function isChangeSet(row: Pick<ApprovalRequest, 'payload'>): boolean {
+  return row.payload?.kind === 'change_set' && Array.isArray(row.payload?.changeSet)
+}
+
+/** What a decision does, in one sentence, before a person confirms it. */
+export function decisionMessage(row: Pick<ApprovalRequest, 'payload'>, intent: 'approve' | 'reject'): string {
+  if (isChangeSet(row)) {
+    const n = (row.payload!.changeSet as unknown[]).length
+    return intent === 'approve'
+      ? `All ${pluralized(n, 'change')} run, in this order. If one fails, the ones after it do not run; nothing is undone.`
+      : 'None of the changes run. The agent is told, and carries on without them.'
+  }
+  return intent === 'approve'
+    ? 'The run resumes where it paused, with this approval as the answer to its request.'
+    : 'The run is cancelled for good; it cannot be resumed.'
+}
 
 export function ApprovalsPage() {
   const queryClient = useQueryClient()
@@ -93,7 +116,7 @@ export function ApprovalsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Approvals"
-        description={query.isLoading ? 'Agent runs paused for human approval.' : `${rows.length} pending · agent runs paused for human approval`}
+        description={query.isLoading ? 'Agent runs and tool calls waiting for a person.' : `${rows.length} pending · agent runs and tool calls waiting for a person`}
       />
 
       {query.isLoading ? (
@@ -120,9 +143,16 @@ export function ApprovalsPage() {
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Bot className="h-4 w-4 text-muted-foreground" />
-                      <Link to={`/agents/${row.agentId}`} className="font-mono hover:underline truncate">
-                        agent {row.agentId.slice(0, 8)}
-                      </Link>
+                      {!row.agentId ? (
+                        // A held tool call no agent made.
+                        <span className="truncate">{row.payload?.tool ? `Tool call: ${row.payload.tool}` : 'Tool call'}</span>
+                      ) : row.agentName ? (
+                        <Link to={`/agents/${row.agentId}`} className="hover:underline truncate">
+                          {row.agentName}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground truncate">Deleted agent</span>
+                      )}
                       <Badge variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-800 dark:text-amber-400">
                         <Clock className="h-3 w-3 mr-1" />
                         pending
@@ -130,6 +160,11 @@ export function ApprovalsPage() {
                       <Badge variant="outline">{row.visibility === 'private' ? 'private' : row.visibility === 'team' ? 'team' : 'org'}</Badge>
                     </CardTitle>
                     <CardDescription className="mt-2 text-foreground">{row.reason}</CardDescription>
+                    {isChangeSet(row) && (
+                      <div className="mt-3">
+                        <ChangeSetView entries={row.payload!.changeSet as ChangeSetEntry[]} />
+                      </div>
+                    )}
                   </div>
                   {decisionFor?.row.id !== row.id && (
                   <div className="flex items-center gap-2 shrink-0">
@@ -155,8 +190,18 @@ export function ApprovalsPage() {
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground space-y-1">
                 <div>
-                  Run: <Link to={`/agents/${row.agentId}/runs/${row.runId}`} className="font-mono hover:underline">{row.runId.slice(0, 12)}</Link>
-                  {' · '}
+                  {row.runId ? (
+                    <>
+                      Run:{' '}
+                      <Link to={`/agents/${row.agentId}/runs/${row.runId}`} className="font-mono hover:underline">
+                        {row.runId.slice(0, 12)}
+                      </Link>
+                      {' · '}
+                    </>
+                  ) : (
+                    // A held tool call: it runs, exactly as asked, once approved.
+                    <>The call runs once approved · </>
+                  )}
                   requested {formatRelativeTime(row.createdAt)}
                   {row.expiresAt && (
                     <> · expires {formatRelativeTime(row.expiresAt)}</>
@@ -187,9 +232,7 @@ export function ApprovalsPage() {
                       ) : (
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
                       )}
-                      {decisionFor.intent === 'approve'
-                        ? 'The run resumes where it paused, with this approval as the answer to its request.'
-                        : 'The run is cancelled for good; it cannot be resumed.'}
+                      {decisionMessage(row, decisionFor.intent)}
                     </p>
                     <Field id={`decision-reason-${row.id}`} label="Note (optional)" hint="Saved with the decision.">
                       <Textarea

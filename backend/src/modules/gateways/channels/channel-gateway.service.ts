@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Inject,
   Optional,
+  ServiceUnavailableException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -15,9 +16,9 @@ import { isUniqueViolation } from '../../../common/utils/unique-violation';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRun } from '../../../entities/agent-run.entity';
-import { ChannelEvent, ChannelEventStatus } from '../../../entities/channel-event.entity';
+import { ChannelEvent, ChannelEventStatus, InboundMessageRecord } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
-import { BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
+import { AdapterResponse, BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
 import { ChatWidgetAdapter } from './adapters/chat-widget.adapter';
 import { SlackAdapter } from './adapters/slack.adapter';
 import { DiscordAdapter } from './adapters/discord.adapter';
@@ -32,16 +33,23 @@ import { MicrosoftTeamsAdapter } from './adapters/microsoft-teams.adapter';
 import { SignalAdapter } from './adapters/signal.adapter';
 import { MatrixAdapter } from './adapters/matrix.adapter';
 import { IrcAdapter } from './adapters/irc.adapter';
+import { IMessageSendblueAdapter } from './adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from './adapters/imessage-loopmessage.adapter';
 import { ChannelInstallationService } from './channel-installation.service';
 import { ChannelCredentialService, ChannelUsePurpose } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { outboundFailureDetail, safeFetch } from '../../../common/security/safe-fetch';
 import { isPrivateGateway } from '../private-gateway';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
-import { Message } from '../../../entities/message.entity';
-import { Conversation } from '../../../entities/conversation.entity';
-import { HostedChatService } from './hosted-chat.service';
+import { AuditAction, AuditLog } from '../../../entities/audit-log.entity';
+import { AuditLogService } from '../../audit-log/audit-log.service';
+import { VisitorDataService } from '../visitor-data.service';
+import { visitorDataAudit } from '../visitor-data-audit';
 import { SPEND_CAP_MESSAGES, ChannelPolicy, ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
+import { ChannelAttachmentReader, type ReadAttachments } from './channel-attachments.service';
+import { withSpeaker } from './channel-speaker';
+import { extractReplyMedia, replyMedia } from './reply-media';
+import type { MessageContent } from '../../../entities/message.entity';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -85,6 +93,8 @@ export class ChannelGatewayService {
     private readonly signalAdapter: SignalAdapter,
     private readonly matrixAdapter: MatrixAdapter,
     private readonly ircAdapter: IrcAdapter,
+    private readonly iMessageSendblueAdapter: IMessageSendblueAdapter,
+    private readonly iMessageLoopMessageAdapter: IMessageLoopMessageAdapter,
     // Optional so existing unit tests and minimal contexts can
     // construct the service without the installation subsystem.
     @Optional() private readonly installationService?: ChannelInstallationService,
@@ -108,6 +118,17 @@ export class ChannelGatewayService {
     // shared memory. Optional for the same positional-construction reason;
     // Nest always injects it (channel-policy.guard.spec.ts).
     @Optional() private readonly channelPolicy?: ChannelPolicyService,
+    // Reads the files a relay hands over as links (the iMessage relays) so
+    // the agent sees them. Optional for the same positional-construction
+    // reason; without it a file is named in the input but not read.
+    @Optional() private readonly attachmentReader?: ChannelAttachmentReader,
+    // What a widget visitor's download and erasure cover, shared with the
+    // web chat and with an owner answering a data request. Required: Nest
+    // always injects it (visitor-data.guard.spec.ts); typed optional only
+    // for positional unit specs.
+    private readonly visitorData?: VisitorDataService,
+    // Records a widget visitor's erasure. Optional for positional specs.
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -128,6 +149,8 @@ export class ChannelGatewayService {
       [GatewayType.SIGNAL, this.signalAdapter],
       [GatewayType.MATRIX, this.matrixAdapter],
       [GatewayType.IRC, this.ircAdapter],
+      [GatewayType.IMESSAGE_SENDBLUE, this.iMessageSendblueAdapter],
+      [GatewayType.IMESSAGE_LOOPMESSAGE, this.iMessageLoopMessageAdapter],
     ]);
   }
 
@@ -175,6 +198,11 @@ export class ChannelGatewayService {
     // and one that exists anyway stays silent.
     if (isPrivateGateway(gateway)) {
       this.logger.warn(`Inbound message refused for private gateway: ${gateway.id}`);
+      return;
+    }
+    // Its agent was deleted: nobody is there to answer.
+    if (Gateway.agentGone(gateway)) {
+      this.logger.warn(`Inbound message dropped for gateway ${gateway.id}: its agent was deleted`);
       return;
     }
 
@@ -225,6 +253,11 @@ export class ChannelGatewayService {
       return;
     }
 
+    // A verified delivery that is not a message to answer: a relay's
+    // echo of our own reply, a delivery status, a reaction. Nothing is
+    // recorded: these arrive for every reply sent, and an event row per
+    // status callback would bury the conversations in the log.
+    if (!adapter.carriesMessage(body)) return;
     // Normalize inbound message
     const normalized: NormalizedMessage = adapter.normalizeInbound(body);
 
@@ -270,6 +303,10 @@ export class ChannelGatewayService {
       null,
       undefined,
       deliveryId,
+      // The sender, so their data request finds this message even if it never becomes a run.
+      normalized.userId && normalized.userId !== 'unknown' ? normalized.userId : null,
+      // What it said, so their download has the words even if it never becomes a run.
+      inboundMessageRecord(normalized),
     );
     if (!claim) {
       this.logger.log(
@@ -308,6 +345,13 @@ export class ChannelGatewayService {
       return;
     }
 
+    // What the agent reads: the text, prefixed with who wrote it in a group
+    // (channel-speaker.ts), and the files the message came with, fetched
+    // the way the platform wants, stored under the conversation and passed
+    // by reference (channel-attachments.service.ts). Only after the sender
+    // and spend checks, so a limited sender costs no download.
+    const read = await this.inboundInput(gateway, adapter, normalized, effectiveConfig);
+    const input = read.text;
     // Find existing run for this thread on this gateway, or start a new
     // one. Scoped to the gateway, not just the agent: one agent sits
     // behind several surfaces, and the public widget lets its caller
@@ -332,7 +376,13 @@ export class ChannelGatewayService {
     }
 
     if (run) {
-      await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, normalized.text);
+      try {
+        await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, input, undefined, read.parts);
+      } catch (err) {
+        await this.discardAttachments(gateway, read.fileIds);
+        throw err;
+      }
+      await this.attachmentReader?.fileUnder(gateway.organizationId, read.fileIds, run.conversationId, run.id);
       // The cross-link the claim row was always meant to carry: without
       // it an operator holding "the bot never answered me at 14:05" has
       // an inbound row and no way to reach the run that answered it.
@@ -356,12 +406,14 @@ export class ChannelGatewayService {
         // The sender is recorded in metadata, where the rest of the
         // channel's facts already live.
         null,
-        normalized.text,
+        input,
         // The policy adds the per-run cost cap, the channel id for the spend
         // cap, the visitor mark for shared memory, and files the
         // conversation under this gateway for retention.
         withChannelPolicy(policy, {
           maxSteps: 25,
+          // The files the message came with, by reference (attached-files.ts).
+          ...(read.parts.length ? { attachments: read.parts } : {}),
           metadata: {
             channelUserId: normalized.userId,
             threadId: normalized.threadId,
@@ -375,6 +427,8 @@ export class ChannelGatewayService {
           principal: gatewayPrincipal(gateway),
         }),
       ).catch(async (err: any) => {
+        // No run, so nothing refers to the files it would have read.
+        await this.discardAttachments(gateway, read.fileIds);
         // Refused before it started: the agent is outside this gateway's
         // scope (a team agent behind a gateway not scoped to its team, or
         // one moved to another team since). Recorded on the delivery with
@@ -388,7 +442,11 @@ export class ChannelGatewayService {
         }
         throw err;
       });
+      // Refused (and its files discarded) above.
       if (!newRun) return;
+      // The files it read go with the conversation it filed them under, so
+      // retention and erasure take them with it.
+      await this.attachmentReader?.fileUnder(gateway.organizationId, read.fileIds, newRun.conversationId, newRun.id);
 
       await this.markInboundOutcome(claim, { runId: newRun.id });
       this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized, effectiveConfig, claim);
@@ -406,6 +464,64 @@ export class ChannelGatewayService {
     await this.incrementRequestCount(gateway.id);
   }
 
+  /**
+   * The message as the agent reads it: the text, with a line per file the
+   * message came with, and "Name: " in front in a conversation that has
+   * several people (channel-speaker.ts). The files themselves become
+   * stored-file references (`parts`) the model call resolves.
+   */
+  private async inboundInput(
+    gateway: Gateway,
+    adapter: BaseAdapter,
+    normalized: NormalizedMessage,
+    config: Record<string, any>,
+  ): Promise<{ text: string; parts: MessageContent[]; fileIds: string[] }> {
+    // Who wrote a group message is named; the name is looked up when the
+    // delivery left it out and the platform can say it.
+    if (normalized.group && normalized.sender && !normalized.sender.name) {
+      const name = await adapter.senderName(normalized, config).catch(() => undefined);
+      if (name) normalized = { ...normalized, sender: { ...normalized.sender, name } };
+    }
+    const sent = normalized.attachments ?? [];
+    if (!sent.length) return { text: withSpeaker(normalized, normalized.text), parts: [], fileIds: [] };
+    if (!this.attachmentReader) {
+      const named = sent.map((a) => `[Attachment: ${String(a.name ?? 'attachment').replace(/[\r\n\[\]]+/g, ' ').slice(0, 120)} was not read]`);
+      return { text: withSpeaker(normalized, ChannelAttachmentReader.textWith(normalized.text, named)), parts: [], fileIds: [] };
+    }
+    const read = await this.attachmentReader.read(adapter, config, sent, {
+      organizationId: gateway.organizationId,
+      agentId: gateway.agentId ?? null,
+      gatewayId: gateway.id,
+      threadId: normalized.threadId ?? null,
+    });
+    return {
+      text: withSpeaker(normalized, ChannelAttachmentReader.textWith(normalized.text, read.lines)),
+      parts: read.parts,
+      fileIds: read.fileIds,
+    };
+  }
+
+  /** Files stored for a message no run will read: removed with their objects. */
+  private async discardAttachments(gateway: Gateway, fileIds: string[]): Promise<void> {
+    if (!fileIds.length || !this.attachmentReader) return;
+    await this.attachmentReader.discard(gateway.organizationId, fileIds).catch((err: any) =>
+      this.logger.warn(`Could not remove unused attachments on gateway ${gateway.id}: ${err?.message ?? err}`),
+    );
+  }
+
+  /**
+   * Files a finished run handed back, in the adapter shape. A run's output
+   * is text today; an output object that carries `attachments` (url, type,
+   * name) has them sent by the adapters that send media.
+   */
+  static replyAttachments(output: unknown): AdapterResponse['attachments'] {
+    const list = (output as { attachments?: unknown } | null)?.attachments;
+    if (typeof output !== 'object' || !Array.isArray(list)) return undefined;
+    const files = list.filter(
+      (a: any): a is { url: string; type: string; name: string } => a && typeof a.url === 'string' && a.url.length > 0,
+    ).map((a) => ({ url: a.url, type: typeof a.type === 'string' ? a.type : 'application/octet-stream', name: typeof a.name === 'string' ? a.name : 'attachment' }));
+    return files.length ? files : undefined;
+  }
   /**
    * Atomic request-count bump. Touches only the three counter columns,
    * so nothing a concurrent writer put in `status` or `configuration`
@@ -573,7 +689,15 @@ export class ChannelGatewayService {
           // outbound message of a conversation when the gateway opts in.
           const responseText = await this.applyAiDisclosure(gateway, finalRun, rawText);
 
-          const formatted = adapter.formatOutbound({ text: responseText });
+          // Images and files the reply links to (reply-media.ts), and any the
+          // run handed back as attachments, go as media on the adapters that
+          // send media; the others send the text, links and all.
+          const media = extractReplyMedia(responseText);
+          const formatted = adapter.formatOutbound({
+            text: responseText,
+            textWithoutMedia: media.textWithoutMedia,
+            attachments: replyMedia(ChannelGatewayService.replyAttachments(finalRun.output), media.attachments),
+          });
           try {
             await adapter.sendResponse(
               sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound')),
@@ -630,19 +754,93 @@ export class ChannelGatewayService {
    * without per-adapter changes.
    */
   async applyAiDisclosure(gateway: Gateway, run: AgentRun, text: string): Promise<string> {
-    const setting = gateway.configuration?.aiDisclosure;
-    if (!setting) return text;
+    const line = ChannelGatewayService.disclosureLine(gateway);
+    if (!line) return text;
     if ((run.metadata as any)?.aiDisclosureSent) return text;
-
-    const line =
-      typeof setting === 'string' && setting.trim()
-        ? setting.trim()
-        : ChannelGatewayService.DEFAULT_AI_DISCLOSURE;
 
     run.metadata = { ...(run.metadata || {}), aiDisclosureSent: true };
     await this.runRepository.save(run);
 
     return `${line}\n\n${text}`;
+  }
+
+  /**
+   * The AI disclosure line a gateway carries, or null when it carries
+   * none: `configuration.aiDisclosure` true is the default wording, a
+   * non-empty string is the channel's own.
+   */
+  static disclosureLine(gateway: Pick<Gateway, 'configuration'>): string | null {
+    const setting = gateway.configuration?.aiDisclosure;
+    if (!setting) return null;
+    return typeof setting === 'string' && setting.trim()
+      ? setting.trim()
+      : ChannelGatewayService.DEFAULT_AI_DISCLOSURE;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Messages the agent starts (scheduled results)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Post a message nobody asked for in this conversation -- a scheduled
+   * result -- through the channel's own send path: the same adapter,
+   * the same configuration and credentials, the same outbound event row
+   * per message as a reply. `parts` are sent in order, one platform
+   * message each; the first the platform refuses stops the rest and is
+   * thrown (ChannelSendError, with the platform's own wording), after the
+   * refusal is recorded.
+   */
+  async postMessage(
+    gateway: Gateway,
+    parts: string[],
+    threadContext: Record<string, any>,
+  ): Promise<{ sent: number }> {
+    const adapter = this.getAdapter(gateway.type);
+    const config = await this.channelConfig(gateway, 'channel_outbound');
+    const context = { ...threadContext, gatewayId: gateway.id, organizationId: gateway.organizationId, runId: null };
+    let sent = 0;
+    for (const text of parts) {
+      const formatted = adapter.formatOutbound({ text });
+      try {
+        await adapter.sendResponse(config, formatted, context);
+      } catch (err: any) {
+        await this.logEvent(gateway, 'outbound', 'failed', this.truncatePayload(formatted), err?.message ?? String(err));
+        throw err;
+      }
+      await this.logEvent(gateway, 'outbound', 'processed', this.truncatePayload(formatted), null);
+      sent++;
+    }
+    return { sent };
+  }
+
+  /**
+   * The conversations a channel has recently been written to in, newest
+   * first: each verified inbound delivery read back through its adapter.
+   * The places a bot may post to on most platforms are the places people
+   * have talked to it, so this is what the schedule page offers.
+   */
+  async recentConversations(
+    gateway: Gateway,
+    take = 200,
+  ): Promise<Array<{ message: NormalizedMessage; raw: any; at: Date }>> {
+    const adapter = this.adapters.get(gateway.type);
+    if (!adapter) return [];
+    const rows = await this.eventRepository.find({
+      where: { gatewayId: gateway.id, organizationId: gateway.organizationId, direction: 'inbound', status: In(['processed', 'received']) as any },
+      order: { createdAt: 'DESC' },
+      take,
+    });
+    const out: Array<{ message: NormalizedMessage; raw: any; at: Date }> = [];
+    for (const row of rows) {
+      const raw = row.payload;
+      if (!raw || raw._truncated || raw._unserializable) continue;
+      try {
+        out.push({ message: adapter.normalizeInbound(raw), raw, at: row.createdAt });
+      } catch {
+        // A payload this adapter no longer reads is skipped, not fatal.
+      }
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------------------
@@ -657,6 +855,8 @@ export class ChannelGatewayService {
     gateway: Gateway,
     body: { message: string; sessionId?: string; threadId?: string },
     policy?: ChannelPolicy | null,
+    /** Files the visitor uploaded for this message (channel-widget.controller.ts). */
+    sent?: ReadAttachments,
   ): Promise<{ runId: string; threadId: string }> {
     if (!gateway.isActive()) {
       throw new BadRequestException('Gateway is not active');
@@ -694,8 +894,11 @@ export class ChannelGatewayService {
       run = existingRuns[0] || null;
     }
 
+    // What the agent reads: the text and a line per uploaded file, with the
+    // files themselves by reference (channel-attachments.service.ts).
+    const input = ChannelAttachmentReader.textWith(normalized.text, sent?.lines ?? []);
     if (run) {
-      run = await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, normalized.text);
+      run = await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, input, undefined, sent?.parts);
     } else {
       const channelMetadata = {
         channelUserId: normalized.userId,
@@ -715,13 +918,18 @@ export class ChannelGatewayService {
         // channel's facts already live. Written with the insert so the
         // gateway-scoped thread lookup above can see the run at once.
         null,
-        normalized.text,
+        input,
         // Runs in the gateway's scope: a channel serves its agent only while
         // the gateway's own visibility covers it, checked on every message.
         // The policy adds the per-run cost cap, the channel id for the spend
         // cap, the visitor mark for shared memory, and files the
         // conversation under this gateway for retention and erasure.
-        withChannelPolicy(policy, { maxSteps: 25, metadata: channelMetadata, principal: gatewayPrincipal(gateway) }),
+        withChannelPolicy(policy, {
+          maxSteps: 25,
+          metadata: channelMetadata,
+          principal: gatewayPrincipal(gateway),
+          ...(sent?.parts.length ? { attachments: sent.parts } : {}),
+        }),
       );
 
       run.metadata = {
@@ -731,6 +939,8 @@ export class ChannelGatewayService {
       };
       await this.runRepository.save(run);
     }
+    // The files go with the conversation that read them.
+    await this.attachmentReader?.fileUnder(gateway.organizationId, sent?.fileIds ?? [], run.conversationId, run.id);
 
     // Persist the agent's reply for the widget poll endpoint once the
     // run completes (the widget can also stream live via the run SSE).
@@ -757,6 +967,8 @@ export class ChannelGatewayService {
     if (!gateway || gateway.type !== GatewayType.CHAT_WIDGET || !gateway.isActive() || isPrivateGateway(gateway)) {
       throw new NotFoundException('Widget gateway not found or inactive');
     }
+    // Its agent was deleted: the widget is gone, whatever page still embeds it.
+    if (Gateway.agentGone(gateway)) throw new NotFoundException('This chat no longer exists');
     return gateway;
   }
 
@@ -796,70 +1008,61 @@ export class ChannelGatewayService {
   // ---------------------------------------------------------------------------
   // Widget visitor rights: the visitor's own copy, and erasure
   // ---------------------------------------------------------------------------
-
-  /**
-   * The runs behind one widget thread on this gateway. The widget has no
-   * visitor row, so the thread is the visitor: every run filed under the
-   * gateway with that threadId (a thread can outlive one run).
-   */
-  private async widgetThreadRuns(gateway: Gateway, threadId: string): Promise<AgentRun[]> {
-    if (!threadId) return [];
-    return this.runRepository
-      .createQueryBuilder('run')
-      .where('run.organizationId = :organizationId', { organizationId: gateway.organizationId })
-      .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
-      .andWhere("run.metadata->>'threadId' = :threadId", { threadId })
-      .orderBy('run.createdAt', 'ASC')
-      .limit(500)
-      .getMany();
-  }
+  //
+  // The widget has no visitor row, so the thread is the visitor: every run
+  // filed under the gateway with that threadId (a thread can outlive one
+  // run). What a thread covers is VisitorDataService's, the same scope the
+  // web chat's erasure and an owner's data request use.
 
   /** Everything the widget holds about one thread, for the visitor to keep. */
   async exportWidgetThread(gateway: Gateway, threadId: string): Promise<Record<string, unknown>> {
-    const runs = await this.widgetThreadRuns(gateway, threadId);
-    const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
-    const messages = conversationIds.length
-      ? await this.runRepository.manager.getRepository(Message).find({
-          where: { conversationId: In(conversationIds) },
-          order: { createdAt: 'ASC' },
-          take: 25_000,
-        })
-      : [];
-    return {
-      exportedAt: new Date().toISOString(),
-      threadId,
-      messages: messages
-        .filter((m) => HostedChatService.isPublicTurn(m))
-        .map((m) => {
-          const { role, content, createdAt } = HostedChatService.toTranscript(m);
-          return { role, content, createdAt };
-        }),
-    };
+    const data = this.requireVisitorData();
+    const footprint = await data.forWidgetThread(gateway, threadId);
+    const [transcripts, held] = await Promise.all([data.transcripts(footprint.conversationIds), data.memoriesAndFiles(footprint)]);
+    // One thread reads as one conversation: the turns of every run behind
+    // it, in order.
+    const messages = footprint.conversationIds
+      .flatMap((id) => transcripts.get(id) ?? [])
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .map(({ role, content, createdAt }) => ({ role, content, createdAt }));
+    return { exportedAt: new Date().toISOString(), threadId, messages, ...held };
   }
 
   /**
-   * Erase one widget thread: its runs, their conversations and messages,
-   * and the replies stored for the poll endpoint. Scoped to this gateway
-   * and organization, so a thread id can only ever reach its own rows.
+   * Erase one widget thread: its runs with their tool calls, their
+   * conversations and messages, the files sent in it or not sent yet, the
+   * memories those runs wrote, and the replies stored for the poll
+   * endpoint. Scoped to this gateway and organization, so a thread id can
+   * only ever reach its own rows. The audit log records that it happened,
+   * with counts, in the same transaction.
    */
   async deleteWidgetThread(gateway: Gateway, threadId: string): Promise<void> {
-    const runs = await this.widgetThreadRuns(gateway, threadId);
-    const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
-    if (runs.length) await this.runRepository.delete({ id: In(runs.map((r) => r.id)) });
-    if (conversationIds.length) {
-      await this.runRepository.manager.getRepository(Message).delete({ conversationId: In(conversationIds) });
-      await this.runRepository.manager
-        .getRepository(Conversation)
-        .delete({ id: In(conversationIds), organizationId: gateway.organizationId });
-    }
-    await this.eventRepository
-      .createQueryBuilder()
-      .delete()
-      .from(ChannelEvent)
-      .where('"gatewayId" = :gatewayId', { gatewayId: gateway.id })
-      .andWhere(`payload->>'threadId' = :threadId`, { threadId })
-      .execute();
-    this.logger.log(`[widget] visitor thread erased gateway=${gateway.id} runs=${runs.length}`);
+    const data = this.requireVisitorData();
+    const written: AuditLog[] = [];
+    const removed = await data.erase(await data.forWidgetThread(gateway, threadId), async (tx, counts) => {
+      if (!this.auditLog) return;
+      written.push(
+        await this.auditLog.logInTransaction(
+          tx,
+          visitorDataAudit({
+            action: AuditAction.VISITOR_DATA_ERASE,
+            organizationId: gateway.organizationId,
+            agentId: gateway.agentId ?? gateway.id,
+            channel: gateway.id,
+            identifier: threadId,
+            counts: { ...counts },
+          }),
+        ),
+      );
+    });
+    this.auditLog?.publishCommitted(written);
+    this.logger.log(`[widget] visitor thread erased gateway=${gateway.id} runs=${removed.runs}`);
+  }
+
+  /** The visitor-data scope; Nest always injects it (visitor-data.guard.spec.ts). */
+  private requireVisitorData(): VisitorDataService {
+    if (!this.visitorData) throw new ServiceUnavailableException('Visitor data is not available here.');
+    return this.visitorData;
   }
 
   // ---------------------------------------------------------------------------
@@ -925,6 +1128,10 @@ export class ChannelGatewayService {
     errorMessage?: string | null,
     runId?: string,
     deliveryId?: string | null,
+    // Who sent an inbound message, so a data request finds it (ChannelEvent.senderId).
+    senderId?: string | null,
+    // What an inbound message said: its text and file names only (ChannelEvent.message).
+    message?: InboundMessageRecord | null,
   ): Promise<ChannelEventRef | null> {
     try {
       const saved = await this.eventRepository.save(this.eventRepository.create({
@@ -937,6 +1144,8 @@ export class ChannelGatewayService {
         errorMessage: errorMessage ?? null,
         runId: runId ?? null,
         deliveryId: deliveryId ?? null,
+        senderId: senderId ? String(senderId).slice(0, 255) : null,
+        message: message ?? null,
       }));
       return {
         eventId: (saved as any)?.id ?? null,
@@ -1161,6 +1370,28 @@ export class ChannelGatewayService {
           return res.ok ? { ok: true, detail: 'whatsapp cloud phone number reachable' }
                         : { ok: false, detail: `graph api ${res.status}` };
         }
+        case GatewayType.IMESSAGE_SENDBLUE: {
+          if (!cfg.api_key_id || !cfg.api_secret_key) {
+            return { ok: false, detail: 'api_key_id + api_secret_key required' };
+          }
+          // GET /api/lines lists the account's numbers and needs both keys
+          // (https://docs.sendblue.com/api-v2/). Read-only, sends nothing.
+          try {
+            const res = await safeFetch('https://api.sendblue.co/api/lines', {
+              headers: { 'sb-api-key-id': String(cfg.api_key_id), 'sb-api-secret-key': String(cfg.api_secret_key) },
+            });
+            return res.ok ? { ok: true, detail: 'sendblue keys accepted' }
+                          : { ok: false, detail: `sendblue ${res.status}` };
+          } catch (e: any) {
+            return { ok: false, detail: outboundFailureDetail(e) };
+          }
+        }
+        case GatewayType.IMESSAGE_LOOPMESSAGE:
+          // LoopMessage documents no read-only call to check a key with, and
+          // a send would text someone. Only presence is checked, and said so.
+          if (!cfg.api_key) return { ok: false, detail: 'api_key not configured' };
+          if (!cfg.inbound_token) return { ok: false, detail: 'inbound_token not configured' };
+          return { ok: true, detail: 'keys present; LoopMessage has no read-only check, so the first reply is the real test' };
         case GatewayType.MICROSOFT_TEAMS: {
           if (!cfg.bot_id || !cfg.bot_password) return { ok: false, detail: 'bot_id + bot_password required' };
           const tokenRes = await fetch('https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token', {
@@ -1242,4 +1473,24 @@ export class ChannelGatewayService {
       return { ok: false, detail: err?.message ?? String(err) };
     }
   }
+}
+
+/** Longest message text kept on an inbound delivery. */
+const INBOUND_TEXT_LIMIT = 20_000;
+/** Most file names kept on an inbound delivery. */
+const INBOUND_ATTACHMENT_NAMES = 20;
+
+/**
+ * What an inbound message said, for the person's own download: the
+ * normalized text and the names of its files, and nothing else of the
+ * platform's delivery. Null when it said nothing.
+ */
+export function inboundMessageRecord(normalized: Pick<NormalizedMessage, 'text' | 'attachments'>): InboundMessageRecord | null {
+  const text = typeof normalized.text === 'string' ? normalized.text.slice(0, INBOUND_TEXT_LIMIT) : '';
+  const attachments = (normalized.attachments ?? [])
+    .map((a) => (typeof a?.name === 'string' ? a.name.slice(0, 255) : ''))
+    .filter(Boolean)
+    .slice(0, INBOUND_ATTACHMENT_NAMES);
+  if (!text && !attachments.length) return null;
+  return { text, ...(attachments.length ? { attachments } : {}) };
 }

@@ -1,4 +1,4 @@
-import { Inject, forwardRef } from '@nestjs/common';
+import { Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Not } from 'typeorm';
@@ -18,8 +18,10 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats } from './dto/tools.dto';
 import { ToolsOperationHelper } from './tools-operation.helper';
 import { assertToolAuthHoldsNoSecret } from './tool-auth-config';
+import { assertProtocolToolShape, impliedExecutionMethod } from './protocol-tool-config';
 import { ToolsStatsHelper } from './tools-stats.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
 import {
   assertAttachable,
   isOthersPrivate,
@@ -30,6 +32,8 @@ import { assertManageable, assertReadable } from '../../common/authorization/rea
 import { assertNoSharedDependents, narrowsScope } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { precheckToolQuota, withToolQuota } from './tool-quota';
+import { computeToolHash, verifyToolIntegrity } from '../../common/security/tool-integrity';
+import { allPagesOfTools } from './tool-pages';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -61,6 +65,9 @@ export class ToolsService {
     private readonly operationHelper: ToolsOperationHelper,
     private readonly statsHelper: ToolsStatsHelper,
     private readonly accessPolicy: AccessPolicyService,
+    // Gateways serving a tool hear when it changes (MCP subscriptions/listen).
+    // Optional for the positional spec harnesses.
+    @Optional() private readonly changeBus?: McpChangeBus,
   ) {}
 
   async createTool(
@@ -148,9 +155,16 @@ export class ToolsService {
         assertAttachable({ visibility: scope.visibility, ownerId: userId, noun: 'tool' }, [api], 'API');
       }
 
+      // A GraphQL, SOAP or gRPC tool is stored as its protocol's config,
+      // never as code; see protocol-tool-config.ts.
+      assertProtocolToolShape(createToolDto as any);
+      const protocolMethod = impliedExecutionMethod(createToolDto as any);
+
       // Create the tool
-      // Custom tools (with code or httpConfig) are ACTIVE by default, auto-generated are DRAFT
-      const isCustomTool = (!!createToolDto.code || !!createToolDto.httpConfig) && !createToolDto.operationId;
+      // Hand-made tools (code, an HTTP request or a GraphQL/SOAP/gRPC call)
+      // are ACTIVE by default; auto-generated ones are DRAFT.
+      const isCustomTool =
+        (!!createToolDto.code || !!createToolDto.httpConfig || !!protocolMethod) && !createToolDto.operationId;
       const isHttpTool = !!createToolDto.httpConfig;
       const tool = this.toolRepository.create({
         ...createToolDto,
@@ -167,6 +181,9 @@ export class ToolsService {
           httpConfig: createToolDto.httpConfig,
           code: null,
         } : {}),
+        ...(!isHttpTool && protocolMethod && !createToolDto.executionMethod
+          ? { executionMethod: protocolMethod }
+          : {}),
         ...(createToolDto.apiId ? { apiId: createToolDto.apiId } : {}),
         metadata: {
           ...createToolDto.metadata,
@@ -234,7 +251,9 @@ export class ToolsService {
       }
 
       // Capture old values for change tracking (before mutation)
-      const oldValues = { name: tool.name, description: tool.description, parameters: tool.parameters, code: tool.code, configuration: tool.configuration, metadata: tool.metadata };
+      const oldValues = { name: tool.name, description: tool.description, parameters: tool.parameters, code: tool.code, configuration: tool.configuration, metadata: tool.metadata, sideEffect: tool.sideEffect };
+      // Whether the integrity hash held before this change (re-stamped below).
+      const hashHeld = !!tool.definitionHash && verifyToolIntegrity(tool, tool.definitionHash).valid;
 
       // Handle categories update
       if (updateToolDto.categoryIds !== undefined) {
@@ -268,6 +287,9 @@ export class ToolsService {
       if (updateToolDto.parameters !== undefined) {
         tool.parameters = updateToolDto.parameters;
       }
+
+      // A GraphQL/SOAP/gRPC tool stays in its one runnable shape.
+      assertProtocolToolShape(updateToolDto as any, tool as any);
 
       if (updateToolDto.code !== undefined) {
         tool.code = updateToolDto.code;
@@ -360,6 +382,29 @@ export class ToolsService {
         if (scope.ownerId) tool.createdBy = scope.ownerId;
       }
 
+      // The side-effect class a person sets (docs/design/code-mode.md, part
+      // A): it overrides the class derived from the definition and survives
+      // re-import. `auto` drops the override, and the class is derived again
+      // when the tool is saved (Tool.classify).
+      if (updateToolDto.sideEffect !== undefined) {
+        if (updateToolDto.sideEffect === 'auto') {
+          tool.sideEffectSource = 'default';
+          if (tool.metadata && 'sideEffect' in tool.metadata) {
+            const { sideEffect: _dropped, ...rest } = tool.metadata;
+            tool.metadata = rest;
+          }
+        } else {
+          tool.sideEffect = updateToolDto.sideEffect;
+          tool.sideEffectSource = 'override';
+        }
+      }
+
+      // An update made here is the tool's owner changing it, so a tool whose
+      // integrity hash held before the change gets a new one for its new
+      // definition. A hash that did not hold (the row was changed some other
+      // way) is not blessed: the tool stays refused at execution.
+      if (hashHeld) tool.definitionHash = computeToolHash(tool).hash;
+
       // Increment version
       const versionParts = tool.version.split('.').map(Number);
       versionParts[2]++; // Increment patch version
@@ -375,9 +420,12 @@ export class ToolsService {
       this.logger.log(`Tool '${updatedTool.name}' updated by user ${userId}`);
 
       // Audit log (fire-and-forget)
-      const changes = this.auditLogService.computeChanges(oldValues, updateToolDto, ['name', 'description', 'parameters', 'code', 'configuration', 'metadata']);
+      const changes = this.auditLogService.computeChanges(oldValues, updateToolDto, ['name', 'description', 'parameters', 'code', 'configuration', 'metadata', 'sideEffect']);
       this.auditLogService.logUpdate(organizationId, userId, AuditResource.TOOL, updatedTool.id, updatedTool.name, changes);
 
+      // A gateway serving this tool lists it differently now (name, schema,
+      // description): tell its MCP listen streams.
+      await this.changeBus?.toolsChanged([updatedTool.id]);
       return updatedTool;
 
     } catch (error) {
@@ -529,6 +577,11 @@ export class ToolsService {
     };
   }
 
+  /** Every tool the filters cover (allPagesOfTools), not one page of them. */
+  async getAllTools(filters: Omit<ToolSearchFilters, 'page' | 'limit'>): Promise<Tool[]> {
+    return allPagesOfTools(this, filters);
+  }
+
   async activateTool(
     toolId: string,
     organizationId: string,
@@ -554,6 +607,7 @@ export class ToolsService {
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_ACTIVATE, resourceType: AuditResource.TOOL, resourceId: tool.id, resourceName: tool.name });
+    await this.changeBus?.toolsChanged([tool.id]);
 
     return updatedTool;
   }
@@ -583,6 +637,7 @@ export class ToolsService {
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_DEACTIVATE, resourceType: AuditResource.TOOL, resourceId: tool.id, resourceName: tool.name });
+    await this.changeBus?.toolsChanged([tool.id]);
 
     return updatedTool;
   }
@@ -608,6 +663,7 @@ export class ToolsService {
 
     // Audit log (fire-and-forget)
     this.auditLogService.logDelete(organizationId, userId, AuditResource.TOOL, tool.id, tool.name);
+    await this.changeBus?.toolsChanged([tool.id]);
   }
 
   async getToolVersions(

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { timeLeft, workspacePath } from '@/components/runners/runner-workspaces-tab'
+import { timeLeft, workspacePath, WorkspaceOrigin } from '@/components/runners/runner-workspaces-tab'
 import { workspacesApi } from '@/lib/api'
 import { cn, formatRelativeTime, formatDateTime } from '@/lib/utils'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
@@ -29,6 +29,10 @@ interface Workspace {
   createdAt: string
   updatedAt: string
   closedAt: string | null
+  name?: string | null
+  agentId?: string | null
+  runId?: string | null
+  agent?: { id: string; name: string } | null
 }
 
 /**
@@ -124,7 +128,7 @@ export function WorkspaceDetailPage() {
               const ok = await confirm({
                 title: 'Release this workspace?',
                 description:
-                  'All processes the workspace owns on the runner will be terminated. The workspace row stays for audit; agents that hold the workspace id will get a structured error on the next call.',
+                  "Every process it runs on the runner is stopped; the folder and its files stay on the machine. If an agent run was given it, the run's next runner call gets a new workspace in the same folder.",
                 confirmLabel: 'Release workspace',
                 destructive: true,
               })
@@ -143,6 +147,7 @@ export function WorkspaceDetailPage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <Row label="cwd" value={<code className="font-mono text-xs">{ws.cwd}</code>} />
+          <Row label="Made for" value={<WorkspaceOrigin workspace={ws} />} />
           <Row label="Isolation" value={<Badge variant="outline" className="font-normal">{ws.isolation}</Badge>} />
           <Row
             label="TTL"

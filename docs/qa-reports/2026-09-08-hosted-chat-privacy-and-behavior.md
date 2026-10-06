@@ -68,8 +68,7 @@ This configuration change does not add product knowledge or document-upload supp
 
 ## Screenshots
 
-- [Owner privacy settings](../../docs-site/public/screenshots/apps-settings.png)
-- [Hosted privacy menu](../../docs-site/public/screenshots/apps-hosted-chat-privacy.png)
+- The owner privacy settings and hosted privacy menu captures were removed with the Apps page; Git history keeps them.
 - [Contract review after the fix](chat-contract-review-after.png)
 - [Fictional clause explanation and questions for counsel](chat-fictional-clause-review-after.png)
 - [Fresh post-deploy scope and contract-review response](chat-post-deploy-after.png)

@@ -32,6 +32,7 @@ import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { isIP } from 'net';
+import * as dns from 'dns';
 import { pinnedLookup } from '../../../common/security/ssrf-safe-agent';
 
 const PROTO_CACHE_DIR = join(tmpdir(), 'almyty-proto-cache');
@@ -117,6 +118,12 @@ export interface GrpcCallInput {
    * only so a test can talk to a server it started on 127.0.0.1.
    */
   pinDns?: boolean;
+  /**
+   * With pinDns: the one host the organization put on its egress
+   * allowlist, resolved without the private-address refusal. Every other
+   * name is still pinned. See tools/executors/tool-egress.ts.
+   */
+  pinDnsExemptHost?: string;
 }
 
 export interface GrpcCallResult {
@@ -163,7 +170,7 @@ export class GrpcCallerService {
     let channelOptions: Record<string, string> = {};
     if (input.pinDns) {
       try {
-        ({ target, channelOptions } = await this.pinTarget(target));
+        ({ target, channelOptions } = await this.pinTarget(target, input.pinDnsExemptHost));
       } catch (err: any) {
         return { success: false, error: `Refused to connect: ${err.message}` };
       }
@@ -230,8 +237,11 @@ export class GrpcCallerService {
     if (deadline) callOptions.deadline = deadline;
 
     const cap = input.maxStreamMessages ?? MAX_STREAM_MESSAGES;
-    const reqStream = !!input.requestStream;
-    const resStream = !!input.responseStream;
+    // A caller that knows (the parser persisted it) says whether the
+    // method streams; otherwise the proto's own method definition does.
+    const methodDef = (ServiceCtor as any).service?.[input.methodName];
+    const reqStream = input.requestStream ?? !!methodDef?.requestStream;
+    const resStream = input.responseStream ?? !!methodDef?.responseStream;
 
     try {
       if (!reqStream && !resStream) {
@@ -454,15 +464,23 @@ export class GrpcCallerService {
    * as the :authority and the TLS server name (so certificate checks are
    * still made against the name, not the address).
    */
-  private async pinTarget(target: string): Promise<{ target: string; channelOptions: Record<string, string> }> {
+  private async pinTarget(
+    target: string,
+    exemptHost?: string,
+  ): Promise<{ target: string; channelOptions: Record<string, string> }> {
     const sep = target.lastIndexOf(':');
     const host = target.slice(0, sep).replace(/^\[/, '').replace(/\]$/, '');
     const port = target.slice(sep + 1);
+    // The one name the organization allowlisted resolves normally (it may
+    // be private, that is the point); every other name is pinned.
+    const exempt = !!exemptHost && exemptHost.replace(/^\[|\]$/g, '').toLowerCase() === host.toLowerCase();
     const resolved = await new Promise<{ address: string; family: number }>((resolve, reject) => {
-      pinnedLookup(host, {}, (err, address, family) => {
+      const done = (err: NodeJS.ErrnoException | null, address: unknown, family?: number) => {
         if (err) reject(err);
         else resolve({ address: String(address), family: family ?? 4 });
-      });
+      };
+      if (exempt) dns.lookup(host, {}, (err, address, family) => done(err, address, family));
+      else pinnedLookup(host, {}, done);
     });
     const dialed = resolved.family === 6
       ? `ipv6:[${resolved.address}]:${port}`

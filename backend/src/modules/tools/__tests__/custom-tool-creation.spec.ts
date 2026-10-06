@@ -140,7 +140,28 @@ describe('ToolsService - Custom Tool Creation', () => {
     expect(toolRepository.save).toHaveBeenCalled();
   });
 
-  it('should create GraphQL tool with executionMethod', async () => {
+  it('should create GraphQL tool as its graphqlConfig', async () => {
+    const createDto = {
+      name: 'GraphQL Tool',
+      description: 'GraphQL query tool',
+      type: ToolType.QUERY,
+      parameters: { type: 'object', properties: {} },
+      executionMethod: 'graphql',
+      graphqlConfig: { endpoint: 'https://api.example.com/graphql', query: 'query { viewer { id } }' },
+    };
+
+    const result = await service.createTool(createDto as any, 'org-123', 'user-123');
+
+    expect(result).toBeDefined();
+    expect(toolRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionMethod: 'graphql',
+        graphqlConfig: createDto.graphqlConfig,
+      })
+    );
+  });
+
+  it('refuses a GraphQL tool sent as generated code: the sandbox cannot run it', async () => {
     const createDto = {
       name: 'GraphQL Tool',
       description: 'GraphQL query tool',
@@ -150,14 +171,8 @@ describe('ToolsService - Custom Tool Creation', () => {
       executionMethod: 'graphql',
     };
 
-    const result = await service.createTool(createDto as any, 'org-123', 'user-123');
-
-    expect(result).toBeDefined();
-    expect(toolRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        executionMethod: 'graphql',
-      })
-    );
+    await expect(service.createTool(createDto as any, 'org-123', 'user-123')).rejects.toThrow(/graphqlConfig/);
+    expect(toolRepository.save).not.toHaveBeenCalled();
   });
 
   it('should accept authConfig in tool creation', async () => {
@@ -226,30 +241,37 @@ describe('ToolsService - Custom Tool Creation', () => {
     );
   });
 
-  it('flows graphqlConfig + soapConfig + grpcConfig + examples through to entity', async () => {
-    const graphqlConfig = { query: 'query { user { id } }', variables: {} };
-    const soapConfig = { operation: 'GetUser', namespace: 'http://example.com' };
-    const grpcConfig = { serviceName: 'UserSvc', methodName: 'Get' };
+  it.each([
+    ['graphqlConfig', 'graphql', { endpoint: 'https://api.example.com/graphql', query: 'query { user { id } }', variables: {} }],
+    ['soapConfig', 'soap', { endpoint: 'https://api.example.com/soap', operation: 'GetUser', namespace: 'http://example.com/' }],
+    [
+      'grpcConfig',
+      'grpc',
+      {
+        endpoint: 'https://api.example.com:443',
+        serviceName: 'UserSvc',
+        methodName: 'Get',
+        protoDefinition: 'syntax = "proto3"; service UserSvc { rpc Get(Req) returns (Res); } message Req {} message Res {}',
+      },
+    ],
+  ])('flows %s + examples through to the entity, active, with its execution method', async (key, method, config) => {
     const examples = [{ name: 'minimal', input: { id: '1' } }];
     await service.createTool(
       {
-        name: 'Multi-Protocol Tool',
-        description: 'one config per protocol',
+        name: `${method} tool`,
+        description: 'one protocol config',
         type: ToolType.QUERY,
         parameters: { type: 'object', properties: {} },
-        graphqlConfig,
-        soapConfig,
-        grpcConfig,
+        [key]: config,
         examples,
       } as any,
       'org-123',
       'user-123',
     );
     expect(toolRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({ graphqlConfig, soapConfig, grpcConfig, examples }),
+      expect.objectContaining({ [key]: config, examples, executionMethod: method, status: 'active' }),
     );
   });
-
   it('reports a name collision as a conflict rather than letting the driver error surface', async () => {
     // `tools_org_name_uq` is what keeps one live tool per (org, name),
     // since name is how the gateways and the skill renderer resolve a

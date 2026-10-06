@@ -1,67 +1,99 @@
 # Channels
 
-A **channel** is how people, or other agents, reach one of your agents: a web chat on its own link, a chat widget on your own website, Slack, WhatsApp and the other messaging apps, an A2A endpoint other agents call, or a desktop or terminal app people download.
+A channel is a place where people can talk to one of your assistants: a chat page with its own link, a chat bubble on your website, Slack, Microsoft Teams, WhatsApp, email, text messages, iMessage, or an app people download. For example, the same support assistant can answer customers in a chat bubble on your site, on WhatsApp and by email, while your team asks it questions in Slack.
 
-Every agent has a **Channels** tab. It is the only place channels are added and edited. An agent can have as many channels as you like, several of one kind among them (a Slack for support and a Slack for sales), and each channel belongs to exactly one agent. Each has a name of its own, which starts as its kind and can be changed on its page.
+You set channels up on the assistant itself, and you decide when each one goes live.
 
-![An agent's Channels tab](/screenshots/apps-list.png)
+![An agent's Channels tab](/screenshots/agent-channels.png)
 
-## The kinds of channel
+## Where people can reach your assistant
 
 | Channel | What people get |
 |---|---|
 | **Web chat** | A chat page on its own link, hosted by almyty |
-| **Website widget** | A chat bubble on your own site, added with one line of script |
-| **Slack** | Answers direct messages and mentions in your workspace, with **Add to Slack** |
-| **WhatsApp** | Through Twilio, or directly through Meta's Cloud API |
+| **Website widget** | A chat bubble on your own website, added by pasting one line into the page |
+| **Slack** | Answers direct messages and mentions in your Slack workspace, installed with **Add to Slack** |
+| **WhatsApp** | Through Twilio, or directly through Meta's WhatsApp Cloud API |
 | **Microsoft Teams**, **Telegram**, **Discord**, **Google Chat** | Answers as a bot |
-| **Signal**, **Matrix**, **IRC** | Answers through a bridge you run |
-| **Email**, **SMS** | Answers mail to your receiving address, or texts to your Twilio number |
-| **Webhook** | Takes messages from, and sends replies to, an endpoint you own |
-| **Desktop app**, **Terminal app** | A signed download people install; see [Downloadable apps](/channels/builds) |
-| **Other agents (A2A)** | Other agents find it by its agent card and call it; see [A2A](/gateways/a2a) |
+| **Signal**, **Matrix**, **IRC** | Answers through a small relay program (a "bridge") you run |
+| **Email**, **SMS** | Answers mail sent to your receiving address, or texts sent to your Twilio number |
+| **iMessage** | Answers one-to-one and group iMessages through a service that owns the number: Sendblue or LoopMessage |
+| **Webhook** | Takes messages from, and sends replies to, a web address you own |
+| **Desktop app**, **Terminal app** | An app people download and install; see [Downloadable apps](/channels/builds) |
+| **Other agents (A2A)** | Other AI agents can call your assistant. A2A ("agent to agent") is a shared standard that lets agents from different companies talk to each other; see [A2A](/gateways/a2a) |
 
-## Adding a channel
+An assistant can have as many channels as you like, including several of one kind (a Slack for support and a Slack for sales). Each channel belongs to one assistant and has its own name, which you can change on its page.
 
-On the agent, open **Channels** and select **Add channel**, then pick the kind. The channel is added to the agent and its page opens. A desktop app opens the agent's web chat, so picking **Desktop app** on an agent with no web chat offers to add the web chat as well. Nothing answers until you **publish** it (or, for a desktop or terminal app, build it): adding a channel records where the agent will be, publishing is the decision to let people reach it.
+## Add a channel
+
+1. Open the assistant on **Agents** and go to its **Channels** tab. This tab is the only place channels are added and changed.
+2. Click **Add channel** and pick where people should reach it. The channel's page opens.
+3. Fill in what that channel needs (see below).
+4. Click **Publish**. Until you do, nothing answers: adding a channel only records where the assistant will be, publishing is the decision to let people in. A desktop or terminal app is built instead of published.
+
+A desktop app opens the assistant's web chat, so picking **Desktop app** on an assistant with no web chat offers to add the web chat too.
+
+## What's on a channel's page
 
 A channel's page has what that channel needs and nothing else:
 
-- Its **name**, and for a web chat its **address**.
-- **Keys** for a messaging channel: pick a credential you keep on Credentials, or select **Create one here** to add one without leaving the page. Only credentials for that platform are offered.
-- **AI disclosure**: a switch, on by default, that tells people they are talking to an AI, with the line from the branding.
-- The **Callback URL** to paste into the platform's console, where the platform needs one. Telegram and the Twilio channels register it for you when you publish.
-- **Publish** and **Unpublish**. Unpublishing stops the channel answering and keeps its settings and address, so publishing again needs no re-registration on the platform side.
-- **Delete** removes the channel and the gateway it answers on, and stops it answering.
+- Its **name**, and for a web chat its **address** (the link people open).
+- **Keys** for a messaging app. A key is the password-like code a platform such as Slack or Twilio gives you so almyty can post as your bot. Pick one you already keep on [Credentials](/credentials), or click **Create one here** to add it without leaving the page. Only keys for that platform are offered. On Slack this section is **Add to Slack** and takes your Slack app's details.
+- **AI disclosure**: a switch, on by default, that tells people they are talking to an AI, using the line you set in the branding. Turning it off needs the white-label option (Enterprise plan).
+- The **Callback URL**, where the platform needs one: the address you paste into the other service so it knows where to send messages. Telegram and the Twilio channels register it for you when you publish.
+- **Publish** and **Unpublish**. Unpublishing stops the channel answering but keeps its settings and address, so publishing again needs no new setup on the other service.
+- **Delete** removes the channel and stops it answering.
 
-A channel of an agent private to its owner cannot be added or published: share the agent with the organization first. A workflow agent cannot be published on a channel either, because it answers a call rather than a person; switch it to autonomous.
+Two kinds of assistant cannot be published on a channel: one that is private to its owner (share it with your organization first), and a workflow assistant, which runs a fixed series of steps when called rather than chatting with a person (switch it to autonomous).
 
 ## Branding and visitor rules
 
-What people see, and who can use the agent's channels, is set once on the agent: on the Channels tab, open **Branding and visitor rules**.
+What people see, and who may use the assistant, is set once for all its channels. On the **Channels** tab, open **Branding and visitor rules**.
 
-- **Look**: the name people see, brand colour, theme, greeting, suggested prompts, the AI disclosure line, and whether the almyty mark shows (removing it needs the white-label entitlement).
-- **Who can use it**: anyone with the link, email verification, sign-in with OAuth, or enterprise SSO (commercial edition).
-- Under **Advanced**, what it may cost and what it keeps: a spend limit per run, per day and per month, messages per visitor and per IP address an hour, how long visitor data is kept, and whether visitors may download or delete their own data.
+- **Look**: the name people see, brand colour, theme, greeting, suggested prompts, the AI disclosure line, and whether the almyty mark shows (removing it needs the white-label option).
+- **Who can use it**: **Anyone with the link**, **Email verification** (visitors confirm an email address first), **Sign in with OAuth** (visitors sign in with an account they already have, such as Google or Microsoft), or **Enterprise SSO** (your company's own sign-in, on the Business and Enterprise plans).
+- Under **Advanced**, what it may cost and what it keeps: a spend limit per run, per day and per month, how many messages each visitor and each internet address may send an hour, how long visitor data is kept, whether visitors may download or delete their own data, and whether visitor conversations may go into the assistant's shared memory (off by default).
 
-![Branding and visitor rules](/screenshots/apps-settings.png)
+![Branding and visitor rules](/screenshots/channel-branding-rules.png)
 
-Every channel uses these unless it sets its own. On a channel's page, turn on **Use this channel's own** under **Branding and visitor rules** and change what should differ: only the fields you change are kept for the channel, and everything else keeps following the agent.
+Every channel follows these unless you give it its own. On a channel's page, under **Branding and visitor rules**, turn on **Use this channel's own** and change what should be different. Only what you change is kept for that channel; everything else keeps following the assistant.
 
 ### Spend limits
 
-The per-run limit stops a single run that would cost more. The per-day and per-month limits cover everything visitors spend on the agent's channels together; a channel that sets its own daily or monthly limit spends from an allowance of its own instead. An agent open to anyone starts at 5 a day and 50 a month (UTC days and months). When a limit is reached, visitors are told it has reached its limit until it resets, and owners and admins are notified. See [Protect model spend](/hosted-chat#protect-model-spend).
+Spend limits stop a public assistant from running up your AI bill:
 
-## What publishing refuses
+- **Spend limit per run** stops any single answer that would cost more.
+- **Spend limit per day** and **per month** cover everything visitors spend on the assistant's channels together. A channel with its own daily or monthly limit has an allowance of its own instead.
 
-Publishing turns away what would produce a channel that is live and useless, or open when you meant it closed, and says every reason at once:
+An assistant open to anyone starts at 5 a day and 50 a month (days and months in UTC). When a limit is reached, visitors are told the chat has reached its limit until it resets, and owners and admins get a notification. See [Protect model spend](/hosted-chat#protect-model-spend).
 
-- **Missing keys**: each platform declares exactly what it uses, so you are told which key is missing.
-- **No spend limit or message limits on a channel open to anyone**: anyone with the link can spend against your model keys.
-- **A workflow agent, or an agent private to its owner.**
-- **The website widget on a channel people must sign in to**: the widget has no sign-in, so it only goes on a channel anyone can use.
-- **A desktop app with no web chat to open**: a desktop app is a window onto the agent's web chat, so add a web chat channel first.
+## Visitor data
 
-## Where the gateways fit
+When someone asks what the assistant keeps about them, or asks you to delete it, the assistant's owner (or an owner or admin of your organization) answers from the **Channels** tab under **Visitor data**: say who they are and on which channel, see what is kept, then download a copy for them or delete it. People on the web chat and the website chat bubble can also do it themselves. See [Visitor data requests](/channels/visitor-data).
 
-Publishing a channel that almyty serves stands up a gateway for it. That gateway is created only through the channel, never from **Create gateway**, and its page says which agent's channel it is and links back. Gateways that serve an agent without being a channel (ACP, an OpenAI-compatible endpoint) are listed on the Channels tab under **Also served by gateways**.
+## Files, pictures and group chats
+
+**People can send files.** A photo, a PDF or a text file sent on a channel is passed to the assistant. An AI model that can look at images or read PDFs gets the file itself; one that cannot is told what was sent (and reads a text file's text). Whether a model can do this is shown on its card on **Models**, filled in automatically, and you can change it there. Up to five files of up to 10 MB each are read per message. Video, audio and archives are named to the assistant but not opened.
+
+This works on Slack, Telegram, Discord, WhatsApp (both kinds), SMS, Microsoft Teams, Matrix, Signal, email, iMessage and the webhook, and in the web chat and website widget, where visitors attach files next to the message box. Google Chat names the files but cannot pass them on, and IRC has no files.
+
+Files are kept with the conversation they arrived in. When the conversation is removed (by your retention period, or because the visitor deleted it) the files go with it. A file uploaded but never sent is removed after a day.
+
+**Group chats say who is talking.** In a conversation with several people (a Slack channel, a Teams group chat, a Discord server, a Telegram or Signal group, a Google Chat space, an IRC channel, a Matrix room, an iMessage group) each message reaches the assistant with the writer's name in front, like "Anna: can someone check order 1182?". It is the name the platform shows. Where there is none, or the name is an email address or phone number, a short code such as `user-3fa21c` is used instead, the same one each time for that person. Contact details are never put in front of a message.
+
+**Pictures and files in replies.** When the assistant's answer includes an image or a link to a file, apps that can show media send it as a picture or attachment: Slack, Telegram, Discord, WhatsApp, Microsoft Teams, Google Chat, Signal, email and iMessage. SMS, Matrix and IRC keep the link, and so do the web chat and widget, which show an image as a link rather than loading it.
+
+## Why a publish can be refused
+
+Publishing refuses a channel that would be live but useless, or open when you meant it closed, and lists every reason at once:
+
+- **Missing keys.** You are told which key the platform still needs.
+- **No limits on a channel open to anyone**: no spend limit per run, or no per-visitor and per-address message limits. Otherwise anyone with the link could spend against your AI provider account.
+- **A workflow assistant, or one private to its owner.**
+- **The website widget on a channel people must sign in to.** The widget has no sign-in, so it only goes on a channel anyone can use.
+- **A desktop app with no web chat to open.** Add a web chat channel first.
+- **Something your plan does not include**: Enterprise SSO sign-in, removing the almyty mark, or turning the AI disclosure off.
+
+## For developers
+
+Publishing a channel that almyty serves creates a gateway for it (a gateway is the address almyty answers on). That gateway is created only through the channel, never from **Create gateway**, and its page says which assistant's channel it is and links back.

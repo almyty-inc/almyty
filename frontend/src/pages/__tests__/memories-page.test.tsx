@@ -31,7 +31,15 @@ vi.mock('../../lib/api', () => ({
     listAudit: vi.fn(),
     listCredentials: vi.fn(),
     runConsolidation: vi.fn(),
+    accountsOverview: vi.fn(async () => ({ accounts: [], services: [] })),
+    listMoves: vi.fn(async () => []),
   },
+}))
+
+vi.mock('../../lib/connections-api', () => ({
+  connectorsApi: { list: vi.fn(async () => []) },
+  connectionsApi: { validate: vi.fn(async () => ({})) },
+  matchesConnectorSearch: () => true,
 }))
 
 vi.mock('../../store/app', () => ({
@@ -99,6 +107,20 @@ describe('MemoriesPage', () => {
         screen.getByText('The user prefers Yosemite over Yellowstone for camping trips.'),
       ).toBeInTheDocument()
     })
+  })
+
+  // A document is kept whole plus the chunks agents look up; the page lists
+  // it once, not once per chunk.
+  it('lists documents whole, without their chunks', async () => {
+    ;(memoriesApi.list as any).mockResolvedValue({ items: [], next_cursor: null })
+    ;(memoriesApi.listBackends as any).mockResolvedValue([])
+    ;(memoriesApi.backendsHealth as any).mockResolvedValue([])
+    ;(memoriesApi.getConfig as any).mockResolvedValue({})
+
+    render(<MemoriesPage />)
+
+    await waitFor(() => expect(memoriesApi.list).toHaveBeenCalled())
+    expect((memoriesApi.list as any).mock.calls[0][0]).toMatchObject({ hide_chunks: true })
   })
 
   // The trash button sits right next to the memory body, so a single stray
@@ -176,10 +198,9 @@ describe('MemoriesPage entry points', () => {
       { id: 'mem0', capabilities: [], modes: ['memory'] },
     ])
     ;(memoriesApi.getConfig as any).mockResolvedValue(null)
-    ;(memoriesApi.backendsHealth as any).mockResolvedValue({})
     render(<MemoriesPage />)
 
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Memories', 'Search', 'Storage'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Memories', 'Search', 'Accounts', 'Storage'])
     const storage = screen.getByRole('tab', { name: 'Storage' })
     fireEvent.mouseDown(storage)
     fireEvent.click(storage)
@@ -193,7 +214,8 @@ describe('MemoriesPage entry points', () => {
     expect(screen.getByLabelText('When a memory is over the size limit')).toBeInTheDocument()
     expect(screen.getByLabelText('Also copy memories to')).toBeInTheDocument()
     expect((await screen.findAllByText(/^Mem0( account)?$/)).length).toBeGreaterThan(0)
-    expect(screen.getByRole('link', { name: /Move memories to another service/ })).toHaveAttribute('href', '/memories/transfer')
+    // Moving memories lives with the accounts now.
+    expect(screen.queryByRole('link', { name: /Move memories/ })).not.toBeInTheDocument()
   })
 })
 

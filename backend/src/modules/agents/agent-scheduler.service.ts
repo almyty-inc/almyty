@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, OnModuleInit, Optional, forwardRef } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { InjectQueue, Process, Processor } from '@nestjs/bull';
 import { Job, Queue } from 'bull';
 
@@ -17,14 +18,98 @@ import {
 } from '../../common/authorization/execution-access.service';
 import { User } from '../../entities/user.entity';
 import { hasEffectiveMembership } from '../../common/authorization/membership';
+import {
+  ScheduleTiming,
+  describeTiming,
+  nextRuns,
+  normalizeTiming,
+  repeatFor,
+  timingOf,
+} from './agent-schedule-spec';
+import {
+  ChannelDelivery,
+  SCHEDULED_RESULT_POSTER,
+  ScheduleDelivery,
+  ScheduledResultPoster,
+} from './scheduled-result-poster';
 
+export { validateIntervalMinutes } from './agent-schedule-spec';
 
-export interface AgentScheduleConfig {
+/**
+ * A schedule as stored on `agent.settings.schedule`. The timing fields are
+ * ScheduleTiming's: `kind` 'interval' with `intervalMinutes` (also what a
+ * schedule saved before kinds existed is read as), or 'days'/'monthly'
+ * with `time`, `days`/`dayOfMonth` and `timezone`.
+ */
+export interface AgentScheduleConfig extends Partial<ScheduleTiming> {
   enabled: boolean;
-  intervalMinutes: number;
+  intervalMinutes?: number;
   input: Record<string, any>;
+  /** Where the result goes besides the run history. Absent: nowhere else. */
+  deliverTo?: ScheduleDelivery | null;
   /** Set when the scheduler paused this schedule on its own (see pauseForBrokenModel). */
   pausedReason?: AgentModelIssue;
+}
+
+/** What the schedule endpoints say about a schedule, besides its stored settings. */
+export interface ScheduleView {
+  schedule: AgentScheduleConfig | null;
+  /** The schedule in plain words, e.g. "Every weekday at 8:00, Europe/Berlin". */
+  summary: string | null;
+  /** The next time it fires, when it is on. */
+  nextRunAt: string | null;
+}
+
+/** A schedule request: the timing, the input, and where the result goes. */
+export interface ScheduleRequest extends Partial<ScheduleTiming> {
+  input?: Record<string, any>;
+  deliverTo?: ScheduleDelivery | null;
+}
+
+import { NotificationsService } from '../notifications/notifications.service';
+import { AgentRuntimeService } from './agent-runtime.service';
+import { AgentWebhookService } from './agent-webhook.service';
+import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { runsOnAutonomousRuntime } from './agent-invocation';
+import { ScheduledResult } from './scheduled-result-poster';
+
+/** What a scheduled tick asks an autonomous agent: the input's message, else the input itself. */
+export function scheduledTask(input: Record<string, any> | null | undefined): string {
+  if (typeof input?.message === 'string' && input.message.trim()) return input.message;
+  if (input && Object.keys(input).length > 0) return JSON.stringify(input);
+  return 'Do your scheduled task now.';
+}
+
+/** A finished workflow execution, as the poster reads it. */
+export function resultOfExecution(execution: AgentExecution): ScheduledResult {
+  return {
+    kind: 'execution',
+    id: execution.id,
+    status: execution.status,
+    output: execution.output,
+    userId: execution.userId ?? null,
+    error: execution.error ?? null,
+    executionTime: execution.executionTime,
+    totalCost: execution.totalCost,
+    totalTokens: execution.totalTokens,
+    metadata: execution.metadata ?? {},
+  };
+}
+
+/** A finished autonomous run, as the poster reads it. */
+export function resultOfRun(run: AgentRun): ScheduledResult {
+  return {
+    kind: 'run',
+    id: run.id,
+    status: run.status,
+    output: run.output,
+    userId: run.userId ?? null,
+    error: run.error ?? null,
+    executionTime: run.executionTime,
+    totalCost: run.totalCost,
+    totalTokens: run.totalTokens,
+    metadata: run.metadata ?? {},
+  };
 }
 
 /**
@@ -39,6 +124,7 @@ export interface AgentModelIssue {
   message: string;
   detectedAt: string;
 }
+
 
 const QUEUE_NAME = 'agent-scheduler';
 
@@ -57,23 +143,6 @@ export function brokenModelFrom(nodeResults: Record<string, any> | undefined | n
 function asIssue(err: unknown): BrokenModel | undefined {
   const e = err as any;
   return e && e.code === 'MODEL_NOT_FOUND' && typeof e.model === 'string' ? e : undefined;
-}
-
-/** Bounds on intervalMinutes. Below the floor we'd flood Redis; above the
- *  ceiling BullMQ can mishandle the timestamp arithmetic. */
-const MIN_INTERVAL_MINUTES = 1;
-const MAX_INTERVAL_MINUTES = 60 * 24 * 365; // 1 year
-
-function validateIntervalMinutes(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new BadRequestException('intervalMinutes must be a finite number');
-  }
-  if (value < MIN_INTERVAL_MINUTES || value > MAX_INTERVAL_MINUTES) {
-    throw new BadRequestException(
-      `intervalMinutes must be between ${MIN_INTERVAL_MINUTES} and ${MAX_INTERVAL_MINUTES}`,
-    );
-  }
-  return Math.floor(value);
 }
 
 @Injectable()
@@ -95,6 +164,23 @@ export class AgentSchedulerService implements OnModuleInit {
     private readonly executionRepo: Repository<AgentExecution>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    // Reaches the channel poster the gateways module provides (see
+    // scheduled-result-poster.ts). Optional so the positional unit tests
+    // construct the service; without it a channel delivery is refused.
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
+    @Optional()
+    private readonly notifications?: NotificationsService,
+    // Runs an autonomous agent's scheduled tick (the workflow engine runs
+    // the others). Optional so the positional unit tests construct this.
+    @Optional()
+    @Inject(forwardRef(() => AgentRuntimeService))
+    private readonly runtime?: AgentRuntimeService,
+    @Optional()
+    @InjectRepository(AgentRun)
+    private readonly runRepo?: Repository<AgentRun>,
+    @Optional()
+    private readonly webhooks?: AgentWebhookService,
   ) {}
 
   async onModuleInit() {
@@ -109,13 +195,35 @@ export class AgentSchedulerService implements OnModuleInit {
     await this.restoreSchedules();
   }
 
+  /** The channel poster, or null on an install where the gateways module is not loaded. */
+  private poster(): ScheduledResultPoster | null {
+    try {
+      return (this.moduleRef?.get(SCHEDULED_RESULT_POSTER, { strict: false }) as ScheduledResultPoster) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Turn an agent's schedule on, or change it.
+   *
+   * `timing` is either a number of minutes (the original "every N
+   * minutes" call) or a ScheduleRequest: a time of day on chosen days or
+   * one day of the month, in a time zone -- the zone of `actingUserId`'s
+   * profile when the request names none, else UTC -- plus the input and
+   * where the result goes.
+   */
   async scheduleAgent(
     agentId: string,
     organizationId: string,
-    intervalMinutes: number,
+    timing: number | ScheduleRequest,
     input: Record<string, any> = {},
+    actingUserId?: string | null,
   ): Promise<Agent> {
-    const validated = validateIntervalMinutes(intervalMinutes);
+    const request: ScheduleRequest =
+      typeof timing === 'number' || timing == null ? { kind: 'interval', intervalMinutes: timing as number } : timing;
+    const zone = await this.profileZone(actingUserId);
+    const validated = normalizeTiming(request as Record<string, any>, zone);
     const agent = await this.agentsService.getAgent(agentId, organizationId);
 
     // Say no here rather than at the first tick.
@@ -133,12 +241,15 @@ export class AgentSchedulerService implements OnModuleInit {
       );
     }
 
+    const deliverTo = await this.checkDelivery(agent, request.deliverTo);
+
     // Update agent settings with schedule config
     const settings = { ...(agent.settings || {}) };
     settings.schedule = {
       enabled: true,
-      intervalMinutes: validated,
-      input,
+      ...validated,
+      input: request.input ?? input,
+      ...(deliverTo ? { deliverTo } : {}),
     } as AgentScheduleConfig;
     // Re-enabling is the acknowledgement: whoever did it has seen the note.
     delete settings.modelIssue;
@@ -147,11 +258,99 @@ export class AgentSchedulerService implements OnModuleInit {
 
     const saved = await this.agentRepo.save(agent);
 
-    // Add repeatable job to BullMQ
+    // Add repeatable job to Bull
     await this.addRepeatableJob(saved);
 
-    this.logger.log(`[SCHEDULE] Agent ${agentId} scheduled every ${validated} minutes via BullMQ`);
+    this.logger.log(`[SCHEDULE] Agent ${agentId} scheduled: ${describeTiming(validated)}`);
     return saved;
+  }
+
+  /** The time zone on a person's profile, if they set one. */
+  private async profileZone(userId?: string | null): Promise<string | null> {
+    if (!userId) return null;
+    const user = await this.userRepo
+      .findOne({ where: { id: userId }, select: { id: true, timezone: true } as any })
+      .catch(() => null);
+    return user?.timezone ?? null;
+  }
+
+  /** Validate where the result goes; null for nowhere else. */
+  private async checkDelivery(agent: Agent, deliverTo: ScheduleDelivery | null | undefined): Promise<ScheduleDelivery | null> {
+    if (!deliverTo) return null;
+    if (deliverTo.kind === 'webhook') {
+      if (!agent.webhookUrl) {
+        throw new BadRequestException('This agent has no webhook URL. Add one first, or send the result somewhere else.');
+      }
+      return { kind: 'webhook' };
+    }
+    if (deliverTo.kind === 'channel') {
+      const poster = this.poster();
+      if (!poster) throw new BadRequestException('Posting to a channel is not available on this install.');
+      return poster.checkDestination(agent, deliverTo);
+    }
+    throw new BadRequestException('Send the result to a webhook or one of the agent\'s channels.');
+  }
+
+  /**
+   * The schedule as the page shows it: the stored settings, the same
+   * thing in plain words, and when it next fires. An interval's next run
+   * is the queue's (it counts from when the repeat was registered); a
+   * time of day's is computed from its cron expression and zone, the way
+   * the queue computes it.
+   */
+  async describeSchedule(agent: Agent, now = new Date()): Promise<ScheduleView> {
+    const schedule = (agent.settings?.schedule as AgentScheduleConfig | undefined) ?? null;
+    if (!schedule) return { schedule: null, summary: null, nextRunAt: null };
+    let summary: string | null = null;
+    try {
+      summary = describeTiming(timingOf(schedule));
+    } catch {
+      summary = null;
+    }
+    let nextRunAt: string | null = null;
+    if (schedule.enabled) {
+      try {
+        const timing = timingOf(schedule);
+        if (timing.kind === 'interval') {
+          const jobs = await this.schedulerQueue.getRepeatableJobs();
+          const job = jobs.find((j) => j.id === `schedule-${agent.id}`);
+          nextRunAt = job?.next ? new Date(job.next).toISOString() : null;
+        } else {
+          nextRunAt = nextRuns(timing, now, 1)[0]?.toISOString() ?? null;
+        }
+      } catch {
+        nextRunAt = null;
+      }
+    }
+    return { schedule, summary, nextRunAt };
+  }
+
+  /**
+   * What a schedule would do, without saving it: the plain words and the
+   * next few runs. The schedule page shows this while a person is still
+   * choosing.
+   */
+  async previewSchedule(
+    request: ScheduleRequest,
+    actingUserId?: string | null,
+    now = new Date(),
+  ): Promise<{ summary: string; nextRuns: string[]; timezone: string | null }> {
+    const timing = normalizeTiming(request as Record<string, any>, await this.profileZone(actingUserId));
+    return {
+      summary: describeTiming(timing),
+      nextRuns: nextRuns(timing, now, 3).map((d) => d.toISOString()),
+      timezone: timing.timezone ?? null,
+    };
+  }
+
+  /** The agent's channels a scheduled result can be posted to. */
+  async deliveryOptions(agentId: string, organizationId: string) {
+    const agent = await this.agentsService.getAgent(agentId, organizationId);
+    const poster = this.poster();
+    return {
+      webhookUrl: agent.webhookUrl ?? null,
+      channels: poster ? await poster.destinations(agent) : [],
+    };
   }
 
   /**
@@ -174,6 +373,7 @@ export class AgentSchedulerService implements OnModuleInit {
     if (!user || user.isActive === false) return undefined;
     return hasEffectiveMembership(user.organizationMemberships, agent.organizationId) ? user.id : undefined;
   }
+
 
   /** Pause a schedule whose owner can no longer run it, and say why. */
   private async pauseForOwner(agent: Agent): Promise<void> {
@@ -286,6 +486,7 @@ export class AgentSchedulerService implements OnModuleInit {
     return saved;
   }
 
+
   async restoreSchedules(): Promise<void> {
     try {
       // Clean up any orphaned repeatable jobs first
@@ -314,9 +515,9 @@ export class AgentSchedulerService implements OnModuleInit {
 
         // Skip silently if a stored schedule is corrupted — restore must
         // not crash the whole boot path because one row has a bad value.
-        let minutes: number;
+        let repeat: ReturnType<typeof repeatFor>;
         try {
-          minutes = validateIntervalMinutes(schedule.intervalMinutes);
+          repeat = repeatFor(timingOf(schedule));
         } catch (err: any) {
           this.logger.warn(`[RESTORE] Skipping agent ${agent.id}: ${err.message}`);
           continue;
@@ -332,7 +533,7 @@ export class AgentSchedulerService implements OnModuleInit {
         // true, so the agent went on reading as "scheduled every 15
         // minutes" and never ran again until somebody toggled it.
         try {
-          await this.enqueueRepeatableJob(agent, minutes, schedule.input || {});
+          await this.enqueueRepeatableJob(agent, repeat, schedule.input || {});
           restoredCount++;
         } catch (err: any) {
           failed.push(agent);
@@ -341,7 +542,7 @@ export class AgentSchedulerService implements OnModuleInit {
       }
 
       if (restoredCount > 0) {
-        this.logger.log(`[RESTORE] Restored ${restoredCount} scheduled agent(s) via BullMQ`);
+        this.logger.log(`[RESTORE] Restored ${restoredCount} scheduled agent(s)`);
       }
 
       // Say so on the agents themselves, through the same channel
@@ -381,17 +582,21 @@ export class AgentSchedulerService implements OnModuleInit {
     await this.removeRepeatableJob(agent.id);
 
     const schedule = agent.settings?.schedule as AgentScheduleConfig | undefined;
-    const minutes = schedule?.intervalMinutes
-      ? validateIntervalMinutes(schedule.intervalMinutes)
-      : 60;
+    const repeat = schedule ? repeatFor(timingOf(schedule)) : { every: 60 * 60 * 1000 };
     const input = schedule?.input || {};
 
-    await this.enqueueRepeatableJob(agent, minutes, input);
+    await this.enqueueRepeatableJob(agent, repeat, input);
   }
 
+  /**
+   * One repeatable job per agent, keyed `schedule-<agentId>`. `repeat` is
+   * `{ every }` for an interval or `{ cron, tz }` for a time of day; Bull
+   * evaluates the cron expression in the zone, so the run follows the
+   * wall clock there across daylight saving changes.
+   */
   private async enqueueRepeatableJob(
     agent: Agent,
-    minutes: number,
+    repeat: ReturnType<typeof repeatFor>,
     input: Record<string, any>,
   ): Promise<void> {
     await this.schedulerQueue.add(
@@ -404,7 +609,7 @@ export class AgentSchedulerService implements OnModuleInit {
         input,
       },
       {
-        repeat: { every: minutes * 60 * 1000 },
+        repeat,
         jobId: `schedule-${agent.id}`,
         removeOnComplete: 100,
         removeOnFail: 100,
@@ -426,10 +631,56 @@ export class AgentSchedulerService implements OnModuleInit {
     }
   }
 
+  /**
+   * A scheduled run that did not start because its channel may not take a
+   * post now (the channel is off, or its spend limit is reached). Written
+   * as a failed run with the reason, and the owner is told, the same way a
+   * failed scheduled run is.
+   */
+  private async refuseForChannel(agent: Agent, owner: string | null, delivery: ChannelDelivery, reason: string): Promise<void> {
+    const message = `Not run: ${reason}`;
+    try {
+      await this.executionRepo.save(
+        this.executionRepo.create({
+          agentId: agent.id,
+          organizationId: agent.organizationId,
+          userId: owner,
+          status: AgentExecutionStatus.FAILED,
+          input: {},
+          error: message,
+          metadata: {
+            triggerType: 'scheduled',
+            channelDelivery: {
+              status: 'skipped',
+              channelId: delivery.channelId,
+              destination: delivery.label ?? delivery.to,
+              error: reason,
+              at: new Date().toISOString(),
+            },
+          },
+        }),
+      );
+    } catch (err: any) {
+      this.logger.error(`[SCHEDULED_RUN] Could not record the skipped run for agent ${agent.id}: ${err.message}`);
+    }
+    const recipient = agent.visibility === 'private' ? agentOwnerUserId(agent) : owner;
+    if (!recipient || !this.notifications) return;
+    await this.notifications
+      .emit({
+        type: 'run.failed',
+        organizationId: agent.organizationId,
+        userIds: [recipient],
+        title: `Scheduled run skipped: ${agent.name}`,
+        body: message,
+        link: `/agents/${agent.id}`,
+      })
+      .catch(() => undefined);
+  }
+
   @Process('execute-agent')
   async handleScheduledExecution(job: Job): Promise<void> {
     // Same emergency gate as onModuleInit. The repeatable job entries
-    // already exist in BullMQ from prior boots; setting the env var
+    // already exist in Redis from prior boots; setting the env var
     // alone wouldn't stop them firing without also short-circuiting
     // the processor.
     if (process.env.DISABLE_AGENT_SCHEDULER === 'true') {
@@ -485,6 +736,39 @@ export class AgentSchedulerService implements OnModuleInit {
         await this.pauseForLostAccess(agent, principal, access.reason);
         return;
       }
+
+      // A result bound for a channel is only worth a run the channel can
+      // take: one switched off, or whose spend limit is reached, would
+      // refuse the post after the run had been paid for.
+      const delivery = schedule.deliverTo?.kind === 'channel' ? schedule.deliverTo : null;
+      const poster = delivery ? this.poster() : null;
+      if (delivery) {
+        const admitted = poster
+          ? await poster.admit(agent, delivery)
+          : { ok: false as const, reason: 'posting to a channel is not available on this install' };
+        if (!admitted.ok) {
+          await this.refuseForChannel(agent, owner, delivery, (admitted as { reason: string }).reason);
+          return;
+        }
+      }
+
+      // Run it on the engine that owns the agent: an autonomous agent on
+      // the autonomous runtime, a workflow on the workflow engine -- the
+      // same dispatch every other entry point makes (runsOnAutonomousRuntime).
+      // Sending an autonomous agent to the workflow engine ran its (empty)
+      // pipeline, which finished at once with no output.
+      if (runsOnAutonomousRuntime(agent)) {
+        if (!this.runtime) throw new Error('The autonomous runtime is not available on this server');
+        await this.runtime.startRun(agent.id, organizationId, owner, scheduledTask(input), {
+          principal,
+          // Where the result goes is decided now and carried by the run, so
+          // it is posted when the run finishes (deliverScheduledRun), on
+          // whichever worker that is, without holding this queue meanwhile.
+          metadata: { triggerType: 'scheduled', scheduledDelivery: schedule.deliverTo ?? null, scheduleTimezone: schedule.timezone ?? null },
+        });
+        return;
+      }
+
       const execution = await this.executionEngine.execute(
         agent,
         organizationId,
@@ -501,6 +785,9 @@ export class AgentSchedulerService implements OnModuleInit {
       if (broken) {
         await this.pauseForBrokenModel(agentId, organizationId, broken);
       }
+      if (delivery && poster && execution?.id) {
+        await poster.post(agent, resultOfExecution(execution), delivery, { timezone: schedule.timezone });
+      }
     } catch (err: any) {
       this.logger.error(`[SCHEDULED_RUN] Failed for agent ${agentId}: ${err.message}`);
       // A model the vendor no longer serves will fail identically on every
@@ -514,11 +801,56 @@ export class AgentSchedulerService implements OnModuleInit {
     }
   }
 
-  async getScheduledAgents(): Promise<{ agentId: string; interval: number; nextRun: Date }[]> {
+  /**
+   * Hand on the result of a scheduled autonomous run once it has finished:
+   * to the channel or the webhook its schedule named when it started.
+   * Called by the runtime's step processor whenever a run ends, on
+   * whichever worker ran its last step; `deliveredAt` is claimed first, so
+   * a step processed twice cannot post twice.
+   */
+  async deliverScheduledRun(runId: string): Promise<void> {
+    try {
+      if (!this.runRepo) return;
+      const run = await this.runRepo.findOne({ where: { id: runId } });
+      if (!run || run.metadata?.triggerType !== 'scheduled' || !run.isDone()) return;
+      const claim = await this.runRepo.update({ id: run.id, deliveredAt: IsNull() }, { deliveredAt: new Date() });
+      if (!claim.affected) return;
+
+      const agent = await this.agentRepo.findOne({ where: { id: run.agentId, organizationId: run.organizationId } });
+      if (!agent) return;
+
+      // A model the vendor retired fails the same way on every tick: pause
+      // the schedule, as a workflow run's does. The step processor recorded
+      // the issue on the agent while this run failed.
+      const issue = agent.settings?.modelIssue as AgentModelIssue | undefined;
+      if (run.status === AgentRunStatus.FAILED && issue?.code === 'MODEL_NOT_FOUND' && Date.parse(issue.detectedAt) >= run.createdAt.getTime() - 1000) {
+        await this.pauseForBrokenModel(agent.id, agent.organizationId, issue);
+      }
+
+      const delivery = run.metadata?.scheduledDelivery as ScheduleDelivery | null | undefined;
+      const result = resultOfRun(run);
+      if (delivery?.kind === 'channel') {
+        const poster = this.poster();
+        if (poster) await poster.post(agent, result, delivery, { timezone: run.metadata?.scheduleTimezone ?? undefined });
+      } else if (delivery?.kind === 'webhook' && this.webhooks) {
+        await this.webhooks.sendExecutionWebhook(agent, result as any, {
+          chosen: true,
+          record: async (outcome) => {
+            await this.runRepo!.update({ id: run.id }, { metadata: { ...(run.metadata ?? {}), webhookDelivery: outcome } });
+          },
+        });
+      }
+    } catch (err: any) {
+      this.logger.error(`[SCHEDULED_RUN] Could not hand on the result of run ${runId}: ${err?.message ?? err}`);
+    }
+  }
+
+  async getScheduledAgents(): Promise<{ agentId: string; interval: number; cron: string | null; nextRun: Date }[]> {
     const jobs = await this.schedulerQueue.getRepeatableJobs();
     return jobs.map(job => ({
       agentId: job.id?.replace('schedule-', '') || 'unknown',
-      interval: job.every ? job.every / 60000 : 0,
+      interval: job.every ? Number(job.every) / 60000 : 0,
+      cron: job.cron ?? null,
       nextRun: new Date(job.next),
     }));
   }

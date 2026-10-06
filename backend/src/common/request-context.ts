@@ -26,11 +26,24 @@ export interface RequestContextStore {
   gatewayId?: string | null;
   /** Set for the duration of an agent run, so its tool calls inherit it. */
   runId?: string | null;
+  /** The agent whose run this is, set with runId. */
+  agentId?: string | null;
+  /**
+   * The run whose runner workspaces this one works in: the run itself, or
+   * for a workflow sub-agent the top-level run (RunWorkspaceService).
+   */
+  workspaceRunId?: string | null;
   /** Set for the duration of a pipeline node's execution. */
   nodeId?: string | null;
   /** Queue name + job id, when the scope is a background job. */
   jobId?: string | null;
   queue?: string | null;
+  /**
+   * W3C trace context an MCP client sent with this request (2026-07-28
+   * `_meta`: traceparent, tracestate, baggage). Audit rows written in this
+   * scope carry it, so a client's trace can be followed into almyty.
+   */
+  trace?: { traceparent: string; tracestate?: string; baggage?: string } | null;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContextStore>();

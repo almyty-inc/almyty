@@ -5,6 +5,8 @@ import { TelegramAdapter } from '../telegram.adapter';
 import { WhatsAppAdapter } from '../whatsapp.adapter';
 import { WhatsAppCloudAdapter } from '../whatsapp-cloud.adapter';
 import { SmsAdapter } from '../sms.adapter';
+import { IMessageSendblueAdapter } from '../imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../imessage-loopmessage.adapter';
 import { EmailAdapter } from '../email.adapter';
 import { WebhookAdapter } from '../webhook.adapter';
 import { GoogleChatAdapter } from '../google-chat.adapter';
@@ -75,6 +77,18 @@ describe('adapter deliveryId', () => {
       adapter: new SmsAdapter(),
       payload: { MessageSid: 'SM1', Body: 'a', From: '+1' },
       other: { MessageSid: 'SM2', Body: 'b', From: '+1' },
+    },
+    {
+      name: 'imessage via sendblue (message_handle)',
+      adapter: new IMessageSendblueAdapter(),
+      payload: { message_handle: 'H-A', content: 'a', from_number: '+1' },
+      other: { message_handle: 'H-B', content: 'b', from_number: '+1' },
+    },
+    {
+      name: 'imessage via loopmessage (message_id)',
+      adapter: new IMessageLoopMessageAdapter(),
+      payload: { event: 'message_inbound', message_id: 'M-A', webhook_id: 'W-A', text: 'a', contact: '+1' },
+      other: { event: 'message_inbound', message_id: 'M-B', webhook_id: 'W-B', text: 'b', contact: '+1' },
     },
     {
       name: 'email (Message-ID)',

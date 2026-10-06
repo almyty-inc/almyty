@@ -1,18 +1,16 @@
-# Node Types
+# Step types
 
-Every step in a workflow agent is a node. There are 12 types, each doing one job,
-wired together by edges on the canvas. Drag them from the palette in the
-[builder](/agents/builder); this page is the reference for what each one needs
-and what it hands downstream.
+A workflow agent is made of steps, such as "ask a model", "use a tool" or "go one way or the other". This page lists every kind of step, what each one needs to be filled in, and what it passes on to the next step. It is a reference: to learn how to draw a workflow, start with the [visual builder](/agents/builder).
 
-Ten of the twelve are in the palette. The other two — [Verify](#verify) and
-`extract_context` — are produced by the strategy compiler rather than dragged.
-Verify is documented at the bottom of this page; `extract_context` is covered
-with the strategies that use it in [Roles and strategies](/agents/execution).
+In the builder, steps are dragged from the **Steps** palette and connected by lines (connections). Here a step is also called a **node** and a connection an **edge**, because that is what they are called in the saved agent. There are 14 kinds, each doing one job.
+
+All fourteen are in the palette. [Verify](#verify) and
+[Extract context](#extract-context) are also produced by the strategy compiler;
+see [Roles and strategies](/agents/execution).
 
 ![Node palette in the agent builder](/screenshots/agent-builder-node-palette.png)
 
-## Quick Reference
+## Quick reference
 
 Every key below is read by the executor. A node's config may carry anything
 else, and nothing will read it.
@@ -21,21 +19,24 @@ else, and nothing will read it.
 |-----------|------------------|---------------------|
 | **Input** | `schema` | `{{input.*}}` |
 | **Output** | `mapping`, `source` | (terminal node) |
-| **LLM Call** | `userPromptTemplate` (or `userPrompt`, required), `systemPrompt`, `providerId`, `routing`, `roleKey`, `model`, `temperature`, `maxTokens`, `toolIds` | `{{nodes.<id>.output}}` |
-| **Tool Call** | `toolId` (required), `parameterMapping` | `{{nodes.<id>.output}}` |
+| **Model call** | `userPromptTemplate` (or `userPrompt`, required), `systemPrompt`, `providerId`, `routing`, `roleKey`, `model`, `temperature`, `maxTokens`, `toolIds` | `{{nodes.<id>.output}}` |
+| **Tool call** | `toolId` (required), `parameterMapping` | `{{nodes.<id>.output}}` |
 | **Condition** | `expression` (required) | (routes to true/false branches) |
 | **Transform** | `expression` (required) | `{{nodes.<id>.output}}`, a string |
 | **Loop** | `iterableExpression` (required), `maxIterations` | `{{nodes.<id>.output}}`, an array |
 | **Parallel** | none | `{{nodes.<id>.output}}` |
 | **Merge** | `strategy`, `judgePrompt`, `consensusThreshold`, `judgeConfig`, `roleKey`, `model`, `routing` | `{{nodes.<id>.output}}` |
-| **Sub-Agent** | `agentId` or `target` (required), `inputMapping` | `{{nodes.<id>.output}}` |
+| **Sub-agent** | `agentId` or `target` (required), `inputMapping` | `{{nodes.<id>.output}}` |
 | **Verify** | `checkers` (required), `target`, `spec`, `policy` | `{{nodes.<id>.output}}`, a verdict object |
+| **Extract context** | `task`, `sources`, `instruction`, `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | `{{nodes.<id>.output}}`, a brief object |
+| **Decision** | `question` (required), `thresholds`, `state`, `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | (routes to the chosen answer's edge) |
+| **Code** | `code` (required), `timeoutMs` | `{{nodes.<id>.output}}`, what the script returns |
 
-An LLM Call node needs a model from somewhere: a `providerId`, a `routing`
+A Model call node needs a model from somewhere: a `providerId`, a `routing`
 policy, a `roleKey` the agent defines, or the organization's default routing
 policy. With none of the four the node fails at run time.
 
-Saving a pipeline enforces more than this table — a Condition node's two
+Saving a pipeline enforces more than this table, such as a Condition node's two
 outgoing edges, a Merge node's two incoming ones. See
 [pipeline validation](/agents/pipeline-validation).
 
@@ -44,7 +45,7 @@ outgoing edges, a Merge node's two incoming ones. See
 The entry point of every pipeline. Defines the JSON Schema that incoming data
 must conform to.
 
-### In the UI
+### In the builder
 
 1. Click the **Input** node on the canvas
 2. In the config panel, define properties and their types
@@ -81,7 +82,7 @@ expressions via `{{input.message}}` or `{{input.context}}`.
 
 The exit point of the pipeline. Names the final result.
 
-### In the UI
+### In the builder
 
 1. Click the **Output** node on the canvas
 2. In the config panel, pick an upstream node, or write the template yourself
@@ -113,15 +114,15 @@ the API; the builder does not write it yet.
 
 With neither set, the node returns every node's output keyed by node id.
 
-A pipeline needs at least one Output node. Two of them are allowed only when they cannot both run in the same execution — on opposite branches of a Condition — because otherwise which one became the run's answer would come down to the order the nodes are stored in.
+A pipeline needs at least one Output node. Two of them are allowed only when they cannot both run in the same execution (on opposite branches of a Condition), because otherwise which one became the run's answer would come down to the order the nodes are stored in.
 
-## LLM Call
+## Model call
 
 Sends a prompt to a configured LLM provider and returns the response.
 
-### In the UI
+### In the builder
 
-1. Drag an **LLM Call** node onto the canvas and connect it
+1. Drag a **Model call** node onto the canvas and connect it
 2. In the config panel, select a **Provider** and **Model** from the dropdowns
 3. Write a **System Prompt** and **User Prompt Template** (supports `{{...}}` expressions)
 4. Optionally attach tools for function calling and adjust temperature/token limits
@@ -157,13 +158,13 @@ Sends a prompt to a configured LLM provider and returns the response.
 When `toolIds` are provided, the LLM can invoke those tools during execution.
 Tool call results are fed back to the LLM automatically.
 
-## Tool Call
+## Tool call
 
 Directly invokes a tool with explicit parameter mapping, without involving an LLM.
 
-### In the UI
+### In the builder
 
-1. Drag a **Tool Call** node onto the canvas
+1. Drag a **Tool call** node onto the canvas
 2. In the config panel, select a tool from the dropdown
 3. Map each parameter using template expressions or static values
 
@@ -195,7 +196,7 @@ The result is available downstream as `{{nodes.tool_1.output}}`.
 Branches the pipeline based on a boolean expression. The node has two outgoing
 edges: one for `true` and one for `false`.
 
-### In the UI
+### In the builder
 
 1. Drag a **Condition** node onto the canvas
 2. In the config panel, write a JavaScript expression that evaluates to true or false
@@ -225,7 +226,7 @@ Renders a template against the execution context and outputs the rendered text.
 
 The expression goes through the same resolver every other node's `{{...}}`
 fields use. That resolver reads `input.*`, `nodes.<id>.output.*` and
-`variables.*` by dot path, own properties only, against a keyword blocklist —
+`variables.*` by dot path, own properties only, against a keyword blocklist,
 and nothing else. There are no function calls, no arithmetic, no array
 indexing and no `return`. `{{Date.now()}}` does not evaluate: it fails the
 resolver's path check and the node throws.
@@ -236,7 +237,7 @@ therefore produces a JSON string rather than an object, and
 To carry structure between nodes, leave the value in the node that produced it
 and reference that node directly.
 
-### In the UI
+### In the builder
 
 1. Drag a **Transform** node onto the canvas
 2. In the config panel, write the template
@@ -268,15 +269,15 @@ Resolves an expression to an array and outputs that array, capped at
 The engine executes a pipeline in topological layers, and a Loop node is one
 node in one layer: it resolves its iterable, caps it, and hands the whole list
 downstream in a single pass. It does not re-run the nodes after it once per
-item, and there is no loop context — `{{loop.item}}` and `{{loop.index}}` name
+item, and there is no loop context: `{{loop.item}}` and `{{loop.index}}` name
 nothing in the execution context, so an expression using either resolves to an
 empty string.
 
 What the node is for is producing a list at a known point in the graph: feed
-`{{nodes.loop_1.output}}` to a tool that takes an array, to an LLM Call prompt
+`{{nodes.loop_1.output}}` to a tool that takes an array, to a Model call prompt
 that handles the whole list in one call, or to a **Parallel** node's branches.
 
-### In the UI
+### In the builder
 
 1. Drag a **Loop** node onto the canvas
 2. In the config panel, set the **Iterable Expression** to an array reference
@@ -304,8 +305,8 @@ An expression that is a single `{{...}}` reference keeps its type, so an array
 stays an array. Anything else is rendered to a string, and any non-array value
 is wrapped in a one-element array.
 
-An iterable that resolves to nothing — a typo, a field the input did not carry,
-a step that failed — fails the node with `the iterable '...' resolved to
+An iterable that resolves to nothing (a typo, a field the input did not carry,
+a step that failed) fails the node with `the iterable '...' resolved to
 nothing`, rather than being treated as a one-item list. An empty array is an
 empty list, and the run carries on.
 
@@ -315,7 +316,7 @@ Marks a fan-out point. The engine executes a pipeline in topological layers, so
 every node wired to a Parallel node's output already runs concurrently, in the
 same layer. The concurrency is the engine's; the node itself is a marker.
 
-### In the UI
+### In the builder
 
 1. Drag a **Parallel** node onto the canvas
 2. Connect its output handle to each branch you want to run at the same time
@@ -323,7 +324,7 @@ same layer. The concurrency is the engine's; the node itself is a marker.
 
 ### Configuration
 
-None. A Parallel node reads nothing from its config — there is no `branches`
+None. A Parallel node reads nothing from its config: there is no `branches`
 list and no `aggregation` setting. Which nodes run together is decided by the
 edges you draw, and how their results combine is decided by the **Merge** node
 you draw them into.
@@ -347,7 +348,7 @@ Collects the outputs of every node with an edge into it and applies a merge
 strategy. Use it after parallel branches or condition branches to unify data
 before continuing.
 
-### In the UI
+### In the builder
 
 1. Drag a **Merge** node onto the canvas
 2. Connect the branches you want to combine as inputs
@@ -388,28 +389,28 @@ What each strategy outputs:
 | `best_of_n` | the incoming output a judge model picked |
 | `consensus` | `{ answer, agreement, consensusReached, threshold, responses }` |
 
-`best_of_n` and `consensus` make a model call. It resolves the way an LLM Call
-node's does — a `roleKey` the agent defines, then `judgeConfig.providerId`,
-then a routing policy, then the organization's default routing policy — and
+`best_of_n` and `consensus` make a model call. It resolves the way a Model call
+node's does: a `roleKey` the agent defines, then `judgeConfig.providerId`,
+then a routing policy, then the organization's default routing policy. And
 the node fails if none of them is set. With one incoming branch neither
 strategy calls a judge; the single answer is returned as-is.
 
 The merged result is available as `{{nodes.merge_1.output}}`.
 
 A branch that failed, or was skipped by a Condition, contributes nothing. The
-merge reads the branches that produced output, in edge order — so
-`concatenate` lists only those, and the positions of the others close up — and
+merge reads the branches that produced output, in edge order, so
+`concatenate` lists only those, and the positions of the others close up, and
 the merge itself fails only when no branch produced anything, naming each
 upstream and whether it failed or was skipped.
 
-## Sub-Agent
+## Sub-agent
 
 Invokes another agent as a step within this pipeline, enabling composable and
 modular architectures.
 
-### In the UI
+### In the builder
 
-1. Drag a **Sub-Agent** node onto the canvas
+1. Drag a **Sub-agent** node onto the canvas
 2. In the config panel, select the target agent from the dropdown
 3. Map input fields from upstream node outputs to the sub-agent's expected input schema
 
@@ -435,7 +436,7 @@ modular architectures.
 
 The sub-agent's output is available as `{{nodes.sub_1.output}}`.
 
-`inputMapping` also accepts an object — `{ "query": "{{nodes.llm_1.output}}" }` —
+`inputMapping` also accepts an object (`{ "query": "{{nodes.llm_1.output}}" }`),
 and both shapes resolve the same way. With no mapping at all, the whole
 invocation input is passed through to the sub-agent unchanged.
 
@@ -460,11 +461,10 @@ with structured JSON.
 
 ### Where it comes from
 
-This is the one node type with no palette entry. A `verify` node reaches a graph
-either from the strategy compiler — the `cascade` and `best_of_n` strategies both
-compile a `verify` step bound to the `verifier` role slot — or from a pipeline
-definition written directly against the API. Ejecting a strategy to an editable
-graph (Execution tab → Eject) leaves the compiled `verify` node in place.
+Drag it from the palette, or let the strategy compiler place it: the `cascade`
+and `best_of_n` strategies both compile a `verify` step bound to the `verifier`
+role slot. Ejecting a strategy to an editable graph (Execution tab, **Eject to
+an editable graph**) leaves the compiled `verify` node in place.
 
 ### It never throws on a failing verdict
 
@@ -513,3 +513,50 @@ JSON becomes verdict `error`, and the policy decides whether that blocks.
 
 Cost and tokens are summed across the panel and accounted to the node like any
 other call, so a check's price shows up in the run.
+
+## Extract context
+
+Compresses what the steps wired into it learned into a small structured brief, which later steps read instead of every transcript. It makes one model call, found the same way as a Model call node's (role, provider, routing policy, or the organization default), and its cost shows on the run like any other step. The `explore_extract_patch` strategy compiles one between the explorers and the principal role.
+
+In the side panel: **What the brief is for** (empty means the run's input), **What to boil down** (empty means the steps wired into it) and **Instruction** (empty means the built-in one).
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `task` | string | What the brief is for. Template-resolved. Defaults to the run input. |
+| `sources` | string | What to compress. Template-resolved. Defaults to the incoming node outputs. |
+| `instruction` | string | Replaces the built-in extraction instruction. |
+| `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | | Which model answers, as for Model call. |
+
+A brief that does not parse fails the node rather than passing the raw transcripts on. With nothing to compress (no `sources` and no upstream output), the node fails before calling a model.
+
+## Decision
+
+Asks a model one question with a fixed set of answers and follows the edge of the answer it picks. The model gives every answer a weight; the weights are normalised into a distribution over the declared answers only, and the node leaves by the edge whose handle (or label) is the chosen answer.
+
+In the side panel: the **Question**, the **Answers** (each with an optional meaning, and exactly one marked as *cannot tell*), the **Kind of question** (**Pick one answer** or **Pick one level, in order**), **How sure it must be** per answer, and **Answers come back under** (the question id).
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `question` | object | Required. The prompt, the kind (`choice` or `score`), and the options, one of them the abstain option. A yes/no question is asked as a choice with yes, no and abstain. |
+| `thresholds` | object | Optional minimum probability per answer. A winning answer below its bar leaves by the abstain edge instead. |
+| `state` | string | What to decide over. Template-resolved. Defaults to the upstream outputs, else the run input. |
+| `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | | Which model answers, as for Model call. |
+
+The output carries `selectedOption`, `argmax`, `abstained`, `probability`, `threshold` and the whole `distribution`. The numbers order the answers; they are not calibrated probabilities.
+
+## Code
+
+Runs a short script that calls the agent's tools, for a job that needs several calls, a loop or filtering: "find every sold pet and archive each one" is one Code step instead of a loop of tool steps. The script runs in a locked box with no network, no files and no passwords; every call it makes is checked like a Tool call step, with the same permissions, approval rules and audit log. What the script returns is the step's result.
+
+In the side panel: the **Script**. It calls the agent's tools as functions, one object per API (`petstore.findPetsByStatus({ status: 'sold' })`), reads the run's input as `context.input` and earlier steps as `context.steps["<step id>"]`, and ends with `return`. `log(...)` adds a line to the step's log.
+
+![A Code step and its script in the builder](/screenshots/builder-code-step.png)
+
+A change the agent's settings send to a person (deletions, by default) does not run inside the script. A workflow cannot pause, so the step stops, waiting, and the changes wait in **Approvals** as one list; approved, they run in order.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `code` | string | Required. The script: the body of an async function, JavaScript or TypeScript. |
+| `timeoutMs` | number | How long it may run, within the server's limits (30 seconds unless set, at most 2 minutes by default). |
+
+The scope is the agent's tools (`toolIds` and the active tools of its APIs). The calls count against the run's tool-call budget. The write policy is the agent's `agentConfig.codeMode` ([scripts in autonomous agents](/agents/autonomous#scripts-many-tool-calls-in-one-go)). A held change set fails the node with `AWAITING_APPROVAL` and its `approvalId` on the node's input, as a held Tool call does. The trace is a `code_executions` row on the run.

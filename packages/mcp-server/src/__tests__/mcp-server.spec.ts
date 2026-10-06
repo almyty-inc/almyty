@@ -1,13 +1,14 @@
 /**
  * These cover the parts of the server that can be checked without a live
  * backend and without an MCP client: discovery and its failure modes, the
- * JSON Schema to Zod mapping full mode depends on, prompt naming, and the
- * text a tool call answers with when almyty says no.
+ * registration full mode builds from a gateway tool, the protocol the proxy
+ * speaks upstream, prompt naming, and the text a tool call answers with when
+ * almyty says no.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EXIT, EXIT_CODE_HELP, exitCodeFor } from '../exit-codes';
 import {
   DiscoverySource,
@@ -17,7 +18,8 @@ import {
   uniquePromptNames,
   upstreamErrorText,
 } from '../catalog';
-import { ZodLike, buildZodShape, zodTypeFor } from '../schema';
+import { cleanAnnotations, gatewayToolConfig, passThroughResult } from '../registration';
+import { AlmytyProxy, encodeMcpHeaderValue, isEraRefusal, upstreamEraFromEnv } from '../proxy';
 
 function source(overrides: Partial<DiscoverySource> = {}): DiscoverySource {
   return {
@@ -193,83 +195,77 @@ describe('prompt names', () => {
   });
 });
 
-// ── The JSON Schema full mode used to hand straight to the SDK ──────
+// ── A gateway tool as full mode registers it ──────────────────────
 
-/** Records what was asked of it, so the mapping can be checked on its own. */
-function fakeZod(): ZodLike {
-  const node = (kind: string, extra: Record<string, unknown> = {}) => ({
-    kind,
-    ...extra,
-    describe(description: string) { return { ...this, description }; },
-    optional() { return { ...this, optional: true }; },
-  });
-  return {
-    string: () => node('string'),
-    number: () => node('number'),
-    boolean: () => node('boolean'),
-    array: (inner: any) => node('array', { inner }),
-    record: (inner: any) => node('record', { inner }),
-    unknown: () => node('unknown'),
-    enum: (values: [string, ...string[]]) => node('enum', { values }),
-  } as unknown as ZodLike;
-}
+/** Records the schema it was given instead of compiling it. */
+const recordSchema = (schema: unknown) => ({ jsonSchema: schema });
 
-describe('buildZodShape', () => {
-  const z = fakeZod();
-
-  it('maps each JSON Schema type to a Zod type', () => {
-    expect(zodTypeFor({ type: 'string' }, z)).toMatchObject({ kind: 'string' });
-    expect(zodTypeFor({ type: 'number' }, z)).toMatchObject({ kind: 'number' });
-    expect(zodTypeFor({ type: 'integer' }, z)).toMatchObject({ kind: 'number' });
-    expect(zodTypeFor({ type: 'boolean' }, z)).toMatchObject({ kind: 'boolean' });
-    expect(zodTypeFor({ type: 'object' }, z)).toMatchObject({ kind: 'record' });
-    expect(zodTypeFor({ type: 'array', items: { type: 'string' } }, z)).toMatchObject({ kind: 'array', inner: { kind: 'string' } });
-  });
-
-  it('narrows a string enum, because that is how a tool says "one of these"', () => {
-    expect(zodTypeFor({ type: 'string', enum: ['a', 'b'] }, z)).toMatchObject({ kind: 'enum', values: ['a', 'b'] });
-    // A mixed enum is not one the SDK can express, so it stays unknown.
-    expect(zodTypeFor({ enum: ['a', 1] } as any, z)).toMatchObject({ kind: 'unknown' });
-  });
-
-  it('takes the concrete member of a nullable union', () => {
-    expect(zodTypeFor({ type: ['string', 'null'] }, z)).toMatchObject({ kind: 'string' });
-  });
-
-  it('falls back to unknown rather than inventing a type', () => {
-    expect(zodTypeFor(undefined, z)).toMatchObject({ kind: 'unknown' });
-    expect(zodTypeFor({ type: 'weird' }, z)).toMatchObject({ kind: 'unknown' });
-  });
-
-  it('turns a tool schema into one Zod type per property', () => {
-    // The old code passed this object itself as the shape, so the SDK saw
-    // the string "object" and a plain object where it wanted Zod types.
-    const shape = buildZodShape({
-      type: 'object',
-      required: ['petId'],
-      properties: {
-        petId: { type: 'string', description: 'The pet' },
-        tags: { type: 'array', items: { type: 'string' } },
-        limit: { type: 'integer' },
+describe('gatewayToolConfig', () => {
+  it('carries the gateway\'s schema, title, output schema, annotations and icons', () => {
+    // The 1.x registration rebuilt a Zod shape from the top-level
+    // properties and dropped everything else the gateway said.
+    const config = gatewayToolConfig({
+      name: 'orders_get_order',
+      title: 'Get order',
+      description: 'Look an order up',
+      inputSchema: {
+        type: 'object',
+        properties: { order: { type: 'object', properties: { id: { type: 'string', 'x-mcp-header': 'Order' } } } },
+        required: ['order'],
       },
-    }, z);
+      outputSchema: { type: 'object', properties: { status: { type: 'string' } } },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true, idempotentHint: 'yes' },
+      icons: [{ src: 'https://cdn.example.com/o.svg', mimeType: 'image/svg+xml' }, { src: 'http://insecure/x.png' }],
+    }, recordSchema);
 
-    expect(Object.keys(shape)).toEqual(['petId', 'tags', 'limit']);
-    expect(shape).not.toHaveProperty('type');
-    expect(shape).not.toHaveProperty('properties');
-    expect(shape.petId).toMatchObject({ kind: 'string', description: 'The pet' });
-    // Required, so `.optional()` was never called on it (the fake replaces
-    // the method with the flag `true` once it is).
-    expect(shape.petId.optional).not.toBe(true);
-    // Not in `required`, so optional.
-    expect(shape.tags).toMatchObject({ kind: 'array', optional: true });
-    expect(shape.limit).toMatchObject({ kind: 'number', optional: true });
+    expect(config).toEqual({
+      title: 'Get order',
+      description: 'Look an order up',
+      inputSchema: {
+        jsonSchema: {
+          type: 'object',
+          properties: { order: { type: 'object', properties: { id: { type: 'string', 'x-mcp-header': 'Order' } } } },
+          required: ['order'],
+        },
+      },
+      outputSchema: { jsonSchema: { type: 'object', properties: { status: { type: 'string' } } } },
+      // A hint of the wrong type is left out rather than passed on.
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      icons: [{ src: 'https://cdn.example.com/o.svg', mimeType: 'image/svg+xml' }],
+    });
   });
 
-  it('gives a tool with no parameters an empty shape', () => {
-    expect(buildZodShape({ type: 'object', properties: {} }, z)).toEqual({});
-    expect(buildZodShape(undefined, z)).toEqual({});
-    expect(buildZodShape({ type: 'object' }, z)).toEqual({});
+  it('leaves out what the gateway did not say, and a non-object output schema', () => {
+    const config = gatewayToolConfig({ name: 'ping', inputSchema: {}, outputSchema: { type: 'array' } as any }, recordSchema);
+    expect(config).toEqual({ description: 'Tool: ping', inputSchema: { jsonSchema: { type: 'object' } } });
+  });
+
+  it('gives a tool with a non-object input schema an empty object schema', () => {
+    expect(gatewayToolConfig({ name: 'x', inputSchema: { type: 'string' } as any }, recordSchema).inputSchema).toEqual({
+      jsonSchema: { type: 'object', properties: {} },
+    });
+  });
+
+  it('refuses a schema that is not valid JSON Schema, with the real SDK', () => {
+    expect(() => gatewayToolConfig({ name: 'broken', inputSchema: { type: 'object', properties: { a: { type: 'nonsense' } } } })).toThrow();
+    expect(() => gatewayToolConfig({ name: 'fine', inputSchema: { type: 'object', properties: { a: { type: 'string' } } } })).not.toThrow();
+  });
+
+  it('keeps only the annotations MCP defines', () => {
+    expect(cleanAnnotations({ readOnlyHint: false, title: 'T', custom: 1 })).toEqual({ readOnlyHint: false, title: 'T' });
+    expect(cleanAnnotations('nope')).toBeUndefined();
+    expect(cleanAnnotations({})).toBeUndefined();
+  });
+
+  it('hands a call back as the gateway answered it, structured content included', () => {
+    expect(passThroughResult({ content: [{ type: 'text', text: '{"a":1}' }], structuredContent: { a: 1 }, isError: false })).toEqual({
+      content: [{ type: 'text', text: '{"a":1}' }],
+      structuredContent: { a: 1 },
+    });
+    expect(passThroughResult({ content: [{ type: 'text', text: 'no' }], isError: true })).toEqual({
+      content: [{ type: 'text', text: 'no' }],
+      isError: true,
+    });
   });
 });
 
@@ -332,22 +328,143 @@ describe('credential wording', () => {
 
 /**
  * The MCP SDK declares the prompts capability when the first prompt is
- * registered and throws once a transport is connected. With every prompt
+ * registered and refuses once the instance is connected. With every prompt
  * added after discovery the server died on startup ("Cannot register
- * capabilities after connecting to transport"). One prompt has to be in
- * place before connect.
+ * capabilities after connecting to transport"). One prompt and the tools
+ * have to be registered in the factory, before the instance is returned to
+ * serveStdio, and only what discovery found is registered late.
  */
 describe('startup order', () => {
   const source = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
 
-  it('registers a prompt and a tool before connecting the transport', () => {
-    const connectAt = source.indexOf('await server.connect(transport)');
-    expect(connectAt).toBeGreaterThan(0);
-    const overviewAt = source.indexOf("'almyty-overview'");
-    expect(overviewAt).toBeGreaterThan(0);
-    expect(overviewAt).toBeLessThan(connectAt);
-    const firstToolAt = source.indexOf('server.tool(');
-    expect(firstToolAt).toBeGreaterThan(0);
-    expect(firstToolAt).toBeLessThan(connectAt);
+  it('registers a prompt and a tool in the factory, before the instance is handed to the SDK', () => {
+    const buildAt = source.indexOf('function buildServer(');
+    const lateAt = source.indexOf('void Promise.all([discovered, clientReady])');
+    const returnAt = source.indexOf('  return server;\n}', buildAt);
+    expect(buildAt).toBeGreaterThan(0);
+    expect(lateAt).toBeGreaterThan(buildAt);
+    for (const marker of ["'almyty-overview'", "server.registerTool(\n      'almyty_execute'", 'server.registerTool(tool.name, { description']) {
+      const at = source.indexOf(marker, buildAt);
+      expect(at, marker).toBeGreaterThan(buildAt);
+      expect(at, marker).toBeLessThan(lateAt);
+    }
+    expect(returnAt).toBeGreaterThan(lateAt);
+    expect(source).toContain('return buildServer(ctx.era');
+    expect(source).toContain('serveStdio(async (ctx) =>');
+  });
+});
+// Gateways are MCP, UTCP and Skills. An agent's channels (web chat,
+// messaging, A2A) stand up gateways of their own, which are not listed.
+describe('almyty_list_gateways', () => {
+  it('asks for tool gateways only', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: { gateways: [] } }), text: async () => '{}' }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await new AlmytyProxy('https://api.example.com', 't').listGateways();
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/gateways?kind=tool');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+// ── The protocol the proxy speaks to almyty ───────────────────────
+
+describe('upstream protocol', () => {
+  type Call = { url: string; headers: Record<string, string>; body: any };
+
+  /** A fetch that records each request and answers from `answer`. */
+  function upstream(answer: (call: Call, n: number) => { status?: number; body: unknown }) {
+    const calls: Call[] = [];
+    const fetchMock = vi.fn(async (url: string, init: any) => {
+      const call = { url, headers: init.headers, body: JSON.parse(init.body) };
+      calls.push(call);
+      const { status = 200, body } = answer(call, calls.length);
+      return { ok: status < 400, status, text: async () => JSON.stringify(body), json: async () => body };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return calls;
+  }
+  const tools = { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'pets_list', title: 'List pets', inputSchema: { type: 'object' } }], resultType: 'complete' } };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('asks in MCP 2026-07-28 by default: _meta in the body, mirrored in the headers', async () => {
+    const calls = upstream(() => ({ body: tools }));
+    const proxy = new AlmytyProxy('https://api.example.com', 't', 'acme/pets', { warn: () => {}, clientVersion: '9.9.9' });
+    expect(await proxy.fetchTools()).toEqual(tools.result.tools);
+    expect(calls[0].url).toBe('https://api.example.com/acme/pets');
+    expect(calls[0].headers).toMatchObject({
+      'MCP-Protocol-Version': '2026-07-28',
+      'Mcp-Method': 'tools/list',
+      Authorization: 'Bearer t',
+      Accept: 'application/json, text/event-stream',
+    });
+    expect(calls[0].body.params._meta).toEqual({
+      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+      'io.modelcontextprotocol/clientCapabilities': {},
+      'io.modelcontextprotocol/clientInfo': { name: '@almyty/mcp-server', version: '9.9.9' },
+    });
+    expect(proxy.upstreamEra).toBe('modern');
+  });
+
+  it('names the tool in Mcp-Name, Base64 when it is not plain ASCII', async () => {
+    const calls = upstream(() => ({ body: { result: { content: [{ type: 'text', text: 'ok' }] } } }));
+    const proxy = new AlmytyProxy('https://api.example.com', 't', undefined, { warn: () => {} });
+    await proxy.callTool('pets_list', {});
+    await proxy.callTool('grüße', {});
+    expect(calls[0].headers['Mcp-Name']).toBe('pets_list');
+    expect(calls[1].headers['Mcp-Name']).toBe(`=?base64?${Buffer.from('grüße').toString('base64')}?=`);
+    expect(encodeMcpHeaderValue(' padded')).toMatch(/^=\?base64\?/);
+    expect(encodeMcpHeaderValue('=?base64?abc?=')).toMatch(/^=\?base64\?PT9/);
+  });
+
+  it.each([
+    ['-32022', { jsonrpc: '2.0', id: 1, error: { code: -32022, message: 'Unsupported protocol version' } }],
+    ['-32600 naming the version', { jsonrpc: '2.0', id: 1, error: { code: -32600, message: 'Unsupported protocol version: 2026-07-28' } }],
+  ])('falls back to the earlier protocol, once and for good, when almyty refuses 2026-07-28 (%s)', async (_label, refusal) => {
+    const warn = vi.fn();
+    const calls = upstream((call) => (call.headers['MCP-Protocol-Version'] ? { status: 400, body: refusal } : { body: tools }));
+    const proxy = new AlmytyProxy('https://api.example.com', 't', undefined, { warn });
+    expect(await proxy.fetchTools()).toEqual(tools.result.tools);
+    await proxy.fetchTools();
+    expect(calls.map((c) => c.headers['MCP-Protocol-Version'] ?? 'none')).toEqual(['2026-07-28', 'none', 'none']);
+    expect(calls[1].body.params._meta).toBeUndefined();
+    expect(proxy.upstreamEra).toBe('legacy');
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fall back on an error that is not about the version', async () => {
+    const calls = upstream(() => ({ status: 400, body: { jsonrpc: '2.0', id: 1, error: { code: -32020, message: 'Header mismatch' } } }));
+    const proxy = new AlmytyProxy('https://api.example.com', 't', undefined, { warn: () => {} });
+    await expect(proxy.fetchTools()).rejects.toThrow('Failed to fetch tools (400)');
+    expect(calls).toHaveLength(1);
+    expect(isEraRefusal(400, { error: { code: -32600, message: 'Invalid request body' } })).toBe(false);
+    expect(isEraRefusal(500, { error: { code: -32022 } })).toBe(false);
+  });
+
+  it('asks skills/list the earlier way: it is almyty\'s own method, not served to 2026-07-28 requests', async () => {
+    const calls = upstream(() => ({ body: { result: { skills: [] } } }));
+    await new AlmytyProxy('https://api.example.com', 't', undefined, { warn: () => {} }).fetchSkills();
+    expect(calls[0].headers['MCP-Protocol-Version']).toBeUndefined();
+    expect(calls[0].body.params._meta).toBeUndefined();
+  });
+
+  it('never tries 2026-07-28 with ALMYTY_MCP_PROTOCOL=legacy, nor falls back with modern', async () => {
+    const calls = upstream(() => ({ status: 400, body: { error: { code: -32022, message: 'Unsupported protocol version' } } }));
+    await new AlmytyProxy('https://x', 't', undefined, { era: upstreamEraFromEnv('legacy'), warn: () => {} }).fetchTools().catch(() => {});
+    expect(calls[0].headers['MCP-Protocol-Version']).toBeUndefined();
+    await new AlmytyProxy('https://x', 't', undefined, { era: upstreamEraFromEnv(' MODERN '), warn: () => {} }).fetchTools().catch(() => {});
+    expect(calls.slice(1).map((c) => c.headers['MCP-Protocol-Version'])).toEqual(['2026-07-28']);
+    expect(upstreamEraFromEnv('bogus')).toBe('auto');
+    expect(upstreamEraFromEnv(undefined)).toBe('auto');
+  });
+
+  it('hands back a call result without the 2026 envelope fields', async () => {
+    upstream(() => ({
+      body: { result: { content: [{ type: 'text', text: '{"n":1}' }], structuredContent: { n: 1 }, isError: false, resultType: 'complete', _meta: { a: 1 } } },
+    }));
+    const proxy = new AlmytyProxy('https://x', 't', undefined, { warn: () => {} });
+    expect(await proxy.callToolResult('t', {})).toEqual({ content: [{ type: 'text', text: '{"n":1}' }], structuredContent: { n: 1 }, isError: false });
+    expect(await proxy.callTool('t', {})).toEqual({ n: 1 });
   });
 });

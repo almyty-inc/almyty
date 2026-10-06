@@ -18,8 +18,12 @@ import { EndUser } from '../../entities/end-user.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { ScheduledPostService } from './channels/scheduled-post.service';
+import { SCHEDULED_RESULT_POSTER } from '../agents/scheduled-result-poster';
 import { ChannelLinkService } from './channel-link.service';
 import { ChannelPolicyService } from './channel-policy.service';
+import { VisitorDataService } from './visitor-data.service';
 import { ChannelLinkController } from './channel-link.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
@@ -59,6 +63,8 @@ import { MicrosoftTeamsAdapter } from './channels/adapters/microsoft-teams.adapt
 import { SignalAdapter } from './channels/adapters/signal.adapter';
 import { MatrixAdapter } from './channels/adapters/matrix.adapter';
 import { IrcAdapter } from './channels/adapters/irc.adapter';
+import { IMessageSendblueAdapter } from './channels/adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from './channels/adapters/imessage-loopmessage.adapter';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
@@ -85,6 +91,8 @@ import { ChannelCredentialService } from './channels/channel-credential.service'
 import { SlackInstallService } from './channels/slack-install.service';
 import { ChannelInstallController } from './channels/channel-install.controller';
 import { ChannelInstallationsController } from './channels/channel-installations.controller';
+import { ChannelAttachmentReader } from './channels/channel-attachments.service';
+import { FilesModule } from '../files/files.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -106,16 +114,20 @@ import { ChannelInstallationsController } from './channels/channel-installations
       Message,
       VisitorEmailCode,
       AgentChannel,
+      AgentExecution,
     ]),
     JwtModule,
     ToolsModule,
     forwardRef(() => AgentsModule),
     AuthorizationModule,
+    FilesModule,
   ],
   providers: [
     HostedChatService,
     ChannelLinkService,
     ChannelPolicyService,
+    // What a visitor's self-service and an owner's data request read and erase.
+    VisitorDataService,
     VisitorEmailOtpService,
     CustomDomainService,
     { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
@@ -150,6 +162,13 @@ import { ChannelInstallationsController } from './channels/channel-installations
     SignalAdapter,
     MatrixAdapter,
     IrcAdapter,
+    IMessageSendblueAdapter,
+    IMessageLoopMessageAdapter,
+    ChannelAttachmentReader,
+    ScheduledPostService,
+    // The scheduler (agents module) reaches the poster by this token, so the
+    // agents module need not import this one (scheduled-result-poster.ts).
+    { provide: SCHEDULED_RESULT_POSTER, useExisting: ScheduledPostService },
   ],
   controllers: [
     // GatewayInfoController has literal-path routes (all-skills,
@@ -184,6 +203,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     GatewayToolService,
     ChannelLinkService,
     ChannelPolicyService,
+    VisitorDataService,
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,

@@ -117,14 +117,14 @@ export function McpServerForm({ organizationId }: { organizationId?: string }) {
       <FormSection title="Authentication" description="Only if the server requires it.">
         <CredentialPicker
           id="mcp-source-token"
-          label="Token (optional)"
+          label="Token or sign-in (optional)"
           value={connection?.id ?? ''}
           onChange={setConnection}
           allowNone
           placeholder="None"
           connectorKey={OTHER_SERVICE_KEY}
           defaultName={name.trim() ? `${name.trim()} token` : undefined}
-          hint="Sent as a bearer token in the Authorization header."
+          hint="A token is sent as a bearer token. For a server that asks you to sign in, sign in on Credentials first (MCP server, then Sign in to the server) and pick that here; it is kept fresh for you."
         />
       </FormSection>
     </FormPage>

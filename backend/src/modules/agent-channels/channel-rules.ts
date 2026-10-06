@@ -85,6 +85,8 @@ export const CHANNEL_DEFAULT_NAMES: Readonly<Record<ChannelType, string>> = Obje
   [ChannelType.WHATSAPP]: 'WhatsApp (Twilio)',
   [ChannelType.WHATSAPP_CLOUD]: 'WhatsApp (Meta Cloud)',
   [ChannelType.SMS]: 'SMS',
+  [ChannelType.IMESSAGE_SENDBLUE]: 'iMessage (Sendblue)',
+  [ChannelType.IMESSAGE_LOOPMESSAGE]: 'iMessage (LoopMessage)',
   [ChannelType.MICROSOFT_TEAMS]: 'Microsoft Teams',
   [ChannelType.GOOGLE_CHAT]: 'Google Chat',
   [ChannelType.EMAIL]: 'Email',
@@ -150,9 +152,17 @@ export const CHANNEL_REFUSALS = Object.freeze({
   BUNDLE_ID_INVALID:
     'Desktop and terminal apps need a reverse-domain identifier such as com.acme.assistant.',
   DESKTOP_NEEDS_WEB_CHAT: PUBLISH_REFUSALS.DESKTOP_NEEDS_WEB_CHAT,
+  SENDER_NAME_REQUIRED:
+    'LoopMessage sends every reply from a sender name. Enter the one set up in your LoopMessage dashboard.',
 });
 
 export type ChannelRefusalCode = keyof typeof CHANNEL_REFUSALS;
+
+/** A LoopMessage channel's sender name, trimmed, or empty when there is none. */
+export function senderNameOf(configuration: Record<string, any> | null | undefined): string {
+  const value = configuration?.sender_name;
+  return typeof value === 'string' ? value.trim() : '';
+}
 
 export interface ChannelCheck {
   ok: boolean;
@@ -278,6 +288,7 @@ const BRANDING_FIELDS = [
   'primaryColor',
   'logoUrl',
   'iconUrl',
+  'iconFileId',
   'greeting',
   'theme',
   'suggestedPrompts',
@@ -296,8 +307,17 @@ function pick<T extends object>(value: unknown, fields: readonly string[]): T | 
   return out as T;
 }
 
+const FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function normalizeBranding(branding: unknown): ChannelBranding | null {
-  return pick<ChannelBranding>(branding, BRANDING_FIELDS);
+  const picked = pick<ChannelBranding>(branding, BRANDING_FIELDS);
+  // The uploaded icon is a file id or nothing; whose file it is, and what
+  // it holds, the service checks against the organization's files.
+  const iconFileId = picked?.iconFileId;
+  if (iconFileId !== undefined && iconFileId !== null && !(typeof iconFileId === 'string' && FILE_ID.test(iconFileId))) {
+    throw new Error('The app icon is not a file uploaded here.');
+  }
+  return picked;
 }
 
 /** Visitor rules as stored: known fields only, limits checked. */
@@ -517,6 +537,13 @@ export function checkChannel(channel: ChannelShape, context: ChannelContext = {}
   if (servesOverGateway(channel.type)) {
     const missing = missingCredentials(channel.type, channel.configuration);
     if (missing.length) refuse('MISSING_CREDENTIALS', missing.join(', '));
+  }
+
+  // LoopMessage sends every reply from a sender name, and it belongs to
+  // the channel rather than the key: one organization key can carry
+  // several senders.
+  if (channel.type === ChannelType.IMESSAGE_LOOPMESSAGE && !senderNameOf(channel.configuration)) {
+    refuse('SENDER_NAME_REQUIRED');
   }
 
   // The widget runs on someone else's page with no sign-in of ours.

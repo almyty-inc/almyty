@@ -1,6 +1,7 @@
 import type { Gateway, Tool, LlmProvider, User, Organization, ApiAuthType } from './index';
 import type { RouteAttribution, RoutingPolicy } from './models';
 import type { AgentMemoryConfig, AgentModels } from './agent-models';
+import type { AgentSchedule } from '@/lib/schedule';
 // Usage Metrics Types
 export interface UsageMetric {
   id: string
@@ -166,7 +167,7 @@ export interface AgentPipeline {
 
 export interface PipelineNode {
   id: string
-  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'loop' | 'transform' | 'merge' | 'parallel' | 'sub_agent' | 'verify' | 'extract_context' | 'decision'
+  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'loop' | 'transform' | 'merge' | 'parallel' | 'sub_agent' | 'verify' | 'extract_context' | 'decision' | 'code'|'extract_context' | 'decision' | 'code'
   position: { x: number; y: number }
   data: Record<string, any>
 }
@@ -200,6 +201,29 @@ export interface AgentPauseReason {
   detectedAt: string
 }
 
+/** What happens to a call a script makes (code mode): run it, ask a person first, or refuse it. */
+export type CodeWriteAction = 'allow' | 'stage' | 'deny'
+
+export interface CodeModeConfig {
+  writes?: { write?: CodeWriteAction; destructive?: CodeWriteAction; tools?: Record<string, CodeWriteAction> }
+  grants?: Array<{ toolId: string; max: number }>
+  extractor?: { providerId: string; model?: string } | null
+}
+
+/** One staged call of a script's change set (backend entities/code-execution.entity.ts). */
+export interface ChangeSetEntry {
+  id: number
+  toolId: string
+  toolName: string
+  codeName: string
+  title: string
+  arguments: Record<string, unknown>
+  sideEffect: 'read' | 'write' | 'destructive'
+  reason: 'policy' | 'amount_rule'
+  rule?: string
+  outcome?: 'ran' | 'failed' | 'not_run'
+  error?: string
+}
 export interface Agent {
 
   id: string
@@ -244,6 +268,23 @@ export interface Agent {
     maxTemporaryAgents?: number
     /** Temporary agents of its runs that may exist at once. */
     maxTemporaryAgentsAlive?: number
+    /**
+     * How the model sees its tools (backend agents/agent-tool-mode.ts):
+     * every definition, or search_tools/get_tool/call_tool plus the pinned
+     * tools; `auto` switches above the threshold. Absent: the server default.
+     */
+    toolMode?: 'direct' | 'discover' | 'code' | 'auto'
+    /** The `auto` threshold in tokens; absent: 3% of the model's context window. */
+    toolModeThresholdTokens?: number
+    /** Tools always shown in full, also when the model searches for the rest. */
+    pinnedToolIds?: string[]
+    /**
+     * Scripts in the code tool mode (backend code-mode/code-write-policy.ts):
+     * what happens to a change or a deletion a script makes (run, ask a
+     * person first, or refuse), per-tool exceptions, per-run allowances and
+     * the model extract() uses.
+     */
+    codeMode?: CodeModeConfig
     /** Machine label requirements for runner-backed tools; the server stores an object, a save may send text. */
     runnerLabels?: Record<string, string> | string
     verify?: {
@@ -273,10 +314,8 @@ export interface Agent {
     maxParallelNodes?: number
     budgetLimit?: number
     enableStreaming?: boolean
-    schedule?: {
-      enabled: boolean
-      intervalMinutes: number
-      input: Record<string, any>
+    /** lib/schedule.ts has the timing kinds and where a result goes. */
+    schedule?: AgentSchedule & {
       /** Set by the backend when it paused the schedule on its own. */
       pausedReason?: AgentModelIssue | AgentPauseReason
     }

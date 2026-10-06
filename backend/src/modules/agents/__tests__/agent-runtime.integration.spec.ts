@@ -395,6 +395,24 @@ describe('AgentRuntimeService (integration)', () => {
       expect(saved.gatewayId).toBe('gw-1');
     });
 
+    it('keeps the files the input came with, by reference, on the first user message', async () => {
+      await service.startRun('agent-1', 'org-1', 'user-1', 'What is this?', {
+        attachments: [
+          { type: 'file', fileId: 'f-1', mimeType: 'image/png', name: 'box.png', size: 108 },
+          // Anything that is not a file reference is not carried: bytes are
+          // built for a model call, never stored on a message.
+          { type: 'image', data: 'AAAA', mimeType: 'image/png' },
+        ],
+      });
+
+      const message = messageStore[messageStore.length - 1];
+      expect(message.content).toBe('What is this?');
+      expect(message.contentParts).toEqual([
+        { type: 'text', text: 'What is this?' },
+        { type: 'file', fileId: 'f-1', mimeType: 'image/png', name: 'box.png', size: 108 },
+      ]);
+    });
+
     it('leaves a run no channel started unstamped', async () => {
       const run = await service.startRun('agent-1', 'org-1', 'user-1', 'hi');
       expect(run.channelId).toBeNull();
@@ -678,6 +696,22 @@ describe('AgentRuntimeService (integration)', () => {
 
       // Should enqueue next step
       expect(mockQueue.add).toHaveBeenCalledTimes(2); // once for startRun, once for sendInput
+    });
+
+    it('keeps the files a follow-up message came with, by reference, on its user message', async () => {
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'initial');
+      run.status = AgentRunStatus.WAITING_INPUT;
+      await mockRunRepo.save(run);
+
+      await service.sendInput(run.id, 'org-1', 'And this one?', undefined, [
+        { type: 'file', fileId: 'f-2', mimeType: 'application/pdf', name: 'invoice.pdf', size: 900 },
+      ]);
+
+      const message = messageStore.find((m) => m.content === 'And this one?')!;
+      expect(message.contentParts).toEqual([
+        { type: 'text', text: 'And this one?' },
+        { type: 'file', fileId: 'f-2', mimeType: 'application/pdf', name: 'invoice.pdf', size: 900 },
+      ]);
     });
 
     it('should throw BadRequestException when run is RUNNING (not waiting)', async () => {

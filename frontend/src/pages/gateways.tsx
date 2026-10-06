@@ -26,16 +26,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Gateway } from '@/types'
-
-/**
- * Gateway types that are really messaging distributions of an app.
- * Managed under Apps, not here.
- */
-const CHANNEL_GATEWAY_TYPES: string[] = [
-  'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms',
-  'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc',
-  'webhook', 'chat_widget', 'hosted_chat',
-]
+import { isProtocolGateway } from '@/components/gateways/schema'
 
 export function GatewaysPage() {
   useEffect(() => {
@@ -62,19 +53,13 @@ export function GatewaysPage() {
     enabled: !!currentOrganization,
   })
 
-  const gateways = gatewaysData?.items ?? []
+  // Gateways is the protocol page: MCP, UTCP and Skills. A web chat, widget,
+  // messaging platform or A2A endpoint is a channel on an agent and lives on
+  // that agent's Channels tab. The server already leaves them out
+  // (gatewaysQuery asks for kind=tool); this keeps the rule if it ever does not.
+  const gateways = (gatewaysData?.items ?? []).filter(isProtocolGateway) as Gateway[]
 
-  // Gateways is the protocol page: MCP, A2A, ACP, UTCP, Skills and the
-  // OpenAI-compatible endpoint. Messaging platforms are reached through
-  // Apps instead, because there they are a distribution of a product
-  // rather than a standalone endpoint. Showing them in both places let
-  // someone create a Slack gateway here and a Slack distribution there
-  // and end up with two records for one Slack app.
-  const protocolOnly = (gateways as Gateway[]).filter(
-    (gateway) => !CHANNEL_GATEWAY_TYPES.includes(gateway.type as string),
-  )
-
-  const filteredGateways = filterByTeamVisibility(protocolOnly as any[], teamFilter).filter((gateway: Gateway) => {
+  const filteredGateways = filterByTeamVisibility(gateways as any[], teamFilter).filter((gateway: Gateway) => {
     const matchesSearch =
       gateway.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (gateway.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -313,9 +298,6 @@ export function GatewaysPage() {
                   <SelectItem value="mcp">MCP</SelectItem>
                   <SelectItem value="utcp">UTCP</SelectItem>
                   <SelectItem value="skills">Skills</SelectItem>
-                  <SelectItem value="a2a">A2A</SelectItem>
-                  <SelectItem value="acp">ACP</SelectItem>
-                  <SelectItem value="openai_chat">OpenAI chat</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>

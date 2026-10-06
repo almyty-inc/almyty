@@ -1,6 +1,6 @@
 import 'reflect-metadata';
-import { ForbiddenException } from '@nestjs/common';
-import { PATH_METADATA } from '@nestjs/common/constants';
+import { ForbiddenException, RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 
 import { CredentialsController } from '../credentials.controller';
 import { ConnectionsService } from '../../connections/connections.service';
@@ -80,5 +80,23 @@ describe('/credentials routes', () => {
   it('declares the fixed routes before the :id ones', () => {
     const order = Object.getOwnPropertyNames(CredentialsController.prototype);
     expect(order.indexOf('listServices')).toBeLessThan(order.indexOf('findById'));
+  });
+
+  // A credential is checked one way: POST /credentials/:id/validate asks its
+  // service and records the answer as the credential's health. The /test
+  // route answered "valid" for anything without asking, so it is gone.
+  it('checks a credential only through validate, which asks its service', async () => {
+    const proto = CredentialsController.prototype as any;
+    const posts = Object.getOwnPropertyNames(proto)
+      .filter((name) => Reflect.getMetadata(METHOD_METADATA, proto[name]) === RequestMethod.POST)
+      .map((name) => Reflect.getMetadata(PATH_METADATA, proto[name]));
+    expect(posts).toContain('credentials/:id/validate');
+    expect(posts.filter((p: string) => /\/test$/.test(p))).toEqual([]);
+
+    const { controller, connections } = build();
+    (connections as any).validate = jest.fn().mockResolvedValue({ id: 'c1', health: { status: 'invalid', error: 'bad key' } });
+    const res = await controller.validate({ user: member }, 'c1');
+    expect((connections as any).validate).toHaveBeenCalledWith(member, ORG, 'c1');
+    expect(res).toMatchObject({ data: { health: { status: 'invalid' } }, message: 'Credential invalid' });
   });
 });

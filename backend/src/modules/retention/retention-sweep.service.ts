@@ -14,6 +14,7 @@ import { Message } from '../../entities/message.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { CodeExecution } from '../../entities/code-execution.entity';
 import { Notification } from '../../entities/notification.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
@@ -23,6 +24,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ChannelEvent } from '../../entities/channel-event.entity';
+import { FilesService } from '../files/files.service';
 
 const SWEEP_INTERVAL_MS =
   Number(process.env.RETENTION_SWEEP_INTERVAL_MS) || 60 * 60_000; // hourly
@@ -39,6 +41,8 @@ const MAX_BATCHES_PER_CLASS = 50;
  * Change History panel still has something to show.
  */
 const VERSION_RETENTION_DAYS = 90;
+/** How long an attachment that never reached a conversation is kept. */
+const UNSENT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 const VERSION_SWEEP_BATCH = 5_000;
 const VERSION_SWEEP_MAX_PASSES = 20;
 
@@ -126,6 +130,11 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     @Optional()
     @InjectRepository(ChannelEvent)
     private readonly channelEventRepository?: Repository<ChannelEvent>,
+    // Files people sent in a conversation (channel and web chat
+    // attachments) go with it, stored object and row. Optional so the spec
+    // can build the sweep with repositories alone.
+    @Optional()
+    private readonly files?: FilesService,
   ) {}
 
   onModuleInit(): void {
@@ -133,7 +142,7 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     this.timer = setInterval(() => {
       // Both sweeps on the same tick: the per-org one, and the global
       // version prune the per-org one cannot express.
-      Promise.all([this.sweep(), this.sweepEntityVersions()]).catch((err) => {
+      Promise.all([this.sweep(), this.sweepEntityVersions(), this.sweepUnsentAttachments()]).catch((err) => {
         this.logger.warn(`Retention sweep failed: ${err.message}`);
       });
     }, SWEEP_INTERVAL_MS);
@@ -165,6 +174,20 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return results;
+  }
+
+  /**
+   * Remove conversation attachments that never reached a conversation: a
+   * web chat or widget upload the visitor never sent, or a channel file
+   * whose run was refused. A day is long enough for any message to be sent;
+   * after that the file is visitor data nothing refers to. Deployment-wide,
+   * like the version prune, since an unsent upload belongs to no policy.
+   */
+  async sweepUnsentAttachments(now = new Date()): Promise<number> {
+    if (!this.files) return 0;
+    const removed = await this.files.removeUnsentAttachments(new Date(now.getTime() - UNSENT_ATTACHMENT_TTL_MS));
+    if (removed > 0) this.logger.log(`Removed ${removed} unsent attachment(s)`);
+    return removed;
   }
 
   /**
@@ -273,6 +296,15 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         organizationId,
         createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
       } as FindOptionsWhere<ToolExecution>);
+      // run_code scripts (code_executions) are the same retention class:
+      // the trace a script's tool executions hang off. Counted with them.
+      const scripts = this.toolExecutionRepository.manager?.getRepository?.(CodeExecution);
+      if (scripts) {
+        counts.toolExecutions += await this.batchDelete(scripts, {
+          organizationId,
+          createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
+        } as FindOptionsWhere<CodeExecution>);
+      }
     }
 
     // notifications is the other per-event table nothing swept. A
@@ -397,6 +429,8 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         out.runs += runs.affected ?? 0;
         const messages = await this.messageRepository.delete({ conversationId: In(ids) });
         out.messages += messages.affected ?? 0;
+        // Files people sent in these conversations, stored objects included.
+        await this.removeConversationFiles(organizationId, ids);
         const conversations = await this.conversationRepository.delete({ id: In(ids) });
         out.conversations += conversations.affected ?? ids.length;
         if (rows.length < SWEEP_BATCH) break;
@@ -415,6 +449,21 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     return out;
   }
 
+  /**
+   * Remove the files filed under conversations about to be deleted. The
+   * foreign key would cascade the rows, but only the files module can
+   * remove the stored objects, so it goes first. A failure is logged and
+   * the sweep goes on: the cascade still removes the rows, and a stored
+   * object left behind is not a reason to keep a transcript past its time.
+   */
+  private async removeConversationFiles(organizationId: string, conversationIds: string[]): Promise<void> {
+    if (!this.files || !conversationIds.length) return;
+    try {
+      await this.files.removeForConversations(organizationId, conversationIds);
+    } catch (err: any) {
+      this.logger.warn(`Could not remove the files of ${conversationIds.length} swept conversation(s): ${err?.message ?? err}`);
+    }
+  }
   private async sweepConversations(
     organizationId: string,
     cutoff: Date,
@@ -433,6 +482,8 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         conversationId: In(ids),
       });
       messages += messageResult.affected ?? 0;
+      // Files people sent in these conversations, stored objects included.
+      await this.removeConversationFiles(organizationId, ids);
       const conversationResult = await this.conversationRepository.delete({
         id: In(ids),
       });

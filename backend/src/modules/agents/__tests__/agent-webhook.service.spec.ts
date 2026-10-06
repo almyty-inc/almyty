@@ -46,6 +46,37 @@ describe('AgentWebhookService', () => {
     };
   }
 
+  // ── A scheduled run goes to the webhook only when it was chosen ──
+
+  describe('a scheduled run', () => {
+    const scheduled = makeExecution({ metadata: { triggerType: 'scheduled' } });
+
+    it('is sent when its schedule sends the result to the webhook', async () => {
+      await service.sendExecutionWebhook(makeAgent({ settings: { schedule: { enabled: true, deliverTo: { kind: 'webhook' } } } }), scheduled);
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['a channel', { kind: 'channel', channelId: 'ch-1', to: 'C1' }],
+      ['nowhere but the run history', null],
+    ])('is not sent when its schedule sends the result to %s', async (_label, deliverTo) => {
+      await service.sendExecutionWebhook(makeAgent({ settings: { schedule: { enabled: true, deliverTo } } }), scheduled);
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+    });
+
+    it('an autonomous run whose schedule chose the webhook is sent, and recorded where the caller says', async () => {
+      const record = jest.fn(async () => undefined);
+      await service.sendExecutionWebhook(makeAgent(), scheduled, { chosen: true, record });
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+      expect(record).toHaveBeenCalledWith(expect.objectContaining({ status: 'delivered' }));
+      expect(executions.update).not.toHaveBeenCalled();
+    });
+
+    it('any other run is sent as before', async () => {
+      await service.sendExecutionWebhook(makeAgent({ settings: { schedule: { enabled: true, deliverTo: null } } }), makeExecution({ metadata: { triggerType: 'api' } }));
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+    });
+  });
   // ── No-op when unconfigured ─────────────────────────────────────────
 
   it('does nothing when webhookUrl is empty', async () => {

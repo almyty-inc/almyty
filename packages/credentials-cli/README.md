@@ -43,7 +43,7 @@ Every read command takes `--json` and writes undecorated JSON to stdout.
 
 | Command | What it does |
 |---|---|
-| `add <service> [--method m] [--owner org\|user\|private] [--name n] [--headless] [--open]` | Add a credential |
+| `add <service> [--method m] [--owner org\|team\|user\|private] [--team id\|slug] [--name n] [--headless] [--open]` | Add a credential |
 | `complete <key> --state s --code c` | Finish a headless sign-in by pasting the code |
 | `validate <id>` | Re-check against the provider; refreshes health and the account label |
 | `rotate <id> [--headless] [--open]` | Replace the secret in place, so everything using the credential keeps working |
@@ -106,6 +106,10 @@ narrows that to a principal.
 `--owner org` (the default) makes the credential the organization's: this is
 what agents and deployments use, and it needs `connections:manage` (admin or
 owner). `--owner user` makes it yours, and you can grant it to others.
+`--owner team --team <id|slug>` makes it the organization's for one team:
+only that team's members (and admins) see or use it. The slug is the team's
+name in lowercase with dashes (`Customer Support` is `customer-support`); a
+member can pick only a team they are on.
 `--owner private` makes it yours alone: nobody else sees or uses it, org admins
 included, and it cannot be granted. Free and personal organizations allow
 personal and private credentials by default; paid organizations start with them off until

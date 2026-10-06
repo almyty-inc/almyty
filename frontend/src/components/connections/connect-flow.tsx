@@ -70,6 +70,8 @@ export const CONNECTORS_QUERY_KEY = ['connectors'] as const
 /** The catalog's "Other service": a name and one secret box. */
 export const OTHER_SERVICE_KEY = 'other'
 
+const TEAM_MISSING = 'Pick the team that can use it.'
+
 const KIND_ICONS: Record<ConnectorKind, typeof Plug> = {
   inference: Brain,
   deployment: Server,
@@ -119,10 +121,12 @@ export function useConnectors() {
 
 /**
  * Who may keep what. Organization connections need an admin; "only you"
- * needs the organization to allow personal keys. A role that is not known
- * yet offers both and lets the server decide, as it always does.
+ * needs the organization to allow personal keys; "one team" needs a team
+ * to pick (the server then checks the caller may use that team, as it
+ * does for a provider connection). A role that is not known yet offers
+ * the organization and lets the server decide, as it always does.
  */
-export function useConnectOwners(): { options: Array<'org' | 'private'>; loading: boolean } {
+export function useConnectOwners(): { options: Array<'org' | 'team' | 'private'>; loading: boolean; firstTeamId: string | null } {
   const { currentOrganization } = useOrganizationStore()
   const { role, canManage } = useOrganizationRole()
   const orgQuery = useQuery({
@@ -130,10 +134,18 @@ export function useConnectOwners(): { options: Array<'org' | 'private'>; loading
     queryFn: () => organizationsApi.getById(currentOrganization!.id),
     enabled: !!currentOrganization?.id,
   })
-  const options: Array<'org' | 'private'> = []
+  // The key VisibilityField reads the same teams under.
+  const teamsQuery = useQuery<Array<{ id: string }>>({
+    queryKey: ['organization-teams', currentOrganization?.id],
+    queryFn: () => organizationsApi.getTeams(currentOrganization!.id),
+    enabled: !!currentOrganization?.id,
+  })
+  const teams = Array.isArray(teamsQuery.data) ? teamsQuery.data : []
+  const options: Array<'org' | 'team' | 'private'> = []
   if (role === null || canManage) options.push('org')
   if (allowUserScopedConnections(orgQuery.data)) options.push('private')
-  return { options, loading: orgQuery.isLoading }
+  if (teams.length > 0) options.push('team')
+  return { options, loading: orgQuery.isLoading || teamsQuery.isLoading, firstTeamId: teams[0]?.id ?? null }
 }
 
 export interface ConnectFlowProps {
@@ -196,14 +208,15 @@ function FormBox({ embedded, onSubmit, children, className, testId, label }: { e
   )
 }
 
-/** The fields a first connect asks for (required and secret ones), and the rest for Advanced. */
+/** The fields a first connect asks for (required and secret ones), and the rest (and anything marked x-advanced) for Advanced. */
 export function splitConnectSchema(schema: JsonSchemaObject | null | undefined): { main: JsonSchemaObject; extra: JsonSchemaObject | null } {
   const props = schema?.properties ?? {}
   const required = new Set(schema?.required ?? [])
   const main: Record<string, any> = {}
   const extra: Record<string, any> = {}
   for (const [key, prop] of Object.entries(props)) {
-    if (required.has(key) || isSecretProperty(prop)) main[key] = prop
+    if (prop['x-advanced'] && !required.has(key)) extra[key] = prop
+    else if (required.has(key) || isSecretProperty(prop)) main[key] = prop
     else extra[key] = prop
   }
   // A schema with nothing required and nothing secret still asks for something.
@@ -362,7 +375,9 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
 
   // Whoever cannot keep an organization connection keeps a private one.
   useEffect(() => {
-    if (owners.options.length > 0 && !owners.options.includes(who.visibility as 'org' | 'private')) setWho({ visibility: owners.options[0], teamId: null })
+    if (owners.options.length > 0 && !owners.options.includes(who.visibility)) {
+      setWho(owners.options[0] === 'team' ? { visibility: 'team', teamId: owners.firstTeamId } : { visibility: owners.options[0], teamId: null })
+    }
   }, [owners.options.join(','), who.visibility])
 
   useEffect(() => {
@@ -417,14 +432,16 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     if (result?.connection) finish(result.connection)
   }
 
-  const owner: ConnectionOwner = who.visibility === 'private' ? 'private' : 'org'
+  const owner: ConnectionOwner = who.visibility === 'private' ? 'private' : who.visibility === 'team' ? 'team' : 'org'
+  // "One team" names the team; a new credential without one is not sent.
+  const teamMissing = !rotateConnection && owner === 'team' && !who.teamId
   const connect = useMutation({
     mutationFn: (input?: Record<string, unknown>) => {
       // A key the service refused was kept as a failed connection: the next
       // try replaces its key rather than leaving a second, broken one behind.
       const existing = rotateConnection ?? failure?.connection ?? null
       if (existing) return connectionsApi.rotate(existing.id, input ? { input } : {})
-      return connectionsApi.connect(connector.key, { method: method?.type, owner, ...(isOther ? { name: name.trim() } : {}), ...(input ? { input } : {}) })
+      return connectionsApi.connect(connector.key, { method: method?.type, owner, ...(owner === 'team' && who.teamId ? { teamId: who.teamId } : {}), ...(isOther ? { name: name.trim() } : {}), ...(input ? { input } : {}) })
     },
     onSuccess: handleResult,
     onError: (error: unknown) => setFailure((prev) => {
@@ -451,11 +468,28 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     if (!check.ok) Object.assign(errors, check.errors)
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) return
+    if (teamMissing) {
+      setFailure({ message: TEAM_MISSING })
+      return
+    }
     connect.mutate(check.value)
   }
 
   const startSignIn = () => {
+    if (teamMissing) {
+      setFailure({ message: TEAM_MISSING })
+      return
+    }
     setFailure(null)
+    // A sign-in that needs to know where first (an MCP server's address).
+    // Signing in again reuses what the connection already has.
+    if (method && !rotateConnection && Object.keys(method.schema?.properties ?? {}).length > 0) {
+      const check = validateSchemaValues(method.schema, values, { mode: 'create' })
+      setFieldErrors(check.ok ? {} : check.errors)
+      if (!check.ok) return
+      connect.mutate(check.value)
+      return
+    }
     connect.mutate(undefined)
   }
 
@@ -470,6 +504,8 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   const busy = connect.isPending || complete.isPending
   const submitType = embedded ? 'button' : 'submit'
   const redirect = !!method && isRedirectMethod(method.type)
+  // A sign-in that asks where first (an MCP server): its form comes before the button.
+  const signInForm = redirect && !rotateConnection && Object.keys(method?.schema?.properties ?? {}).length > 0
   const others = connector.connect.filter((m) => m.type !== method?.type)
 
   if (!method) return <p className="text-sm text-muted-foreground">This service can't be added yet.</p>
@@ -527,7 +563,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
           </p>
         </div>
       )}
-      {extra && !redirect && <JsonSchemaForm schema={extra} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
+      {extra && (!redirect || signInForm) && signIn.phase === 'idle' && <JsonSchemaForm schema={extra} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
       {redirect && signIn.phase !== 'idle' && !signIn.byCode && <PasteCode embedded={embedded} code={code} onCode={setCode} onSubmit={submitCode} busy={busy} submitType={submitType} pending={complete.isPending} />}
     </Disclosure>
   )
@@ -535,10 +571,15 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   if (redirect) {
     return (
       <div className="space-y-4" data-testid="connect-form">
-        <p className="text-sm text-muted-foreground">You sign in at {connector.displayName} and come back here. Nothing to paste.</p>
+        <p className="text-sm text-muted-foreground">
+          {signInForm
+            ? `Enter where it is, then sign in at ${connector.displayName} and come back here.`
+            : `You sign in at ${connector.displayName} and come back here. Nothing to paste.`}
+        </p>
         {failureBox}
         {signIn.phase === 'idle' && (
           <>
+            {signInForm && <JsonSchemaForm schema={main} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
             {whoLine}
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={startSignIn} disabled={busy}>

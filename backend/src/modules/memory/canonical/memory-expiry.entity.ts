@@ -46,6 +46,14 @@ export class MemoryExpiry {
   @Column({ name: 'memory_id', type: 'text' })
   memoryId: string;
 
+  /**
+   * The run that saved it, so erasing the visitor whose run it was
+   * reaches it in the outside service too.
+   */
+  @Index('memory_expiries_run', { where: 'run_id IS NOT NULL' })
+  @Column({ name: 'run_id', type: 'text', nullable: true })
+  runId: string | null;
+
   @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })
   expiresAt: Date | null;
 

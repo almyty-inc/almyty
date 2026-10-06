@@ -8,7 +8,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 
 import { Agent } from '../../entities/agent.entity';
 import {
@@ -19,7 +19,8 @@ import {
   VisitorRules,
   isChannelType,
 } from '../../entities/agent-channel.entity';
-import { Gateway } from '../../entities/gateway.entity';
+import { Gateway, GatewayType } from '../../entities/gateway.entity';
+import { ChannelWebhookRegistrar } from '../gateways/channels/channel-webhook-registrar.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
 import { GatewaysService } from '../gateways/gateways.service';
@@ -28,6 +29,9 @@ import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { channelSecretKeysIn } from '../gateways/channels/channel-config.helper';
 import { ChannelPolicyService, SpendStatus } from '../gateways/channel-policy.service';
+import { FilesService } from '../files/files.service';
+import { MAX_ICON_BYTES } from './build-icon';
+import { AppBuildsService } from './app-builds.service';
 import {
   ChannelCheck,
   ChannelContext,
@@ -96,11 +100,22 @@ export interface PublicSettingsInput {
   visitorRules?: VisitorRules | null;
 }
 
+/** What publishing last did about the platform webhook (channel-webhook-registrar.service.ts). */
+export interface WebhookRegistrationView {
+  action: 'register' | 'unregister';
+  status: 'registered' | 'unregistered' | 'failed' | 'skipped';
+  /** The platform's own wording, or why it was skipped. Never a key. */
+  error: string | null;
+  at: string | null;
+}
+
 /** What the channel page shows: the row, where it answers, and what it resolves to. */
 export type ChannelView = AgentChannel & {
   endpoint: string;
   /** Whether this organization may turn the AI disclosure off (the white-label entitlement). */
   disclosureRemovable: boolean;
+  /** For a channel whose webhook publishing registers: how that last went. Null otherwise. */
+  webhookRegistration: WebhookRegistrationView | null;
   effective: {
     branding: ReturnType<typeof effectiveBranding>;
     visitorRules: Omit<ReturnType<typeof effectiveVisitorRules>, 'ownSpend'> & { ownSpend: boolean };
@@ -109,6 +124,9 @@ export type ChannelView = AgentChannel & {
 
 /** Ceiling on one list of an agent's channels; the page is not paginated. */
 export const MAX_CHANNELS_PER_AGENT = 200;
+
+/** How long an app icon uploaded on the branding page may wait to be saved before the sweep clears it. */
+export const UNSAVED_ICON_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Channels on an agent: adding, configuring, publishing and removing
@@ -141,6 +159,13 @@ export class AgentChannelsService {
     private readonly credentialRefs?: CredentialRefResolver,
     // The spend caps and what the agent has spent against them.
     private readonly policy?: ChannelPolicyService,
+    // The organization's files, where an uploaded app icon is kept. Without
+    // it an uploaded icon is refused.
+    @Optional()
+    private readonly files?: FilesService,
+    // The downloads built for a channel, whose stored files go with it.
+    @Optional()
+    private readonly builds?: AppBuildsService,
   ) {}
 
   // ─── Agents ──────────────────────────────────────────────────────────
@@ -180,18 +205,21 @@ export class AgentChannelsService {
    */
   async updatePublicSettings(organizationId: string, agentId: string, caller: Caller, input: PublicSettingsInput) {
     const agent = await this.manageableAgent(organizationId, agentId, caller);
+    const previousIcon = agent.branding?.iconFileId;
     try {
       if (input.branding !== undefined) agent.branding = normalizeBranding(input.branding);
       if (input.visitorRules !== undefined) agent.visitorRules = normalizeVisitorRules(input.visitorRules);
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Those settings are not valid.');
     }
+    await this.assertIconFile(organizationId, agent.branding);
     // Only these two columns: an agent save touches its version history
     // and a whole-row save would race the agent editor.
     await this.agentRepository.update(
       { id: agent.id, organizationId },
       { branding: agent.branding as any, visitorRules: agent.visitorRules as any },
     );
+    await this.releaseIconFiles(organizationId, [previousIcon]);
     await this.resyncLiveChannels(organizationId, agent, caller);
     return this.publicSettingsOf(agent);
   }
@@ -242,16 +270,54 @@ export class AgentChannelsService {
 
   private async views(agent: Agent, channels: AgentChannel[]): Promise<ChannelView[]> {
     const disclosureRemovable = channels.length ? (await this.entitlements(agent.organizationId)).hasWhiteLabel === true : false;
+    const registrations = await this.webhookRegistrations(agent.organizationId, channels);
     return channels.map((channel) =>
       Object.assign(channel, {
         endpoint: endpointFor(channel),
         disclosureRemovable,
+        webhookRegistration: (channel.gatewayId && registrations.get(channel.gatewayId)) || null,
         effective: {
           branding: effectiveBranding(agent, channel),
           visitorRules: effectiveVisitorRules(agent, channel),
         },
       }),
     );
+  }
+
+  /**
+   * What publishing last did about the platform webhook, for the channels
+   * whose platform takes it through an API (channel-webhook-registrar.ts),
+   * read off their gateways. A failure is said on the channel page rather
+   * than only in a log.
+   */
+  private async webhookRegistrations(
+    organizationId: string,
+    channels: AgentChannel[],
+  ): Promise<Map<string, WebhookRegistrationView>> {
+    const out = new Map<string, WebhookRegistrationView>();
+    const ids = channels
+      .filter((c) => c.gatewayId && ChannelWebhookRegistrar.isRegistrable(GATEWAY_TYPE_FOR_CHANNEL[c.type] as GatewayType))
+      .map((c) => c.gatewayId as string);
+    if (!ids.length) return out;
+    try {
+      const gateways = await this.gatewayRepository.find({
+        where: { id: In(ids), organizationId },
+        select: { id: true, metadata: true },
+      });
+      for (const gateway of gateways ?? []) {
+        const r = (gateway.metadata as any)?.webhookRegistration;
+        if (!r || typeof r !== 'object') continue;
+        out.set(gateway.id, {
+          action: r.action === 'unregister' ? 'unregister' : 'register',
+          status: r.status,
+          error: typeof r.error === 'string' ? r.error : null,
+          at: typeof r.at === 'string' ? r.at : null,
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not read webhook registrations: ${err?.message ?? err}`);
+    }
+    return out;
   }
 
   async add(organizationId: string, agentId: string, caller: Caller, input: AddChannelInput): Promise<ChannelView> {
@@ -262,7 +328,7 @@ export class AgentChannelsService {
 
     const slug = SLUGGED_CHANNEL_TYPES.includes(input.type) ? await this.freeSlug(agent, input.type, input.slug) : null;
     const name = await this.freeName(agent, input.type, input.name);
-    const overrides = this.normalizedOverrides(input);
+    const overrides = await this.normalizedOverrides(organizationId, input);
 
     let configuration: Record<string, any> = this.withoutKeys(input.configuration);
     await this.assertDisclosureSwitch(agent, input.type, configuration);
@@ -307,7 +373,7 @@ export class AgentChannelsService {
   ): Promise<ChannelView> {
     const agent = await this.manageableAgent(organizationId, agentId, caller);
     const channel = await this.channelOf(organizationId, agent, channelId);
-    const overrides = this.normalizedOverrides(input);
+    const overrides = await this.normalizedOverrides(organizationId, input);
     if (input.name !== undefined && input.name.trim() !== channel.name) {
       channel.name = await this.freeName(agent, channel.type, input.name, channel.id);
     }
@@ -317,6 +383,7 @@ export class AgentChannelsService {
       if (channel.type !== ChannelType.WEB) throw new BadRequestException('Only a web chat has an address to change.');
       channel.slug = await this.freeSlug(agent, channel.type, input.slug, channel);
     }
+    const previousIcon = channel.branding?.iconFileId;
     if ('branding' in overrides) channel.branding = overrides.branding ?? null;
     if ('visitorRules' in overrides) channel.visitorRules = overrides.visitorRules ?? null;
 
@@ -339,6 +406,7 @@ export class AgentChannelsService {
     }
 
     const saved = await this.channelRepository.save(channel);
+    await this.releaseIconFiles(organizationId, [previousIcon]);
     if (saved.status === ChannelStatus.LIVE) await this.resync(organizationId, agent, saved, caller);
     return (await this.views(agent, [saved]))[0];
   }
@@ -353,7 +421,37 @@ export class AgentChannelsService {
       if (gateway) await this.gateways.deleteGateway(gateway.id, organizationId, caller.id);
     }
     // The credential it used stays on Credentials: it is the org's, not the channel's.
+    await this.builds?.removeArtifactsOf([channel.id]);
     await this.channelRepository.remove(channel);
+    await this.releaseIconFiles(organizationId, [channel.branding?.iconFileId]);
+  }
+
+  /**
+   * Everything that reaches an agent that is being deleted: each of its
+   * channels with the gateway it answered on (platform webhook taken down,
+   * address freed), the stored files of its downloads and unused app
+   * icons, and any other agent gateway bound to it (an A2A endpoint made
+   * on the Gateways page). Its conversations stay, and go with the
+   * organization's retention like any other.
+   *
+   * The caller has already checked the user may delete the agent; this
+   * does not check again, so a gateway someone else made for the agent
+   * goes too. Called before the agent row is removed, while the channels
+   * still point at it.
+   */
+  async removeAllOf(organizationId: string, agentId: string, userId?: string | null): Promise<{ channels: number; gateways: number }> {
+    const channels = await this.channelRepository.find({ where: { organizationId, agentId } });
+    const gatewayIds = new Set(channels.map((c) => c.gatewayId).filter((id): id is string => !!id));
+    const bound = await this.gatewayRepository.find({ where: { organizationId, agentId } });
+    for (const gateway of bound) gatewayIds.add(gateway.id);
+    const gateways = gatewayIds.size
+      ? await this.gatewayRepository.find({ where: { id: In([...gatewayIds]), organizationId } })
+      : [];
+    for (const gateway of gateways) await this.gateways.deleteGatewayOfDeletedAgent(gateway, userId);
+    await this.builds?.removeArtifactsOf(channels.map((c) => c.id));
+    if (channels.length) await this.channelRepository.remove(channels);
+    await this.releaseIconFiles(organizationId, channels.map((c) => c.branding?.iconFileId));
+    return { channels: channels.length, gateways: gateways.length };
   }
 
   /** Whether the channel may go live or be built, and if not, why. */
@@ -407,7 +505,9 @@ export class AgentChannelsService {
         return false;
       }
     };
-    return { hasEnterpriseAuth: await has('sso'), hasWhiteLabel: await has(EE_ENTITLEMENTS.WHITE_LABEL) };
+    // Visitor sign-in (the sso auth mode) is the SSO entitlement's; white
+    // label only removes the almyty mark and permits removing the disclosure.
+    return { hasEnterpriseAuth: await has(EE_ENTITLEMENTS.SSO), hasWhiteLabel: await has(EE_ENTITLEMENTS.WHITE_LABEL) };
   }
 
   /**
@@ -485,18 +585,90 @@ export class AgentChannelsService {
 
   // ─── Internals ───────────────────────────────────────────────────────
 
-  private normalizedOverrides(input: { branding?: unknown; visitorRules?: unknown }): {
+  private async normalizedOverrides(organizationId: string, input: { branding?: unknown; visitorRules?: unknown }): Promise<{
     branding?: ChannelBranding | null;
     visitorRules?: VisitorRules | null;
-  } {
+  }> {
+    let out: { branding?: ChannelBranding | null; visitorRules?: VisitorRules | null };
     try {
-      return {
+      out = {
         ...(input.branding !== undefined ? { branding: normalizeBranding(input.branding) } : {}),
         ...(input.visitorRules !== undefined ? { visitorRules: normalizeVisitorRules(input.visitorRules) } : {}),
       };
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Those settings are not valid.');
     }
+    await this.assertIconFile(organizationId, out.branding);
+    return out;
+  }
+
+  /**
+   * Delete app icons nothing uses any more: the ones a save replaced or
+   * removed, or a removed channel had. An icon still named by the agent's
+   * branding or any channel's (a channel copying the agent's, say) stays.
+   * Never fails the save that let go of it.
+   */
+  private async releaseIconFiles(organizationId: string, previous: Array<string | null | undefined>): Promise<number> {
+    const candidates = [...new Set(previous.filter((id): id is string => !!id))];
+    if (!candidates.length || !this.files) return 0;
+    const inUse = await this.iconFilesInUse(organizationId);
+    let removed = 0;
+    for (const id of candidates) {
+      if (inUse.has(id)) continue;
+      try {
+        await this.files.remove(id, organizationId);
+        removed++;
+      } catch (err: any) {
+        this.logger.warn(`Could not delete the app icon file ${id}: ${err?.message ?? err}`);
+      }
+    }
+    return removed;
+  }
+
+  /** The icon files the organization's agents and channels name in their branding. */
+  private async iconFilesInUse(organizationId: string): Promise<Set<string>> {
+    const [agents, channels] = await Promise.all([
+      this.agentRepository.find({ where: { organizationId }, select: { id: true, branding: true } }),
+      this.channelRepository.find({ where: { organizationId }, select: { id: true, branding: true } }),
+    ]);
+    const inUse = new Set<string>();
+    for (const row of [...agents, ...channels]) {
+      const id = (row.branding as ChannelBranding | null | undefined)?.iconFileId;
+      if (id) inUse.add(id);
+    }
+    return inUse;
+  }
+
+  /**
+   * Clear app icons uploaded on the branding page and never saved: an
+   * upload (purpose app_icon) older than a day that no agent's or
+   * channel's branding names. A day, so a page someone is still filling in
+   * keeps its icon. Run by the hourly channel housekeeping sweep.
+   */
+  async sweepUnsavedIcons(now: Date = new Date()): Promise<number> {
+    if (!this.files) return 0;
+    const stale = await this.files.findForPurposeBefore('app_icon', new Date(now.getTime() - UNSAVED_ICON_TTL_MS));
+    const byOrg = new Map<string, string[]>();
+    for (const file of stale) byOrg.set(file.organizationId, [...(byOrg.get(file.organizationId) ?? []), file.id]);
+    let removed = 0;
+    for (const [organizationId, ids] of byOrg) removed += await this.releaseIconFiles(organizationId, ids);
+    return removed;
+  }
+
+  /**
+   * The uploaded app icon has to be this organization's file, a PNG (the
+   * branding page converts a JPG or WebP to one before uploading), and no
+   * bigger than a build takes. Anything else would only be found out when
+   * a desktop build ships with the default icon.
+   */
+  private async assertIconFile(organizationId: string, branding: ChannelBranding | null | undefined): Promise<void> {
+    const fileId = branding?.iconFileId;
+    if (!fileId) return;
+    if (!this.files) throw new BadRequestException('App icons cannot be uploaded on this server.');
+    const file = await this.files.findById(fileId, organizationId).catch(() => null);
+    if (!file) throw new BadRequestException('That icon was not found. Upload it again.');
+    if (file.mimeType !== 'image/png') throw new BadRequestException('The app icon has to be a PNG.');
+    if (file.size > MAX_ICON_BYTES) throw new BadRequestException('The app icon is larger than 4 MB.');
   }
 
   /**

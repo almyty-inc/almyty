@@ -66,6 +66,13 @@ describe('FilesService upload hardening', () => {
     return { path: spooled(buffer), originalname: name, mimetype: 'text/plain', size: buffer.length };
   };
 
+  it('records what an upload is for, so the unsaved-icon sweep can find it', async () => {
+    const icon = await service.upload(ORG_A, txt('png', 'app-icon.png'), { purpose: 'app_icon', extractText: false });
+    expect(icon.metadata).toEqual({ purpose: 'app_icon' });
+    const plain = await service.upload(ORG_A, txt('notes'));
+    expect(plain.metadata).toBeNull();
+  });
+
   it('refuses an agentId that walks the storage key into another org', async () => {
     await expect(
       service.upload(ORG_A, txt('planted'), { agentId: `../${ORG_B}/agent` }),

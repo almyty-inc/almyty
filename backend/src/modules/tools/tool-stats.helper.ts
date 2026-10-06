@@ -74,6 +74,7 @@ export class ToolStatsHelper {
         organizationId: options.organizationId,
         gatewayId,
         runId,
+        codeExecutionId: options.codeExecutionId ?? null,
         parameters,
         result: result.data,
         success: result.success,
@@ -88,6 +89,9 @@ export class ToolStatsHelper {
           requestId: result.metadata?.requestId ?? scope?.requestId,
           rateLimited: result.rateLimited,
           ...(scope?.nodeId ? { nodeId: scope.nodeId } : {}),
+          // The MCP client's trace (2026-07-28 _meta traceparent), so its
+          // span can be joined to this row.
+          ...(scope?.trace ? { trace: scope.trace } : {}),
         },
       });
 

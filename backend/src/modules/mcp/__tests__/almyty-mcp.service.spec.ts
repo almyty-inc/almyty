@@ -342,10 +342,16 @@ describe('AlmytyMcpService', () => {
 
   describe('initialize', () => {
     it('returns server info and capabilities', async () => {
-      const res = await call('initialize');
+      const res = await call('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'c', version: '1' } });
       expect(res.result.serverInfo.name).toBe('almyty');
       expect(res.result.capabilities.tools).toBeDefined();
-      expect(res.result.protocolVersion).toBe('2024-11-05');
+      expect(res.result.protocolVersion).toBe('2025-11-25');
+    });
+
+    // It used to answer every client 2024-11-05, whatever it asked for.
+    it.each(['2025-06-18', '2025-03-26', '2024-11-05'])('negotiates %s like every other surface', async (version) => {
+      const res = await call('initialize', { protocolVersion: version, capabilities: {}, clientInfo: { name: 'c', version: '1' } });
+      expect(res.result.protocolVersion).toBe(version);
     });
   });
 
@@ -391,10 +397,11 @@ describe('AlmytyMcpService', () => {
   });
 
   describe('prompts/get', () => {
-    it('returns valid message response', async () => {
+    // The management surface has no prompts, so every name is unknown. It
+    // used to echo the name back as a made-up prompt.
+    it('answers -32602 for any prompt name', async () => {
       const res = await call('prompts/get', { name: 'test-prompt' });
-      expect(res.result.messages).toBeDefined();
-      expect(res.result.messages[0].role).toBe('user');
+      expect(res.error.code).toBe(-32602);
     });
   });
 
@@ -446,10 +453,12 @@ describe('AlmytyMcpService', () => {
   });
 
   describe('tools/call', () => {
-    it('returns error for unknown tool', async () => {
+    // An unknown tool is a protocol error (-32602) on every surface; only a
+    // known tool that fails is a tool error.
+    it('answers an unknown tool with -32602, not a tool error', async () => {
       const res = await call('tools/call', { name: 'nonexistent_tool', arguments: {} });
-      expect(res.result.content[0].text).toContain('Unknown tool');
-      expect(res.result.isError).toBe(true);
+      expect(res.result).toBeUndefined();
+      expect(res.error).toEqual({ code: -32602, message: 'Tool not found: nonexistent_tool' });
     });
 
     it('list_apis calls ApisService.findAllByOrganization', async () => {
@@ -487,9 +496,10 @@ describe('AlmytyMcpService', () => {
       expect(parsed.status).toBe('queued');
     });
 
-    it('list_gateways calls GatewaysService.getGateways', async () => {
+    // Gateways are MCP, UTCP and Skills; channels are listed by list_channels.
+    it('list_gateways asks GatewaysService for tool gateways only', async () => {
       await call('tools/call', { name: 'list_gateways', arguments: {} });
-      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1', limit: 50, caller: { id: 'user-1' } });
+      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1', limit: 50, kind: 'tool', caller: { id: 'user-1' } });
     });
 
     it('create_agent calls AgentsService.createAgent with correct args', async () => {

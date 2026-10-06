@@ -4,6 +4,7 @@ import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 
 import { McpController } from '../mcp.controller';
 import { McpTransportController } from '../controllers/mcp-transport.controller';
+import { WorkerStreamController } from '../../runner/transport/worker-stream.controller';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { ROLES_KEY } from '../../auth/decorators/roles.decorator';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
@@ -49,28 +50,12 @@ describe('MCP surface role gate', () => {
     } as unknown as ExecutionContext;
   };
 
-  // Every authenticated handler on McpController.
-  const mcpHandlers = [
-    'handleMcp',
-    'initialize',
-    'ping',
-    'handleNotifications',
-    'listTools',
-    'callTool',
-    'discoverTools',
-    'searchTools',
-    'getToolDetails',
-    'listSkills',
-    'getSkill',
-    'listResources',
-    'readResource',
-    'listPrompts',
-    'getPrompt',
-  ] as const;
+  // Every authenticated handler on McpController. The per-method REST
+  // routes (/mcp/tools/call and friends) are gone; POST /mcp is the one
+  // door, and the last test below keeps it that way.
+  const mcpHandlers = ['handleMcp'] as const;
 
   const transportHandlers = [
-    'streamablePost',
-    'streamableStream',
     'handleSse',
     'sendSseMessage',
     'handleServerSse',
@@ -95,9 +80,27 @@ describe('MCP surface role gate', () => {
       );
     });
 
+    it('has no handler besides POST /mcp and the two unauthenticated probes', () => {
+      const handlers = Object.getOwnPropertyNames(McpController.prototype).filter((n) => n !== 'constructor');
+      expect(handlers.sort()).toEqual(['handleMcp', 'health', 'wellKnown']);
+    });
+
     it('leaves the unauthenticated probes ungated', () => {
       expect(Reflect.getMetadata(ROLES_KEY, McpController.prototype.health)).toBeUndefined();
       expect(Reflect.getMetadata(ROLES_KEY, McpController.prototype.wellKnown)).toBeUndefined();
+    });
+  });
+
+  // The worker stream moved out of McpTransportController with the runner
+  // split; its four handlers (the new route and the kept /mcp/streamable)
+  // keep the same gate.
+  describe('WorkerStreamController', () => {
+    it.each(['post', 'open', 'legacyPost', 'legacyOpen'] as const)('%s refuses a viewer and admits a member', (handler) => {
+      expect(Reflect.getMetadata(ROLES_KEY, WorkerStreamController.prototype[handler])).toEqual(['member', 'admin', 'owner']);
+      expect(() => guard.canActivate(contextFor(WorkerStreamController, handler, OrganizationRole.VIEWER))).toThrow(
+        ForbiddenException,
+      );
+      expect(guard.canActivate(contextFor(WorkerStreamController, handler, OrganizationRole.MEMBER))).toBe(true);
     });
   });
 

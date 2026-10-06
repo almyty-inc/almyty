@@ -192,16 +192,16 @@ export enum GatewayKind {
 export enum GatewayType {
   MCP = 'mcp',
   A2A = 'a2a',
-  ACP = 'acp',
   UTCP = 'utcp',
   SKILLS = 'skills',
-  OPENAI_CHAT = 'openai_chat',
   SLACK = 'slack',
   DISCORD = 'discord',
   TELEGRAM = 'telegram',
   WHATSAPP = 'whatsapp',
   WHATSAPP_CLOUD = 'whatsapp_cloud',
   SMS = 'sms',
+  IMESSAGE_SENDBLUE = 'imessage_sendblue',
+  IMESSAGE_LOOPMESSAGE = 'imessage_loopmessage',
   EMAIL = 'email',
   WEBHOOK = 'webhook',
   GOOGLE_CHAT = 'google_chat',
@@ -352,6 +352,10 @@ export interface Tool {
   id: string
   name: string
   description?: string
+  /** What calling it does to data (code-mode part A), where that came from, and whether it reaches a third party. */
+  sideEffect?: 'read' | 'write' | 'destructive'
+  sideEffectSource?: 'override' | 'annotation' | 'http_method' | 'graphql' | 'default'
+  openWorld?: boolean
   type: ToolType
   category: ToolCategory
   organizationId: string

@@ -16,9 +16,28 @@ import { apiGet, apiPost } from '@/lib/api'
 
 interface ConsentInfo {
   clientName: string
+  // The host of a Client ID Metadata Document client's URL. Its name is
+  // self-asserted, so the host is shown next to it.
+  clientHost?: string | null
   gatewayName: string
   scopes: string[]
+  // RFC 9207: sent back to the client as `iss` on every outcome.
+  issuer?: string
 }
+
+// Schemes that run or read something in the browser that follows them.
+// The redirect is assigned to window.location from this origin, so none of
+// them is ever a redirect target, whatever the server registered.
+const FORBIDDEN_REDIRECT_SCHEMES = new Set([
+  'javascript:',
+  'data:',
+  'vbscript:',
+  'file:',
+  'about:',
+  'blob:',
+  'filesystem:',
+  'view-source:',
+])
 
 // Friendly descriptions for the scopes we issue. Unknown scopes fall back
 // to the raw value so a new scope is never silently hidden from the user.
@@ -113,16 +132,20 @@ export function OAuthConsentPage() {
       setSubmitting(false)
       return false
     }
-    // Only http(s) is a place to send the browser. Anything else --
-    // `javascript://localhost/...` parses fine and has host localhost --
-    // would run as script in this origin when assigned to location.href.
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    // A redirect may be http(s) or a native app's private-use scheme
+    // (`cursor://...`): the server only shows this page for a redirect URI
+    // the client registered. Never a scheme that runs in this origin --
+    // `javascript://localhost/...` parses fine and has host localhost.
+    if (FORBIDDEN_REDIRECT_SCHEMES.has(url.protocol)) {
       setSubmitError('The client supplied an invalid redirect URI.')
       setSubmitting(false)
       return false
     }
     for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v)
     if (state) url.searchParams.set('state', state)
+    // RFC 9207: name the authorization server that answered, on success and
+    // on denial alike, so a client talking to several can tell them apart.
+    if (info?.issuer) url.searchParams.set('iss', info.issuer)
     window.location.href = url.toString()
     return true
   }
@@ -173,6 +196,11 @@ export function OAuthConsentPage() {
             {info
               ? `${info.clientName} is requesting access to ${info.gatewayName}.`
               : 'Review this authorization request.'}
+            {info?.clientHost && (
+              <span className="mt-1 block text-xs" data-testid="consent-client-host">
+                This client described itself from <span className="font-medium text-foreground">{info.clientHost}</span>. Approve only if you recognize it.
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
 

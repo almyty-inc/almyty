@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsEnum,
   IsIn,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
@@ -173,4 +174,24 @@ export class RecordBuildBodyDto {
   @IsString()
   @MaxLength(2000)
   error?: string;
+}
+
+/**
+ * One person in a data request: what identifies them (an email address,
+ * a phone number, a Slack member id, a widget conversation id, an A2A key
+ * or client id) and the channel to look on, every channel of the agent
+ * when left out. Sent in a POST body rather than a query string so the
+ * identifier stays out of access logs.
+ */
+export class VisitorDataRequestBodyDto {
+  @ApiPropertyOptional({ description: "The agent's channel the person used. Every channel people talk to when left out." })
+  @IsOptional()
+  @IsUUID()
+  channelId?: string;
+
+  @ApiProperty({ description: 'What identifies the person on that channel' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(320)
+  id: string;
 }

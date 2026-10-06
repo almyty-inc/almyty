@@ -1,26 +1,28 @@
-# Turn an npm package into tools
+# Turn a code library into tools
 
-**Stack**: `Tools: any npm package (stripe, @aws-sdk, octokit)` · `Execution: SDK (sandboxed)` · `Secrets: Credentials vault` · `Output: typed tools, no wrappers`
+Many services publish a ready-made code library (an npm package) for talking to them: Stripe, AWS, GitHub and thousands more. Point almyty at the package and it reads what the package can do; you then pick the functions your assistants should use, and each becomes a tool. No wrapper code to write.
 
-**Who it's for**: anyone who wants an agent to use a library, Stripe, AWS, GitHub, without hand-writing a tool per function.
-**What it does**: points almyty at an npm package, introspects its exports, and turns the functions you pick into typed tools that run in a hardened sandbox. Re-run discovery when the SDK updates and the parameters follow, no schema drift.
+For example: add the `stripe` package, and make tools for "look up a customer" and "create a refund".
 
-## Build it
+## What you need
 
-1. **Add the package as an SDK tool.** *Tools → Create Tool*, choose **SDK**, enter the package and version (`stripe` at `^17.0.0`), and click **Discover**: almyty installs it in a sandbox and infers a parameter schema for each function from the package's own TypeScript types.
-2. **Keep the functions you want.** Select the ones you need, `charges.create`, `refunds.create`, `customers.retrieve`, review the generated names and parameters, and create them. Each is a JavaScript tool that `require()`s the package.
-3. **Give it its secret.** Store the API key in the [Credentials](/credentials) vault and reference it from the tool, injected at run time, never in a prompt.
-4. **Attach and use.** Add the tools to an agent or publish them on a gateway; the agent calls `refunds.create` like any other tool.
+- The package name (and version), from npmjs.com.
+- The service's key, if it needs one.
+- Someone comfortable reading a library's function names, for step 3.
 
-![Your new tools, ready to attach or publish](/screenshots/tools-list.png)
+## How to build it
 
-## Make it yours
+1. **Add the package.** Open **APIs**, click **Connect an API** and pick **SDK / npm**. Give it a name, add the package and version (for example `stripe`, version `^17.0.0`), and click **Connect API**. almyty installs it in a safe, separate place and works out its functions and their inputs from the package's own type information.
+2. **Keep the key safe.** Save the service's key in [Credentials](/credentials). Tools read it when they run; it never goes into a prompt.
+3. **Make a tool per function.** Open **Tools**, click **Create tool** and pick **SDK / npm package** as the execution method. Choose the package, then the function, such as `refunds.create`. For each of its inputs, say whether the caller fills it in, it is always the same, or it comes from a credential. Click **Create tool**, then test it on its page.
+4. **Use it.** Pick the tools for an assistant under **Tools and APIs**, or offer them through a gateway.
 
-- Works for `@aws-sdk/client-s3`, `@octokit/rest`, `lodash`, or any package on npm.
-- Combine with a [connected API](/examples/give-claude-your-api) on the same gateway.
-- Re-run **Discover** after an SDK bump to refresh parameters.
+![Tools, ready to give to an assistant or a gateway](/screenshots/tools-list.png)
 
-**Uses**: `Platform` · `SDK tools` · `Integrations`
+## Ideas
+
+- It works for `@aws-sdk/client-s3`, `@octokit/rest` or any other package on npm, including private ones from your own registry.
+- Put these tools on the same gateway as a [connected API](/examples/give-claude-your-api).
 
 ## Related
 

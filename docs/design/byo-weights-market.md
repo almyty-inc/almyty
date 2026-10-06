@@ -37,7 +37,7 @@ produced an arbitrary provider list.
 | Fireworks | 2 | Validates the model against a recognised architecture list. Trained LoRAs deploy to dedicated capacity only, never serverless. |
 | Nebius Token Factory | 1 and 2 | LoRA adapters served per-token, plus full fine-tuning on a curated base list. No arbitrary repo. |
 | Featherless | 3, but console only | Auto-ingests any public HF repo over 100 downloads; private models are a ten-slot feature managed in the web app. **No deployment API at all.** |
-| HF Inference Providers | 0 | A router over other providers' catalogs. A competitor to OpenRouter, not a place to put your model. |
+| HF Inference Providers | 0 | A router over other providers' catalogs, not a place to put your model. |
 | Naver HyperCLOVA X | 0 | Five in-house models. Tuning modifies those bases and is not exportable. |
 | Yandex AI Studio | 0 and 2 | Serverless catalog plus dedicated instances from a curated list. |
 

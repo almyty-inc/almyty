@@ -3,6 +3,8 @@ import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
 import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { AgentChannelsService } from '../agent-channels/agent-channels.service';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -18,6 +20,7 @@ import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-mod
 import { parseLabelRequirements } from '../runner/runner-labels';
 import { AgentMemoryConfig, memoryConfigProblems, memorySettings, retentionSeconds, NATIVE_MEMORY_ACCOUNT } from './agent-memory-settings';
 import { capabilityProblems, normaliseCapabilities } from './agent-capabilities';
+import { toolModeProblems } from './agent-tool-mode';
 import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
 import { Api } from '../../entities/api.entity';
 import { CredentialType } from '../../entities/credential.entity';
@@ -204,6 +207,9 @@ export class AgentsService {
     // and to apply its retention to what it already saved.
     @Optional() private readonly memoryAccounts?: MemoryAccountsService,
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
+    // To reach AgentChannelsService when an agent is deleted. Resolved
+    // lazily: AgentChannels imports Gateways, which imports this module.
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   /** See the call sites: an agent's own memory account must be one the agent may use. */
@@ -251,6 +257,7 @@ export class AgentsService {
     normaliseCapabilities(agentConfig as any);
     const capability = capabilityProblems(agentConfig);
     problems.push(...capability);
+    problems.push(...toolModeProblems(agentConfig as Record<string, any> | null | undefined));
     if (!capability.length && agentConfig) {
       const callable = (agentConfig.callableAgentIds ?? []).filter((id) => id !== selfId);
       if (agentConfig.callableAgentIds?.includes(selfId ?? '')) problems.push('An agent cannot call itself');
@@ -905,8 +912,26 @@ export class AgentsService {
       });
     }
 
+    // Its channels go first, while they still point at it: each channel's
+    // gateway (platform webhook, address), and any other gateway bound to
+    // it. Left behind, a web chat kept its address taken and answered
+    // requests for an agent that no longer exists.
+    const removed = await this.channelsOf()?.removeAllOf(organizationId, id, userId ?? null);
     await this.agentRepository.remove(agent);
-    this.logger.log(`[DELETE_AGENT] Agent deleted: id=${id}`);
+    this.logger.log(
+      `[DELETE_AGENT] Agent deleted: id=${id}` +
+        (removed ? ` with ${removed.channels} channel(s) and ${removed.gateways} gateway(s)` : ''),
+    );
+  }
+
+  /**
+   * The channel service, or null in a positional unit spec built without
+   * the container. Inside the app a failed lookup throws: deleting the
+   * agent anyway would leave its channels answering.
+   */
+  private channelsOf(): AgentChannelsService | null {
+    if (!this.moduleRef) return null;
+    return this.moduleRef.get(AgentChannelsService, { strict: false });
   }
 
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {

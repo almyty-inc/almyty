@@ -10,6 +10,7 @@ import { TextExtractorService } from './text-extractor.service';
   imports: [TypeOrmModule.forFeature([AgentFile])],
   providers: [FilesService, StorageService, TextExtractorService],
   controllers: [FilesController],
-  exports: [FilesService, StorageService],
+  // TextExtractorService: a channel describes a file someone sent with it (gateways/channels/channel-attachments.service.ts).
+  exports: [FilesService, StorageService, TextExtractorService],
 })
 export class FilesModule {}

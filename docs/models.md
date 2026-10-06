@@ -37,9 +37,9 @@ A provider's models become usable when the **provider's key check** passes, all 
 - **Key rejected.** A 401/403, or the vendor's words for one, sends the provider's checked cards back to waiting with the reason, so nothing served by a key the vendor refuses is offered. The next passing check restores them. Any other failure (outage, timeout) changes nothing: the router already skips an unhealthy provider, and a blip must not empty every model list.
 - **Model gone.** A real call the vendor answers `MODEL_NOT_FOUND` (retired, or never offered to this key) marks that one card `failed` / `error` with the vendor's message (`ModelRouterService.markModelNotFound`, called from the chat runner), so no list offers it again. A key check does not revive it; a passing check of that model does. A model the provider stops listing goes `inactive` on the next sync (below).
 - **Endpoint with no provider row.** Checked by its own call, `POST /models/:id/validate`. A model started on the customer's cloud is checked this way by itself when it reaches ready (below).
-- **Cards the check never saw.** A card still waiting under a provider whose check passed (imported before this rule, or by a sync that ran while the provider read as unchecked) is marked the same way, with no vendor call, at boot, before each sweep, and whenever `GET /models` would show one (`ModelCatalogService.reconcileReadiness`). The provider API sends the rule itself as `keyChecked`, which is what the Models page shows as "Key works": the provider card and its rows read one rule.
+- **Cards the check never saw.** A card still waiting under a provider whose check passed (imported before this rule, or by a sync that ran while the provider read as unchecked) is marked the same way, with no vendor call, at boot, before each sweep, and whenever `GET /models` would show one (`ModelCatalogService.reconcileReadiness`). The provider API sends the rule itself as `keyChecked`, which is what a connection's page shows as "Key works": the connection and its model rows read one rule.
 
-`Model.isSelectable()` is still the only definition of "usable" (active, callable, `validationStatus: passed`); what changed is who writes `passed`. The router, `GET /models?selectable=true`, the MCP tools and the CLI all read it.
+`Model.isSelectable()` is the only definition of "usable" (active, callable, `validationStatus: passed`). The router, `GET /models?selectable=true`, the MCP tools and the CLI all read it.
 
 ### Connect
 
@@ -103,8 +103,7 @@ inside and outside mainland China, so the edition is chosen. A base that
 embeds an account's own region, resource name or endpoint id is a
 template filled from the configuration.
 
-None of those is a reason to exclude a vendor, which is what they had
-previously been used as.
+None of those is a reason to exclude a vendor.
 
 ### Inbound, and native first
 
@@ -231,7 +230,7 @@ user declares what it supports and validation is a real call.
 `GET/POST /models`, `GET/PATCH/DELETE /models/:id`. A card carries:
 
 - `providerId` or `endpointRef.url`, plus `vendorModelId` (the id sent on the wire)
-- `capabilities` (tools, vision, reasoning, embedding, structuredOutput), `contextLength`
+- `capabilities` (tools, vision, pdfInput, reasoning, embedding, structuredOutput), `contextLength`
 - `privacyTier` (`local` < `private_cloud` < `public`), `region`
 - `pricing` + `pricingSource`, optional `pricingOverride` (wins when set)
 - `validationStatus`, `lastValidatedAt`, `lastValidationError`, `measuredLatencyMs`
@@ -251,7 +250,7 @@ Every register, validate, price change and route is an audit row (`model_registe
 
 ## Pricing
 
-Automatic. The daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks OpenRouter; a disagreement above 25% is kept on the card in `metadata.pricingDisagreement`. Cards are priced at registration from the cached feed and refreshed by the job; a replica that boots with an empty or day-old cache refreshes at once, and a sync that creates cards the feed cannot price refreshes a stale feed and prices the org's cards in the background (`PriceFeedService.ensureFresh`). A card with no price reads "Price unknown", never $0; only an Ollama server you run is priced free (`native`), since Ollama Cloud bills by plan and is in neither feed. Context length comes from the feed with the price and is left blank when unknown. `pricingSource` says where a number came from: `feed:litellm`, `feed:openrouter`, `native` (provider-reported), `adapter` (a deployment's cost snapshot), `manual` (an override), or `unpriced`. The hand-maintained table in `llm-models.helper.ts` is an offline seed only.
+Automatic. The daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks OpenRouter; a disagreement above 25% is kept on the card in `metadata.pricingDisagreement`. Cards are priced at registration from the cached feed and refreshed by the job; a replica that boots with an empty or day-old cache refreshes at once, and a sync that creates cards the feed cannot price refreshes a stale feed and prices the org's cards in the background (`PriceFeedService.ensureFresh`). A card with no price reads "Price unknown", never $0; only an Ollama server you run is priced free (`native`), since Ollama Cloud bills by plan and is in neither feed. Context length comes from the feed with the price and is left blank when unknown. So do the inputs a model takes besides text: `vision` from LiteLLM's `supports_vision` or an OpenRouter `image` input modality, `pdfInput` from `supports_pdf_input` or a `file` modality. The feed only ever sets these to true, and only on a card that has no value of its own, so an operator's setting stands; they decide whether a file someone sent reaches the model as an image or a document or as text (see `docs/channels.md`, files people send). `pricingSource` says where a number came from: `feed:litellm`, `feed:openrouter`, `native` (provider-reported), `adapter` (a deployment's cost snapshot), `manual` (an override), or `unpriced`. The hand-maintained table in `llm-models.helper.ts` is an offline seed only.
 
 ## Routing
 
@@ -293,7 +292,7 @@ Routing needs the catalog module wired in (it is, in `app.module.ts`); without i
 
 ## Models on your cloud account (`model-deployments`)
 
-A model hosted on the customer's own cloud account is still one model in the Models list. The cloud account is a provider like any other: it is connected from the same grid of providers, and its provider page has a "Start a model" action that asks one thing, which model (a Hugging Face repository). Weight buckets, regions, dedicated or serverless, scale to zero and adapters go under Advanced. The model's state, hourly cost, budget and start/stop controls live on that provider page. User-facing copy never says "deployment" or "tracked artifact": the docs site calls this "your cloud account". The code names stay: the `model-deployments` module, the `ModelDeployment` entity, `/model-deployments`, `/model-adapters`, the CLI's `deploy`/`deployments`/`scale`/`teardown`, and `deploymentId` fields. User docs: `docs-site/content/models/your-cloud.mdx`.
+A model hosted on the customer's own cloud account is still one model in the Models list. The cloud account is a provider like any other: it is connected from the same grid of providers, and its provider page has a "Start a model" action on its "Open models on this account" tab that asks one thing, which model (a Hugging Face repository). Weight buckets, regions, dedicated or serverless, scale to zero and adapters go under Advanced. The model's state, hourly cost, budget and start/stop controls live on that provider page. User-facing copy never says "deployment" or "tracked artifact": the docs site calls this "your cloud account". The code names stay: the `model-deployments` module, the `ModelDeployment` entity, `/model-deployments`, `/model-adapters`, the CLI's `deploy`/`deployments`/`scale`/`teardown`, and `deploymentId` fields. User docs: `docs-site/content/models/your-cloud.mdx`.
 
 `GET /model-adapters` describes every registered adapter as data: capabilities, the model references it accepts (`modelSchemes`), and a JSON schema for its config (`x-secret: true` marks fields that are encrypted at rest and never returned). `POST /model-deployments` records desired state and creates the card at once (`status: deploying`, linked through `endpointRef.deploymentId` once ready; optional `name` and `vendorModelId` label it; `modelId` attaches an existing card instead). The reconcile queue (`MODEL_RECONCILE_CRON`, default every 2 minutes) is the only thing that talks to a provider. `POST /model-deployments/:id/scale { replicas }` and `/teardown` change desired state only.
 

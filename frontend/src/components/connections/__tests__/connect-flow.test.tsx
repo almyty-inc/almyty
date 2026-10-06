@@ -92,6 +92,32 @@ const slack: Connector = {
   ],
 }
 
+const mcpServer: Connector = {
+  key: 'mcp-custom',
+  kind: 'mcp',
+  displayName: 'MCP server',
+  connect: [
+    {
+      type: 'api_key',
+      label: 'Server URL and token',
+      schema: { type: 'object', properties: { serverUrl: { type: 'string', title: 'Server URL', format: 'uri' }, apiKey: { type: 'string', title: 'Bearer token', 'x-secret': true } }, required: ['serverUrl'] },
+    },
+    {
+      type: 'oauth2_pkce',
+      label: 'Sign in to the server',
+      schema: {
+        type: 'object',
+        properties: {
+          serverUrl: { type: 'string', title: 'Server URL', format: 'uri' },
+          clientId: { type: 'string', title: 'Client id', 'x-advanced': true },
+          clientSecret: { type: 'string', title: 'Client secret', 'x-secret': true, 'x-advanced': true },
+        },
+        required: ['serverUrl'],
+      },
+    },
+  ],
+}
+
 function connection(overrides: Partial<Connection> = {}): Connection {
   return {
     id: 'conn-1',
@@ -122,7 +148,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   Object.assign(role, { role: 'admin', canManage: true })
   vi.mocked(organizationsApi.getById).mockResolvedValue({ id: 'test-org-id', plan: 'free', settings: {} })
-  vi.mocked(connectorsApi.list).mockResolvedValue([openai, vllm, slack])
+  vi.mocked(organizationsApi.getTeams).mockResolvedValue([])
+  vi.mocked(connectorsApi.list).mockResolvedValue([openai, vllm, slack, mcpServer])
   openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
 })
 
@@ -141,7 +168,7 @@ describe('ConnectFlow', () => {
     // One field, a link to where the key is made, and who can use it.
     expect(screen.getByLabelText('API key')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Get a key/ })).toHaveAttribute('href', 'https://platform.openai.com/api-keys')
-    expect(screen.getByTestId('who-can-use')).toHaveTextContent('Who can use it: everyone in your organization')
+    expect(screen.getByTestId('who-can-use')).toHaveTextContent('Who can use it: Everyone')
     // The service's own instructions wait under Advanced.
     expect(screen.queryByTestId('connect-instructions')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
@@ -270,6 +297,48 @@ describe('ConnectFlow', () => {
     await waitFor(() => expect(onConnected).toHaveBeenCalledWith(landed))
   })
 
+
+  it('signs in to an MCP server: asks where it is first, keeps a client id under Advanced, and sends both', async () => {
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ ...redirect('st-mcp'), method: 'oauth2_pkce' })
+    vi.mocked(connectionsApi.list).mockResolvedValue([])
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="mcp-custom" onConnected={() => {}} pollIntervalMs={50} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Sign in to the server' }))
+    expect(await screen.findByText(/Enter where it is, then sign in at MCP server/)).toBeInTheDocument()
+
+    // Without the address there is nothing to sign in to.
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(connectionsApi.connect).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Server URL'), { target: { value: 'https://mcp.example.com/mcp' } })
+    // The sign-in's own Advanced: the client id an owner hands out.
+    if (!screen.queryByLabelText('Client id')) fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.change(screen.getByLabelText('Client id'), { target: { value: 'pre-registered-id' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    await waitFor(() =>
+      expect(connectionsApi.connect).toHaveBeenCalledWith('mcp-custom', {
+        method: 'oauth2_pkce',
+        owner: 'org',
+        input: { serverUrl: 'https://mcp.example.com/mcp', clientId: 'pre-registered-id' },
+      }),
+    )
+    await waitFor(() => expect(openSpy).toHaveBeenCalledWith('https://slack.com/oauth/authorize?state=st-mcp', '_blank', 'noopener'))
+  })
+
+  it('signs in to an MCP server again without asking where it is', async () => {
+    const existing = connection({ id: 'conn-mcp', name: 'Docs MCP', connectorKey: 'mcp-custom', kind: 'mcp', method: 'oauth2_pkce' } as Partial<Connection>)
+    vi.mocked(connectionsApi.rotate).mockResolvedValue({ ...redirect('st-again'), method: 'oauth2_pkce' })
+    vi.mocked(connectionsApi.list).mockResolvedValue([])
+    render(<ConnectFlow embedded onCancel={() => {}} rotateConnection={existing} onConnected={() => {}} pollIntervalMs={50} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Sign in to the server' }))
+    expect(screen.queryByLabelText('Server URL')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    await waitFor(() => expect(connectionsApi.rotate).toHaveBeenCalledWith('conn-mcp', {}))
+  })
   it('replaces the key of an existing connection with only the new key', async () => {
     const existing = connection()
     vi.mocked(connectionsApi.rotate).mockResolvedValue({ pending: false, connection: { ...existing, updatedAt: new Date().toISOString() } })
@@ -292,11 +361,11 @@ describe('who can use it', () => {
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'private' }) })
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     const line = await screen.findByTestId('who-can-use')
-    expect(line).toHaveTextContent('everyone in your organization')
+    expect(line).toHaveTextContent('Everyone')
     fireEvent.click(within(line).getByRole('button', { name: 'Change' }))
-    // Organization or only you; a team is not something a connection is shared with here.
-    expect(screen.queryByRole('radio', { name: /Team/ })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('radio', { name: /Private/ }))
+    // Organization or only you: this organization has no teams, so there is no team to pick.
+    expect(screen.queryByRole('radio', { name: /^One team/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio', { name: /^Only you/ }))
 
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -315,7 +384,7 @@ describe('who can use it', () => {
     Object.assign(role, { role: 'member', canManage: false })
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'private' }) })
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
-    await waitFor(() => expect(screen.getByTestId('who-can-use')).toHaveTextContent('only you'))
+    await waitFor(() => expect(screen.getByTestId('who-can-use')).toHaveTextContent('Only you'))
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'private' })))
@@ -327,6 +396,35 @@ describe('who can use it', () => {
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     expect(await screen.findByTestId('connect-admins-only')).toHaveTextContent('Only admins can add credentials')
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
+  })
+
+  it('offers one team too, like a provider connection, and sends the team picked', async () => {
+    vi.mocked(organizationsApi.getTeams).mockResolvedValue([{ id: 'team-1', name: 'Support', isDefault: false }, { id: 'team-2', name: 'Sales', isDefault: false }])
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'team', teamId: 'team-1' }) })
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
+    const line = await screen.findByTestId('who-can-use')
+    fireEvent.click(within(line).getByRole('button', { name: 'Change' }))
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^One team/ })).toBeEnabled())
+    // The three choices a provider connection has.
+    for (const name of [/^Only you/, /^One team/, /^Everyone/]) expect(screen.getByRole('radio', { name })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio', { name: /^One team/ }))
+
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'team', teamId: 'team-1' })))
+  })
+
+  it('a member without personal keys can still add one for a team', async () => {
+    Object.assign(role, { role: 'member', canManage: false })
+    vi.mocked(organizationsApi.getById).mockResolvedValue({ id: 'test-org-id', plan: 'pro', settings: { allowUserScopedConnections: false } })
+    vi.mocked(organizationsApi.getTeams).mockResolvedValue([{ id: 'team-1', name: 'Support', isDefault: false }])
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'team', teamId: 'team-1' }) })
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId('who-can-use')).toHaveTextContent('One team'))
+    expect(screen.queryByTestId('connect-admins-only')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'team', teamId: 'team-1' })))
   })
 })
 
@@ -342,5 +440,11 @@ describe('splitConnectSchema', () => {
     const { main, extra } = splitConnectSchema({ type: 'object', properties: { a: { type: 'string' } } })
     expect(Object.keys(main.properties)).toEqual(['a'])
     expect(extra).toBeNull()
+  })
+
+  it('keeps fields marked x-advanced under Advanced, secret or not, unless they are required', () => {
+    const { main, extra } = splitConnectSchema(mcpServer.connect[1].schema)
+    expect(Object.keys(main.properties)).toEqual(['serverUrl'])
+    expect(Object.keys(extra!.properties)).toEqual(['clientId', 'clientSecret'])
   })
 })

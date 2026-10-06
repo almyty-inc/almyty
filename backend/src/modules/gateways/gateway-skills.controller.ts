@@ -11,6 +11,7 @@ import {
   HttpStatus,
   HttpException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 
@@ -27,6 +28,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { isServableGatewayTool } from './gateway-servable';
+import { ModuleRef } from '@nestjs/core';
+import { CodeModeService } from '../code-mode/code-mode.service';
 
 @Controller('gateways')
 @ApiTags('Gateways')
@@ -42,6 +45,8 @@ export class GatewaySkillsController {
     private readonly toolExecutorService: ToolExecutorService,
     private readonly cliGeneratorService: CliGeneratorService,
     private readonly codegenService: CodegenService,
+    // run_code on a gateway in code exposure, reached lazily (code-mode/).
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -221,6 +226,53 @@ export class GatewaySkillsController {
         },
         error.status || HttpStatus.BAD_REQUEST,
       );
+    }
+  }
+
+  /**
+   * Run a script on a Skills gateway in `code` exposure (code mode): the
+   * address its skill names. A member runs it as themselves, over exactly
+   * what the gateway serves; changes that wait for a person come back with
+   * an approvalId, and posting `{ approvalId }` reports what happened.
+   */
+  @Post(':gatewayId/skills/run-code')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Run a script on a gateway in code exposure' })
+  @ApiParam({ name: 'gatewayId', description: 'Gateway ID' })
+  async runCode(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Body() body: { code?: string; timeoutMs?: number; approvalId?: string },
+    @Request() req: any,
+  ) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException({ success: false, message: 'No organization found', error: 'NO_ORGANIZATION' }, HttpStatus.BAD_REQUEST);
+    }
+    const userId = req.user.sub || req.user.id;
+    await this.readableGateway(gatewayId, organizationId, req, false);
+    const codeMode = this.codeModeService();
+    const found = codeMode ? await codeMode.gatewayExposure(gatewayId, organizationId) : null;
+    if (!codeMode || !found?.gateway || found.exposure !== 'code') {
+      throw new HttpException(
+        { success: false, message: 'This gateway does not run scripts', error: 'CODE_MODE_OFF' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const answer = await codeMode.runOnGateway({
+      gateway: found.gateway,
+      userId,
+      scope: await codeMode.gatewayScope(gatewayId),
+      params: body ?? {},
+      principal: userPrincipal(userId),
+    });
+    return { success: !answer.isError, data: answer.forModel };
+  }
+
+  private codeModeService(): CodeModeService | null {
+    try {
+      return (this.moduleRef?.get(CodeModeService, { strict: false }) as CodeModeService) ?? null;
+    } catch {
+      return null;
     }
   }
 

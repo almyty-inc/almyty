@@ -144,6 +144,18 @@ describe('HostedChatService', () => {
       await expect(service.findBySlug('')).rejects.toThrow(NotFoundException);
       expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
     });
+
+    // A web chat left behind by a deleted agent stayed live and answered a
+    // message with a 500. It is a clean 404 saying the chat is gone.
+    it('404s with "This chat no longer exists" for a surface whose agent was deleted', async () => {
+      surfaces = [surface({ agentId: null as any })];
+      await expect(service.findBySlug('acme')).rejects.toThrow(new NotFoundException('This chat no longer exists'));
+    });
+
+    it('serves the live surface when a deleted agent left an old claimant on the slug', async () => {
+      surfaces = [surface({ id: 'gw-orphan', agentId: null as any }), surface({ id: 'gw-live' })];
+      await expect(service.findBySlug('acme')).resolves.toMatchObject({ id: 'gw-live' });
+    });
   });
 
   describe('publicBranding', () => {
@@ -194,36 +206,82 @@ describe('HostedChatService', () => {
   describe('visitor self-service', () => {
     const visitor = { id: 'eu-1', gatewayId: 'gw-1', email: 'a@b.c', displayName: 'A', authProvider: null, createdAt: new Date('2026-01-01'), lastSeenAt: new Date('2026-01-02') } as any;
 
-    it('deletes a conversation only through the visitor who owns it, runs first', async () => {
-      conversationRepository.findOne.mockResolvedValue({ id: 'conv-1', endUserId: 'eu-1' });
-      runRepository.delete = jest.fn(async () => ({ affected: 1 }));
-      messageRepository.delete = jest.fn(async () => ({ affected: 3 }));
-      conversationRepository.delete = jest.fn(async () => ({ affected: 1 }));
+    /** The service with the shared visitor-data scope it gets from Nest, as a double. */
+    const scoped = () => {
+      const footprint = { organizationId: 'org-1', gatewayIds: ['gw-1'], endUserIds: ['eu-1'], runIds: ['r1'], conversationIds: ['c1'], widgetThreads: [] };
+      const removed = { conversations: 1, messages: 3, runs: 1, toolCalls: 0, memories: 1, files: 1, storedReplies: 0, visitors: 1, memoriesPending: 0 };
+      const tx = { marker: 'tx' };
+      const visitorData = {
+        forWebVisitors: jest.fn(async () => footprint),
+        forVisitorConversation: jest.fn(async () => ({ ...footprint, endUserIds: [] })),
+        erase: jest.fn(async (_f: unknown, within?: (tx: unknown, counts: unknown) => Promise<void>) => {
+          if (within) await within(tx, removed);
+          return removed;
+        }),
+      };
+      const audit = { logInTransaction: jest.fn(async (_tx: unknown, entry: unknown) => entry), publishCommitted: jest.fn() };
+      const svc = new HostedChatService(
+        gatewayRepository, endUserRepository, conversationRepository, messageRepository, runRepository,
+        audit as any, undefined, undefined, undefined, visitorData as any,
+      );
+      return { svc, visitorData, audit, footprint, tx };
+    };
 
-      await service.deleteConversation(visitor, 'conv-1');
+    it('deletes a conversation only through the visitor who owns it, with what came of it', async () => {
+      const { svc, visitorData, footprint } = scoped();
+      conversationRepository.findOne.mockResolvedValue({ id: 'conv-1', endUserId: 'eu-1', organizationId: 'org-1' });
+
+      await svc.deleteConversation(visitor, 'conv-1');
 
       expect(conversationRepository.findOne).toHaveBeenCalledWith({ where: { id: 'conv-1', endUserId: 'eu-1' } });
-      const order = [runRepository.delete, messageRepository.delete, conversationRepository.delete].map((m) => m.mock.invocationCallOrder[0]);
-      expect(order).toEqual([...order].sort((a, b) => a - b));
-      expect(runRepository.delete).toHaveBeenCalledWith({ conversationId: 'conv-1', endUserId: 'eu-1' });
-      expect(conversationRepository.delete).toHaveBeenCalledWith({ id: 'conv-1', endUserId: 'eu-1' });
+      // One conversation: its runs, messages, files and memories, not the visitor.
+      expect(visitorData.forVisitorConversation).toHaveBeenCalledWith(visitor, 'conv-1');
+      expect(visitorData.erase).toHaveBeenCalledWith({ ...footprint, endUserIds: [] });
     });
 
     it('refuses to delete a conversation the visitor does not own', async () => {
+      const { svc, visitorData } = scoped();
       conversationRepository.findOne.mockResolvedValue(null);
-      runRepository.delete = jest.fn();
-      await expect(service.deleteConversation(visitor, 'conv-x')).rejects.toBeInstanceOf(NotFoundException);
-      expect(runRepository.delete).not.toHaveBeenCalled();
+      await expect(svc.deleteConversation(visitor, 'conv-x')).rejects.toBeInstanceOf(NotFoundException);
+      expect(visitorData.erase).not.toHaveBeenCalled();
     });
 
-    it('erases the visitor: runs explicitly, the row (and its conversations) by cascade', async () => {
-      runRepository.delete = jest.fn(async () => ({ affected: 2 }));
-      endUserRepository.delete = jest.fn(async () => ({ affected: 1 }));
+    it('erases the visitor through the shared visitor-data scope, found by their row on this chat', async () => {
+      const { svc, visitorData, footprint } = scoped();
 
-      await service.deleteVisitor(gateway(), visitor);
+      await svc.deleteVisitor(gateway(), visitor);
 
-      expect(runRepository.delete).toHaveBeenCalledWith({ endUserId: 'eu-1' });
-      expect(endUserRepository.delete).toHaveBeenCalledWith({ id: 'eu-1', gatewayId: 'gw-1' });
+      // The same erasure an owner's data request runs: conversations, runs,
+      // the memories and files, stored replies, the visitor row.
+      expect(visitorData.forWebVisitors).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), ['eu-1']);
+      expect(visitorData.erase).toHaveBeenCalledWith(footprint, expect.any(Function));
+    });
+
+    it('records the erasure in the audit log inside its transaction: counts and a hash, nothing erased', async () => {
+      const { svc, audit, tx } = scoped();
+
+      await svc.deleteVisitor(gateway(), visitor);
+
+      expect(audit.logInTransaction).toHaveBeenCalledTimes(1);
+      const [usedTx, entry] = audit.logInTransaction.mock.calls[0] as [unknown, any];
+      expect(usedTx).toBe(tx);
+      expect(entry).toMatchObject({
+        organizationId: 'org-1',
+        action: 'visitor_data_erase',
+        resourceType: 'agent',
+        details: { request: 'erase', by: 'visitor', channel: 'gw-1', counts: expect.objectContaining({ messages: 3, memories: 1, files: 1 }) },
+      });
+      expect(entry.details.subject).toMatch(/^sha256:[0-9a-f]{24}$/);
+      expect(entry.userId).toBeUndefined();
+      // Neither the visitor's id nor their email is written.
+      expect(JSON.stringify(entry)).not.toContain('eu-1');
+      expect(JSON.stringify(entry)).not.toContain('a@b.c');
+      expect(audit.publishCommitted).toHaveBeenCalledWith([entry]);
+    });
+
+    it('refuses to erase when the visitor-data scope is missing, rather than erase part of it', async () => {
+      await expect(service.deleteVisitor(gateway(), visitor)).rejects.toThrow('Visitor data is not available here.');
+      await expect(service.deleteConversation(visitor, 'conv-1')).rejects.toBeDefined();
     });
 
     it('exports the visitor record and every conversation with its messages', async () => {
@@ -526,6 +584,11 @@ describe('HostedChatService', () => {
     it('returns null for an empty hostname without touching the database', async () => {
       await expect(service.findByCustomDomain('')).resolves.toBeNull();
       expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('serves a domain whose agent was deleted as unknown', async () => {
+      surfaces = [domain('chat.acme.com', 'active', { agentId: null as any })];
+      await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBeNull();
     });
   });
 

@@ -318,8 +318,6 @@ describe('each gateway serves one protocol', () => {
       resolver,
       {} as any,
       {} as any,
-      {} as any,
-      {} as any,
       { get: jest.fn().mockReturnValue(null) } as any,
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any,
       { getAdapter: jest.fn(), handleInboundMessage: jest.fn() } as any,
@@ -426,7 +424,7 @@ describe('each gateway serves one protocol', () => {
       'answers %s as not found on MCP and UTCP, off the network',
       async (_name, tool) => {
         const viaMcp = await send('weather', { key: KEYS.mcp, body: rpc('tools/call', { name: tool.name, arguments: {} }) });
-        expect(viaMcp.body.error).toMatchObject({ code: JsonRpcErrorCode.TOOL_NOT_FOUND });
+        expect(viaMcp.body.error).toMatchObject({ code: JsonRpcErrorCode.INVALID_PARAMS });
 
         const viaUtcp = await send('weather-utcp', { key: KEYS.utcp, action: 'execute', body: { toolId: tool.id, parameters: {} } });
         expect(viaUtcp.body).toMatchObject({ success: false, error: { code: 'TOOL_NOT_FOUND' } });

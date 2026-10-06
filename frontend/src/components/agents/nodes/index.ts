@@ -11,6 +11,7 @@ export { LoopNode } from './loop-node'
 export { VerifyNode } from './verify-node'
 export { ExtractContextNode } from './extract-context-node'
 export { DecisionNode } from './decision-node'
+export { CodeNode } from './code-node'
 
 import type { NodeTypes } from '@xyflow/react'
 import { InputNode } from './input-node'
@@ -26,6 +27,7 @@ import { SubAgentNode } from './sub-agent-node'
 import { VerifyNode } from './verify-node'
 import { ExtractContextNode } from './extract-context-node'
 import { DecisionNode } from './decision-node'
+import { CodeNode } from './code-node'
 
 // Every type the engine runs and the strategy compiler can emit. A type
 // missing here reaches React Flow unregistered, which draws nothing: an
@@ -45,6 +47,7 @@ export const nodeTypes: NodeTypes = {
   verify: VerifyNode,
   extract_context: ExtractContextNode,
   decision: DecisionNode,
+  code: CodeNode,
 }
 
 export type PipelineNodeType = keyof typeof nodeTypes
@@ -63,4 +66,5 @@ export const NODE_TYPE_CONFIG: Record<PipelineNodeType, { label: string; color: 
   verify: { label: 'Verify', color: 'bg-emerald-500', description: 'Check an answer against a spec' },
   extract_context: { label: 'Extract context', color: 'bg-sky-500', description: 'Sum up earlier steps' },
   decision: { label: 'Decision', color: 'bg-cyan-500', description: 'Pick one of a few options' },
+  code: { label: 'Code', color: 'bg-indigo-500', description: 'Run a script that calls tools' },
 }

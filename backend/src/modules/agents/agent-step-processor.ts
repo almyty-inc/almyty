@@ -1,4 +1,4 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Optional, forwardRef } from '@nestjs/common';
 import { In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
@@ -16,12 +16,14 @@ import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
 import { AgentMemoryKeeper } from './agent-memory.keeper';
 import { agentApiIds, callsAgents, mayCallAgent } from './agent-capabilities';
-import { ToolStatus } from '../../entities/tool.entity';
+import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
 import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
+import type { ApprovalGateHit } from '../tools/tool-approval-gate.service';
+import { NamedTool, readableToolName } from '../tools/tool-readable-name';
 
 
 /**
@@ -45,6 +47,25 @@ import type { ResolvedRunLimits } from './run-limits';
 import { capPersistedPayload } from './persist-cap';
 import { canReference } from '../../common/authorization/private-visibility';
 import { describePrincipal, principalOfRun } from '../../common/authorization/execution-access.service';
+import { Model } from '../../entities/model.entity';
+import { Api } from '../../entities/api.entity';
+import { ToolDiscoveryService } from '../tool-discovery/tool-discovery.service';
+import { CALL_TOOL, GET_TOOL, META_TOOL_DEFINITIONS, RUN_CODE, RUN_CODE_DEFINITION, SEARCH_TOOLS } from '../tool-discovery/meta-tools';
+import { codeNames } from '../tool-discovery/tool-signature';
+import { ToolModeDecision, decideToolMode } from './agent-tool-mode';
+import { Organization } from '../../entities/organization.entity';
+import { CodeModeService } from '../code-mode/code-mode.service';
+import { codeModeLimits } from '../code-mode/code-mode.settings';
+import { CodeModeConfig, grantsLeftFor } from '../code-mode/code-write-policy';
+import { buildExtract } from '../code-mode/code-extract';
+import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
+
+/** One line per namespace a script can use: `petstore (19 functions)`. */
+function namespaceSummary(tools: Tool[]): string[] {
+  const counts = new Map<string, number>();
+  for (const { namespace } of codeNames(tools).values()) counts.set(namespace, (counts.get(namespace) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([ns, n]) => `${ns} (${n} function${n === 1 ? '' : 's'})`);
+}
 /**
  * A run in one of these is finished and no worker may write it back to
  * running — the same list `AgentRun.isDone()` answers with.
@@ -135,6 +156,33 @@ type FinalCall = {
   fallback?: 'error' | 'empty';
   error?: string;
 };
+
+/**
+ * A tool call an approval policy's amount rule held, waiting on
+ * `run.workingMemory.gatedToolCalls` for its approval.
+ */
+type GatedToolCall = {
+  toolCallId: string;
+  toolId: string;
+  toolName: string;
+  parameters: Record<string, any>;
+  approvalId: string;
+  /** The rule in plain words. */
+  rule: string;
+};
+
+/**
+ * A script's change set waiting for a person (code mode), on
+ * `run.workingMemory.pendingChangeSets`: the run_code call it answers, its
+ * trace, its approval, and what the model will read with the outcome.
+ */
+type PendingChangeSet = {
+  toolCallId: string;
+  codeExecutionId: string;
+  approvalId: string;
+  forModel: CodeResultForModel;
+};
+
 @Injectable()
 export class AgentStepProcessor {
   constructor(
@@ -143,7 +191,15 @@ export class AgentStepProcessor {
     private readonly verifier: AgentVerifierHelper,
     private readonly compactor: AgentContextCompactor,
     private readonly constraints: AgentConstraintsService,
-  ) {}
+    @Optional() discovery?: ToolDiscoveryService,
+    // run_code (code mode); without it the code tool mode answers that it is not available.
+    @Optional() private readonly codeMode?: CodeModeService,
+  ) {
+    this.discovery = discovery ?? new ToolDiscoveryService();
+  }
+
+  /** search_tools and get_tool for discover mode; keyword-only when embeddings are not wired. */
+  private readonly discovery: ToolDiscoveryService;
 
   /**
    * Tool sets resolved for (organizationId, toolIds), with the capped payload
@@ -268,10 +324,30 @@ export class AgentStepProcessor {
       // (principal: the run's, resolved above)
       const tools = await this.s.executionAccess.filterExecutable(principal, await this.resolveTools(agent));
 
+      // Calls an approval policy held on an earlier step, and scripts'
+      // change sets, now decided: the approved ones run, as a step of their
+      // own, before the model is asked anything (it needs their results).
+      if (
+        (Array.isArray(run.workingMemory?.gatedToolCalls) && run.workingMemory.gatedToolCalls.length > 0) ||
+        (Array.isArray(run.workingMemory?.pendingChangeSets) && run.workingMemory.pendingChangeSets.length > 0)
+      ) {
+        return await this.runApprovedCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart);
+      }
+
       // The roles this step works with (autonomous-team.ts), read from the
       // agent on every step like its instructions are.
       const team = teamOf(agent, run);
       const runner = new AutonomousStrategyRunner(this.s, this.verifier);
+
+      // Direct, discover or code (agent-tool-mode.ts), decided once per run.
+      // In discover mode the model sees the three meta-tools plus the pinned
+      // tools; every other tool is found with search_tools and run with
+      // call_tool, and stays exactly as callable as in direct mode. Code mode
+      // adds run_code.
+      const toolMode = await this.toolModeFor(run, agent, team, tools);
+      const discover = toolMode.mode !== 'direct';
+      const pinned = new Set(Array.isArray(agent.agentConfig?.pinnedToolIds) ? agent.agentConfig.pinnedToolIds : []);
+      const offeredTools = discover ? tools.filter((t) => pinned.has(t.id)) : tools;
 
       // Explore, extract, patch opens with its explorers and the brief, as
       // a step of its own, before the main role's first call.
@@ -319,7 +395,10 @@ export class AgentStepProcessor {
       }
 
       // Build messages for the LLM, reusing the organization loaded above.
-      let messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, organization);
+      // In code mode the prompt names the namespaces a script can call
+      // (a line per API), never the functions: those are found as needed.
+      const codeNamespaces = toolMode.mode === 'code' ? namespaceSummary(await this.withApiNames(tools)) : undefined;
+      let messages = await this.s.builders.buildMessages(agent, run, offeredTools, memoryContext, organization, { discover, codeNamespaces });
 
       // Compact long-running context (off unless the agent opts in). Folds the
       // old prefix into a summary so per-step token cost doesn't grow unbounded.
@@ -338,7 +417,11 @@ export class AgentStepProcessor {
       }
 
       // Build tool definitions for the LLM (user tools + built-in tools)
-      const llmTools = this.s.builders.buildToolDefinitions(tools, agent);
+      const llmTools = [
+        ...(discover ? META_TOOL_DEFINITIONS : []),
+        ...(toolMode.mode === 'code' ? [RUN_CODE_DEFINITION] : []),
+        ...this.s.builders.buildToolDefinitions(offeredTools, agent),
+      ];
 
       // Resolve sub-agent tools: exactly the agents its Capabilities section
       // lets it call (agent-capabilities.ts), and of those only the ones
@@ -538,6 +621,10 @@ export class AgentStepProcessor {
           await this.s.messageRepository.save(assistantMsg);
         }
 
+        // Calls an approval policy's amount rule held for a person.
+        const gated: GatedToolCall[] = [];
+        // Scripts' change sets waiting for a person (code mode).
+        const changeSets: PendingChangeSet[] = [];
         // Execute each tool call
         for (const toolCall of responseMessage.toolCalls) {
           // The tool-call budget, spent per call rather than per step.
@@ -732,32 +819,108 @@ export class AgentStepProcessor {
             continue;
           }
 
+          // Code mode: run_code runs a script over this run's own tools
+          // (code-mode/). Its result goes back as this call's result, unless
+          // it staged changes: then a person decides the whole set first, and
+          // the result comes with the outcome (runApprovedCalls).
+          if (toolMode.mode === 'code' && toolCall.name === RUN_CODE) {
+            const ran = await this.runCode(run, agent, toolCall, tools, resolvedLimits, organization ?? null);
+            toolCall.result = ran.forModel;
+            toolCall.error = ran.error;
+            toolCall.executionTime = Date.now() - toolExecStart;
+            run.steps.push({
+              type: 'tool_call',
+              input: { tool: RUN_CODE, parameters: { code: typeof toolCall.parameters?.code === 'string' ? toolCall.parameters.code : '' } },
+              output: ran.stepOutput,
+              duration: toolCall.executionTime,
+              timestamp: new Date().toISOString(),
+              error: ran.error,
+            });
+            if (ran.pending) {
+              changeSets.push(ran.pending);
+              continue;
+            }
+            this.s.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: RUN_CODE,
+              success: !ran.error,
+              executionTime: toolCall.executionTime,
+            });
+            if (run.conversationId) {
+              const msg = Message.createToolResultMessage(run.conversationId, toolCall.id, JSON.stringify(ran.forModel), ran.error);
+              msg.runId = run.id;
+              await this.s.messageRepository.save(msg);
+            }
+            continue;
+          }
+
+          // Discover mode (agent-tool-mode.ts): search_tools and get_tool are
+          // answered here, over this run's own tools (the set it could call
+          // directly, after filterExecutable). call_tool names a tool of the
+          // same set and runs exactly like a direct call below.
+          let callName = toolCall.name;
+          let callParams: Record<string, any> = toolCall.parameters || {};
+          if (toolMode.mode !== 'direct' && (toolCall.name === SEARCH_TOOLS || toolCall.name === GET_TOOL)) {
+            const answer = await this.answerDiscovery(toolCall.name, callParams, tools, run.organizationId);
+            toolCall.result = answer.result;
+            toolCall.error = answer.error;
+            toolCall.executionTime = Date.now() - toolExecStart;
+            this.s.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: toolCall.name,
+              success: !answer.error,
+              executionTime: toolCall.executionTime,
+            });
+            if (run.conversationId) {
+              const content = answer.error ? `Error: ${answer.error}` : JSON.stringify(answer.result);
+              const msg = Message.createToolResultMessage(run.conversationId, toolCall.id, content, answer.error);
+              msg.runId = run.id;
+              await this.s.messageRepository.save(msg);
+            }
+            run.steps.push({
+              type: 'tool_call',
+              input: { tool: toolCall.name, parameters: callParams },
+              output: answer.result,
+              duration: toolCall.executionTime,
+              timestamp: new Date().toISOString(),
+              error: answer.error,
+            });
+            continue;
+          }
+          if (toolMode.mode !== 'direct' && toolCall.name === CALL_TOOL) {
+            callName = typeof callParams.name === 'string' ? callParams.name : '';
+            const inner = callParams.arguments;
+            callParams = inner && typeof inner === 'object' && !Array.isArray(inner) ? inner : {};
+          }
+
           // Regular tool execution via ToolExecutorService
           const matchingTool = tools.find(
-            t => t.name.replace(/[^a-zA-Z0-9_-]/g, '_') === toolCall.name || t.name === toolCall.name,
+            t => t.name.replace(/[^a-zA-Z0-9_-]/g, '_') === callName || t.name === callName,
           );
 
           if (!matchingTool) {
-            toolCall.error = `Tool '${toolCall.name}' not found`;
+            toolCall.error = `Tool '${callName}' not found`;
             toolCall.executionTime = Date.now() - toolExecStart;
 
             this.s.emitEvent(runId, 'tool.result', {
               step: run.currentStep,
               toolCallId: toolCall.id,
-              tool: toolCall.name,
+              tool: callName,
               success: false,
               executionTime: toolCall.executionTime,
             });
 
             if (run.conversationId) {
-              const errMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, `Error: Tool '${toolCall.name}' not found`, toolCall.error);
+              const errMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, `Error: Tool '${callName}' not found`, toolCall.error);
               errMsg.runId = run.id;
               await this.s.messageRepository.save(errMsg);
             }
 
             run.steps.push({
               type: 'tool_call',
-              input: { tool: toolCall.name, parameters: toolCall.parameters },
+              input: { tool: callName, parameters: callParams },
               error: toolCall.error,
               duration: Date.now() - toolExecStart,
               timestamp: new Date().toISOString(),
@@ -786,13 +949,45 @@ export class AgentStepProcessor {
               retries: resolvedLimits.toolErrorRetries,
               // The machine this agent's runner-backed tools must run on.
               runnerLabels: agent.agentConfig?.runnerLabels,
+              // The run and agent a runner workspace made for this call
+              // belongs to (RunWorkspaceService).
+              runId: run.id,
+              agentId: agent.id,
+              // A team's approval rules hold only that team's agents' calls.
+              agentTeamId: agent.teamId ?? null,
+              // This run pauses and asks a person itself (holdForApproval).
+              holdForApproval: 'caller',
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
               matchingTool.id,
-              toolCall.parameters || {},
+              callParams,
               execOptions,
             );
+
+            // Held by an approval policy's amount rule: the call did not
+            // run. Ask a person, and run it once they approve.
+            if (toolResult.approvalRequired) {
+              const held = await this.holdForApproval(run, agent, matchingTool, { id: toolCall.id, parameters: callParams }, toolResult.approvalRequired);
+              gated.push(held);
+              toolCall.executionTime = Date.now() - toolExecStart;
+              this.s.emitEvent(runId, 'tool.result', {
+                step: run.currentStep,
+                toolCallId: toolCall.id,
+                tool: matchingTool.name,
+                success: false,
+                awaitingApproval: true,
+                executionTime: toolCall.executionTime,
+              });
+              run.steps.push({
+                type: 'tool_call',
+                input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: callParams },
+                output: { status: 'waiting_approval', rule: held.rule, approvalId: held.approvalId },
+                duration: toolCall.executionTime,
+                timestamp: new Date().toISOString(),
+              });
+              continue;
+            }
 
             toolCall.result = toolResult.data;
             toolCall.error = toolResult.success ? undefined : toolResult.error;
@@ -821,7 +1016,7 @@ export class AgentStepProcessor {
 
             run.steps.push({
               type: 'tool_call',
-              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: toolCall.parameters },
+              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: callParams },
               output: toolResult.data,
               cost: toolResult.metadata?.cost || 0,
               duration: toolResult.executionTime,
@@ -848,12 +1043,46 @@ export class AgentStepProcessor {
 
             run.steps.push({
               type: 'tool_call',
-              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: toolCall.parameters },
+              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: callParams },
               error: err.message,
               duration: Date.now() - toolExecStart,
               timestamp: new Date().toISOString(),
             });
           }
+        }
+
+        // A call an approval policy's amount rule held, or a script's change
+        // set: the run waits for a person. The other calls of this reply have
+        // run; the held ones run, and the change sets are run or dropped, on
+        // the step after they are decided (runApprovedCalls).
+        if (gated.length > 0 || changeSets.length > 0) {
+          const stepDuration = Date.now() - stepStart;
+          run.steps.push({
+            type: 'llm_call',
+            role: stampOf(acting),
+            input: { messageCount: messages.length, toolCount: allToolDefs.length },
+            output: {
+              status: 'waiting_approval',
+              ...(gated.length ? { heldToolCalls: gated.map((g) => ({ tool: g.toolName, rule: g.rule })) } : {}),
+              ...(changeSets.length ? { heldChangeSets: changeSets.map((c) => ({ codeExecutionId: c.codeExecutionId, approvalId: c.approvalId })) } : {}),
+              ...answeredBy(llmResponse, acting),
+            },
+            cost: stepCost,
+            tokens: { input: stepInputTokens, output: stepOutputTokens },
+            duration: stepDuration,
+            timestamp: new Date().toISOString(),
+          });
+          run.workingMemory = {
+            ...(run.workingMemory || {}),
+            ...(gated.length ? { gatedToolCalls: gated } : {}),
+            ...(changeSets.length ? { pendingChangeSets: changeSets } : {}),
+          };
+          run.status = AgentRunStatus.WAITING_APPROVAL;
+          run.currentStep++;
+          run.executionTime += stepDuration;
+          if (!(await this.commitStep(run, expectedStep))) return 'done';
+          this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'waiting_approval' });
+          return 'waiting';
         }
 
         // Record the LLM call step
@@ -1554,6 +1783,363 @@ export class AgentStepProcessor {
     this.s.emitEvent(run.id, 'explore.completed', { step: run.currentStep, brief });
     this.s.emitEvent(run.id, 'step.completed', { step: run.currentStep, status: 'explored' });
     return 'continue';
+  }
+
+  /**
+   * How this run shows the model its tools (agent-tool-mode.ts), decided on
+   * the first step and kept in working memory: the tools array then stays
+   * the same for the whole run, so a provider's prefix cache holds. `auto`
+   * compares the definitions' size with a share of the main model's context
+   * window (its model card), or with the agent's own threshold.
+   */
+  private async toolModeFor(run: AgentRun, agent: Agent, team: Team, tools: Tool[]): Promise<ToolModeDecision> {
+    const kept = run.workingMemory?.toolMode;
+    if (kept && (kept.mode === 'direct' || kept.mode === 'discover' || kept.mode === 'code')) return kept as ToolModeDecision;
+    const definitions = this.s.builders.buildToolDefinitions(tools, agent).slice(0, tools.length);
+    let contextLength: number | null = null;
+    const main = team.main;
+    if (main.kind === 'model' && main.providerId && main.model && !main.routing) {
+      try {
+        const card = await this.s.toolRepository.manager.getRepository(Model).findOne({
+          where: { organizationId: run.organizationId, providerId: main.providerId, vendorModelId: main.model },
+          select: { id: true, contextLength: true },
+        });
+        contextLength = card?.contextLength ?? null;
+      } catch (err) {
+        this.s.logger.warn(`No model card for the tool-mode threshold on run ${run.id}: ${err.message}`);
+      }
+    }
+    const decision = decideToolMode({
+      configured: agent.agentConfig?.toolMode,
+      definitions,
+      contextLength,
+      overrideTokens: agent.agentConfig?.toolModeThresholdTokens,
+    });
+    run.workingMemory = { ...(run.workingMemory || {}), toolMode: decision };
+    return decision;
+  }
+
+  /**
+   * search_tools and get_tool for an agent in discover mode, over the tools
+   * this run may call. Names are the ones the model calls (sanitised, as in
+   * the tools array), so call_tool takes what search_tools returned.
+   */
+  private async answerDiscovery(
+    name: string,
+    params: Record<string, any>,
+    tools: Tool[],
+    organizationId: string,
+  ): Promise<{ result?: unknown; error?: string }> {
+    const nameOf = (t: Tool) => t.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (name === SEARCH_TOOLS) {
+      const query = typeof params.query === 'string' ? params.query.trim() : '';
+      if (!query) return { error: 'search_tools needs a query' };
+      const limit = Number.isInteger(params.limit) && params.limit > 0 ? params.limit : undefined;
+      const { results, total } = await this.discovery.search(tools, query, { organizationId, limit, nameOf });
+      return { result: { tools: results, total } };
+    }
+    const toolName = typeof params.name === 'string' ? params.name : '';
+    const tool = toolName ? this.discovery.resolve(tools, toolName, nameOf) : null;
+    if (!tool) return { error: `Tool '${toolName}' not found. Use search_tools to find it.` };
+    const detail = params.detail === 'name' || params.detail === 'description' ? params.detail : 'full';
+    return { result: this.discovery.describe(await this.withApiNames(tools), tool, detail, nameOf) };
+  }
+
+  /** The tools with their API's name attached (the code namespace), without loading the APIs' schemas. */
+  private async withApiNames(tools: Tool[]): Promise<Tool[]> {
+    const ids = [...new Set(tools.filter((t) => t.apiId && !t.api).map((t) => t.apiId as string))];
+    if (!ids.length) return tools;
+    const apis = await this.s.toolRepository.manager.getRepository(Api).find({ where: { id: In(ids) }, select: { id: true, name: true } });
+    const byId = new Map(apis.map((a) => [a.id, a]));
+    return tools.map((t) => (t.apiId && !t.api && byId.has(t.apiId) ? ({ ...t, api: byId.get(t.apiId) } as Tool) : t));
+  }
+
+  /**
+   * One run_code call (code mode, docs/design/code-mode.md parts C and D):
+   * the script runs over exactly this run's executable tools, every call it
+   * makes goes through the executor as this run, and what it staged becomes
+   * one approval request for the whole set. Extract calls, the CPU it used
+   * and the calls it made are charged to the run.
+   */
+  private async runCode(
+    run: AgentRun,
+    agent: Agent,
+    toolCall: { id: string; parameters?: Record<string, any> },
+    tools: Tool[],
+    resolvedLimits: ResolvedRunLimits,
+    organization: Organization | null,
+  ): Promise<{ forModel: CodeResultForModel | { error: string }; error?: string; stepOutput: Record<string, unknown>; pending?: PendingChangeSet }> {
+    if (!this.codeMode) {
+      const error = 'Code mode is not available on this server.';
+      return { forModel: { error }, error, stepOutput: { error } };
+    }
+    const params = toolCall.parameters || {};
+    const config: CodeModeConfig | undefined = agent.agentConfig?.codeMode;
+    // A script's calls come out of the run's tool-call budget too, so it may
+    // make at most what is left of it (run_code itself was counted above).
+    const orgLimits = codeModeLimits((organization?.settings as any)?.codeMode);
+    const limits = { ...orgLimits, maxCalls: Math.min(orgLimits.maxCalls, Math.max(0, resolvedLimits.maxToolCalls - (run.toolCallCount ?? 0))) };
+    const principal = principalOfRun(run);
+    const outcome = await this.codeMode.run({
+      code: params.code,
+      timeoutMs: params.timeoutMs,
+      scope: await this.withApiNames(tools),
+      context: {
+        organizationId: run.organizationId,
+        userId: run.userId ?? null,
+        principal,
+        runId: run.id,
+        agentId: agent.id,
+        agentTeamId: agent.teamId ?? null,
+        runnerLabels: agent.agentConfig?.runnerLabels,
+        retries: resolvedLimits.toolErrorRetries,
+      },
+      policy: config,
+      grantsLeft: grantsLeftFor(config, run.workingMemory?.codeGrantsUsed),
+      limits,
+      extract: buildExtract({
+        chat: (providerId, request) => this.s.llmProvidersService.chat(providerId, request as any, run.organizationId, principal),
+        extractor: config?.extractor ?? null,
+        routing: organization?.settings?.defaultRouting ?? null,
+      }),
+    });
+
+    // Charged to the run like any other step: extract()'s model calls, and
+    // every tool call the script made against the run's tool-call budget.
+    run.totalCost += outcome.extractCost;
+    run.totalTokens += outcome.extractTokens;
+    run.toolCallCount = (run.toolCallCount ?? 0) + outcome.calls.filter((c) => c.op === 'tool' || c.op === 'call').length;
+    if (Object.keys(outcome.grantsUsed).length) {
+      const used: Record<string, number> = { ...(run.workingMemory?.codeGrantsUsed ?? {}) };
+      for (const [toolId, n] of Object.entries(outcome.grantsUsed)) used[toolId] = (used[toolId] ?? 0) + n;
+      run.workingMemory = { ...(run.workingMemory || {}), codeGrantsUsed: used };
+    }
+
+    const forModel = codeResultForModel(outcome, limits.resultCapChars + limits.logCapChars + 8_192);
+    const stepOutput = {
+      codeExecutionId: outcome.codeExecutionId,
+      status: outcome.status,
+      calls: forModel.calls,
+      cpuMs: outcome.cpuMs,
+      ...(outcome.staged.length ? { staged: outcome.staged.length } : {}),
+    };
+    if (outcome.status !== 'waiting_approval') {
+      return { forModel, error: outcome.error?.message, stepOutput };
+    }
+    const n = outcome.staged.length;
+    const approval = await this.s.approvals.create({
+      organizationId: run.organizationId,
+      teamId: agent.teamId ?? null,
+      runId: run.id,
+      agentId: agent.id,
+      toolCallId: toolCall.id,
+      reason: `A script wants to make ${n} change${n === 1 ? '' : 's'}. Approve to make all of them, or reject to make none.`,
+      payload: {
+        kind: 'change_set',
+        tool: 'run_code',
+        codeExecutionId: outcome.codeExecutionId,
+        changeSet: outcome.staged,
+      },
+      principal,
+    });
+    await this.codeMode.attachApproval(outcome.codeExecutionId, approval.id);
+    return {
+      forModel,
+      stepOutput: { ...stepOutput, approvalId: approval.id },
+      pending: { toolCallId: toolCall.id, codeExecutionId: outcome.codeExecutionId, approvalId: approval.id, forModel },
+    };
+  }
+
+  /**
+   * Ask a person about a call an approval policy's amount rule held. The
+   * approval request carries the tool, the arguments and the rule, so the
+   * approver sees exactly what would run; `_gate` is how the executor
+   * later recognises the approval as covering this call and no other.
+   */
+  private async holdForApproval(
+    run: AgentRun,
+    agent: Agent,
+    tool: { id: string; name: string },
+    toolCall: { id: string; parameters?: Record<string, any> },
+    hit: ApprovalGateHit,
+  ): Promise<GatedToolCall> {
+    const parameters = toolCall.parameters || {};
+    const approval = await this.s.approvals.create({
+      organizationId: run.organizationId,
+      teamId: agent.teamId ?? null,
+      runId: run.id,
+      agentId: agent.id,
+      toolCallId: toolCall.id,
+      reason:
+        hit.value === null
+          ? `${hit.summary}. On this call ${hit.argument} is not a number.`
+          : `${hit.summary}. On this call ${hit.argument} is ${hit.value}.`,
+      payload: {
+        tool: readableToolName(tool as NamedTool),
+        parameters,
+        _gate: {
+          policyId: hit.policyId,
+          toolId: hit.toolId,
+          argument: hit.argument,
+          value: hit.value,
+          op: hit.op,
+          amount: hit.amount,
+          paramsHash: hit.paramsHash,
+          rule: hit.summary,
+        },
+      },
+      principal: principalOfRun(run),
+    });
+    return {
+      toolCallId: toolCall.id,
+      toolId: tool.id,
+      toolName: tool.name,
+      parameters,
+      approvalId: approval.id,
+      rule: hit.summary,
+    };
+  }
+
+  /**
+   * The step after a held call or a script's change set is decided: run
+   * each approved call with its approval, exactly as it was asked for, run
+   * or drop each decided change set, and hand the model the results.
+   * Anything still waiting keeps the run waiting. A rejected held call never
+   * gets here: it cancels the run. A rejected change set does: the model is
+   * told nothing in it ran, and carries on.
+   */
+  private async runApprovedCalls(
+    run: AgentRun,
+    agent: Agent,
+    tools: Tool[],
+    resolvedLimits: ResolvedRunLimits,
+    expectedStep: number,
+    stepStart: number,
+  ): Promise<'continue' | 'done' | 'waiting'> {
+    const runId = run.id;
+    // Scripts' change sets a person has now decided (code mode, part D):
+    // an approved set runs in order through the executor with the approval,
+    // under its script; a rejected or expired one runs nothing. Either way
+    // the model gets one result for its run_code call.
+    const sets: PendingChangeSet[] = run.workingMemory?.pendingChangeSets ?? [];
+    const setsWaiting: PendingChangeSet[] = [];
+    for (const set of sets) {
+      const started = Date.now();
+      const approval = await this.s.approvals.findInOrganization(set.approvalId, run.organizationId);
+      if (!approval || approval.status === 'pending' || !this.codeMode) {
+        setsWaiting.push(set);
+        continue;
+      }
+      const decision = approval.status === 'approved' ? 'approved' : approval.status === 'expired' ? 'expired' : 'rejected';
+      const entries =
+        decision === 'approved'
+          ? await this.codeMode.applyChangeSet(set.codeExecutionId, set.approvalId, tools, {
+              organizationId: run.organizationId,
+              userId: run.userId ?? null,
+              principal: principalOfRun(run),
+              runId: run.id,
+              agentId: agent.id,
+              agentTeamId: agent.teamId ?? null,
+              runnerLabels: agent.agentConfig?.runnerLabels,
+            })
+          : await this.codeMode.rejectChangeSet(set.codeExecutionId, run.organizationId);
+      const answer = changeSetOutcomeForModel(set.forModel, decision, entries, approval.decisionReason);
+      const failed = entries.find((e) => e.outcome === 'failed');
+      this.s.emitEvent(runId, 'tool.result', {
+        step: run.currentStep,
+        toolCallId: set.toolCallId,
+        tool: RUN_CODE,
+        success: decision === 'approved' && !failed,
+        executionTime: Date.now() - started,
+      });
+      if (run.conversationId) {
+        const msg = Message.createToolResultMessage(run.conversationId, set.toolCallId, JSON.stringify(answer), failed?.error);
+        msg.runId = run.id;
+        await this.s.messageRepository.save(msg);
+      }
+      run.steps.push({
+        type: 'tool_call',
+        input: { tool: RUN_CODE, codeExecutionId: set.codeExecutionId, approvalId: set.approvalId },
+        output: answer.changeSet,
+        duration: Date.now() - started,
+        timestamp: new Date().toISOString(),
+        ...(failed ? { error: failed.error } : {}),
+      });
+    }
+
+    const held: GatedToolCall[] = run.workingMemory?.gatedToolCalls ?? [];
+    const waiting: GatedToolCall[] = [];
+    for (const call of held) {
+      const started = Date.now();
+      const tool = tools.find((t) => t.id === call.toolId);
+      const result: ToolExecutionResult = tool
+        ? await this.s.toolExecutorService.executeTool(tool.id, call.parameters, {
+            userId: run.userId ?? undefined,
+            principal: principalOfRun(run),
+            organizationId: run.organizationId,
+            retries: resolvedLimits.toolErrorRetries,
+            runnerLabels: agent.agentConfig?.runnerLabels,
+            runId: run.id,
+            agentId: agent.id,
+            agentTeamId: agent.teamId ?? null,
+            approvedGate: { approvalId: call.approvalId },
+            holdForApproval: 'caller',
+          })
+        : {
+            success: false,
+            error: `Tool '${call.toolName}' is no longer available to this run`,
+            executionTime: 0,
+            cached: false,
+            rateLimited: false,
+            retryCount: 0,
+          };
+      if (result.approvalRequired) {
+        waiting.push(call);
+        continue;
+      }
+      this.s.emitEvent(runId, 'tool.result', {
+        step: run.currentStep,
+        toolCallId: call.toolCallId,
+        tool: call.toolName,
+        success: result.success,
+        executionTime: result.executionTime,
+      });
+      if (run.conversationId) {
+        const content = result.success
+          ? typeof result.data === 'string'
+            ? result.data
+            : JSON.stringify(result.data)
+          : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
+        const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
+        msg.runId = run.id;
+        await this.s.messageRepository.save(msg);
+      }
+      run.steps.push({
+        type: 'tool_call',
+        input: { tool: call.toolName, toolId: call.toolId, parameters: call.parameters, approvalId: call.approvalId },
+        output: result.data,
+        cost: result.metadata?.cost || 0,
+        duration: Date.now() - started,
+        timestamp: new Date().toISOString(),
+        error: result.success ? undefined : result.error,
+      });
+    }
+    const { gatedToolCalls: _done, pendingChangeSets: _sets, ...rest } = run.workingMemory || {};
+    run.workingMemory = {
+      ...rest,
+      ...(waiting.length ? { gatedToolCalls: waiting } : {}),
+      ...(setsWaiting.length ? { pendingChangeSets: setsWaiting } : {}),
+    };
+    const stillWaiting = waiting.length > 0 || setsWaiting.length > 0;
+    if (stillWaiting) run.status = AgentRunStatus.WAITING_APPROVAL;
+    run.currentStep++;
+    run.executionTime += Date.now() - stepStart;
+    if (!(await this.commitStep(run, expectedStep))) return 'done';
+    this.s.emitEvent(runId, 'step.completed', {
+      step: run.currentStep,
+      ...(stillWaiting ? { status: 'waiting_approval' } : { total: run.maxSteps }),
+    });
+    return stillWaiting ? 'waiting' : 'continue';
   }
 
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {

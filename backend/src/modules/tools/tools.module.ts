@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { ToolDiscoveryModule } from '../tool-discovery/tool-discovery.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Tool } from '../../entities/tool.entity';
@@ -16,6 +17,10 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Credential } from '../../entities/credential.entity';
+import { ApprovalPolicy } from '../../entities/approval-policy.entity';
+import { Agent } from '../../entities/agent.entity';
+import { ApprovalRequest } from '../../entities/approval-request.entity';
+import { ToolApprovalGateService } from './tool-approval-gate.service';
 
 import { ToolsService } from './tools.service';
 import { ToolGeneratorService } from './tool-generator.service';
@@ -58,12 +63,16 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
       User,
       Organization,
       Credential,
+      ApprovalPolicy,
+      ApprovalRequest,
+      Agent,
     ]),
     JsonSchemaTranslatorModule,
     NodeSandboxModule,
     RunnerModule,
     McpSourcesModule,
     forwardRef(() => MemoryModule),
+    forwardRef(() => ToolDiscoveryModule),
     AuthorizationModule,
   ],
   providers: [
@@ -72,6 +81,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     ToolsStatsHelper,
     ToolGeneratorService,
     ToolExecutorService,
+    ToolApprovalGateService,
     ToolHttpExecutor,
     ToolProtocolExecutor,
     ToolGrpcExecutor,
@@ -90,6 +100,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     ToolsService,
     ToolGeneratorService,
     ToolExecutorService,
+    ToolApprovalGateService,
     SkillGeneratorService,
     CliGeneratorService,
     CodegenService,

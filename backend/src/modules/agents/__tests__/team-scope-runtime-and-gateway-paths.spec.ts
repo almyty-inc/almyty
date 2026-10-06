@@ -22,6 +22,8 @@ import { MicrosoftTeamsAdapter } from '../../gateways/channels/adapters/microsof
 import { SignalAdapter } from '../../gateways/channels/adapters/signal.adapter';
 import { MatrixAdapter } from '../../gateways/channels/adapters/matrix.adapter';
 import { IrcAdapter } from '../../gateways/channels/adapters/irc.adapter';
+import { IMessageSendblueAdapter } from '../../gateways/channels/adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../../gateways/channels/adapters/imessage-loopmessage.adapter';
 import { McpToolHandler } from '../../mcp/services/mcp-tool.handler';
 import { JsonRpcErrorCode } from '../../mcp/types/mcp.types';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
@@ -424,7 +426,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
         runtime,
         new ChatWidgetAdapter(null as any), new SlackAdapter(), new DiscordAdapter(), new TelegramAdapter(),
         new WhatsAppAdapter(), new WhatsAppCloudAdapter(), new SmsAdapter(), new EmailAdapter(), new WebhookAdapter(),
-        new GoogleChatAdapter(), new MicrosoftTeamsAdapter(), new SignalAdapter(), new MatrixAdapter(), new IrcAdapter(),
+        new GoogleChatAdapter(), new MicrosoftTeamsAdapter(), new SignalAdapter(), new MatrixAdapter(), new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
       );
       const body = { text: 'hello', deliveryId };
       const raw = JSON.stringify(body);
@@ -509,7 +511,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       ['a private gateway of a non-member', 'gw-private-nonmember', CAST.nonMember],
     ])('refuses a team tool through %s with the not-found answer, off the network', async (_l, gw, owner) => {
       const refused = await call('team-tool', gw, owner).catch((e) => e);
-      expect(refused).toMatchObject({ code: JsonRpcErrorCode.TOOL_NOT_FOUND, message: 'Tool not found: team-tool' });
+      expect(refused).toMatchObject({ code: JsonRpcErrorCode.INVALID_PARAMS, message: 'Tool not found: team-tool' });
       expect(mockedAxios).not.toHaveBeenCalled();
     });
 
@@ -517,7 +519,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       expect((await call('team-tool', 'gw-private-member', CAST.member)).isError).toBe(false);
       m.leaveTeam(CAST.team, CAST.member);
       await expect(call('team-tool', 'gw-private-member', CAST.member)).rejects.toMatchObject({
-        code: JsonRpcErrorCode.TOOL_NOT_FOUND,
+        code: JsonRpcErrorCode.INVALID_PARAMS,
         message: 'Tool not found: team-tool',
       });
     });
@@ -533,7 +535,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       expect((await call('team-tool', undefined, CAST.member)).isError).toBe(false);
       expect((await call('team-tool', undefined, CAST.admin)).isError).toBe(false);
       await expect(call('team-tool', undefined, CAST.nonMember)).rejects.toMatchObject({
-        code: JsonRpcErrorCode.TOOL_NOT_FOUND,
+        code: JsonRpcErrorCode.INVALID_PARAMS,
         message: 'Tool not found: team-tool',
       });
     });

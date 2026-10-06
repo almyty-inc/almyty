@@ -2,6 +2,7 @@ import type { RoutingPolicy } from '../modules/model-catalog/routing/model-route
 import type { AgentCollaboration } from '../modules/agents/collaboration-participants';
 import type { AgentModels } from '../modules/agents/autonomous-models';
 import type { ChannelBranding, VisitorRules } from './agent-channel.entity';
+import type { CodeModeConfig } from '../modules/code-mode/code-write-policy';
 export type {
   AgentCollaboration,
   CollaborationParticipant,
@@ -251,6 +252,20 @@ export class Agent {
       autoLearn?: boolean;
       distill?: { providerId: string; model?: string };
     };
+    /**
+     * How the model sees the agent's tools (agents/agent-tool-mode.ts;
+     * docs/design/code-mode.md, part E): `direct` (every definition),
+     * `discover` (search_tools, get_tool, call_tool and the pinned tools),
+     * `code` (discover plus run_code) or `auto` (discover once the
+     * definitions pass the threshold). Absent: AGENT_TOOL_MODE_DEFAULT.
+     */
+    toolMode?: 'direct' | 'discover' | 'code' | 'auto';
+    /** The `auto` threshold in tokens, instead of a share of the model's context window. */
+    toolModeThresholdTokens?: number;
+    /** Tools the model always sees in full, also in discover mode. */
+    pinnedToolIds?: string[];
+    /** run_code: what happens to changes and deletions, allowances, and extract()'s model (code-mode/code-write-policy.ts). */
+    codeMode?: CodeModeConfig;
   };
 
   @Column({ default: false })

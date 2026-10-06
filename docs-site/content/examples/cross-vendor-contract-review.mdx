@@ -1,28 +1,31 @@
-# Cross-vendor contract and risk review
+# Contract review by several AI models
 
-**Stack**: `Trigger: upload / agent API` · `Models: Claude + GPT-4o + Gemini panelists, judge` · `Tools: clause/precedent search (optional)` · `Work mode: Panel` · `Output: risk memo from what the panel agreed on`
+For legal, purchasing and due-diligence teams, where one AI model's reading isn't enough. Several models from different companies each read the contract from their own angle, and a final "judge" model writes one risk memo from what they found. A missed auto-renewal or indemnity clause gets caught by the model that was looking for it.
 
-**Who it's for**: legal, procurement, and diligence teams where one model's read isn't enough.
-**What it does**: several models read a document's risks from different angles and a judge writes the final memo, so a missed indemnity or auto-renewal clause is caught by the model that was looking for it, not left to one opinion.
+For example: one model reads as your company, one as the other side, one checks the governing law. The memo lists the risks all of them agreed on.
 
-## Build it
+## What you need
 
-1. **Create an autonomous agent** and write its instructions: review the contract and write a risk memo.
-2. **Set the work mode to Panel.** The slots follow: the main model, two or more panelists and an optional judge. Give each panelist a different provider, and under its **Advanced** a lens in its extra instructions: *tenant's risk*, *counterparty's leverage*, *compliance with governing law*. A panelist can also be one of your other agents, with its own tools.
+- At least two AI providers connected (for example one from OpenAI and one from Mistral), under **Credentials**, **Connect a provider**.
+- Optionally, a search tool over your clause library or past contracts.
 
-   ![The Work mode section set to Panel, with panelists on different providers and a judge](/screenshots/agent-collab-debate.png)
-3. **Add a judge**: the model that reads what the panelists said and writes the one answer they agree on. Without a judge, the main model does it.
-4. **(Optional) give it a search tool** under **Capabilities > Tools and APIs** for your clause library or past contracts, so readings cite precedent, not just the text.
-5. **Feed it the document**: upload the contract or have your DMS call the agent API.
-6. **Get the memo**: one structured risk summary. The run shows each panelist's answer, which model gave it, and how far they agreed.
+## How to build it
 
-## Make it yours
+1. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Review the contract and write a risk memo."
+2. **Set the work mode to Panel.** In the **Work mode** section, pick **Panel**. You then fill in the main model, two or more panelists and, if you like, a judge. Give each panelist a different provider, and under its **Advanced**, an angle in its extra instructions: "your company's risk", "the other side's leverage", "compliance with the governing law". A panelist can also be one of your other assistants, with its own tools.
 
-- Reuse the pattern for research synthesis, due diligence, or incident post-mortems, anywhere one model isn't enough.
-- Keep Panel for high-stakes calls; for high-volume, low-stakes work use **Cascade**, where a cheaper model answers first and the main model steps in only when a checker rejects the draft.
-- Route anything above a risk score to a human via [`request_approval`](/approvals).
+   ![Work mode set to Panel, with panelists on different providers and a judge](/screenshots/agent-work-mode-panel.png)
 
-**Uses**: `Legal` · `Panel` · `Multi-model`
+3. **Add a judge.** The judge reads what the panelists said and writes the one answer they agree on. Without a judge, the main model does it.
+4. **Optionally give it a search tool** under **Tools and APIs**, so its reading can point to earlier contracts, not just the text in front of it.
+5. **Send it the contract.** Add a **Web chat** channel on its **Channels** tab, publish it, and attach the contract as a PDF, or have your document system call it.
+6. **Read the memo.** Each run shows every panelist's answer, which model gave it, and how far they agreed.
+
+## Ideas
+
+- The same setup works for research summaries, due diligence or incident reviews: anywhere one model isn't enough.
+- For large volumes of low-stakes work, use **Cascade** instead: a cheaper model answers first, and the main model steps in only when a checker rejects the draft.
+- Have it ask a person before anything above a risk level goes out (see [Approvals](/approvals)).
 
 ## Related
 

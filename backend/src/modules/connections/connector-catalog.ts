@@ -415,6 +415,88 @@ export const OAUTH2_SIGN_IN_CONNECTOR: ConnectorDefinition = {
   docsUrl: null,
 };
 
+/**
+ * The memory services the memory module has an adapter for
+ * (memory/canonical/backends). Each connector's key IS the adapter's id,
+ * so a credential made from one is a memory account of that service: the
+ * Memory page lists them, an agent picks one, and a move names them. An
+ * organization can hold several accounts of one service.
+ *
+ * Probes checked 2026-09-30 against the live APIs with a bogus key, each
+ * answering 401 (the route exists and reads the key the way given here).
+ */
+export const MEMORY_CONNECTORS: ConnectorDefinition[] = [
+  {
+    key: 'mem0',
+    kind: 'memory',
+    displayName: 'Mem0',
+    description: 'Long-term memory for agents, kept by Mem0.',
+    connect: [{ type: 'api_key', label: 'API key', schema: API_KEY_SCHEMA, credentialType: CredentialType.MEMORY_BACKEND, keyPageUrl: 'https://app.mem0.ai/dashboard/api-keys' }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'http', url: 'https://api.mem0.ai/v1/ping/', method: 'GET', auth: 'header', headerName: 'Authorization', headerPrefix: 'Token ' },
+    keyPageUrl: 'https://app.mem0.ai/dashboard/api-keys',
+    docsUrl: 'https://docs.mem0.ai/api-reference',
+  },
+  {
+    key: 'zep',
+    kind: 'memory',
+    displayName: 'Zep',
+    description: 'A temporal knowledge graph of what your agents learn, kept by Zep.',
+    connect: [{ type: 'api_key', label: 'API key', schema: API_KEY_SCHEMA, credentialType: CredentialType.MEMORY_BACKEND, keyPageUrl: 'https://app.getzep.com/' }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'http', url: 'https://api.getzep.com/api/v2/users-ordered?pageSize=1', method: 'GET', auth: 'header', headerName: 'Authorization', headerPrefix: 'Api-Key ' },
+    keyPageUrl: 'https://app.getzep.com/',
+    docsUrl: 'https://help.getzep.com/',
+  },
+  {
+    key: 'supermemory',
+    kind: 'memory',
+    displayName: 'Supermemory',
+    description: 'Memories and documents for agents, kept by Supermemory.',
+    connect: [{ type: 'api_key', label: 'API key', schema: API_KEY_SCHEMA, credentialType: CredentialType.MEMORY_BACKEND, keyPageUrl: 'https://console.supermemory.ai/' }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'http', url: 'https://api.supermemory.ai/v3/documents/list', method: 'POST', auth: 'bearer', body: { limit: 1 } },
+    keyPageUrl: 'https://console.supermemory.ai/',
+    docsUrl: 'https://docs.supermemory.ai/',
+  },
+  {
+    key: 'anthropic-memory-tool',
+    kind: 'memory',
+    displayName: 'Claude memory tool',
+    description: "Memories kept as files in your Anthropic account, through Claude's memory tool.",
+    connect: [{ type: 'api_key', label: 'API key', schema: API_KEY_SCHEMA, credentialType: CredentialType.MEMORY_BACKEND, keyPageUrl: 'https://console.anthropic.com/settings/keys' }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'http', url: 'https://api.anthropic.com/v1/models', auth: 'header', headerName: 'x-api-key', headers: { 'anthropic-version': '2023-06-01' } },
+    keyPageUrl: 'https://console.anthropic.com/settings/keys',
+    docsUrl: 'https://docs.claude.com/en/docs/agents-and-tools/tool-use/memory-tool',
+  },
+  {
+    key: 'vertex-memory-bank',
+    kind: 'memory',
+    displayName: 'Vertex AI Memory Bank',
+    description: 'Memories kept by a Vertex AI Agent Engine, signed in with a service account.',
+    connect: [{
+      type: 'service_account',
+      label: 'Service account JSON',
+      schema: {
+        type: 'object',
+        properties: {
+          serviceAccountJson: { type: 'string', title: 'Service account key (JSON)', 'x-secret': true, minLength: 20 },
+          engine: { type: 'string', title: 'Agent Engine', description: 'projects/<project>/locations/<region>/reasoningEngines/<id>' },
+          location: { type: 'string', title: 'Region', default: 'us-central1' },
+        },
+        required: ['serviceAccountJson', 'engine'],
+      },
+      credentialType: CredentialType.MEMORY_BACKEND,
+      keyPageUrl: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
+    }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'gcp_service_account' },
+    keyPageUrl: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
+    docsUrl: 'https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/memory-bank/overview',
+  },
+];
+
 const OTHER_CONNECTORS: ConnectorDefinition[] = [
   REGISTRY_S3_CONNECTOR,
   {
@@ -456,7 +538,7 @@ const OTHER_CONNECTORS: ConnectorDefinition[] = [
     key: 'mcp-custom',
     kind: 'mcp',
     displayName: 'MCP server',
-    description: 'A remote MCP server over streamable HTTP, optionally behind a bearer token.',
+    description: 'A remote MCP server over streamable HTTP, open, behind a bearer token, or behind a sign-in (OAuth).',
     connect: [{
       type: 'api_key',
       label: 'Server URL and token',
@@ -469,6 +551,27 @@ const OTHER_CONNECTORS: ConnectorDefinition[] = [
         required: ['serverUrl'],
       },
       credentialType: CredentialType.BEARER_TOKEN,
+    }, {
+      // MCP authorization: the server says where to sign in. Endpoints,
+      // registration and token refresh are connections/mcp-oauth's.
+      type: 'oauth2_pkce',
+      label: 'Sign in to the server',
+      description:
+        'For an MCP server that asks you to sign in. almyty finds the sign-in page from the server itself and keeps the sign-in fresh.\n' +
+        'A client id is only needed for a server whose owner registers apps by hand; enter the one they gave you.',
+      schema: {
+        type: 'object',
+        properties: {
+          serverUrl: { type: 'string', title: 'Server URL', format: 'uri' },
+          clientId: { type: 'string', title: 'Client id (only if the server gave you one)', 'x-advanced': true },
+          clientSecret: { type: 'string', title: 'Client secret (only with a client id)', 'x-secret': true, 'x-advanced': true },
+          scope: { type: 'string', title: 'Scopes (optional, space separated)', 'x-advanced': true },
+        },
+        required: ['serverUrl'],
+      },
+      oauth: { authorizeUrl: '', tokenUrl: '', pkce: true, discover: 'mcp' },
+      credentialType: CredentialType.OAUTH2,
+      secretField: 'accessToken',
     }],
     capabilities: ['tools'],
     validation: { kind: 'mcp_initialize' },
@@ -548,7 +651,7 @@ const SLACK_AUTH_TEST: HttpProbe = {
  * builder joins `scopes` with spaces, so the comma list travels as one
  * entry. `scopesNeeded` carries them individually for display.
  */
-const SLACK_SCOPES = ['chat:write', 'app_mentions:read', 'im:history'];
+const SLACK_SCOPES = ['chat:write', 'app_mentions:read', 'im:history', 'files:read', 'users:read'];
 
 const TWILIO_CONSOLE = 'https://console.twilio.com/';
 
@@ -795,6 +898,70 @@ const CHANNEL_CONNECTORS: ConnectorDefinition[] = [
     docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api/reference/phone-numbers',
   },
   {
+    key: channelKey('imessage_sendblue'),
+    kind: 'channel',
+    displayName: 'iMessage (Sendblue)',
+    description: 'iMessage through a Sendblue line.',
+    // From the docs, 2026-09-30, not a live call (no account): the send is
+    // POST https://api.sendblue.co/api/send-message with `sb-api-key-id` and
+    // `sb-api-secret-key` headers; the receive webhook carries the secret set
+    // on it in `sb-signing-secret`. There is no single-header probe the
+    // validator can make, so the shape is checked.
+    connect: [{
+      type: 'api_key',
+      label: 'Sendblue API keys',
+      description: 'Sendblue dashboard: API keys for the two keys, Developer, Webhooks for the receive webhook and its secret.',
+      schema: {
+        type: 'object',
+        properties: {
+          api_key_id: { type: 'string', title: 'API key ID', description: 'Sent as sb-api-key-id.' },
+          api_secret_key: { type: 'string', title: 'API secret key', 'x-secret': true, description: 'Sent as sb-api-secret-key.' },
+          phone_number: { type: 'string', title: 'Sendblue number', pattern: '^\\+[1-9]\\d{6,14}$', description: 'The line replies go out from, in E.164 form.' },
+          signing_secret: { type: 'string', title: 'Webhook secret', 'x-secret': true, minLength: 16, description: 'The secret on your receive webhook. Sendblue sends it with every message so almyty can reject forgeries.' },
+        },
+        required: ['api_key_id', 'api_secret_key', 'phone_number', 'signing_secret'],
+      },
+      credentialType: CredentialType.API_KEY,
+      keyPageUrl: 'https://dashboard.sendblue.com/',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: { kind: 'format', fields: { phone_number: '^\\+[1-9]\\d{6,14}$' }, accountLabelFrom: 'phone_number' },
+    keyPageUrl: 'https://dashboard.sendblue.com/',
+    docsUrl: 'https://docs.sendblue.com/api/resources/messages/methods/send/',
+  },
+  {
+    key: channelKey('imessage_loopmessage'),
+    kind: 'channel',
+    displayName: 'iMessage (LoopMessage)',
+    description: 'iMessage through a LoopMessage sender.',
+    // From the docs, 2026-09-30, not a live call (no account): the send is
+    // POST https://a.loopmessage.com/api/v1/message/send/ with the
+    // organization API key as the bare Authorization value; webhooks carry
+    // the Authorization value set for them in the dashboard. LoopMessage
+    // documents no read-only call, so the shape is checked. The sender name
+    // replies go out from is set on the channel, not here: one organization
+    // key can carry several senders.
+    connect: [{
+      type: 'api_key',
+      label: 'LoopMessage API key',
+      description: 'LoopMessage dashboard: the organization API key, and under Webhooks the authorization header value you choose.',
+      schema: {
+        type: 'object',
+        properties: {
+          api_key: { type: 'string', title: 'API key', 'x-secret': true, minLength: 8 },
+          inbound_token: { type: 'string', title: 'Webhook authorization value', 'x-secret': true, minLength: 16, description: 'The same value you type as the webhook authorization header in LoopMessage, so almyty can reject forgeries.' },
+        },
+        required: ['api_key', 'inbound_token'],
+      },
+      credentialType: CredentialType.API_KEY,
+      keyPageUrl: 'https://dashboard.loopmessage.com/',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: { kind: 'format' },
+    keyPageUrl: 'https://dashboard.loopmessage.com/',
+    docsUrl: 'https://loopmessage.com/apidocs/send-message',
+  },
+  {
     key: channelKey('microsoft_teams'),
     kind: 'channel',
     displayName: 'Microsoft Teams',
@@ -1028,6 +1195,7 @@ export const BUILTIN_CONNECTORS: readonly ConnectorDefinition[] = [
   ...DEPLOYMENT_CONNECTORS,
   ...CLOUD_CONNECTORS,
   ...CHANNEL_CONNECTORS,
+  ...MEMORY_CONNECTORS,
   ...OTHER_CONNECTORS,
 ];
 

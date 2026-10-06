@@ -5,14 +5,14 @@ event data. One `retention_policies` row per org; each `*Days` field is a
 number of days, and **null means keep forever**, which is the default for
 every class. An org with no policy row is never swept.
 
-Configured under Settings → Data Retention, or over the API with `GET`/`PUT /organizations/:organizationId/retention`.
+Configured in the Data retention card under Settings → Organization, or over the API with `GET`/`PUT /organizations/:organizationId/retention`.
 
 ## The classes
 
 | Field | Table | What it holds |
 |---|---|---|
 | `agentRunsDays` | `agent_runs` | Terminal runs only. A run still going is never deleted regardless of age. |
-| `conversationsDays` | `conversations` + `messages` | A conversation and its messages go together. |
+| `conversationsDays` | `conversations` + `messages` | A conversation, its messages and the files people sent in it (channel and web chat attachments, stored object included) go together. |
 | `requestLogsDays` | `request_logs` | Scoped through the org's gateways. |
 | `usageMetricsDays` | `usage_metrics` | Two rows per HTTP request, so this is the highest-count table. |
 | `auditLogDays` | `audit_logs` | See the warning below. |
@@ -44,9 +44,17 @@ most.
 
 An agent can carry its own `privacy.retentionDays` in its visitor rules,
 and a channel can override it; the sweep removes the conversations reaching
-each channel through its gateway after the effective period. It never keeps
+each channel through its gateway after the effective period, with the files sent in them and the channel's stored deliveries and replies (`channel_events`, including the text kept for a message that never became a run). It never keeps
 data **longer** than the organization policy — the shorter of the two
 wins.
+
+## Attachments that were never sent
+
+A file a web chat or widget visitor uploads waits, with no conversation, for the message that names it; a channel attachment is stored before its run starts and filed under the run's conversation once it has one. An attachment that never reached a conversation (uploaded and not sent, or stored for a run that was refused) belongs to no policy, so it is removed deployment-wide a day after it was stored, on the same hourly tick. Erasing a web chat visitor or a widget thread removes that visitor's unsent uploads at once.
+
+## Erasure on request
+
+Retention is the schedule; a person can also ask for their data to go now. The web chat and widget offer it to their visitors, and whoever may manage the agent (an organization owner or admin, or the member who owns it) answers anyone else from the agent's Channels tab (`/agents/:id/channels/visitor-data`). Either way `VisitorDataService.erase` removes the person's conversations, messages, runs with their tool executions, files (stored objects included), memories in almyty's store and in an outside memory service, channel events (with the text of messages that never became a run) and visitor rows at once, whatever the retention periods say, and records a `visitor_data_erase` audit entry with counts only. See `docs/channels.md` (Visitor data).
 
 ## Entity snapshots
 

@@ -153,7 +153,8 @@ describe('GatewaysController', () => {
       const result = await controller.getGateway('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(result.data).toBe(mockGateway);
+      // The gateway, plus what the page needs to offer scripts (code mode).
+      expect(result.data).toEqual({ ...mockGateway, codeMode: { serverAllows: false, hasAuth: false, exposure: 'tools' } });
     });
   });
 

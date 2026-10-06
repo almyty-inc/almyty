@@ -12,7 +12,7 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { Plus, ShieldCheck, Trash2 } from 'lucide-react'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
@@ -36,6 +36,9 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { approvalPoliciesApi, type ApprovalPolicy, type UpsertApprovalPolicy } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
+import { useOrganizationStore } from '@/store/organization'
+import { Disclosure } from '@/components/ui/disclosure'
+import { VisibilityField } from '@/components/ui/visibility-field'
 
 export const APPROVAL_POLICIES_PATH = '/settings/approvals'
 
@@ -117,6 +120,7 @@ export interface ApprovalPolicyFormProps {
 }
 
 export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolicyFormProps) {
+  const { currentOrganization } = useOrganizationStore()
   const form = useForm<ApprovalPolicyFormValues>({
     resolver: zodResolver(approvalPolicySchema),
     defaultValues: {
@@ -173,7 +177,7 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
   return (
     <FormPage
       title={policy ? 'Edit approval policy' : 'New approval policy'}
-      description="Match conditions decide when an approval is required; steps decide who must sign off, in order. A request must clear every step before it is approved."
+      description="Decide when to ask for approval, and who must sign off, in order. A request must clear every step before it is approved."
       back={{ to: APPROVAL_POLICIES_PATH, label: 'Approval policies' }}
       guard={guard}
       onSubmit={form.handleSubmit(submit)}
@@ -187,19 +191,17 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         <Field id="policy-description" label="Description">
           <Textarea placeholder="Why this policy exists (optional)" {...form.register('description')} />
         </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field
-            id="policy-priority"
-            label="Priority"
-            hint="Highest priority wins when several policies match."
-            error={errors.priority?.message}
-          >
-            <Input type="number" {...form.register('priority', { valueAsNumber: true })} />
-          </Field>
-          <Field id="policy-team" label="Team ID (optional)" hint="Settings > Members & teams shows each team's ID.">
-            <Input placeholder="Scope to a team" {...form.register('teamId')} />
-          </Field>
-        </div>
+        <VisibilityField
+          organizationId={currentOrganization?.id ?? ''}
+          options={['org', 'team']}
+          label="Which agents it applies to"
+          descriptions={{
+            org: 'Requests from every agent in the organization.',
+            team: "Only requests from the team's agents.",
+          }}
+          value={{ visibility: form.watch('teamId') ? 'team' : 'org', teamId: form.watch('teamId') || null }}
+          onChange={(next) => form.setValue('teamId', next.teamId ?? '', { shouldDirty: true })}
+        />
         <div className="flex items-center justify-between gap-4 rounded-md border p-3">
           <div>
             <Label htmlFor="policy-enabled">Enabled</Label>
@@ -217,7 +219,14 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
 
       <FormSection
         title="Match conditions"
-        description="All conditions must hold (AND). Leave empty to match every request."
+        description={
+          <>
+            An agent asks for approval when its instructions tell it to. These conditions pick which of those
+            requests this policy governs; all must hold. Leave empty to govern every request. To ask before a tool
+            call over an amount whatever the agent was told, add an amount rule under{' '}
+            <Link to={APPROVAL_POLICIES_PATH} className="underline">Ask before large amounts</Link>.
+          </>
+        }
       >
         {matchArray.fields.length === 0 && (
           <p className="text-sm italic text-muted-foreground">
@@ -350,6 +359,17 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
           <Plus className="mr-1 h-4 w-4" /> Add step
         </Button>
       </FormSection>
+
+      <Disclosure title="Advanced" summary={`Priority ${form.watch('priority') ?? 0}`}>
+        <Field
+          id="policy-priority"
+          label="Priority"
+          hint="When more than one policy fits a request, the one with the higher number decides who signs off. Leave it at 0 unless two of your policies overlap."
+          error={errors.priority?.message}
+        >
+          <Input type="number" className="w-32" {...form.register('priority', { valueAsNumber: true })} />
+        </Field>
+      </Disclosure>
     </FormPage>
   )
 }

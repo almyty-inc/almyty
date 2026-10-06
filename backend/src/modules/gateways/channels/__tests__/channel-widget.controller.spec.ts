@@ -7,6 +7,11 @@ import {
   WIDGET_DEFAULT_AI_DISCLOSURE,
 } from '../widget-script';
 import { ChannelGatewayService } from '../channel-gateway.service';
+import { ChannelAttachmentReader } from '../channel-attachments.service';
+import { TextExtractorService } from '../../../files/text-extractor.service';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 /**
  * Unit coverage for the public chat-widget surface. The controller is
@@ -164,7 +169,7 @@ describe('ChannelWidgetController', () => {
         message: 'hi there',
         sessionId: undefined,
         threadId: 'thread-1',
-      }, null);
+      }, null, { lines: [], parts: [], fileIds: [] });
       expect(out).toEqual({ success: true, data: { runId: 'run-1', threadId: 'thread-1' } });
     });
 
@@ -442,6 +447,69 @@ describe('ChannelWidgetController', () => {
 
     it('ignores an empty/whitespace title so the default stays', () => {
       expect(sanitizeWidgetConfig({ widget: { title: '   ' } }).title).toBe('Chat with us');
+    });
+  });
+
+  describe('attachments', () => {
+    const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+    let files: any;
+    let dir: string;
+    const widgetGateway = { id: 'gw-1', type: 'chat_widget', organizationId: 'org-1', agentId: 'agent-1' };
+
+    const upload = (bytes: Buffer, originalname: string, mimetype: string) => {
+      const path = join(dir, `upload-${Math.random().toString(16).slice(2)}`);
+      writeFileSync(path, bytes);
+      return { path, originalname, mimetype, size: bytes.length };
+    };
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'widget-attach-'));
+      channelGatewayService.findWidgetGateway.mockResolvedValue(widgetGateway);
+      files = {
+        storeBytes: jest.fn(async (_org: string, bytes: Buffer, file: any) => ({ id: 'up-1', name: file.name, mimeType: file.mimeType, size: bytes.length })),
+        findUnsentUploads: jest.fn(async () => [{ id: 'up-1', name: 'box.png', mimeType: 'image/png', size: 72, extractedText: null }]),
+      };
+      controller = new ChannelWidgetController(
+        channelGatewayService as any,
+        gatewayRateLimit as any,
+        undefined,
+        undefined,
+        new ChannelAttachmentReader(new TextExtractorService(), files),
+        files,
+      );
+    });
+    afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+    it('stores an upload under the widget and the thread the visitor names, within the limits', async () => {
+      const out = await controller.uploadAttachment('gw-1', upload(PNG, 'box.png', 'image/png'), { threadId: 'wt-1' }, req as any, res as any);
+      expect(out).toEqual({ success: true, data: { id: 'up-1', name: 'box.png', mimeType: 'image/png', size: 72 } });
+      expect(files.storeBytes.mock.calls[0][3].metadata).toEqual({ source: 'widget_upload', gatewayId: 'gw-1', threadId: 'wt-1' });
+      expect(gatewayRateLimit.checkVisitor).toHaveBeenCalledWith(widgetGateway, expect.objectContaining({ endUserId: 'wt-1' }));
+    });
+
+    it('needs a thread to file the upload under, and refuses what a model cannot take', async () => {
+      await expect(controller.uploadAttachment('gw-1', upload(PNG, 'box.png', 'image/png'), {}, req as any, res as any)).rejects.toThrow('threadId is required');
+      await expect(
+        controller.uploadAttachment('gw-1', upload(Buffer.from('<svg onload=x>'), 'x.svg', 'image/svg+xml'), { threadId: 'wt-1' }, req as any, res as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(files.storeBytes).not.toHaveBeenCalled();
+    });
+
+    it('hands the thread\'s uploads a message names to the run, by reference', async () => {
+      await controller.postMessage('gw-1', { message: 'Is this damaged?', threadId: 'wt-1', attachmentIds: ['up-1'] }, req as any, res as any);
+      expect(files.findUnsentUploads).toHaveBeenCalledWith('org-1', ['up-1'], { gatewayId: 'gw-1', threadId: 'wt-1' });
+      const sent = channelGatewayService.handleWidgetMessage.mock.calls[0][3];
+      expect(sent.parts).toEqual([{ type: 'file', fileId: 'up-1', mimeType: 'image/png', name: 'box.png', size: 72 }]);
+      expect(sent.lines).toEqual(['[Attachment: box.png (image/png, 72 B)]']);
+    });
+
+    it('refuses uploads named without the thread they belong to, or from another one', async () => {
+      await expect(controller.postMessage('gw-1', { message: 'hi', attachmentIds: ['up-1'] }, req as any, res as any)).rejects.toThrow(BadRequestException);
+      files.findUnsentUploads.mockResolvedValue(null);
+      await expect(
+        controller.postMessage('gw-1', { message: 'hi', threadId: 'other', attachmentIds: ['up-1'] }, req as any, res as any),
+      ).rejects.toThrow('An attachment was not found. Upload it again.');
+      expect(channelGatewayService.handleWidgetMessage).not.toHaveBeenCalled();
     });
   });
 });

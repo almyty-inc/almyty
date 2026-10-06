@@ -1,105 +1,119 @@
-# Gateway Authentication
+# Gateway authentication
 
-Every gateway request is authenticated before any tool runs. almyty is default-deny: a gateway with no auth configured rejects all requests with 401. You add auth once, and it guards every transport (MCP, UTCP, A2A) on that gateway.
+A gateway only answers apps and people you have let in. Until you add a way to sign in, it turns every request away, so nothing is ever open by accident. The usual way in is an access key: a long secret you give to one app or person, and can cancel on its own at any time.
+
+For example, give Claude Code on your laptop one key and a partner's system another. If the partner's key leaks, delete that key; your own keeps working.
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
-## Add auth in the UI
+## Add a way in
 
-1. Open a gateway's detail page and find the **Authentication** section
-2. Click **Add auth method** to expand the inline form
-3. Select a type: API Key, Bearer Token, Basic Auth, JWT, OAuth 2.1, or None
-4. Fill in the configuration and click **Add auth method**
+1. Open the gateway and find the **Authentication** section.
+2. Click **Add auth method** and pick a **Method**:
+   - **OAuth 2.0**: people sign in with their almyty account in a browser, and the AI app keeps the sign-in (OAuth is the standard "sign in with..." flow). Good for AI apps that support it, so nobody pastes keys. Current apps identify themselves by a web address and need no setup step; the sign-in page shows the app's name and that address, so check both before you approve.
+   - **OAuth 2.0**: people sign in with their almyty account in a browser, and the AI app keeps the sign-in (OAuth is the standard "sign in with..." flow). Good for AI apps that support it, so nobody pastes keys.
+   - **Bearer Token**, **Basic Auth**, **JWT** or **Custom**: for systems that already sign their requests one of those ways.
+   - **None (Public)**: anyone can call it. Only for tests and public tools.
+3. Fill in what the method asks for and click **Add auth method**.
 
-To issue API keys, click **Generate key** after adding an API Key method. Name the key in the inline form. The raw key is shown once at creation time, then stored only as a SHA-256 hash. The key API also supports optional expiry, scopes, and `lastUsedAt` tracking.
+The section then lists the **Active auth methods**; an app can get in with any of them.
 
-A generated key looks like this (the `key` field appears only in this one response):
+## Give out keys
 
-```json
-{
-  "id": "key-uuid",
-  "name": "Production Key",
-  "key": "almyty_gw_abc123...",
-  "scopes": ["tools:read", "tools:execute"],
-  "expiresAt": "2027-01-01T00:00:00Z"
-}
-```
+With an **API Key** method in place, click **Generate key**, give it a **Key name** (such as "Claude Code, Ava's laptop") and click **Generate key**. The key appears once, under **Your new API key**: copy it now, because it is never shown again. The **API keys** list shows each key's name and lets you delete it.
 
-## Authentication methods
+A gateway made with **Create gateway** already has an API Key method and a first key, shown once on the page that opens after creating it. The keys of an agent's **Other agents (A2A)** channel work the same way, managed on the channel's page. A Skills gateway has no **Authentication** section: the Skills tool signs in as you.
 
-| Method | Header / Parameter | Use case |
+## For developers
+
+### Methods
+
+| Method | How clients send it | Use case |
 |--------|-------------------|----------|
-| **None** | (none) | Public/development gateways (must be set explicitly) |
-| **API Key** | `X-API-Key` header or `api_key` query param | Machine-to-machine |
+| **None** | (nothing) | Public or development gateways; must be added explicitly |
+| **API Key** | `x-api-key` header or `api_key` query parameter (both names configurable) | Machine to machine |
 | **Bearer Token** | `Authorization: Bearer <token>` | Programmatic access |
-| **Basic Auth** | `Authorization: Basic <base64>` | Legacy integrations |
+| **Basic Auth** | `Authorization: Basic <base64>` | Older integrations |
 | **JWT** | `Authorization: Bearer <jwt>` | Signed, self-contained tokens |
-| **OAuth 2.1** | `Authorization: Bearer <oauth-token>` | Full authorization code flow with PKCE |
+| **OAuth 2.0** | `Authorization: Bearer <oauth-token>` | MCP OAuth 2.1 authorization code flow with PKCE |
+| **Custom** | A header you name, optionally checked against a regex | Anything else |
 
-### API Key and Bearer Token
-
-Pass the key one of three ways: an `X-API-Key` header, an `api_key` query parameter, or an `Authorization: Bearer` header. In an MCP client config, set it as a header:
+In an MCP client config, send the key as a header:
 
 ```json
 {
   "mcpServers": {
     "petstore": {
       "url": "https://api.almyty.com/acme/petstore",
-      "headers": { "x-api-key": "almyty_gw_abc123..." }
+      "headers": { "x-api-key": "gw_..." }
     }
   }
 }
 ```
 
-### Basic Auth
+**Keys.** A generated key looks like `gw_` followed by 43 random characters. The raw key is returned only in the create response; afterwards only a SHA-256 hash and the first eight characters are kept. The key API also takes an optional expiry and records `lastUsedAt`.
 
-Decodes the `Authorization: Basic` header, looks up the user by email, and verifies the password with bcrypt.
+**Basic Auth** decodes the header, looks the user up by email and checks the password with bcrypt.
 
-### JWT
+**JWT** verifies the signature with the secret configured on the auth method (or a JWKS URL or public key). There is no fallback to the server's own secret: a JWT method without one refuses every request. When the payload carries `sub` or `userId`, that user is looked up.
 
-Verifies the JWT signature using the secret configured on the auth method (or the server's `JWT_SECRET` as a fallback). The payload must contain `sub` or `userId`.
+### Enforcement
 
-## Enforcement pipeline
+Every request to a gateway passes through the same steps:
 
-Every request to a gateway endpoint passes through the same pipeline:
+1. Resolve the organization and gateway from the URL.
+2. Load the gateway's active auth methods.
+3. With none, reject with 401 (`NO_AUTH_CONFIGURED`).
+4. Try each required method in order; the first success wins.
+5. If all fail, reject with the last error (401 or 403).
+6. Otherwise, run the request.
 
-1. Resolve the organization and gateway from the URL
-2. Load all active auth configs for that gateway
-3. If no auth configs exist, reject with 401
-4. Try each required auth method in order: first success wins
-5. If all fail, reject with the last error (401 or 403)
-6. If valid, execute the request
+Discovery endpoints (`.well-known/*`, Agent Cards) are public, except on a private gateway.
 
-Discovery endpoints (`.well-known/*`, Agent Cards) are always public.
+### OAuth 2.1 (MCP OAuth)
 
-## OAuth 2.1 (MCP OAuth)
+almyty runs an OAuth 2.1 authorization server per the MCP specification:
 
-almyty implements a full OAuth 2.1 authorization server per the MCP specification:
-
-- Authorization Code flow with PKCE (S256 mandatory)
-- Dynamic Client Registration (RFC 7591)
-- Token Revocation (RFC 7009)
+- Authorization code flow with PKCE (S256 required)
+- Client ID Metadata Documents (MCP 2025-11-25): no registration step
+- Dynamic Client Registration (RFC 7591): deprecated in MCP 2026-07-28 and kept for clients without metadata-document support; metadata documents come first
+- `iss` in every authorization response (RFC 9207)
+- Token revocation (RFC 7009)
 - Authorization Server Metadata (RFC 8414)
 - Protected Resource Metadata (RFC 9728)
 
-MCP clients handle this flow for you. On a 401, the gateway returns a `WWW-Authenticate` header pointing at the protected resource metadata, and a compatible client registers itself, runs the authorization code exchange, and attaches the token automatically.
-
-### Discovery endpoints
+MCP clients handle the flow themselves. On a 401 the gateway returns a `WWW-Authenticate` header pointing at the protected resource metadata; a compatible client finds the authorization server, identifies itself, runs the code exchange and attaches the token.
 
 ```
 https://api.almyty.com/acme/petstore/.well-known/oauth-authorization-server
 https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 ```
 
-### Flow endpoints
-
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /acme/petstore/register` | Dynamic Client Registration |
-| `GET /acme/petstore/authorize` | Start the authorization code flow (with `code_challenge`, `code_challenge_method=S256`) |
-| `POST /acme/petstore/token` | Exchange the code (plus `code_verifier`) for tokens |
+| `POST /acme/petstore/register` | Dynamic Client Registration (deprecated in MCP 2026-07-28; kept for clients without metadata-document support) |
+| `GET /acme/petstore/authorize` | Start the authorization code flow (`code_challenge`, `code_challenge_method=S256`) |
+| `POST /acme/petstore/token` | Exchange the code (with `code_verifier`) for tokens |
+| `POST /acme/petstore/revoke` | Revoke a token |
 
-### Token lifetimes
+**How a client identifies itself.** The metadata advertises both ways, in the order the specification asks clients to try them:
+
+1. **Client ID Metadata Document** (`client_id_metadata_document_supported: true`). The client uses an `https` URL as its `client_id`, for example `https://app.example.com/oauth/client.json`. almyty fetches that document, checks that its `client_id` is exactly that URL, that it names `client_name` and `redirect_uris`, and that the `redirect_uri` of the request is one of them. Only public clients (`token_endpoint_auth_method: none`) are accepted. The consent screen shows the client's name and the host of its URL, because the name is the client's own claim. The client is stored once, keyed by its URL, so codes, tokens and revocation work as for a registered client, on any gateway.
+2. **Dynamic Client Registration.** Deprecated in MCP 2026-07-28 and kept for clients that need it. A registration may name `application_type`: `web` needs `https` redirect URIs (loopback `http` only outside production), `native` may use loopback `http` on any port or a private-use scheme such as `cursor://`. A registration without it whose redirect URIs are all loopback is taken as `native`, since that is what CLIs and desktop apps send; set `MCP_OAUTH_INFER_APPLICATION_TYPE=false` for the plain OIDC default (`web`). The response echoes `application_type`.
+
+The metadata document is fetched through the same guard as every other outbound request (no private, loopback or cloud-metadata addresses, no redirects, a total deadline and a size cap), with nothing relaxed for self-hosted installs. Fetches are limited per host, and a document is cached for its `Cache-Control` lifetime within bounds. All of it is configuration:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `MCP_CIMD_ENABLED` | `true` | Accept metadata-document clients at all |
+| `MCP_CIMD_FETCH_TIMEOUT_MS` | `5000` | Total deadline per fetch |
+| `MCP_CIMD_MAX_BYTES` | `65536` | Largest document read |
+| `MCP_CIMD_CACHE_MIN_SECONDS` / `MCP_CIMD_CACHE_MAX_SECONDS` | `300` / `86400` | Bounds on the cache lifetime |
+| `MCP_CIMD_FETCHES_PER_HOST` / `MCP_CIMD_FETCH_WINDOW_SECONDS` | `30` / `60` | Fetches allowed per host per window |
+
+A gateway owner can accept registered clients only by setting `"oauth": { "clientMetadataDocuments": false }` in the gateway's configuration; the gateway's metadata then stops advertising the option.
+
+**`iss`.** Every authorization response, approval or denial, carries `iss` set to the gateway's issuer (`https://api.almyty.com/acme/petstore`), and the metadata says so with `authorization_response_iss_parameter_supported: true`.
 
 | Token | Lifetime |
 |-------|----------|
@@ -109,9 +123,11 @@ https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 
 Refresh tokens rotate on use. Revoking a refresh token also revokes its access tokens.
 
-## Validation rules
+**Scopes.** An OAuth token carries the scopes the user approved on the consent screen: `mcp:tools`, `mcp:resources`, `mcp:prompts` or `mcp:*`. On an MCP gateway, `tools/*` methods need `mcp:tools`, `resources/*` need `mcp:resources` and `prompts/*` need `mcp:prompts`; a UTCP gateway needs `mcp:tools` for every call. A missing scope is a 403 `insufficient_scope` naming the scope. API keys and the other methods are not scope-checked.
 
-Auth methods can carry extra validation. Restrict by IP range:
+### Validation rules
+
+An auth method can carry extra checks. Restrict by IP range:
 
 ```json
 {
@@ -121,7 +137,7 @@ Auth methods can carry extra validation. Restrict by IP range:
 }
 ```
 
-Or require specific headers:
+Or require headers:
 
 ```json
 {
@@ -131,14 +147,7 @@ Or require specific headers:
 }
 ```
 
-## Key scopes
+### Several methods
 
-| Scope | Description |
-|-------|-------------|
-| `tools:read` | List and view tool definitions |
-| `tools:execute` | Execute/invoke tools |
-| `gateway:read` | View gateway configuration |
-
-## Multiple auth methods
-
-A gateway can carry several auth methods, each marked required or optional. Required methods are tried in order (first match wins), so you can combine them for a gradual migration, for example adding OAuth while keeping API keys active.
+A gateway can carry several auth methods, each required or optional. Required methods are tried in order and the first match wins, so you can, for example, add OAuth while keeping API keys working.
+A gateway can carry several auth methods, each marked required or optional. Required methods are tried in order (first match wins), so you can combine them, for example adding OAuth while keeping API keys active.

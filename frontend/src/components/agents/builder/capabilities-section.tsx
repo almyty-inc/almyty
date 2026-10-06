@@ -5,6 +5,9 @@
  *
  *  - Tools and APIs: single tools, or a whole API, which means every tool
  *    of it, including tools added to it later.
+ *  - How the model sees its tools: every tool, or search for them (the
+ *    server's agent-tool-mode.ts), the switch-over threshold and the tools
+ *    always shown in full.
  *  - Other agents: the ones it may call or hand work to, picked by name.
  *  - Machine: the labels of the machine its runner tools run on, and the
  *    machines that have them.
@@ -23,11 +26,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RunnerLabelsField, parseRunnerLabels } from '@/components/agents/builder/runner-labels-field'
 import { apisApi, runnersApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
-import type { Agent } from '@/types'
+import type { Agent, CodeWriteAction } from '@/types'
 
 type AgentConfig = NonNullable<Agent['agentConfig']> & { runnerLabels?: Record<string, string> | string }
 
@@ -68,6 +72,11 @@ export function CapabilitiesSection({
           onToolIdsChange={onToolIdsChange}
           apiIds={agentConfig.apiIds ?? []}
           onApiIdsChange={(apiIds) => set({ apiIds })}
+        />
+        <ToolModeSection
+          agentConfig={agentConfig}
+          usableTools={tools.filter((t) => toolIds.includes(t.id) || (t.apiId && (agentConfig.apiIds ?? []).includes(t.apiId)))}
+          onChange={set}
         />
         <OtherAgents
           agentId={agentId}
@@ -410,10 +419,161 @@ function TemporaryAgents({ agentConfig, onChange }: { agentConfig: AgentConfig; 
 
 /** Everything that would stop a save of this section, one sentence each. */
 export function capabilityProblems(agentConfig: AgentConfig): string[] {
-  const problems: string[] = []
+  const problems: string[] = [...toolModeProblems(agentConfig)]
   if (!agentConfig.canCreateAgents) return problems
   const bad = (n: unknown) => n !== undefined && (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > TEMPORARY_AGENTS_MAX)
   if (bad(agentConfig.maxTemporaryAgents)) problems.push(`Temporary agents per run: a whole number from 1 to ${TEMPORARY_AGENTS_MAX}`)
   if (bad(agentConfig.maxTemporaryAgentsAlive)) problems.push(`Temporary agents at once: a whole number from 1 to ${TEMPORARY_AGENTS_MAX}`)
   return problems
+}
+
+/* ── How the model sees its tools ───────────────────────────────────── */
+
+export const TOOL_MODE_LABEL: Record<ToolMode, string> = {
+  auto: 'Automatic',
+  direct: 'Show every tool',
+  discover: 'Search for tools',
+  code: 'Search, and write scripts',
+}
+
+const TOOL_MODE_HINT: Record<ToolMode, string> = {
+  auto: 'Every tool is shown to the model while the list is small. Once it would take a large share of the model\'s context, the model searches for the tools it needs instead.',
+  direct: 'The model sees every tool, in full, on every step. Best for a handful of tools.',
+  discover: 'The model gets three small tools to search for, read and run its tools, and finds the right one when it needs it. Best for many tools.',
+  code: 'As with searching, and the model can also write a short script that calls the tools many times, for example to go through a list. The script runs in a locked box with no network access; every call it makes is checked like any other.',
+}
+
+type ToolMode = 'auto' | 'direct' | 'discover' | 'code'
+
+export function ToolModeSection({
+  agentConfig,
+  usableTools,
+  onChange,
+}: {
+  agentConfig: AgentConfig
+  /** The tools this agent may use (picked singly or through an API): the ones that can be pinned. */
+  usableTools: Array<{ id: string; name: string }>
+  onChange: (patch: Partial<AgentConfig>) => void
+}) {
+  const mode: ToolMode = agentConfig.toolMode ?? 'auto'
+  const pinned = agentConfig.pinnedToolIds ?? []
+  const togglePin = (id: string, on: boolean) => {
+    const next = on ? [...pinned, id] : pinned.filter((p) => p !== id)
+    onChange({ pinnedToolIds: next.length ? next : undefined })
+  }
+  return (
+    <section className="space-y-3" data-testid="capability-tool-mode">
+      <SectionHeading
+        title="How the model sees its tools"
+        hint="Many tools take up room the model needs for the task itself. Searching keeps that small; every tool stays just as usable."
+      />
+      <div className="space-y-1.5">
+        <Label htmlFor="agent-tool-mode">Tool list</Label>
+        <Select value={mode} onValueChange={(v) => onChange({ toolMode: v as ToolMode })}>
+          <SelectTrigger id="agent-tool-mode" className="h-9 sm:w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(['auto', 'direct', 'discover', 'code'] as const).map((m) => (
+              <SelectItem key={m} value={m}>{TOOL_MODE_LABEL[m]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">{TOOL_MODE_HINT[mode]}</p>
+      </div>
+      {mode === 'auto' && (
+        <div className="space-y-1.5">
+          <Label htmlFor="agent-tool-mode-threshold">Switch to searching above (tokens)</Label>
+          <Input
+            id="agent-tool-mode-threshold"
+            type="number"
+            min={1}
+            className="sm:w-64"
+            placeholder="Default"
+            value={agentConfig.toolModeThresholdTokens ?? ''}
+            onChange={(e) => onChange({ toolModeThresholdTokens: e.target.value === '' ? undefined : Number(e.target.value) })}
+          />
+          <p className="text-xs text-muted-foreground">Leave empty for the default: a share of the model's context window (3% unless the server sets another).</p>
+        </div>
+      )}
+      {mode === 'code' && <ScriptChanges agentConfig={agentConfig} onChange={onChange} />}
+      {mode !== 'direct' && usableTools.length > 0 && (
+        <div className="space-y-1.5">
+          <Label>Always show in full</Label>
+          <p className="text-xs text-muted-foreground">Tools the model needs on almost every task, so it never has to search for them.</p>
+          {pinned.length > 0 && (
+            <p className="text-xs" data-testid="pin-summary">
+              Always shown: {usableTools.filter((t) => pinned.includes(t.id)).map((t) => t.name).sort().join(', ') || 'none of the tools above'}
+            </p>
+          )}
+          {/* By name; a long list scrolls in place. */}
+          <div className="grid max-h-56 grid-cols-1 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2" data-testid="pin-list">
+            {[...usableTools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
+              <label key={t.id} className="flex items-center gap-2 text-sm">
+                <Checkbox checked={pinned.includes(t.id)} onCheckedChange={(on) => togglePin(t.id, on === true)} aria-label={`Always show ${t.name}`} />
+                <span className="truncate font-mono text-xs">{t.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Problems with the tool-mode settings, one sentence each (the server checks the same: agent-tool-mode.ts). */
+export function toolModeProblems(agentConfig: AgentConfig): string[] {
+  const n = agentConfig.toolModeThresholdTokens
+  if (n === undefined) return []
+  return Number.isInteger(n) && n > 0 && n <= 10_000_000 ? [] : ['Switch to searching above: a whole number of tokens from 1 to 10,000,000']
+}
+
+/* ── What a script may change (code mode) ───────────────────────────── */
+
+const WRITE_ACTION_LABEL: Record<CodeWriteAction, string> = {
+  allow: 'Make them',
+  stage: 'Ask a person first',
+  deny: 'Never',
+}
+
+/**
+ * What happens to a change or a deletion a script makes (backend
+ * code-mode/code-write-policy.ts). Reads always run. Changes run unless
+ * a person asks to approve them; deletions wait for a person unless someone
+ * says otherwise. Every call still goes through the same permissions,
+ * approval rules and audit as a call the model makes directly.
+ */
+export function ScriptChanges({ agentConfig, onChange }: { agentConfig: AgentConfig; onChange: (patch: Partial<AgentConfig>) => void }) {
+  const writes = agentConfig.codeMode?.writes ?? {}
+  const set = (key: 'write' | 'destructive', value: CodeWriteAction) =>
+    onChange({ codeMode: { ...(agentConfig.codeMode ?? {}), writes: { ...writes, [key]: value } } })
+  const rows: Array<{ key: 'write' | 'destructive'; label: string; fallback: CodeWriteAction }> = [
+    { key: 'write', label: 'Changes to data', fallback: 'allow' },
+    { key: 'destructive', label: 'Deletions', fallback: 'stage' },
+  ]
+  return (
+    <div className="space-y-2" data-testid="script-changes">
+      <Label>When a script changes data</Label>
+      <p className="text-xs text-muted-foreground">
+        Reading always runs. Changes the script asks a person about are collected into one list, approved or rejected as a whole once the script is done.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {rows.map((row) => (
+          <div key={row.key} className="space-y-1.5">
+            <Label htmlFor={`script-${row.key}`} className="text-xs font-normal text-muted-foreground">{row.label}</Label>
+            <Select value={writes[row.key] ?? row.fallback} onValueChange={(v) => set(row.key, v as CodeWriteAction)}>
+              <SelectTrigger id={`script-${row.key}`} aria-label={row.label} className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(['allow', 'stage', 'deny'] as const).map((a) => (
+                  <SelectItem key={a} value={a}>{WRITE_ACTION_LABEL[a]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

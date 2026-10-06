@@ -2,13 +2,13 @@
 
 An agent's **Channels** tab (`/agents/:id?tab=channels`). The agent's own API keys (for its API and the OpenAI-compatible endpoint) are on its Overview, next to the API snippets; a channel's keys are on that channel. It puts an agent someone has already built in front of people or other agents, under their own name: a hosted chat on its own address, a chat widget on their website, a Slack or WhatsApp presence, an A2A endpoint, a terminal command, a desktop app.
 
-![An agent's Channels tab](../docs-site/public/screenshots/apps-list.png)
+![An agent's Channels tab](../docs-site/public/screenshots/agent-channels.png)
 
 ## Why this exists
 
-Every competitor terminates at a hosted widget, a messaging channel, or an API. All three keep the end user tethered to the vendor. A signed binary the customer hands to their own users does not: it carries their name, their identifier, their signature, and the operating system that asks who published it gets their answer, not ours.
+A hosted chat, a widget, a messaging channel and an API all keep the end user on almyty's side. A signed binary the customer hands to their own users carries their name, their identifier and their signature, and the operating system that asks who published it gets their answer.
 
-That is the part nobody else ships, so it is the part this subsystem is built around.
+That is why builds and signing are a first-class part of this subsystem.
 
 ## The two nouns
 
@@ -28,7 +28,7 @@ That is the part nobody else ships, so it is the part this subsystem is built ar
 
 The Channels tab is the only place a channel is added or edited: Create gateway makes only a tool gateway (MCP, UTCP or Skills), the server refuses a web chat, widget, messaging or A2A gateway no channel publishes, and the gateway page links back to its channel.
 
-The tab is a DataTable of the agent's channels by name, with **Add channel** (`/agents/:id/channels/new`, a ChoiceTiles picker; picking a desktop app on an agent with no web chat offers, inline, to add both) and **Branding and visitor rules** (`/agents/:id/channels/settings`). A row opens the channel's page at `/agents/:id/channels/:channelId`, a FormPage holding its keys, publish state and type-specific sections. Signing credential creation has its own page beneath it at `/signing/new`. Gateways that serve the agent without being a channel (ACP, OpenAI-compatible) are listed under **Also served by gateways**.
+The tab is a DataTable of the agent's channels by name, with **Add channel** (`/agents/:id/channels/new`, a ChoiceTiles picker; picking a desktop app on an agent with no web chat offers, inline, to add both) and **Branding and visitor rules** (`/agents/:id/channels/settings`). A row opens the channel's page at `/agents/:id/channels/:channelId`, a FormPage holding its keys, publish state and type-specific sections. Signing credential creation has its own page beneath it at `/signing/new`.
 
 Entities: `agent-channel.entity.ts`, `app-build.entity.ts` (`channelId`, `agentId`).
 
@@ -51,9 +51,9 @@ The gateway is created with the channel's effective rate limits. Publishing with
 
 Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing, because the second attempt is usually someone reapplying a settings change. A change to the agent's branding and visitor rules re-syncs every live channel's gateway.
 
-**Every channel gateway belongs to a channel.** The gateway types a channel stands up (`CHANNEL_GATEWAY_TYPES` in `gateways/channel-surface.ts`: the hosted chat, the chat widget, A2A and the thirteen messaging platforms) are made only by `upsertForChannel`, which passes `forChannel` to `createGateway`. `createGateway` refuses one of these types without it (`CHANNEL_GATEWAY_NEEDS_AGENT`), so `POST /gateways`, the platform's own MCP tools and the CLI cannot make one outside a channel; `channel-gateways-belong-to-an-agent.spec.ts` holds `forChannel` to that one caller. ACP and OpenAI-compatible gateways are not channels.
+**Every channel gateway belongs to a channel.** The gateway types a channel stands up (`CHANNEL_GATEWAY_TYPES` in `gateways/channel-surface.ts`: the hosted chat, the chat widget, A2A and the fifteen messaging platforms) are made only by `upsertForChannel`, which passes `forChannel` to `createGateway`. `createGateway` refuses one of these types without it (`CHANNEL_GATEWAY_NEEDS_AGENT`), so `POST /gateways`, the platform's own MCP tools and the CLI cannot make one outside a channel; `channel-gateways-belong-to-an-agent.spec.ts` holds `forChannel` to that one caller. The gateways that are not channels are the MCP, UTCP and Skills ones, which serve tools, not an agent.
 
-**The website widget** (`widget`, a `chat_widget` gateway) takes its look from the agent and channel on every request: `GET /gateways/:id/widget-config` overlays the effective colour, name, greeting, theme, AI disclosure (always shown) and almyty mark, and keeps only the widget's placement (`configuration.widget.position`, `launcherIcon`), which republishing keeps (with the allowed sites). It has no sign-in, so it is refused on a channel whose effective auth mode is not `public_link` (`WIDGET_HAS_NO_SIGN_IN`, in both `checkChannel` and `checkPublish`); its rate limits are per visitor, like the web chat.
+**The website widget** (`widget`, a `chat_widget` gateway) takes its look from the agent and channel on every request: `GET /gateways/:id/widget-config` overlays the effective colour, name, greeting, theme, AI disclosure (unless the channel's switch is off, `disclosureOff`) and almyty mark, and keeps only the widget's placement (`configuration.widget.position`, `launcherIcon`), which republishing keeps (with the allowed sites). It has no sign-in, so it is refused on a channel whose effective auth mode is not `public_link` (`WIDGET_HAS_NO_SIGN_IN`, in both `checkChannel` and `checkPublish`); its rate limits are per visitor, like the web chat.
 
 **A2A** (`a2a`) answers at `/{org}/channels/{channelId}` with its card at `.well-known/agent-card.json`, through the unified endpoint's channel lookup (`channelSurfaceSlug`). Callers sign in with the gateway's API keys, made on the channel's page. The card and JSON-RPC answer only for an active agent the gateway may serve (`findServableGatewayAgent`), and publishing refuses a workflow agent. Each caller credential has its own per-visitor share on the methods that start a task (`A2A_RUN_METHODS`).
 
@@ -61,23 +61,26 @@ Publishing refuses what would otherwise produce a channel that is live and usele
 
 Messaging channels take their keys from Credentials only: the channel page has the shared `CredentialPicker` (`components/credentials/credential-picker.tsx`), which lists that platform's credentials (`channel-<type>` connectors, and `channel-slack-app` for a Slack app's Add to Slack credentials) and creates one in place. The row keeps `credentialId` and `credentialKeys` (secret names only) and a copy of the credential's plain settings (`channelSettingsIn`: a phone number, a receiving address), which routing and the publish check read from the row; they are read again from the credential on every publish. A key sent in a channel's configuration (by the API or the `add_channel` MCP tool) is refused, and a write drops any key the row holds. Deleting a channel leaves its credential on Credentials.
 
+**Where the platform delivers.** A messaging channel page shows its callback URL (`<api>/<org>/channels/<id>`) and says whether publishing registers it or it is pasted by hand (`CHANNEL_INBOUND` in `frontend/src/lib/agent-channels.ts`). Publishing registers it where the platform documents an API for that (`ChannelWebhookRegistrar`): Telegram `setWebhook`, the Twilio number's messaging webhook for WhatsApp and SMS, and Sendblue's account webhooks for iMessage via Sendblue (a `receive` webhook carrying the channel's webhook secret, scoped to its line). Unpublishing and deleting remove it. What the last attempt did is kept on the gateway (`metadata.webhookRegistration`), returned with the channel as `webhookRegistration`, and shown next to the URL: registered, or the platform's own reason it refused, with what to do. Registration runs after publish answers, so the page reads the channel again every two seconds until it is recorded. Everywhere else, LoopMessage included (it documents no webhook API), the page says where to paste the URL.
+
+**iMessage** is reached through a relay, Sendblue or LoopMessage, picked when the channel is added. Both answer one-to-one and group chats: a group is one conversation keyed on the group, the member who wrote counts against their own visitor limit, and the reply goes to the group. In a group each message reaches the agent under its writer's short id, since the relays give a number and no name. Files someone sends, and files a reply links to, work as on every channel (below). A LoopMessage channel needs a sender name, entered on the channel page and required to publish (`SENDER_NAME_REQUIRED`); it is the channel's rather than the connection's because one LoopMessage key can carry several senders. Details and doc sources: `docs/interface-adapters-audit.md`.
 Each channel has a `name`, unique among the agent's channels, so an agent can have several of one kind. A web chat's `slug` (its address) is generated from the agent's name and can be changed; it is a subdomain, so it is free across every organization and every hosted chat gateway (`freeSlug`).
 
 **AI disclosure.** Every channel people talk to (`carriesDisclosure`: web, widget, messaging) has a switch, `configuration.aiDisclosure`, on unless false. A messaging channel's gateway gets the effective branding line (or `true` for the default) as `aiDisclosure`, which `applyAiDisclosure` prefixes to the first reply; the web chat and widget read the switch live through `ownerOf`. Off is a removal of the disclosure: saving it needs the white-label entitlement (`DISCLOSURE_REMOVAL_NOT_ENTITLED`), refused on save as well as at publish because the web surfaces read it live.
 
-![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
+![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/channel-slack-live.png)
 
 For the hosted chat, publish writes the `hostedChat` block it is looked up by: its address (the channel slug) and a mirror of the sign-in rule. Branding is not copied onto the gateway: `findBySlug` and `findByCustomDomain` overlay the effective look, sign-in rule and visitor rights on every request (`ChannelLinkService.withChannelSettings`, `ownerOf`, `hostedChatBlockFor`), so a change shows without republishing.
 
-![The web chat channel after a successful publish](../docs-site/public/screenshots/apps-web-published.png)
+![The web chat channel after a successful publish](../docs-site/public/screenshots/channel-web-published.png)
 
 The web chat channel page carries the sign-in provider (presets first; a discovery URL only for Other; endpoints, keys and scopes under Advanced), the custom domain and the allowed sites, keyed by the channel's `gatewayId`.
 
 A gateway a channel stood up is found from `agent_channels.gatewayId` (`GET /gateways/:id/channel`). Its page says which agent's channel it is, with a link back, and drops the settings the channel owns.
 
-![The branded hosted chat surface](../docs-site/public/screenshots/apps-hosted-chat.png)
+![The branded hosted chat surface](../docs-site/public/screenshots/hosted-chat.png)
 
-Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever keys were attached, so taking a channel down for an afternoon does not mean re-registering a Slack app afterwards. Deleting a channel deletes its gateway.
+Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever keys were attached, so taking a channel down for an afternoon does not mean re-registering a Slack app afterwards. Deleting a channel deletes its gateway: the platform webhook is taken down first, while the keys it needs can still be read, then the credential the gateway managed is released and the row deleted (`GatewaysService.tearDown`). Deleting an agent deletes every channel of it the same way, and any other agent gateway bound to it, before the agent row goes (`AgentChannelsService.removeAllOf`, called from `AgentsService.deleteAgent`); the web chat's address is free again at once. The stored files of its downloads go with it. `gateways.agentId` cascades on delete for any path that removes an agent without the service, and a gateway found with no agent anyway answers 404 "This chat no longer exists" (`Gateway.agentGone`).
 
 ## What stops a channel from shipping
 
@@ -101,13 +104,66 @@ The first two are satisfied from the effective `limits`: a cost ceiling per run 
 
 Those inputs live under Advanced on **Branding and visitor rules**, below the look, with their current values summed up in one line. A channel page can switch on its own branding and visitor rules; only the fields that differ from the agent's are stored.
 
-![Branding and visitor rules with cost ceiling, spend limits and per-user / per-IP rate limits](../docs-site/public/screenshots/apps-settings.png)
+![Branding and visitor rules with cost ceiling, spend limits and per-user / per-IP rate limits](../docs-site/public/screenshots/channel-branding-rules.png)
 
 A limit left empty is stored as null, not as zero. Zero would read as "no requests allowed" rather than "unset", and the rules treat both as unprotected, but only one of them is what the operator meant.
 
 **Every channel runs under its policy.** `ChannelPolicyService` (gateways module) is the one place a web chat, widget, messaging channel or A2A call asks before a run: it resolves the channel and its agent from the gateway and hands the run options every channel starts with (`withChannelPolicy`): the effective per-run `costCapCents` as `maxCostCents`, `channelId` on the run, the channel's `gatewayId` on a new conversation (what retention and widget erasure find it by), and `metadata.appVisitor` with the effective `visitorMemory`, so a visitor with no end-user row (widget, channel, A2A) stays out of shared memory unless the agent opted in. Per-visitor shares are the web chat visitor, the widget thread, the channel sender and the A2A credential (`a2aCallerId`); `channel-policy.guard.spec.ts` reads the source so a new `startRun` on a channel cannot skip it.
 
 **Spend cap.** `dailySpendCapCents` and `monthlySpendCapCents` on the agent bound all of its channels together: a missing field is the default for the auth mode (open: 500 and 5000, SSO: none, `spendCapsFrom`), null is none. A channel that sets either in its own visitor rules gets an allowance of its own (`ownSpend`) and is left out of the agent's pool. The policy sums `agent_runs.totalCost` over the UTC day and month (by `updatedAt`, so a thread open across midnight is counted; index `IDX_agent_runs_channelId_updatedAt`), counting the runs stamped with a `channelId`. Reached, the web chat, widget and A2A answer 429 with the code `CHANNEL_SPEND_CAP_REACHED` and "This chat has reached its limit for today." (or "for this month."), a messaging channel sends that sentence as its reply without a run, owners and admins get one `budget.alert` notification per period, and `GET /agents/:agentId/public-settings/spend` drives the notice on the Channels tab.
+
+**Visitor data.** `VisitorDataService` (gateways module) is the one scope for a person's data on an agent's channels: the web chat's *Download my data*, *Delete this conversation* and *Delete everything about me*, the widget's *Download my chat* and *Delete my chat*, and the owner's data requests (`POST /agents/:agentId/visitor-data/lookup|export|erase`, anyone who may manage the agent (an organization owner or admin, or the member who owns it), the page at `/agents/:id/channels/visitor-data` linked from the Channels tab) all find the person their own way (visitor row, widget thread, `metadata.channelUserId`, `metadata.a2aCaller` stamped by `withA2ACaller`) and read, export and erase the same footprint: runs and their child runs with tool executions, conversations and messages, files (in the conversations, made by the runs, unsent uploads; stored object first), native memories (the visitor's own scope and any written by the runs, by `provenance.session_id`), outside memories (by `memory_expiries.scope_id` or `run_id`, deleted through `MemoryAccountsService.forget`, left to the hourly sweep when the service does not answer), channel events (including inbound deliveries that never became a run, found by `channel_events.senderId`, their words kept as `channel_events.message`, the normalized text and file names only) and visitor rows. A download reads outside memories back from their service (`MemoryAccountsService.read`), listing one it cannot read with a note. Every erasure writes `visitor_data_erase` (and every owner export `visitor_data_export`) on resource `agent` with counts and `sha256(org:identifier)` only, the erasure's row in its own transaction. `visitor-data.guard.spec.ts` keeps the self-service and owner paths on the service; `visitor-data.integration.spec.ts` drives every channel against Postgres. User guide: `docs-site/content/channels/visitor-data.mdx`.
+
+## Files, pictures, and who said what
+
+**Files people send.** Every channel that delivers files hands them to the agent. The adapter records what its platform delivers (`InboundAttachment` in `adapters/base.adapter.ts`: a link, a platform handle, or the bytes themselves) and reads it the platform's way (`fetchAttachment`), through the egress guard (`safeFetch`: https, the address pinned at connect, each redirect re-checked with any `Authorization` header dropped when it leaves the origin), and with a credential only when the link is on the platform's own host.
+
+| Channel | What arrives | How it is read |
+|---|---|---|
+| Slack | Files shared in the message | `url_private_download` with the bot token, `files.slack.com` only (scope `files:read`) |
+| Telegram | A photo (its largest size) or a document; the caption is the text | `getFile`, then the bot's file URL |
+| Discord | Message attachments | Their CDN link (`cdn.discordapp.com`, `media.discordapp.net`), no token |
+| WhatsApp (Cloud API) | Image and document messages; the caption is the text | The media node with the access token, then its URL on `lookaside.fbsbx.com` with the token |
+| WhatsApp, SMS (Twilio) | Media on the message (`NumMedia`, `MediaUrl{i}`) | The media URL on `api.twilio.com` with the account's credentials |
+| Microsoft Teams | A pasted image; a file shared in a personal chat | The image from the Bot Framework's attachment service with the bot's token; the file by its pre-authorized SharePoint link, with nothing |
+| Matrix | Unencrypted `m.image`, `m.file`, `m.audio`, `m.video` | The homeserver's authenticated media endpoint with the access token |
+| Signal | Attachments | The bridge's `/v1/attachments/<id>` |
+| Email | MIME attachments, the first five of up to 10 MB each | Their bytes, from the message itself |
+| Webhook | `attachments: [{ url, type?, name? }]` in the payload | The https link, no credentials |
+| iMessage | The relay's media links | The https link, no credentials |
+| Web chat, widget | Uploads, below | Stored when uploaded |
+| Google Chat | Attachments are named, not read | Chat serves their bytes only through its media API, with a service account or a user's authorization; the channel holds a webhook and a token |
+| IRC | No files | |
+
+A message is read for five files, each up to 10 MB and 20 seconds (`ChannelAttachmentReader`); the rest are named as not read. The bytes decide what a file is (`sniffMediaType`: the PNG, JPEG, GIF, WebP and PDF signatures): a claim of image or PDF the bytes do not bear out is not believed, and a web page served in place of a file is not taken for it. Images, PDFs and text files are stored in the files module (`FilesService.storeBytes`), filed under the conversation that reads them (`files.conversationId`) once the run has one, and the user message carries a reference to each (`{ type: 'file', fileId, mimeType, name, text }`, message `contentParts`), with a line naming it in the message text: `[Attachment: box.png (image/png, 2 KB)]`, which is what a transcript shows. Anything else (video, audio, an archive, HEIC) is named and not stored. A file stored for a run that is then refused is removed straight away.
+
+**What the model gets.** When a model is called, `MessageAttachmentResolver` (`llm-providers/message-attachments.resolver.ts`) turns each reference into what that model can read. It runs at dispatch, once the provider and model are known, so it holds for the workflow engine and the autonomous runtime, for an explicit provider and for each routed candidate. The model's catalog card decides: `capabilities.vision` sends an image as image content (OpenAI `image_url` with a data URL, Anthropic an `image` block, Gemini `inline_data`), `capabilities.pdfInput` sends a PDF as a document (OpenAI `file`, Anthropic `document`, Gemini `inline_data`). Otherwise the model reads a text file's text, or a sentence saying what was sent and that it cannot open it. A model with no card is text-only, and so are Perplexity and a custom endpoint in its own format. The file is read from storage within the call's organization and checked against its bytes again; an image is sent up to 5 MB, a PDF up to 10 MB, and one request carries at most 20 MB, the rest as text. The bytes exist only in the outgoing request. The price feed fills `vision` and `pdfInput` on the cards (see `docs/models.md`, pricing).
+
+A workflow run can carry files too: `input.attachments` (ids of files uploaded to `/files`, or `{ fileId, name, mimeType }`) go, after the text, to every `llm_call` whose prompt reads `{{input...}}`.
+
+**Web chat and widget uploads.** `POST /public/chat/:slug/attachments` and `POST /gateways/:id/widget/attachments` (multipart `file`; the widget also sends `threadId`) store one file under its visitor: the web chat end user, or the widget thread. They count against the same surface and visitor limits as a message and take only images, PDFs (both by their bytes) and text files (`text/plain`, `text/csv`, `text/markdown`, `application/json`), up to 10 MB. A message names its files in `attachmentIds`, at most five; an id that is not that visitor's unsent upload on that surface is refused before anything is created. The widget makes up its thread id before its first message when a file is attached first. The web chat shows picked files above the message box and the widget above its input; each can be taken back before sending.
+
+**Retention and erasure.** Conversation retention, the organization's and a channel's, removes a conversation's files, stored objects included, before the conversation (`FilesService.removeForConversations`). Deleting a web chat conversation, erasing a web chat visitor and erasing a widget thread do the same, and remove the visitor's uploads not sent yet. An attachment that never reached a conversation is removed a day after it was stored (`RetentionSweepService.sweepUnsentAttachments`). See `docs/retention.md`.
+
+**Who wrote it.** In a conversation with several people, each message reaches the agent as "Name: text" (`channel-speaker.ts`): Slack channels and group DMs, Teams group chats and channels, Discord server channels, Telegram groups, Google Chat spaces, Signal groups, IRC channels, iMessage groups, and Matrix rooms (every room, since an event does not say whether a room is a direct chat). The name is the platform's display name when the delivery carries one (Slack asks `users.info` with the bot token when the event does not, scope `users:read`, cached for an hour; Matrix uses the user id's localpart). Otherwise, and whenever the name is an email address or has enough digits to be a phone number, it is `user-` and six hex characters derived from the sender's platform id: the same person reads the same in every message, and a contact detail never enters the transcript. One-to-one conversations are unchanged.
+
+**Images and files in a reply.** What a reply links to goes out as media where the platform can send it (`reply-media.ts`): a markdown image, a markdown link to a file, a bare https URL ending in a file's extension, and any `attachments` the run returns. The platform fetches the file from the link; nothing is downloaded here except for Signal. The text then goes without those links, plus a line with the link of each file the platform could not send as media.
+
+| Channel | Sent as media | Stays a link |
+|---|---|---|
+| Slack | Images, as image blocks | Other files |
+| Telegram | Images (`sendPhoto`); GIF and PDF (`sendDocument`) | Other files |
+| Discord | Images, as embeds | Other files |
+| WhatsApp (Cloud API) | JPEG, PNG and PDF, each a message of its own | Other files |
+| WhatsApp (Twilio) | JPEG, PNG and PDF (`MediaUrl`), one per message | Other files |
+| Microsoft Teams | Images, as attachments | Other files (they need the file-consent flow) |
+| Google Chat | Images, in a card | Other files |
+| Signal | Images and PDFs, read through the egress guard (5 MB each) and attached | A file that could not be read |
+| Email | Every file, attached by link (Resend fetches it) | |
+| iMessage | Every file, as the relay's media | |
+| SMS, Matrix, IRC | | Everything: MMS depends on the number, Matrix needs an upload to the homeserver, IRC has no files |
+| Web chat, widget | | Everything: an image the agent names is shown as a link, so the visitor's browser does not fetch an address the agent chose the moment it paints |
+| Webhook | | The text as written; the files also go in `attachments` |
 
 ## Custom domains
 
@@ -144,6 +200,8 @@ Without one, every customer's app wears the Electron logo, which undoes most of 
 That URL is customer input and the fetch runs from the build host's own network, so it goes through the same SSRF-safe agents the rest of the product uses: a link to `169.254.169.254` or to something on the internal network is refused at connect time. The bytes are checked for a PNG signature rather than trusted on the URL's extension or the server's content-type, and capped, because this file is handed to an image toolchain.
 
 None of it ever fails a build. A default icon is worse than a branded one and far better than no artifact, so every path returns a sentence saying which happened.
+
+An icon uploaded on the branding page (`purpose=app_icon`) is stored before the page is saved. One that no agent's or channel's branding names a day later is cleared by an hourly repeatable job on its own `channel-housekeeping` queue, registered on every process whatever `APP_BUILD_MODE` says, so a deployment with builds off still cleans up. Override the cadence with `UNSAVED_ICON_SWEEP_CRON`.
 
 ### The desktop shell
 
@@ -212,7 +270,7 @@ Desktop builds download the pinned Electron release, so the host needs outbound 
 
 `GET /agents/:agentId/channels/:channelId/capabilities` answers both before anyone presses Build, and the panel disables the button when the host cannot compile and warns separately when it can compile but not sign. Those are different problems with different fixes, so they are said separately.
 
-![A Terminal app channel that can build now that bun is on the host](../docs-site/public/screenshots/apps-build-capabilities.png)
+![A Terminal app channel that can build now that bun is on the host](../docs-site/public/screenshots/channel-terminal-build.png)
 
 The API image should remain lean. The recommended production layout is a dedicated build worker image, with an eventual option to isolate each build in an ephemeral Kubernetes Job. The trade-offs, security boundary, and rollout are in [Builder image topology](./builder-image-topology.md).
 

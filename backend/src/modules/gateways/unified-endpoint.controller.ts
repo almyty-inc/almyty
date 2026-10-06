@@ -12,7 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Not, IsNull, type FindOptionsWhere } from 'typeorm';
+import { Repository, Not, IsNull, type FindOptionsWhere } from 'typeorm';
 import { Response, Request } from 'express';
 import * as crypto from 'crypto';
 import { Organization } from '../../entities/organization.entity';
@@ -27,6 +27,28 @@ import { UnifiedAgentHelper } from './unified-agent.helper';
 import { UnifiedGatewayDelegation } from './unified-gateway-delegation.helper';
 import { isPrivateGateway } from './private-gateway';
 import { findServableGatewayAgent } from './gateway-servable';
+
+/**
+ * The per-client rate limit on every unified-endpoint route (gateway
+ * traffic: MCP, UTCP, A2A, channel webhooks), on top of each gateway's own
+ * limits. Read per request, so it is configuration rather than a constant:
+ *
+ *   UNIFIED_ENDPOINT_RATE_LIMIT        requests per window (default 60)
+ *   UNIFIED_ENDPOINT_RATE_TTL_SECONDS  the window (default 60)
+ *
+ * An MCP client opens a few requests per tool call, and a conformance run
+ * makes hundreds a minute from one address.
+ */
+function positiveIntFromEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+const UNIFIED_ENDPOINT_THROTTLE = {
+  default: {
+    limit: () => positiveIntFromEnv('UNIFIED_ENDPOINT_RATE_LIMIT', 60),
+    ttl: () => positiveIntFromEnv('UNIFIED_ENDPOINT_RATE_TTL_SECONDS', 60) * 1000,
+  },
+};
 
 /**
  * Unified endpoint controller that provides GitHub-style URLs:
@@ -69,7 +91,7 @@ export class UnifiedEndpointController {
    * a multi-tenant platform.
    */
   @All('.well-known/agent-card.json')
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @Throttle(UNIFIED_ENDPOINT_THROTTLE)
   async handleRootAgentCard(
     @Req() req: Request,
     @Res() res: Response,
@@ -101,7 +123,7 @@ export class UnifiedEndpointController {
             where: {
               id: defaultGatewayId,
               status: GatewayStatus.ACTIVE,
-              type: In([GatewayType.A2A, GatewayType.ACP, GatewayType.OPENAI_CHAT]),
+              type: GatewayType.A2A,
               agentId: Not(IsNull()),
               // A card served to anyone is never a private gateway's.
               visibility: Not('private'),
@@ -202,7 +224,7 @@ export class UnifiedEndpointController {
    * API key in the request determines which gateway to route to.
    */
   @All('/')
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @Throttle(UNIFIED_ENDPOINT_THROTTLE)
   async handleRootJsonRpc(
     @Req() req: Request,
     @Res() res: Response,
@@ -293,7 +315,7 @@ export class UnifiedEndpointController {
   // Its three siblings here all carry this; this one did not, so the same
   // gateway traffic was rate-limited or not depending on whether the path had
   // a trailing segment.
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @Throttle(UNIFIED_ENDPOINT_THROTTLE)
   async handleRequest(
     @Param('orgSlug') orgSlug: string,
     @Param('resourceSlug') resourceSlug: string,
@@ -345,7 +367,7 @@ export class UnifiedEndpointController {
    * Needed for A2A discovery, UTCP manual, etc.
    */
   @All(':orgSlug/:resourceSlug/*')
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @Throttle(UNIFIED_ENDPOINT_THROTTLE)
   async handleSubPathRequest(
     @Param('orgSlug') orgSlug: string,
     @Param('resourceSlug') resourceSlug: string,

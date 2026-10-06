@@ -67,9 +67,6 @@ export function AgentDetailPage() {
 
   // Webhook state (lifted so overview tab can use it, synced from agent data)
   const [webhookUrl, setWebhookUrl] = useState('')
-  const [scheduleEnabled, setScheduleEnabled] = useState(false)
-  const [scheduleInterval, setScheduleInterval] = useState(60)
-  const [scheduleInput, setScheduleInput] = useState('{}')
 
   // Fetch agent
   const { data: agentData, isLoading, isError, error: agentError, refetch: refetchAgent } = useQuery({
@@ -147,16 +144,16 @@ export function AgentDetailPage() {
 
   const auditLog: AgentAuditEntry[] = Array.isArray(auditLogData) ? auditLogData : []
 
-  // Fetch runs (autonomous mode)
-  const { data: runsData } = useQuery({
+  // Fetch runs (autonomous mode). An autonomous agent's runs are its
+  // Recent runs on Overview too, so they are read there as well.
+  const { data: runsData, error: runsError, refetch: refetchRuns } = useQuery({
     queryKey: ['agent-runs', id],
     queryFn: async () => {
       const d = await agentsApi.listRuns(id!)
       return Array.isArray(d) ? d : d?.data || []
     },
-    enabled: !!id && activeTab === 'runs',
+    enabled: !!id && (activeTab === 'runs' || (activeTab === 'overview' && agent?.mode === 'autonomous')),
   })
-
   const runs: AgentRun[] = Array.isArray(runsData) ? runsData : []
 
   // Fetch memories: the memory this agent's runs read and write, per its
@@ -190,17 +187,9 @@ export function AgentDetailPage() {
 
   const files: AgentFile[] = Array.isArray(filesData) ? filesData : []
 
-  // Sync webhook/schedule state from agent data
+  // Sync webhook state from agent data (the schedule has its own page)
   React.useEffect(() => {
-    if (agent) {
-      setWebhookUrl(agent.webhookUrl || '')
-      const schedule = agent.settings?.schedule
-      if (schedule) {
-        setScheduleEnabled(!!schedule.enabled)
-        setScheduleInterval(schedule.intervalMinutes || 60)
-        setScheduleInput(JSON.stringify(schedule.input || {}, null, 2))
-      }
-    }
+    if (agent) setWebhookUrl(agent.webhookUrl || '')
   }, [agent])
 
   // Build React Flow nodes/edges from pipeline (read-only)
@@ -411,19 +400,14 @@ export function AgentDetailPage() {
           <OverviewTab
             agent={agent}
             executions={executions}
-            executionsError={executionsError as Error | null}
-            onRetryExecutions={() => refetchExecutions()}
+            executionsError={(executionsError ?? (agent.mode === 'autonomous' ? runsError : null)) as Error | null}
+            onRetryExecutions={() => { refetchExecutions(); if (agent.mode === 'autonomous') refetchRuns() }}
+            runs={agent.mode === 'autonomous' ? runs : []}
             versions={versions}
             entityVersions={entityVersions}
             auditLog={auditLog}
             webhookUrl={webhookUrl}
             setWebhookUrl={setWebhookUrl}
-            scheduleEnabled={scheduleEnabled}
-            setScheduleEnabled={setScheduleEnabled}
-            scheduleInterval={scheduleInterval}
-            setScheduleInterval={setScheduleInterval}
-            scheduleInput={scheduleInput}
-            setScheduleInput={setScheduleInput}
           />
           {/* The keys that call this agent's API sit by that API. A channel's
               own keys (an A2A channel's callers) are on the channel. */}
@@ -445,7 +429,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="channels" className="space-y-4">
-          <ChannelsTab agentId={id!} agentName={agent?.name} />
+          <ChannelsTab agentId={id!} agentName={agent?.name} agentOwnerId={agent?.createdBy} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">

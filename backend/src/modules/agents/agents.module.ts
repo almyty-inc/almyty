@@ -17,6 +17,7 @@ import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { AgentFile } from '../../entities/file.entity';
+import { Workspace } from '../../entities/workspace.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -65,6 +66,8 @@ import { OrchestratorService } from './strategies/orchestrator.service';
 import { Strategy } from '../../entities/strategy.entity';
 import { AgentConstraintsModule } from '../agent-constraints/agent-constraints.module';
 import { ToolsModule } from '../tools/tools.module';
+import { ToolDiscoveryModule } from '../tool-discovery/tool-discovery.module';
+import { CodeModeModule } from '../code-mode/code-mode.module';
 import { MemoryModule } from '../memory/memory.module';
 import { A2AModule } from '../a2a/a2a.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
@@ -90,6 +93,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
       Message,
       ApprovalRequest,
       AgentFile,
+      Workspace,
     ]),
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),
@@ -101,6 +105,11 @@ import { BudgetsModule } from '../budgets/budgets.module';
     // that looked like a missing license rather than a missing import.
     forwardRef(() => ModelCatalogModule),
     forwardRef(() => ToolsModule),
+    // ToolDiscoveryService answers search_tools and get_tool for agents in
+    // discover mode (agent-tool-mode.ts); without it they rank by keywords only.
+    forwardRef(() => ToolDiscoveryModule),
+    // run_code for agents in the code tool mode, and the traces the run view reads.
+    forwardRef(() => CodeModeModule),
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
     forwardRef(() => ApprovalsModule),

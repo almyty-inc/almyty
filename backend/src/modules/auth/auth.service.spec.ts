@@ -1173,7 +1173,7 @@ describe('AuthService', () => {
 
       expect(result).toHaveLength(2);
       expect(apiKeyRepository.find).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
+        where: expect.objectContaining({ userId: 'user-1', isActive: true }),
         order: { createdAt: 'DESC' },
       });
     });

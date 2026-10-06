@@ -148,6 +148,13 @@ export class MemoryRouter implements OnModuleInit {
     return b.delete(nativeId, 'hard', creds ?? (await this.credsResolver.resolve(credentialScope, b.id)) ?? undefined);
   }
 
+  /** Read one memory by the id the backend knows it by (MemoryBackend.nativeId). */
+  async getOn(backendId: string, nativeId: string, credentialScope: ScopeRef, creds?: BackendCredentials): Promise<MemoryItem | null> {
+    const b = this.backends.get(backendId);
+    if (!b) throw new Error(`unknown memory backend: ${backendId}`);
+    return b.get(nativeId, creds ?? (await this.credsResolver.resolve(credentialScope, b.id)) ?? undefined);
+  }
+
   private explicit(backendId: string, mode: Mode): MemoryBackend {
     const b = this.backends.get(backendId);
     if (!b) throw new Error(`unknown memory backend: ${backendId}`);
@@ -375,7 +382,7 @@ export class MemoryRouter implements OnModuleInit {
  * Surfaces those counts so operators can decide whether the cost
  * of a one-way migration is acceptable.
  */
-function computeTransferWarnings(
+export function computeTransferWarnings(
   source: MemoryBackend,
   target: MemoryBackend,
   items: MemoryItem[],

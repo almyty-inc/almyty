@@ -71,6 +71,11 @@ export const CHANNEL_SECRET_CONFIG_KEYS: readonly string[] = [
   'secret',
   // Google Chat bot verification token
   'verification_token',
+  // iMessage relays: Sendblue's secret key and webhook secret (the latter
+  // is signing_secret, above), LoopMessage's API key and webhook
+  // Authorization value (inbound_token, above)
+  'api_secret_key',
+  'api_key',
 ];
 
 /**

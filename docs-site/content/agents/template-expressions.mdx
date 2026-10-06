@@ -1,13 +1,8 @@
-# Template Expressions
+# Template expressions
 
-Wire data between pipeline nodes without writing glue code. A template
-expression pulls a value out of the invocation input, another node's output, or
-an agent variable, using `{{...}}` syntax, resolved at run time just before each
-node executes.
+A template expression passes information from one step of a workflow to the next. You write it in double curly braces inside a step's settings, and almyty fills in the value just before the step runs. For example, a prompt that reads `Write a reply about order {{input.orderId}}` goes to the model as "Write a reply about order NW-10428".
 
-It is a lookup language, not a scripting language: a dot path and nothing else.
-No function calls, no arithmetic, no array indexing, and no comparisons inside
-the braces.
+An expression can read what the run started with, what an earlier step produced, or an agent variable. It is a lookup, not a programming language: a dotted path and nothing else. No function calls, no arithmetic, no array indexing, and no comparisons inside the braces.
 
 ![Template expressions in node config](/screenshots/agent-builder.png)
 
@@ -20,7 +15,7 @@ the braces.
 The first segment identifies the data source. Subsequent segments navigate into
 the data structure using dot notation.
 
-## Data Sources
+## Data sources
 
 | Source | Syntax | Description |
 |--------|--------|-------------|
@@ -33,14 +28,14 @@ does not re-run the nodes after it per item, so `{{loop.item}}` and
 `{{loop.index}}` name nothing and resolve to an empty string. See
 [Loop](/agents/node-types#loop).
 
-### Input Data
+### Input data
 
 ```
 {{input.message}}          // Top-level property
 {{input.user.name}}        // Nested property
 ```
 
-### Node Outputs
+### Node outputs
 
 ```
 {{nodes.llm_1.output}}          // Full output of node llm_1
@@ -48,12 +43,12 @@ does not re-run the nodes after it per item, so `{{loop.item}}` and
 {{nodes.transform_1.output}}    // A transform node's rendered string
 ```
 
-### What a Path May Contain
+### What a path may contain
 
 Each segment is letters, digits, underscores and hyphens, and segments are
 separated by dots. Anything else is rejected and the node throws
 `Template expression contains invalid characters`. That rules out array
-indexing — `{{input.items[0].title}}` is an error, not an empty value — along
+indexing (`{{input.items[0].title}}` is an error, not an empty value), along
 with calls such as `{{Date.now()}}` and comparisons written inside the braces.
 
 A segment that is exactly `__proto__`, `constructor`, `prototype`, `process`,
@@ -65,21 +60,21 @@ Only own properties are read, so nothing reached through a prototype resolves.
 An expression may be at most 500 characters, and a whole template at most
 10,000.
 
-## In the UI
+## In the builder
 
 Template expressions are used in node configuration fields throughout the
 builder:
 
 1. Click a node on the canvas to open its config panel
-2. Type the expression into any field that takes one — prompts, mappings, parameters
-3. An LLM Call node lists the expressions it found in your prompts, so you can check them at a glance
+2. Type the expression into any field that takes one: prompts, mappings, parameters
+3. A Model call node lists the expressions it found in your prompts, so you can check them at a glance
 4. Use the **Test** panel in the builder's top bar to run the pipeline and see what each one resolved to
 
 ## Examples
 
-### Simple String Interpolation
+### Simple string interpolation
 
-In an LLM Call node's user prompt template:
+In a Model call node's user prompt template:
 
 ```
 You asked: {{input.message}}
@@ -87,14 +82,14 @@ You asked: {{input.message}}
 
 Resolves to: `You asked: What is the weather?`
 
-### Composing Multi-Node Data
+### Composing data from several steps
 
 ```
 Based on the search results ({{nodes.tool_1.output.count}} found),
 here is a summary: {{nodes.llm_1.output}}
 ```
 
-### Composing a Value in a Transform Node
+### Composing a value in a Transform step
 
 A Transform node renders its template and outputs the result:
 
@@ -107,9 +102,9 @@ string rather than an object, so a downstream
 `{{nodes.transform_1.output.count}}` resolves to an empty string instead of a
 number.
 
-## Type Handling
+## Type handling
 
-Inside a template string every resolved value is rendered to text — numbers and
+Inside a template string every resolved value is rendered to text: numbers and
 booleans with `String()`, objects and arrays with `JSON.stringify`. A value of
 `null` or `undefined` renders as an empty string, which is also what a path
 that does not exist produces.
@@ -121,15 +116,15 @@ Two fields read a raw value instead and keep its type:
 | Output node | `source`, a bare dot path with no braces |
 | Loop node | `iterableExpression`, when it is a single `{{...}}` reference and nothing else |
 
-Everywhere else — prompts, transform templates, tool parameters, sub-agent
-input mappings, an output node's `mapping` — the result is a string.
+Everywhere else (prompts, transform templates, tool parameters, sub-agent
+input mappings, an output node's `mapping`) the result is a string.
 
-## Error Handling
+## Error handling
 
 | Scenario | Behavior |
 |----------|----------|
 | Path does not exist | Resolves to an empty string. A warning is logged; the run does not fail |
-| Node id is misspelled | The same — an empty string, silently, in the prompt or parameter |
+| Node id is misspelled | The same: an empty string, silently, in the prompt or parameter |
 | Path contains invalid characters or a blocked segment | The node throws and the run fails there |
 | Upstream node failed | Every node downstream of it is skipped, so the expression is never resolved |
 
@@ -138,10 +133,10 @@ prompt with a mistyped path is sent with a hole in it and the model answers
 anyway. Run the pipeline from the **Test** panel and read what each expression
 resolved to before activating the agent.
 
-## Best Practices
+## Good practice
 
 1. **Keep expressions to a path**: there is nothing else available, so shape the
-   data in the node that produces it — ask an LLM Call node for JSON, or pick a
+   data in the node that produces it: ask a Model call node for JSON, or pick a
    tool that returns the field you want
 2. **Validate your schema**: define an Input node schema to catch bad data early
 3. **Use meaningful node IDs**: `search_api` reads better than `tool_1` in an

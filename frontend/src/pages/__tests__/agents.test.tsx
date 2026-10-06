@@ -353,6 +353,29 @@ describe('AgentsPage', () => {
 
       expect(mockNavigate).toHaveBeenCalledWith('/agents/agent-1')
     })
+
+    // Deleting an agent deletes its channels too, so the confirmation says so.
+    it('says the agent\'s channels go with it before deleting', async () => {
+      const user = userEvent.setup()
+      vi.mocked(agentsApi.delete).mockResolvedValue(undefined as any)
+      renderAgentsPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('Chat Agent')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getAllByRole('button', { name: 'Open actions menu' })[0])
+      await user.click(await screen.findByRole('menuitem', { name: /Delete/ }))
+
+      const dialog = await screen.findByRole('alertdialog')
+      expect(dialog).toHaveTextContent('Delete agent?')
+      expect(dialog).toHaveTextContent('its run history and its channels')
+      expect(dialog).toHaveTextContent('Its web chat, widget and messaging channels stop answering')
+      expect(agentsApi.delete).not.toHaveBeenCalled()
+
+      await user.click(screen.getByRole('button', { name: 'Delete agent' }))
+      await waitFor(() => expect(agentsApi.delete).toHaveBeenCalledWith('agent-1'))
+    })
   })
 
   describe('Templates Section', () => {

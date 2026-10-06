@@ -1,9 +1,11 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThan, Repository } from 'typeorm';
 
 import { Agent } from '../../../entities/agent.entity';
 import { CredentialRefResolver, ResolveOptions, SystemActor } from '../../credentials/credential-ref.resolver';
+import { ConnectionsService } from '../../connections/connections.service';
 import { CanonicalMemoryService } from './canonical-memory.service';
 import { CanonicalMemoryWorkspaceConfig } from './canonical-memory-config.entity';
 import { CanonicalMemory } from './canonical-memory.entity';
@@ -13,6 +15,7 @@ import { PutInput } from './dto/canonical-memory.dto';
 import { MemoryItem, RankedItem, ScopeRef, SearchQuery } from './canonical.types';
 import { BackendCredentials } from './backends/memory-backend.interface';
 import { pickKnownFields } from './backend-credentials.resolver';
+import { plainServiceError } from './plain-service-error';
 
 /** almyty's own store: always there, needs no account. */
 export const NATIVE_MEMORY_ACCOUNT = 'almyty-native';
@@ -89,6 +92,9 @@ export class MemoryAccountsService {
     // An agent's own memory account is a connection of its own, read
     // through the one seam every consumer uses.
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
+    // The Memory page's account list reads the caller's memory connections
+    // through the Connections service (visibility, health), found at run time.
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   /** almyty's own store, then every outside service the organization has an account for. */
@@ -122,7 +128,7 @@ export class MemoryAccountsService {
     accountId: string,
     input: PutInput,
     actor: { user_id?: string },
-    opts: { agentId?: string | null; expiresInSeconds?: number | null } & AgentAccountUse = {},
+    opts: { agentId?: string | null; runId?: string | null; expiresInSeconds?: number | null } & AgentAccountUse = {},
   ): Promise<MemoryItem> {
     const ttl = opts.expiresInSeconds ?? null;
     if (!accountId || accountId === NATIVE_MEMORY_ACCOUNT) {
@@ -147,6 +153,7 @@ export class MemoryAccountsService {
           nativeId,
           memoryId: item.id,
           credentialId: opts.credentialId ?? null,
+          runId: opts.runId ?? null,
           expiresAt: ttl ? new Date(Date.now() + ttl * 1000) : null,
         }),
       );
@@ -252,6 +259,209 @@ export class MemoryAccountsService {
     if (done.length) await this.expiryRepo.delete({ id: In(done) });
     return { deleted, failed };
   }
+
+  /**
+   * The text of these outside memories, read back from their service, for
+   * a visitor's download (VisitorDataService). `ids` are memory_expiries
+   * rows of this organization; any other id is ignored. Each read goes
+   * through the service's own client, so the organization's egress rules
+   * apply, and is given `timeoutMs`. A memory the service cannot give back
+   * (down, refused, slow, or no way to read one memory) maps to null.
+   */
+  async read(organizationId: string, ids: string[], timeoutMs = 5_000): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    if (!ids.length) return out;
+    const rows = await this.expiryRepo.find({ where: { id: In(ids), organizationId } });
+    for (const row of rows) {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        const creds = row.credentialId ? await this.agentCredentials(row) : undefined;
+        const item = await Promise.race([
+          this.router.getOn(row.backendId, row.nativeId, orgScope(row.organizationId), creds),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), timeoutMs);
+          }),
+        ]);
+        out.set(row.id, typeof item?.content === 'string' ? item.content : null);
+      } catch (e: any) {
+        out.set(row.id, null);
+        this.logger.warn(`could not read memory ${row.memoryId} from ${row.backendId}: ${e?.message ?? e}`);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Delete these outside memories now, through their service's API: a
+   * visitor's erasure (VisitorDataService). `ids` are memory_expiries rows
+   * of this organization; any other id is ignored. A delete the service
+   * does not answer is handed to sweepExpired (its due date set to now),
+   * which keeps trying on its hourly pass.
+   */
+  async forget(organizationId: string, ids: string[]): Promise<{ deleted: number; pending: number }> {
+    if (!ids.length) return { deleted: 0, pending: 0 };
+    const rows = await this.expiryRepo.find({ where: { id: In(ids), organizationId } });
+    const done: string[] = [];
+    const later: string[] = [];
+    for (const row of rows) {
+      try {
+        const creds = row.credentialId ? await this.agentCredentials(row) : undefined;
+        await this.router.deleteOn(row.backendId, row.nativeId, orgScope(row.organizationId), creds);
+        done.push(row.id);
+      } catch (e: any) {
+        later.push(row.id);
+        this.logger.warn(`could not delete memory ${row.memoryId} from ${row.backendId} now, the sweep will retry: ${e?.message ?? e}`);
+      }
+    }
+    if (done.length) await this.expiryRepo.delete({ id: In(done) });
+    if (later.length) await this.expiryRepo.update({ id: In(later) }, { expiresAt: new Date() });
+    return { deleted: done.length, pending: later.length };
+  }
+
+  // ── the Memory page's account list ────────────────────────────
+
+  /**
+   * Every memory account the caller can see, with its health, and every
+   * memory service with how many accounts it has.
+   *
+   * An account is almyty's own memory, or a connection (a credential) of
+   * a memory service: several per service, each named. The health of a
+   * connection is its last check (the connector's probe, run by the
+   * Credentials page's "Check" and on connect), never a probe without a
+   * key: a service nobody has an account for says so ("not set up")
+   * instead of reading as unreachable.
+   */
+  async overview(organizationId: string, user: { id: string }): Promise<MemoryAccountsOverview> {
+    const cfg = await this.configRepo.findOne({ where: { scopeType: 'workspace', scopeId: organizationId } });
+    const routing = ((cfg?.overrides as any)?.routing ?? {}) as { memory_backend?: string; credentials?: Record<string, string> };
+    const defaultService = routing.memory_backend || NATIVE_MEMORY_ACCOUNT;
+    const orgCredentials = routing.credentials ?? {};
+
+    const native = this.router.backend(NATIVE_MEMORY_ACCOUNT);
+    const nativeHealth = native ? await native.healthCheck().catch((e: any) => ({ ok: false, latency_ms: 0, details: { error: e?.message } })) : null;
+    const accounts: MemoryAccountRow[] = [
+      {
+        id: NATIVE_MEMORY_ACCOUNT,
+        service: NATIVE_MEMORY_ACCOUNT,
+        serviceName: 'almyty',
+        name: memoryAccountName(NATIVE_MEMORY_ACCOUNT),
+        accountLabel: null,
+        owner: 'org',
+        health: {
+          status: nativeHealth?.ok ? 'valid' : 'failed',
+          checkedAt: new Date(),
+          error: nativeHealth?.ok ? null : 'almyty could not reach its own memory store. Try again in a few minutes.',
+        },
+        isDefault: defaultService === NATIVE_MEMORY_ACCOUNT,
+        canMoveFrom: true,
+        canMoveTo: true,
+      },
+    ];
+
+    const services = this.outsideServices();
+    const connections = await this.memoryConnections(organizationId, user);
+    for (const c of connections) {
+      const backend = this.router.backend(c.connectorKey)!;
+      accounts.push({
+        id: c.id,
+        service: c.connectorKey,
+        serviceName: memoryAccountName(c.connectorKey),
+        name: c.name,
+        accountLabel: c.accountLabel ?? null,
+        owner: c.owner,
+        // In plain words: the service's raw answer stays on the credential, never on this page.
+        health: { status: c.health?.status ?? 'unknown', checkedAt: c.health?.checkedAt ?? null, error: c.health?.error ? plainServiceError(c.connectorKey, c.health.error) : null },
+        isDefault: defaultService === c.connectorKey && orgCredentials[c.connectorKey] === c.id,
+        canMoveFrom: typeof backend.nativeId === 'function',
+        canMoveTo: true,
+      });
+    }
+    return {
+      accounts,
+      services: services.map((s) => ({
+        id: s.id,
+        name: memoryAccountName(s.id),
+        accounts: connections.filter((c) => c.connectorKey === s.id).length,
+      })),
+    };
+  }
+
+  /**
+   * The account an id names, for a move: almyty's own memory, or a memory
+   * connection the caller can see. Anything else is not found.
+   */
+  async describeAccount(organizationId: string, user: { id: string }, accountId: string): Promise<{ service: string; credentialId: string | null; name: string }> {
+    if (!accountId || accountId === NATIVE_MEMORY_ACCOUNT) {
+      return { service: NATIVE_MEMORY_ACCOUNT, credentialId: null, name: memoryAccountName(NATIVE_MEMORY_ACCOUNT) };
+    }
+    const found = (await this.memoryConnections(organizationId, user)).find((c) => c.id === accountId);
+    if (!found) throw new NotFoundException({ code: 'MEMORY_ACCOUNT_NOT_FOUND', message: 'That memory account was not found' });
+    return { service: found.connectorKey, credentialId: found.id, name: found.name };
+  }
+
+  /** The memory services almyty can keep memories in besides its own. */
+  private outsideServices() {
+    return this.router
+      .list_backends()
+      .filter((b) => b.id !== NATIVE_MEMORY_ACCOUNT && b.modes.includes('memory'));
+  }
+
+  /** The caller's visible connections of a memory service almyty has an adapter for. */
+  private async memoryConnections(organizationId: string, user: { id: string }): Promise<MemoryConnectionLike[]> {
+    const connections = this.connections();
+    if (!connections) return [];
+    const services = new Set(this.outsideServices().map((s) => s.id));
+    const all = (await connections.list(user as any, organizationId)) as MemoryConnectionLike[];
+    return all.filter((c) => c.kind === 'memory' && services.has(c.connectorKey));
+  }
+
+  /** The Connections seam, looked up lazily: MemoryModule does not import ConnectionsModule. */
+  private connections(): { list(principal: unknown, organizationId: string): Promise<unknown[]> } | null {
+    if (!this.moduleRef) return null;
+    try {
+      return this.moduleRef.get(ConnectionsService, { strict: false });
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** A memory connection as the Connections service lists it (the fields read here). */
+interface MemoryConnectionLike {
+  id: string;
+  name: string;
+  kind: string | null;
+  connectorKey: string;
+  accountLabel: string | null;
+  owner: string;
+  health?: { status: string; checkedAt: Date | null; error: string | null };
+}
+
+/** One row of the Memory page's account list. */
+export interface MemoryAccountRow {
+  /** almyty-native, or the connection's (credential's) id. */
+  id: string;
+  /** The memory service (backend id). */
+  service: string;
+  serviceName: string;
+  name: string;
+  accountLabel: string | null;
+  owner: string;
+  /** The connection's last check: valid, failed, expired, revoked, quota or unknown (never checked). */
+  health: { status: string; checkedAt: Date | null; error: string | null };
+  /** Where the organization's memories go by default. */
+  isDefault: boolean;
+  /** Whether memories can be moved out of it: the service can delete one memory at a time. */
+  canMoveFrom: boolean;
+  canMoveTo: boolean;
+}
+
+export interface MemoryAccountsOverview {
+  accounts: MemoryAccountRow[];
+  /** Every outside memory service, with how many accounts the caller can see; 0 means not set up. */
+  services: Array<{ id: string; name: string; accounts: number }>;
 }
 
 /** Outside accounts are the organization's: their credentials sit on its workspace memory settings. */

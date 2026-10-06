@@ -29,11 +29,11 @@ Twenty years of better APIs, better protocols, better tooling. Computers still d
 
 ## What almyty does
 
-Point it at an API schema (OpenAPI, GraphQL, SOAP, Protobuf) and each operation becomes a tool. Or point it at an npm package (`pg`, `stripe`, `@aws-sdk/*`, etc.) and almyty generates tools from the SDK surface automatically. No code needed for either path. When you do need custom logic, write sandboxed JavaScript with npm dependencies: it runs in a Node 26 worker thread with filesystem, process, and network restrictions enforced.
+Point it at an API description (OpenAPI / Swagger, GraphQL, SOAP / WSDL, gRPC / proto) and each operation becomes a tool. Or point it at an npm package (`pg`, `stripe`, `@aws-sdk/*`, etc.) and almyty generates tools from the SDK surface automatically. No code needed for either path. When you do need custom logic, write sandboxed JavaScript with npm dependencies: it runs in a Node 26 worker thread with filesystem, process, and network restrictions enforced.
 
 Build agents with a visual pipeline builder. Chain LLM calls, tool calls, conditions, loops, parallel fan-out, sub-agents. Or skip the pipeline and run autonomous agents that figure out the steps themselves. Either way, you get scheduling, webhooks, human-in-the-loop, and an OpenAI-compatible chat API.
 
-Expose everything through gateways. Tools and agents are served over [MCP](https://docs.almyty.com/gateways/mcp), [A2A](https://docs.almyty.com/gateways/a2a), [UTCP](https://docs.almyty.com/gateways/utcp), [Agent Skills](https://docs.almyty.com/gateways/skills), and the [OpenAI-compatible API](https://docs.almyty.com/api-reference/openai-compatible) from a single endpoint per gateway (`/{org}/{gateway}`). Connect agents to Slack, Discord, Telegram, email, or any webhook. You pick the protocol, almyty translates.
+Serve your tools through gateways: each gateway serves the tools you pick over one protocol, [MCP](https://docs.almyty.com/gateways/mcp), [UTCP](https://docs.almyty.com/gateways/utcp) or [Agent Skills](https://docs.almyty.com/gateways/skills), from its own endpoint (`/{org}/{gateway}`). Put an agent where people are through its channels: a web chat, a widget on your site, Slack, WhatsApp, Teams, Telegram, Discord, email, SMS, a webhook, a desktop or terminal app, and [A2A](https://docs.almyty.com/gateways/a2a) for other agents. Every agent also has an [OpenAI-compatible API](https://docs.almyty.com/api-reference/openai-compatible).
 
 Self-hosted. Your infrastructure, your data.
 
@@ -75,16 +75,16 @@ Two ways to self-host:
  | OpenAPI  |     | Auto-gen |     | Visual       |    | MCP       |
  | GraphQL  |---->| HTTP     |---->| pipeline     |--->| A2A       |
  | SOAP     |     | JS/Code  |     | builder      |    | UTCP      |
- | Protobuf |     | GraphQL  |     |              |    | OpenAI API|
+ | gRPC     |     | GraphQL  |     |              |    | OpenAI API|
  |          |     | LLM      |     | Autonomous   |    | Skills    |
  +----------+     +----------+     +--------------+    +-----------+
 ```
 
 **Import** any API schema. Each operation becomes a tool. ([docs](https://docs.almyty.com))
 
-**Build** agents visually or let them run autonomously. 12 node types, 39 LLM providers. ([docs](https://docs.almyty.com/agents))
+**Build** agents visually or let them run autonomously. 13 step types, 39 LLM providers. ([docs](https://docs.almyty.com/agents))
 
-**Deploy** tools and agents behind gateways, one protocol each: MCP, UTCP, Agent Skills, A2A. ([docs](https://docs.almyty.com/gateways/mcp))
+**Serve** tools through gateways, one protocol each: MCP, UTCP or Agent Skills. Put agents in front of people and other agents through their channels: web chat, website widget, Slack, WhatsApp and the other messaging apps, desktop and terminal apps, and A2A. ([docs](https://docs.almyty.com/gateways))
 
 ## CLI
 

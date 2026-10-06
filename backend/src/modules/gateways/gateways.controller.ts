@@ -30,6 +30,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { maskChannelConfigSecrets } from './channels/channel-config.helper';
 import { Gateway, GatewayKind } from '../../entities/gateway.entity';
+import { codeModeGatewaysEnabled, effectiveExposure, gatewayHasAuth } from '../code-mode/code-exposure';
 
 import {
   CreateGatewayBodyDto,
@@ -216,7 +217,16 @@ export class GatewaysController {
 
       return {
         success: true,
-        data: this.maskGatewaySecrets(gateway),
+        data: {
+          ...this.maskGatewaySecrets(gateway),
+          // What the page needs to offer scripts (code-mode/code-exposure.ts):
+          // whether this server allows them, and what the gateway serves now.
+          codeMode: {
+            serverAllows: codeModeGatewaysEnabled(),
+            hasAuth: gatewayHasAuth(gateway),
+            exposure: effectiveExposure(gateway),
+          },
+        },
         message: 'Gateway retrieved successfully',
       };
     } catch (error) {

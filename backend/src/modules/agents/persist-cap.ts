@@ -20,5 +20,14 @@ export function capPersistedPayload(value: unknown): unknown {
     return '[unserializable]';
   }
   if (text === undefined || text.length <= STEP_PAYLOAD_CAP) return value;
-  return `${text.slice(0, STEP_PAYLOAD_CAP)}… (truncated from ${text.length} characters)`;
+  return withTruncationMarker(text.slice(0, STEP_PAYLOAD_CAP), text.length);
+}
+
+/**
+ * Text that was cut, with the marker every capped payload carries
+ * (`… (truncated from N characters)`), so the UI and a model read a
+ * truncation the same way wherever it happened.
+ */
+export function withTruncationMarker(kept: string, totalCharacters: number): string {
+  return `${kept}… (truncated from ${totalCharacters} characters)`;
 }

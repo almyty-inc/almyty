@@ -25,6 +25,8 @@ export type ChannelType =
   | 'whatsapp'
   | 'whatsapp_cloud'
   | 'sms'
+  | 'imessage_sendblue'
+  | 'imessage_loopmessage'
   | 'microsoft_teams'
   | 'google_chat'
   | 'email'
@@ -41,6 +43,8 @@ export const MESSAGING_CHANNEL_TYPES: ChannelType[] = [
   'whatsapp',
   'whatsapp_cloud',
   'sms',
+  'imessage_sendblue',
+  'imessage_loopmessage',
   'microsoft_teams',
   'google_chat',
   'email',
@@ -63,6 +67,8 @@ export const ADDABLE_CHANNEL_TYPES: ChannelType[] = [
   'slack',
   'whatsapp',
   'whatsapp_cloud',
+  'imessage_sendblue',
+  'imessage_loopmessage',
   'microsoft_teams',
   'telegram',
   'discord',
@@ -85,6 +91,8 @@ export interface ChannelBranding {
   primaryColor?: string
   logoUrl?: string | null
   iconUrl?: string | null
+  /** The app icon uploaded on the branding page (a PNG in the organization's files). */
+  iconFileId?: string | null
   greeting?: string
   theme?: 'dark' | 'light' | 'auto'
   suggestedPrompts?: string[]
@@ -143,6 +151,15 @@ export interface EffectiveSettings {
   }
 }
 
+/** What publishing last did about the platform webhook (backend channel-webhook-registrar.service.ts). */
+export interface WebhookRegistration {
+  action: 'register' | 'unregister'
+  status: 'registered' | 'unregistered' | 'failed' | 'skipped'
+  /** The platform's own wording, or why it was skipped. */
+  error: string | null
+  at: string | null
+}
+
 export interface AgentChannel {
   id: string
   agentId: string
@@ -163,6 +180,11 @@ export interface AgentChannel {
   /** This channel's own visitor rules; null uses the agent's. */
   visitorRules: VisitorRules | null
   effective: EffectiveSettings
+  /**
+   * For a channel whose webhook publishing registers (CHANNEL_INBOUND mode
+   * 'auto'): how that last went. Null otherwise, or before the first try.
+   */
+  webhookRegistration?: WebhookRegistration | null
   lastBuild?: {
     version?: string
     platform?: string
@@ -201,6 +223,8 @@ export const CHANNEL_LABELS: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp (Twilio)',
   whatsapp_cloud: 'WhatsApp (Meta Cloud)',
   sms: 'SMS',
+  imessage_sendblue: 'iMessage (Sendblue)',
+  imessage_loopmessage: 'iMessage (LoopMessage)',
   microsoft_teams: 'Microsoft Teams',
   google_chat: 'Google Chat',
   email: 'Email',
@@ -223,6 +247,8 @@ export const CHANNEL_HINTS: Record<ChannelType, string> = {
   whatsapp: 'Via Twilio',
   whatsapp_cloud: 'Via Meta Cloud',
   sms: 'Via Twilio',
+  imessage_sendblue: 'Via Sendblue',
+  imessage_loopmessage: 'Via LoopMessage',
   microsoft_teams: 'As a bot',
   google_chat: 'In your spaces',
   email: 'Via Resend',
@@ -245,6 +271,8 @@ export const CHANNEL_DESCRIPTIONS: Record<ChannelType, string> = {
   whatsapp: 'Answers messages to your Twilio WhatsApp sender.',
   whatsapp_cloud: 'Answers messages to your business number through Meta\u2019s Cloud API.',
   sms: 'Answers text messages to your Twilio number.',
+  imessage_sendblue: 'Answers iMessages to your Sendblue number, one to one and in group chats.',
+  imessage_loopmessage: 'Answers iMessages to your LoopMessage sender, one to one and in group chats.',
   microsoft_teams: 'Answers as a bot in Microsoft Teams.',
   google_chat: 'Answers as a Chat app in your Google Workspace spaces.',
   email: 'Answers email sent to your receiving address, through Resend.',
@@ -378,7 +406,9 @@ export interface SpendStatus {
  *
  *  - manual: the operator pastes our URL into the platform's console.
  *  - auto:   publishing registers it (Telegram setWebhook, the Twilio
- *            number's messaging webhook -- channel-webhook-registrar.ts).
+ *            number's messaging webhook, Sendblue's receive webhook --
+ *            channel-webhook-registrar.service.ts), and unpublishing or
+ *            deleting removes it.
  *  - none:   nothing calls us: a download, the web chat, or
  *            Discord, whose messages arrive over the gateway websocket
  *            almyty opens (discord-gateway.transport.ts).
@@ -420,6 +450,14 @@ export const CHANNEL_INBOUND: Record<ChannelType, ChannelInbound> = {
   sms: {
     mode: 'auto',
     where: 'Set on your Twilio number for you when you publish. Shown here in case you need to check it.',
+  },
+  imessage_sendblue: {
+    mode: 'auto',
+    where: 'Added to your Sendblue account for you when you publish, as the receive webhook for your Sendblue number with the webhook secret from your credential, and removed when you unpublish or delete. Shown here in case you need to check it.',
+  },
+  imessage_loopmessage: {
+    mode: 'manual',
+    where: 'LoopMessage has no API for setting its webhook, so paste this yourself: LoopMessage dashboard → Webhooks, as the webhook URL, with the webhook authorization value from your credential as its authorization header.',
   },
   whatsapp_cloud: {
     mode: 'manual',
@@ -603,6 +641,128 @@ export const agentChannelsApi = {
     apiGet(`/agents/${agentId}/public-settings/spend`).then((r) =>
       unwrap<{ agent: SpendStatus; channels: Array<{ channelId: string; status: SpendStatus }> }>(r),
     ),
+}
+
+// -- Visitor data ----------------------------------------------------------
+//
+// An owner or admin answering one person's request for their data: look
+// them up on the agent's channels, send them a copy, or delete it.
+
+/** Channels people talk to the agent on, where a data request can find them. */
+export function holdsVisitorData(type: ChannelType): boolean {
+  return type === 'web' || type === 'widget' || type === 'a2a' || isMessagingChannel(type)
+}
+
+/** What identifies a person on a channel, in the words an owner knows it by. */
+export interface PersonIdentifierHint {
+  label: string
+  placeholder: string
+  hint: string
+}
+
+const PHONE_HINT: PersonIdentifierHint = {
+  label: 'Their phone number',
+  placeholder: '+1 415 555 0100',
+  hint: 'With the country code. Spaces and dashes do not matter.',
+}
+
+const SENDER_HINT: PersonIdentifierHint = {
+  label: 'How the channel knows them',
+  placeholder: 'user-123',
+  hint: 'The id the platform sends with their messages.',
+}
+
+/** Looking on every channel at once. */
+export const ANY_CHANNEL_HINT: PersonIdentifierHint = {
+  label: 'Their email address, phone number or id',
+  placeholder: 'name@example.com',
+  hint: 'Each channel looks for it the way it knows people: an email on the web chat, a phone number on SMS, a member id on Slack.',
+}
+
+export const PERSON_IDENTIFIER_HINTS: Partial<Record<ChannelType, PersonIdentifierHint>> = {
+  web: {
+    label: 'Their email address',
+    placeholder: 'name@example.com',
+    hint: 'The email they signed in with, or the visitor id in the file they downloaded from the chat.',
+  },
+  widget: {
+    label: 'Their conversation id',
+    placeholder: 'The threadId in their download',
+    hint: 'The chat bubble has no sign-in, so the conversation is the person. The id is in the file they download from it.',
+  },
+  a2a: {
+    label: 'The key or client id of the calling agent',
+    placeholder: 'key id or OAuth client id',
+    hint: 'The API key id or OAuth client the other agent used to call this one.',
+  },
+  slack: { label: 'Their Slack member id', placeholder: 'U012ABCDEF', hint: 'In Slack: their profile, then More, then Copy member ID.' },
+  discord: { label: 'Their Discord user id', placeholder: '80351110224678912', hint: 'With developer mode on: right-click them, then Copy User ID.' },
+  telegram: { label: 'Their Telegram user id', placeholder: '123456789', hint: 'The number Telegram gives their account, not their @name.' },
+  whatsapp: PHONE_HINT,
+  whatsapp_cloud: PHONE_HINT,
+  sms: PHONE_HINT,
+  signal: PHONE_HINT,
+  imessage_sendblue: { ...PHONE_HINT, label: 'Their phone number or email', hint: 'The number or Apple ID email they wrote from.' },
+  imessage_loopmessage: { ...PHONE_HINT, label: 'Their phone number or email', hint: 'The number or Apple ID email they wrote from.' },
+  email: { label: 'Their email address', placeholder: 'name@example.com', hint: 'The address they wrote from.' },
+  microsoft_teams: { label: 'Their Teams user id', placeholder: '29:1abc…', hint: 'The id Teams sends for them.' },
+  google_chat: { label: 'Their Google Chat user', placeholder: 'users/1234567890', hint: 'The users/… name Google Chat sends for them.' },
+  matrix: { label: 'Their Matrix id', placeholder: '@name:example.org', hint: 'Their full Matrix id.' },
+  irc: { label: 'Their nick', placeholder: 'nick', hint: 'The nick they used.' },
+  webhook: SENDER_HINT,
+}
+
+/** One person, as the owner knows them, on one channel or all of them. */
+export interface VisitorDataRequest {
+  /** Every channel people talk to when left out. */
+  channelId?: string
+  id: string
+}
+
+/** What the agent keeps about them, in counts and dates. */
+export interface VisitorDataSummary {
+  found: boolean
+  conversations: number
+  messages: number
+  firstAt: string | null
+  lastAt: string | null
+  memories: number
+  files: number
+  storedReplies: number
+  /** Messages they sent that the agent never answered (over a limit, refused). */
+  unanswered: number
+  runs: number
+  recent: Array<{ id: string; title: string | null; messages: number; firstAt: string | null; lastAt: string | null }>
+  /** The channels they were found on. */
+  channels: Array<{ id: string; name: string; type: ChannelType }>
+}
+
+/** What a deletion removed. */
+export interface VisitorErasure {
+  conversations: number
+  messages: number
+  runs: number
+  toolCalls: number
+  memories: number
+  files: number
+  storedReplies: number
+  /** Messages they sent that the agent never answered. */
+  unanswered: number
+  visitors: number
+  /** Memories in an outside memory service it could not reach yet; retried every hour. */
+  memoriesPending: number
+}
+
+export const visitorDataApi = {
+  lookup: (agentId: string, request: VisitorDataRequest) =>
+    apiPost(`/agents/${agentId}/visitor-data/lookup`, request).then((r) => unwrap<VisitorDataSummary>(r)),
+
+  /** Everything kept about them, as the JSON file they are sent. */
+  export: (agentId: string, request: VisitorDataRequest) =>
+    apiPost<Record<string, unknown>>(`/agents/${agentId}/visitor-data/export`, request),
+
+  erase: (agentId: string, request: VisitorDataRequest) =>
+    apiPost(`/agents/${agentId}/visitor-data/erase`, request).then((r) => unwrap<VisitorErasure>(r)),
 }
 
 /** The agent channel a gateway answers for, as the gateway page shows it. */

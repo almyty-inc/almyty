@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
@@ -6,19 +6,26 @@ import { createHash, randomBytes } from 'crypto';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { EndUser } from '../../../entities/end-user.entity';
 import { Conversation, ConversationStatus } from '../../../entities/conversation.entity';
-import { Message, MessageRole, MessageType } from '../../../entities/message.entity';
+import { Message } from '../../../entities/message.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import {
   HostedChatConfig,
   hostedChatConfigFrom,
 } from './hosted-chat.config';
-import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
+import { AuditAction, AuditLog, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { OrgLicenseResolver } from '../../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 import { isPrivateGateway } from '../private-gateway';
 import { providerLabel, visitorOAuthConfigured } from './visitor-oauth';
 import { ChannelLinkService } from '../channel-link.service';
+import { FilesService } from '../../files/files.service';
+import { VisitorDataService } from '../visitor-data.service';
+import { visitorDataAudit } from '../visitor-data-audit';
+import { TranscriptTurn, groupTranscripts, isPublicTurn, toTranscript } from '../visitor-transcript';
+
+/** What a public chat address whose agent was deleted answers. */
+export const CHAT_GONE = 'This chat no longer exists';
 
 /**
  * The tenant-facing half of the hosted chat app.
@@ -77,6 +84,15 @@ export class HostedChatService {
     // Required: Nest must inject it, so a surface never serves branding
     // from the gateway. Typed optional only for positional unit specs.
     private readonly channelLink?: ChannelLinkService,
+    // Files the visitor sent (attachments), erased with them. Optional for
+    // positional unit specs; Nest always injects it.
+    @Optional()
+    private readonly files?: FilesService,
+    // What "Delete everything about me" erases and the download adds,
+    // shared with the widget and with an owner answering a data request.
+    // Required: Nest must inject it (visitor-data.guard.spec.ts). Typed
+    // optional only for positional unit specs.
+    private readonly visitorData?: VisitorDataService,
   ) {}
 
   /**
@@ -102,7 +118,10 @@ export class HostedChatService {
 
     // Private gateways are never public surfaces (refused at write time);
     // one that exists anyway is not served.
-    const active = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway));
+    const live = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway));
+    // Nor is one whose agent was deleted: its web chat is gone, and
+    // running a message against no agent was a 500.
+    const active = live.filter((gateway) => !Gateway.agentGone(gateway));
 
     // A tenant slug is a global public address. If bad historic data or
     // a concurrent publish ever leaves more than one live claimant,
@@ -116,6 +135,7 @@ export class HostedChatService {
       );
     }
 
+    if (active.length === 0 && live.length > 0) throw new NotFoundException(CHAT_GONE);
     if (active.length !== 1) throw new NotFoundException('Chat app not found');
     return this.withChannelSettings(active[0]);
   }
@@ -314,26 +334,54 @@ export class HostedChatService {
   // the cookie, never an id from the request, and scope every write
   // through that row so nothing of anyone else's can be touched.
 
-  /** Remove one conversation, its messages, and the runs behind it. */
+  /**
+   * Remove one conversation and everything that came of it: its messages,
+   * the runs behind it with their tool calls, the files sent in it or made
+   * by those runs, and the memories those runs wrote (VisitorDataService).
+   * The visitor and their other conversations stay.
+   */
   async deleteConversation(endUser: EndUser, conversationId: string): Promise<void> {
     const conversation = await this.findConversation(endUser, conversationId);
-    // Runs reference the conversation with SET NULL, so delete them first
-    // or they outlive the transcript they belong to.
-    await this.runRepository.delete({ conversationId: conversation.id, endUserId: endUser.id });
-    await this.messageRepository.delete({ conversationId: conversation.id });
-    await this.conversationRepository.delete({ id: conversation.id, endUserId: endUser.id });
+    const data = this.requireVisitorData();
+    await data.erase(await data.forVisitorConversation(endUser, conversation.id));
   }
 
-  /** Erase everything this surface holds about the visitor. The cookie dies with the row. */
+  /**
+   * Erase everything this chat holds about the visitor. The cookie dies
+   * with the row. The same scope an owner erases when answering a data
+   * request (VisitorDataService): their conversations and messages, the
+   * runs behind them with their tool calls, the files they sent or the
+   * runs produced, their memories, and stored replies. The audit log
+   * records that it happened, with counts, in the same transaction.
+   */
   async deleteVisitor(gateway: Gateway, endUser: EndUser): Promise<void> {
-    // agent_runs.endUserId has no foreign key; take them out explicitly.
-    await this.runRepository.delete({ endUserId: endUser.id });
-    // conversations (and their messages) cascade from the visitor row.
-    await this.endUserRepository.delete({ id: endUser.id, gatewayId: gateway.id });
-    this.audit(gateway, 'visitor.erased', { endUserId: endUser.id });
+    const data = this.requireVisitorData();
+    const written: AuditLog[] = [];
+    const removed = await data.erase(await data.forWebVisitors(gateway, [endUser.id]), async (tx, counts) => {
+      if (!this.auditLogService) return;
+      written.push(
+        await this.auditLogService.logInTransaction(
+          tx,
+          visitorDataAudit({
+            action: AuditAction.VISITOR_DATA_ERASE,
+            organizationId: gateway.organizationId,
+            agentId: gateway.agentId ?? gateway.id,
+            channel: gateway.id,
+            identifier: endUser.id,
+            counts: { ...counts },
+          }),
+        ),
+      );
+    });
+    this.auditLogService?.publishCommitted(written);
+    this.audit(gateway, 'visitor.erased', { ...removed });
   }
 
-  /** Everything this surface holds about the visitor, for them to keep. */
+  /**
+   * Everything this chat holds about the visitor, for them to keep: their
+   * visitor record, every conversation, and the memories and files the
+   * shared scope finds for them (VisitorDataService).
+   */
   async exportVisitor(gateway: Gateway, endUser: EndUser): Promise<Record<string, unknown>> {
     const conversations = await this.conversationRepository.find({
       where: { endUserId: endUser.id },
@@ -359,6 +407,9 @@ export class HostedChatService {
         createdAt: m.createdAt,
       })),
     }));
+    const held = this.visitorData
+      ? await this.visitorData.memoriesAndFiles(await this.visitorData.forWebVisitors(gateway, [endUser.id]))
+      : null;
     return {
       exportedAt: new Date().toISOString(),
       app: hostedChatConfigFrom(gateway.configuration).appName,
@@ -371,6 +422,7 @@ export class HostedChatService {
         lastSeen: endUser.lastSeenAt,
       },
       conversations: threads,
+      ...(held ?? {}),
     };
   }
 
@@ -379,56 +431,34 @@ export class HostedChatService {
    *
    * Same filtering `listMessages` applies — only user and assistant turns,
    * nothing marked internal — and the same per-conversation ceiling, applied
-   * after grouping. The overall `take` is what keeps an export bounded in
+   * after grouping (groupTranscripts, which the widget's and the owner's
+   * exports use too). The overall `take` is what keeps an export bounded in
    * heap regardless of how much the visitor has written.
    */
-  private async messagesByConversation(
-    conversationIds: string[],
-  ): Promise<Map<string, Array<{ id: string; role: string; content: string; createdAt: Date }>>> {
-    const grouped = new Map<string, Array<{ id: string; role: string; content: string; createdAt: Date }>>();
-    if (!conversationIds.length) return grouped;
-
+  private async messagesByConversation(conversationIds: string[]): Promise<Map<string, TranscriptTurn[]>> {
+    if (!conversationIds.length) return new Map();
     const rows = await this.messageRepository.find({
       where: { conversationId: In(conversationIds) },
       order: { conversationId: 'ASC', createdAt: 'ASC' },
       take: EXPORT_MESSAGE_LIMIT,
     });
-
-    for (const m of rows) {
-      if (!HostedChatService.isPublicTurn(m)) continue;
-      const bucket = grouped.get(m.conversationId);
-      if (bucket) {
-        if (bucket.length < MESSAGE_PAGE_LIMIT) bucket.push(HostedChatService.toTranscript(m));
-      } else {
-        grouped.set(m.conversationId, [HostedChatService.toTranscript(m)]);
-      }
-    }
-    return grouped;
+    return groupTranscripts(rows);
   }
 
-  /**
-   * Tool calls and system scaffolding stay out of a public transcript. An
-   * assistant turn that called tools is scaffolding too: its text is the
-   * agent narrating its working (what it is about to look up, what the
-   * last tool said), saved alongside the call, not an answer.
-   */
+  /** Whether a turn belongs in a public transcript (visitor-transcript.ts). */
   static isPublicTurn(m: Message): boolean {
-    return (
-      (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
-      m.type !== MessageType.TOOL_CALL &&
-      !(Array.isArray(m.toolCalls) && m.toolCalls.length > 0) &&
-      m.metadata?.internal !== true
-    );
+    return isPublicTurn(m);
   }
 
-  /** The shape a transcript turn is exposed as. */
-  static toTranscript(m: Message): { id: string; role: string; content: string; createdAt: Date } {
-    return {
-      id: m.id,
-      role: m.role,
-      content: typeof m.getTextContent === 'function' ? m.getTextContent() : m.content,
-      createdAt: m.createdAt,
-    };
+  /** The shape a transcript turn is exposed as (visitor-transcript.ts). */
+  static toTranscript(m: Message): TranscriptTurn {
+    return toTranscript(m);
+  }
+
+  /** The visitor-data scope; Nest always injects it (visitor-data.guard.spec.ts). */
+  private requireVisitorData(): VisitorDataService {
+    if (!this.visitorData) throw new ServiceUnavailableException('Visitor data is not available here.');
+    return this.visitorData;
   }
 
   private audit(gateway: Gateway, action: string, details: Record<string, unknown>): void {
@@ -528,7 +558,7 @@ export class HostedChatService {
 
     // Private gateways are never public surfaces (refused at write time);
     // one that exists anyway is not served.
-    const active = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway));
+    const active = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway) && !Gateway.agentGone(gateway));
 
     // Same fail-closed rule as findBySlug. A hostname is a global public
     // address too, and nothing claims one exclusively: the only thing

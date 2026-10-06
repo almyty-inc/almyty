@@ -21,7 +21,7 @@ describe('Tool Integrity', () => {
 
       expect(result.algorithm).toBe('sha256');
       expect(result.hash).toMatch(/^[a-f0-9]{64}$/);
-      expect(result.fields).toEqual(['name', 'description', 'parameters', 'code', 'executionMethod']);
+      expect(result.fields).toEqual(['name', 'description', 'parameters', 'code', 'executionMethod', 'sideEffect']);
     });
 
     it('should produce deterministic hashes', () => {

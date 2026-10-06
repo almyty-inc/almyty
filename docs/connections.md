@@ -13,8 +13,10 @@ models, deployments, APIs, tools and the registry use it.
 `/credentials` in the sidebar is a table of every credential: name and
 logo, service, whether it works ("Works", "Needs attention", or "Saved"
 for a key nobody can check), who can use it, what uses it, and when it
-was added. Keys a model provider uses are their own group, "Model
-providers", added and changed on Models. The table also lists the keys a
+was added. Model provider connections are their own group below it,
+"Model providers": one row per connection (several per provider, keyless
+ones such as an Ollama you run included), each opening its page at
+`/credentials/providers/:id`, and "Connect a provider" adds one. The table also lists the keys a
 single API, MCP server, channel or app keeps for itself (credential rows
 without a connector, from `GET /credentials`), each saying what keeps it.
 
@@ -305,7 +307,7 @@ next call.
 | Consumer | Reference | What a pasted secret becomes |
 |---|---|---|
 | LLM provider | `llm_providers.credentialId` (inference key), `llm_providers.usageCredentialId` (usage/admin key, a different scope at the vendor) | an `api_key` row tagged with the vendor as its connector, owned by the provider: rotated in place on the next paste, deleted with the provider |
-| MCP server | `mcp_sources.credentialId` | a `bearer_token` row (token) or a `custom` row (header map, every value encrypted) |
+| MCP server | `mcp_sources.credentialId` | a `bearer_token` row (token) or a `custom` row (header map, every value encrypted); a sign-in made on Credentials is an `oauth2` row of the `mcp-custom` connector holding the tokens with their issuer, refreshed by `connections/mcp-oauth` before use |
 | Chat channel installation | `channel_installations.credentialId` | a `custom` row with the workspace's bot token, released when the installation is revoked |
 | API | `credentials.apiId` (the row is bound to the API; tool execution already prefers it) | a row of the matching type; the API keeps the public part of its auth config plus `credentialId` |
 | Deployment | `providerConfig.credentialId` | the connection made in the form first. A request that names a `credentialId` and also pastes an `x-secret` value is refused (`PROVIDER_CONFIG_INLINE_SECRET`) |

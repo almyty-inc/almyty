@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { QueryClient } from '@tanstack/react-query'
 import { renderWithProviders } from '@/test/setup'
 import { agentsApi } from '@/lib/api'
 import { RunPanel } from '../run-panel'
@@ -25,9 +26,7 @@ const wrappedError = Object.assign(new Error('Request failed with status code 40
 
 function renderOverview() {
   renderWithProviders(<OverviewTab agent={agent} executions={[]} executionsError={null} versions={[]}
-    entityVersions={[]} auditLog={[]} webhookUrl="" setWebhookUrl={vi.fn()} scheduleEnabled={false}
-    setScheduleEnabled={vi.fn()} scheduleInterval={60} setScheduleInterval={vi.fn()}
-    scheduleInput="{}" setScheduleInput={vi.fn()} />)
+    entityVersions={[]} auditLog={[]} webhookUrl="" setWebhookUrl={vi.fn()} />)
 }
 
 describe('agent invocation errors', () => {
@@ -62,6 +61,20 @@ describe('agent invocation errors', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Agent must be active to invoke')
     expect(input).toHaveValue('hello')
     expect(notifications.error).toHaveBeenCalledWith('Run failed', 'Agent must be active to invoke')
+  })
+
+  it('refreshes Recent runs and the Runs tab after an Overview Try It run', async () => {
+    vi.mocked(agentsApi.invoke).mockResolvedValueOnce({ status: 'completed', output: 'All systems fine' } as any)
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    renderWithProviders(<OverviewTab agent={agent} executions={[]} executionsError={null} versions={[]}
+      entityVersions={[]} auditLog={[]} webhookUrl="" setWebhookUrl={vi.fn()} />, { queryClient })
+    const input = screen.getByPlaceholderText('Type a message to test this agent...')
+    fireEvent.change(input, { target: { value: 'Run the nightly check.' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(await screen.findByText(/All systems fine/)).toBeInTheDocument()
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['agent-runs', agent.id] }))
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['agent-executions', agent.id] })
   })
 
   it('preserves useful local invalid-JSON errors without invoking the API', async () => {

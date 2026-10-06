@@ -21,6 +21,11 @@ import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
  *   - whatsapp (Twilio) and sms (Twilio): look up the IncomingPhoneNumber
  *     by phone_number and update its SmsUrl/SmsMethod (cleared on
  *     unregister)
+ *   - imessage_sendblue: add / delete a receive webhook on the Sendblue
+ *     account, with the channel's webhook secret, scoped to its line
+ *
+ * LoopMessage documents no API for its webhook (it is set in its
+ * dashboard), so that channel keeps the paste-the-URL instructions.
  *
  * The public URL is `<PUBLIC_API_URL>/<orgSlug><gateway.endpoint>` —
  * the same /:orgSlug/:resourceSlug path the unified endpoint serves.
@@ -46,7 +51,15 @@ export class ChannelWebhookRegistrar {
     GatewayType.TELEGRAM,
     GatewayType.WHATSAPP,
     GatewayType.SMS,
+    GatewayType.IMESSAGE_SENDBLUE,
   ]);
+
+  /**
+   * Sendblue's webhook endpoint. The API reference gives api.sendblue.co for
+   * every call (its webhooks guide shows api.sendblue.com); .co is the host
+   * the send path already uses.
+   */
+  static readonly SENDBLUE_WEBHOOKS_URL = 'https://api.sendblue.co/api/account/webhooks';
 
   constructor(
     @InjectRepository(Gateway)
@@ -126,6 +139,9 @@ export class ChannelWebhookRegistrar {
           // the adapter's verification config in lockstep.
           await this.persistConfig(gateway, { webhook_url: publicUrl });
           break;
+        case GatewayType.IMESSAGE_SENDBLUE:
+          await this.sendblueSetWebhook(gateway, publicUrl);
+          break;
       }
       await this.record(gateway, 'register', 'registered', publicUrl);
       this.logger.log(`registered ${gateway.type} webhook for gateway ${gateway.id}: ${publicUrl}`);
@@ -146,6 +162,9 @@ export class ChannelWebhookRegistrar {
         case GatewayType.WHATSAPP:
         case GatewayType.SMS:
           await this.twilioSetWebhook(gateway, '');
+          break;
+        case GatewayType.IMESSAGE_SENDBLUE:
+          await this.sendblueUnregister(gateway);
           break;
       }
       if (recordOnGateway) {
@@ -251,6 +270,86 @@ export class ChannelWebhookRegistrar {
     if (!updateRes.ok) {
       throw new Error(`twilio webhook update failed (${updateRes.status})`);
     }
+  }
+
+  /**
+   * Sendblue: add the gateway URL as a receive webhook, with the channel's
+   * webhook secret (Sendblue sends it back in `sb-signing-secret`, which
+   * the adapter checks) and scoped to the channel's line, so messages to
+   * the account's other lines are not delivered here.
+   *
+   * Sendblue appends to the webhooks already set, so a URL registered
+   * before is deleted first: its secret or line may have changed since.
+   *
+   * https://docs.sendblue.com/api/resources/webhooks/methods/create/
+   * https://docs.sendblue.com/api/resources/webhooks/methods/list/
+   */
+  private async sendblueSetWebhook(gateway: Gateway, publicUrl: string): Promise<void> {
+    const cfg = await this.channelConfig(gateway);
+    if (!cfg.api_key_id || !cfg.api_secret_key || !cfg.phone_number || !cfg.signing_secret) {
+      throw new Error('api_key_id, api_secret_key, phone_number and signing_secret are required');
+    }
+    if (await this.sendblueHasWebhook(cfg, publicUrl)) await this.sendblueDeleteWebhook(cfg, publicUrl);
+
+    const res = await this.fetch(ChannelWebhookRegistrar.SENDBLUE_WEBHOOKS_URL, {
+      method: 'POST',
+      headers: this.sendblueHeaders(cfg),
+      body: JSON.stringify({
+        webhooks: [{ url: publicUrl, secret: String(cfg.signing_secret), sendblue_numbers: [String(cfg.phone_number)] }],
+        type: 'receive',
+      }),
+    });
+    await this.sendblueAccepted(res, 'adding the webhook');
+  }
+
+  /** Whether `url` is among the account's receive webhooks (entries are URLs or `{url, ...}`). */
+  private async sendblueHasWebhook(cfg: Record<string, any>, url: string): Promise<boolean> {
+    const res = await this.fetch(ChannelWebhookRegistrar.SENDBLUE_WEBHOOKS_URL, { headers: this.sendblueHeaders(cfg) });
+    const json = await this.sendblueAccepted(res, 'listing webhooks');
+    const receive = json?.webhooks?.receive;
+    if (!Array.isArray(receive)) return false;
+    return receive.some((entry: any) => (typeof entry === 'string' ? entry : entry?.url) === url);
+  }
+
+  /** https://docs.sendblue.com/api/resources/webhooks/methods/delete/ */
+  private async sendblueDeleteWebhook(cfg: Record<string, any>, url: string): Promise<void> {
+    const res = await this.fetch(ChannelWebhookRegistrar.SENDBLUE_WEBHOOKS_URL, {
+      method: 'DELETE',
+      headers: this.sendblueHeaders(cfg),
+      body: JSON.stringify({ webhooks: [url], type: 'receive' }),
+    });
+    await this.sendblueAccepted(res, 'removing the webhook');
+  }
+
+  private async sendblueUnregister(gateway: Gateway): Promise<void> {
+    const cfg = await this.channelConfig(gateway);
+    if (!cfg.api_key_id || !cfg.api_secret_key) throw new Error('api_key_id and api_secret_key are required');
+    // The URL that was registered, else the one it would have been.
+    const recorded = gateway.metadata?.webhookRegistration;
+    const url = (recorded?.status === 'registered' && recorded?.url) || (await this.buildPublicUrl(gateway));
+    if (!url) throw new Error('PUBLIC_API_URL not configured, so the webhook to remove is not known');
+    if (await this.sendblueHasWebhook(cfg, url)) await this.sendblueDeleteWebhook(cfg, url);
+  }
+
+  private sendblueHeaders(cfg: Record<string, any>): Record<string, string> {
+    return {
+      'sb-api-key-id': String(cfg.api_key_id),
+      'sb-api-secret-key': String(cfg.api_secret_key),
+      'Content-Type': 'application/json',
+    };
+  }
+
+  /**
+   * Sendblue's answer, refused unless it is a 2xx whose `status` is not
+   * an error. The message is Sendblue's own wording, never our request.
+   */
+  private async sendblueAccepted(res: any, doing: string): Promise<any> {
+    const json: any = await res.json().catch(() => ({}));
+    const status = typeof json?.status === 'string' ? json.status.toUpperCase() : '';
+    if (!res.ok || status === 'ERROR' || status === 'FAILED') {
+      throw new Error(`Sendblue refused ${doing}: ${json?.message || json?.error_message || `HTTP ${res.status}`}`);
+    }
+    return json;
   }
 
   // ---------------------------------------------------------------------------

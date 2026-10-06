@@ -12,6 +12,7 @@
 import { GatewayToolSecurityPolicy } from '../../common/security/gateway-tool-policy';
 import type { ToolInvocationBudget } from './executors/tool-invocation-budget';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
+import type { ApprovalGateHit } from './tool-approval-gate.service';
 export { GatewayToolSecurityPolicy };
 
 export interface ToolExecutionOptions {
@@ -59,6 +60,12 @@ export interface ToolExecutionOptions {
   gatewayId?: string | null;
   runId?: string | null;
   /**
+   * The agent whose run made this call (else the correlation scope's).
+   * A runner-backed tool that needs a workspace and was given none gets
+   * one for this run, attributed to this agent (RunWorkspaceService).
+   */
+  agentId?: string | null;
+  /**
    * The `gateway_tools.securityPolicy` row governing this call.
    *
    * Normally left undefined: `ToolExecutorService.executeTool` resolves it
@@ -103,6 +110,30 @@ export interface ToolExecutionOptions {
    * means this is a root execution.
    */
   invocation?: ToolInvocationContext;
+  /**
+   * An approved request that covers this exact call (same tool, same
+   * parameters), raised when an approval policy's amount rule held it.
+   * The executor checks it against the rule before letting the call run.
+   */
+  approvedGate?: { approvalId: string };
+  /**
+   * Who asks a person when an approval policy's amount rule holds the
+   * call. 'caller': the caller does (the autonomous runtime, which pauses
+   * its run); the executor only reports the hit. Absent: the executor holds
+   * the call itself and it runs once approved (ToolApprovalGateService).
+   */
+  holdForApproval?: 'caller';
+  /**
+   * The run_code script making this call (code_executions.id): recorded on
+   * the tool_executions row, so a script's calls are its call tree.
+   */
+  codeExecutionId?: string | null;
+  /**
+   * The team of the agent making the call. A team's amount rule holds only
+   * that team's agents; absent (no agent behind the call), every rule on
+   * the tool applies.
+   */
+  agentTeamId?: string | null;
 }
 
 export interface ToolInvocationContext {
@@ -126,6 +157,16 @@ export interface ToolExecutionResult {
    * being able to tell them apart.
    */
   notFound?: boolean;
+  /**
+   * Set when an approval policy's amount rule held the call: it did not
+   * run. The autonomous runtime asks a person and calls again with
+   * `approvedGate`; every other caller reports the refusal.
+   */
+  approvalRequired?: ApprovalGateHit;
+  /** A held call: the approval request it waits on (callers retry with it as `_approvalId`). */
+  approvalId?: string;
+  /** A held call: 'pending' while it waits, 'rejected' once refused. */
+  approvalStatus?: 'pending' | 'rejected';
 }
 
 export interface GraphQLRequest {

@@ -15,6 +15,7 @@ import {
   IsArray,
   IsBoolean,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -31,6 +32,7 @@ import { ApprovalPolicyService } from './approval-policy.service';
 import {
   ApprovalMatchCondition,
   ApprovalStep,
+  ApprovalToolAmountTrigger,
 } from '../../../src/entities/approval-policy.entity';
 
 class UpsertPolicyDto {
@@ -61,6 +63,11 @@ class UpsertPolicyDto {
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  /** An amount rule: ask when the tool is called over the amount. Null clears it. */
+  @IsOptional()
+  @IsObject()
+  trigger?: ApprovalToolAmountTrigger | null;
 }
 
 /**

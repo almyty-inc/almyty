@@ -23,6 +23,7 @@ vi.mock('@/lib/api', () => ({
     getGatewayUsage: vi.fn(),
     getLlmUsage: vi.fn(),
     getToolUsage: vi.fn(),
+    getScriptUsage: vi.fn().mockResolvedValue({ scripts: 0, failed: 0, withChanges: 0, cpuMs: 0, calls: 0 }),
     getRequestLogs: vi.fn(),
     getAuditSummary: vi.fn(),
   },

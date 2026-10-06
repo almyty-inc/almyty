@@ -128,6 +128,7 @@ export class EndpointProviderHelper {
     provider.name = input.name;
     provider.type = LlmProviderType.OPENAI;
     provider.status = LlmProviderStatus.ACTIVE;
+    provider.inactiveReason = null;
     provider.isHealthy = true;
     provider.configuration = {
       ...(provider.configuration ?? {}),
@@ -155,6 +156,7 @@ export class EndpointProviderHelper {
     if ((provider.metadata as Record<string, any> | null)?.managedBy?.id !== managedById) return;
     if (provider.status === LlmProviderStatus.INACTIVE && !provider.isHealthy) return;
     provider.status = LlmProviderStatus.INACTIVE;
+    provider.inactiveReason = 'endpoint_stopped';
     provider.isHealthy = false;
     await this.providers.save(provider);
     this.logger.log(`endpoint provider ${provider.id} deactivated: its endpoint is no longer serving`);

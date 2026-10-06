@@ -85,9 +85,9 @@ That's a live RPC to your laptop, dispatched through the SaaS.
 
 ## Step 4: Run a workspace-scoped command
 
-Back on the runner detail page, scroll to **Workspaces** and create one (or use any existing active workspace). The default cwd is your home directory; pick whatever directory you want shell.exec to run in.
+You need an active workspace on the runner. Agents reserve one when a job needs a folder, so there is no create button in the UI; for this demo, create one over the API with `POST /workspaces` and a body such as `{ "runnerId": "<your-runner-id>", "cwd": "/path/you/want" }` (`ttlMs` optional, default one hour). It then shows on the runner detail page's **Workspaces** tab.
 
-Open **/tools/<id>** for `runner.<name>.shell.exec`. The Test Tool tab now shows a **Workspace** picker (red asterisk — required). Pick the workspace you just created. In the parameters area:
+Open **/tools/<id>** for `runner.<name>.shell.exec`. The **Test tool** tab now shows a **Workspace** picker (red asterisk — required). Pick the workspace you just created. In the parameters area:
 
 - `command`: `ls -la`
 
@@ -115,7 +115,7 @@ Each one is a full request/response cycle: SaaS → backend → Streamable HTTP 
 ## What just happened, technically
 
 - **Step 2's runner** registered with the backend over `POST /runners/register`. The backend wrote a `Runner` row, then `RunnerCapabilityPublisher` minted two `Tool` rows (one for `runner.info`, one for `shell.exec`) with `runnerConfig` pointing at the runner.
-- **Step 2's runner** also opened a Streamable HTTP session on `GET /mcp/streamable` for server→client envelopes, and the backend recorded the session in `runner_sessions`.
+- **Step 2's runner** also opened a Streamable HTTP session on `GET /runners/stream` for server→client envelopes, and the backend recorded the session in `runner_sessions`.
 - **Step 3's Execute Tool** click hit `POST /organizations/:org/tools/:id/execute`, which loaded the Tool, saw `runnerConfig`, and called `RunnerCallService.dispatch(runnerId, 'runner.info', {})`.
 - `RunnerCallService` minted a uuid v7 correlation id, pushed a `request` envelope onto the streamable session via `transport.push`, and registered a pending entry keyed by the id.
 - The runner saw the envelope on its SSE stream, dispatched `runner.info` locally (`packages/runner/src/handlers.ts`), and POSTed a `response` envelope back. The transport emitted it; `RunnerCallService` matched the id and resolved the pending promise.

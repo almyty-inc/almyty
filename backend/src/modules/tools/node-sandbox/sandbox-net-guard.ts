@@ -134,9 +134,18 @@ interface NetGuardOptions {
    * (`gateway_tools.securityPolicy`). See `policyRefusal`.
    */
   hostPolicy?: SandboxHostPolicy | null;
+  /**
+   * Refuse every destination (the code-mode profile, docs/design/code-mode.md
+   * part D). The worker also starts without --allow-net, so on Node 26 the
+   * runtime refuses every socket first; this keeps a worker on an older
+   * Node, or one started with the flag by mistake, just as closed.
+   */
+  denyAll?: boolean;
 }
 
 let allowedTestTargets: Set<string> = new Set();
+let denyAll = false;
+const DENY_ALL_REASON = 'network access is off in code mode';
 
 function isAllowedTestTarget(host: string, port: number): boolean {
   if (allowedTestTargets.size === 0) return false;
@@ -185,6 +194,7 @@ const policyVettedAddresses = new Set<string>();
 let transportPolicy: { requireHttps: boolean; allowedHttpMethods: string[] } | null = null;
 
 function policyRefusal(host: string): string | null {
+  if (denyAll) return DENY_ALL_REASON;
   if (!hostPolicy) return null;
   const h = stripBrackets(String(host).toLowerCase());
   if (net.isIP(h) && policyVettedAddresses.has(h)) return null;
@@ -205,6 +215,7 @@ function policyRefusal(host: string): string | null {
  * left to the connect / lookup patches, which see every connection.
  */
 function transportRefusal(url: string, method: string): string | null {
+  if (denyAll) return DENY_ALL_REASON;
   if (!transportPolicy) return null;
   const decision = decideToolRequest(transportPolicy, url, method);
   return decision.allowed ? null : (decision.reason ?? 'refused by security policy');
@@ -242,7 +253,11 @@ export function installSandboxNetGuard(options: NetGuardOptions = {}): void {
   if (installed) return;
   installed = true;
 
-  if (options.testAllow) {
+  // Deny-all (the code-mode profile): no destination is reachable, and a
+  // test allow list is ignored rather than honoured.
+  if (options.denyAll) {
+    denyAll = true;
+  } else if (options.testAllow) {
     if (locked) {
       throw new Error('Sandbox net guard is locked; testAllow is refused.');
     }
@@ -319,6 +334,7 @@ export function resetSandboxNetGuardForTesting(): void {
     throw new Error('Sandbox net guard is locked; reset is refused.');
   }
   installed = false;
+  denyAll = false;
   allowedTestTargets = new Set();
   hostPolicy = null;
   transportPolicy = null;
@@ -448,6 +464,7 @@ function dnsServerKey(ip: string, port: number): string {
 }
 
 function isAllowedDnsServer(ip: string, port: number): boolean {
+  if (denyAll) return false;
   if (systemDnsServers.has(dnsServerKey(ip, port))) return true;
   if (isAllowedTestTarget(ip, port)) return true;
   if (!net.isIP(ip)) return false;

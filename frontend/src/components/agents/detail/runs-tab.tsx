@@ -28,14 +28,21 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { runStatusVariant, formatDuration } from './constants'
 import type { AgentRun } from '@/types'
 import { VerifyStepCard, VerifySummary } from './verify-step'
+import { CodeStepCard, isCodeStep } from './code-step'
 import { PromoteRunSection } from './promote-run-section'
 import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
+import { DeliveryNote } from './schedule-card'
 
 interface RunsTabProps {
   runs: AgentRun[]
   /** Needed to fetch a run's route trace, which is scoped by agent. */
   agentId?: string
+}
+
+/** Whether any of the run's calls went through routing, so there is a route to show. */
+export function runRouted(run: Pick<AgentRun, 'steps'>): boolean {
+  return (run.steps ?? []).some((s) => !!(s.output as any)?.routing)
 }
 
 export function RunsTab({ runs, agentId }: RunsTabProps) {
@@ -111,6 +118,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                           {run.status === 'running' && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
                           {run.status.replace('_', ' ')}
                         </Badge>
+                        <DeliveryNote outcome={run.metadata?.channelDelivery} />
                       </TableCell>
                       <TableCell className="text-sm max-w-[200px] truncate">
                         {run.input ? JSON.stringify(run.input).slice(0, 80) : '--'}
@@ -134,13 +142,16 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                     {expandedRunId === run.id && (
                       <TableRow>
                         <TableCell colSpan={8} className="bg-muted/30 p-4">
-                          <div className="space-y-4">
+                          {/* w-0 min-w-full: the details fill the row without widening the
+                              table, so a long step line truncates instead of pushing every
+                              column off screen. */}
+                          <div className="w-0 min-w-full space-y-4">
                             {/* Verification verdict (if the agent ran a verify gate) */}
                             <VerifySummary run={run} />
                             {/* Where the requests went. Only for runs that
                                 routed — a pinned-model run has no trace to
                                 show and an empty panel would read as broken. */}
-                            {agentId && (
+                            {agentId && runRouted(run) && (
                               <div>
                                 <h4 className="mb-2 text-sm font-medium">Route</h4>
                                 <RouteTraceTimeline agentId={agentId} executionId={run.id} />
@@ -155,6 +166,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                 <div className="space-y-2">
                                   {run.steps.map((step, idx) => {
                                     if (step.type === 'verify') return <VerifyStepCard key={idx} step={step} index={idx} />
+                                    if (isCodeStep(step)) return <CodeStepCard key={idx} step={step} index={idx} agentId={agentId} runId={run.id} />
                                     const summary = stepSummary(step)
                                     return (
                                     <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm" data-testid={`run-step-${idx}`}>

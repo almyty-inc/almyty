@@ -146,6 +146,15 @@ describe('VertexMemoryBankBackend (auth-mocked)', () => {
     expect(fakeAuthClient.getAccessToken).toHaveBeenCalled();
   });
 
+  it('reads a service account stored as JSON text, as a credential holds it', async () => {
+    fakeAuthClient.getAccessToken.mockResolvedValue('minted-token-2');
+    axiosInstance.post.mockResolvedValue({ data: { retrievedMemories: [] } });
+    const key = { client_email: 'text@p.iam', private_key_id: 'kid-text', private_key: '-----' };
+    const h = await backend.healthCheck({ engine: credsBearer.engine, location: 'us-central1', serviceAccountJson: JSON.stringify(key) });
+    expect(h.ok).toBe(true);
+    expect(googleAuthMock.GoogleAuth).toHaveBeenCalledWith(expect.objectContaining({ credentials: key }));
+  });
+
   it('delete returns false (Memory Bank has no per-item delete)', async () => {
     const ok = await backend.delete('any-id', 'hard', credsBearer);
     expect(ok).toBe(false);

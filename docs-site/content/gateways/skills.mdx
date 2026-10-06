@@ -1,63 +1,57 @@
-# Skills Gateway
+# Skills gateway
 
-Drop your tools into any AI coding agent as installable skills. A Skills gateway renders each tool as a `SKILL.md` file following the [Agent Skills](https://agentskills.io) specification. The almyty Skills CLI installs and auto-injects those files into 30+ agents, including Cursor, Windsurf, Claude Desktop, and GitHub Copilot.
+A skill is a short instruction file (`SKILL.md`) that teaches an AI coding assistant how to do one thing. A Skills gateway turns each of its tools into such a file, following the open [Agent Skills](https://agentskills.io) format, and the almyty Skills command-line tool installs them into the coding assistants on your computer: Claude Code, Cursor, GitHub Copilot, Windsurf, Codex and 25 more. After that, you can ask your assistant "look up order NW-10428" and it knows how.
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
 ## Create the gateway
 
-1. Open **Gateways** and click **Create gateway** (`/gateways/new`)
-2. Under **Protocol**, pick **Skills**
-3. Under **Tools**, pick a whole API or single tools (a draft can't be served until it is active)
-4. Name it; the address follows from the name (**Advanced** changes the path and who can use it)
-5. Click **Create gateway**. A Skills gateway has no access key: the Skills CLI signs in as you (`npx @almyty/auth login`)
+1. Open **Gateways** and click **Create gateway**.
+2. Under **Protocol**, pick **Skills**.
+3. Under **Tools**, pick a whole API or single tools. A draft tool can't be offered until it is active.
+4. Give it a **Name**; its address follows from the name (**Advanced** changes the path and who can use it).
+5. Click **Create gateway**.
 
-Each tool the gateway serves becomes one `SKILL.md` file; **Tool scoping** on the gateway detail page changes which. Copy the gateway slug: you will use it with the Skills CLI.
+A Skills gateway has no access key of its own: the Skills tool signs in as you. **Tool scoping** on the gateway's page changes which tools it offers. The gateway's **Integrations** tab shows the exact commands to install it, keep it up to date and sign in.
 
-![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
+![Assigning tools on the gateway Tool scoping tab](/screenshots/gateway-detail-tools.png)
 
-## Install with the Skills CLI
+## Install the skills
 
-Install the gateway's skills into your local agents:
+Someone comfortable with a terminal runs two commands on their computer: one to sign in, one to install. Copy them from the **Integrations** tab, or see [For developers](#for-developers) below. From then on, the coding assistants on that computer can use the gateway's tools.
 
-```bash
-npx @almyty/skills install @acme/my-skills
-```
+## For developers
 
-Authenticate first if needed:
+Sign in once (all almyty CLIs share one sign-in), then install:
 
 ```bash
-npx @almyty/skills login
-npx @almyty/skills login --token your-api-key
+npx @almyty/auth login
+npx @almyty/auth login --token your-api-key   # CI: skip the browser
+npx @almyty/skills install acme/my-skills
 ```
 
-### Watch mode
+With a terminal, `install` shows a picker with the agents it detected already ticked; in CI or a pipe it writes to the detected agents plus `.agents/skills/` (run `--dry-run` first to see where). It only touches the files it installed.
 
-Poll the gateway every 30 seconds and refresh SKILL.md files when tools change:
+**Keep them current.** `watch` re-syncs one gateway every 60 seconds (`--interval` changes it); `daemon` re-syncs everything installed. Stop either with Ctrl+C.
 
 ```bash
-npx @almyty/skills watch @acme/my-skills
+npx @almyty/skills watch acme/my-skills
 ```
 
-Stop with Ctrl+C or:
+**List and remove.**
 
 ```bash
-npx @almyty/skills stop
+npx @almyty/skills gateways              # your gateways and the ref to install each
+npx @almyty/skills list acme/my-skills   # the skills a gateway serves
+npx @almyty/skills installed             # what is installed in this directory
+npx @almyty/skills remove                # remove the almyty skills from this directory
 ```
 
-### List and remove
+See the [Skills CLI](/cli/skills) for every command and option.
 
-```bash
-npx @almyty/skills list
-npx @almyty/skills remove @acme/my-skills
-```
+### SKILL.md format
 
-The CLI writes SKILL.md files to each agent's skill directory and registers them for auto-loading.
-
-## SKILL.md format
-
-Each tool produces a markdown file whose frontmatter carries only `name`, `description`,
-and a `metadata` block:
+Each tool produces a markdown file whose frontmatter carries only `name`, `description` and a `metadata` block:
 
 ```yaml
 ---
@@ -71,30 +65,21 @@ metadata:
 ---
 ```
 
-The `toolId` is what `almyty-skills run` resolves against, so a skill keeps working after
-a rename. Under the frontmatter the file has a `# get_users` title, the tool's
-description, then `## When to use`, `## HTTP endpoint`, `## Parameters`, `## Example`,
-and `## Invocation` sections.
+The `toolId` is what `almyty-skills run` resolves against, so a skill keeps working after a rename. Under the frontmatter the file has a `# get_users` title, the tool's description, then `## When to use`, `## HTTP endpoint`, `## Parameters`, `## Example` and `## Invocation` sections.
 
-`## HTTP endpoint` names the **upstream** API the tool wraps — for example
-`GET https://api.example.com/users` — not an almyty URL. Agents do not call it directly;
-`## Invocation` gives them the Skills CLI command, which authenticates with your stored
-almyty credentials and runs the tool through the gateway:
+`## HTTP endpoint` names the upstream API the tool wraps (for example `GET https://api.example.com/users`), not an almyty URL. Agents do not call it directly: `## Invocation` gives them the Skills CLI command, which signs in with your stored almyty credentials and runs the tool through the gateway:
 
 ```bash
 npm i -g @almyty/skills   # one-time, skip if already installed
 almyty-skills run acme/my-skills/get_users --limit 10
 ```
 
-`npx -y @almyty/skills run ...` works too, at roughly a second of startup overhead per
-call.
+`npx -y @almyty/skills run ...` works too, at roughly a second of startup per call.
 
-## Supported agents
+### Supported agents
 
-| Category | Agents |
-|----------|--------|
-| **IDE** | Cursor, Windsurf, VS Code (Copilot), JetBrains |
-| **AI Assistants** | Claude Desktop, ChatGPT, Gemini |
-| **Dev Tools** | GitHub Copilot CLI, Aider, Continue, Cody |
-| **Frameworks** | LangChain, LlamaIndex, AutoGPT, CrewAI |
-| **Others** | 20+ additional agents |
+The CLI knows 30 coding agents and where each keeps its skills:
+
+Claude Code, Cursor, GitHub Copilot, Windsurf, Codex, Amp, Augment, Cline, CodeBuddy, Command Code, Continue, Cortex, Droid (Factory), Gemini CLI, Goose, Junie, Kilo Code, Kiro CLI, Kode, MCPJam, Mistral Vibe, Mux, OpenCode, OpenHands, Pi, Qoder, Qwen Code, Roo Code, Trae and Zencoder.
+
+Any other agent that reads the universal `.agents/skills/` directory picks them up too.

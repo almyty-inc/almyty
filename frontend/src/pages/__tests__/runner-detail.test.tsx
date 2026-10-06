@@ -111,7 +111,7 @@ describe('RunnerDetailPage', () => {
     update.mockResolvedValue({})
     const user = userEvent.setup()
     render(<RunnerDetailPage />)
-    await user.click(await screen.findByRole('radio', { name: /private/i }))
+    await user.click(await screen.findByRole('radio', { name: /^only you/i }))
     await user.click(screen.getByRole('button', { name: /save visibility/i }))
     await waitFor(() => expect(update).toHaveBeenCalledWith('r1', { visibility: 'private', teamId: null }))
     expect(screen.queryByRole('dialog')).toBeNull()

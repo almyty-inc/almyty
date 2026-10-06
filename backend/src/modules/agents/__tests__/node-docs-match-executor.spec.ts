@@ -64,7 +64,10 @@ describe('Transform is a template, not JavaScript', () => {
 
   it('is documented by the key it reads', () => {
     expect(nodeTypesDoc).toContain('| `expression` | string | Template rendered against the execution context. Required. |');
-    expect(nodeTypesDoc).not.toMatch(/\|\s*`code`\s*\|/);
+    // Transform has no `code` key (the Code step has one; it is another section).
+    const transform = nodeTypesDoc.slice(nodeTypesDoc.indexOf('## Transform'), nodeTypesDoc.indexOf('## Loop'));
+    expect(transform).toContain('expression');
+    expect(transform).not.toMatch(/\|\s*`code`\s*\|/);
     expect(nodeTypesProse).toContain('It is a template language, not JavaScript');
   });
 });
@@ -118,7 +121,11 @@ describe('Merge strategies', () => {
     for (const strategy of ['first_response', 'concatenate', 'best_of_n', 'consensus']) {
       expect(nodeTypesDoc).toContain(`\`${strategy}\``);
     }
-    expect(nodeTypesDoc).not.toMatch(/\|\s*`sources`\s*\|/);
+    // Merge reads its incoming edges only. Extract context has a real
+    // `sources` key of its own, so look at the Merge section alone.
+    const mergeStart = nodeTypesDoc.indexOf('\n## Merge');
+    const mergeSection = nodeTypesDoc.slice(mergeStart, nodeTypesDoc.indexOf('\n## ', mergeStart + 1));
+    expect(mergeSection).not.toMatch(/\|\s*`sources`\s*\|/);
     expect(nodeTypesDoc).not.toContain('`first_non_null`');
     expect(nodeTypesProse).toContain('There is no `sources` list');
   });

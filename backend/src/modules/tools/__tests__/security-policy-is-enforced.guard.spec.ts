@@ -103,12 +103,21 @@ describe('the orchestrator resolves the policy before dispatch', () => {
 });
 
 describe('every outbound-request executor enforces the policy', () => {
-  // Any file in executors/ that runs validateUrl is building a request that
-  // leaves this process. Each one must also run the gateway-tool gate.
+  // Any file in executors/ that runs the SSRF gate (validateUrl, or
+  // decideToolEgress, which wraps it with the organization allowlist) is
+  // building a request that leaves this process. Each one must also run the
+  // gateway-tool gate. tool-egress.ts is the SSRF gate itself and builds no
+  // request, so it is not one of them.
   const outbound = readdirSync(EXECUTORS_DIR)
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'))
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts') && f !== 'tool-egress.ts')
     .map((f) => ({ name: f, source: readFileSync(join(EXECUTORS_DIR, f), 'utf8') }))
-    .filter((f) => f.source.includes('validateUrl(') || f.source.includes('assertSafeNextPageUrl('));
+    .filter(
+      (f) =>
+        f.source.includes('validateUrl(') ||
+        f.source.includes('decideToolEgress(') ||
+        f.source.includes('egressFor(') ||
+        f.source.includes('assertSafeNextPageUrl('),
+    );
 
   it('finds the executors it is supposed to be guarding', () => {
     expect(outbound.map((f) => f.name).sort()).toEqual([
@@ -119,6 +128,11 @@ describe('every outbound-request executor enforces the policy', () => {
     ]);
   });
 
+  it('the shared egress decision runs the SSRF gate before any allowlist', () => {
+    const egress = readFileSync(join(EXECUTORS_DIR, 'tool-egress.ts'), 'utf8');
+    expect(egress).toContain('const strict = validateUrl(url);');
+    expect(egress.indexOf('validateUrl(url)')).toBeLessThan(egress.indexOf('decideEgress('));
+  });
   it.each(outbound.map((f) => [f.name]))('%s runs the gateway-tool policy gate', (name) => {
     const source = outbound.find((f) => f.name === name)!.source;
     const gated =
@@ -185,6 +199,6 @@ describe('the gateway call sites hand the executor a gatewayId', () => {
 
   it('the MCP JSON-RPC dispatcher forwards the gateway to tools/call', () => {
     const mcp = read('modules', 'mcp', 'mcp.service.ts');
-    expect(mcp).toMatch(/handleToolCall\([^)]*gatewayId\)/);
+    expect(mcp).toMatch(/handleToolCall\([^)]*\bgatewayId[,)]/);
   });
 });

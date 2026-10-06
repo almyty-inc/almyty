@@ -2,377 +2,172 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { McpController } from './mcp.controller';
 import { McpService } from './mcp.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { getProtocolContext } from '../../common/interceptors/protocol-context';
 
 describe('McpController', () => {
   let controller: McpController;
-  let mcpService: jest.Mocked<McpService>;
+  let mcpService: { handleJsonRpcMessage: jest.Mock; healthCheck: jest.Mock };
+
+  const makeRes = () => {
+    const res: any = { statusCode: 200 };
+    res.status = jest.fn().mockImplementation((code: number) => {
+      res.statusCode = code;
+      return res;
+    });
+    res.json = jest.fn().mockReturnValue(res);
+    res.end = jest.fn().mockReturnValue(res);
+    return res;
+  };
+
+  const request = (headers: Record<string, string> = {}, user: any = { id: 'user-1', currentOrganizationId: 'org-1' }) =>
+    ({ user, headers }) as any;
 
   beforeEach(async () => {
-    const mockMcpService = {
-      handleJsonRpc: jest.fn(),
+    mcpService = {
       handleJsonRpcMessage: jest.fn(),
       healthCheck: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [McpController],
-      providers: [
-        {
-          provide: McpService,
-          useValue: mockMcpService,
-        },
-      ],
+      providers: [{ provide: McpService, useValue: mcpService }],
     })
-    .overrideGuard(JwtAuthGuard)
-    .useValue({ canActivate: jest.fn(() => true) })
-    .compile();
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      .compile();
 
     controller = module.get<McpController>(McpController);
-    mcpService = module.get(McpService);
   });
+
   describe('handleMcp', () => {
-    it('should handle MCP request successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'tools/list',
-      };
+    it('answers through the core at the version the header names', async () => {
+      const body = { jsonrpc: '2.0', id: '1', method: 'tools/list' };
+      const answer = { jsonrpc: '2.0', id: '1', result: { tools: [] } };
+      mcpService.handleJsonRpcMessage.mockResolvedValue(answer);
+      const res = makeRes();
 
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: { tools: [] },
-      };
+      await controller.handleMcp(request({ 'mcp-protocol-version': '2025-11-25' }), body, res);
 
-      (mcpService as any).handleJsonRpcMessage.mockResolvedValue(mockResponse);
-
-      const result = await controller.handleMcp(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-      // The batch-aware entry point: the body of this route may be an array.
-      expect((mcpService as any).handleJsonRpcMessage).toHaveBeenCalledWith(
-        mockBody,
-        'org-1',
-        'user-1'
-      );
+      expect(res.json).toHaveBeenCalledWith(answer);
+      expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', 'user-1', undefined, {
+        version: '2025-11-25',
+        era: 'legacy',
+      });
     });
 
-    it('passes a JSON-RPC batch straight through', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+    it('treats a request without the header as 2025-03-26, which still allows a batch', async () => {
       const batch = [
-        { jsonrpc: '2.0' as const, id: 1, method: 'ping' },
-        { jsonrpc: '2.0' as const, id: 2, method: 'ping' },
+        { jsonrpc: '2.0', id: 1, method: 'ping' },
+        { jsonrpc: '2.0', id: 2, method: 'ping' },
       ];
-      (mcpService as any).handleJsonRpcMessage.mockResolvedValue([]);
+      mcpService.handleJsonRpcMessage.mockResolvedValue([]);
 
-      await controller.handleMcp(mockRequest, batch);
+      await controller.handleMcp(request(), batch, makeRes());
 
-      expect((mcpService as any).handleJsonRpcMessage).toHaveBeenCalledWith(batch, 'org-1', 'user-1');
-    });
-  });
-
-  // `0` is a legal JSON-RPC id. `body.id || 1` rewrote it to `1` on every
-  // one of these REST-style wrappers, so the response came back correlated
-  // to an id the client never sent.
-  describe('request id 0', () => {
-    it.each([
-      ['callTool', 'tools/call'],
-      ['listTools', 'tools/list'],
-      ['initialize', 'initialize'],
-      ['ping', 'ping'],
-      ['getPrompt', 'prompts/get'],
-    ])('%s preserves id 0', async (route, method) => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 0, result: {} } as any);
-
-      await (controller as any)[route](mockRequest, { id: 0, params: {} });
-
-      expect(mcpService.handleJsonRpc.mock.calls[0][0]).toMatchObject({ method, id: 0 });
+      expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(batch, 'org-1', 'user-1', undefined, {
+        version: '2025-03-26',
+        era: 'assumed',
+      });
     });
 
-    it('still defaults a missing id to 1', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: {} } as any);
+    it('refuses a batch with 400 from 2025-06-18 on, before anything runs', async () => {
+      const res = makeRes();
+      await controller.handleMcp(
+        request({ 'mcp-protocol-version': '2025-06-18' }),
+        [{ jsonrpc: '2.0', id: 1, method: 'ping' }],
+        res,
+      );
 
-      await controller.listTools(mockRequest, { params: {} });
-
-      expect(mcpService.handleJsonRpc.mock.calls[0][0]).toMatchObject({ id: 1 });
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json.mock.calls[0][0].error.code).toBe(-32600);
+      expect(mcpService.handleJsonRpcMessage).not.toHaveBeenCalled();
     });
-  });
 
-  describe('initialize', () => {
-    it('should handle initialization request', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
+    it('refuses an unsupported MCP-Protocol-Version with 400', async () => {
+      const res = makeRes();
+      await controller.handleMcp(
+        request({ 'mcp-protocol-version': '1999-01-01' }),
+        { jsonrpc: '2.0', id: 4, method: 'tools/list' },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json.mock.calls[0][0]).toMatchObject({ id: 4, error: { code: -32022, data: { requested: '1999-01-01' } } });
+      expect(mcpService.handleJsonRpcMessage).not.toHaveBeenCalled();
+    });
+
+    it('refuses a foreign Origin with 403', async () => {
+      const res = makeRes();
+      await controller.handleMcp(
+        request({ origin: 'https://evil.example.com' }),
+        { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json.mock.calls[0][0]).toMatchObject({ id: null, error: { code: -32600 } });
+      expect(mcpService.handleJsonRpcMessage).not.toHaveBeenCalled();
+    });
+
+    it('answers a notification-only POST with 202 and no body', async () => {
+      mcpService.handleJsonRpcMessage.mockResolvedValue(null);
+      const res = makeRes();
+
+      await controller.handleMcp(request(), { jsonrpc: '2.0', method: 'notifications/initialized' }, res);
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it('records the protocol version and client of an initialize on the request log', async () => {
+      mcpService.handleJsonRpcMessage.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: {} });
+      const req = request();
+
+      await controller.handleMcp(
+        req,
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', version: '2.1.0' } },
+        },
+        makeRes(),
+      );
+
+      expect(getProtocolContext(req)?.mcp).toEqual({
+        protocolVersion: '2025-06-18',
+        era: 'legacy',
         method: 'initialize',
-        params: {
-          protocolVersion: '1.0',
-          capabilities: {},
-        },
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: {
-          protocolVersion: '1.0',
-          capabilities: {},
-          serverInfo: {},
-        },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.initialize(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
+        clientName: 'claude-code',
+        clientVersion: '2.1.0',
+        outcome: 'ok',
+      });
     });
-  });
 
-  describe('ping', () => {
-    it('should handle ping request', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'ping',
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: {},
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.ping(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-    });
-  });
-
-  describe('listTools', () => {
-    it('should list tools successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'tools/list',
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: {
-          tools: [
-            { name: 'tool-1', description: 'Test tool 1', inputSchema: {} },
-          ],
-        },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.listTools(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-    });
-  });
-
-  describe('callTool', () => {
-    it('should call tool successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'tools/call',
-        params: {
-          name: 'test-tool',
-          arguments: { param1: 'value1' },
-        },
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: {
-          content: [{ type: 'text', text: 'Tool result' }],
-          isError: false,
-        },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.callTool(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
+    it('throws when the organization context is missing', async () => {
+      await expect(
+        controller.handleMcp(request({}, { id: 'user-1' }), { jsonrpc: '2.0', id: '1', method: 'tools/list' }, makeRes()),
+      ).rejects.toThrow('Organization context required');
     });
   });
 
   describe('health', () => {
     it('should return health status', async () => {
-      const mockHealth = {
-        status: 'healthy',
-        activeSessions: 5,
-        serverInfo: { version: '1.0.0', uptime: 1000 },
-      };
-
+      const mockHealth = { status: 'healthy', activeSessions: 5, serverInfo: { version: '1.0.0' } };
       mcpService.healthCheck.mockResolvedValue(mockHealth);
 
-      const result = await controller.health();
-
-      expect(result).toBe(mockHealth);
-      expect(mcpService.healthCheck).toHaveBeenCalled();
-    });
-  });
-
-  describe('handleNotifications', () => {
-    it('should handle notifications successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        method: 'notifications/initialized',
-      };
-
-      const result = await controller.handleNotifications(mockRequest, mockBody);
-
-      expect(result).toBeUndefined();
-    });
-
-    it('should throw error when organization context is missing', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
-      const mockBody = {
-        method: 'notifications/initialized',
-      };
-
-      await expect(controller.handleNotifications(mockRequest, mockBody)).rejects.toThrow('Organization context required');
-    });
-  });
-
-  describe('listResources', () => {
-    it('should list resources successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'resources/list',
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: {
-          resources: [
-            { uri: 'resource-1', name: 'Test Resource', mimeType: 'application/json' },
-          ],
-        },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.listResources(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-    });
-  });
-
-  describe('readResource', () => {
-    it('should read resource successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'resources/read',
-        params: {
-          uri: 'resource-1',
-        },
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: {
-          contents: [{ uri: 'resource-1', mimeType: 'application/json', text: '{"data":"value"}' }],
-        },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.readResource(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-    });
-  });
-
-  describe('listPrompts', () => {
-    it('should list prompts successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'prompts/list',
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: {
-          prompts: [
-            { name: 'prompt-1', description: 'Test Prompt' },
-          ],
-        },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.listPrompts(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-    });
-  });
-
-  describe('getPrompt', () => {
-    it('should get prompt successfully', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'prompts/get',
-        params: {
-          name: 'test-prompt',
-        },
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        result: {
-          description: 'Test Prompt',
-          messages: [{ role: 'user', content: 'Test content' }],
-        },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.getPrompt(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
+      await expect(controller.health()).resolves.toBe(mockHealth);
     });
   });
 
   describe('wellKnown', () => {
-    it('should return MCP server information', async () => {
+    it('names the newest version answered and every version answered', async () => {
       const result = await controller.wellKnown();
 
-      expect(result).toBeDefined();
       expect(result.protocol).toBe('mcp');
-      expect(result.version).toBe('2024-11-05');
+      expect(result.version).toBe('2026-07-28');
+      expect(result.supportedVersions).toEqual(['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
       expect(result.server.name).toBe('almyty');
-      expect(result.capabilities.tools).toBeDefined();
-      expect(result.capabilities.resources).toBeDefined();
-      expect(result.capabilities.prompts).toBeDefined();
       expect(result.transports.http).toContain('/mcp');
     });
 
@@ -388,6 +183,8 @@ describe('McpController', () => {
       expect(result.transports.sse).not.toContain('/api/');
       expect(result.transports.websocket).not.toContain('/api/');
       expect(result.transports.sse).toMatch(/\/mcp\/sse$/);
+      // HTTP+SSE is still listed, as deprecated (MCP 2026-07-28, SEP-2596).
+      expect(result.deprecatedTransports).toEqual(['sse']);
     });
 
     // The handshake advertises listChanged: false for all three, and
@@ -400,241 +197,6 @@ describe('McpController', () => {
       expect(result.capabilities.tools.listChanged).toBe(false);
       expect(result.capabilities.resources.listChanged).toBe(false);
       expect(result.capabilities.prompts.listChanged).toBe(false);
-    });
-  });
-
-  describe('error cases', () => {
-    it('should throw error when organization context is missing in handleMcp', async () => {
-      const mockRequest = { user: { id: 'user-1' } };
-      const mockBody = {
-        jsonrpc: '2.0' as const,
-        id: '1',
-        method: 'tools/list',
-      };
-
-      await expect(controller.handleMcp(mockRequest, mockBody)).rejects.toThrow('Organization context required');
-    });
-
-    it('should use default id when not provided in initialize', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        params: {
-          protocolVersion: '1.0',
-          capabilities: {},
-        },
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 1,
-        result: {
-          protocolVersion: '1.0',
-          capabilities: {},
-        },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.initialize(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-      expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 1,
-          method: 'initialize',
-        }),
-        'org-1',
-        'user-1'
-      );
-    });
-
-    it('should use params directly when no id provided in callTool', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        name: 'test-tool',
-        arguments: { param1: 'value1' },
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 1,
-        result: { content: [] },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.callTool(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-      expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          params: mockBody,
-        }),
-        'org-1',
-        'user-1'
-      );
-    });
-
-    it('should handle ping without params', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = { };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 1,
-        result: {},
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.ping(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-      expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          params: undefined,
-        }),
-        'org-1',
-        'user-1'
-      );
-    });
-
-    it('should handle listTools without params', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = { id: 5 };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 5,
-        result: { tools: [] },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.listTools(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-      expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 5,
-          params: undefined,
-        }),
-        'org-1',
-        'user-1'
-      );
-    });
-
-    it('should handle listResources without params', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = { };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 1,
-        result: { resources: [] },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.listResources(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-    });
-
-    it('should handle listPrompts without params', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = { };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 1,
-        result: { prompts: [] },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.listPrompts(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-    });
-
-    it('should handle readResource without params object', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        uri: 'test-resource',
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 1,
-        result: { contents: [] },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.readResource(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-      expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          params: mockBody,
-        }),
-        'org-1',
-        'user-1'
-      );
-    });
-
-    it('should handle getPrompt without params object', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        name: 'test-prompt',
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 1,
-        result: { messages: [] },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.getPrompt(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-      expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          params: mockBody,
-        }),
-        'org-1',
-        'user-1'
-      );
-    });
-
-    it('should handle initialize without params object', async () => {
-      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
-      const mockBody = {
-        protocolVersion: '1.0',
-        capabilities: {},
-      };
-
-      const mockResponse = {
-        jsonrpc: '2.0' as const,
-        id: 1,
-        result: { protocolVersion: '1.0' },
-      };
-
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
-
-      const result = await controller.initialize(mockRequest, mockBody);
-
-      expect(result).toBe(mockResponse);
-      expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          params: mockBody,
-        }),
-        'org-1',
-        'user-1'
-      );
     });
   });
 });

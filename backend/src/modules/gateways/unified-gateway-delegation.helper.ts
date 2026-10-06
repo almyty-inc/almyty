@@ -23,21 +23,30 @@ import { UtcpService } from '../mcp/utcp.service';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
 import { A2AServerService, A2A_RUN_METHODS } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
-import { AcpServerService } from '../acp/acp-server.service';
-import { AcpDiscoveryService } from '../acp/acp-discovery.service';
 import { isPrivateGateway } from './private-gateway';
 import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { assertOAuthScope } from '../mcp/services/mcp-oauth-scope';
-import { ChannelPolicy, ChannelPolicyService, a2aCallerId } from './channel-policy.service';
+import { ChannelPolicy, ChannelPolicyService, a2aCallerId, withA2ACaller } from './channel-policy.service';
 import { HostedChatService } from './channels/hosted-chat.service';
 import { trustedClientIp } from '../../common/security/client-ip';
+import {
+  enterMcpRequest,
+  mcpHttpStatusOf,
+  mcpOriginRefusal,
+  mcpOutcomeOf,
+  recordMcpRequest,
+  resolveMcpRequestVersion,
+} from '../mcp/core/mcp-http-binding';
+import { McpCallContext } from '../mcp/core/mcp-protocol-core';
+import { serveSubscriptionListen } from '../mcp/core/mcp-listen';
+import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
 
 /**
  * Per-protocol delegation for gateways exposed under
  * `/:orgSlug/:resourceSlug`. The unified controller dispatches
  * to `handleGatewayRequest`, which fans out to the correct
- * MCP / UTCP / A2A / ACP / channel service based on `gateway.type`.
+ * MCP / UTCP / A2A / channel service based on `gateway.type`.
  */
 @Injectable()
 export class UnifiedGatewayDelegation {
@@ -79,6 +88,8 @@ export class UnifiedGatewayDelegation {
     GatewayType.WHATSAPP,
     GatewayType.WHATSAPP_CLOUD,
     GatewayType.SMS,
+    GatewayType.IMESSAGE_SENDBLUE,
+    GatewayType.IMESSAGE_LOOPMESSAGE,
     GatewayType.EMAIL,
     GatewayType.WEBHOOK,
     GatewayType.GOOGLE_CHAT,
@@ -100,8 +111,6 @@ export class UnifiedGatewayDelegation {
     private readonly gatewayResolver: GatewayResolverService,
     private readonly a2aServerService: A2AServerService,
     private readonly a2aAgentCardService: A2AAgentCardService,
-    private readonly acpServerService: AcpServerService,
-    private readonly acpDiscoveryService: AcpDiscoveryService,
     private readonly configService: ConfigService,
     private readonly gatewayRateLimit: GatewayRateLimitService,
     private readonly channelGatewayService: ChannelGatewayService,
@@ -115,6 +124,9 @@ export class UnifiedGatewayDelegation {
     // visitor memory rule. Optional for the same reason; Nest always
     // injects it (channel-policy.guard.spec.ts).
     @Optional() private readonly channelPolicy?: ChannelPolicyService,
+    // Delivers tool-set changes to MCP subscriptions/listen streams.
+    // Optional for the positional unit tests; Nest always injects it.
+    @Optional() private readonly changeBus?: McpChangeBus,
   ) {}
 
   async handleGatewayRequest(
@@ -126,6 +138,13 @@ export class UnifiedGatewayDelegation {
     res: Response,
     body: any,
   ) {
+    // A gateway whose agent was deleted answers like a missing one. Before
+    // deleting an agent took its gateways with it, such a gateway stayed
+    // active and a message to it ran against no agent: a 500.
+    if (Gateway.agentGone(gateway)) {
+      const what = UnifiedGatewayDelegation.CHANNEL_TYPES.has(gateway.type) ? 'This chat no longer exists' : 'Not found';
+      throw new HttpException(what, HttpStatus.NOT_FOUND);
+    }
     const afterGateway = req.path.replace(`/${orgSlug}/${resourceSlug}`, '');
     const action = afterGateway.replace(/^\//, '') || '';
 
@@ -161,9 +180,32 @@ export class UnifiedGatewayDelegation {
       );
     }
 
+    // MCP: Origin first (a browser page on another origin, DNS rebinding
+    // included, must not reach the gateway with the visitor's network
+    // position or credentials; 403 for every version), then the version and
+    // its headers (2026-07-28: header checks run before authorization scope
+    // checks and before dispatch). Both before authentication.
+    let mcpCtx: McpCallContext | undefined;
+    if (gateway.type === GatewayType.MCP && !action.startsWith('.well-known/')) {
+      const refusal = mcpOriginRefusal(req);
+      if (refusal) {
+        recordMcpRequest(req, null, body, 'refused');
+        return res.status(refusal.status).json(refusal.body);
+      }
+      if (req.method === 'POST') {
+        const resolution = resolveMcpRequestVersion(req, body);
+        if ('refusal' in resolution) {
+          recordMcpRequest(req, null, body, 'refused');
+          return res.status(resolution.refusal.status).json(resolution.refusal.body);
+        }
+        mcpCtx = resolution.ctx;
+        enterMcpRequest(mcpCtx);
+      }
+    }
+
     const isDiscovery =
       action.startsWith('.well-known/') ||
-      (action === '' && req.method === 'GET' && [GatewayType.A2A, GatewayType.ACP].includes(gateway.type));
+      (action === '' && req.method === 'GET' && gateway.type === GatewayType.A2A);
 
     // Channel platform webhooks authenticate via platform signature
     // (verified by the adapter), not via almyty API keys — Slack or
@@ -196,7 +238,7 @@ export class UnifiedGatewayDelegation {
     switch (gateway.type) {
       case GatewayType.MCP:
         // MCP bumps the gateway request counters inside McpService.
-        return this.delegateMcp(gateway, auth, body, req, res);
+        return this.delegateMcp(gateway, auth, body, req, res, mcpCtx);
       case GatewayType.UTCP: {
         const out = await this.delegateUtcp(gateway, organization, action, auth, req, res, body);
         this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
@@ -204,11 +246,6 @@ export class UnifiedGatewayDelegation {
       }
       case GatewayType.A2A: {
         const out = await this.delegateA2A(gateway, organization, action, req, res, body, auth);
-        this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
-        return out;
-      }
-      case GatewayType.ACP: {
-        const out = await this.delegateACP(gateway, organization, action, req, res, body);
         this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
         return out;
       }
@@ -311,9 +348,52 @@ export class UnifiedGatewayDelegation {
     body: any,
     req: Request,
     res: Response,
+    resolvedCtx?: McpCallContext,
   ) {
-    const incomingSessionId = req.headers['mcp-session-id'] as string;
+    // Only POST carries MCP here. There is no server-to-client stream (GET)
+    // and no session to terminate (DELETE), so both are 405 Method Not
+    // Allowed, as every revision since 2025-03-26 has a server without them
+    // answer.
+    if (req.method === 'GET' || req.method === 'DELETE') {
+      recordMcpRequest(req, null, body, 'refused');
+      res.setHeader('Allow', 'POST');
+      return res.status(405).json({
+        jsonrpc: '2.0',
+        id: null,
+        error: { code: -32600, message: `${req.method} is not supported on this MCP endpoint; use POST` },
+      });
+    }
 
+    // The version this POST is served at: resolved before authentication in
+    // handleGatewayRequest (the header checks of 2026-07-28 run before
+    // anything else), or here for a caller that did not.
+    let ctx = resolvedCtx;
+    if (!ctx) {
+      const resolution = resolveMcpRequestVersion(req, body);
+      if ('refusal' in resolution) {
+        recordMcpRequest(req, null, body, 'refused');
+        return res.status(resolution.refusal.status).json(resolution.refusal.body);
+      }
+      ctx = resolution.ctx;
+      enterMcpRequest(ctx);
+    }
+
+    // A modern client's change-notification stream. A tenant gateway can
+    // report changes to its tool set; the management gateway's tools never
+    // change, so its streams acknowledge nothing and only keep alive.
+    if (ctx.era === 'modern' && body?.method === 'subscriptions/listen' && body.id !== undefined) {
+      recordMcpRequest(req, ctx, body, 'ok');
+      return serveSubscriptionListen({
+        res,
+        id: body.id,
+        params: body.params,
+        serverInfo: { name: gateway.isSystem ? 'almyty' : gateway.name, version: '1.0.0' },
+        toolsGatewayId: gateway.isSystem ? null : gateway.id,
+        bus: this.changeBus,
+      });
+    }
+
+    let result: Awaited<ReturnType<McpService['handleJsonRpcMessage']>>;
     if (gateway.isSystem) {
       let userId = auth?.userId || (req as any).user?.sub || (req as any).user?.id;
       if (!userId) {
@@ -325,59 +405,37 @@ export class UnifiedGatewayDelegation {
           if (validation.valid) userId = validation.userId;
         }
       }
-      const result = await this.almytyMcpService.handleJsonRpc(
-        body,
-        gateway.organizationId,
-        userId,
-      );
-      // 202 Accepted, not 204: the Streamable HTTP revision names 202 for a
-      // POST that carries only notifications or responses, and the
-      // TypeScript SDK's StreamableHTTPClientTransport branches on
-      // `status === 202` to decide whether to open the server->client SSE
-      // stream after `notifications/initialized`. On a 204 it returns
-      // without error and never opens the stream, so a server-initiated
-      // notification could never be delivered.
-      if (result === null) {
-        return res.status(202).end();
-      }
-      // A batch response is an array; only a single response carries a
-      // session id to echo.
-      const single = Array.isArray(result) ? null : result;
-      if (single?.result?.sessionId || incomingSessionId) {
-        res.setHeader('Mcp-Session-Id', single?.result?.sessionId || incomingSessionId);
-      }
-      return res.json(result);
+      result = await this.almytyMcpService.handleJsonRpc(body, gateway.organizationId, userId, ctx);
+    } else {
+      // The caller the gateway's own auth identified (an API key's or OAuth
+      // token's user), as UTCP does. With no user, tools/call and tools/get
+      // treat the caller as nobody: another member's private tool -- and on
+      // a private gateway, which only its owner reaches, the owner's own --
+      // is refused rather than run on no one's behalf.
+      const callerId: string | undefined = auth?.userId || (req as any).user?.sub || (req as any).user?.id || undefined;
+      result = await this.mcpService.handleJsonRpcMessage(body, gateway.organizationId, callerId, gateway.id, ctx);
     }
+    recordMcpRequest(req, ctx, body, mcpOutcomeOf(result));
 
-    // The caller the gateway's own auth identified (an API key's or OAuth
-    // token's user), as UTCP does. With no user, tools/call and tools/get
-    // treat the caller as nobody: another member's private tool -- and on
-    // a private gateway, which only its owner reaches, the owner's own --
-    // is refused rather than run on no one's behalf. Passing null here made
-    // a private gateway useless to its owner and ran every call unattributed.
-    const callerId: string | undefined = auth?.userId || (req as any).user?.sub || (req as any).user?.id || undefined;
-    const result = await this.mcpService.handleJsonRpcMessage(
-      body,
-      gateway.organizationId,
-      callerId,
-      gateway.id,
-    );
-
-    // 202 Accepted for a notification-only POST — see the system-gateway
-    // branch above for why the SDK cares about the exact status.
+    // 202 Accepted, not 204, for a notification-only POST: the Streamable
+    // HTTP revisions name 202, and the TypeScript SDK branches on exactly
+    // that status.
     if (result === null) {
       return res.status(202).end();
     }
 
+    // A legacy `initialize` gets an Mcp-Session-Id so clients that insist
+    // on one are satisfied. Nothing stores or reads it, and a client's own
+    // Mcp-Session-Id is never echoed: modern requests carry no session at
+    // all (2026-07-28: "do not mint or echo session IDs").
     const single = Array.isArray(result) ? null : result;
-    if (body?.method === 'initialize' && single?.result) {
-      const sessionId = single.result.sessionId || crypto.randomUUID();
-      res.setHeader('Mcp-Session-Id', sessionId);
-    } else if (incomingSessionId) {
-      res.setHeader('Mcp-Session-Id', incomingSessionId);
+    if (ctx.era !== 'modern' && body?.method === 'initialize' && single?.result) {
+      res.setHeader('Mcp-Session-Id', crypto.randomUUID());
     }
 
-    return res.json(result);
+    // A modern request for a method this server does not serve is a 404
+    // with -32601, which is how a dual-era client tells modern from legacy.
+    return res.status(mcpHttpStatusOf(ctx, result)).json(result);
   }
 
   private async delegateA2A(
@@ -467,48 +525,10 @@ export class UnifiedGatewayDelegation {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    return this.channelPolicy ? this.channelPolicy.admit(gateway) : null;
-  }
-
-  private async delegateACP(
-    gateway: Gateway,
-    organization: Organization,
-    action: string,
-    req: Request,
-    res: Response,
-    body: any,
-  ) {
-    if (action === '.well-known/acp') {
-      // Only an active agent this gateway may serve has a discovery
-      // document; anything else is the not-found a missing agent gets.
-      const agent = organization.id === gateway.organizationId
-        ? await findServableGatewayAgent(this.agentRepository, gateway)
-        : null;
-      if (!agent) {
-        throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
-      }
-      const baseUrl =
-        this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
-      const doc = this.acpDiscoveryService.buildDiscoveryDocument(gateway, agent, organization, baseUrl);
-      res.setHeader('Cache-Control', 'public, max-age=300');
-      return res.json(doc);
-    }
-
-    if (req.method !== 'POST') {
-      throw new HttpException('ACP gateways only accept POST for JSON-RPC', HttpStatus.METHOD_NOT_ALLOWED);
-    }
-
-    // Every session method runs or reads the gateway's agent, so it answers
-    // only for an agent this gateway may serve -- the rule the discovery
-    // document above follows. Anything else is the not-found a missing
-    // agent gets.
-    const agent = organization.id === gateway.organizationId
-      ? await findServableGatewayAgent(this.agentRepository, gateway)
-      : null;
-    if (!agent) {
-      throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
-    }
-    await this.acpServerService.handleJsonRpc(gateway, req, body, res);
+    if (!this.channelPolicy) return null;
+    // Each run is filed under the caller's credential, so the owner can
+    // answer that caller's data request (VisitorDataService.forA2ACaller).
+    return withA2ACaller(await this.channelPolicy.admit(gateway), gateway.id, a2aCallerId(auth));
   }
 
   private async delegateUtcp(
@@ -549,6 +569,20 @@ export class UnifiedGatewayDelegation {
       return res.json(manual);
     }
 
+    // A meta-tool of a gateway in code or both exposure (code mode).
+    const metaName = utcpMetaToolName(action);
+    if (metaName && req.method === 'POST') {
+      const userId = auth?.userId || (req as any).user?.sub || null;
+      const result = await this.utcpService.executeMetaTool(metaName, body, organization.id, userId, gateway.id);
+      this.metrics?.record(MetricType.UTCP_DIRECT_CALL, {
+        organizationId: organization.id,
+        gatewayId: gateway.id,
+        userId,
+        status: result?.success === false ? MetricStatus.ERROR : MetricStatus.SUCCESS,
+      });
+      return res.json(result);
+    }
+
     const toolId = utcpExecuteToolId(action);
     if ((action === 'execute' || toolId) && req.method === 'POST') {
       const userId = auth?.userId || (req as any).user?.sub || null;
@@ -580,7 +614,7 @@ export class UnifiedGatewayDelegation {
 
   /**
    * Bump the per-gateway request counters shown on the gateway list page.
-   * MCP traffic already does this in McpService; UTCP / A2A / ACP used to
+   * MCP traffic already does this in McpService; UTCP / A2A used to
    * skip it, so those gateways permanently showed "0 requests".
    * Fire-and-forget — counter loss is preferable to slowing the response.
    */
@@ -606,5 +640,11 @@ export class UnifiedGatewayDelegation {
 /** The tool id of an `execute/<toolId>` path: one plain segment, or null. */
 export function utcpExecuteToolId(action: string): string | null {
   const match = /^execute\/([A-Za-z0-9_-]+)$/.exec(action);
+  return match ? match[1] : null;
+}
+
+/** `execute/meta/<name>`: a code-mode meta-tool's address on a UTCP gateway. */
+export function utcpMetaToolName(action: string): string | null {
+  const match = /^execute\/meta\/([a-z_]{1,40})$/.exec(action);
   return match ? match[1] : null;
 }

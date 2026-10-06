@@ -33,6 +33,9 @@ import { UnifiedGatewayDelegation } from '../../modules/gateways/unified-gateway
 import { A2AServerService } from '../../modules/a2a/a2a-server.service';
 import { runMayWriteSharedMemory } from '../../modules/agents/memory-autosave.policy';
 import { FakeRedisWithWindows } from '../fake-redis-windows';
+import { VisitorDataService } from '../../modules/gateways/visitor-data.service';
+import { FilesService } from '../../modules/files/files.service';
+import { AgentFile } from '../../entities/file.entity';
 import { ensureSchema } from './isolated-schema.helper';
 
 /**
@@ -269,6 +272,11 @@ run('channel limits and visitor rights (real Postgres)', () => {
       getRun: jest.fn(),
     };
 
+    // What a visitor's own download and erasure cover (visitor-data.integration.spec.ts).
+    const visitorData = new VisitorDataService(
+      runs,
+      new FilesService(ds.getRepository(AgentFile), { delete: async () => undefined } as any, undefined as any, undefined as any),
+    );
     const hosted = new HostedChatService(
       gateways,
       ds.getRepository(EndUser),
@@ -278,6 +286,8 @@ run('channel limits and visitor rights (real Postgres)', () => {
       undefined,
       undefined,
       appLink,
+      undefined,
+      visitorData,
     );
     hostedChat = new HostedChatController(hosted, rateLimit, runtime as any, places);
 
@@ -285,6 +295,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       type: 'telegram',
       extractTenantId: () => null,
       verifyWebhook: async () => true,
+      carriesMessage: () => true,
       deliveryId: (body: any) => String(body.update_id),
       normalizeInbound: (body: any) => ({
         text: body.text,
@@ -302,13 +313,15 @@ run('channel limits and visitor rights (real Postgres)', () => {
       events,
       runtime as any,
       new ChatWidgetAdapter(events),
-      stub, stub, telegram, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub,
+      stub, stub, telegram, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub,
       undefined,
       undefined,
       rateLimit,
       undefined,
       undefined,
       places,
+      undefined,
+      visitorData,
     );
     widget = new ChannelWidgetController(channels, rateLimit, appLink, places);
 
@@ -324,8 +337,6 @@ run('channel limits and visitor rights (real Postgres)', () => {
       // The caller's credential, as the gateway auth layer resolves it.
       { resolveAndAuthenticate: async (_o: string, _e: string, r: any) => ({ auth: r.__auth }) } as any,
       a2a,
-      unused,
-      unused,
       unused,
       { get: () => 'https://api.example.test' } as any,
       rateLimit,

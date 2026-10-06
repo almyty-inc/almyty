@@ -5,7 +5,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { ConnectorCatalogService } from './connector-catalog.service';
 import { ConnectionView, ConnectorDefinition, connectionOwnerOf, isOthersPrivateConnection } from './connector.types';
 import { ConnectionsService } from './connections.service';
-import { CONNECTIONS_READ, ConnectionPrincipal, membershipOf, principalHasPermission } from './connections.permissions';
+import { CONNECTIONS_MANAGE, CONNECTIONS_READ, ConnectionPrincipal, membershipOf, principalHasPermission } from './connections.permissions';
 import { GrantsService } from './grants/grants.service';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 
@@ -64,7 +64,12 @@ export class ConnectionsResolverService {
     }
 
     // Ownership only (no grants module wired): org connections for any
-    // member with connections:read, user connections for their owner.
+    // member with connections:read, user connections for their owner. A
+    // team connection needs its team, which only the grants module knows:
+    // without it, only connections:manage (fail closed, and not found).
+    if (row.visibility === 'team' && !principalHasPermission(principal, row.organizationId, CONNECTIONS_MANAGE)) {
+      throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+    }
     const allowed = row.ownerUserId
       ? row.ownerUserId === principal.id
       : principalHasPermission(principal, row.organizationId, CONNECTIONS_READ);

@@ -233,7 +233,7 @@ describe('MCP Gateway Scoping', () => {
 
     it('answers a resource the gateway does not publish exactly like a nonexistent one', async () => {
       const missing = shape(await read('almyty://resources/00000000-0000-4000-8000-0000000000ff', 'gateway-1'));
-      expect(missing).toEqual({ code: -32001, message: 'Resource not found' });
+      expect(missing).toMatchObject({ code: -32602, message: 'Resource not found' });
       for (const resource of mockAllResources.slice(1)) {
         expect(shape(await read(`almyty://resources/${resource.id}`, 'gateway-1'))).toEqual(missing);
       }

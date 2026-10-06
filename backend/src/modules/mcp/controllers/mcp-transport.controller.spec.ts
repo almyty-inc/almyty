@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { McpTransportController } from './mcp-transport.controller';
 import { McpService } from '../mcp.service';
 import { SseTransport } from '../transports/sse.transport';
-import { StreamableHttpTransport } from '../transports/streamable-http.transport';
+import { snapshotEnv } from '../../../test/env';
 
 describe('McpTransportController', () => {
   let controller: McpTransportController;
@@ -28,10 +28,6 @@ describe('McpTransportController', () => {
             broadcastToAll: jest.fn(),
             getConnectionStats: jest.fn(),
           },
-        },
-        {
-          provide: StreamableHttpTransport,
-          useValue: { handlePost: jest.fn(), handleStream: jest.fn() },
         },
       ],
     }).compile();
@@ -111,7 +107,7 @@ describe('McpTransportController', () => {
       const mockRequest = {
         user: { id: 'user-1', currentOrganizationId: 'org-1' }
       };
-      const mockResponse = {};
+      const mockResponse = { setHeader: jest.fn() };
       const mockServerId = 'server-1';
 
       sseTransport.handleSseConnection = jest.fn().mockResolvedValue(undefined);
@@ -150,7 +146,7 @@ describe('McpTransportController', () => {
 
       sseTransport.handleSseMessage = jest.fn().mockResolvedValue({ success: true });
 
-      const result = await controller.sendSseMessage(connectionId, mockMessage, mockRequest);
+      const result = await controller.sendSseMessage(connectionId, mockMessage, mockRequest, { setHeader: jest.fn() });
 
       expect(result).toEqual({ success: true });
       // The caller's org travels with the message: the connection is
@@ -175,7 +171,7 @@ describe('McpTransportController', () => {
         method: 'tools/list',
       };
 
-      await expect(controller.sendSseMessage('conn-123', mockMessage, mockRequest)).rejects.toThrow('Organization context required');
+      await expect(controller.sendSseMessage('conn-123', mockMessage, mockRequest, { setHeader: jest.fn() })).rejects.toThrow('Organization context required');
     });
   });
 
@@ -184,7 +180,7 @@ describe('McpTransportController', () => {
       const mockRequest = {
         user: { id: 'user-1', currentOrganizationId: 'org-1' }
       };
-      const mockResponse = {};
+      const mockResponse = { setHeader: jest.fn() };
       const serverId = 'server-123';
 
       sseTransport.handleSseConnection = jest.fn().mockResolvedValue(undefined);
@@ -206,6 +202,67 @@ describe('McpTransportController', () => {
       const mockResponse = {};
 
       await expect(controller.handleServerSse('server-123', mockRequest, mockResponse)).rejects.toThrow('Organization context required');
+    });
+  });
+
+  // The legacy HTTP+SSE transport is deprecated in MCP 2026-07-28
+  // (SEP-2596): still served, and every response says so (RFC 9745).
+  describe('legacy SSE deprecation headers', () => {
+    const restore = snapshotEnv('MCP_LEGACY_SSE_DEPRECATION_HEADERS', 'MCP_LEGACY_SSE_DEPRECATED_AT', 'MCP_LEGACY_SSE_DOCS_URL');
+    afterEach(restore);
+    const req = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+    const headersOf = (res: { setHeader: jest.Mock }) => Object.fromEntries(res.setHeader.mock.calls);
+
+    beforeEach(() => {
+      sseTransport.handleSseConnection = jest.fn().mockResolvedValue(undefined);
+      sseTransport.handleSseMessage = jest.fn().mockResolvedValue({ ok: true });
+    });
+
+    it('marks all three routes deprecated, with a link to the docs', async () => {
+      const expected = {
+        Deprecation: '@1785196800',
+        Link: '<https://docs.almyty.com/gateways/mcp#legacy-sse-transport>; rel="deprecation"; type="text/html"',
+      };
+      const open = { setHeader: jest.fn() };
+      await controller.handleSse(req, open);
+      expect(headersOf(open)).toEqual(expected);
+
+      const message = { setHeader: jest.fn() };
+      await controller.sendSseMessage('conn-1', { jsonrpc: '2.0', id: '1', method: 'tools/list' }, req, message);
+      expect(headersOf(message)).toEqual(expected);
+
+      const server = { setHeader: jest.fn() };
+      await controller.handleServerSse('server-1', req, server);
+      expect(headersOf(server)).toEqual(expected);
+    });
+
+    it('takes the date and the link from configuration, and can be turned off', async () => {
+      process.env.MCP_LEGACY_SSE_DEPRECATED_AT = '2026-08-01T00:00:00Z';
+      process.env.MCP_LEGACY_SSE_DOCS_URL = 'https://docs.example.com/sse';
+      const res = { setHeader: jest.fn() };
+      await controller.handleSse(req, res);
+      expect(headersOf(res)).toEqual({
+        Deprecation: `@${Date.UTC(2026, 7, 1) / 1000}`,
+        Link: '<https://docs.example.com/sse>; rel="deprecation"; type="text/html"',
+      });
+
+      // A value that is not a URL never reaches a header.
+      process.env.MCP_LEGACY_SSE_DOCS_URL = 'javascript:alert(1)';
+      const fallback = { setHeader: jest.fn() };
+      await controller.handleSse(req, fallback);
+      expect(headersOf(fallback).Link).toContain('https://docs.almyty.com/');
+
+      process.env.MCP_LEGACY_SSE_DEPRECATION_HEADERS = 'false';
+      const off = { setHeader: jest.fn() };
+      await controller.handleSse(req, off);
+      expect(off.setHeader).not.toHaveBeenCalled();
+    });
+
+    it('lists sse as a deprecated transport', async () => {
+      (mcpService as any).getActiveSessions = jest.fn().mockResolvedValue([]);
+      sseTransport.getConnectionStats = jest.fn().mockReturnValue({ byOrganization: {} });
+      const stats = await controller.getTransportStats(req);
+      expect(stats.serverInfo.deprecatedTransports).toEqual(['sse']);
     });
   });
 

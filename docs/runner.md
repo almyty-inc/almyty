@@ -17,14 +17,12 @@ data is* — against a private repo, behind a VPN, on a box with a GPU or a
 licensed binary or a VPN-only database — is a runner job, and most of them have
 nothing to do with coding agents.
 
-One case it happens to be unusually good at is orchestrating coding-agent CLIs.
-Every such CLI on the market is single-vendor: Claude Code calls Anthropic
-models, Codex calls OpenAI's, gemini-cli calls Google's, aider lets you pick but
-each subagent is still locked to one provider per turn. Because the runner
-exposes a generic process surface rather than per-tool wrappers, one almyty
-workflow can drive any of them with any model, in one coherent workspace: a PM
-agent plans, dispatches subtasks to specialist agents on different CLIs and
-different models, all editing the same checkout on the same runner.
+One case it handles well is orchestrating coding-agent CLIs such as Claude Code,
+Codex, gemini-cli and aider. Because the runner exposes a generic process
+surface rather than per-tool wrappers, one almyty workflow can drive any of
+them with any model, in one coherent workspace: a PM agent plans, dispatches
+subtasks to specialist agents on different CLIs and different models, all
+editing the same checkout on the same runner.
 
 **v1 limit:** one runner per account. Multi-machine registration is not
 available yet.
@@ -52,7 +50,7 @@ The backend never spawns processes itself; it dispatches over the runner connect
 `backend/src/modules/mcp/transports/streamable-http.transport.ts` and `backend/src/modules/mcp/types/worker-protocol.types.ts`.
 
 - **Why not WebSockets**: MCP Streamable HTTP (2025-03-26 revision) is the transport the project will need anyway for non-runner MCP clients. Building it as the foundation for the runner connection saves a separate transport.
-- **Single endpoint, two methods**: `POST /mcp/streamable` for client→server, `GET /mcp/streamable` for the server→client SSE stream. Sessions identified by the `Mcp-Session-Id` header.
+- **Single endpoint, two methods**: `POST /runners/stream` for client→server, `GET /runners/stream` for the server→client SSE stream. Sessions identified by the `Mcp-Session-Id` header. This channel carries worker envelopes only; it was `/mcp/streamable` while it shared the MCP transport, and that path still serves envelopes for one runner release (runners try `/runners/stream` first and fall back on a 404).
 - **Two message shapes on one wire**: JSON-RPC for MCP itself (routed to `McpService.handleJsonRpc`), worker envelopes for the runner (and any future worker-shaped protocols, emitted as `envelope` events for downstream subscribers).
 - **Reconnect via Last-Event-ID**: per-session ring buffer of recent events. Client reconnects with the last id it saw; server replays everything after. REPLAY_UNAVAILABLE error when the requested id has aged out of the buffer.
 - **Cross-tenant refusal returns UNKNOWN_SESSION**: not 403, not "session belongs to another org" — the same code as truly-unknown so the response doesn't leak session existence.
@@ -93,7 +91,7 @@ draining -> offline          drain grace expires
 - **Selection** is `RunnerService.resolveByLabels(required, caller, organizationId, { preferRunnerId })`. Candidates are the organization's runners in a `canAcceptWork` state whose labels include every requirement (keys and values trimmed, compared case-insensitively; extra labels are fine). Each candidate is then put through `resolveForDispatch` with the same caller, so label routing adds no access rule of its own: private is the owner's, team is the team's (and org admins', as everywhere), a runner of a deactivated member takes nobody's work, a dispatch with no known caller reaches org-wide runners only, a gateway run is judged by the gateway's scope. A candidate also needs a live session. Order: the preferred runner, then ONLINE before BUSY, then the latest heartbeat.
 - **No match** is a 404 with one sentence, `No machine with gpu=yes is online`, the same whether no runner carries the labels or the ones that do are someone else's, so the answer does not say which machines exist. Over the runner bridge it is `runner_not_found` with that message.
 - **Agents**: `agentConfig.runnerLabels` (typed as `gpu=yes, os=mac` on the autonomous agent form under Capabilities > Machine, stored as an object by `normaliseRunnerLabels`). The engine hands it to every tool call (`ToolExecutionOptions.runnerLabels`, from `agent-step-processor.ts` and, for pipelines, `NodeExecutionOptions.runnerLabels`), and `RunnerCallService.dispatch` routes a runner-backed tool's call with it, preferring the tool's own runner.
-- **Workspaces**: `POST /workspaces` takes `labels` (text or object). Without `runnerId` the workspace goes on the runner `resolveByLabels` picks for the caller, which can be another member's org or team runner; with `runnerId` that runner must carry the labels (400 otherwise). Work in a workspace always goes to the workspace's runner; a dispatch that also names labels is refused when that runner lacks one.
+- **Workspaces**: a workspace an agent run is given goes on the runner its call goes to, so the agent's labels pick it (see "Workspaces for agent runs"). `POST /workspaces` takes `labels` (text or object). Without `runnerId` the workspace goes on the runner `resolveByLabels` picks for the caller, which can be another member's org or team runner; with `runnerId` that runner must carry the labels (400 otherwise). Work in a workspace always goes to the workspace's runner; a dispatch that also names labels is refused when that runner lacks one.
 - `backend/src/__tests__/no-control-is-stored-and-ignored.guard.spec.ts` checks that the reader exists end to end, and `test/integration/runner-label-routing.integration.spec.ts` proves it against Postgres.
 
 ### Single-runner-per-account in v1.0
@@ -105,13 +103,13 @@ The data model carries no such restriction; the limit lives in the registration 
 A runner is identified and authorised by the login its daemon presents, never by its name.
 
 - `POST /runners/register` takes the owner from the bearer token (the user who ran `almyty-auth login`, or whose `ALMYTY_TOKEN` it is) and the organization from `X-Organization-Id` (`--org`), which `JwtStrategy` refuses for an organization the user is not a member of. Nothing in the body names an owner or an org.
-- The name is a label, **unique within the organization**. A name another member already uses is refused with 409. It used to be unique only per owner, while the published tool names (`runner.<name>.<method>`) are unique per organization and publishing replaces rows by name: a second member registering the same name deleted the first member's tools and republished them pointing at their own machine, so an agent calling `runner.<name>.shell.exec` ran on the wrong person's computer.
+- The name is a label, **unique within the organization**. A name another member already uses is refused with 409. The published tool names (`runner.<name>.<method>`) are unique per organization and publishing replaces rows by name, so a name unique only per owner would let a second member registering the same name delete the first member's tools and republish them pointing at their own machine: an agent calling `runner.<name>.shell.exec` would run on the wrong person's computer.
 - The same user restarting with the same name (a rebuilt machine) updates the same row in place; the newest session takes the dispatches. That is the intended takeover and only the owner can do it.
-- `runner.hello` binds a Streamable HTTP session to a runner only when the session's user **owns** the runner (`RunnerService.isOwnedBy`). It used to check the organization only, so another member of the same org could bind their daemon's session to your runner id and receive its dispatches (`getActiveSession` takes the newest session). Sessions themselves are bound to the user who minted them: another member cannot POST on, or open the stream of, your session id.
+- `runner.hello` binds a Streamable HTTP session to a runner only when the session's user **owns** the runner (`RunnerService.isOwnedBy`). An organization check alone would let another member of the same org bind their daemon's session to your runner id and receive its dispatches (`getActiveSession` takes the newest session). Sessions themselves are bound to the user who minted them: another member cannot POST on, or open the stream of, your session id.
 
 ### Visibility
 
-`visibility` is `private` | `team` | `org`, the same three tiers as agents, tools, APIs, gateways, LLM providers and credentials (`AccessPolicyService`). A runner nobody chose a visibility for is **private**: it runs commands as its owner on its owner's machine. The setup page sets it on the pending record; the daemon does not send one, and re-registration keeps what is stored (it used to reset every runner to `org` on each restart).
+`visibility` is `private` | `team` | `org`, the same three tiers as agents, tools, APIs, gateways, provider connections and credentials (`AccessPolicyService`). A runner nobody chose a visibility for is **private**: it runs commands as its owner on its owner's machine. The setup page sets it on the pending record; the daemon does not send one, and re-registration keeps what is stored.
 
 A private runner is visible to and usable by its owner only, org owners/admins included:
 
@@ -201,9 +199,9 @@ The walkthrough lives at [docs/runner-demo.md](runner-demo.md): start a runner w
 Four pages, all conforming to the existing UI patterns in the repo (React Router v6, TanStack Query inline in pages, shadcn/ui components, custom `<table>`s with the same header/Card/empty-state shape `agents.tsx` uses):
 
 - `/runners` — list page with state badge (a runner whose daemon never connected reads "never connected"), visibility badge, OS/arch, last heartbeat, capacity, labels, and a Delete action behind a one-line confirmation. Lists every runner the caller may see: their own (private ones included), org-wide ones, and team ones for their teams. Polls every 15s (half the runner heartbeat interval). Empty state links to the start-a-runner page.
-- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results) and a Workspaces tab: every workspace on the runner in a table with status filter, cwd search and time left. The owner changes visibility in place on this page. Delete renders when the runner is `offline` or has never connected and requires confirmation.
+- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results) and a Workspaces tab: the workspaces on the runner the viewer may see (their own; all of them for the runner's owner; all on a team or org-wide runner for org owners/admins, see "Who sees a workspace") in a table with cwd search, the agent and run each was made for, status, isolation, time left and a Release action (with a confirmation) on active rows. No create button: agent runs get workspaces automatically (see "Workspaces for agent runs"). The owner changes visibility in place on this page. Delete renders when the runner is `offline` or has never connected and requires confirmation.
 - `/runners/new` — the setup page. Step 1: name, labels, visibility (Private by default, Team, Org-wide). "Generate command" creates the runner record (`POST /runners`, pending: never connected) holding all of that, so step 2's commands need only the name: `npm i -g @almyty/runner @almyty/auth`, `almyty-auth login`, `almyty-runner start --name X --org <org-id>`. From step 2 the user can go Back (the pending record is updated in place with `PATCH /runners/:id`, rename allowed only while pending) or Cancel (the pending record is deleted). Step 3 polls the record and opens the runner on its first heartbeat. An abandoned setup stays visible on `/runners` as "never connected" and can be deleted there.
-- `/runners/:runnerId/workspaces/:id` — one workspace: metadata, close reason (only for terminated workspaces), Release action (only for active).
+- `/runners/:runnerId/workspaces/:id` — one workspace: metadata (including the agent and run it was made for), close reason (only for terminated workspaces), Release action (only for active).
 
 Shared mappings live in `frontend/src/pages/runners-shared.ts`: runner state -> badge variant (online=success, busy=secondary, stale/draining=warning, offline=destructive), workspace status -> badge variant (active=success, released=secondary, expired=outline, stranded=destructive), and the polling cadence constant.
 
@@ -211,7 +209,7 @@ Sidebar entry inserted in `dashboard-layout.tsx` after Agents, before Credential
 
 ### Open question deferred to follow-up: real-time updates
 
-Cluster 1 lands a Streamable HTTP transport on the backend. A natural follow-up is to use it for runner-state subscriptions in the UI (the start-page "waiting for heartbeat" experience and the detail-page state badge would both feel snappier with sub-second updates instead of 15s polling). The cleanest shape would be a per-org event subscription routed through the same `/mcp/streamable` endpoint with a runner-events worker envelope; the UI subscribes once and gets push updates. Polling stays as the conservative default until that subscription endpoint exists; this cluster doesn't add any speculative subscription code.
+Cluster 1 lands a Streamable HTTP transport on the backend. A natural follow-up is to use it for runner-state subscriptions in the UI (the start-page "waiting for heartbeat" experience and the detail-page state badge would both feel snappier with sub-second updates instead of 15s polling). The cleanest shape would be a per-org event subscription routed through the same `/runners/stream` endpoint with a runner-events worker envelope; the UI subscribes once and gets push updates. Polling stays as the conservative default until that subscription endpoint exists; this cluster doesn't add any speculative subscription code.
 
 ### Anti-goals (UI cluster)
 
@@ -237,6 +235,99 @@ runner tool".
   `requiresWorkspace` flag (true for the workspace-scoped surfaces, false for
   the informational ones), owner-scoped. `unpublish()` removes them when the
   runner goes away.
+
+## Workspaces for agent runs
+
+Agents get workspaces automatically. When an agent run calls a runner-backed
+tool whose `requiresWorkspace` is true and names no `workspaceId`, the platform
+gives the run one on the runner the call is going to. Nothing in the UI, the
+agent config or the MCP tools creates a workspace by hand; `POST /workspaces`
+remains for scripts.
+
+- **Where**: `ToolExecutorService.executeRunnerCall` asks
+  `RunWorkspaceService.acquire` (`backend/src/modules/runner/run-workspace.service.ts`)
+  when the call belongs to a run: `ToolExecutionOptions.runId`/`agentId` from
+  the autonomous step processor, or the correlation scope's `runId`/`agentId`,
+  which `AgentExecutionEngine` sets for a workflow run. A call outside a run
+  still fails with "requires a workspaceId".
+- **Which runner**: the same one the call goes to, resolved by the same rules
+  as `RunnerCallService.dispatch` (the agent's `runnerLabels` through
+  `resolveByLabels`, preferring the tool's runner; otherwise
+  `resolveForDispatch`). It must be in a `canAcceptWork` state.
+- **The folder**: the backend dispatches `workspace.prepare` with a name,
+  `<agent-slug>-<first 8 of the run id>`. The runner makes it (idempotently)
+  under `almyty-workspaces/` in its first `allowedCwdRoots` entry, or under
+  `~/.almyty/workspaces/`, holds it to the same cwd policy as every command,
+  and answers the absolute path. Only then is the row written, with that path
+  as `cwd`. A runner that does not know the method is told to update.
+- **The row**: an ordinary workspace, owned by the run's user (or the owner of
+  the private/team gateway the run came through; an org-wide gateway's run is
+  refused, since `findForDispatch` covers no workspace for it), with `name`,
+  `agentId` (nulled when the agent is deleted) and `runId`, the default one-hour
+  TTL and the runner's isolation. Release, TTL expiry, stranding and the
+  heartbeat reclaim apply unchanged.
+- **Reuse**: one workspace per (job, runner), where the job is the top-level
+  run. Later calls of the same run find the active row by `runId` and
+  `runnerId`; concurrent calls on one pod share one in-flight acquisition, and
+  a partial unique index (`UQ_workspaces_active_run_runner`, active rows only)
+  makes a second pod take the first pod's row. A run whose workspace was
+  released or expired gets a new one on its next call, in the same folder. An
+  expired row the sweep has not reached yet is expired on the spot. A different
+  run, or a later run of the same agent, gets its own.
+- **Sub-agents share it (one job, one folder)**: a helper, collaboration member
+  or spawned agent is an autonomous child run, and `RunWorkspaceService.jobOf`
+  walks its `parentRunId` chain (same organization, cycle-safe, at most 32
+  hops) to the top-level run. A workflow `sub_agent` node hands the top-level
+  execution's id down as `EngineInternalOptions.workspaceRunId`, which the
+  engine puts in the correlation scope, and the executor uses it as the run.
+  So a child on the same runner works in the parent's workspace. A child sent
+  to another runner gets the job's workspace on that runner. Either way the
+  row's `runId` and `agentId` are the top-level run's and its agent's, and the
+  folder is named after them.
+- **Released when the job ends**: `releaseRunWorkspaces`
+  (`backend/src/modules/workspace/run-end-release.ts`) is called where runs
+  end: the autonomous step loop when a step reports the run done, the queue's
+  exhausted-retry failure and the timeout check, `cancelRun`, an approval
+  rejection, and the workflow engine's `finally` on every way out of
+  `execute`. For an autonomous run it finds the job's top-level run
+  (`jobRootOf`, the same walk as `jobOf`) and releases the job's active rows
+  only if no run of the job, the top-level run or any descendant, is still
+  pending, running, sleeping, waiting for input or waiting for an approval
+  (`jobHasLiveRun`). So a parent that ends before its helpers leaves them the
+  folder, and the last run of the job to end releases it. A workflow's
+  sub-agents run inside its `execute` and end before it, so a workflow run is
+  released as it ends. The transition is conditional, like every one out of
+  `active` (`closeReason: { kind: 'released', detail: 'run <top-level id>
+  ended' }`). The workspace tick's `releaseForEndedRuns` applies the same
+  rule, within one beat, to whatever a run that ended elsewhere (the reaper,
+  a collaboration step) left active. The folder stays on the machine; the
+  heartbeat stops the processes. The one-hour TTL remains the safety net.
+- **Capacity**: the runner holds at most `config.maxConcurrent` active
+  workspaces; past that the call fails with `runner_at_capacity`.
+- **Failure** is the tool call's error (`<code>: <sentence>`), which the agent
+  sees like any other tool error: `runner_at_capacity`, `workspace_unavailable`
+  (the runner could not make the folder, or is too old to), `workspace_required`
+  (no one to own it), `runner_offline`, `runner_not_found`.
+
+### Who sees a workspace
+
+`GET /workspaces`, `GET /workspaces/:id` and `DELETE /workspaces/:id`
+(release) answer, per `WorkspaceService.listForOwner` and `getOne`:
+
+- the workspace's owner;
+- the owner of the runner it is on, for every workspace on it, including those
+  other members' agent runs were given;
+- org owners and admins, for every workspace on the organization's team and
+  org-wide runners. A private runner's workspaces are its owner's alone, admins
+  included, the same as the runner itself.
+
+Anyone else gets 404. Dispatch into a workspace (`findForDispatch`) is
+unchanged: only the owner's runs, or a gateway covering the owner, may send
+work into it.
+
+The runner's Workspaces tab lists each workspace the viewer may see with the
+agent and run it was made for (`GET /workspaces` attaches `agent: { id, name }`)
+and a Release action.
 
 ## Isolation: host is what runs
 

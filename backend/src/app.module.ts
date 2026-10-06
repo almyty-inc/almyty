@@ -83,9 +83,9 @@ import { AgentConstraintsModule } from './modules/agent-constraints/agent-constr
 import { MemoryModule } from './modules/memory/memory.module';
 import { FilesModule } from './modules/files/files.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { McpEventsModule } from './modules/mcp-events/mcp-events.module';
 import { ToolHubModule } from './modules/tool-hub/tool-hub.module';
 import { A2AModule } from './modules/a2a/a2a.module';
-import { AcpModule } from './modules/acp/acp.module';
 import { UnifiedEndpointModule } from './modules/gateways/unified-endpoint.module';
 import { MailModule } from './modules/mail/mail.module';
 import { VersionsModule } from './modules/versions/versions.module';
@@ -267,6 +267,7 @@ import { appDataSourceFactory } from './common/errors/redact-query-error';
     MemoryModule,
     FilesModule,
     AuditLogModule,
+    McpEventsModule,
     RunnerModule,
     ApprovalsModule,
     AgentChannelsModule,
@@ -289,7 +290,6 @@ import { appDataSourceFactory } from './common/errors/redact-query-error';
     ...loadEeModules(),
     ToolHubModule,
     A2AModule,
-    AcpModule,
     // MUST be last — wildcard /:orgSlug/:resourceSlug catches everything
     UnifiedEndpointModule,
   ],

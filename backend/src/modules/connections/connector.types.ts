@@ -48,28 +48,33 @@ export const CONNECTION_HEALTH_STATUSES: readonly ConnectionHealthStatus[] = [
 /**
  * Who a connection belongs to.
  * - 'org': the organization's; members use it through grants.
+ * - 'team': the organization's, for one team: only that team's members
+ *   (and whoever holds connections:manage) see or use it, grants or not.
+ *   The team is the row's teamId; nobody holds it personally.
  * - 'user' (Personal): one member's key; only they use it unless they
  *   share it, and admins who manage connections can still see and revoke it.
  * - 'private': one member's key and nobody else's -- not shareable, and not
  *   listed, usable or revocable by anyone else, org admins included.
  *   Everyone else gets the not-found a missing id gets.
  */
-export type ConnectionOwner = 'org' | 'user' | 'private';
+export type ConnectionOwner = 'org' | 'team' | 'user' | 'private';
 
-export const CONNECTION_OWNERS: readonly ConnectionOwner[] = ['org', 'user', 'private'];
+export const CONNECTION_OWNERS: readonly ConnectionOwner[] = ['org', 'team', 'user', 'private'];
 
 /** The owner tier a stored connection row is in. */
 export function connectionOwnerOf(row: { ownerUserId?: string | null; visibility?: string | null }): ConnectionOwner {
   if (row.visibility === 'private') return 'private';
+  if (row.visibility === 'team') return 'team';
   return row.ownerUserId ? 'user' : 'org';
 }
 
 /**
  * The governance hook (EE) and connection policies speak of who holds the
- * key: the organization or a user. A private connection is a user's key.
+ * key: the organization or a user. A private connection is a user's key; a
+ * team one is the organization's.
  */
 export function heldBy(owner: ConnectionOwner): 'org' | 'user' {
-  return owner === 'org' ? 'org' : 'user';
+  return owner === 'org' || owner === 'team' ? 'org' : 'user';
 }
 
 /**
@@ -88,6 +93,8 @@ export interface JsonSchemaProperty {
   description?: string;
   /** Encrypted at rest, never returned by the API. */
   'x-secret'?: boolean;
+  /** Shown under Advanced on the connect form even when secret (an optional client secret). */
+  'x-advanced'?: boolean;
   format?: string;
   default?: unknown;
   enum?: unknown[];
@@ -137,6 +144,13 @@ export interface OAuth2Config {
   revocationUrl?: string;
   /** Provider prints the code on-screen when no callback URL is sent (headless / CLI mode). */
   headlessCode?: boolean;
+  /**
+   * `mcp`: the endpoints are not known in advance. They are discovered
+   * from the MCP server named in the form (`serverUrl`): its Protected
+   * Resource Metadata, then its authorization server's metadata
+   * (connections/mcp-oauth). `authorizeUrl` and `tokenUrl` stay empty.
+   */
+  discover?: 'mcp';
   /** Extra static query params for the authorize URL. */
   extraAuthorizeParams?: Record<string, string>;
 }
@@ -271,6 +285,8 @@ export interface ConnectionView {
   name: string;
   owner: ConnectionOwner;
   ownerUserId: string | null;
+  /** The team a 'team' connection is for; null otherwise. */
+  teamId: string | null;
   method: ConnectMethodType | null;
   accountLabel: string | null;
   health: { status: ConnectionHealthStatus; checkedAt: Date | null; error: string | null };

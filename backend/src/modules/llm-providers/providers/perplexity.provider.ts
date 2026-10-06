@@ -6,6 +6,7 @@ import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk, stepKindSignal } from '../dto/llm-providers.dto';
 import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
 import { requireModel } from '../model-errors';
+import { fileFallbackText } from '../content-parts';
 
 /**
  * Perplexity's Agent API.
@@ -40,13 +41,14 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
  * Message content is either a plain string or almyty's structured part
  * array. The Agent API takes a string per input item, so parts are flattened
  * to their text; a part with no text (an image, say) contributes nothing
- * rather than a stringified object.
+ * rather than a stringified object, and a file someone sent contributes its
+ * text fallback (content-parts.ts).
  */
 function asText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content
-      .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+      .map((part: any) => (part?.type === 'file' ? fileFallbackText(part) : typeof part?.text === 'string' ? part.text : ''))
       .filter(Boolean)
       .join('\n');
   }

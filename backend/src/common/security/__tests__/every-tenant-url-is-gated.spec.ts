@@ -57,6 +57,9 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
     ['modules/llm-providers/endpoint-provider.helper.ts', 'deployment endpoint url', /decideEgress\(/],
     // The one consumer of that column that did not re-gate at request time
     ['modules/provider-usage/provider-usage.service.ts', 'provider apiUrl', /safeFetch\(/],
+    // MCP OAuth: an https client_id is a URL an anonymous authorize request
+    // names; the server fetches the client's metadata from it.
+    ['modules/mcp/services/mcp-oauth-cimd.service.ts', 'client_id (Client ID Metadata Document URL)', /safeFetch\(/],
   ];
 
   it.each(GATED)('%s (%s) is gated', (file, _field, gate) => {
@@ -80,7 +83,8 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
     // Follows a few hops, each re-validated (pinned-redirects.ts): a spec URL
     // that 301s to https is the ordinary case, a 302 to 169.254.169.254 is not.
     ['modules/apis/apis-import.helper.ts', /egressAxiosConfig\(\{[^}]*maxRedirects: DEFAULT_REDIRECT_HOPS/],
-    ['modules/tools/executors/tool-grpc.executor.ts', /maxRedirects: 0/],
+    // gRPC over HTTP/2 follows no redirects; the protocol executor's axios calls refuse them.
+    ['modules/tools/executors/tool-protocol.executor.ts', /maxRedirects: 0/],
     ['modules/model-deployments/adapters/ollama.adapter.ts', /maxRedirects: 0/],
     ['modules/model-deployments/adapters/custom-endpoint.adapter.ts', /maxRedirects: 0/],
   ];
@@ -91,15 +95,31 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
 
   /**
    * `tool-grpc` was the odd one out among the executors: its two siblings
-   * pin DNS and refuse redirects on the same tenant-written `api.baseUrl`,
-   * and it did neither.
+   * pinned DNS and refused redirects on the same tenant-written
+   * `api.baseUrl`, and it did neither. The HTTP-family executors now take
+   * their agents from one decision (tool-egress.ts: the pinning agents, or
+   * for an allowlisted host the agents exempting that host alone); every
+   * gRPC call is a real gRPC call that dials the pinned address.
    */
+  it('the shared tool egress decision hands out the pinning agents', () => {
+    const egress = read(join(SRC, 'modules/tools/executors/tool-egress.ts'));
+    expect(egress).toMatch(/httpsAgent: ssrfSafeHttpsAgent/);
+    expect(egress).toMatch(/agentsExempting\(host\)/);
+  });
+
   it.each([
     'modules/tools/executors/tool-http.executor.ts',
     'modules/tools/executors/tool-protocol.executor.ts',
-    'modules/tools/executors/tool-grpc.executor.ts',
-  ])('%s pins DNS', (file) => {
-    expect(read(join(SRC, file))).toMatch(/ssrfSafeHttpsAgent/);
+  ])('%s pins DNS with the agents the egress decision returned', (file) => {
+    const source = read(join(SRC, file));
+    expect(source).toMatch(/decideToolEgress\(/);
+    expect(source).toMatch(/httpsAgent: (egress|urlCheck|fullUrlCheck)\.httpsAgent/);
+  });
+
+  it('tool-grpc.executor.ts pins DNS on both of its calls', () => {
+    const source = read(join(SRC, 'modules/tools/executors/tool-grpc.executor.ts'));
+    expect(source.match(/pinDns: true/g)?.length).toBe(2);
+    expect(source).not.toMatch(/\baxios\(/);
   });
 
   it('the shared adapter fetch init pins DNS and refuses redirects', () => {

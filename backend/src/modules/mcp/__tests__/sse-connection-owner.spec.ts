@@ -32,7 +32,7 @@ describe('SSE message posting is bound to the connection owner', () => {
       on: jest.fn(),
     };
     const transport = new SseTransport({ handleJsonRpc } as any, sessions as any);
-    const controller = new McpTransportController({} as any, transport, {} as any);
+    const controller = new McpTransportController({} as any, transport);
     return { transport, controller, handleJsonRpc };
   }
 
@@ -59,7 +59,7 @@ describe('SSE message posting is bound to the connection owner', () => {
     transport = built.transport;
     const connectionId = await transport.handleSseConnection(stream(), 'org-1', 'alice');
 
-    const res = await built.controller.sendSseMessage(connectionId, call as any, member('mallory'));
+    const res = await built.controller.sendSseMessage(connectionId, call as any, member('mallory'), { setHeader: () => undefined });
 
     expect(res.error).toEqual({ code: -32001, message: 'Connection not found' });
     expect(built.handleJsonRpc).not.toHaveBeenCalled();
@@ -70,7 +70,7 @@ describe('SSE message posting is bound to the connection owner', () => {
     transport = built.transport;
     const connectionId = await transport.handleSseConnection(stream(), 'org-1', 'alice');
 
-    const res = await built.controller.sendSseMessage(connectionId, call as any, member('alice', 'org-2'));
+    const res = await built.controller.sendSseMessage(connectionId, call as any, member('alice', 'org-2'), { setHeader: () => undefined });
 
     expect(res.error?.code).toBe(-32001);
     expect(built.handleJsonRpc).not.toHaveBeenCalled();
@@ -92,7 +92,7 @@ describe('SSE message posting is bound to the connection owner', () => {
     transport = built.transport;
     const connectionId = await transport.handleSseConnection(stream(), 'org-1', 'alice');
 
-    const res = await built.controller.sendSseMessage(connectionId, call as any, member('alice'));
+    const res = await built.controller.sendSseMessage(connectionId, call as any, member('alice'), { setHeader: () => undefined });
 
     expect(res.result).toEqual({ ranAs: { organizationId: 'org-1', userId: 'alice' } });
   });

@@ -4,52 +4,108 @@
   "screenshots": [
     {
       "id": "agent-builder-autonomous",
-      "title": "agent builder autonomous",
+      "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T06:49:00.541Z",
       "status": "needs-recapture",
-      "reason": "The autonomous form is reorganised: Work mode comes first as one dropdown (Single, Cascade, Best of N, Panel, Explore, extract, patch) with the model slots it needs under it; Memory has account, whose memory, what it saves, never save and how long it keeps memories; Capabilities has tools and APIs, other agents it can call, machine and temporary agents. The model chooser also shows each model's price and status and has Add a connection. Recapture on staging.",
-      "sha256": "c94b58f0f0c815fbb223492905bb6a79c98972f42157f255c2a44cf5cd844466"
+      "sha256": "077e7cf0a3ae49e2d49762a9ea520da001b9b9981283b2f7f3e64b75f4e3f24a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/edit"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "agent-builder-node-palette",
-      "title": "agent builder node palette",
+      "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T06:49:08.859Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "baf4fb6fa7d60074a0edc158e1ac8de98fff5bc195488d483fc717fb9b6cda7d"
+      "sha256": "16ed372b8779633c72addd328d2f8dd2adc8f8b263b09737d417c2bf07f6f256",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/edit"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "agent-builder",
-      "title": "Visual agent DAG builder (react-flow)",
+      "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T06:49:06.211Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh, and the workflow toolbar now has a Settings button that opens the Run limits card inline above the canvas. Tracked for #675, not verified current.",
-      "sha256": "aec23af9c643ccc4bd4957ae080a1dc4fc9ac41794999e73f56a0bcb689fc287"
+      "sha256": "7101205493af213b7b6dbbc67eb4730a8a9980de53c6384df3a440cf03dd1e06",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/edit"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
-      "id": "agent-collab-debate",
-      "title": "agent collab debate",
-      "path": "screenshots/agent-collab-debate.png",
-      "capturedAt": null,
+      "id": "agent-channels",
+      "title": "An agent's Channels tab",
+      "path": "screenshots/agent-channels.png",
+      "capturedAt": "2026-10-01T16:11:09.415Z",
       "status": "needs-recapture",
-      "reason": "Collaboration is no longer on the autonomous form: several models work together through the work mode, and the cross-vendor contract review example now describes Panel. Recapture as the Work mode section set to Panel, with panelists on different providers and a judge (the example page and autonomous page use this image). Tracked for #675, not verified current.",
-      "sha256": "0151ac29672c9601e031e34476a394c11370c36883f61a1cd0feff3cbf85436b"
+      "sha256": "2d9e051b9f8ba2624e3ac368df45d7f0f341fc79926ba534e12a1fa50d7a6e35",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id?tab=channels"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "91be8c898939c774b39ad0e675cbd38483029d9fd09f3e6c74c53129def00677",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "agent-constraints",
-      "title": "Seeded support agent constraints",
+      "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
-      "capturedAt": "2026-09-22T15:03:56.228Z",
+      "capturedAt": "2026-10-01T16:11:12.061Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "92c5d4960db84bb41e769dcf7fba75f556869c6ef60a39fd0489c3c5ab69628c",
+      "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/agents"
+        "environment": "local-demo",
+        "route": "/agents/:id?tab=constraints"
       },
       "sources": [
         "frontend/src/pages/agent-detail.tsx",
@@ -58,21 +114,21 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "agent-detail-overview",
-      "title": "Autonomous support agent overview with primary model and verifier panel",
+      "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
-      "capturedAt": "2026-09-22T15:02:31.998Z",
+      "capturedAt": "2026-10-01T16:11:14.752Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733), and the overview memory chip now names what the agent saves (facts it learns, whole conversations, only when asked). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "b2f5761e661b123b4ac9b14adbc07cd48d90cdcfca9257e204dd59cc043b9359",
+      "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/agents"
+        "environment": "local-demo",
+        "route": "/agents/:id"
       },
       "sources": [
         "frontend/src/pages/agent-detail.tsx",
@@ -81,51 +137,110 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
-      "notes": "Live seeded demo agent. Viewport framed to show configuration without environment-specific integration URLs. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "agent-skill-viewer",
-      "title": "agent skill viewer",
+      "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T16:11:17.331Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "0c857a615f0262d587219eebec75d75045dbfe9c1a62e05f610bceccc385b2df"
+      "sha256": "4a5001c21f8e0b27a887d60d6778cef722dfecf52e81bc70bf9f510dfcf41c79",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id?tab=skills"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "agent-tool-mode",
+      "title": "How the model sees its tools",
+      "path": "screenshots/agent-tool-mode.png",
+      "capturedAt": "2026-10-02T00:13:43.000Z",
+      "status": "current",
+      "sha256": "08cad43e567a1ba701b8450469df206b27d749bf044929d82cd32f7d351ef320",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/agents/:id/edit"
+      },
+      "sources": [
+        "frontend/src/components/agents/builder/capabilities-section.tsx",
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "349fe9ec190837827c99354ae89199f696bd2c230a76e1514edc70600b2b241e",
+      "notes": "Local stack, local test user; the benchmark's mock Pet Store API and a local model."
+    },
+    {
+      "id": "agent-work-mode-panel",
+      "title": "Panel work mode",
+      "path": "screenshots/agent-work-mode-panel.png",
+      "capturedAt": "2026-10-01T06:49:03.651Z",
+      "status": "needs-recapture",
+      "sha256": "472eceef77a0d801d628b27c6d94382300690462de91cd2aca8f40681c2c8108",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/edit"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "agents-list",
-      "title": "Agents list filtered to the seeded customer support agent",
+      "title": "Agents list",
       "path": "screenshots/agents-list.png",
-      "capturedAt": "2026-09-22T15:00:19.849Z",
+      "capturedAt": "2026-10-01T06:48:41.254Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "60f6726d4c8fe298fb4e9626f31a26b1118386d99d3f7376afb91f589504d300",
+      "sha256": "6d7908e9e7d374cba03ef445f6ea71ce0e5b23e9da84168f9b57858f3362eb02",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/agents"
       },
       "sources": [
         "frontend/src/pages/agents.tsx",
+        "frontend/src/components/agents",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "67524f29fab181964bced72d0084e969c017b7a02bfcd305145888baac2089dd",
-      "notes": "Live seeded demo organization; search filter excludes unrelated QA fixtures. Sidebar collapsed to omit account details. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "6a16b38d1fec1f68742a5b6a1f97039fe20b65393ff1c8b26b90610653a3a311",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "analytics-agents",
-      "title": "Agent analytics for seeded demo agents",
+      "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
-      "capturedAt": "2026-09-23T10:38:34.134Z",
+      "capturedAt": "2026-10-01T16:11:19.993Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "50891b155a11a678b90cce25d60db58930a2068731af76e4fefbd7bc8677b108",
+      "sha256": "c76b798f222ef734b16382f4483601c14a6a7b0b3a75a66f693d637b43554a57",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/analytics/agents"
       },
       "sources": [
@@ -135,20 +250,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
-      "notes": "Seeded QA agent lifetime totals and time-window counters; not production reliability measurements. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-audit",
-      "title": "Audit trail recording the successful demo tool execution",
+      "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
-      "capturedAt": "2026-09-23T10:43:43.012Z",
+      "capturedAt": "2026-10-01T16:11:22.526Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "e80db95d1753f83c9b1f53f2451ef958788fa5db71979fa71dde8396698e82ea",
+      "sha256": "a7af888214f7a172480a7f2c58a301ed97b1ec43f30f9d7a6a0343a514b13d23",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/analytics/audit"
       },
       "sources": [
@@ -158,48 +273,43 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
-      "notes": "Seeded demo identity only. No IP addresses or secrets are visible. Audit export is locked on this Pro organization; page-header exports are for request logs. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-chargeback-locked",
-      "title": "Chargeback locked without the Enterprise entitlement",
+      "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
-      "capturedAt": "2026-09-23T10:56:29.502Z",
+      "capturedAt": "2026-10-01T16:11:25.056Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "294c858ca2521da20e65163919ba19e4784929fc6467605b0912b687121b749b",
+      "sha256": "f7ec69cb930d2b5eea3a339271cd2e9e326661421d1a821ca3305cd1cb214bd0",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/analytics/chargeback"
       },
       "sources": [
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d202cf4b2c5a8548486e3571f17c72c3394e4dcca6753b32b073f3ff45fd286b",
-      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-gateways",
-      "title": "Gateway analytics with no traffic in the selected seven-day window",
+      "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
-      "capturedAt": "2026-09-23T10:42:59.978Z",
+      "capturedAt": "2026-10-01T16:11:27.584Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "1154ddc97e8e04337a73ace52c2269067ecf531bdcef0bf17e7775a5ba0b9342",
+      "sha256": "88aa07490ff5133741a23fd2dfe69f586f9eabc30b941b17f47e334adb901cc3",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/analytics/gateways"
       },
       "sources": [
@@ -209,20 +319,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
-      "notes": "The demo organization has no gateway requests in this time window; this is the genuine loaded empty state. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-overview",
-      "title": "Analytics overview recording one successful demo tool execution",
+      "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
-      "capturedAt": "2026-09-23T09:20:55.280Z",
+      "capturedAt": "2026-10-01T16:11:30.163Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "82de687608e52867afe5fd0e3f3c3e8dbeda29edeb61d36b1babd1a3c57ea210",
+      "sha256": "92d0924f996fdd498ed6ee5fb004d4dba1310a0485a8b71b04411284bc3911ef",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/analytics"
       },
       "sources": [
@@ -232,20 +342,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
-      "notes": "Actual staging QA traffic from the weather-tool check; not a production performance benchmark. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-tools",
-      "title": "Tool analytics recording the successful weather test",
+      "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
-      "capturedAt": "2026-09-23T09:20:39.134Z",
+      "capturedAt": "2026-10-01T16:11:32.674Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "2e8162663cc0063533bef60abd2171adc5076bdb459eb8737047980a8b99e84c",
+      "sha256": "9679040f9e76d6b855531f5dbc2dcc2e3f86e2de2582157c91555fe2674e003f",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/analytics/tools"
       },
       "sources": [
@@ -255,20 +365,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
-      "notes": "One actual staging UI execution; not a production reliability benchmark. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "apis-list",
-      "title": "APIs list with an imported Open-Meteo demo schema",
+      "title": "APIs list",
       "path": "screenshots/apis-list.png",
-      "capturedAt": "2026-09-22T15:12:24.622Z",
-      "status": "needs-recapture",
-      "reason": "Connect an API picks the kind first. Recapture /apis on staging.",
-      "sha256": "90353bd3bc69fc6356e168ebc2365f25761db69c10e335f868657ddbeb187bcc",
+      "capturedAt": "2026-10-01T06:49:57.792Z",
+      "status": "current",
+      "sha256": "81e7de7b9f19a44a139fcfa01c22eb535f7e5e9e478a0b767c74ce931cc072d4",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/apis"
       },
       "sources": [
@@ -278,71 +388,75 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8feb460967b73e44e1e4be6f012c62e6087e31964642e126547a5dd3f202cfd9",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "511c56d3fd150904241da7a485344a20059dc4b0e96f0072d8c21228e86e76b4",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approval-refund-820",
-      "title": "approval refund 820",
+      "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T06:50:45.392Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "b1c09457867b05eeda0c80f4544abad0d22deeee02cd295a35b43912107d8dcd"
+      "sha256": "7f8ca2057a650dbe8db99a32594e32f74ff32fcd46fc80389754995857861798",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4bec482e40fb46550c821b8346cca9620d5976bfd6eea947f01291f91e27ad3b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
+    },
+    {
+      "id": "approvals-change-set",
+      "title": "A script's changes in Approvals",
+      "path": "screenshots/approvals-change-set.png",
+      "capturedAt": "2026-10-02T01:23:51.750Z",
+      "status": "current",
+      "sha256": "e10edcfea07dfdc4d09ea578ceab42575b239b7f3d657b7a4f7317f4ab1f9b6d",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/approvals",
+        "frontend/src/components/ui",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "af801fa3f46b92ad417ed6c15e3c94c6ccdb6cddc71be27ca8d8d680786b5c9c",
+      "notes": "Local stack, local test user; a real run of a local model in code mode against the benchmark's mock Pet Store API."
     },
     {
       "id": "approvals-pending",
-      "title": "approvals pending",
+      "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T06:50:42.290Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "55fe72de0843b510b95d3656c19f0d08984873f066762c6b09aaab1dcb632586"
-    },
-    {
-      "id": "apps-agents",
-      "title": "App Agents tab with the product default",
-      "path": "screenshots/apps-agents.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The Apps page and its Agents tab are gone: channels are added on the agent. Recapture as the agent Channels tab.",
-      "sha256": "c6d2dc6577758abf0317e3a632f586a4972e213c8dee161795963c57bb773ee9"
-    },
-    {
-      "id": "apps-build-capabilities",
-      "title": "Build capability refusal when Bun is unavailable",
-      "path": "screenshots/apps-build-capabilities.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Builds moved to the desktop and terminal app channels on the agent. Recapture a Terminal app channel page.",
-      "sha256": "a54a37231df9605022d3f408f64fecd6195ddb0077a69382cafe75a3524fb8fd"
-    },
-    {
-      "id": "apps-detail",
-      "title": "App detail page with Slack, Terminal, and Web distribution cards",
-      "path": "screenshots/apps-detail.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The app detail page is gone: channels are added on the agent. Recapture as the agent Channels tab.",
-      "sha256": "95b14e9928eddd271f9fa47d3960cee055507ddc689a440c36d66904b4bc88a2"
-    },
-    {
-      "id": "apps-empty",
-      "title": "Empty app: not shipping anywhere yet",
-      "path": "screenshots/apps-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The app detail page is gone. Recapture as the agent Channels tab with no channels yet.",
-      "sha256": "d80ca650f5f082f9e2d803cbd375dd8087f35443921aa0771d648574ce6fbe7c"
-    },
-    {
-      "id": "apps-hosted-chat-privacy",
-      "title": "Hosted chat privacy menu with visitor export and deletion controls",
-      "path": "screenshots/apps-hosted-chat-privacy.png",
-      "capturedAt": "2026-09-08T08:04:35.743Z",
-      "status": "needs-recapture",
-      "reason": "Visitor rights now come from the agent branding and visitor rules. Recapture after the channels move.",
-      "sha256": "90449095be6a2c379383d6d016278be9d5c7bcd7263df10857626682d6b1b577"
+      "sha256": "7f8ca2057a650dbe8db99a32594e32f74ff32fcd46fc80389754995857861798",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4bec482e40fb46550c821b8346cca9620d5976bfd6eea947f01291f91e27ad3b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -354,354 +468,1607 @@
       "sha256": "227adb55926cb6bf2c8e6aa8aebbadaa3fa3471e4276b1460bfa42420dbba784"
     },
     {
-      "id": "apps-hosted-chat",
-      "title": "Branded hosted chat surface",
-      "path": "screenshots/apps-hosted-chat.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The hosted chat now takes its branding from the agent (or its web chat channel). Recapture after the channels move.",
-      "sha256": "2b26f59866e2c3dd9729a1714c362bc04e9b2c7db86bc29355ede88547364899"
-    },
-    {
-      "id": "apps-list",
-      "title": "Apps list with a customer-facing product",
-      "path": "screenshots/apps-list.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The Apps page is gone: channels are added on the agent. Recapture as the agent Channels tab.",
-      "sha256": "929359bfe6fd59140f7e18764d02813664cdb4c76c5879ccebcdb792cf9f3c54"
-    },
-    {
-      "id": "apps-settings",
-      "title": "App Settings tab with visitor privacy controls, cost ceiling, and rate limits",
-      "path": "screenshots/apps-settings.png",
-      "capturedAt": "2026-09-08T07:59:28.902Z",
-      "status": "needs-recapture",
-      "reason": "App settings moved to the agent: Branding and visitor rules (/agents/:id/channels/settings). Recapture there.",
-      "sha256": "61aeb5b71e0b969ab6367e30ef369f0fb38cfa9424488dfaef0bcf7087ba74ba"
-    },
-    {
-      "id": "apps-slack-credentials",
-      "title": "Slack distribution with Bot token and Signing secret fields",
-      "path": "screenshots/apps-slack-credentials.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The Slack place is now a Slack channel on the agent (/agents/:id/channels/:channelId), with keys entered or picked. Recapture there.",
-      "sha256": "8ad236a0c90022ab382d59f5ff91fc04c5b4588c14192e59ca2d0e20c4a13d92"
-    },
-    {
-      "id": "apps-slack-live",
-      "title": "Slack distribution published and live",
-      "path": "screenshots/apps-slack-live.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The Slack place is now a Slack channel on the agent. Recapture the published channel page.",
-      "sha256": "8ad236a0c90022ab382d59f5ff91fc04c5b4588c14192e59ca2d0e20c4a13d92"
-    },
-    {
-      "id": "apps-web-published",
-      "title": "Published Web app distribution",
-      "path": "screenshots/apps-web-published.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The web app place is now the Web chat channel on the agent. Recapture the published channel page.",
-      "sha256": "73a8ceaf9161f967acb65a0739628d7aaa130eaa5f548b8193be984aa553b322"
-    },
-    {
       "id": "auth-register",
-      "title": "Sign-up screen",
+      "title": "Create account",
       "path": "screenshots/auth-register.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "45370a6be997c16400943b1165dc7588d2c457d7dba9b73160b21e25ef3bb0bf"
+      "capturedAt": "2026-10-01T06:51:36.201Z",
+      "status": "current",
+      "sha256": "0fd0ae6cb048a83098acac5ce38ccac627a4dd850110428e20666f1a23b3b4f6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/auth/register"
+      },
+      "sources": [
+        "frontend/src/pages/auth",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "7244e25336678d3611903a9077a1076dab3882e8e0cf992072f99e7a63044e6a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "builder-code-step",
+      "title": "A Code step in the builder",
+      "path": "screenshots/builder-code-step.png",
+      "capturedAt": "2026-10-02T03:15:53.785Z",
+      "status": "current",
+      "sha256": "97b174567acb8d26ead36e2625f07edd4a45ffab018583945996cb86bd974e1f",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/agents/:id/edit"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "30e691b2e74909b365cf184fc31cc3b5747fb2350844b0af8c50fa46a60367ad",
+      "notes": "Local stack, local test user; a workflow agent over the benchmark's mock Pet Store API."
+    },
+    {
+      "id": "channel-branding-rules",
+      "title": "Branding and visitor rules",
+      "path": "screenshots/channel-branding-rules.png",
+      "capturedAt": "2026-10-01T16:11:35.294Z",
+      "status": "current",
+      "sha256": "5fe3919689b49ac17afb25e0b3c21b321e1f2dd3f63d68cfec96dd7944aa8033",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/settings"
+      },
+      "sources": [
+        "frontend/src/pages/agent-public-settings.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "efa026afef612c503df01efc731e583d89877dba429adadf9336eca3f3e6e605",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "channel-slack-keys",
+      "title": "Slack channel keys",
+      "path": "screenshots/channel-slack-keys.png",
+      "capturedAt": "2026-10-01T16:11:38.913Z",
+      "status": "current",
+      "sha256": "7d07d38b1fc8db0875a2be862d966c508e2cff6c3c2e7255bff18a234803f802",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "channel-slack-live",
+      "title": "Published Slack channel",
+      "path": "screenshots/channel-slack-live.png",
+      "capturedAt": "2026-10-01T16:11:41.968Z",
+      "status": "current",
+      "sha256": "c067e90b5f9ab9288449c8c2ded46b3927b365aaa676108c1857ecd9294d8847",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "channel-terminal-build",
+      "title": "Terminal app channel",
+      "path": "screenshots/channel-terminal-build.png",
+      "capturedAt": "2026-10-01T16:11:44.594Z",
+      "status": "current",
+      "sha256": "81db9c8408d17de95edf28458b79f099a72aa46ea3d4d25fef2d76adeebb4067",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "channel-web-published",
+      "title": "Published web chat channel",
+      "path": "screenshots/channel-web-published.png",
+      "capturedAt": "2026-10-01T16:11:47.211Z",
+      "status": "current",
+      "sha256": "ed18f83d07bef8b1484cf0040a39442cbd0298d8f6e0b15af696079653326c7a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "cli-agents-help",
-      "title": "Agents CLI 1.5.0 help",
+      "title": "Agents CLI 1.5.2 help",
       "path": "screenshots/cli/agents-help.png",
-      "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "needs-recapture",
-      "reason": "The CLI suite is at 1.5.1, so the version in the help banner is stale; recapture from the published @almyty/agents@1.5.1.",
-      "sha256": "ce9560c890c85cd02d2f2197c284b41d01d71dbc01aba4844921fb521e0e60e7",
+      "capturedAt": "2026-10-01T15:53:41.000Z",
+      "status": "current",
+      "sha256": "b5a63b6dc10208fe660e0b274ad0d5210ce1888a52e8c8516ac6f14633922458",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/agents@1.5.0",
+        "package": "@almyty/agents@1.5.2",
         "command": "almyty-agents --help"
       },
       "sources": [
         "packages/agents-cli/src",
         "packages/agents-cli/package.json"
       ],
-      "sourceDigest": "50f9685b62d48b50bc93c91f62b6254d8b6d29cf8572a81c8b6fc1afdd990a0c",
-      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "941bf2e92c94b71a84e976ce14bd27846ba3aa882684d50730f54fac3010903e",
+      "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-almyty-help",
-      "title": "almyty CLI 1.5.0 help",
+      "title": "almyty CLI 1.5.2 help",
       "path": "screenshots/cli/almyty-help.png",
-      "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "needs-recapture",
-      "reason": "The models line of almyty --help now reads hosting instead of deployments; recapture from the next published @almyty/cli.",
-      "sha256": "127476c28bf06cb8875274993aabc45a03f804e1e21bea8de6bcc3cf4963c393",
+      "capturedAt": "2026-10-01T15:53:34.000Z",
+      "status": "current",
+      "sha256": "47b40de6145ffc3d735b12ac03b92f26a6de1c634d358ce39ce035128af22a2c",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/cli@1.5.0",
+        "package": "@almyty/cli@1.5.2",
         "command": "almyty --help"
       },
       "sources": [
         "packages/almyty-cli/src",
         "packages/almyty-cli/package.json"
       ],
-      "sourceDigest": "68cf1d3073ad3ff3d4a54872244ac9ef297a9afd14d45cd2759920d6a90ab0d1",
-      "notes": "Rendered from the published binary using freeze; CLI refresh merged in #684. Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "a8f9bb090057143444f8f27a29df35405317c03cd05afc9155dfc1b98bdb1ab0",
+      "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-auth-help",
-      "title": "Auth CLI 1.5.0 help",
+      "title": "Auth CLI 1.5.2 help",
       "path": "screenshots/cli/auth-help.png",
-      "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "needs-recapture",
-      "reason": "The help names @almyty/credentials among the CLIs that read the login. Recapture from the next published @almyty/auth.",
-      "sha256": "bb5f75fd765b191b74ec5178246ed59c2375cec367bca8541d38ee636f9df54d",
+      "capturedAt": "2026-10-01T15:53:35.000Z",
+      "status": "current",
+      "sha256": "39bc7f145aa707cd9b856c6b630649584fd3dd59b2f90553292cb6ee906093a4",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/auth@1.5.0",
+        "package": "@almyty/auth@1.5.2",
         "command": "almyty-auth --help"
       },
       "sources": [
         "packages/auth-cli/src",
         "packages/auth-cli/package.json"
       ],
-      "sourceDigest": "5ed7085bc0ec7b1458198440fc5e8c08dc3b3c87401d82da259ffc2c61a9655c",
-      "notes": "Local home directory normalized to ~ before rendering; no personal machine path published. Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "91ddd74baab7465a16b9613ca283f107ed225f4eca8674127b3bfa27d99ac53c",
+      "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-chat-help",
-      "title": "Chat CLI 1.5.0 help",
+      "title": "Chat CLI 1.5.2 help",
       "path": "screenshots/cli/chat-help.png",
-      "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "needs-recapture",
-      "sha256": "7bd2f9304e5fd0b835700609dd4fc65a2e1875070670e879c411b13507da17e4",
+      "capturedAt": "2026-10-01T15:53:38.000Z",
+      "status": "current",
+      "sha256": "c71b95c43fade9e47e7f9171e3a64c228d36f6dfe1aae389bb5e77e70a5ed510",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/chat@1.5.0",
+        "package": "@almyty/chat@1.5.2",
         "command": "almyty-chat --help"
       },
       "sources": [
         "packages/chat-cli/src",
         "packages/chat-cli/package.json"
       ],
-      "sourceDigest": "88395f17b7d2b46ab8ae4344a1dea58a9aa632b9ab7d7e4d77764a26d83426ba",
-      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved.",
-      "reason": "chat-cli source changed (linear trailing-newline trim, #853); help text likely unchanged, recapture from the next published @almyty/chat"
+      "sourceDigest": "6d938d70695c750dddf807fb5427bd4d9ad91707522ceaa9455e964c554461e3",
+      "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-mcp-server-help",
-      "title": "MCP server CLI 1.5.0 help",
+      "title": "MCP server CLI 1.5.2 help",
       "path": "screenshots/cli/mcp-server-help.png",
-      "capturedAt": "2026-09-22T13:42:14.000Z",
+      "capturedAt": "2026-10-01T15:53:39.000Z",
       "status": "needs-recapture",
-      "reason": "Captured from published 1.5.0. The source has since changed: almyty_create_gateway shares tools only (A2A is now a place on an app), though the help text itself is the same. Recapture after the next publish of @almyty/mcp-server.",
-      "sha256": "ca20cb3aa051362aa5c2bdfc09da337171142ca458566e69d736430b6db59b3f",
+      "reason": "The --help text was fixed in source (duplicate 'run by hand.' line, missing blank line) after 1.5.2 was published. This image is still what 1.5.2 prints; recapture from the published binary once the next version is out.",
+      "sha256": "5614c3cfa0321b9490dc7d0ea0d1ea8303064a50353e203ff18d1e034b2c61da",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/mcp-server@1.5.0",
+        "package": "@almyty/mcp-server@1.5.2",
         "command": "almyty-mcp --help"
       },
       "sources": [
         "packages/mcp-server/src",
         "packages/mcp-server/package.json"
       ],
-      "sourceDigest": "b656cb89c51e1515691dc8a966f5da82ddbe78392f2daf470951387819b84ab0",
-      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "abbcbc1603be253074b3764d1077d5a9c43e9b5434677b25e4161e89b28579c1",
+      "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-skills-help",
-      "title": "Skills CLI 1.5.0 help",
+      "title": "Skills CLI 1.5.2 help",
       "path": "screenshots/cli/skills-help.png",
-      "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "needs-recapture",
-      "reason": "The September 24 source integration changed the skills installer security checks. Preserve the published 1.5.0 capture as dated evidence until the current published CLI is reviewed and recaptured.",
-      "sha256": "b6859549f586c2f3312554002948e2da588722c6440a4eaf11ec186166205f72",
+      "capturedAt": "2026-10-01T15:53:40.000Z",
+      "status": "current",
+      "sha256": "8642c7c4b0670e4330c99c87c2d32799a5fd5de588aa3b66fcddf8d3080b9c7c",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/skills@1.5.0",
+        "package": "@almyty/skills@1.5.2",
         "command": "almyty-skills --help"
       },
       "sources": [
         "packages/skills-cli/src",
         "packages/skills-cli/package.json"
       ],
-      "sourceDigest": "526a8347ffe04a21322eab4a5e7ee636d973aaa72636e5033d92226f089472e4",
-      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "51fcd9519d2d1548d9e00fe86ff33239b775972bbc5a6d1b484c04a54336d1de",
+      "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
-      "id": "connections",
-      "title": "Credentials page",
-      "path": "screenshots/connections.png",
-      "capturedAt": "2026-09-23T05:53:42.281Z",
-      "status": "needs-recapture",
-      "reason": "Credentials is a table of every credential, model provider keys as their own group, Add credential and the Advanced tab. Capture /credentials and /credentials/advanced on staging.",
-      "sha256": "d91157a54e07217ba91b2f90efe289387fd80c0477f697747a1ac992471f5afd",
+      "id": "credentials-connect-provider",
+      "title": "Connect a provider",
+      "path": "screenshots/credentials-connect-provider.png",
+      "capturedAt": "2026-10-01T06:50:32.101Z",
+      "status": "current",
+      "sha256": "17eff1ae55d6c6f71e81612ef2a7c1d7738ee6ac661224c74718d46e1931ebdb",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/settings/connections"
+        "environment": "local-demo",
+        "route": "/credentials/providers/new"
       },
       "sources": [
-        "frontend/src/pages/settings.tsx",
-        "frontend/src/components/connections",
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/models",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a3fb96a17709cca4ba2a230089d19dd7f080dc5731899837a0508f458deada7b",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "b38c432c5abf5a1f87ba952a5aae70f1448eaac4f3608aea4aaae48f1138681f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "credentials-vault",
-      "title": "Credential vault with seeded provider credential labels",
+      "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
-      "capturedAt": "2026-09-23T10:44:29.981Z",
-      "status": "needs-recapture",
-      "reason": "Credentials is a sidebar page again: one table of every key, token and account, with Model providers as their own group, which lists every provider connection and has its own Connect a provider button. Recapture /credentials on staging.",
-      "sha256": "cf1d4b266fe8a01145e730c45415a1923364769634bb231fe551f705e6faa174",
+      "capturedAt": "2026-10-01T06:50:29.664Z",
+      "status": "current",
+      "sha256": "d81477b07cbcbf8a07061daeea9bf8c2b5bcbb33cfe74fb09ef79e51b146b2b6",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/credentials"
       },
       "sources": [
         "frontend/src/pages/credentials.tsx",
+        "frontend/src/pages/credential-pages.tsx",
         "frontend/src/components/credentials",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f77989e05b1fa1f846234e68ee523342390b04e393cc7b1cf8b32914c37a1da9",
-      "notes": "Only labels and status are visible; no secret values were revealed. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "c6ff08b197d87223444d02f6613e0ae3a6028da98f36d23c67900bfcb143c8ba",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail-tools",
-      "title": "Gateway detail — Tools tab with scoping",
+      "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Share tools became Create gateway with a protocol pick. Recapture a new MCP gateway on staging.",
-      "sha256": "c638eca3e8262999cb2a9015d486ec11e84b8f0337b06fc7c820478d997828c4"
+      "capturedAt": "2026-10-02T05:20:21.250Z",
+      "status": "current",
+      "sha256": "20842928dcea1a4d4790f2a87bf52daaf04c75cbc424dfd915f4aa06f495ff9f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id?tab=tools"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail",
-      "title": "gateway detail",
+      "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Gateways are created with an explicit protocol pick; the detail page shows the setup for that protocol only. Recapture a new MCP gateway on staging.",
-      "sha256": "341c3513b9c2d32056a1f2a8bd0e7c5494e946eb61f975d1ea5e5754bf6ae76a"
+      "capturedAt": "2026-10-02T05:20:18.272Z",
+      "status": "current",
+      "sha256": "7e3613dc1952d220912bd04ea61e4819c58f09a35ddc9d24251331f9cbbdaa9d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "gateway-exposure",
+      "title": "How apps see a gateway's tools",
+      "path": "screenshots/gateway-exposure.png",
+      "capturedAt": "2026-10-02T02:24:27.824Z",
+      "status": "current",
+      "sha256": "fe6e42fc2517f21534ea82d5a1ab052101d5c6f394adb0fa4389f8c768660772",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/gateways/:id"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/agents/builder/capabilities-section.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4c31505640a82bf36559ce0784e8bdcb9a0da2889f3b0102025cde8c3c74cdc3",
+      "notes": "Local stack, local test user; the benchmark's mock Pet Store API, CODE_MODE_GATEWAYS on."
     },
     {
       "id": "gateway-petstore-config",
-      "title": "gateway petstore config",
+      "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Share tools became Create gateway with a protocol pick. Recapture on staging.",
-      "sha256": "a18d4dc7315900a7268221676d2ef15c793f39fc5bd33c1b945d971f3fade1b2"
+      "capturedAt": "2026-10-02T05:20:23.850Z",
+      "status": "current",
+      "sha256": "6e87207b33d863c00415c21c72168e1cf6e8104660a46a915cc154ccc2a50eed",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-integration",
-      "title": "gateway petstore integration",
+      "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-02T05:20:29.534Z",
+      "status": "current",
+      "sha256": "ca2d0dd8408c2da6197252bd05761b865781835cd4629108016d06a218e505a9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id?tab=integrations"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "guides-dev-1-gateway",
+      "title": "Serve the order tools to coding assistants",
+      "path": "screenshots/guides/dev-1-gateway.png",
+      "capturedAt": "2026-10-02T05:24:37.448Z",
+      "status": "current",
+      "sha256": "f2a6ea19e7bd1d4446442fc182e3f8b5e73657e0e3889e8bb13535909bb7ae52",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/new"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-new.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b3da277eb9acced5246701d82e4dcd2e864bc38c7b8094c5bdb047ee60baef93",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-dev-2-gateway-setup",
+      "title": "The address, the key and a ready-made setup",
+      "path": "screenshots/guides/dev-2-gateway-setup.png",
+      "capturedAt": "2026-10-02T05:24:39.806Z",
+      "status": "current",
+      "sha256": "3cc8b5ace2a3bda977a6512dcbf6db39c524e906d2451ff9433cfba8c441482e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-dev-3-runner",
+      "title": "Start a runner on your own machine",
+      "path": "screenshots/guides/dev-3-runner.png",
+      "capturedAt": "2026-10-01T06:48:33.057Z",
+      "status": "current",
+      "sha256": "cff20499b1e2da1c5860e2b43173a029a1c09726c3d593d9f91a25351309e76b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners/new"
+      },
+      "sources": [
+        "frontend/src/pages/runner-new.tsx",
+        "frontend/src/components/runners",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c1f20812d16cf4ee2ddf301fcce9379e87e2f6cb26a226fa1ba9ebe88005a35f",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-dev-4-runner-command",
+      "title": "The commands to run on the machine",
+      "path": "screenshots/guides/dev-4-runner-command.png",
+      "capturedAt": "2026-10-01T06:48:35.424Z",
+      "status": "current",
+      "sha256": "c5e47ea0e7a13ca082aae5f5711c9a1daa15284385904addb457ba829bb82907",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners/new"
+      },
+      "sources": [
+        "frontend/src/pages/runner-new.tsx",
+        "frontend/src/components/runners",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c1f20812d16cf4ee2ddf301fcce9379e87e2f6cb26a226fa1ba9ebe88005a35f",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-1-connect-intranet",
+      "title": "Connect your intranet",
+      "path": "screenshots/guides/helpdesk-1-connect-intranet.png",
+      "capturedAt": "2026-10-01T06:47:57.319Z",
+      "status": "current",
+      "sha256": "639df1dea1987761d34e1cf5c1819b794fdca3472fe86d4df99aec4624c127e8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-2-office-guide",
+      "title": "The office guide, added as a document",
+      "path": "screenshots/guides/helpdesk-2-office-guide.png",
+      "capturedAt": "2026-10-01T06:48:00.684Z",
+      "status": "current",
+      "sha256": "882c486b2218ea81f0a98018e82230d9a1f1b5edf19e6d9ac77ac31a6356bd75",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/memories/new"
+      },
+      "sources": [
+        "frontend/src/pages/memory-new.tsx",
+        "frontend/src/components/memory",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b264e12680eff3dc27f385ce41f02a386522c887c8cf08276cf141d1846d13ed",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-3-agent",
+      "title": "The help desk assistant reads shared memory",
+      "path": "screenshots/guides/helpdesk-3-agent.png",
+      "capturedAt": "2026-10-01T06:48:06.751Z",
       "status": "needs-recapture",
-      "reason": "Share tools became Create gateway with a protocol pick. Recapture the Integrations tab of an MCP gateway on staging.",
-      "sha256": "8ce35bad186b518728f4f61f25a05718db98a9edb94154da5333ea9f26878420"
+      "sha256": "81d2ad6fbc8b8c637699db44c59a9f9258706043876f12bb709d679e015f4066",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+    },
+    {
+      "id": "guides-helpdesk-4-leave",
+      "title": "A question answered from the HR system",
+      "path": "screenshots/guides/helpdesk-4-leave.png",
+      "capturedAt": "2026-10-01T16:17:39.564Z",
+      "status": "needs-recapture",
+      "sha256": "d9d0a09b8219398ef56218d14c92d99c2b2a9b433d7a5d8f3acae5bd6f68d87a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-helpdesk-5-wifi",
+      "title": "A question answered from the office guide",
+      "path": "screenshots/guides/helpdesk-5-wifi.png",
+      "capturedAt": "2026-10-01T16:17:41.630Z",
+      "status": "needs-recapture",
+      "sha256": "2e9e9bb8edab7adc5451d646abc7bef0196101402a75300d01cc0f590edfe94e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-helpdesk-6-teams",
+      "title": "Add Microsoft Teams",
+      "path": "screenshots/guides/helpdesk-6-teams.png",
+      "capturedAt": "2026-10-01T16:17:47.345Z",
+      "status": "current",
+      "sha256": "cc4b79db256ca6a1a9ee0291661212e83ee11694b56c9be4dace979f5bebc2e8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d6171fb16e7ca00de94f3ec69ce14149810341893d7bd3475e106e241b03a1c2",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-1-connect-docs",
+      "title": "Connect your help center",
+      "path": "screenshots/guides/marketing-1-connect-docs.png",
+      "capturedAt": "2026-10-01T06:46:42.487Z",
+      "status": "current",
+      "sha256": "bdffef031f9b9f6ce1891bc5e44b566f5c27ed7c7edf03c8032786de11273dca",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-2-agent",
+      "title": "A product assistant that answers from the help center",
+      "path": "screenshots/guides/marketing-2-agent.png",
+      "capturedAt": "2026-10-01T06:46:45.372Z",
+      "status": "needs-recapture",
+      "sha256": "8d3bb4fe41c12f34d2926477238f0a487bb0bce2d2bb3746bbcb6127d2376fee",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+    },
+    {
+      "id": "guides-marketing-3-try",
+      "title": "An answer with its source",
+      "path": "screenshots/guides/marketing-3-try.png",
+      "capturedAt": "2026-10-01T16:16:17.531Z",
+      "status": "needs-recapture",
+      "sha256": "cd4956a9113fd167e7cba6b370a729af40d908d6d2f1aee5cfab878b9a478701",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-marketing-4-limits",
+      "title": "A daily spending cap for visitors",
+      "path": "screenshots/guides/marketing-4-limits.png",
+      "capturedAt": "2026-10-01T16:16:20.400Z",
+      "status": "current",
+      "sha256": "d0d46865f3269bf200257dba435a1389c6b992b665828fd0ff1c95c8c2adf54f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/settings"
+      },
+      "sources": [
+        "frontend/src/pages/agent-public-settings.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "efa026afef612c503df01efc731e583d89877dba429adadf9336eca3f3e6e605",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-5-widget",
+      "title": "The chat bubble, only on your own site",
+      "path": "screenshots/guides/marketing-5-widget.png",
+      "capturedAt": "2026-10-01T16:16:32.779Z",
+      "status": "current",
+      "sha256": "fdb6b6f7149d07940632721d094101305165955e5481693283d2accdb29ac641",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/gateways/widget-builder.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "824cb7760d4a2a28193c3c1783ff5d184a319ce8d1c6b59d63370a5e3d798f25",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-6-visitor",
+      "title": "A visitor asks a product question",
+      "path": "screenshots/guides/marketing-6-visitor.png",
+      "capturedAt": "2026-10-01T06:47:17.566Z",
+      "status": "current",
+      "sha256": "6585c66632f7b3595004a9bde79d4019845423ebded43942ddfd6154779723fc",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/?__slug=product-questions"
+      },
+      "sources": [
+        "frontend/src/pages/hosted-chat.tsx",
+        "frontend/src/lib/hosted-chat.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-1-connect-status",
+      "title": "Connect the system you check",
+      "path": "screenshots/guides/ops-1-connect-status.png",
+      "capturedAt": "2026-10-01T06:47:22.570Z",
+      "status": "current",
+      "sha256": "fc92dd1e976328bda95bc2999f39154184055c3d1ca63b4686297f71af9f1d4a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-2-agent",
+      "title": "The nightly check and its status tools",
+      "path": "screenshots/guides/ops-2-agent.png",
+      "capturedAt": "2026-10-01T06:47:25.565Z",
+      "status": "needs-recapture",
+      "sha256": "37da7d36fde11165de45599d891f5a407f748f9a3319a67e613e38dd369b29b4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+    },
+    {
+      "id": "guides-ops-3-try",
+      "title": "A test run writes the report",
+      "path": "screenshots/guides/ops-3-try.png",
+      "capturedAt": "2026-10-01T16:16:58.252Z",
+      "status": "needs-recapture",
+      "sha256": "deccf7602c3e27c09bcd71ec679784edd9ed82c8c83c3359754027269758bc10",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-ops-4-slack",
+      "title": "Slack, published for the report",
+      "path": "screenshots/guides/ops-4-slack.png",
+      "capturedAt": "2026-10-01T16:17:05.755Z",
+      "status": "current",
+      "sha256": "0c51eb0ef052ebd5258387a5a2a8bee4ea54e76b014798a8e86f7710b925dbc6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d6171fb16e7ca00de94f3ec69ce14149810341893d7bd3475e106e241b03a1c2",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-5-schedule",
+      "title": "Every day at 6:00, to the Slack channel",
+      "path": "screenshots/guides/ops-5-schedule.png",
+      "capturedAt": "2026-10-01T06:47:46.372Z",
+      "status": "current",
+      "sha256": "9ed95fb77745ad1cbe194e8b37b110e29828e02454de5ee8756c7a4b6dd03585",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/schedule"
+      },
+      "sources": [
+        "frontend/src/pages/agent-schedule.tsx",
+        "frontend/src/lib/schedule.ts",
+        "frontend/src/components/settings/time-zone-select.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b362a60b2182cb86441990d4f7741dfa88c57e99de1bd492e7eff368682957de",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-6-schedule-card",
+      "title": "The schedule on the agent",
+      "path": "screenshots/guides/ops-6-schedule-card.png",
+      "capturedAt": "2026-10-01T16:17:12.164Z",
+      "status": "current",
+      "sha256": "f6a357cf87d8c51658e88374ad2c47c85af4c57b37528dff3436f103d51c49d9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents/detail/schedule-card.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "dffeb198befba8c21d656d8775d2523556fdc975cba5d85a9d5486c31338607b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-7-report-run",
+      "title": "A report run, step by step",
+      "path": "screenshots/guides/ops-7-report-run.png",
+      "capturedAt": "2026-10-01T16:17:16.107Z",
+      "status": "needs-recapture",
+      "sha256": "5b302f0d1dd4bb16b7a2c77c4b2aa31867f2080cd419c0fa80900276a79df794",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-sales-1-connect-crm",
+      "title": "Connect your CRM",
+      "path": "screenshots/guides/sales-1-connect-crm.png",
+      "capturedAt": "2026-10-01T06:46:13.993Z",
+      "status": "current",
+      "sha256": "ce473e5a9904307c4ee1a9caa98658920b77c5415a7c67a717ab8874c0a63f49",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-sales-2-agent",
+      "title": "The sales assistant and its CRM tools",
+      "path": "screenshots/guides/sales-2-agent.png",
+      "capturedAt": "2026-10-01T06:46:16.920Z",
+      "status": "needs-recapture",
+      "sha256": "4fdc31139f46c69b717a0af660bd44944ce1a4d4bceb45e20fb4656cd6d1be75",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+    },
+    {
+      "id": "guides-sales-3-brief",
+      "title": "A brief before the call",
+      "path": "screenshots/guides/sales-3-brief.png",
+      "capturedAt": "2026-10-01T16:15:49.272Z",
+      "status": "needs-recapture",
+      "sha256": "39aa4b3341bb29e6582d793feafecb4e0729894b57b38721a74f7a2c74b9dba1",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-sales-4-notes",
+      "title": "Meeting notes saved to the CRM",
+      "path": "screenshots/guides/sales-4-notes.png",
+      "capturedAt": "2026-10-01T16:15:51.336Z",
+      "status": "needs-recapture",
+      "sha256": "bf7487eb77a32a0ee181e6fcb60b2a89a5f6aee2217df700b88afea11f845783",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-sales-5-slack-keys",
+      "title": "Add Slack with your Slack app",
+      "path": "screenshots/guides/sales-5-slack-keys.png",
+      "capturedAt": "2026-10-01T16:15:57.048Z",
+      "status": "current",
+      "sha256": "eae7f3b21043a830d14e5697e5a8918b0e1a89c7dd89bdcf11097bd7e3110cd0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d6171fb16e7ca00de94f3ec69ce14149810341893d7bd3475e106e241b03a1c2",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-sales-6-slack-live",
+      "title": "Published: the install link and redirect URL",
+      "path": "screenshots/guides/sales-6-slack-live.png",
+      "capturedAt": "2026-10-01T16:16:00.758Z",
+      "status": "current",
+      "sha256": "f112375bc6f306b093659ad7bbc9c9e5cc08a2ed221827082c648c45d27b1bd0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-1-connect-model",
+      "title": "Connect an AI model",
+      "path": "screenshots/guides/support-1-connect-model.png",
+      "capturedAt": "2026-10-01T06:44:39.145Z",
+      "status": "current",
+      "sha256": "7ea268d434cc30085ece6ffb88b37f25a3d3486914c618e4e9c4a1cbebf5efa7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/credentials/providers/new?type=openai"
+      },
+      "sources": [
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/llm-providers",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d27c47977964b5784fc616762b0139a524d3c7c690f6f1f5ecb7bc2221da84da",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-10-approve",
+      "title": "Approve the refund",
+      "path": "screenshots/guides/support-10-approve.png",
+      "capturedAt": "2026-10-01T06:45:12.805Z",
+      "status": "needs-recapture",
+      "sha256": "91b294624d769898989048e7b6e73c34e0efe1a7d24390753d2342cb6aeafeb2",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "967332123d5f78d7e7c56c8c44030e86f1eeb5c3d8c5527a14c2ff54e70b102d",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-support-11-add-channel",
+      "title": "Pick where customers reach it",
+      "path": "screenshots/guides/support-11-add-channel.png",
+      "capturedAt": "2026-10-01T16:14:39.145Z",
+      "status": "current",
+      "sha256": "827a71924251b71a6da5830c1100fdd77769c55e25d52a0fee85be9e300267ff",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel-new.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "a0a51d00e703c9516d8692b14905fbef867bf90baf3c8c74b73bbd63f706ab8e",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-12-web-chat",
+      "title": "Publish the web chat",
+      "path": "screenshots/guides/support-12-web-chat.png",
+      "capturedAt": "2026-10-01T16:14:39.920Z",
+      "status": "current",
+      "sha256": "7dab34d8329e4df823487d1dabdaf46166b3f287f185fb60afbb842835a1c59c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-13-widget",
+      "title": "Put the chat bubble on your website",
+      "path": "screenshots/guides/support-13-widget.png",
+      "capturedAt": "2026-10-01T16:14:43.674Z",
+      "status": "current",
+      "sha256": "20b695b600eb127665a9424fdc5a17d543b7267a4144848891aba0baf740e34a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/gateways/widget-builder.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "824cb7760d4a2a28193c3c1783ff5d184a319ce8d1c6b59d63370a5e3d798f25",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-14-whatsapp",
+      "title": "Add WhatsApp with your Twilio keys",
+      "path": "screenshots/guides/support-14-whatsapp.png",
+      "capturedAt": "2026-10-01T16:15:14.785Z",
+      "status": "current",
+      "sha256": "57022529bea35a39f29e6de4eca45560f6aad03038653438667aeb308cc94535",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d6171fb16e7ca00de94f3ec69ce14149810341893d7bd3475e106e241b03a1c2",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-15-email",
+      "title": "Add email with your Resend key",
+      "path": "screenshots/guides/support-15-email.png",
+      "capturedAt": "2026-10-01T16:15:20.488Z",
+      "status": "current",
+      "sha256": "6c1f1971e0041e8a1cf5ea7585d8aa42e7d75712b8c78ad5154cb2db1400b7ac",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d6171fb16e7ca00de94f3ec69ce14149810341893d7bd3475e106e241b03a1c2",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-16-branding",
+      "title": "Name, greeting and limits",
+      "path": "screenshots/guides/support-16-branding.png",
+      "capturedAt": "2026-10-01T16:15:24.722Z",
+      "status": "current",
+      "sha256": "b1035a3a63e7f36405ce5a54632f0d1ac311a7e5e3ef21ea8f6290a272986591",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/settings"
+      },
+      "sources": [
+        "frontend/src/pages/agent-public-settings.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "efa026afef612c503df01efc731e583d89877dba429adadf9336eca3f3e6e605",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-17-customer-view",
+      "title": "What a customer sees",
+      "path": "screenshots/guides/support-17-customer-view.png",
+      "capturedAt": "2026-10-01T06:46:09.059Z",
+      "status": "current",
+      "sha256": "d997fe307a9d7c91571ac219770208dd6dd7787b6d7e68a00b3248a0e60af6ed",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/?__slug=customer-support-assistant"
+      },
+      "sources": [
+        "frontend/src/pages/hosted-chat.tsx",
+        "frontend/src/lib/hosted-chat.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-2-connect-orders",
+      "title": "Connect your order system",
+      "path": "screenshots/guides/support-2-connect-orders.png",
+      "capturedAt": "2026-10-01T06:44:43.685Z",
+      "status": "current",
+      "sha256": "595b33955978c725da7a7bcb183958204559da0162ad866022cb5dd24b1320a6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/pages/api-new-description.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "1d4b26eb70012d87ad5019b8011348ec7121c53ad13e909cb43ba59aa8a859e3",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-3-orders-tools",
+      "title": "The order system, with what it can do",
+      "path": "screenshots/guides/support-3-orders-tools.png",
+      "capturedAt": "2026-10-01T06:44:44.982Z",
+      "status": "current",
+      "sha256": "41298c6bfefb1fdf00abad1ee810a3dd30a99b3011c40ae54509273177571796",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-4-new-agent",
+      "title": "A new autonomous agent",
+      "path": "screenshots/guides/support-4-new-agent.png",
+      "capturedAt": "2026-10-01T06:44:49.281Z",
+      "status": "needs-recapture",
+      "sha256": "0d0eb4398386c4cebd9d3ea1bb98b0df76f19b2c48bbffe24df853827f35747b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+    },
+    {
+      "id": "guides-support-5-model-and-tools",
+      "title": "Tick the order tools",
+      "path": "screenshots/guides/support-5-model-and-tools.png",
+      "capturedAt": "2026-10-01T06:44:49.841Z",
+      "status": "needs-recapture",
+      "sha256": "5689d3f669842e02e475c6ce67d010bc920483832cc230404d41c9301a4c4e07",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+    },
+    {
+      "id": "guides-support-6-activate",
+      "title": "Save and turn the agent on",
+      "path": "screenshots/guides/support-6-activate.png",
+      "capturedAt": "2026-10-01T16:14:16.407Z",
+      "status": "needs-recapture",
+      "sha256": "b34c649d6910ac12373f4fc1bcc4b9fe3f244bdf34ed767a1ae523629f1acdb7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-support-7-try-order",
+      "title": "Ask about an order",
+      "path": "screenshots/guides/support-7-try-order.png",
+      "capturedAt": "2026-10-01T16:14:18.504Z",
+      "status": "needs-recapture",
+      "sha256": "7bb2cbb9574765f96748d340cb6cc6758c5f4bb5eea79fcabe1a12ed34b05b85",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "guides-support-8-amount-rule",
+      "title": "Ask before refunds over 500",
+      "path": "screenshots/guides/support-8-amount-rule.png",
+      "capturedAt": "2026-10-01T06:44:59.447Z",
+      "status": "current",
+      "sha256": "482dea7623ff903a11064a35a774327d9c63fecbc1479ef6c2e7890d97509dc0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/approvals/rules/new"
+      },
+      "sources": [
+        "frontend/src/pages/approval-rule.tsx",
+        "frontend/src/components/settings/approval-amount-rule.tsx",
+        "frontend/src/lib/approval-rules.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e1177c4b404113478986099894f795111401f1cb8c6a46a0bee7c551271a09f",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-9-refund-waits",
+      "title": "A big refund waits for approval",
+      "path": "screenshots/guides/support-9-refund-waits.png",
+      "capturedAt": "2026-10-01T06:45:11.920Z",
+      "status": "needs-recapture",
+      "sha256": "e8a3a5f05a0577cdba06cfa17e7eb10f1e05f594c7132031aa78e4a3ad7b256a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "967332123d5f78d7e7c56c8c44030e86f1eeb5c3d8c5527a14c2ff54e70b102d",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
+    },
+    {
+      "id": "hosted-chat-privacy",
+      "title": "Hosted chat: visitor data",
+      "path": "screenshots/hosted-chat-privacy.png",
+      "capturedAt": "2026-10-01T06:49:55.086Z",
+      "status": "current",
+      "sha256": "11208187d15885d3bb4a0b0785cc47b8ca759b24348c76cd76071e5742eba010",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/?__slug=northwind-help"
+      },
+      "sources": [
+        "frontend/src/pages/hosted-chat.tsx",
+        "frontend/src/lib/hosted-chat.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "hosted-chat",
+      "title": "Hosted web chat",
+      "path": "screenshots/hosted-chat.png",
+      "capturedAt": "2026-10-01T06:49:50.573Z",
+      "status": "current",
+      "sha256": "8f2479f7c99e114f697b5ff8aa02d2ec29ca5c03a9d8a8f2b53cc76799c8ad24",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/?__slug=northwind-help"
+      },
+      "sources": [
+        "frontend/src/pages/hosted-chat.tsx",
+        "frontend/src/lib/hosted-chat.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-config",
-      "title": "interfaces channel config",
+      "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The Interfaces tab is now the Channels tab; channel settings are on each channel page. Recapture there.",
-      "sha256": "5acf3f1ffb3494a664e19f5589e626d7a1396ee1cd6e1fc4736f9f1603e4f73b"
+      "capturedAt": "2026-10-01T16:12:00.860Z",
+      "status": "current",
+      "sha256": "aa6a65aabbf701d494218a1311d013f4bc5cd7d662e8e8477d18684631b06957",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel-new.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "a0a51d00e703c9516d8692b14905fbef867bf90baf3c8c74b73bbd63f706ab8e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-setup",
-      "title": "A channel's place on its app, with the callback URL next to the settings it needs",
+      "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The Interfaces tab is now the Channels tab; a channel is added with Add channel. Recapture there.",
-      "sha256": "981ad7f99f7e76e0d34d788f046417d0caba96e2fc133b53c60b40a11ee657ab"
-    },
-    {
-      "id": "llm-providers-create",
-      "title": "Add LLM Provider dialog",
-      "path": "screenshots/llm-providers-create.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Connecting a provider is a page under Credentials (/credentials/providers/new): it asks for a connection name, offers a saved key from Credentials instead of a pasted one, shows Ollama Cloud and your own server as a choice on the Ollama tile, and ends with the models found, all ticked, to untick before Done. Recapture after the provider-connections rework reaches staging.",
-      "sha256": "b890a50dca4543856c488141c13a8988cc3bf08ed257e84e28c5c8ea55137943"
+      "capturedAt": "2026-10-01T16:12:03.499Z",
+      "status": "current",
+      "sha256": "5aa653839576d6ce4ea671e5f2fd701d0896c08f9fcf5b6acda1e22f9154355d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory-write",
-      "title": "Blank New memory dialog with mode and scope selection",
+      "title": "Add memory",
       "path": "screenshots/memory-write.png",
-      "capturedAt": "2026-09-23T10:47:43.651Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "f1bbdb0f928b1860a455607d829cc5a33b80eb2888fe6ffe26df7b2a1529d0a7",
+      "capturedAt": "2026-10-01T06:50:39.845Z",
+      "status": "current",
+      "sha256": "7786413e5bfedd08a2b08cb2da55b620839935778e23326012324d20444f9443",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/memories"
+        "environment": "local-demo",
+        "route": "/memories/new"
       },
       "sources": [
-        "frontend/src/pages/memories.tsx",
-        "frontend/src/components/connections",
+        "frontend/src/pages/memory-new.tsx",
+        "frontend/src/components/memory",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "769cfb4ae1b1c9e93ded1f92473dfafd91532467e563b6b51128d80315996096",
-      "notes": "No memory was created or modified. Long-tier seeded demo entries are visible behind the dialog."
+      "sourceDigest": "b264e12680eff3dc27f385ce41f02a386522c887c8cf08276cf141d1846d13ed",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory",
-      "title": "Long-tier seeded demo memories with tags and embedding status",
+      "title": "Memory",
       "path": "screenshots/memory.png",
-      "capturedAt": "2026-09-23T10:47:32.593Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733), and memory has a fifth scope, one agent's own (an agent whose memory is per agent). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "2b9544dc9b7fa57e4435dd0d436c46be9ea00dbc9bc311a4fae2fa1b44fa5e72",
+      "capturedAt": "2026-10-01T06:50:37.453Z",
+      "status": "current",
+      "sha256": "e63f6b06ac3332949b7509b1654a981f245aaf83459cf3b120f7fae0b52aab40",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/memories"
       },
       "sources": [
         "frontend/src/pages/memories.tsx",
-        "frontend/src/components/connections",
+        "frontend/src/components/memory",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "769cfb4ae1b1c9e93ded1f92473dfafd91532467e563b6b51128d80315996096",
-      "notes": "Browse filtered to the long tier. The displayed policies and percentages are seeded demo content, not almyty commercial terms or product measurements."
+      "sourceDigest": "8d9d523bf5ec7d7013b7a32bac345f4dba2f8b8a2ae095055a513008ef30b306",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "models",
-      "title": "Models catalog grid with validation and routing availability",
+      "title": "Model catalog",
       "path": "screenshots/models.png",
-      "capturedAt": "2026-09-23T05:31:21.070Z",
-      "status": "needs-recapture",
-      "reason": "Models is now a catalog table of every model from every provider connection (connection, price, context, status, New), with no connected-provider cards; connections are named, several per provider, and choose which models they offer. Recapture after the provider-connections rework reaches staging.",
-      "sha256": "43650583b6d8cea1468aab7833a72f97f7d78a03f3928cbfb490b4dd72460e72",
+      "capturedAt": "2026-10-01T06:50:34.720Z",
+      "status": "current",
+      "sha256": "69d454fd8eab70ef2b795281cba2d58bd6354b6132c8ba127c5edce184e6915e",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/models"
       },
       "sources": [
@@ -711,21 +2078,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "701b872da75dd2d622c2110c9fe332f55f8a4c6e63d86d7fe16056bb326d2e6d",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "fd1a05a1aa4becde25b5e7b27f4266b4b7fa07d2deab1ba7ba269977567c624e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-api-imported",
-      "title": "Connected Open-Meteo API with parsed operation and generated tool",
+      "title": "Imported API",
       "path": "screenshots/quickstart-api-imported.png",
-      "capturedAt": "2026-09-23T09:18:25.838Z",
-      "status": "needs-recapture",
-      "reason": "Connect an API picks the kind first, then its own form; the key is picked or created with the credential control. Recapture on staging.",
-      "sha256": "cfc481629a98c618201e51c93cadbb3d23ce69f7c1a8a684d0025ff2854d887e",
+      "capturedAt": "2026-10-01T06:50:00.413Z",
+      "status": "current",
+      "sha256": "e915b3cd315ad4d7af5c7a7ba6b0a337fbdca296fc9c2cc4352128b49b192a27",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/apis"
+        "environment": "local-demo",
+        "route": "/apis/:id"
       },
       "sources": [
         "frontend/src/pages/api-detail.tsx",
@@ -734,62 +2100,165 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7f655b4e2f07238c281362054f28c4b93793fc901b4438b80648b6a3e8e3dbf2",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-claude-config",
-      "title": "quickstart claude config",
+      "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "9383ece88b0d876961032b01d060c51516a3056aeb02c8fea95b3c75b2f216c4"
+      "capturedAt": "2026-10-02T05:20:35.525Z",
+      "status": "current",
+      "sha256": "8bde6ebba51f6ca75de929a0bb419376a3640eef1b2f66fa9da1b78db33eeb45",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id?tab=integrations"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-gateway-mcp",
-      "title": "quickstart gateway mcp",
+      "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The quickstart now creates an MCP gateway with Create gateway. Recapture on staging.",
-      "sha256": "a99843fba87607e705e1d7dc8414225592b1e8fc14fbabf77637ad5885d4ce10"
+      "capturedAt": "2026-10-02T05:20:26.489Z",
+      "status": "current",
+      "sha256": "a03657674275c4ac9ff008502609c7e024d257a25141b56048c43961c0e0b19d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-mcp-endpoints",
-      "title": "quickstart mcp endpoints",
+      "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "18537595dad1a5455ed425f126ef48e436da3d9ee28c322627ebdbf3ecefc7f5"
+      "capturedAt": "2026-10-02T05:20:32.531Z",
+      "status": "current",
+      "sha256": "92c770313c9256d76b272ae5ff885038fba59c0ec20fa5913833b4bbcec35268",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id?tab=integrations"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "run-script-step",
+      "title": "A script step in a run",
+      "path": "screenshots/run-script-step.png",
+      "capturedAt": "2026-10-02T00:13:24.000Z",
+      "status": "current",
+      "sha256": "cf89514ab38d2142687c32745d0b8de9da0a90fa5c9979d0a23201860bca1dc3",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/components/agents/detail/code-step.tsx",
+        "frontend/src/components/agents/detail/runs-tab.tsx",
+        "frontend/src/components/approvals",
+        "frontend/src/components/ui",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "ff2a2c89860df9492a64f240940f052467e6f95e8b48a7000895c1c4692a1fca",
+      "notes": "Local stack, local test user; the same run after its changes were approved."
     },
     {
       "id": "runner-detail",
-      "title": "runner detail",
+      "title": "Runner detail",
       "path": "screenshots/runner-detail.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Runner pages have Overview and Workspaces tabs; the Workspaces sidebar item is gone. Recapture /runners/:id and its Workspaces tab on staging.",
-      "sha256": "1b1cd0d9afbed153cd9e0a2018e6b8cdb044b93920be5080745dc94b411db426"
+      "capturedAt": "2026-10-01T06:50:50.583Z",
+      "status": "current",
+      "sha256": "d8e6c348308efc524a62094e4d1888c91c75ca37050bda9171a69c4f81a54799",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners/:id"
+      },
+      "sources": [
+        "frontend/src/pages/runner-detail.tsx",
+        "frontend/src/pages/runners-shared.ts",
+        "frontend/src/components/runners",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "8d1e49beb4a74cc9c96bf09f71d19156d37d0ca158bf788700a928c3616bec5f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "runners-list",
-      "title": "runners list",
+      "title": "Runners",
       "path": "screenshots/runners-list.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "The Workspaces sidebar item moved onto each runner page. Recapture /runners on staging.",
-      "sha256": "3beefba3a06dfb389778a1034ac8a99329a34bd1dd2e90c7a6245ab5f596a632"
+      "capturedAt": "2026-10-01T06:50:47.975Z",
+      "status": "current",
+      "sha256": "b68c31157a171c62180e3d5c3d3dd284a5a8f5c58d2dcba05f335fb6870593f4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners"
+      },
+      "sources": [
+        "frontend/src/pages/runners.tsx",
+        "frontend/src/pages/runners-shared.ts",
+        "frontend/src/components/runners",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "daa92cae05a4e3d140e9d0e756f528cdd00c0a870a3c593632101feb7e2b0640",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "schedule-config",
-      "title": "schedule config",
+      "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T16:12:16.287Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "fba222bc1d9f56a0e7f5a12170db4c328889d7b0a00b9c388469486692325a05"
+      "sha256": "2c8b41462aa6c362ca3e818965a9e4556001439fb5906b2a9c732a5915e037c9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "self-hosting-compose",
@@ -797,70 +2266,64 @@
       "path": "screenshots/self-hosting-compose.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "A terminal capture of `docker compose up`, not an app page; the #675 local browser pass does not produce it. Recapture from a clean compose run with the current images.",
       "sha256": "44cc16af94a40f8e2260d0289bb385f90f7c18e51831f73f2281f2588419896a"
     },
     {
       "id": "settings-approval-policies-enabled",
-      "title": "Business approval policies with an empty policy list",
+      "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
-      "capturedAt": "2026-09-24T13:56:05.000Z",
-      "status": "needs-recapture",
-      "sha256": "6a41362debab6895732b1c6a5c31ca05938cda00586a4bc73d4c6e701c306ada",
+      "capturedAt": "2026-10-01T06:51:23.501Z",
+      "status": "current",
+      "sha256": "4654abcbce0e5df9f6253d933fb52c284d05a678706759baae0acb3138eacbd1",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/approvals"
       },
       "sources": [
         "frontend/src/pages/settings.tsx",
+        "frontend/src/pages/approval-policy.tsx",
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/lib/plan-catalog.ts",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed in the authorized seeded Business organization. No approval policy was created or changed.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "sourceDigest": "950c607e540c55bb650e62e7e9afafd43c11f97f1a2bcb227e808758d49fe40a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-approval-policy-new",
-      "title": "New approval policy page with match conditions and sequential steps",
+      "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
-      "capturedAt": "2026-09-24T13:57:42.000Z",
-      "status": "needs-recapture",
-      "sha256": "92a0173c78e6c89c1ca39457aa9df7d2bb1826855011f11a8e2836c43fc0c119",
+      "capturedAt": "2026-10-01T06:51:26.130Z",
+      "status": "current",
+      "sha256": "881347549e4cdd0d304720189e23f270338b8540667c0e14ef07fc3504c69ae1",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/approvals/policies/new"
       },
       "sources": [
         "frontend/src/pages/approval-policy.tsx",
-        "frontend/src/components/settings/approval-policy-form.tsx",
+        "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8b3d9e8ff058b680216dea80acd42ef044691ab50069a20a39f4209d415276f4",
-      "notes": "Blank creation form opened through New policy and visually reviewed at a taller viewport. No values were submitted and no policy was created.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "sourceDigest": "4df9da13c43d5513b942056c8b0b55ea321abab0930a6f25d436f99bd2e2ecf5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-audit-streams-enabled",
-      "title": "Business audit streaming with target configuration unlocked",
+      "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
-      "capturedAt": "2026-09-24T13:58:57.000Z",
-      "status": "needs-recapture",
-      "sha256": "3e6215ebd1c8b4ea3b6635f5335959599c987c8f42ca9c1fd1198cc00e21a2d0",
+      "capturedAt": "2026-10-01T06:51:31.418Z",
+      "status": "current",
+      "sha256": "2814af83e89ad903c7d8c2878fa6800e5c288e6a761e914d489f570afb5c8696",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/audit-streams"
       },
       "sources": [
@@ -868,27 +2331,21 @@
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/lib/plan-catalog.ts",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed the empty target configuration form. The token is blank; no stream was registered and no audit data was sent externally.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-compliance-enabled",
-      "title": "Business compliance policy defaults and posture report",
+      "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
-      "capturedAt": "2026-09-24T13:58:20.000Z",
-      "status": "needs-recapture",
-      "sha256": "a35683471f7513e857a4c15dba6824ec16f9767910266c21ee5fd1572597bcf6",
+      "capturedAt": "2026-10-01T06:51:28.832Z",
+      "status": "current",
+      "sha256": "b332d4756ae97808a2f4c1a58213786ad3fb604a38880a0a16207d871a3240a3",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/compliance"
       },
       "sources": [
@@ -896,55 +2353,43 @@
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/lib/plan-catalog.ts",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed secure-default policy and loaded posture report. No policy or guardrail settings were changed.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-encryption-locked",
-      "title": "Customer-managed keys locked without the Enterprise entitlement",
+      "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
-      "capturedAt": "2026-09-23T10:55:42.438Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "6986ac57e3f632ebd109e0818cd3cfaf766e0f0ba2c27c23e87275e0de4e0d9d",
+      "capturedAt": "2026-10-01T06:51:33.975Z",
+      "status": "current",
+      "sha256": "ca3f57182b20332d233e278098c2f9300ef16aa966a92ca58c1f1feb521024a7",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/encryption"
       },
       "sources": [
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
-      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-enabled",
-      "title": "Business Roles settings with custom roles unlocked",
+      "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
-      "capturedAt": "2026-09-24T13:54:37.000Z",
-      "status": "needs-recapture",
-      "sha256": "1f5c5caf9be493f2281f762601823e8a4e05a45868871e56fb59cc8c89eb940e",
+      "capturedAt": "2026-10-01T06:51:11.389Z",
+      "status": "current",
+      "sha256": "67bc2b8e69f6153b3f42b8311a78756be6fc5f17ba31e2823297f919f6b25550",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/rbac"
       },
       "sources": [
@@ -952,27 +2397,21 @@
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/lib/plan-catalog.ts",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed in the authorized seeded Business organization. Custom role controls are unlocked; no role or access policy was created. Existing locked-state evidence is separate.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-policy",
-      "title": "New access policy inline form on an entitled Business organization",
+      "title": "New access policy",
       "path": "screenshots/settings-rbac-new-policy.png",
-      "capturedAt": "2026-09-24T18:44:29.595Z",
-      "status": "needs-recapture",
-      "sha256": "e5ceb39e432e9a6eb9bf15229b2650bf05bec6a9ba1799b9e0372df406b59d3f",
+      "capturedAt": "2026-10-01T06:51:18.103Z",
+      "status": "current",
+      "sha256": "3cc722b28c931573030004cfe046ae2ba5f7a6349a825584fd5a2eb3f5de3323",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/rbac"
       },
       "sources": [
@@ -980,27 +2419,21 @@
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/lib/plan-catalog.ts",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Visually reviewed actual staging capture on the authorized seeded Business fixture. Scrolled to show the complete unsaved form and empty policies list. The form has no condition editor; attribute conditions require the API. No policy was submitted and no permissions or billing were changed.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-role",
-      "title": "Inline custom role creation with permission strings",
+      "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
-      "capturedAt": "2026-09-24T14:01:00.000Z",
-      "status": "needs-recapture",
-      "sha256": "0f4730525c5db0bcc998aef4ed7c611a67e32fa857361531095abc8ded192b91",
+      "capturedAt": "2026-10-01T06:51:14.741Z",
+      "status": "current",
+      "sha256": "4372359444cf418eba043e752eca0bb06f51e33ebf79e01a8f6e456edb289e0f",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/rbac"
       },
       "sources": [
@@ -1008,27 +2441,21 @@
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/lib/plan-catalog.ts",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed the blank New custom role inline form. Displayed examples are placeholders; no role was created, assigned or granted.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-sso-enabled",
-      "title": "Business SSO and SCIM configuration controls",
+      "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
-      "capturedAt": "2026-09-24T13:59:53.000Z",
-      "status": "needs-recapture",
-      "sha256": "8d9c9564023b2d1d256df93a6368d5451ea4f984dfab421fe744c13a8764bd8a",
+      "capturedAt": "2026-10-01T06:51:20.801Z",
+      "status": "current",
+      "sha256": "339d5078a61e7093f33ea8c3299add6025effe0d01185b86e14088def496ea68",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/sso"
       },
       "sources": [
@@ -1036,55 +2463,45 @@
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/lib/plan-catalog.ts",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed SAML configuration and SCIM provisioning controls in the authorized seeded Business organization. SSO remains disabled, fields are defaults/placeholders, and no SCIM token was generated. The displayed SCIM address belongs to the staging capture environment, not the public documentation base URL.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx), and the page now has an Email domains card (verified domains for SSO provisioning) between the SSO and SCIM cards; recapture on staging."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-teams",
-      "title": "Members and Teams settings showing the seeded organization owner",
+      "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
-      "capturedAt": "2026-09-23T06:10:33.702Z",
-      "status": "needs-recapture",
-      "reason": "Members and teams are one page now (members first, teams below, no inner tabs), and the Settings header no longer shows the plan. Recapture on staging.",
-      "sha256": "bbdd844b8f42e116b403a9b0b4d2ef147ec950dd89b320de263823fa9958cb1a",
+      "capturedAt": "2026-10-01T06:51:08.798Z",
+      "status": "current",
+      "sha256": "39d8f050fffd3db55c942d730ec8d6ec6de78d9822eae5eb543580501979b1f1",
       "source": {
         "kind": "browser",
-        "environment": "staging",
+        "environment": "local-demo",
         "route": "/settings/members"
       },
       "sources": [
         "frontend/src/pages/settings.tsx",
+        "frontend/src/components/MembersAndTeamsTab.tsx",
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/index.css",
-        "frontend/src/components/MembersAndTeamsTab.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts"
+        "frontend/src/index.css"
       ],
-      "sourceDigest": "07d882b0a0bc234ec860f0aa6496633fe36d38af2157ea15fcfcbaf0d06d6cdf",
-      "notes": "Members tab, not the custom-role editor. Only seeded demo account data is shown. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved. Dependency review additionally records the directly imported settings tab and plan indicator; original pixels and capture time preserved."
+      "sourceDigest": "70ab2349a3922c15273d719ea14ef388d1b1667e48ff816b81e093e24ce4671b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-constraints",
-      "title": "Seeded support agent constraints",
+      "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
-      "capturedAt": "2026-09-22T15:03:56.228Z",
+      "capturedAt": "2026-10-01T16:12:18.902Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "92c5d4960db84bb41e769dcf7fba75f556869c6ef60a39fd0489c3c5ab69628c",
+      "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/agents"
+        "environment": "local-demo",
+        "route": "/agents/:id?tab=constraints"
       },
       "sources": [
         "frontend/src/pages/agent-detail.tsx",
@@ -1093,21 +2510,21 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "support-agent-overview",
-      "title": "Autonomous support agent overview with primary model and verifier panel",
+      "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
-      "capturedAt": "2026-09-22T15:02:31.998Z",
+      "capturedAt": "2026-10-01T16:12:21.560Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "b2f5761e661b123b4ac9b14adbc07cd48d90cdcfca9257e204dd59cc043b9359",
+      "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/agents"
+        "environment": "local-demo",
+        "route": "/agents/:id"
       },
       "sources": [
         "frontend/src/pages/agent-detail.tsx",
@@ -1116,21 +2533,21 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
-      "notes": "Live seeded demo agent. Viewport framed to show configuration without environment-specific integration URLs. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "support-agent-runs",
-      "title": "Seeded support agent autonomous run history with costs and outcomes",
+      "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
-      "capturedAt": "2026-09-22T15:03:24.398Z",
+      "capturedAt": "2026-10-01T16:12:24.190Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "6f86d21633ab3174563eda7271b71a3df3b4f60e17c674f6b969b0c215de0b70",
+      "sha256": "a0be00def5dc7bd3c7b5fa9ab1d9a45749dad44dc02854aa94d0d0056fbf98e1",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/agents"
+        "environment": "local-demo",
+        "route": "/agents/:id?tab=runs"
       },
       "sources": [
         "frontend/src/pages/agent-detail.tsx",
@@ -1139,21 +2556,21 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "tool-detail",
-      "title": "Generated weather tool details and parameter schema",
+      "title": "Tool test",
       "path": "screenshots/tool-detail.png",
-      "capturedAt": "2026-09-23T09:19:05.133Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "488e344dbcb34084fb44627c7538df931641670d387cd316c6a9d7f178c0204e",
+      "capturedAt": "2026-10-02T00:12:52.738Z",
+      "status": "current",
+      "sha256": "7e5a3724291982fdccec0691962a367aedeea933d2d828920c33e9b147315551",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/tools"
+        "environment": "local-demo",
+        "route": "/tools/:id?tab=test"
       },
       "sources": [
         "frontend/src/pages/tool-detail.tsx",
@@ -1162,68 +2579,166 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e68bfe673adf4109b0cf818b0f4878a3d16697737925692b24f97f26994e4059",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "24cd1039c596709f5e0600482da7cc55df49d64e5dc68a30317e24683672fb60",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
-      "id": "tools-list",
-      "title": "Tools list with Active filter on the current page",
-      "path": "screenshots/tools-list.png",
-      "capturedAt": "2026-09-22T15:10:21.424Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "3c3ac6115b5d8a46ded9a683461ecfda2dabc5f102792fc7b3fb8679ddb1622f",
+      "id": "tool-side-effect",
+      "title": "What a tool does to your data",
+      "path": "screenshots/tool-side-effect.png",
+      "capturedAt": "2026-10-01T14:50:12.083Z",
+      "status": "current",
+      "sha256": "d879f066a568174a1d64df6bdb1518882c4a593da71aa2ddad655035f6fc94ac",
       "source": {
         "kind": "browser",
-        "environment": "staging",
-        "route": "/tools"
+        "environment": "local",
+        "route": "/tools/:id?tab=details"
       },
       "sources": [
-        "frontend/src/pages/tools.tsx",
-        "frontend/src/pages/tool-hub.tsx",
+        "frontend/src/pages/tool-detail.tsx",
         "frontend/src/components/tools",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ebdb59176185ec9766bb49330f0271d5efec8930d93bc38e8149d28cd3ad5f43",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "24cd1039c596709f5e0600482da7cc55df49d64e5dc68a30317e24683672fb60",
+      "notes": "Local stack with the MCP conformance seed (Petstore import), local test user only; not staging or production data."
+    },
+    {
+      "id": "tools-list",
+      "title": "Tools list",
+      "path": "screenshots/tools-list.png",
+      "capturedAt": "2026-10-02T00:12:44.037Z",
+      "status": "current",
+      "sha256": "fd031f67bff1d7520d1464dc45eee80486cba1ec17efd1b9c158f35a8134bcd4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/tools"
+      },
+      "sources": [
+        "frontend/src/pages/tools.tsx",
+        "frontend/src/components/tools",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2a490942adbfacb561a82718defd1e0d7e8ec263ee9e841514e4fec66960422d",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning-history",
-      "title": "versioning history",
+      "title": "Change history",
       "path": "screenshots/versioning-history.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T16:12:33.067Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "c7b92cf8167576870f5fae2c2d206e3eb696a141dcc6014cce78745cd58f50be"
+      "sha256": "1412a28e636399b379ef04c5ace5c821cf270a42504735ebd7d0dc589786d1c4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "versioning",
-      "title": "versioning",
+      "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T16:12:36.112Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "89a8e774481444845575915d7ac3f9d02d10061feebdb16d71db34d7c25e349d"
+      "sha256": "21972b07aeee8a95fe59f92283f13315116b9552678e4590d767464abccac52b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+    },
+    {
+      "id": "visitor-data-request",
+      "title": "Visitor data request",
+      "path": "screenshots/visitor-data-request.png",
+      "capturedAt": "2026-10-01T10:14:16.000Z",
+      "status": "current",
+      "sha256": "6efe0e5f3d1c8f824fcbf523e9b873eda5ba822d7970a1b3ed2cfe48ec80cd69",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/visitor-data"
+      },
+      "sources": [
+        "frontend/src/pages/agent-visitor-data.tsx",
+        "frontend/src/components/channels/visitor-data-request.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5359f6a1285d553b37535dfcadf9079c19d93f0c7d5999d34a8d4f8c03fb0e15",
+      "notes": "Local stack with a fake Northwind AI organization and fake people; local test credentials; not staging or production data."
     },
     {
       "id": "webhook-config",
-      "title": "webhook config",
+      "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
-      "capturedAt": null,
+      "capturedAt": "2026-10-01T16:12:39.461Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "b546ba18585fc5f8c0799fecc566c9d03dca890ebc8f855c182a2aaabbf2c083"
+      "sha256": "2c8b41462aa6c362ca3e818965a9e4556001439fb5906b2a9c732a5915e037c9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "widget-builder",
-      "title": "The website widget's place on its app: embed line, placement with live preview, allowed sites",
+      "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites; the widget also shows Download my chat and Delete my chat when the app lets visitors. Recapture from /apps/<app>/distributions/widget once published.",
-      "sha256": "3e007ef828b2789531a98aa22d9ba9f573f0fbc419ec4fea57d99accf938a991"
+      "capturedAt": "2026-10-01T16:12:45.147Z",
+      "status": "current",
+      "sha256": "ce07dc4f3fc8e51c2d82bc47d7635aaffe6d9650b203c971ec18665e5635fb21",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/gateways/widget-builder.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "824cb7760d4a2a28193c3c1783ff5d184a319ce8d1c6b59d63370a5e3d798f25",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     }
   ]
 }

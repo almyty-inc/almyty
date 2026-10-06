@@ -33,6 +33,26 @@ export interface ApprovalStep {
 }
 
 /**
+ * A rule that asks for approval by itself, at the tool call, rather than
+ * waiting for the agent to call request_approval: "ask before
+ * issue_refund when amount is over 500". A call whose argument is at or
+ * under the amount runs without asking. The amount is a plain number;
+ * whatever currency the tool uses, it is the tool's.
+ */
+export interface ApprovalToolAmountTrigger {
+  kind: 'tool_amount';
+  /** The tool the rule watches. */
+  toolId: string;
+  /** Its name when the rule was saved, for the rule's summary. */
+  toolName?: string;
+  /** The numeric argument, as a dot path into the call's input (`amount`, `refund.total`). */
+  argument: string;
+  /** Over (gt), or at or over (gte). */
+  op: 'gt' | 'gte';
+  amount: number;
+}
+
+/**
  * EE (approval_policy): a declarative, multi-step / conditional / quorum
  * approval policy. The single-gate approval (one authorized approver
  * flips the request) stays OSS in the `approvals` module. This policy
@@ -83,6 +103,14 @@ export class ApprovalPolicy {
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   steps: ApprovalStep[];
 
+  /**
+   * When set, the policy asks for approval by itself at the tool call
+   * (ApprovalToolAmountTrigger), and governs only the requests it raises.
+   * Null: the policy governs requests an agent raises with request_approval
+   * that its `match` conditions select.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  trigger: ApprovalToolAmountTrigger | null;
   /**
    * Higher priority wins when several policies match the same request —
    * the highest-priority matching policy is the one enforced.
