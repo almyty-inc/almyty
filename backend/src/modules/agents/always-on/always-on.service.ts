@@ -79,6 +79,8 @@ export interface WakeInput {
   payload?: Record<string, any> | null;
   /** A message from the owner on their own channel: its text, and where the reply goes. */
   ownerMessage?: { text: string; replyTo: ChannelDelivery } | null;
+  /** Keep the wake for the next run without starting one for it. */
+  passive?: boolean;
 }
 
 /** What the agent page shows about Always on. */
@@ -540,7 +542,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     }
 
     await this.coalesceOverflow(agentId);
-    await this.enqueueProcess(agentId, organizationId);
+    if (!input.passive) await this.enqueueProcess(agentId, organizationId);
     return row;
   }
 
@@ -927,8 +929,20 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
   private async notifyOwner(agent: Agent, type: 'agent.report' | 'agent.paused' | 'run.failed', title: string, body: string, link?: string): Promise<void> {
     const owner = agentOwnerUserId(agent);
     if (!owner || !this.notifications) return;
+    const path = link ?? `/agents/${agent.id}`;
+    let base = process.env.FRONTEND_URL || 'https://app.almyty.com';
+    while (base.endsWith('/')) base = base.slice(0, -1);
     await this.notifications
-      .emit({ type: type as any, organizationId: agent.organizationId, userIds: [owner], title, body, link: link ?? `/agents/${agent.id}` })
+      .emit({
+        type: type as any,
+        organizationId: agent.organizationId,
+        userIds: [owner],
+        title,
+        body,
+        link: path,
+        // The email, for whoever has it on: the agent, what happened, and a link.
+        email: { template: type, params: { agentName: agent.name, message: body, error: body, agentUrl: `${base}${path}`, triggerType: 'always_on' } },
+      } as any)
       .catch(() => undefined);
   }
 
@@ -1072,6 +1086,11 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         summary: `${who} wrote on ${channel.name} (they have their own chat; you do not see it here)`,
         dedupeKey: `channel:${key}`,
         sourceRef: channel.id,
+        // A line about someone else's chat does not start a run of its own
+        // when a timer will come anyway: it waits for the next wake. A busy
+        // channel would otherwise cost a run per message and pause the
+        // agent at its hourly limit.
+        passive: !!role.config.wakeOn.timer,
       });
     }
     return 'continue';

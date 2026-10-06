@@ -202,6 +202,17 @@ describe('Always on: channel messages', () => {
     expect(wake.payload).toBeNull();
   });
 
+  it('a visitor line waits for the next timer instead of starting a run of its own', async () => {
+    const w = world();
+    await w.service.routeInbound({ ...base, gatewayId: GW_SLACK, senderId: 'U-VISITOR', text: 'hi' });
+    expect(w.wakes.rows()).toHaveLength(1);
+    expect(w.queue.added.filter((j) => j.name === ALWAYS_ON_WAKE_JOB)).toHaveLength(0);
+    // With no timer to come, it wakes the agent itself.
+    const noTimer = world({ agent: alwaysOnAgent({}, { wakeOn: { timer: null, channelIds: [SLACK] } }) });
+    await noTimer.service.routeInbound({ ...base, gatewayId: GW_SLACK, senderId: 'U-VISITOR', text: 'hi' });
+    expect(noTimer.queue.added.filter((j) => j.name === ALWAYS_ON_WAKE_JOB)).toHaveLength(1);
+  });
+
   it('a message the agent\'s own bot sent wakes nothing', async () => {
     const w = world();
     expect(await w.service.routeInbound({ ...base, gatewayId: GW_SLACK, senderId: 'B-BOT', text: 'Report: done', fromBot: true })).toBe('continue');

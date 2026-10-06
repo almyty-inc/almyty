@@ -26,7 +26,8 @@ the builder), then **Set up always on**. You choose:
     what was sent. On every other channel, the people writing keep their
     own chats exactly as before; the agent is only told that someone
     wrote, never what they said, so one person's words never turn up in an
-    answer to someone else.
+    answer to someone else. With a timer on, that note waits for the next
+    wake instead of waking it by itself, so a busy channel does not start a run per message.
   - *Connections that need attention*: a connection it was given is about
     to expire, has expired, or is due for a new key.
 - **Talk to it yourself.** Pick one of its channels and your own address
