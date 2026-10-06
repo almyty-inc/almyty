@@ -76,8 +76,13 @@ The agent page says why, and you get a notification:
   it: a webhook that fires too often, or a channel it reports into and
   also listens to. Look at **What woke it lately**, fix the cause, and turn
   it back on.
-- **Its owner can no longer run it.** Always-on work runs as the agent's
-  owner, checked at every wake. Add them back, or duplicate the agent.
+- **Its owner can no longer run it.** Always-on work answers to the
+  agent's owner, checked at every wake. Add them back, or duplicate the
+  agent.
+- **It acts as itself, and your plan no longer includes that.** An agent
+  set to act as itself (Business) runs with its own access. If the plan
+  lapses it pauses instead of running as you. Switch it back to acting as
+  you, or upgrade, then turn it back on.
 - **Its timer could not be restored after a restart.** Turn it back on.
 
 ## Limits
@@ -129,7 +134,10 @@ standingConversationId`, `agentLimits: true` (the agent's resolved limits,
 never the old fixed ten steps) and `metadata.triggerType: 'always_on'`. Runs
 started in the last hour are counted from consumed wakes; at the plan's
 `maxWakesPerHour` the agent pauses with `WAKE_LOOP`. Access is judged at
-fire time as the owner (`OWNER_CANNOT_RUN`). The standing thread is always
+fire time as the owner (`OWNER_CANNOT_RUN`); the run then acts as
+`AgentIdentityService.resolve(agent, 'always_on')` says: the owner, or the
+agent itself under `agent_identity`, and `IDENTITY_LAPSED` pauses it when the
+plan no longer includes that. The standing thread is always
 compacted (`AgentContextCompactor`, the agent's own settings when it has
 them).
 

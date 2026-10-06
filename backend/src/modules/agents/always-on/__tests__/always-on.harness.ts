@@ -14,6 +14,7 @@ import { fakeRepository, FakeRepository } from '../../../../test/fake-repository
 import { membershipFixture } from '../../../../test/execution-access.fixture';
 import { AlwaysOnService } from '../always-on.service';
 import { SCHEDULED_RESULT_POSTER } from '../../scheduled-result-poster';
+import { AgentIdentityService } from '../../agent-identity';
 
 export const ORG = '11111111-1111-4111-8111-111111111111';
 export const OWNER = '22222222-2222-4222-8222-222222222222';
@@ -109,7 +110,9 @@ export function alwaysOnAgent(overrides: Record<string, any> = {}, alwaysOn: Rec
   };
 }
 
-export function world(options: { plan?: string; agent?: Record<string, any> | null; ownerIsMember?: boolean } = {}): World {
+export function world(
+  options: { plan?: string; agent?: Record<string, any> | null; ownerIsMember?: boolean; identityLicensed?: boolean } = {},
+): World {
   const agents = fakeRepository<any>(options.agent === null ? [] : [options.agent ?? alwaysOnAgent()]);
   const wakes = fakeRepository<any>({ make: () => new AgentWake(), idPrefix: 'wake' });
   const runs = fakeRepository<any>({ make: () => new AgentRun(), idPrefix: 'run' });
@@ -182,6 +185,8 @@ export function world(options: { plan?: string; agent?: Record<string, any> | nu
     moduleRef as any,
     notifications as any,
     audit as any,
+    // The real resolution, with the plan's agent_identity as the world says.
+    new AgentIdentityService({ hasForOrg: async () => options.identityLicensed === true } as any),
   );
   return { service, agents, wakes, runs, channels, organizations, tools, messages, grants, queue, redis, startRun, sendInput, approvals, posted, notified, audited, membership };
 }

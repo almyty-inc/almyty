@@ -29,6 +29,7 @@ import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { userPrincipal } from '../../../common/authorization/execution-access.service';
+import { AgentIdentityService, isLapsed, runUserOf } from '../agent-identity';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { agentOwnerUserId } from '../agent-owner';
 import {
@@ -256,6 +257,8 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly moduleRef?: ModuleRef,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() private readonly audit?: AuditLogService,
+    // Who an unattended run acts as (agent-identity.ts).
+    @Optional() private readonly identity?: AgentIdentityService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -696,23 +699,33 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         return 'paused';
       }
 
-      // Judged now, as the owner is now (as a heartbeat was).
-      const principal = userPrincipal(agentOwnerUserId(agent), 'always_on');
-      const access = await this.runtime.executionAccess.canExecute(principal, agent);
+      // Judged now, as the owner is now (as a heartbeat was): the owner is
+      // who answers for the agent, whoever it runs as.
+      const owner = userPrincipal(agentOwnerUserId(agent), 'always_on');
+      const access = await this.runtime.executionAccess.canExecute(owner, agent);
       if (!access.allowed) {
-        const message = principal.userId
+        const message = owner.userId
           ? `Its owner can no longer run this agent (${access.reason}), so Always on was paused.`
           : `This agent has no owner who can run it (${access.reason}), so Always on was paused.`;
         await this.pause(agent, { code: 'OWNER_CANNOT_RUN', message, detectedAt: new Date().toISOString() });
         return 'paused';
       }
+      // Who the run acts as: the owner, or the agent itself when it acts as
+      // itself and the plan still includes that. When the plan lapsed it
+      // pauses; it never quietly runs as the owner instead.
+      const resolved = this.identity ? await this.identity.resolve(agent, 'always_on') : { principal: owner };
+      if (isLapsed(resolved)) {
+        await this.pause(agent, resolved.reason);
+        return 'paused';
+      }
+      const principal = resolved.principal;
 
       // Claim before starting, so a second worker cannot hand the same wakes to another run.
       const claimed = await this.claim(queued, null);
       if (!claimed.length) return 'idle';
       let run: AgentRun;
       try {
-        run = await this.runtime.startRun(agentId, organizationId, principal.userId, wakeMessage(config.brief, claimed), {
+        run = await this.runtime.startRun(agentId, organizationId, runUserOf(principal), wakeMessage(config.brief, claimed), {
           principal,
           agentLimits: true,
           ...(config.standingConversationId ? { conversationId: config.standingConversationId } : {}),
