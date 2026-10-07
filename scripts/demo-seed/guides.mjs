@@ -481,12 +481,15 @@ const OPERATIONS = [
     await h.show('Try it')
   }],
   ['ops-4-slack', 'Slack, published for the report', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
+    await h.go('/agents')
+    await h.link('Nightly systems check')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^Slack/ }).click()
     await h.settle(1500)
     await h.click('Create one here')
     // Placeholder Slack app keys, shaped like real ones; nothing is sent to Slack until someone installs it.
+    await page.getByTestId('credential-form').getByLabel('Name', { exact: true }).fill('Nightly Slack app')
     await page.getByLabel('Client ID').first().fill('4312876501.7719203348122')
     await page.getByRole('textbox', { name: 'Client secret' }).first().fill('demo0client0secret0000001')
     await page.getByRole('textbox', { name: 'Signing secret' }).first().fill('demo0signing0secret000001')

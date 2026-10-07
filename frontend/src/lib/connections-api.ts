@@ -69,6 +69,9 @@ export const connectionsApi = {
   /** Who can use it, changed after it was added: everyone, one team (with its id) or only you. */
   setSharing: (id: string, body: { owner: 'org' | 'team' | 'private'; teamId?: string }) =>
     apiPatch<unknown>(`/credentials/${id}/sharing`, body).then(unwrapConnection),
+  /** Give an agent an explicit credential grant from its identity settings. */
+  addGrant: (id: string, body: { principalType: 'agent'; principalId: string }) =>
+    apiPost(`/credentials/${encodeURIComponent(id)}/grants`, body),
 
 }
 

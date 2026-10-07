@@ -387,7 +387,7 @@ export function GatewayDetailPage() {
         </div>
       </div>
 
-      {initialApiKey && (
+      {initialApiKey && (!isToolGateway || gateway.accessScope === 'external_protected') && (
         <div
           data-testid="initial-api-key"
           className="space-y-3 rounded-lg border border-amber-400/60 bg-amber-50 p-4 dark:bg-amber-950/30"
