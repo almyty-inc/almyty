@@ -914,7 +914,12 @@ export class AgentExecutionEngine {
             nodeResults[nodeId] = {
               status: 'waiting_approval',
               message: error,
-              waitingForApproval: { approvalId: item.waiting.approvalId, changes: item.waiting.changes },
+              waitingForApproval: {
+                approvalId: item.waiting.approvalId,
+                kind: item.waiting.kind ?? 'code',
+                changes: item.waiting.changes,
+                ...(item.waiting.call ? { call: item.waiting.call } : {}),
+              },
               ...(item.resolvedInput !== undefined ? { input: capPersistedPayload(item.resolvedInput) } : {}),
               startedAt,
               completedAt,
@@ -1155,7 +1160,8 @@ export class AgentExecutionEngine {
       // output node that legitimately produced `null` isn't treated as "no output ran".
       const hasNodeFailures = Object.values(nodeResults).some((r: any) => r.error);
 
-      // A Code step's changes wait for a person: the run waits with them,
+      // A Code step's changes, or a call an approval rule held, wait for a
+      // person: the run waits with them,
       // neither failed nor finished, and carries on from that step once
       // they are decided (WorkflowApprovalResumeService). Only when nothing
       // else failed: a run that failed elsewhere has nothing to carry on.
@@ -1184,15 +1190,15 @@ export class AgentExecutionEngine {
             executionId: execution.id,
             status: AgentExecutionStatus.WAITING_APPROVAL,
             message: execution.error,
-            approvals: waitingSteps.map((s) => ({ nodeId: s.nodeId, approvalId: s.approvalId, changes: s.changes })),
+            approvals: waitingSteps.map((s) => ({ nodeId: s.nodeId, approvalId: s.approvalId, kind: s.kind ?? 'code', changes: s.changes })),
           },
           timestamp: Date.now(),
         });
         return execution;
       }
 
-      // Every step that did not finish was a Code step whose changes a
-      // person rejected (or nobody decided on in time): the run stops there,
+      // Every step that did not finish was a Code step's changes or a held
+      // call a person rejected (or nobody decided on in time): the run stops there,
       // cancelled rather than failed, the way a rejected approval cancels
       // an autonomous run. Nothing went wrong; somebody said no.
       const failures = Object.values(nodeResults).filter((r: any) => r.error);

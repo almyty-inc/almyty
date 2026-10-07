@@ -42,6 +42,13 @@ export interface ApprovalGateHit {
   paramsHash: string;
 }
 
+/**
+ * Emitted on ApprovalsService once an approved held call has been made and
+ * its outcome kept on the request (runHeld), with the request row: workflow
+ * runs waiting on it carry on (agents/workflow-approval-resume.service.ts).
+ */
+export const HELD_CALL_SETTLED = 'approval.held_call_settled';
+
 /** What about this call tripped the rule, in words: "amount is 820", "it is on the ask-first list". */
 export function hitDetail(hit: Pick<ApprovalGateHit, 'kind' | 'argument' | 'value'>): string {
   if (hit.kind === 'tool_call') return 'it is on the list of things to ask about first';
@@ -288,21 +295,31 @@ export class ToolApprovalGateService implements OnModuleInit {
     const call = (row.payload?._gate?.call ?? {}) as Partial<HeldCallContext>;
     const executor = this.moduleRef?.get(ToolExecutorService, { strict: false });
     if (!executor) return;
-    const result = await executor.executeTool(row.toolId, row.payload?.parameters ?? {}, {
-      organizationId,
-      userId: call.userId ?? (undefined as any),
-      ...(call.principal ? { principal: call.principal } : {}),
-      ...(call.gatewayId ? { gatewayId: call.gatewayId } : {}),
-      ...(call.scopes ? { scopes: call.scopes } : {}),
-      ...(call.runnerLabels ? { runnerLabels: call.runnerLabels } : {}),
-      agentId: row.agentId ?? null,
-      agentTeamId: call.agentTeamId ?? null,
-      approvedGate: { approvalId: row.id },
-    });
-    await this.requests.update(
-      { id: row.id },
-      { result: { success: result.success, data: result.data ?? null, error: result.error ?? null } as any },
-    );
+    let result: { success: boolean; data?: unknown; error?: string };
+    try {
+      result = await executor.executeTool(row.toolId, row.payload?.parameters ?? {}, {
+        organizationId,
+        userId: call.userId ?? (undefined as any),
+        ...(call.principal ? { principal: call.principal } : {}),
+        ...(call.gatewayId ? { gatewayId: call.gatewayId } : {}),
+        ...(call.scopes ? { scopes: call.scopes } : {}),
+        ...(call.runnerLabels ? { runnerLabels: call.runnerLabels } : {}),
+        agentId: row.agentId ?? null,
+        agentTeamId: call.agentTeamId ?? null,
+        approvedGate: { approvalId: row.id },
+      });
+    } catch (err: any) {
+      // Kept as the call's outcome, so whoever waits on it hears that it failed instead of waiting forever.
+      result = { success: false, error: err?.message ?? 'The call failed' };
+    }
+    const kept = { success: result.success, data: result.data ?? null, error: result.error ?? null };
+    await this.requests.update({ id: row.id }, { result: kept as any });
+    // Whoever waits on this call (a workflow run, WorkflowApprovalResumeService) carries on now.
+    try {
+      this.approvalsService()?.emit(HELD_CALL_SETTLED, { ...row, result: kept });
+    } catch (err: any) {
+      this.logger.error(`Could not announce the outcome of the approved call ${row.id}: ${err?.message ?? err}`);
+    }
   }
 
   /** The first enabled rule on this tool the call is over, highest priority first. */
