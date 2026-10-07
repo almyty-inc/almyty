@@ -47,6 +47,8 @@ export interface CodeCallContext {
   runnerLabels?: Record<string, string>;
   pinnedRunnerId?: string;
   retries?: number;
+  /** The workflow run a Code step belongs to: its held change set is settled by that run when decided. */
+  workflowExecutionId?: string | null;
 }
 
 export interface RunCodeInput {
@@ -404,6 +406,8 @@ export class CodeModeService implements OnModuleInit {
   onModuleInit(): void {
     this.approvalsService()?.on('approval.decided', (row: ApprovalRequest) => {
       if (!row || row.runId || row.payload?.kind !== 'change_set') return;
+      // A workflow run's change set is settled by the run (WorkflowApprovalResumeService).
+      if (row.payload?.workflowExecutionId) return;
       this.decideHeld(row).catch((err: any) => this.logger.error(`Could not settle the change set of approval ${row.id}: ${err?.message ?? err}`));
     });
   }
@@ -433,7 +437,15 @@ export class CodeModeService implements OnModuleInit {
       runId: null,
       agentId: context.agentId ?? null,
       reason: `A script wants to make ${n} change${n === 1 ? '' : 's'}. Approve to make all of them, or reject to make none.`,
-      payload: { kind: 'change_set', tool: 'run_code', codeExecutionId: outcome.codeExecutionId, changeSet: outcome.staged, _call: call },
+      payload: {
+        kind: 'change_set',
+        tool: 'run_code',
+        codeExecutionId: outcome.codeExecutionId,
+        changeSet: outcome.staged,
+        _call: call,
+        // A workflow run waiting on this decision settles it itself, then carries on.
+        ...(context.workflowExecutionId ? { workflowExecutionId: context.workflowExecutionId } : {}),
+      },
       principal: context.principal ?? null,
     });
     await this.attachApproval(outcome.codeExecutionId, row.id);
@@ -635,9 +647,10 @@ export class CodeModeService implements OnModuleInit {
 
   /**
    * A workflow's Code step (part E): the script over the agent's tools, the
-   * step's input as its `context`, run as the workflow run. A workflow
-   * cannot pause, so changes that need a person are held in Approvals as
-   * one request and run once approved; the step reports that it is waiting.
+   * step's input as its `context`, run as the workflow run. Changes that
+   * need a person are held in Approvals as one request; the workflow run
+   * waits for the decision and carries on from this step once it is made
+   * (agents/workflow-approval-resume.service.ts).
    */
   async runWorkflowStep(input: {
     agent: Pick<Agent, 'id' | 'organizationId' | 'toolIds' | 'agentConfig' | 'teamId'>;
@@ -668,6 +681,7 @@ export class CodeModeService implements OnModuleInit {
         userId: input.userId,
         ...(input.principal ? { principal: input.principal } : {}),
         runId: input.runId,
+        workflowExecutionId: input.runId,
         agentId: agent.id,
         agentTeamId: agent.teamId ?? null,
         ...(input.runnerLabels ? { runnerLabels: input.runnerLabels } : {}),
@@ -720,6 +734,11 @@ export class CodeModeService implements OnModuleInit {
   /** The scripts of a run, newest last. */
   async forRun(runId: string, organizationId: string): Promise<CodeExecution[]> {
     return this.executions.find({ where: { runId, organizationId }, order: { createdAt: 'ASC' }, take: 500 });
+  }
+
+  /** One script's row (its status and change set), in its organization. */
+  async findExecution(codeExecutionId: string, organizationId: string): Promise<CodeExecution | null> {
+    return this.executions.findOne({ where: { id: codeExecutionId, organizationId } });
   }
 }
 

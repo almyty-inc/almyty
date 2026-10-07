@@ -566,8 +566,14 @@ benchmark report below exists.
   agent's tools, with `context.input` (the run's input) and
   `context.steps` (earlier steps' outputs) as a frozen `context` global.
   Its result is what the script returns. Its calls come out of the run's
-  tool-call budget. A workflow cannot pause, so held changes stop the step
-  with `AWAITING_APPROVAL`, like a held `tool_call`.
+  tool-call budget. Held changes stop the run in `waiting_approval` (the
+  change set's approval carries `payload.workflowExecutionId`); once it is
+  decided, `WorkflowApprovalResumeService` settles the set and carries the
+  run on from the step, replaying the steps before it from the run's
+  record. Approved, the step's output is the script's return value;
+  rejected or expired, the step fails with `APPROVAL_REJECTED` and the run
+  ends cancelled. The model-facing "call run_code again with the
+  approvalId" note is for gateway clients only.
 
 ## P3 gate: the sandbox runtime (decision 1)
 

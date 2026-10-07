@@ -15,7 +15,7 @@ import * as Redis from 'ioredis';
 import { isUniqueViolation } from '../../../common/utils/unique-violation';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
-import { AgentRun } from '../../../entities/agent-run.entity';
+import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { ChannelEvent, ChannelEventStatus, InboundMessageRecord } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { AlwaysOnService } from '../../agents/always-on/always-on.service';
@@ -65,6 +65,9 @@ interface ChannelEventRef {
   gatewayId: string;
   deliveryId: string | null;
 }
+
+/** A thread run in one of these takes the next message itself (threadOnGateway). */
+const THREAD_ACTIVE_STATUSES: string[] = [AgentRunStatus.RUNNING, AgentRunStatus.WAITING_INPUT, AgentRunStatus.SLEEPING];
 
 @Injectable()
 export class ChannelGatewayService {
@@ -389,24 +392,10 @@ export class ChannelGatewayService {
     // one. Scoped to the gateway, not just the agent: one agent sits
     // behind several surfaces, and the public widget lets its caller
     // pick any threadId, so an agent-wide match would let a thread
-    // opened on one surface capture messages sent on another.
-    let run: AgentRun | null = null;
-
-    if (normalized.threadId) {
-      const existingRuns = await this.runRepository
-        .createQueryBuilder('run')
-        .where('run.agentId = :agentId', { agentId: gateway.agentId })
-        .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
-        .andWhere('run.status IN (:...activeStatuses)', {
-          activeStatuses: ['running', 'waiting_input', 'sleeping'],
-        })
-        .andWhere("run.metadata->>'threadId' = :threadId", { threadId: normalized.threadId })
-        .orderBy('run.createdAt', 'DESC')
-        .limit(1)
-        .getMany();
-
-      run = existingRuns[0] || null;
-    }
+    // opened on one surface capture messages sent on another. A new run
+    // in a thread that already had one carries on in its conversation.
+    const thread = await this.threadOnGateway(gateway, normalized.threadId);
+    const run: AgentRun | null = thread.active;
 
     if (run) {
       try {
@@ -447,6 +436,7 @@ export class ChannelGatewayService {
           maxSteps: 25,
           // The files the message came with, by reference (attached-files.ts).
           ...(read.parts.length ? { attachments: read.parts } : {}),
+          ...(thread.conversationId ? { conversationId: thread.conversationId } : {}),
           metadata: {
             channelUserId: normalized.userId,
             threadId: normalized.threadId,
@@ -909,23 +899,10 @@ export class ChannelGatewayService {
     // an outsider can know (an SMS sender's phone number, a Telegram
     // chat id). Matching on the agent alone let a widget caller feed
     // text into someone else's live conversation and read the reply.
-    let run: AgentRun | null = null;
-
-    if (normalized.threadId) {
-      const existingRuns = await this.runRepository
-        .createQueryBuilder('run')
-        .where('run.agentId = :agentId', { agentId: gateway.agentId })
-        .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
-        .andWhere('run.status IN (:...activeStatuses)', {
-          activeStatuses: ['running', 'waiting_input', 'sleeping'],
-        })
-        .andWhere("run.metadata->>'threadId' = :threadId", { threadId: normalized.threadId })
-        .orderBy('run.createdAt', 'DESC')
-        .limit(1)
-        .getMany();
-
-      run = existingRuns[0] || null;
-    }
+    // A thread whose last run has finished carries on in that run's
+    // conversation: one widget thread is one conversation.
+    const thread = await this.threadOnGateway(gateway, normalized.threadId);
+    let run: AgentRun | null = thread.active;
 
     // What the agent reads: the text and a line per uploaded file, with the
     // files themselves by reference (channel-attachments.service.ts).
@@ -962,6 +939,7 @@ export class ChannelGatewayService {
           metadata: channelMetadata,
           principal: gatewayPrincipal(gateway),
           ...(sent?.parts.length ? { attachments: sent.parts } : {}),
+          ...(thread.conversationId ? { conversationId: thread.conversationId } : {}),
         }),
       );
 
@@ -988,6 +966,32 @@ export class ChannelGatewayService {
       runId: run.id,
       threadId: (run.metadata as any)?.threadId || run.id,
     };
+  }
+
+  /**
+   * The latest run of a thread on this gateway. Still going (running,
+   * waiting for input, sleeping): the message goes into it. Finished: the
+   * next run starts in its conversation, so one thread is one conversation
+   * whatever number of runs answered it. Only this gateway's runs count;
+   * see the callers for why.
+   */
+  private async threadOnGateway(
+    gateway: Gateway,
+    threadId: string | undefined,
+  ): Promise<{ active: AgentRun | null; conversationId: string | null }> {
+    if (!threadId) return { active: null, conversationId: null };
+    const latest = await this.runRepository
+      .createQueryBuilder('run')
+      .where('run.agentId = :agentId', { agentId: gateway.agentId })
+      .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
+      .andWhere("run.metadata->>'threadId' = :threadId", { threadId })
+      .orderBy('run.createdAt', 'DESC')
+      .limit(1)
+      .getMany();
+    const run = latest[0] ?? null;
+    if (!run) return { active: null, conversationId: null };
+    if (THREAD_ACTIVE_STATUSES.includes(run.status)) return { active: run, conversationId: run.conversationId ?? null };
+    return { active: null, conversationId: run.conversationId ?? null };
   }
 
   /**

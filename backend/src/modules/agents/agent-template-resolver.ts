@@ -3,7 +3,7 @@ import { replaceDelimited } from '../../common/security/linear-text';
 
 export interface ExecutionContext {
   input: Record<string, any>;
-  nodes: Record<string, { output: any; status?: 'failed' | 'skipped' }>;
+  nodes: Record<string, { output: any; status?: 'failed' | 'skipped' | 'waiting' }>;
   variables?: Record<string, any>;
   /**
    * Sink for template references that resolved to nothing. The resolver

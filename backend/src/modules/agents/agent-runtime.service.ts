@@ -31,6 +31,7 @@ import { AgentStepProcessor } from './agent-step-processor';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { describeLimitTrip } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
+import { conversationTitle } from './conversation-title';
 import {
   ExecutionAccessService,
   ExecutionPrincipal,
@@ -378,7 +379,10 @@ export class AgentRuntimeService implements OnModuleInit {
       }
     }
 
-    // Reuse an existing conversation or create a new one
+    // Reuse an existing conversation or create a new one. A conversation is
+    // titled after the first thing said in it, so a list of them (the
+    // visitor-data table, a chat's history) reads as what each was about.
+    const title = conversationTitle(input);
     let savedConversation: Conversation;
     if (options?.conversationId) {
       const existing = await this.conversationRepository.findOne({
@@ -388,6 +392,10 @@ export class AgentRuntimeService implements OnModuleInit {
         throw new BadRequestException('Conversation not found');
       }
       savedConversation = existing;
+      if (!existing.title && title) {
+        await this.conversationRepository.update({ id: existing.id }, { title });
+        existing.title = title;
+      }
     } else {
       const conversation = Conversation.createConversation({
         agentId,
@@ -395,6 +403,7 @@ export class AgentRuntimeService implements OnModuleInit {
         userId: userId ?? undefined,
         endUserId: options?.endUserId ?? null,
         ...(options?.gatewayId ? { gatewayId: options.gatewayId } : {}),
+        ...(title ? { title } : {}),
       });
       savedConversation = await this.conversationRepository.save(conversation);
     }
