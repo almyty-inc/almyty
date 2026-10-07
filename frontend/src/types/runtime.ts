@@ -3,7 +3,7 @@ import type { RunStepRole } from './agent-models'
 
 export type AgentRunMode = 'workflow' | 'autonomous'
 
-export type AgentRunStatus = 'pending' | 'running' | 'waiting_input' | 'sleeping' | 'completed' | 'failed' | 'cancelled' | 'timeout'
+export type AgentRunStatus = 'pending' | 'running' | 'waiting_input' | 'waiting_approval' | 'sleeping' | 'completed' | 'failed' | 'cancelled' | 'timeout'
 
 export interface AgentRunStep {
   type: string

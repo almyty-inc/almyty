@@ -323,6 +323,22 @@ describe('ChannelGatewayService installation resolution', () => {
       expect(agentRuntimeService.startRun).toHaveBeenCalled();
     });
 
+    // Slack, Teams and the other channels follow the widget's rule: a new
+    // run in a thread whose last run finished carries on in its conversation.
+    it('starts a new run in a finished thread in that thread\'s conversation', async () => {
+      runRows.push(openRun({ status: 'completed', conversationId: 'conv-thread' }));
+
+      await deliver(buildService(false));
+
+      expect(agentRuntimeService.startRun.mock.calls[0][4]).toMatchObject({ conversationId: 'conv-thread' });
+    });
+
+    it('a thread no run has answered yet gets a new conversation', async () => {
+      await deliver(buildService(false));
+
+      expect(agentRuntimeService.startRun.mock.calls[0][4].conversationId).toBeUndefined();
+    });
+
     it('will not continue a run open on another thread', async () => {
       runRows.push(openRun({ metadata: { threadId: '999.000', gatewayId: 'gw-1' } }));
 
@@ -400,6 +416,36 @@ describe('ChannelGatewayService installation resolution', () => {
         });
 
         expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+      });
+
+      // One widget thread is one conversation. Each answered message ends
+      // its run, so the next one starts a run of its own -- and that run
+      // used to open a conversation of its own too, which is how one chat
+      // became "Untitled conversation" twice in the visitor-data table.
+      it('starts the next message of a thread in the conversation the thread already has', async () => {
+        runRows.push(openRun({ id: 'run-first', status: 'completed', conversationId: 'conv-thread', createdAt: 1 }));
+
+        await buildService(false).handleWidgetMessage(widgetGateway(), { message: 'and another thing', threadId: '111.222' });
+
+        expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+        expect(agentRuntimeService.startRun.mock.calls[0][4]).toMatchObject({ conversationId: 'conv-thread' });
+      });
+
+      it('takes the conversation of the thread\'s latest run', async () => {
+        runRows.push(openRun({ id: 'run-old', status: 'completed', conversationId: 'conv-old', createdAt: 1 }));
+        runRows.push(openRun({ id: 'run-new', status: 'completed', conversationId: 'conv-new', createdAt: 2 }));
+
+        await buildService(false).handleWidgetMessage(widgetGateway(), { message: 'third', threadId: '111.222' });
+
+        expect(agentRuntimeService.startRun.mock.calls[0][4]).toMatchObject({ conversationId: 'conv-new' });
+      });
+
+      it('a new thread gets a new conversation, and another gateway\'s thread is not this one', async () => {
+        runRows.push(openRun({ status: 'completed', conversationId: 'conv-sms', metadata: { threadId: '111.222', gatewayId: 'gw-sms' } }));
+
+        await buildService(false).handleWidgetMessage(widgetGateway(), { message: 'hello', threadId: '111.222' });
+
+        expect(agentRuntimeService.startRun.mock.calls[0][4].conversationId).toBeUndefined();
       });
     });
   });

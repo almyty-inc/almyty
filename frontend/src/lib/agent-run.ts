@@ -44,10 +44,19 @@ export async function invokeAndSettle(agentId: string, input: unknown, options: 
   return run
 }
 
+/** "Waiting for your approval: 3 changes." from a run that waits in Approvals, or the plain line when it carries none. */
+export function waitingLine(run: { error?: string | null } | null | undefined): string {
+  const said = typeof run?.error === 'string' ? run.error.trim() : ''
+  return said.startsWith('Waiting for your approval') ? said : 'Waiting for your approval.'
+}
+
 /** What to show for a settled run: its answer, or why there is none. */
 export function runOutcome(run: any): { output?: string; error?: string } {
   if (run?.status && run.status !== 'completed') {
-    if (run.status === 'waiting_input' || run.status === 'waiting_approval') {
+    if (run.status === 'waiting_approval') {
+      return { error: `${waitingLine(run)} Open Approvals to decide; the run carries on once you do.` }
+    }
+    if (run.status === 'waiting_input') {
       return { error: 'The run is waiting for someone. Open it on the Runs tab.' }
     }
     return { error: run.error || `The run ${run.status === 'running' ? 'is still going' : 'did not finish'}.` }

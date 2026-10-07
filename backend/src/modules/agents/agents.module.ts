@@ -50,6 +50,7 @@ import { AgentIdentityReachController, AgentIdentityReachService } from './agent
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentRunReaperService } from './agent-run-reaper.service';
 import { AgentExecutionReaperService } from './agent-execution-reaper.service';
+import { WorkflowApprovalResumeService } from './workflow-approval-resume.service';
 import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentTechDocHelper } from './agent-tech-doc.helper';
 import { AgentsController } from './agents.controller';
@@ -128,7 +129,9 @@ import { BudgetsModule } from '../budgets/budgets.module';
   ],
   providers: [AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentIdentityService, AgentIdentityReachService,
-    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService],
+    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
+    // Carries a workflow run on once the change sets its Code steps wait on are decided.
+    WorkflowApprovalResumeService],
   controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
     AgentIdentityReachController],
   exports: [

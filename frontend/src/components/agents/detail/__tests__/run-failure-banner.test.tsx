@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { RunFailureBanner } from '../run-failure-banner'
 import { agentsApi } from '@/lib/api'
@@ -17,9 +18,11 @@ const exec = (status: AgentExecution['status'], error?: string): AgentExecution 
 
 const renderIt = (a: Agent, executions: AgentExecution[]) =>
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <RunFailureBanner agent={a} executions={executions} />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <RunFailureBanner agent={a} executions={executions} />
+      </QueryClientProvider>
+    </MemoryRouter>,
   )
 
 describe('RunFailureBanner', () => {
@@ -63,5 +66,20 @@ describe('RunFailureBanner', () => {
     renderIt(agent(), [exec('failed', 'Role "principal" could not be filled: no models are registered for this organization')])
     expect(screen.getByRole('alert')).toHaveTextContent('Add a model to this organization')
     expect(screen.getByRole('alert')).toHaveTextContent('Execution tab')
+  })
+
+  it('says a run waiting for approval waits, in plain words, with the way to Approvals -- not that it failed', () => {
+    renderIt(agent(), [exec('waiting_approval', 'Waiting for your approval: 3 changes.')])
+    expect(screen.queryByRole('alert')).toBeNull()
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('Waiting for your approval: 3 changes.')
+    expect(status).not.toHaveTextContent(/failed|run_code|approvalId/)
+    expect(screen.getByRole('link', { name: 'Open approvals' })).toHaveAttribute('href', '/approvals')
+  })
+
+  it('an autonomous run waiting for approval says so too', async () => {
+    ;(agentsApi.listRuns as any).mockResolvedValue({ runs: [{ id: 'r1', status: 'waiting_approval', error: null, createdAt: '2026-09-04T10:40:41.000Z' }] })
+    renderIt(agent({ mode: 'autonomous' }), [])
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Waiting for your approval.'))
   })
 })

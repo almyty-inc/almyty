@@ -17,6 +17,7 @@ import { AgentExecutionEngine } from './agent-execution.engine';
 import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
 import { CodeModeService } from '../code-mode/code-mode.service';
+import { WAITING_FOR_APPROVAL_CODE, WaitingCodeStep, waitingForApprovalText } from './workflow-approval';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentVerifierHelper, VerifyPolicy } from './agent-verifier.helper';
 import {
@@ -796,9 +797,10 @@ export class AgentNodeExecutor {
    * agent's tools, run in the code sandbox with the step's input as its
    * `context` (`context.input`, and `context.steps`, every earlier step's
    * output by id). Its output is what the script returns. The calls it
-   * makes come out of the run's tool-call budget. A workflow cannot pause,
-   * so changes that need a person are held in Approvals and the step
-   * stops here, waiting, like a held tool_call.
+   * makes come out of the run's tool-call budget. Changes that need a
+   * person are held in Approvals as one request and the step stops here:
+   * the run waits for the decision, then carries on from this step
+   * (workflow-approval.ts).
    */
   private async executeCodeNode(
     node: AgentPipelineNode,
@@ -841,9 +843,22 @@ export class AgentNodeExecutor {
     if (context.toolCalls && made > 0) context.toolCalls.count += made;
     const resolvedInput = { codeExecutionId: answer.codeExecutionId ?? null, ...(answer.approvalId ? { approvalId: answer.approvalId } : {}) };
     if (answer.approvalId) {
-      throw Object.assign(new Error(String((answer.forModel as any).note ?? 'The script\'s changes wait for a person in Approvals.')), {
+      // The run waits here for a person (workflow-approval.ts). The words
+      // are for people; the model-facing note ("call run_code again with
+      // the approvalId") is for a gateway client and is not a person's.
+      const forModel = answer.forModel as any;
+      const changes = Array.isArray(forModel?.staged) ? forModel.staged.length : Number(forModel?.calls?.staged ?? 0);
+      const waiting: WaitingCodeStep = {
+        nodeId: node.id,
+        approvalId: answer.approvalId,
+        codeExecutionId: answer.codeExecutionId ?? null,
+        changes,
+        ...(forModel && 'result' in forModel ? { result: forModel.result } : {}),
+      };
+      throw Object.assign(new Error(waitingForApprovalText(changes)), {
         resolvedInput,
-        code: 'AWAITING_APPROVAL',
+        code: WAITING_FOR_APPROVAL_CODE,
+        waiting,
       });
     }
     if (answer.isError) {

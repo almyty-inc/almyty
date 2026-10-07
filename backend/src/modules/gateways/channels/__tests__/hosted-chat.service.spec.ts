@@ -428,13 +428,19 @@ describe('HostedChatService', () => {
       });
     });
 
-    it('caps a supplied title', async () => {
+    it('caps a supplied title, the same way every conversation is titled', async () => {
       const conversation = await service.startConversation(
         gateway(),
         { id: 'eu-1' } as EndUser,
         'x'.repeat(300),
       );
-      expect(conversation.title).toHaveLength(120);
+      expect(conversation.title).toHaveLength(80);
+      expect(conversation.title.endsWith('…')).toBe(true);
+    });
+
+    it('titles a conversation with the first line of the message, trimmed', async () => {
+      const conversation = await service.startConversation(gateway(), { id: 'eu-1' } as EndUser, '   Do you ship   to Norway?\nThanks ');
+      expect(conversation.title).toBe('Do you ship to Norway?');
     });
   });
 

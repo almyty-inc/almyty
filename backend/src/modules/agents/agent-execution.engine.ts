@@ -74,6 +74,13 @@ export interface EngineInternalOptions {
   maxNestingDepth?: number;
   /** A sub-agent's run: the top-level run whose runner workspaces it shares. */
   workspaceRunId?: string;
+  /**
+   * Carry on a run that waited for a person (WorkflowApprovalResumeService):
+   * its row, already moved back to running, and the outcome of each Code
+   * step it waited on, by node id. The steps that ran before are replayed
+   * from the row; the ones after run now.
+   */
+  resume?: { execution: AgentExecution; settled: Record<string, SettledCodeStep> };
 }
 
 /**
@@ -104,6 +111,14 @@ import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolve
 import { AgentRolesService } from './agent-roles.service';
 import { evaluateBudget } from './strategies/budget-policy';
 import { capPersistedPayload } from './persist-cap';
+import {
+  APPROVAL_REJECTED_CODE,
+  SettledCodeStep,
+  WAITING_FOR_APPROVAL_CODE,
+  WaitingCodeStep,
+  WorkflowWaitState,
+  waitingRunText,
+} from './workflow-approval';
 import { runWithRequestContext, updateRequestContext } from '../../common/request-context';
 import {
   classifiedError,
@@ -194,7 +209,11 @@ export class AgentExecutionEngine {
     onEvent?: (event: StreamEvent) => void,
     internalOptions?: EngineInternalOptions,
   ): Promise<AgentExecution> {
-    const startTime = Date.now();
+    // Carrying on after an approval (internalOptions.resume): the time the
+    // run had already taken counts; the time it waited for a person does not.
+    const resume = internalOptions?.resume;
+    const wait = resume?.execution.metadata?.waitingForApproval as WorkflowWaitState | undefined;
+    const startTime = Date.now() - (resume?.execution.executionTime ?? 0);
 
     // ── Input validation ────────────────────────────────────────────────
     validateInput(options.input, internalOptions);
@@ -223,20 +242,36 @@ export class AgentExecutionEngine {
     // run that exhausted it. Every path into a workflow run goes through
     // here: the execution controller, the scheduler, both compat APIs and
     // the sub-agent executor.
+    // A run carrying on after an approval was admitted when it started.
     if (this.budgets) {
-      await this.budgets.enforceForRun(organizationId, agent.id);
+      if (!resume) await this.budgets.enforceForRun(organizationId, agent.id);
     }
 
-    // 1. Create execution record
-    const execution = this.agentExecutionRepository.create({
-      agentId: agent.id,
-      organizationId,
-      userId,
-      status: AgentExecutionStatus.RUNNING,
-      input: options.input || {},
-      metadata: options.metadata || {},
-    });
-    await this.agentExecutionRepository.save(execution);
+    // 1. Create execution record -- or, carrying on after an approval, take
+    // up the one that waited (WorkflowApprovalResumeService has already
+    // moved it back to running). Its waiting line goes, and so does the
+    // state it waited with; which approvals it waited on stays on record.
+    let execution: AgentExecution;
+    if (resume) {
+      execution = resume.execution;
+      execution.status = AgentExecutionStatus.RUNNING;
+      execution.error = null as any;
+      const { waitingForApproval: _waited, ...metadata } = (execution.metadata ?? {}) as Record<string, any>;
+      execution.metadata = {
+        ...metadata,
+        approvalDecided: (wait?.steps ?? []).map((s) => ({ nodeId: s.nodeId, approvalId: s.approvalId })),
+      };
+    } else {
+      execution = this.agentExecutionRepository.create({
+        agentId: agent.id,
+        organizationId,
+        userId,
+        status: AgentExecutionStatus.RUNNING,
+        input: options.input || {},
+        metadata: options.metadata || {},
+      });
+      await this.agentExecutionRepository.save(execution);
+    }
 
     // Now that the execution has an id, put it in the cancellation registry
     // and run on the registry's signal rather than the caller's. The two are
@@ -285,8 +320,10 @@ export class AgentExecutionEngine {
     // llm nodes (which have a split) with tool and transform nodes (which
     // do not), so the two input/output figures sum to at most totalTokens,
     // never necessarily to it.
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
+    // A run carrying on after an approval keeps the split it had so far;
+    // the steps it replays add their cost and tokens again below.
+    let totalInputTokens = resume ? resume.execution.inputTokens ?? 0 : 0;
+    let totalOutputTokens = resume ? resume.execution.outputTokens ?? 0 : 0;
 
     try {
       // A chosen strategy IS the pipeline for this run. Compiled here
@@ -303,7 +340,9 @@ export class AgentExecutionEngine {
 
       // As the run's principal, not its row's user: a gateway run decides
       // (and later calls models) within its gateway's team.
-      const compiled = await this.strategyPipelines?.pipelineFor(agent, requestText, principal).catch((err) => {
+      // A run carrying on after an approval keeps the graph it stopped in
+      // (wait.pipeline below); compiling again could choose another shape.
+      const compiled = wait?.pipeline ? null : await this.strategyPipelines?.pipelineFor(agent, requestText, principal).catch((err) => {
         throw classifiedError(err?.message ?? 'Could not compile this strategy', ExecutionErrorType.VALIDATION_ERROR);
       });
       if (compiled) {
@@ -334,7 +373,7 @@ export class AgentExecutionEngine {
       // agent that defines exactly that role, because nothing had resolved
       // it — the compiler was wired to the engine and L4 was not.
       let resolvedRoles: Array<{ key: string; modelId: string; via: 'pinned' | 'resolved'; rationale?: string }> | undefined;
-      if (compiled && this.agentRoles) {
+      if ((compiled || (wait && execution.metadata?.strategyKey)) && this.agentRoles) {
         try {
           resolvedRoles = await this.agentRoles.resolveRoles(organizationId, agent.id, {}, principal);
         } catch (err: any) {
@@ -344,7 +383,8 @@ export class AgentExecutionEngine {
         }
       }
 
-      const pipeline = compiled?.pipeline ?? agent.pipeline;
+      // A run carrying on after an approval runs the graph it stopped in.
+      const pipeline = wait?.pipeline ?? compiled?.pipeline ?? agent.pipeline;
       if (!pipeline || !pipeline.nodes || !pipeline.edges) {
         throw classifiedError('Agent pipeline is not configured', ExecutionErrorType.VALIDATION_ERROR);
       }
@@ -404,6 +444,8 @@ export class AgentExecutionEngine {
         // same budget instead of each one seeing zero.
         toolCalls: { count: 0 },
       };
+      // A run carrying on after an approval starts from where it stopped.
+      if (wait?.toolCalls) context.toolCalls!.count = wait.toolCalls;
 
       // Build node map
       const nodeMap = new Map<string, AgentPipelineNode>();
@@ -421,6 +463,17 @@ export class AgentExecutionEngine {
       // legitimately produced null" (success).
       let outputCaptured = false;
       const skippedNodes = new Set<string>();
+      // Code steps whose changes wait for a person (workflow-approval.ts).
+      const waitingSteps: WaitingCodeStep[] = [];
+      // Carrying on after an approval: the steps that already ran, replayed
+      // from the run's record instead of run again. The steps that waited
+      // come from `resume.settled`; everything after them runs now.
+      const priorResults: Record<string, any> = resume ? { ...(execution.nodeResults ?? {}) } : {};
+      const replay = new Map<string, any>();
+      for (const [id, r] of Object.entries(priorResults)) {
+        if (resume?.settled[id] || !r || r.error || r.skipped || r.status === 'waiting_approval') continue;
+        if ('output' in r) replay.set(id, r);
+      }
 
       // Timeout and budget settings.
       //
@@ -589,6 +642,55 @@ export class AgentExecutionEngine {
           const node = nodeMap.get(nodeId);
           if (!node) return;
 
+          // Carrying on after an approval: a step that already ran gives
+          // back what it gave the first time, and the Code step that waited
+          // gives its decided outcome. Nothing runs twice.
+          const prior = replay.get(nodeId);
+          if (prior) {
+            return {
+              nodeId,
+              node,
+              result: {
+                output: prior.output,
+                cost: prior.cost || 0,
+                tokens: prior.tokens || 0,
+                executionTime: prior.executionTime || 0,
+                resolvedInput: prior.input,
+                ...(prior.providerId ? { providerId: prior.providerId } : {}),
+                ...(prior.model ? { model: prior.model } : {}),
+                ...(prior.routing ? { routing: prior.routing } : {}),
+              } as NodeExecutionResult | null,
+              error: null as string | null,
+              errorType: null as ExecutionErrorType | null,
+              errorCode: undefined as string | undefined,
+              errorModel: undefined as string | undefined,
+              errorProviderId: undefined as string | undefined,
+              resolvedInput: prior.input,
+              startedAt: (prior.startedAt as number) ?? Date.now(),
+              completedAt: (prior.completedAt as number) ?? Date.now(),
+            };
+          }
+          const decided = resume?.settled[nodeId];
+          if (decided) {
+            const at = Date.now();
+            const waitedInput = priorResults[nodeId]?.input;
+            return {
+              nodeId,
+              node,
+              result: decided.error
+                ? null
+                : ({ output: decided.output ?? null, cost: 0, tokens: 0, executionTime: 0, resolvedInput: waitedInput } as NodeExecutionResult | null),
+              error: (decided.error ?? null) as string | null,
+              errorType: (decided.error ? ExecutionErrorType.TOOL_ERROR : null) as ExecutionErrorType | null,
+              errorCode: decided.errorCode as string | undefined,
+              errorModel: undefined as string | undefined,
+              errorProviderId: undefined as string | undefined,
+              resolvedInput: waitedInput,
+              startedAt: at,
+              completedAt: at,
+            };
+          }
+
           const nodeStartedAt = Date.now();
 
           this.logger.log(`[EXECUTE] Processing node '${nodeId}' (type=${node.type}) for agent=${agent.id}`);
@@ -691,10 +793,14 @@ export class AgentExecutionEngine {
             const nodeCompletedAt = Date.now();
             const errorType = classifyNodeError(err);
 
-            this.logger.error(
-              `[EXECUTE] Node '${nodeId}' failed (${errorType}): ${err.message}`,
-              err.stack,
-            );
+            if (err?.code === WAITING_FOR_APPROVAL_CODE && err?.waiting) {
+              this.logger.log(`[EXECUTE] Node '${nodeId}' waits for approval ${err.waiting.approvalId}`);
+            } else {
+              this.logger.error(
+                `[EXECUTE] Node '${nodeId}' failed (${errorType}): ${err.message}`,
+                err.stack,
+              );
+            }
 
             return {
               nodeId,
@@ -714,6 +820,8 @@ export class AgentExecutionEngine {
               resolvedInput: err?.resolvedInput,
               attemptedProviderId: err?.attemptedProviderId as string | undefined,
               attemptedModel: err?.attemptedModel as string | undefined,
+              // A Code step whose changes wait for a person (workflow-approval.ts).
+              waiting: err?.waiting as WaitingCodeStep | undefined,
               startedAt: nodeStartedAt,
               completedAt: nodeCompletedAt,
             };
@@ -797,6 +905,35 @@ export class AgentExecutionEngine {
         for (const item of layerResults) {
           if (!item) continue;
           const { nodeId, node, result, error, errorType, errorCode, errorModel, errorProviderId, startedAt, completedAt } = item;
+
+          // A Code step whose changes now wait for a person: not a failure.
+          // The step is recorded as waiting, in words a person reads, and
+          // what comes after it waits too (skipped for now; the run carries
+          // on through it once the changes are decided).
+          if (item.waiting && errorCode === WAITING_FOR_APPROVAL_CODE) {
+            nodeResults[nodeId] = {
+              status: 'waiting_approval',
+              message: error,
+              waitingForApproval: { approvalId: item.waiting.approvalId, changes: item.waiting.changes },
+              ...(item.resolvedInput !== undefined ? { input: capPersistedPayload(item.resolvedInput) } : {}),
+              startedAt,
+              completedAt,
+              executionTime: completedAt - startedAt,
+            };
+            context.nodes[nodeId] = { output: undefined, status: 'waiting' };
+            waitingSteps.push(item.waiting);
+            this.state.emitEvent(onEvent, {
+              type: 'node.completed',
+              nodeId,
+              nodeType: node.type,
+              data: { status: 'waiting_approval', message: error },
+              timestamp: Date.now(),
+            });
+            for (const neighbor of adjacencyList.get(nodeId) || []) {
+              markBranchAsSkipped(neighbor, adjacencyList, skippedNodes, pipeline.edges);
+            }
+            continue;
+          }
 
           if (error || !result) {
             // Node failed — record error but continue with other branches
@@ -1017,6 +1154,67 @@ export class AgentExecutionEngine {
       // Use the explicit `outputCaptured` flag instead of `finalOutput === null` so an
       // output node that legitimately produced `null` isn't treated as "no output ran".
       const hasNodeFailures = Object.values(nodeResults).some((r: any) => r.error);
+
+      // A Code step's changes wait for a person: the run waits with them,
+      // neither failed nor finished, and carries on from that step once
+      // they are decided (WorkflowApprovalResumeService). Only when nothing
+      // else failed: a run that failed elsewhere has nothing to carry on.
+      if (waitingSteps.length && !hasNodeFailures) {
+        execution.status = AgentExecutionStatus.WAITING_APPROVAL;
+        execution.error = waitingRunText(waitingSteps);
+        execution.output = null;
+        execution.nodeResults = nodeResults;
+        execution.executionTime = executionTime;
+        execution.totalCost = totalCost;
+        execution.totalTokens = totalTokens;
+        execution.inputTokens = totalInputTokens;
+        execution.outputTokens = totalOutputTokens;
+        const wait: WorkflowWaitState = {
+          steps: waitingSteps.map((s) => ({ ...s, result: capPersistedPayload(s.result) })),
+          toolCalls: context.toolCalls?.count ?? 0,
+          pipeline: { nodes: pipeline.nodes, edges: pipeline.edges },
+          ...(options.variables ? { variables: options.variables } : {}),
+          principal,
+        };
+        execution.metadata = { ...(execution.metadata ?? {}), waitingForApproval: wait };
+        if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
+        this.state.emitEvent(onEvent, {
+          type: 'execution.waiting',
+          data: {
+            executionId: execution.id,
+            status: AgentExecutionStatus.WAITING_APPROVAL,
+            message: execution.error,
+            approvals: waitingSteps.map((s) => ({ nodeId: s.nodeId, approvalId: s.approvalId, changes: s.changes })),
+          },
+          timestamp: Date.now(),
+        });
+        return execution;
+      }
+
+      // Every step that did not finish was a Code step whose changes a
+      // person rejected (or nobody decided on in time): the run stops there,
+      // cancelled rather than failed, the way a rejected approval cancels
+      // an autonomous run. Nothing went wrong; somebody said no.
+      const failures = Object.values(nodeResults).filter((r: any) => r.error);
+      if (failures.length && !outputCaptured && failures.every((r: any) => r.errorCode === APPROVAL_REJECTED_CODE)) {
+        execution.status = AgentExecutionStatus.CANCELLED;
+        execution.error = failures.map((r: any) => r.error).join(' ').slice(0, MAX_EXECUTION_ERROR_CHARS);
+        execution.output = null;
+        execution.nodeResults = nodeResults;
+        execution.executionTime = executionTime;
+        execution.totalCost = totalCost;
+        execution.totalTokens = totalTokens;
+        execution.inputTokens = totalInputTokens;
+        execution.outputTokens = totalOutputTokens;
+        if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
+        await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
+        this.state.emitEvent(onEvent, {
+          type: 'execution.failed',
+          data: { error: execution.error, errorType: 'CANCELLED', executionId: execution.id },
+          timestamp: Date.now(),
+        });
+        return execution;
+      }
 
       if (hasNodeFailures && !outputCaptured) {
         // Capped. `execution.error` is a `text` column with no length of its
