@@ -79,6 +79,8 @@ This works on Slack, Telegram, Discord, WhatsApp (both kinds), SMS, Microsoft Te
 
 Files are kept with the conversation they arrived in. When the conversation is removed (by your retention period, or because the visitor deleted it) the files go with it. A file uploaded but never sent is removed after a day.
 
+**One chat is one conversation.** Every message in the same chat belongs to one conversation, however long the gaps between them: a chat in the website widget, a Slack thread, a Teams or Telegram chat, a text conversation with one number, an email thread. The assistant reads what was said before, and the conversation is named after the first thing the person said in it, so a list of conversations (in **Visitor data**, say) reads as what each was about.
+
 **Group chats say who is talking.** In a conversation with several people (a Slack channel, a Teams group chat, a Discord server, a Telegram or Signal group, a Google Chat space, an IRC channel, a Matrix room, an iMessage group) each message reaches the assistant with the writer's name in front, like "Anna: can someone check order 1182?". It is the name the platform shows. Where there is none, or the name is an email address or phone number, a short code such as `user-3fa21c` is used instead, the same one each time for that person. Contact details are never put in front of a message.
 
 **Pictures and files in replies.** When the assistant's answer includes an image or a link to a file, apps that can show media send it as a picture or attachment: Slack, Telegram, Discord, WhatsApp, Microsoft Teams, Google Chat, Signal, email and iMessage. SMS, Matrix and IRC keep the link, and so do the web chat and widget, which show an image as a link rather than loading it.
