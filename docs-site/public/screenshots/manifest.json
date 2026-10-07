@@ -161,13 +161,13 @@
       "id": "agent-tool-mode",
       "title": "How the model sees its tools",
       "path": "screenshots/agent-tool-mode.png",
-      "capturedAt": "2026-10-02T00:13:43.000Z",
-      "status": "needs-recapture",
-      "sha256": "08cad43e567a1ba701b8450469df206b27d749bf044929d82cd32f7d351ef320",
+      "capturedAt": "2026-10-06T13:15:25.037Z",
+      "status": "current",
+      "sha256": "4ebdd4e5e01fb52590ebe446e0eab2b2262c99a20826a5f92c3dc20139ae40f4",
       "source": {
         "kind": "browser",
-        "environment": "local",
-        "route": "/agents/:id/edit"
+        "environment": "local-demo",
+        "route": "/agents/af8f0421-c7f8-4e1e-bf42-869491143e7f/edit"
       },
       "sources": [
         "frontend/src/components/agents/builder/capabilities-section.tsx",
@@ -175,9 +175,8 @@
         "frontend/src/components/ui",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "349fe9ec190837827c99354ae89199f696bd2c230a76e1514edc70600b2b241e",
-      "notes": "Local stack, local test user; the benchmark's mock Pet Store API and a local model.",
-      "reason": "frontend/src/components/agents changed: Capabilities gained an \"Acts as\" section (agent_identity), the builder's Heartbeat card became the Always on card, and the agent page gained an Always on card. Recapture against the current UI and re-register."
+      "sourceDigest": "fa66cc4905d3260d50a035846b8caac150e880bb90f62e031c7eca0ca5c68f1e",
+      "notes": "Captured by coordinated Claude on the isolated local demo. Gateway code-mode switch is disabled in this server environment. No pending changes were approved."
     },
     {
       "id": "agent-work-mode-panel",
@@ -476,13 +475,13 @@
       "id": "builder-code-step",
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
-      "capturedAt": "2026-10-02T03:15:53.785Z",
-      "status": "needs-recapture",
-      "sha256": "97b174567acb8d26ead36e2625f07edd4a45ffab018583945996cb86bd974e1f",
+      "capturedAt": "2026-10-06T13:15:31.714Z",
+      "status": "current",
+      "sha256": "9a95f90447526e5e64013ba54823fd55aa32f4a977176f4f15861e2d8b36bba8",
       "source": {
         "kind": "browser",
-        "environment": "local",
-        "route": "/agents/:id/edit"
+        "environment": "local-demo",
+        "route": "/agents/a84e059f-7afc-4b3a-875e-91df1d9eb6a7/edit"
       },
       "sources": [
         "frontend/src/pages/agent-builder.tsx",
@@ -490,9 +489,8 @@
         "frontend/src/components/ui",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30e691b2e74909b365cf184fc31cc3b5747fb2350844b0af8c50fa46a60367ad",
-      "notes": "Local stack, local test user; a workflow agent over the benchmark's mock Pet Store API.",
-      "reason": "frontend/src/components/agents changed: Capabilities gained an \"Acts as\" section (agent_identity), the builder's Heartbeat card became the Always on card, and the agent page gained an Always on card. Recapture against the current UI and re-register."
+      "sourceDigest": "36f500ea23a4d8932fca8c9b2f4d8365d9f1b3bb2a40dfb6518fca096d8db247",
+      "notes": "Captured by coordinated Claude on the isolated local demo. Gateway code-mode switch is disabled in this server environment. No pending changes were approved."
     },
     {
       "id": "channel-branding-rules",
@@ -812,14 +810,13 @@
       "id": "gateway-exposure",
       "title": "How apps see a gateway's tools",
       "path": "screenshots/gateway-exposure.png",
-      "capturedAt": "2026-10-02T02:24:27.824Z",
-      "status": "needs-recapture",
-      "reason": "capabilities-section.tsx changed: Capabilities gained an \"Acts as\" section at its end (agent_identity). This view does not show it; recapture against the current UI and re-register.",
-      "sha256": "fe6e42fc2517f21534ea82d5a1ab052101d5c6f394adb0fa4389f8c768660772",
+      "capturedAt": "2026-10-06T13:15:35.710Z",
+      "status": "current",
+      "sha256": "58a3f8fa62a10f142af185d1a9409f3ef0f36394e02192eec0fdc73a3013dadf",
       "source": {
         "kind": "browser",
-        "environment": "local",
-        "route": "/gateways/:id"
+        "environment": "local-demo",
+        "route": "/gateways/590784da-be62-4bb0-8c8a-e2ffe416bad8"
       },
       "sources": [
         "frontend/src/pages/gateway-detail.tsx",
@@ -828,8 +825,8 @@
         "frontend/src/components/ui",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c31505640a82bf36559ce0784e8bdcb9a0da2889f3b0102025cde8c3c74cdc3",
-      "notes": "Local stack, local test user; the benchmark's mock Pet Store API, CODE_MODE_GATEWAYS on."
+      "sourceDigest": "832cc55ccaea49a3d858d73e6e0304948d154e7fc2e678ea652da0a16b2752e9",
+      "notes": "Captured by coordinated Claude on the isolated local demo. Gateway code-mode switch is disabled in this server environment. No pending changes were approved."
     },
     {
       "id": "gateway-petstore-config",
