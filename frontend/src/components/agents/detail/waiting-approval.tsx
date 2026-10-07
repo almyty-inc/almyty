@@ -32,8 +32,15 @@ export function WaitingApprovalBanner({ run }: { run: { error?: string | null } 
   )
 }
 
-/** Under a run's status in Recent runs. */
+/**
+ * Under a run's status in Recent runs: that it waits for a person, or,
+ * once they said no, the plain outcome ("Rejected. None of the 3 changes ran.").
+ */
 export function WaitingApprovalNote({ run }: { run: { status: string; error?: string | null } }) {
+  const said = typeof run.error === 'string' ? run.error.trim() : ''
+  if (run.status === 'cancelled' && /^(Rejected|Nobody approved in time)\b/.test(said)) {
+    return <p className="mt-1 max-w-[260px] text-xs text-muted-foreground">{said}</p>
+  }
   if (run.status !== WAITING_APPROVAL) return null
   return (
     <p className="mt-1 max-w-[260px] text-xs text-amber-600 dark:text-amber-400">
