@@ -102,13 +102,12 @@ const NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
  * runnerNameFromHostname; "runner" when nothing usable is left.
  */
 export function runnerNameFromHostname(host: string): string {
-  const name = (host ?? '')
-    .split('.')[0]
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
-  return name || 'runner';
+  const name = (host ?? '').split('.')[0].toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  let start = 0;
+  let end = name.length;
+  while (start < end && name[start] === '-') start++;
+  while (end > start && name[end - 1] === '-') end--;
+  return name.slice(start, Math.min(end, start + 64)) || 'runner';
 }
 
 /** A runner that has never registered from a daemon: created by the setup page only. */

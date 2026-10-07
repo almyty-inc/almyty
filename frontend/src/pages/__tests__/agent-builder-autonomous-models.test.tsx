@@ -376,10 +376,10 @@ describe('the autonomous agent page', () => {
       const user = userEvent.setup()
       openAgent({ strategy: 'single', roles: [MAIN] }, { memoryConfig: { enabled: false } })
       const card = await screen.findByTestId('memory-card')
-      expect(within(card).queryByLabelText('Memory account')).not.toBeInTheDocument()
+      expect(within(card).queryByLabelText('Keep memories in')).not.toBeInTheDocument()
       await user.click(within(card).getByRole('switch', { name: 'Remember between conversations' }))
 
-      await user.click(within(card).getByRole('combobox', { name: 'Memory account' }))
+      await user.click(within(card).getByRole('combobox', { name: 'Keep memories in' }))
       await user.click(await screen.findByRole('option', { name: 'Mem0' }))
       await user.click(within(card).getByRole('combobox', { name: 'Whose memory' }))
       await user.click(await screen.findByRole('option', { name: 'Each person has their own' }))

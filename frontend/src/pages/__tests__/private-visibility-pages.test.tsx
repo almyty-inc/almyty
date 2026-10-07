@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
@@ -65,8 +65,7 @@ describe('create gateway page', () => {
     await user.click(screen.getByTestId('gateway-protocol-mcp'))
     await user.click(await screen.findByLabelText(/listPets/))
     await user.click(screen.getByRole('button', { name: /^Advanced/ }))
-    await user.click(screen.getByRole('button', { name: 'Change' }))
-    await user.click(privateOption())
+    await user.click(within(screen.getByRole('radiogroup', { name: 'Who can manage it' })).getByRole('radio', { name: /^Only you/ }))
     await user.click(screen.getByRole('button', { name: 'Create gateway' }))
 
     await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalled())
@@ -89,11 +88,11 @@ describe('connect a provider', () => {
   it('sends private with no team once the scope is changed', async () => {
     const user = userEvent.setup()
     vi.mocked(llmProvidersApi.connect).mockResolvedValue({ provider: { id: 'p-1', name: 'Ollama', type: 'ollama' }, models: [] })
-    render(<ConnectProviderForm type="ollama" onConnected={() => {}} />)
+    render(<ConnectProviderForm name="Ollama" type="ollama" onConnected={() => {}} />)
     await user.type(screen.getByLabelText('Ollama Cloud API key'), 'ollama-key-1234567890')
     await user.click(screen.getByRole('button', { name: 'Change' }))
     await user.click(privateOption())
-    await user.click(screen.getByRole('button', { name: 'Connect' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(llmProvidersApi.connect).toHaveBeenCalled())
     expect(vi.mocked(llmProvidersApi.connect).mock.calls[0][0]).toMatchObject({ type: 'ollama', visibility: 'private', teamId: null })

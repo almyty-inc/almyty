@@ -616,6 +616,10 @@ const DEVELOPERS = [
     await page.getByRole('button', { name: /^MCP/ }).click()
     await page.getByRole('button', { name: /^Northwind Orders/ }).click()
     await page.locator('#gateway-name').fill('Northwind Orders')
+    // Repeated local walks need their own endpoint path.
+    await page.getByRole('button', { name: /^Advanced/ }).click()
+    await page.getByLabel('Path').fill(`/northwind-orders-${Date.now()}`)
+    await page.getByRole('button', { name: /^Advanced/ }).click()
     await h.settle()
     await h.show('Protocol')
   }],

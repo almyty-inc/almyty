@@ -57,7 +57,7 @@ describe('AgentStepProcessor query and serialization shape', () => {
   it('never loads the agent pipeline or metadata on the step path', () => {
     expect(AGENT_STEP_COLUMNS).not.toHaveProperty('pipeline');
     expect(AGENT_STEP_COLUMNS).not.toHaveProperty('metadata');
-    expect([...AGENT_STEP_COLUMNS_OMITTED]).toEqual(['pipeline', 'metadata', 'branding', 'visitorRules']);
+    expect([...AGENT_STEP_COLUMNS_OMITTED]).toEqual(['pipeline', 'metadata', 'branding', 'visitorRules', 'apiGatewayId', 'apiAccessScope', 'apiAccessTeamId']);
   });
 
   it('narrows the joined agent when it loads the run', async () => {

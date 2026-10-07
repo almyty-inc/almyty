@@ -1,5 +1,5 @@
 /**
- * /credentials/providers/:id: one provider connection. Its name, whether its key
+ * /models/providers/:id: one provider connection. Its name, whether its key
  * works and which of its models it offers up top; the models tab ticks and
  * unticks them; settings holds the key, who can use it and Advanced.
  */
@@ -65,7 +65,7 @@ const card = (vendorModelId: string, over: Record<string, any> = {}) =>
     ...over,
   }) as any
 
-const at = (tab?: string) => renderAtRoute(<ProviderPage />, { path: '/credentials/providers/:id', url: `/credentials/providers/p1${tab ? `?tab=${tab}` : ''}`, paths: ['/models', '/credentials'] })
+const at = (tab?: string) => renderAtRoute(<ProviderPage />, { path: '/models/providers/:id', url: `/models/providers/p1${tab ? `?tab=${tab}` : ''}`, paths: ['/models', '/credentials'] })
 
 describe('ProviderPage', () => {
   beforeEach(() => {

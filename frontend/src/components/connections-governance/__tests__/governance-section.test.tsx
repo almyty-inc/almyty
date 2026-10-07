@@ -58,7 +58,7 @@ describe('ConnectionsGovernanceSection', () => {
 
   it('shows the locked card with upgrade copy when the entitlement is missing', () => {
     render(<ConnectionsGovernanceSection />)
-    expect(screen.getByRole('region', { name: 'Governance' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Credential rules' })).toBeInTheDocument()
     const locked = screen.getByTestId('governance-locked')
     expect(locked).toHaveTextContent('Credentials governance')
     expect(locked).toHaveTextContent(/Upgrade to unlock it for your organization/)
@@ -79,13 +79,13 @@ describe('ConnectionsGovernanceSection', () => {
     render(<ConnectionsGovernanceSection />)
     expect(screen.queryByTestId('governance-locked')).not.toBeInTheDocument()
     expect(await screen.findByTestId('policies-panel')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Policies' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Policies', { selector: 'summary' }).closest('details')).toHaveAttribute('open')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Review' }))
+    fireEvent.click(screen.getByText('Review', { selector: 'summary' }))
     expect(await screen.findByTestId('review-panel')).toBeInTheDocument()
     expect(connectionsReviewApi.list).toHaveBeenCalledWith('production')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Expiry and rotation' }))
+    fireEvent.click(screen.getByText('Expiry and rotation', { selector: 'summary' }))
     expect(await screen.findByTestId('expiry-panel')).toBeInTheDocument()
     expect(await screen.findByTestId('expiring-empty')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Rotate due now' })).toBeInTheDocument()

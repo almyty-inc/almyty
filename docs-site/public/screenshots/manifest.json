@@ -766,9 +766,9 @@
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
-      "capturedAt": "2026-10-06T13:03:40.935Z",
+      "capturedAt": "2026-10-07T15:16:56.799Z",
       "status": "current",
-      "sha256": "d302e5cbf4884a3b1b122e2d491f888eebb0d979d893f749aae847e714439884",
+      "sha256": "96348918d53c015e9bcae2a30b49cdec287ff1a9722ac2f10fc34a826f837ce0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -781,16 +781,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a3a50c85cfe815e0a555ee68e8c28d6d300d0b82215ddd5cb948193e881f244d",
+      "sourceDigest": "8cd2c3030e4f0f35169697f320dcda98d74b0da9374aa632474ded1d14296ac7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
-      "capturedAt": "2026-10-06T13:03:37.708Z",
+      "capturedAt": "2026-10-07T15:17:00.092Z",
       "status": "current",
-      "sha256": "088d520ce395b935ae566dca9fc2daa87a1d18ded4755e2a95157b26f60c82da",
+      "sha256": "88dd6f8e0d011b701447c4f2da208cb5dcae80699ec18b6ebc614f75b927a8a1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -803,7 +803,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a3a50c85cfe815e0a555ee68e8c28d6d300d0b82215ddd5cb948193e881f244d",
+      "sourceDigest": "8cd2c3030e4f0f35169697f320dcda98d74b0da9374aa632474ded1d14296ac7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -832,9 +832,9 @@
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
-      "capturedAt": "2026-10-06T13:03:43.660Z",
+      "capturedAt": "2026-10-07T15:17:02.903Z",
       "status": "current",
-      "sha256": "bc03700eaecdbb327682f668a141820687ad23f62bc5cf44e45ee68b05091d0e",
+      "sha256": "3f44df9754b964e0d7310b04193c1f8577ce1a1568fd16b69dcf363d95963109",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -847,16 +847,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a3a50c85cfe815e0a555ee68e8c28d6d300d0b82215ddd5cb948193e881f244d",
+      "sourceDigest": "8cd2c3030e4f0f35169697f320dcda98d74b0da9374aa632474ded1d14296ac7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
-      "capturedAt": "2026-10-06T13:03:49.864Z",
+      "capturedAt": "2026-10-07T15:17:06.130Z",
       "status": "current",
-      "sha256": "718dbd850eeb9d445ec8a70501ff5513a14b71e6ad9e97cb1f18ffffdfe9cf99",
+      "sha256": "e34aaa21003bf486bb0a990e7eb5dbf61dbd0d142795440b262ef62d2fb50f59",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -869,7 +869,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a3a50c85cfe815e0a555ee68e8c28d6d300d0b82215ddd5cb948193e881f244d",
+      "sourceDigest": "8cd2c3030e4f0f35169697f320dcda98d74b0da9374aa632474ded1d14296ac7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2073,9 +2073,9 @@
       "id": "quickstart-claude-config",
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
-      "capturedAt": "2026-10-06T13:03:56.151Z",
+      "capturedAt": "2026-10-07T15:17:09.319Z",
       "status": "current",
-      "sha256": "f093f21f34e9760b83b18ba640a375d804972323ce0c2ac8c5a3a4694205e242",
+      "sha256": "11f9b0417fab067f57bc401bfe48f31371bd087230182991c623155cb48f34f1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2088,16 +2088,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a3a50c85cfe815e0a555ee68e8c28d6d300d0b82215ddd5cb948193e881f244d",
+      "sourceDigest": "8cd2c3030e4f0f35169697f320dcda98d74b0da9374aa632474ded1d14296ac7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
-      "capturedAt": "2026-10-06T13:03:46.533Z",
+      "capturedAt": "2026-10-07T15:17:12.142Z",
       "status": "current",
-      "sha256": "696ba6641098635648df53fadd01c5a1de34d9f82cfbb14eb03347f793a25396",
+      "sha256": "9b5c33cc9bf71dafef349442dcc79ca34e6ae467c091383b6e73ae791aae1cd8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2110,16 +2110,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a3a50c85cfe815e0a555ee68e8c28d6d300d0b82215ddd5cb948193e881f244d",
+      "sourceDigest": "8cd2c3030e4f0f35169697f320dcda98d74b0da9374aa632474ded1d14296ac7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
-      "capturedAt": "2026-10-06T13:03:53.025Z",
+      "capturedAt": "2026-10-07T15:17:15.521Z",
       "status": "current",
-      "sha256": "76dbedabe898a988165b2388c922250300501747b4eac45e0574206514de32dc",
+      "sha256": "c6885586e8927c13687ac191a597b88bed37512bbfaaf4918eac2b6b40808126",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2132,7 +2132,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a3a50c85cfe815e0a555ee68e8c28d6d300d0b82215ddd5cb948193e881f244d",
+      "sourceDigest": "8cd2c3030e4f0f35169697f320dcda98d74b0da9374aa632474ded1d14296ac7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {

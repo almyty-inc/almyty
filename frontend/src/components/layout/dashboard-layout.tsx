@@ -322,9 +322,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               scrolls within its own box instead of pushing the footer off
               screen or sliding under the header above. */}
           <nav key={location.pathname} className={cn("flex-1 min-h-0 py-3 space-y-1 overflow-y-auto overscroll-contain", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation" data-testid="sidebar-nav">
-            {navigation.map((item) => {
+            {navigation.map((item, index) => {
               if (item.name === 'divider') {
-                return <div key="divider" className="my-2 mx-3 border-t border-border/40" />
+                return <div key={`divider-${index}`} className="my-2 mx-3 border-t border-border/40" />
               }
               // NavLink computes `isActive` per-render against the live
               // router location, sidestepping the React reconciliation

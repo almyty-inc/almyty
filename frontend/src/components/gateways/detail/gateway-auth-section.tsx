@@ -110,7 +110,7 @@ function GatewayKeys({ gatewayId, readOnly }: { gatewayId: string; readOnly: boo
         <Field id={`key-expiry-${gatewayId}`} label="Expires on" hint="Leave empty to keep it until you revoke it."><Input type="date" value={expiry} onChange={event => setExpiry(event.target.value)} /></Field>
         <InlineFormActions onCancel={() => setCreating(false)} submitLabel="Make key" submitting={create.isPending} />
       </form>}
-      {secret && <div data-testid="generated-api-key" className="space-y-3 rounded-lg border bg-muted p-4">
+      {secret && <div data-sensitive-text data-testid="generated-api-key" className="space-y-3 rounded-lg border bg-muted p-4">
         <CopyField value={secret} label="API key" />
         <p className="text-sm">Copy it now. You won't see it again.</p>
         <Button type="button" variant="outline" size="sm" onClick={() => setSecret(null)}>I've saved it</Button>

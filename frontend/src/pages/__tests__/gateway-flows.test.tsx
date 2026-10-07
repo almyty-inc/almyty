@@ -161,12 +161,13 @@ describe('/gateways/new: create gateway', () => {
       initialApiKey: 'ak_secret_once',
       sharedTools: { associated: 2, skipped: [] },
     } as any)
-    vi.mocked(gatewaysApi.getById).mockResolvedValue({ ...SHARED, type: 'mcp' } as any)
+    vi.mocked(gatewaysApi.getById).mockResolvedValue({ ...SHARED, type: 'mcp', accessScope: 'external_protected' } as any)
     renderAt('/gateways/new')
 
     await user.click(await screen.findByTestId('gateway-protocol-mcp'))
     expect(screen.getByTestId('gateway-protocol-mcp')).toHaveAttribute('aria-pressed', 'true')
     await user.click(await screen.findByTestId('share-api-api-1'))
+    await user.click(screen.getByRole('radio', { name: /^Outside, protected/ }))
     // The draft is part of the API but can't be served; the name follows the API.
     expect(screen.getByLabelText(/^Name/)).toHaveValue('Petstore')
     expect(screen.getByText(/Address: .*\/acme\/petstore$/)).toBeInTheDocument()
@@ -182,6 +183,8 @@ describe('/gateways/new: create gateway', () => {
         configuration: { transport: 'http' },
         visibility: 'org',
         teamId: null,
+        accessScope: 'external_protected',
+        accessTeamId: null,
         toolIds: ['t1', 't2'],
       }),
     )
@@ -217,7 +220,7 @@ describe('/gateways/new: create gateway', () => {
     renderAt('/gateways/new')
     await user.click(await screen.findByTestId('gateway-protocol-skills'))
     await user.click(screen.getByRole('button', { name: /^Advanced/ }))
-    expect(screen.getByText(/a Skills gateway has no access key/)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^Everyone in the organization/ })).toHaveAttribute('aria-checked', 'true')
     await user.click(await screen.findByLabelText(/weatherNow/))
     await user.click(screen.getByRole('button', { name: 'Create gateway' }))
     await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'skills', configuration: { format: 'skill-md' } })))
@@ -317,7 +320,7 @@ describe('/gateways/new: create gateway', () => {
     expect(gatewaysApi.create).not.toHaveBeenCalled()
   })
 
-  it('keeps path, description and who can use it under Advanced', async () => {
+  it('keeps path and description under Advanced while endpoint access stays visible', async () => {
     const user = userEvent.setup()
     renderAt('/gateways/new')
     await screen.findByTestId('share-api-api-1')
@@ -326,7 +329,7 @@ describe('/gateways/new: create gateway', () => {
     await user.click(screen.getByRole('button', { name: /^Advanced/ }))
     expect(screen.getByLabelText(/^Path/)).toBeInTheDocument()
     expect(screen.getByLabelText(/^Description/)).toBeInTheDocument()
-    expect(screen.getByTestId('who-can-use')).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Who can use it' })).toBeInTheDocument()
   })
 })
 
