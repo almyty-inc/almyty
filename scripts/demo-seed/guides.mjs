@@ -35,7 +35,7 @@ const OUT = join(process.env.SHOT_DIR || '/tmp/almyty-demo/shots', 'guides')
 const FILES = join(OUT, 'files')
 mkdirSync(FILES, { recursive: true })
 
-export const SAM = { email: 'sam.rivera@northwind.ai', password: 'Northwind-local-2026!', firstName: 'Sam', lastName: 'Rivera', organizationName: 'Northwind' }
+export const SAM = { email: process.env.DEMO_GUIDE_EMAIL || 'sam.rivera@northwind.ai', password: 'Northwind-local-2026!', firstName: 'Sam', lastName: 'Rivera', organizationName: process.env.DEMO_GUIDE_ORGANIZATION || 'Northwind' }
 const sql = (q) => execSync(`${PSQL} -v ON_ERROR_STOP=1 -tA`, { input: q, encoding: 'utf8' }).trim()
 
 // ---------- the account ----------
@@ -67,8 +67,8 @@ const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'fro
 const src = (...paths) => [...paths, ...UI]
 
 async function session(browser) {
-  const state = join(OUT, 'sam-state.json')
-  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'dark', timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 }, ...(existsSync(state) ? { storageState: state } : {}) })
+  const state = process.env.DEMO_GUIDE_EMAIL ? null : join(OUT, 'sam-state.json')
+  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'dark', timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 }, ...(state && existsSync(state) ? { storageState: state } : {}) })
   await ctx.addInitScript(() => { try { localStorage.setItem('theme', 'dark') } catch {} })
   const page = await ctx.newPage()
   await page.goto('/dashboard')
@@ -78,7 +78,7 @@ async function session(browser) {
     await page.locator('#password').fill(SAM.password)
     await page.getByRole('button', { name: 'Sign in' }).click()
     await page.waitForURL(/\/dashboard/)
-    await ctx.storageState({ path: state })
+    if (state) await ctx.storageState({ path: state })
   }
   // The provider key goes to the fake vendor instead of the real one.
   await page.route('**/llm-providers/connect', async (route) => {
@@ -91,9 +91,50 @@ async function session(browser) {
 }
 
 function helpers(page) {
+  const apiIds = new Map()
+  const agentIds = new Map()
+  const currentId = () => page.url().match(/[0-9a-f]{8}-[0-9a-f-]{27}/)?.[0]
+  // Reuse the exact fixtures from the latest successful capture when a walk
+  // starts at a later step or the developers guide runs on its own.
+  const log = join(OUT, 'captures.json')
+  const prior = existsSync(log) ? JSON.parse(readFileSync(log, 'utf8')) : {}
+  for (const [name, shot] of [
+    ['Northwind Orders', 'support-3-orders-tools'], ['Northwind CRM', 'sales-1-connect-crm'],
+    ['Northwind Help Center', 'marketing-1-connect-docs'], ['Northwind Status', 'ops-1-connect-status'],
+    ['Northwind Intranet', 'helpdesk-1-connect-intranet'],
+  ]) {
+    const id = prior[shot]?.route?.match(/[0-9a-f]{8}-[0-9a-f-]{27}/)?.[0]
+    if (id) apiIds.set(name, id)
+  }
+  for (const [name, shot] of [
+    ['Customer support assistant', 'support-6-activate'], ['Sales assistant', 'sales-3-brief'],
+    ['Product questions', 'marketing-3-try'], ['Nightly systems check', 'ops-3-try'],
+    ['Ask HR and IT', 'helpdesk-4-leave'],
+  ]) {
+    const id = prior[shot]?.route?.match(/[0-9a-f]{8}-[0-9a-f-]{27}/)?.[0]
+    if (id) agentIds.set(name, id)
+  }
   const settle = async (ms = 700) => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(ms) }
   return {
     settle,
+    rememberApi: (name) => apiIds.set(name, currentId()),
+    pickGatewayApi: async (name) => {
+      const id = apiIds.get(name)
+      if (!id) throw new Error(`No captured API available for ${name}; run its connection guide first`)
+      await page.getByTestId(`share-api-${id}`).click()
+    },
+    pickApiTools: async (name) => {
+      const id = apiIds.get(name)
+      if (!id) throw new Error(`No API created in this walk for ${name}`)
+      await page.getByTestId(`tool-group-${id}`).getByRole('checkbox', { name: `All tools of ${name}, including ones added later`, exact: true }).click()
+    },
+    rememberAgent: (name) => agentIds.set(name, currentId()),
+    agent: async (name) => {
+      const id = agentIds.get(name)
+      if (!id) throw new Error(`No agent created in this walk for ${name}`)
+      await page.locator(`a[href="/agents/${id}"]`).filter({ hasText: name }).click()
+      await settle()
+    },
     go: async (path) => { await page.goto(path); await settle(1000) },
     // What reads as a button may be a link underneath; the reader cannot tell and does not care.
     click: async (name, { role, exact = false } = {}) => {
@@ -147,6 +188,7 @@ const SUPPORT = [
     await h.click('Connect API')
     await page.waitForURL(/\/apis\/[0-9a-f-]{36}/, { timeout: 30000 })
     await page.getByText('Get an order by number').first().waitFor({ timeout: 30000 })
+    h.rememberApi('Northwind Orders')
     await h.show('API operations')
   }],
   ['support-4-new-agent', 'A new autonomous agent', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
@@ -161,14 +203,15 @@ const SUPPORT = [
     await h.show('Work mode')
   }],
   ['support-5-model-and-tools', 'Tick the order tools', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
-    await page.getByRole('checkbox', { name: /All tools of Northwind Orders/ }).click()
+    await h.pickApiTools('Northwind Orders')
     await h.show('Capabilities')
   }],
   ['support-6-activate', 'Save and turn the agent on', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
+    h.rememberAgent('Customer support assistant')
     await h.click('Back to agents')
-    await h.link('Customer support assistant')
+    await h.agent('Customer support assistant')
     await h.click('Activate')
     await page.getByText('Active', { exact: true }).first().waitFor({ timeout: 15000 })
     await h.top()
@@ -197,7 +240,7 @@ const SUPPORT = [
     await h.click('Create rule')
     await page.getByTestId('amount-rules').waitFor({ timeout: 15000 })
     await h.link('Agents')
-    await h.link('Customer support assistant')
+    await h.agent('Customer support assistant')
     await page.getByPlaceholder('Type a message to test this agent...').fill('Brightway Logistics wants a refund of $820 on order NW-44120, it arrived defective.')
     await h.click('Run test')
     await page.waitForTimeout(8000)
@@ -216,7 +259,7 @@ const SUPPORT = [
       await page.getByText('No pending approvals').waitFor({ timeout: 15000 })
     }
     await h.link('Agents')
-    await h.link('Customer support assistant')
+    await h.agent('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
   }],
@@ -228,7 +271,7 @@ const SUPPORT = [
   }],
   ['support-13-widget', 'Put the chat bubble on your website', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/gateways/widget-builder.tsx'), async (page, h) => {
     await h.link('Agents')
-    await h.link('Customer support assistant')
+    await h.agent('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^Website widget/ }).click()
@@ -238,7 +281,7 @@ const SUPPORT = [
   }],
   ['support-14-whatsapp', 'Add WhatsApp with your Twilio keys', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
     await h.link('Agents')
-    await h.link('Customer support assistant')
+    await h.agent('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^WhatsApp\s*Via Twilio/ }).click()
@@ -248,7 +291,7 @@ const SUPPORT = [
   }],
   ['support-15-email', 'Add email with your Resend key', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
     await h.link('Agents')
-    await h.link('Customer support assistant')
+    await h.agent('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^Email/ }).click()
@@ -258,7 +301,7 @@ const SUPPORT = [
   }],
   ['support-16-branding', 'Name, greeting and limits', src('frontend/src/pages/agent-public-settings.tsx', 'frontend/src/components/channels'), async (page, h) => {
     await h.link('Agents')
-    await h.link('Customer support assistant')
+    await h.agent('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
     await h.link('Branding and visitor rules')
     await page.locator('input#agent-name').fill('Northwind Help')
@@ -272,7 +315,7 @@ const SUPPORT = [
     const save = page.getByRole('button', { name: 'Save' }).last()
     if (await save.isEnabled()) { await save.click(); await page.waitForTimeout(1500) }
     await h.link('Agents')
-    await h.link('Customer support assistant')
+    await h.agent('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
     await page.getByText('Web chat', { exact: true }).first().click()
     await h.settle()
@@ -298,6 +341,7 @@ const SALES = [
     await h.click('Connect API')
     await page.waitForURL(/\/apis\/[0-9a-f-]{36}/, { timeout: 30000 })
     await page.getByText('Add a meeting note to an account').first().waitFor({ timeout: 30000 })
+    h.rememberApi('Northwind CRM')
     await h.show('API operations')
   }],
   ['sales-2-agent', 'The sales assistant and its CRM tools', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
@@ -309,14 +353,15 @@ const SALES = [
     await page.getByRole('option', { name: /^gpt-4o(?!-)/ }).first().click()
     await page.getByLabel('Personality and style').fill('Short and practical. Numbers first, no small talk.')
     await page.getByLabel('Instructions').fill(SALES_INSTRUCTIONS)
-    await page.getByRole('checkbox', { name: /All tools of Northwind CRM/ }).click()
+    await h.pickApiTools('Northwind CRM')
     await h.show('Capabilities')
   }],
   ['sales-3-brief', 'A brief before the call', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
+    h.rememberAgent('Sales assistant')
     await h.click('Back to agents')
-    await h.link('Sales assistant')
+    await h.agent('Sales assistant')
     await h.click('Activate')
     await page.getByPlaceholder('Type a message to test this agent...').fill('I have a call with Kestrel Coffee in ten minutes. What should I know?')
     await h.click('Run test')
@@ -332,7 +377,7 @@ const SALES = [
   }],
   ['sales-5-slack-keys', 'Add Slack with your Slack app', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
     await h.link('Agents')
-    await h.link('Sales assistant')
+    await h.agent('Sales assistant')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^Slack/ }).click()
@@ -369,6 +414,7 @@ const MARKETING = [
     await h.click('Connect API')
     await page.waitForURL(/\/apis\/[0-9a-f-]{36}/, { timeout: 30000 })
     await page.getByText('Search the product documentation and help articles').first().waitFor({ timeout: 30000 })
+    h.rememberApi('Northwind Help Center')
     await h.show('API operations')
   }],
   ['marketing-2-agent', 'A product assistant that answers from the help center', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
@@ -380,14 +426,15 @@ const MARKETING = [
     await page.getByRole('option', { name: /^gpt-4o-mini/ }).first().click()
     await page.getByLabel('Personality and style').fill('Warm and clear. Short answers, plain words.')
     await page.getByLabel('Instructions').fill(MARKETING_INSTRUCTIONS)
-    await page.getByRole('checkbox', { name: /All tools of Northwind Help Center/ }).click()
+    await h.pickApiTools('Northwind Help Center')
     await h.show('Capabilities')
   }],
   ['marketing-3-try', 'An answer with its source', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
+    h.rememberAgent('Product questions')
     await h.click('Back to agents')
-    await h.link('Product questions')
+    await h.agent('Product questions')
     await h.click('Activate')
     await page.getByPlaceholder('Type a message to test this agent...').fill('Does the Brew 2 grinder work in the UK?')
     await h.click('Run test')
@@ -412,7 +459,7 @@ const MARKETING = [
     await page.getByRole('button', { name: 'Save' }).last().click()
     await h.settle(1500)
     await h.link('Agents')
-    await h.link('Product questions')
+    await h.agent('Product questions')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^Website widget/ }).click()
@@ -427,7 +474,7 @@ const MARKETING = [
     const save = page.getByRole('button', { name: 'Save', exact: true }).last()
     if (await save.isVisible() && await save.isEnabled()) { await save.click(); await h.settle(1500) }
     await h.link('Agents')
-    await h.link('Product questions')
+    await h.agent('Product questions')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^Web chat/ }).click()
@@ -454,6 +501,7 @@ const OPERATIONS = [
     await h.click('Connect API')
     await page.waitForURL(/\/apis\/[0-9a-f-]{36}/, { timeout: 30000 })
     await page.getByText('Check the health of every system').first().waitFor({ timeout: 30000 })
+    h.rememberApi('Northwind Status')
     await h.show('API operations')
   }],
   ['ops-2-agent', 'The nightly check and its status tools', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
@@ -465,14 +513,15 @@ const OPERATIONS = [
     await page.getByRole('option', { name: /^gpt-4o-mini/ }).first().click()
     await page.getByLabel('Personality and style').fill('Plain and short. Lead with what needs attention.')
     await page.getByLabel('Instructions').fill(OPS_INSTRUCTIONS)
-    await page.getByRole('checkbox', { name: /All tools of Northwind Status/ }).click()
+    await h.pickApiTools('Northwind Status')
     await h.show('Capabilities')
   }],
   ['ops-3-try', 'A test run writes the report', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
+    h.rememberAgent('Nightly systems check')
     await h.click('Back to agents')
-    await h.link('Nightly systems check')
+    await h.agent('Nightly systems check')
     await h.click('Activate')
     await page.getByPlaceholder('Type a message to test this agent...').fill('Run the nightly check.')
     await h.click('Run test')
@@ -482,7 +531,7 @@ const OPERATIONS = [
   }],
   ['ops-4-slack', 'Slack, published for the report', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
     await h.go('/agents')
-    await h.link('Nightly systems check')
+    await h.agent('Nightly systems check')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^Slack/ }).click()
@@ -503,7 +552,7 @@ const OPERATIONS = [
   }],
   ['ops-5-schedule', 'Every day at 6:00, to the Slack channel', src('frontend/src/pages/agent-schedule.tsx', 'frontend/src/lib/schedule.ts', 'frontend/src/components/settings/time-zone-select.tsx'), async (page, h) => {
     await h.link('Agents')
-    await h.link('Nightly systems check')
+    await h.agent('Nightly systems check')
     await h.click(/^(Set up a schedule|Edit schedule)$/)
     await page.locator('#schedule-days').click()
     await page.getByRole('option', { name: 'Every day' }).click()
@@ -546,6 +595,7 @@ const HELPDESK = [
     await h.click('Connect API')
     await page.waitForURL(/\/apis\/[0-9a-f-]{36}/, { timeout: 30000 })
     await page.getByText('Search the staff handbook and HR and IT policies').first().waitFor({ timeout: 30000 })
+    h.rememberApi('Northwind Intranet')
     await h.show('API operations')
   }],
   ['helpdesk-2-office-guide', 'The office guide, added as a document', src('frontend/src/pages/memory-new.tsx', 'frontend/src/components/memory'), async (page, h) => {
@@ -576,14 +626,15 @@ const HELPDESK = [
     await page.getByRole('option', { name: 'Shared by all agents' }).click()
     await page.locator('#memory-save').click()
     await page.getByRole('option', { name: 'Only when asked' }).click()
-    await page.getByRole('checkbox', { name: /All tools of Northwind Intranet/ }).click()
+    await h.pickApiTools('Northwind Intranet')
     await h.show('Remember between conversations')
   }],
   ['helpdesk-4-leave', 'A question answered from the HR system', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
+    h.rememberAgent('Ask HR and IT')
     await h.click('Back to agents')
-    await h.link('Ask HR and IT')
+    await h.agent('Ask HR and IT')
     await h.click('Activate')
     await page.getByPlaceholder('Type a message to test this agent...').fill('How many vacation days do I have left? My email is sam.rivera@northwind.example.')
     await h.click('Run test')
@@ -599,7 +650,7 @@ const HELPDESK = [
   }],
   ['helpdesk-6-teams', 'Add Microsoft Teams', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
     await h.link('Agents')
-    await h.link('Ask HR and IT')
+    await h.agent('Ask HR and IT')
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
     await page.getByRole('button', { name: /^Microsoft Teams/ }).click()
@@ -614,7 +665,7 @@ const DEVELOPERS = [
     await h.go('/gateways')
     await h.click('Create gateway')
     await page.getByRole('button', { name: /^MCP/ }).click()
-    await page.getByRole('button', { name: /^Northwind Orders/ }).click()
+    await h.pickGatewayApi('Northwind Orders')
     await page.locator('#gateway-name').fill('Northwind Orders')
     // Repeated local walks need their own endpoint path.
     await page.getByRole('button', { name: /^Advanced/ }).click()
