@@ -6,7 +6,7 @@
       "id": "agent-builder-autonomous",
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
-      "capturedAt": "2026-10-07T15:42:45.143Z",
+      "capturedAt": "2026-10-07T17:20:50.942Z",
       "status": "current",
       "sha256": "70e94fe45285b340864c3955b8db8e86458e1af852247c1665eaa2767848f096",
       "source": {
@@ -21,14 +21,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
-      "capturedAt": "2026-10-07T15:42:54.391Z",
+      "capturedAt": "2026-10-07T17:20:53.647Z",
       "status": "current",
       "sha256": "90ce90323b6eb35a7e84c6bd4c0f2f7e7dc1d6d751180e341f3e18885f1c7dfe",
       "source": {
@@ -43,14 +43,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
-      "capturedAt": "2026-10-07T15:42:51.263Z",
+      "capturedAt": "2026-10-07T17:20:56.267Z",
       "status": "current",
       "sha256": "4213557076754aedaa257bdf9f27f29db5ff31f1b3dd502afbb53e05ed202e83",
       "source": {
@@ -65,16 +65,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
-      "capturedAt": "2026-10-07T15:43:12.195Z",
+      "capturedAt": "2026-10-07T17:20:58.949Z",
       "status": "current",
-      "sha256": "de9c61fa44a2f540c9a0be3ad7c513b2e21f2328ec2dacc479ad86483a15e458",
+      "sha256": "e5646322127e059bd2b42be008641aba3edfc90f206b2680ec474386fb47d672",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -88,16 +88,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f7b92e317d54a1758b87eb3eaf8230699c13de6366e73c7e882056e88ba83ed5",
+      "sourceDigest": "0a6e3c00ee4a114d5fcf04c778b715bb5a36ecc694fe9f7da56769ff8762d885",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
-      "capturedAt": "2026-10-07T15:42:33.454Z",
+      "capturedAt": "2026-10-07T17:21:01.648Z",
       "status": "current",
-      "sha256": "c7ccbc481e8bbba99957bdc38c68d5b1ff8da5f9409717e0a6abbcd6fc319815",
+      "sha256": "d83348102ea5ab0a32daca6e6c0ce8834a09c6ea2d1772bc16af5b30067dabf4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -110,16 +110,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
-      "capturedAt": "2026-10-07T15:42:26.964Z",
+      "capturedAt": "2026-10-07T17:21:04.302Z",
       "status": "current",
-      "sha256": "3bf26a3fda0438c414c1e6260c313ae1afed4f16f0363b63982caec3a014b924",
+      "sha256": "f1fb2921f62e183d9c4335b216aced25238528a9ed6a442eabd8f5cef3275989",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -132,16 +132,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
-      "capturedAt": "2026-10-07T15:42:41.823Z",
+      "capturedAt": "2026-10-07T17:21:06.886Z",
       "status": "current",
-      "sha256": "a4429278182f13a2edb527f3304010a6f35ef3cc4c4b48692cb0d8bd3a59f054",
+      "sha256": "c6bf1377edb58027a51c18856bb42ea76a3e149f6dc83edb820bb31dfdf2762b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -154,7 +154,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -182,7 +182,7 @@
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
-      "capturedAt": "2026-10-07T15:42:48.471Z",
+      "capturedAt": "2026-10-07T17:21:10.019Z",
       "status": "current",
       "sha256": "86e523e4c2a5d908f8c015550d89e4bf2ab746982baa075a8e25e00af507e065",
       "source": {
@@ -197,16 +197,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
-      "capturedAt": "2026-10-07T15:42:23.267Z",
+      "capturedAt": "2026-10-07T17:21:12.707Z",
       "status": "current",
-      "sha256": "6b1248537a09b6f570b8e8d03a9e44472fe32fa9528023a22a541449b0745e26",
+      "sha256": "b1f345ae2c9912877e47ae4b5b2a808b790a1be88019671a31f8e49514b87aea",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -219,7 +219,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "53edf4ae0bb86cc605498a5434818f6c548cc91fd2690171ec34439b5dd9102e",
+      "sourceDigest": "663b5bdbcb508a39cf3f3deecf87c1b5081cf4be71500d22bcdf6386f5e101a3",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -475,9 +475,9 @@
       "id": "builder-code-step",
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
-      "capturedAt": "2026-10-07T16:05:15.498Z",
+      "capturedAt": "2026-10-07T17:23:00.292Z",
       "status": "current",
-      "sha256": "ab8f6ab24b7daddbcde31ea5d6139ed99eef7b393f72ef9b5f2a026f86192208",
+      "sha256": "198ce857bdf7c08ebff7161d3795b767a475d9421c513ab7f02a678bd34688b4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -489,7 +489,7 @@
         "frontend/src/components/ui",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "929d397c8d11c8f0623596650c3c579416012fd4d03e363ca4837db11d3377c4",
+      "sourceDigest": "6d34980842619c7b021005c0395ed1177660517b88dae4006424e24e284f93ec",
       "notes": "Recaptured the existing local seeded demo gateway after repairs; no external changes approved. Code mode remains disabled in this demo."
     },
     {
@@ -986,9 +986,9 @@
       "id": "guides-helpdesk-2-office-guide",
       "title": "The office guide, added as a document",
       "path": "screenshots/guides/helpdesk-2-office-guide.png",
-      "capturedAt": "2026-10-07T16:08:11.939Z",
+      "capturedAt": "2026-10-07T17:23:30.939Z",
       "status": "current",
-      "sha256": "8c5a95e5d0654aacebc577d37ec44de692966bc9a59982c0fca0d3f195371601",
+      "sha256": "217642d5a4b3a8368e1f93f40405cf4885237e61e728d14c9960fdc759ae910d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1008,9 +1008,9 @@
       "id": "guides-helpdesk-3-agent",
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
-      "capturedAt": "2026-10-07T16:08:19.000Z",
+      "capturedAt": "2026-10-07T17:23:37.864Z",
       "status": "current",
-      "sha256": "2dca1149fbe85a9d303166782538fb738740a2d786a92b965f6166a0ea3521a5",
+      "sha256": "b9edd40dc3b9abf55a687e7bfc2d1c4e3940f6ee01f2b35aa3226c6158988b73",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1023,16 +1023,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-4-leave",
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
-      "capturedAt": "2026-10-07T16:08:28.061Z",
+      "capturedAt": "2026-10-07T17:23:46.832Z",
       "status": "current",
-      "sha256": "223cbd180039e342354f3e999561ce6a429ab3da68e185c1ce6d706c6e2830e0",
+      "sha256": "9dca4db6fb76e6d039fb026eaa3e28a464d375f8ce93ec8129aba5c8e0d83007",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1045,16 +1045,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
-      "capturedAt": "2026-10-07T16:08:30.188Z",
+      "capturedAt": "2026-10-07T17:23:48.911Z",
       "status": "current",
-      "sha256": "b5875e81c976355bd69ed3b46be7489d35b1017c60a17bd195e30a111f3a208a",
+      "sha256": "8b455f8cf9fb187695a94de5cb93a31565b55eee301368263171f23a884a3f97",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1067,16 +1067,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-6-teams",
       "title": "Add Microsoft Teams",
       "path": "screenshots/guides/helpdesk-6-teams.png",
-      "capturedAt": "2026-10-07T16:08:35.963Z",
+      "capturedAt": "2026-10-07T17:23:54.626Z",
       "status": "current",
-      "sha256": "d77161b8ef5267d9cc6c2c56682f138494be003b938595e20ca8c5731d58b676",
+      "sha256": "1aa584e185c70c0683086c75bec7b6f4a85b272748890b14cd8e9d9103721bb9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1119,9 +1119,9 @@
       "id": "guides-marketing-2-agent",
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
-      "capturedAt": "2026-10-07T16:06:50.928Z",
+      "capturedAt": "2026-10-07T17:21:20.247Z",
       "status": "current",
-      "sha256": "e3d16070c96bdb469c1863bb33194dc1718e6c2cddf4319bc241a3c3ef8e79aa",
+      "sha256": "a40c7684fa1fc74d7cdebcc38520555635d2acfb60f3940eff9a9fecd33e729f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1134,16 +1134,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-3-try",
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
-      "capturedAt": "2026-10-07T16:06:59.968Z",
+      "capturedAt": "2026-10-07T17:21:29.255Z",
       "status": "current",
-      "sha256": "8774fe718525b0081125531ec399e24ba320bb312ab60ad1b62b8d54288d5ae2",
+      "sha256": "186c36779e25b29c73d5876b8f9427d0e3100cdeba9e4f755c8f3c49c519a1a9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1156,16 +1156,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-4-limits",
       "title": "A daily spending cap for visitors",
       "path": "screenshots/guides/marketing-4-limits.png",
-      "capturedAt": "2026-10-07T16:07:02.869Z",
+      "capturedAt": "2026-10-07T17:21:32.117Z",
       "status": "current",
-      "sha256": "b9d8e84c567817aa827105f8084e2072f4d491855b7afb054a0bac450d3881da",
+      "sha256": "4f25706057235abeaa8e5409037c7690b75a94ee4c6febc4f4b618a8e3f0b657",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1185,9 +1185,9 @@
       "id": "guides-marketing-5-widget",
       "title": "The chat bubble, only on your own site",
       "path": "screenshots/guides/marketing-5-widget.png",
-      "capturedAt": "2026-10-07T16:07:15.010Z",
+      "capturedAt": "2026-10-07T17:21:48.942Z",
       "status": "current",
-      "sha256": "58cd2c028a80863ea8795aa12522ebe46831e7515dc4dc7e4bda08671cfc0f52",
+      "sha256": "1e1a5bb427038fe3f2298ab2744f680e861cbd2f32e532e2e725065181fd00cf",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1208,13 +1208,13 @@
       "id": "guides-marketing-6-visitor",
       "title": "A visitor asks a product question",
       "path": "screenshots/guides/marketing-6-visitor.png",
-      "capturedAt": "2026-10-07T16:07:23.787Z",
+      "capturedAt": "2026-10-07T17:21:57.007Z",
       "status": "current",
       "sha256": "6585c66632f7b3595004a9bde79d4019845423ebded43942ddfd6154779723fc",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/?__slug=product-questions-2"
+        "route": "/?__slug=product-questions-3"
       },
       "sources": [
         "frontend/src/pages/hosted-chat.tsx",
@@ -1252,9 +1252,9 @@
       "id": "guides-ops-2-agent",
       "title": "The nightly check and its status tools",
       "path": "screenshots/guides/ops-2-agent.png",
-      "capturedAt": "2026-10-07T16:07:32.088Z",
+      "capturedAt": "2026-10-07T17:21:19.011Z",
       "status": "current",
-      "sha256": "c25af6c9cd9e76b7a8aa2c7e5802c6b840fcde039b544d7c01b0dd0080bd1434",
+      "sha256": "54fa6be319a2b2759c5bd48e0f7834455780057084b2b14100510d61c0d2b689",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1267,16 +1267,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-3-try",
       "title": "A test run writes the report",
       "path": "screenshots/guides/ops-3-try.png",
-      "capturedAt": "2026-10-07T16:07:41.138Z",
+      "capturedAt": "2026-10-07T17:21:28.048Z",
       "status": "current",
-      "sha256": "cc9b208587749cb8f5f959464be025b1ad2d96d7afa69cc652186e0e99c28607",
+      "sha256": "1cf0344de41136d0ecfccb7ebd69afb9e0a1d157d7c612a84a0f6eab702ce9ed",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1289,16 +1289,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-4-slack",
       "title": "Slack, published for the report",
       "path": "screenshots/guides/ops-4-slack.png",
-      "capturedAt": "2026-10-07T16:07:52.949Z",
+      "capturedAt": "2026-10-07T17:21:39.561Z",
       "status": "current",
-      "sha256": "e87df911133877f067c4c9fc1c6063d0a4e2add4d7f008747e59c242d063b42c",
+      "sha256": "f1f452fdf91abefb2d388c0523d154c4e2ce54b1396c42ab3e01b6bb242a11da",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1319,9 +1319,9 @@
       "id": "guides-ops-5-schedule",
       "title": "Every day at 6:00, to the Slack channel",
       "path": "screenshots/guides/ops-5-schedule.png",
-      "capturedAt": "2026-10-07T16:07:57.540Z",
+      "capturedAt": "2026-10-07T17:21:43.986Z",
       "status": "current",
-      "sha256": "55f18fac34b69ffced6d216ae467552de00fdc1b4b4f091bfe7caa8eba40d8a3",
+      "sha256": "c6297312f9a46acc1b392ce6ec801f3251c052a113bd8c893aa9df09f7005ed9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1342,9 +1342,9 @@
       "id": "guides-ops-6-schedule-card",
       "title": "The schedule on the agent",
       "path": "screenshots/guides/ops-6-schedule-card.png",
-      "capturedAt": "2026-10-07T16:07:59.526Z",
+      "capturedAt": "2026-10-07T17:21:45.939Z",
       "status": "current",
-      "sha256": "4c103f8683f9fcc8494e767cd2b93be6d150e8cf104f515cd87eeb7392f33ce3",
+      "sha256": "19756e6dc5bbb2591ae10c5d4c92f5413e2b6470eb858a377589f773daa472e8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1357,16 +1357,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39f09fe2ddaed86a1f35bfeff936c1a3472f9f6ee521bb1e38ac385f9106da88",
+      "sourceDigest": "cecb2d60aa44d125e6b60c29377f5e21976f7a6de439c176e90d3219db306c59",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-7-report-run",
       "title": "A report run, step by step",
       "path": "screenshots/guides/ops-7-report-run.png",
-      "capturedAt": "2026-10-07T16:08:03.478Z",
+      "capturedAt": "2026-10-07T17:21:49.857Z",
       "status": "current",
-      "sha256": "005bc737b0ae10e6856abe026c441b20456f8f469d1c4ff9406cd9e71ee39d2b",
+      "sha256": "d0d5abd7748ac8f276983d360ab11f641855d23c0534543d2394d1340e4519b6",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1379,7 +1379,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1408,9 +1408,9 @@
       "id": "guides-sales-2-agent",
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
-      "capturedAt": "2026-10-07T16:06:21.839Z",
+      "capturedAt": "2026-10-07T17:21:20.234Z",
       "status": "current",
-      "sha256": "fcd0b43383a659c57f1f9e26e880c10c93b4fac7ef285f87e2c3c54ca48e0ff2",
+      "sha256": "e25a19a85df45d5672f1d9e3a9678dfd085e8cbf40cda000eea25b38d4c802f3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1423,16 +1423,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-3-brief",
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
-      "capturedAt": "2026-10-07T16:06:30.935Z",
+      "capturedAt": "2026-10-07T17:21:29.284Z",
       "status": "current",
-      "sha256": "0ea3f4cd47f00cae07eacd6cb7cef6ac6a9287340826dbb018fa5efb18d79319",
+      "sha256": "39453a1699e3e427da851410c86cb7ed8aba65184ee0ac24e11ab58402ed56b8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1445,16 +1445,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
-      "capturedAt": "2026-10-07T16:06:33.061Z",
+      "capturedAt": "2026-10-07T17:21:31.393Z",
       "status": "current",
-      "sha256": "e16b1ab0afcea5af2a678cdc890167a35e98f23d066a3828181913dd708b817d",
+      "sha256": "6d3339248d66bc320ee99b175542a4fc35338e2e4e0b588f733d264e20fbd799",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1467,16 +1467,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-5-slack-keys",
       "title": "Add Slack with your Slack app",
       "path": "screenshots/guides/sales-5-slack-keys.png",
-      "capturedAt": "2026-10-07T16:06:38.782Z",
+      "capturedAt": "2026-10-07T17:21:37.072Z",
       "status": "current",
-      "sha256": "4c9a6d8cc722fd2e720897bb2bfeda654f9db4ca2327a5d573f58a26c331b2dc",
+      "sha256": "cc0490ed5d7921baa463f9632a892c8ba397dd12e0a849a52359cf52bdd82898",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1497,9 +1497,9 @@
       "id": "guides-sales-6-slack-live",
       "title": "Published: the install link and redirect URL",
       "path": "screenshots/guides/sales-6-slack-live.png",
-      "capturedAt": "2026-10-07T16:06:42.698Z",
+      "capturedAt": "2026-10-07T17:21:40.856Z",
       "status": "current",
-      "sha256": "d5042d79411edb44b8cc869a90ad2a81120856d0e53fa9235d6619fc4478494f",
+      "sha256": "628c0a7e25469423213b669afca8ec4ed3a789fef2157957e8190d582ac56b0d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1542,9 +1542,9 @@
       "id": "guides-support-10-approve",
       "title": "Approve the refund",
       "path": "screenshots/guides/support-10-approve.png",
-      "capturedAt": "2026-10-07T16:05:16.195Z",
+      "capturedAt": "2026-10-07T17:21:43.157Z",
       "status": "current",
-      "sha256": "c431b00967f066fa31db1c7c972c2be6661da9bfcda051263682eef974de2e88",
+      "sha256": "c54ad3455f6f452679407099ea86c4be52c919feae424c6711a58698fe366278",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1563,9 +1563,9 @@
       "id": "guides-support-11-add-channel",
       "title": "Pick where customers reach it",
       "path": "screenshots/guides/support-11-add-channel.png",
-      "capturedAt": "2026-10-07T16:05:20.107Z",
+      "capturedAt": "2026-10-07T17:21:46.329Z",
       "status": "current",
-      "sha256": "32a4c8bb8c779ec5dde2eac4fa660b718f9fb5c34b49bf4caac85fcadbdcf3a7",
+      "sha256": "0b8d6a2c9f9e797abdc33a93506077ac07c5ae9251063d4bfa0bd521203089b5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1585,9 +1585,9 @@
       "id": "guides-support-12-web-chat",
       "title": "Publish the web chat",
       "path": "screenshots/guides/support-12-web-chat.png",
-      "capturedAt": "2026-10-07T16:05:21.082Z",
+      "capturedAt": "2026-10-07T17:21:47.070Z",
       "status": "current",
-      "sha256": "71e8e96b507092ecd516c732737a43c8ce063a3ebfa10469fd03f23dced2b4e9",
+      "sha256": "176bf1fd0c66cc552a421cfa08ce748a487b336220722aa5b34555d86b7ac0f2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1607,9 +1607,9 @@
       "id": "guides-support-13-widget",
       "title": "Put the chat bubble on your website",
       "path": "screenshots/guides/support-13-widget.png",
-      "capturedAt": "2026-10-07T16:05:24.958Z",
+      "capturedAt": "2026-10-07T17:21:50.837Z",
       "status": "current",
-      "sha256": "50c81b11d6175f7857c1642c7006e4291b93a055f56a84b832c1d29f0b1f10f3",
+      "sha256": "131baca0cce74c02bb71c5dc7c4f58e5972c1aabc872ad9f9020fe42e1f78682",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1630,9 +1630,9 @@
       "id": "guides-support-14-whatsapp",
       "title": "Add WhatsApp with your Twilio keys",
       "path": "screenshots/guides/support-14-whatsapp.png",
-      "capturedAt": "2026-10-07T16:05:54.995Z",
+      "capturedAt": "2026-10-07T17:22:21.537Z",
       "status": "current",
-      "sha256": "d21e8f4e0e6e0bab8f45f9442a194bde81ee6d678d53159e2b1dbfeef8144ec0",
+      "sha256": "639f5c6e20185bffdb42027dd9e94ee9ce5813911627e35dec3acbdf9b19781e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1653,9 +1653,9 @@
       "id": "guides-support-15-email",
       "title": "Add email with your Resend key",
       "path": "screenshots/guides/support-15-email.png",
-      "capturedAt": "2026-10-07T16:06:00.714Z",
+      "capturedAt": "2026-10-07T17:22:27.222Z",
       "status": "current",
-      "sha256": "4be29c6140faee2a4b781ecf37d6d8faa9573fc045b709127707967654c6a487",
+      "sha256": "a8598c073562f6366b8b3ca6f3aeacd05e68ac19e9d2b49c67088701f7825c86",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1676,9 +1676,9 @@
       "id": "guides-support-16-branding",
       "title": "Name, greeting and limits",
       "path": "screenshots/guides/support-16-branding.png",
-      "capturedAt": "2026-10-07T16:06:04.987Z",
+      "capturedAt": "2026-10-07T17:22:31.486Z",
       "status": "current",
-      "sha256": "c19d0291370d0f13190063e4173a274a2df09adade47aa4333df6bc9a1eecfad",
+      "sha256": "42889d867762cf848391b925f4a8b9b8e0cbca5de9ce89a1e536144a36b56d73",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1698,13 +1698,13 @@
       "id": "guides-support-17-customer-view",
       "title": "What a customer sees",
       "path": "screenshots/guides/support-17-customer-view.png",
-      "capturedAt": "2026-10-07T16:06:13.526Z",
+      "capturedAt": "2026-10-07T17:22:39.201Z",
       "status": "current",
       "sha256": "d997fe307a9d7c91571ac219770208dd6dd7787b6d7e68a00b3248a0e60af6ed",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/?__slug=customer-support-assistant-2"
+        "route": "/?__slug=customer-support-assistant-3"
       },
       "sources": [
         "frontend/src/pages/hosted-chat.tsx",
@@ -1765,9 +1765,9 @@
       "id": "guides-support-4-new-agent",
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
-      "capturedAt": "2026-10-07T16:04:52.678Z",
+      "capturedAt": "2026-10-07T17:21:19.517Z",
       "status": "current",
-      "sha256": "a32165c680409ac5110c174f4452f92f5ce617390c5f4ed41f7c7042f649bd8a",
+      "sha256": "d06871a83c9399afaf1886637482f5cb2841a376c9decbb836042d8ad57ca9e9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1780,16 +1780,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
-      "capturedAt": "2026-10-07T16:04:53.271Z",
+      "capturedAt": "2026-10-07T17:21:20.120Z",
       "status": "current",
-      "sha256": "3520f9beb7140a125d34f1d0bbd932320b2742dbc451078f6d93455901821788",
+      "sha256": "5eee5e25bae586f399eee24d8b819c2f994af643ceaff08b8c360f6f20cef101",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1802,16 +1802,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b7e5cd1c96c87f11960eed27b3a6df10e344875658d1c716b10aa7f6a633eb1b",
+      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-6-activate",
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
-      "capturedAt": "2026-10-07T16:04:56.609Z",
+      "capturedAt": "2026-10-07T17:21:23.537Z",
       "status": "current",
-      "sha256": "a64443202e6a3cb21e1ad4c78e8d88d7e3e0d2eb11de2ec59d82907c9487090d",
+      "sha256": "5ec0a60cde773d25a3c715ba36b0c42cc7f621dda11d250ddf3e2c42bdfacb83",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1824,16 +1824,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
-      "capturedAt": "2026-10-07T16:04:58.710Z",
+      "capturedAt": "2026-10-07T17:21:25.626Z",
       "status": "current",
-      "sha256": "cbc90f6e3c8e35e276806a8adc180af326c7b0a4f0e543424ee3317301258ed4",
+      "sha256": "4bbf825b265166283516fe8802c89574e6a99d797ec390195d927498ae5fd40a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1846,16 +1846,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-8-amount-rule",
       "title": "Ask before refunds over 500",
       "path": "screenshots/guides/support-8-amount-rule.png",
-      "capturedAt": "2026-10-07T16:05:02.846Z",
+      "capturedAt": "2026-10-07T17:21:29.806Z",
       "status": "current",
-      "sha256": "29223cb7f58ee86a0959cf70b8dc0132ee50911ded7f654c9c50e1623bb53427",
+      "sha256": "c6e52e58e51d44343d4012d63eb659daf5038d71221efd0fe5a72db363c71d54",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1876,9 +1876,9 @@
       "id": "guides-support-9-refund-waits",
       "title": "A big refund waits for approval",
       "path": "screenshots/guides/support-9-refund-waits.png",
-      "capturedAt": "2026-10-07T16:05:15.320Z",
+      "capturedAt": "2026-10-07T17:21:42.302Z",
       "status": "current",
-      "sha256": "fa5a14cb645ab6fd50382c3f84fed3e7d9974551df979cf304245ae826a3de5f",
+      "sha256": "cb6e2acfab6e4c23c634e01d547660c508b6d9b74a1ac0a41e1cbbe2d969ec01",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2207,7 +2207,7 @@
       "id": "schedule-config",
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
-      "capturedAt": "2026-10-07T15:42:57.725Z",
+      "capturedAt": "2026-10-07T17:21:17.773Z",
       "status": "current",
       "sha256": "2aacd0550d1957c1b7bfdeb407352fde80b3ae815add5db63c571b45449b6c06",
       "source": {
@@ -2222,7 +2222,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2460,9 +2460,9 @@
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
-      "capturedAt": "2026-10-07T15:42:36.224Z",
+      "capturedAt": "2026-10-07T17:21:20.857Z",
       "status": "current",
-      "sha256": "c7ccbc481e8bbba99957bdc38c68d5b1ff8da5f9409717e0a6abbcd6fc319815",
+      "sha256": "d83348102ea5ab0a32daca6e6c0ce8834a09c6ea2d1772bc16af5b30067dabf4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2475,16 +2475,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
-      "capturedAt": "2026-10-07T15:42:30.572Z",
+      "capturedAt": "2026-10-07T17:21:23.904Z",
       "status": "current",
-      "sha256": "3bf26a3fda0438c414c1e6260c313ae1afed4f16f0363b63982caec3a014b924",
+      "sha256": "f1fb2921f62e183d9c4335b216aced25238528a9ed6a442eabd8f5cef3275989",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2497,16 +2497,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
-      "capturedAt": "2026-10-07T15:42:39.063Z",
+      "capturedAt": "2026-10-07T17:21:26.620Z",
       "status": "current",
-      "sha256": "0d40e83d5781026d6efb680a04cf9af66176e16d145a048a47afe00f32142c1a",
+      "sha256": "39d5e8d881c22e7a848127a07aa3fd60f0dca775c9fb57bf5f8e85a0f04e8bc7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2519,7 +2519,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2592,9 +2592,9 @@
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
-      "capturedAt": "2026-10-07T15:43:08.851Z",
+      "capturedAt": "2026-10-07T17:21:29.643Z",
       "status": "current",
-      "sha256": "30cc687e8a813e7ccf42657fd2479107676383f8a742eb6940b567c7ba5a4c38",
+      "sha256": "3f76cc2f58660bc8006b8ce93b532a0900094211b6ed55322353fe5bda64ae2c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2607,14 +2607,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
-      "capturedAt": "2026-10-07T15:43:05.169Z",
+      "capturedAt": "2026-10-07T17:21:32.897Z",
       "status": "current",
       "sha256": "53e5db602951454d67b122fe28da438c0429115ec732b15458deca1e322e3fea",
       "source": {
@@ -2629,7 +2629,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2658,7 +2658,7 @@
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
-      "capturedAt": "2026-10-07T15:43:01.128Z",
+      "capturedAt": "2026-10-07T17:21:36.141Z",
       "status": "current",
       "sha256": "2aacd0550d1957c1b7bfdeb407352fde80b3ae815add5db63c571b45449b6c06",
       "source": {
@@ -2673,7 +2673,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "45d08f4caf0a00a682865f73a0099e8d2aa054d044387b3104ba9cfac79392d9",
+      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {

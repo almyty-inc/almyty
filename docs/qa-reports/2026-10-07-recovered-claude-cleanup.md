@@ -1,6 +1,6 @@
 # Recovered Claude cleanup review
 
-The recovered session stopped after saving the four-method access design. This branch completes the credentials/models/sidebar, memory/runner/CLI, and scoped endpoint access work, with current development integrated through a0977514. No merge or deployment is authorized by this report.
+The recovered session stopped after saving the four-method access design. This branch completes the credentials/models/sidebar, memory/runner/CLI, and scoped endpoint access work, with current development integrated through 1661d822 (including PR #934). No merge or deployment is authorized by this report.
 
 ## Validation
 
@@ -11,6 +11,7 @@ The recovered session stopped after saving the four-method access design. This b
 - The first GitHub CI run exposed stale tests and real regressions despite the initial bounded checks. Repairs include API-only agent query columns, A2A scope detection, gateway key-method provisioning and unique sidebar separator keys; full local checks were completed before the next push.
 - Browser checks saved a named key with expiry, a username/password, Google company sign-in configuration with a domain restriction, and JWT issuer/JWKS/audience configuration. Actual company-provider authentication was verified with signed mock-provider tests; live vendor accounts were not tested.
 - Final development integration: 335 backend regression tests and 19 frontend tests passed. Application captures: 63 refreshed views; all six guide walks completed, 46 steps. Screenshot inventory: 124 tracked, two inherited pending captures, zero errors.
+- The later development held-tool-call approval merge passed 40 affected backend tests and seven frontend schedule tests; authorization context and runner pinning are retained when approved calls resume.
 
 The demo uses isolated PostgreSQL/Redis and fake model/vendor systems. Script-trace and change-set screenshots use explicitly seeded local screenshot fixtures; they do not claim a real model-generated execution. No production or staging data was changed.
 
