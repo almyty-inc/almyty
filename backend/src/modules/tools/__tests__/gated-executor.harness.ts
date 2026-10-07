@@ -67,7 +67,10 @@ export class FakeApprovals extends EventEmitter {
     this.created.push(saved);
     return saved;
   }
-  async decide(id: string, status: 'approved' | 'rejected', decisionReason: string | null = null) {
+  async findInOrganization(id: string, organizationId: string) {
+    return this.rows.findOne({ where: { id, organizationId } });
+  }
+  async decide(id: string, status: 'approved' | 'rejected' | 'expired', decisionReason: string | null = null) {
     await this.rows.update({ id }, { status, decisionReason });
     const row = await this.rows.findOne({ where: { id } });
     this.emit('approval.decided', row);
