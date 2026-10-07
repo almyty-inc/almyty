@@ -41,7 +41,17 @@ describe('invokeAndSettle', () => {
     invoke.mockResolvedValue({ id: 'run-1', mode: 'autonomous', status: 'running' })
     getRun.mockResolvedValue({ id: 'run-1', mode: 'autonomous', status: 'waiting_approval' })
     const run = await invokeAndSettle('agent-1', {}, { wait: noWait })
-    expect(runOutcome(run).error).toMatch(/waiting/)
+    expect(runOutcome(run).error).toBe('Waiting for your approval. Open Approvals to decide; the run carries on once you do.')
+  })
+
+  it('a workflow run waiting for approval says how many changes, in plain words', () => {
+    const outcome = runOutcome({ status: 'waiting_approval', error: 'Waiting for your approval: 3 changes.' })
+    expect(outcome.error).toBe('Waiting for your approval: 3 changes. Open Approvals to decide; the run carries on once you do.')
+    expect(outcome.error).not.toMatch(/run_code|approvalId/)
+  })
+
+  it('a run waiting for input still points at the Runs tab', () => {
+    expect(runOutcome({ status: 'waiting_input' }).error).toMatch(/waiting for someone/)
   })
 
   it('gives a failed run its reason, not its JSON', () => {

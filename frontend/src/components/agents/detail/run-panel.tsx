@@ -22,6 +22,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
+import { WAITING_APPROVAL, WaitingApprovalBanner, waitingLine } from './waiting-approval'
 
 const DEFAULT_INPUT = '{\n  "message": "Hello"\n}'
 
@@ -32,7 +33,7 @@ interface RunPanelProps {
 
 export function RunPanel({ agent, onClose }: RunPanelProps) {
   const queryClient = useQueryClient()
-  const { success, error: errorNotif } = useNotifications()
+  const { success, info, error: errorNotif } = useNotifications()
   const sectionRef = useRef<HTMLElement>(null)
 
   const [invokeInput, setInvokeInput] = useState(DEFAULT_INPUT)
@@ -68,6 +69,8 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
       setInvokeResult(result)
       if (result?.status === 'completed') {
         success('Run finished', 'The agent finished this run.')
+      } else if (result?.status === WAITING_APPROVAL) {
+        info('Waiting for your approval', `${waitingLine(result)} Open Approvals to decide; the run carries on once you do.`)
       } else {
         errorNotif(
           result?.status === 'cancelled' ? 'Run cancelled' : 'Run failed',
@@ -92,7 +95,9 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
     },
   })
 
-  const failed = !!invokeResult && (invokeResult as any).status !== 'completed'
+  // Waiting for a person in Approvals is neither a failure nor an answer yet.
+  const waiting = (invokeResult as any)?.status === WAITING_APPROVAL
+  const failed = !!invokeResult && (invokeResult as any).status !== 'completed' && !waiting
   const output = (invokeResult as any)?.output
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
@@ -162,7 +167,9 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
             the raw execution row is still one click away for
             debugging, but it is no longer the answer.
           */}
-          {failed ? (
+          {waiting ? (
+            <WaitingApprovalBanner run={invokeResult as { error?: string | null }} />
+          ) : failed ? (
             <div role="alert" data-testid="invoke-failed" className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
               {(invokeResult as any).error || 'The agent did not finish this run.'}
             </div>

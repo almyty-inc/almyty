@@ -341,7 +341,7 @@ export interface AgentExecution {
   agentId: string
   organizationId: string
   userId?: string
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'waiting_approval'
   input?: Record<string, any>
   output?: any
   nodeResults?: Record<string, {

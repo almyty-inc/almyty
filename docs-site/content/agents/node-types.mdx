@@ -552,11 +552,13 @@ In the side panel: the **Script**. It calls the agent's tools as functions, one 
 
 ![A Code step and its script in the builder](/screenshots/builder-code-step.png)
 
-A change the agent's settings send to a person (deletions, by default) does not run inside the script. A workflow cannot pause, so the step stops, waiting, and the changes wait in **Approvals** as one list; approved, they run in order.
+A change the agent's settings send to a person (deletions, by default) does not run inside the script. The run stops at the step and waits: the agent's page says **Waiting for your approval: 3 changes**, with a link to **Approvals**, where the changes wait as one list. Approve them and they are made, in order, and the run carries on from that step with what the script returned. Reject them and none is made: the step ends **Rejected** and the run stops there.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `code` | string | Required. The script: the body of an async function, JavaScript or TypeScript. |
 | `timeoutMs` | number | How long it may run, within the server's limits (30 seconds unless set, at most 2 minutes by default). |
 
-The scope is the agent's tools (`toolIds` and the active tools of its APIs). The calls count against the run's tool-call budget. The write policy is the agent's `agentConfig.codeMode` ([scripts in autonomous agents](/agents/autonomous#scripts-many-tool-calls-in-one-go)). A held change set fails the node with `AWAITING_APPROVAL` and its `approvalId` on the node's input, as a held Tool call does. The trace is a `code_executions` row on the run.
+The scope is the agent's tools (`toolIds` and the active tools of its APIs). The calls count against the run's tool-call budget. The write policy is the agent's `agentConfig.codeMode` ([scripts in autonomous agents](/agents/autonomous#scripts-many-tool-calls-in-one-go)). The trace is a `code_executions` row on the run.
+
+A held change set puts the run in `waiting_approval`, with `error` set to the plain line ("Waiting for your approval: 3 changes."), the node recorded as `status: "waiting_approval"` with `waitingForApproval: { approvalId, changes }` and its `approvalId` on the node's input, and what the run needs to carry on in `metadata.waitingForApproval`. The approval request is marked with the run (`payload.workflowExecutionId`). When it is decided, `WorkflowApprovalResumeService` settles the change set and, once nothing the run waits on is pending, moves the run back to `running` and carries it on: the steps that ran before are replayed from the run's record, not run again. Approved, the node's output is what the script returned (a change that fails fails the node, naming it); rejected or expired, the node fails with `errorCode: "APPROVAL_REJECTED"` and the run ends `cancelled`. The run streams `execution.waiting` when it stops.

@@ -18,6 +18,11 @@ export enum AgentExecutionStatus {
   FAILED = 'failed',
   CANCELLED = 'cancelled',
   TIMEOUT = 'timeout',
+  /**
+   * A Code step's changes wait for a person in Approvals. Not terminal: once
+   * they are decided the run carries on from that step (agents/workflow-approval.ts).
+   */
+  WAITING_APPROVAL = 'waiting_approval',
 }
 
 /**
