@@ -17,7 +17,14 @@ import { AgentExecutionEngine } from './agent-execution.engine';
 import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
 import { CodeModeService } from '../code-mode/code-mode.service';
-import { WAITING_FOR_APPROVAL_CODE, WaitingCodeStep, waitingForApprovalText } from './workflow-approval';
+import {
+  WAITING_FOR_APPROVAL_CODE,
+  WaitingCodeStep,
+  heldCallWords,
+  waitingForApprovalText,
+  waitingForCallText,
+} from './workflow-approval';
+import { hitDetail } from '../tools/tool-approval-gate.service';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentVerifierHelper, VerifyPolicy } from './agent-verifier.helper';
 import {
@@ -774,15 +781,20 @@ export class AgentNodeExecutor {
     const executionTime = Date.now() - startTime;
 
     if (!result.success) {
+      const resolvedInput = { toolId, parameters: resolvedParams, ...(result.approvalId ? { approvalId: result.approvalId } : {}) };
+      // A call an approval rule held: it waits in Approvals, the run waits
+      // with it, and once a person approves, the approval gate makes the
+      // call (once, exactly as asked) and the run carries on with what it
+      // returned (workflow-approval.ts). The words are for people; the
+      // "call again with _approvalId" note is for clients that cannot wait.
+      if (result.approvalRequired && result.approvalStatus === 'pending' && result.approvalId) {
+        const call = heldCallWords(result.approvalRequired.toolName, hitDetail(result.approvalRequired));
+        const waiting: WaitingCodeStep = { nodeId: node.id, kind: 'tool_call', approvalId: result.approvalId, codeExecutionId: null, changes: 1, call };
+        throw Object.assign(new Error(waitingForCallText(call)), { resolvedInput, code: WAITING_FOR_APPROVAL_CODE, waiting });
+      }
       // The resolved parameters ride on the error so a failed tool call's
       // input is persisted too, not just its message.
-      throw Object.assign(new Error(result.error || 'Tool execution failed'), {
-        resolvedInput: { toolId, parameters: resolvedParams, ...(result.approvalId ? { approvalId: result.approvalId } : {}) },
-        // A call an approval policy held: it waits in Approvals and runs
-        // once a person approves it. A workflow cannot pause, so the run
-        // stops here and says so (the run history shows it as waiting).
-        ...(result.approvalRequired && result.approvalStatus === 'pending' ? { code: 'AWAITING_APPROVAL' } : {}),
-      });
+      throw Object.assign(new Error(result.error || 'Tool execution failed'), { resolvedInput });
     }
 
     return {

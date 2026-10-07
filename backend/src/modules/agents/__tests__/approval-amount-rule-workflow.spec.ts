@@ -10,6 +10,7 @@ import { fakeRepository } from '../../../test/fake-repository';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 import { userPrincipal } from '../../../common/authorization/execution-access.service';
 import { gatedExecutor } from '../../tools/__tests__/gated-executor.harness';
+import { WorkflowApprovalResumeService } from '../workflow-approval-resume.service';
 
 jest.mock('axios', () => {
   const fn: any = jest.fn();
@@ -20,15 +21,16 @@ jest.mock('axios', () => {
 /**
  * The workflow engine and an approval policy's amount rule, end to end:
  * AgentExecutionEngine -> AgentNodeExecutor (tool_call) -> the real
- * ToolExecutorService and gate. A workflow cannot pause for a person, so a
- * call over the amount is refused -- the refund is not made and the run
- * says why -- while a call under it runs without asking.
+ * ToolExecutorService and gate. A call over the amount waits for a person:
+ * the run waits with it, then carries on with the call's result once
+ * approved, or ends "Rejected" -- while a call under it runs without asking.
  */
 describe('approval over an amount in a workflow agent', () => {
   const mockedAxios = axios as unknown as jest.Mock;
   let engine: AgentExecutionEngine;
   let agents: any;
   let harness: ReturnType<typeof gatedExecutor>;
+  let executions: any;
 
   const refundAgent = () =>
     Object.assign(new Agent(), {
@@ -63,7 +65,7 @@ describe('approval over an amount in a workflow agent', () => {
     access.member('org-1', 'u-1');
     harness = gatedExecutor(access.executionAccess);
     agents = fakeRepository<Agent>({ seed: [refundAgent()], make: () => new Agent() });
-    const executions = fakeRepository<AgentExecution>({ make: () => new AgentExecution(), idPrefix: 'exec' });
+    executions = fakeRepository<AgentExecution>({ make: () => new AgentExecution(), idPrefix: 'exec' });
     const state = {
       emitEvent: jest.fn(),
       bumpAgentStats: jest.fn().mockResolvedValue(undefined),
@@ -81,6 +83,8 @@ describe('approval over an amount in a workflow agent', () => {
     const resolver = new AgentTemplateResolver();
     const subAgents = new AgentSubAgentExecutors(resolver, agents as any, engine, {} as any, {} as any);
     (engine as any).nodeExecutor = new AgentNodeExecutor(resolver, {} as any, harness.executor, agents as any, engine, {} as any, {} as any, subAgents, {} as any);
+    // Carries a waiting run on once its call is decided, subscribed as Nest does at start-up.
+    new WorkflowApprovalResumeService(executions as any, agents as any, engine, harness.approvals as any).onModuleInit();
   });
 
   const run = (input: Record<string, any>) =>
@@ -91,24 +95,78 @@ describe('approval over an amount in a workflow agent', () => {
     expect(execution.status).toBe(AgentExecutionStatus.COMPLETED);
     expect(mockedAxios).toHaveBeenCalledTimes(1);
   });
-  it('holds a refund over the amount for a person: the run stops waiting, and the refund is made once approved', async () => {
+  /** Let the gate's decision handler, the call it makes and the run carrying on all finish. */
+  const settle = async () => {
+    for (let i = 0; i < 50; i++) await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  it('holds a refund over the amount for a person: the run waits, saying what for in plain words', async () => {
     const execution = await run({ amount: 820, order: 'NW-44120' });
-    // A workflow cannot pause: the run stops, and says it is waiting and on what.
-    expect(execution.status).toBe(AgentExecutionStatus.FAILED);
-    expect(execution.error).toContain('Waiting for approval: Ask before “Issue refund” when amount is over 500 (amount is 820)');
+    expect(execution.status).toBe(AgentExecutionStatus.WAITING_APPROVAL);
+    expect(execution.error).toBe('Waiting for your approval: Issue refund (amount is 820).');
+    expect(execution.error).not.toMatch(/_approvalId|call again/);
     const refund = execution.nodeResults.refund;
-    expect(refund.errorCode).toBe('AWAITING_APPROVAL');
+    expect(refund).toMatchObject({ status: 'waiting_approval', waitingForApproval: { kind: 'tool_call', changes: 1 } });
+    expect(refund.error).toBeUndefined();
     const [asked] = harness.approvals.created;
     expect(refund.input.approvalId).toBe(asked.id);
+    expect(execution.nodeResults.out).toMatchObject({ skipped: true });
     expect(mockedAxios).not.toHaveBeenCalled();
     expect(harness.audit.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'held' }));
+  });
 
-    // Approved in Approvals: the held refund runs, exactly as the workflow asked for it.
+  it('approved: the refund is made once, exactly as asked, and the run carries on to the end with its result', async () => {
+    const execution = await run({ amount: 820, order: 'NW-44120' });
+    const [asked] = harness.approvals.created;
     await harness.approvals.decide(asked.id, 'approved');
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    await settle();
     expect(mockedAxios).toHaveBeenCalledTimes(1);
     // The parameters as the workflow resolved them (its templates give text).
     expect(mockedAxios.mock.calls[0][0]).toMatchObject({ data: { amount: '820', order: 'NW-44120' } });
+    const after = executions.row(execution.id)!;
+    expect(after.status).toBe(AgentExecutionStatus.COMPLETED);
+    expect(after.error).toBeNull();
+    expect(after.nodeResults.refund.output).toEqual({ refunded: true });
+    expect(after.output).toBe('done');
+  });
+
+  it('two runs waiting on the same refund both carry on, and the refund is still made once', async () => {
+    const first = await run({ amount: 820, order: 'NW-44120' });
+    const second = await run({ amount: 820, order: 'NW-44120' });
+    expect(harness.approvals.created).toHaveLength(1);
+    await harness.approvals.decide(harness.approvals.created[0].id, 'approved');
+    await settle();
+    expect(mockedAxios).toHaveBeenCalledTimes(1);
+    expect(executions.row(first.id)!.status).toBe(AgentExecutionStatus.COMPLETED);
+    expect(executions.row(second.id)!.status).toBe(AgentExecutionStatus.COMPLETED);
+  });
+
+  it('rejected: the refund is not made and the step ends with a plain "Rejected"', async () => {
+    const execution = await run({ amount: 820, order: 'NW-44120' });
+    await harness.approvals.decide(harness.approvals.created[0].id, 'rejected', 'customer already refunded');
+    await settle();
+    expect(mockedAxios).not.toHaveBeenCalled();
+    const after = executions.row(execution.id)!;
+    expect(after.status).toBe(AgentExecutionStatus.CANCELLED);
+    expect(after.error).toBe('Rejected (customer already refunded). The call was not made.');
+    expect(after.nodeResults.refund).toMatchObject({ errorCode: 'APPROVAL_REJECTED' });
+  });
+
+  it('nobody decided in time: the call is not made and the run says so', async () => {
+    const execution = await run({ amount: 820, order: 'NW-44120' });
+    await harness.approvals.decide(harness.approvals.created[0].id, 'expired', 'approval expired');
+    await settle();
+    expect(mockedAxios).not.toHaveBeenCalled();
+    expect(executions.row(execution.id)!.error).toBe('Nobody approved in time. The call was not made.');
+  });
+
+  it('approved, but the call fails: the step fails saying so', async () => {
+    const execution = await run({ amount: 820, order: 'NW-44120' });
+    mockedAxios.mockRejectedValue(Object.assign(new Error('billing is down'), { response: { status: 503, data: 'billing is down' } }));
+    await harness.approvals.decide(harness.approvals.created[0].id, 'approved');
+    await settle();
+    const after = executions.row(execution.id)!;
+    expect(after.status).toBe(AgentExecutionStatus.FAILED);
+    expect(after.nodeResults.refund.error).toMatch(/^Approved, but the call failed/);
   });
 });

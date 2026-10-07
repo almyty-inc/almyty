@@ -191,6 +191,12 @@ Directly invokes a tool with explicit parameter mapping, without involving an LL
 
 The result is available downstream as `{{nodes.tool_1.output}}`.
 
+### When the call needs approval
+
+If an [approval rule](/approvals) holds the call (a refund over its amount, say), the run stops at the step and waits. The agent's page says **Waiting for your approval: Issue refund (amount is 820)**, with a link to **Approvals**. Approve it and the call is made once, exactly as the step asked, and the run carries on from there with what it returned. Reject it, or let it expire, and the call is not made: the step ends **Rejected** and the run stops there.
+
+For developers: the run is `waiting_approval` with the plain line in `error`, and the node is recorded as `status: "waiting_approval"` with `waitingForApproval: { approvalId, kind: "tool_call" }`. The approval request is the gate's held call (no run on it). Once it is approved, `ToolApprovalGateService.runHeld` makes the call, keeps its outcome on the request and emits `approval.held_call_settled`; `WorkflowApprovalResumeService` then carries on every run waiting on that request with that outcome (the gate files the same call held twice while pending as one request, so two such runs share one call). Rejected or expired, the node fails with `errorCode: "APPROVAL_REJECTED"` and the run ends `cancelled`.
+
 ## Condition
 
 Branches the pipeline based on a boolean expression. The node has two outgoing
