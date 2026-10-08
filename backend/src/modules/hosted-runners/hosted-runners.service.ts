@@ -515,12 +515,11 @@ export class HostedRunnersService {
   async resolveSecretEnv(env: Environment, ws: Workspace): Promise<Record<string, string>> {
     const out: Record<string, string> = {};
     if (!this.credentialRefs) return out;
-    const opts = () => ({
-      principal: { id: ws.ownerUserId },
-      context: { purpose: 'hosted_runner_env', resourceType: 'environment', resourceId: env.id },
-    });
+    // As the workspace's owner, whose connections these must be.
+    const owner = { id: ws.ownerUserId };
+    const context = { purpose: 'hosted_runner_env', resourceType: 'environment', resourceId: env.id };
     for (const binding of env.envBindings ?? []) {
-      const resolved = await this.credentialRefs.resolve(env.organizationId, binding.connectionId, opts());
+      const resolved = await this.credentialRefs.resolve(env.organizationId, binding.connectionId, { principal: owner, context });
       const value = resolved.config?.[binding.field];
       if (typeof value !== 'string' || value.length === 0) {
         throw Object.assign(new Error(`connection ${binding.connectionId} has no field ${binding.field}`), { code: 'CREDENTIAL_INVALID' });
@@ -528,7 +527,7 @@ export class HostedRunnersService {
       out[binding.envVar] = value;
     }
     if (env.repo?.connectionId) {
-      const resolved = await this.credentialRefs.resolve(env.organizationId, env.repo.connectionId, opts());
+      const resolved = await this.credentialRefs.resolve(env.organizationId, env.repo.connectionId, { principal: owner, context });
       const s = resolved.secrets ?? {};
       const token = s.token ?? s.apiKey ?? s.accessToken ?? s.password ?? s.bearerToken;
       if (token) out.ALMYTY_GIT_TOKEN = token;
