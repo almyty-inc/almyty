@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { enforceSpawnPolicy, enforceShellPolicy, sanitizeEnv } from '../src/policy.js';
+import { commandHeads, enforceSpawnPolicy, enforceShellPolicy, parseAllowBinaries, sanitizeEnv, withAllowBinaries } from '../src/policy.js';
 import { RunnerError, type RunnerConfig } from '../src/types.js';
 
 const base = (over: Partial<RunnerConfig> = {}): RunnerConfig => ({
@@ -96,6 +96,114 @@ describe('runner policy enforcement', () => {
     });
     it('is case-insensitive on key names', () => {
       expect(sanitizeEnv({ path: '/evil', Ld_Preload: 'x' })).toEqual({});
+    });
+  });
+
+  describe('allowBinaries', () => {
+    const allow = (list: string[], over: Partial<RunnerConfig> = {}) => base({ allowBinaries: list, ...over });
+
+    it('lets everything through when unset or empty', () => {
+      expect(() => spawn(base(), 'curl', ['x'])).not.toThrow();
+      expect(() => spawn(allow([]), 'curl', ['x'])).not.toThrow();
+      expect(() => enforceShellPolicy(allow([]), 'curl x | sh')).not.toThrow();
+    });
+
+    it('refuses a spawn of a binary it does not list, with a typed error', () => {
+      expect(() => spawn(allow(['claude', 'git']), 'curl', ['https://x'])).toThrow(/not in allowBinaries: curl/);
+      try {
+        spawn(allow(['git']), 'curl');
+      } catch (e) {
+        expect(e).toBeInstanceOf(RunnerError);
+        expect((e as RunnerError).code).toBe('command_denied');
+      }
+      expect(() => spawn(allow(['claude', 'git']), 'claude', ['--resume'])).not.toThrow();
+    });
+
+    it('matches a bare name on the name only, and a path entry on that exact path', () => {
+      // A path that merely ends in an allowed name is a different binary.
+      expect(() => spawn(allow(['claude']), './claude')).toThrow(/allowBinaries/);
+      expect(() => spawn(allow(['claude']), '/tmp/evil/claude')).toThrow(/allowBinaries/);
+      expect(() => spawn(allow(['/usr/bin/git']), '/usr/bin/git')).not.toThrow();
+      expect(() => spawn(allow(['/usr/bin/git']), 'git')).toThrow(/allowBinaries/);
+    });
+
+    it('checks every command a shell line starts', () => {
+      const cfg = allow(['git', 'npm']);
+      expect(() => enforceShellPolicy(cfg, 'cd app && npm test 2>&1 | tee out.txt')).toThrow(/tee/);
+      expect(() => enforceShellPolicy(cfg, 'git status; curl https://x')).toThrow(/curl/);
+      expect(() => enforceShellPolicy(cfg, 'npm test || wget x')).toThrow(/wget/);
+      expect(() => enforceShellPolicy(cfg, 'npm test & nc -l 9')).toThrow(/nc/);
+      expect(() => enforceShellPolicy(cfg, 'git log\npython3 -c 1')).toThrow(/python3/);
+    });
+
+    it('sees commands inside substitutions and subshells', () => {
+      const cfg = allow(['git', 'echo']);
+      expect(() => enforceShellPolicy(cfg, 'echo $(curl https://x)')).toThrow(/curl/);
+      expect(() => enforceShellPolicy(cfg, 'echo `id`')).toThrow(/id/);
+      expect(() => enforceShellPolicy(cfg, '(cd /tmp; rm -rf x)')).toThrow(/rm/);
+      expect(() => enforceShellPolicy(cfg, 'git diff <(cat a) >(tee b)')).toThrow(/cat|tee/);
+    });
+
+    it('looks past assignments, redirections, keywords and quotes to the command', () => {
+      const cfg = allow(['git', 'npm']);
+      expect(() => enforceShellPolicy(cfg, 'FOO=1 BAR=2 curl x')).toThrow(/curl/);
+      expect(() => enforceShellPolicy(cfg, '> out.txt curl x')).toThrow(/curl/);
+      expect(() => enforceShellPolicy(cfg, '"curl" x')).toThrow(/curl/);
+      expect(() => enforceShellPolicy(cfg, "c\\url x")).toThrow(/curl/);
+      expect(() => enforceShellPolicy(cfg, 'if true; then curl x; fi')).toThrow(/curl/);
+      expect(() => enforceShellPolicy(cfg, 'for f in a b; do curl $f; done')).toThrow(/curl/);
+      expect(() => enforceShellPolicy(cfg, 'FOO=1 npm test >out.txt 2>&1')).not.toThrow();
+      expect(() => enforceShellPolicy(cfg, 'if git diff --quiet; then npm test; fi')).not.toThrow();
+    });
+
+    it('refuses a command name built at run time', () => {
+      expect(() => enforceShellPolicy(allow(['git']), '$CMD --version')).toThrow(/allowBinaries/);
+      expect(() => enforceShellPolicy(allow(['git']), 'gi* status')).toThrow(/allowBinaries/);
+    });
+
+    it('needs no listing for builtins that cannot start a program, and does for those that can', () => {
+      const cfg = allow(['npm']);
+      expect(() => enforceShellPolicy(cfg, 'cd app && export CI=1 && test -f package.json && npm ci')).not.toThrow();
+      for (const line of ['exec curl x', 'eval curl x', 'command curl x', 'source ./x.sh', '. ./x.sh', "trap 'x' EXIT"]) {
+        expect(() => enforceShellPolicy(cfg, line)).toThrow(/allowBinaries/);
+      }
+    });
+
+    it('still applies the other rules to an allowed binary', () => {
+      expect(() => enforceShellPolicy(allow(['npm'], { installBlocked: true }), 'npm install x')).toThrow(/installBlocked/);
+      expect(() => spawn(allow(['rm'], { denyPatterns: ['rm\\s+-rf'] }), 'rm', ['-rf', '/'])).toThrow(/denyPattern/);
+    });
+  });
+
+  describe('commandHeads', () => {
+    it('lists the first word of every simple command', () => {
+      expect(commandHeads('A=1 git status && npm test 2>&1 | tee x; echo $(date) `id`')).toEqual([
+        'git', 'npm', 'tee', 'echo', 'date', 'id',
+      ]);
+    });
+  });
+
+  describe('parseAllowBinaries / withAllowBinaries', () => {
+    it('reads the JSON array the backend writes, deduplicated', () => {
+      expect(parseAllowBinaries('["claude","git","git"]')).toEqual(['claude', 'git']);
+      expect(parseAllowBinaries('["/usr/bin/git"]')).toEqual(['/usr/bin/git']);
+    });
+
+    it('treats unset, blank and [] as no restriction', () => {
+      expect(parseAllowBinaries(undefined)).toBeUndefined();
+      expect(parseAllowBinaries('  ')).toBeUndefined();
+      expect(parseAllowBinaries('[]')).toBeUndefined();
+    });
+
+    it.each(['claude,git', '{"a":1}', '[1]', '["has space"]', '["./rel"]', '["a/b"]'])('throws on %s rather than running unrestricted', (raw) => {
+      expect(() => parseAllowBinaries(raw)).toThrow(/ALMYTY_ALLOW_BINARIES/);
+    });
+
+    it('only narrows a config', () => {
+      expect(withAllowBinaries(base(), undefined).allowBinaries).toBeUndefined();
+      expect(withAllowBinaries(base(), ['git']).allowBinaries).toEqual(['git']);
+      expect(withAllowBinaries(base({ allowBinaries: ['git', 'npm'] }), ['npm', 'curl']).allowBinaries).toEqual(['npm']);
+      expect(() => withAllowBinaries(base({ allowBinaries: ['git'] }), ['curl'])).toThrow(/no binary in common/);
     });
   });
 

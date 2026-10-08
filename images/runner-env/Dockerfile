@@ -2,9 +2,10 @@
 #
 # One Dockerfile, one target per flavour:
 #
-#   node      base + pnpm and yarn
-#   python    base + pip, venv and the headers native wheels build against
-#   standard  node + python (the default an environment gets)
+#   node              base + pnpm and yarn
+#   python            base + pip, venv and the headers native wheels build against
+#   standard          node + python + the coding CLIs (the default an environment gets)
+#   standard-browser  standard + Playwright and headless Chromium
 #
 # `base` is not offered on its own; it is what the flavours share: Debian
 # slim with Node 26 (the repo's one Node major, scripts/check-node-version.js),
@@ -96,10 +97,66 @@ RUN apt-get update \
  && ln -sf /usr/bin/python3 /usr/local/bin/python
 USER 1000:1000
 
+# The coding CLIs the runner detects and drives (packages/runner/src/
+# coding-agents/registry.ts), each from its vendor's own package at a pinned
+# version: Claude Code, Codex and Gemini CLI from npm, aider from PyPI in its
+# own venv so its pinned dependencies never meet a project's. Installed into
+# the image, read-only at run time; what they write (config, sessions,
+# caches) goes under HOME=/workspace/.home on the volume. The entrypoint
+# points them at almyty's model endpoints when the pod carries a model token.
 FROM node AS standard
+ARG CLAUDE_CODE_VERSION=2.1.293
+ARG CODEX_VERSION=0.161.0
+ARG GEMINI_CLI_VERSION=0.63.0
+ARG AIDER_VERSION=0.86.2
 USER root
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3-dev python3-pip python3-venv \
  && rm -rf /var/lib/apt/lists/* \
  && ln -sf /usr/bin/python3 /usr/local/bin/python
+RUN npm install --global --no-audit --no-fund \
+      "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+      "@openai/codex@${CODEX_VERSION}" \
+      "@google/gemini-cli@${GEMINI_CLI_VERSION}" \
+ && npm cache clean --force \
+ && rm -rf /root/.npm /root/.cache /tmp/*
+RUN python3 -m venv /opt/aider \
+ && /opt/aider/bin/pip install --no-cache-dir --disable-pip-version-check "aider-chat==${AIDER_VERSION}" \
+ && ln -s /opt/aider/bin/aider /usr/local/bin/aider \
+ && rm -rf /root/.cache /tmp/*
+# No self-updates (the root is read-only and the version is the image's),
+# no first-run questions and no analytics calls from a pod whose egress is
+# an allowlist.
+ENV DISABLE_AUTOUPDATER=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    AIDER_CHECK_UPDATE=false \
+    AIDER_ANALYTICS_DISABLE=true \
+    AIDER_SHOW_RELEASE_NOTES=false
+USER 1000:1000
+
+# standard + headless Chromium for agents that need a browser. Playwright
+# at a pinned version with the headless Chromium build it was released
+# against (`--only-shell`: a pod has no display, and the full browser adds
+# 400 MB) and the system libraries it needs (`--with-deps`). The browser
+# sits in /opt/ms-playwright, read-only at run time; a project that pins
+# another Playwright release sets PLAYWRIGHT_BROWSERS_PATH under HOME and
+# installs its own. NODE_PATH makes the global `playwright` requirable
+# without a project install.
+#
+# Chromium runs without its own sandbox here, which is Playwright's default
+# (chromiumSandbox: false adds --no-sandbox). The sandbox needs either a
+# setuid helper, which allowPrivilegeEscalation: false rules out, or
+# unprivileged user namespaces, which the RuntimeDefault seccomp profile
+# refuses to a pod without CAP_SYS_ADMIN. The pod itself is the sandbox:
+# gVisor, non-root, no capabilities, read-only root.
+FROM standard AS standard-browser
+ARG PLAYWRIGHT_VERSION=1.64.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    NODE_PATH=/usr/local/lib/node_modules
+USER root
+RUN npm install --global --no-audit --no-fund "playwright@${PLAYWRIGHT_VERSION}" \
+ && playwright install --with-deps --only-shell chromium \
+ && chmod -R a+rX /opt/ms-playwright \
+ && npm cache clean --force \
+ && rm -rf /var/lib/apt/lists/* /root/.npm /root/.cache /tmp/*
 USER 1000:1000
