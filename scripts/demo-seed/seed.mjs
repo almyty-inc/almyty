@@ -356,6 +356,42 @@ async function runner() {
   }
 }
 
+// Hosted environments (stack.sh runs the API with HOSTED_RUNNERS_ENABLED and
+// the stub adapter, which starts nothing). The machine rows are written
+// directly: a stub machine never enrolls, so it would never read "running".
+// stack.sh turns the reconcile sweep off so these rows stay as written.
+async function hosted(orgId) {
+  const body = await fetch(`${API}/environments`, { headers: { authorization: `Bearer ${token}` } }).then((r) => r.json()).catch(() => null)
+  if (!body?.enabled) { log('hosted environments skipped (off on this API)'); return }
+  const have = list(body.data, 'environments')
+  const want = [
+    { name: 'web-app', repo: { url: 'https://github.com/northwind-ai/web-app', ref: 'main' }, image: { base: 'standard-browser' }, setupScript: 'npm ci', egress: { allowHosts: ['github.com', 'registry.npmjs.org'] }, idleTimeoutMinutes: 30 },
+    { name: 'data-jobs', repo: { url: 'https://github.com/northwind-ai/data-jobs', ref: 'main' }, image: { base: 'standard' }, setupScript: 'pip install -r requirements.txt', egress: { allowHosts: ['github.com', 'pypi.org', 'files.pythonhosted.org'] } },
+  ]
+  const ids = {}
+  for (const env of want) {
+    ids[env.name] = have.find((e) => e.name === env.name)?.id ?? (await call('POST', '/environments', env)).id
+  }
+  const userId = sql(`SELECT id FROM users WHERE email = '${USER.email}'`)
+  const machine = (envId, n, { state, status, replicas, idle }) => {
+    if (sql(`SELECT count(*) FROM workspaces WHERE "environmentId" = '${envId}'`) !== '0') return
+    const runnerId = `0000000${n}-0000-4000-8000-00000000000${n}`
+    const workspaceId = `0000000${n}-0000-4000-8000-0000000000a${n}`
+    const hostedId = `0000000${n}-0000-4000-8000-0000000000b${n}`
+    sql(`BEGIN;
+      INSERT INTO runners (id, name, "ownerUserId", "organizationId", visibility, kind, state, labels, "hostedRunnerId")
+        VALUES ('${runnerId}', 'env-${n}-${workspaceId.slice(0, 8)}', '${userId}', '${orgId}', 'private', 'hosted', 'registered', '{}', '${hostedId}');
+      INSERT INTO workspaces (id, "runnerId", "ownerUserId", "organizationId", cwd, isolation, status, kind, "environmentId", "lastActiveAt", "createdAt")
+        VALUES ('${workspaceId}', '${runnerId}', '${userId}', '${orgId}', '/workspace', 'host', '${status}', 'persistent', '${envId}', now() - interval '${idle}', now() - interval '6 days');
+      INSERT INTO hosted_runners (id, "organizationId", "environmentId", "environmentVersion", "workspaceId", "runnerId", "providerType", desired, state, "lastActiveAt")
+        VALUES ('${hostedId}', '${orgId}', '${envId}', 1, '${workspaceId}', '${runnerId}', 'stub', '{"replicas":${replicas},"resourceClass":"small"}', '${state}', now() - interval '${idle}');
+      COMMIT;`)
+  }
+  machine(ids['web-app'], 1, { state: 'ready', status: 'active', replicas: 1, idle: '4 minutes' })
+  machine(ids['data-jobs'], 2, { state: 'suspended', status: 'suspended', replicas: 0, idle: '3 days' })
+  log('hosted environments')
+}
+
 async function waitForRuns(agentId) {
   for (let i = 0; i < 40; i++) {
     const rows = list(await call('GET', `/agents/${agentId}/runs`), 'runs')
@@ -408,6 +444,7 @@ export async function main() {
   await approvalPolicy()
   await amountRule(toolRows)
   await runner()
+  await hosted(orgId)
   if (process.env.SEED_RUNS !== '0') {
     if (gw['support-tools']?.initialApiKey) await mcpTraffic(org.slug, '/support-tools', gw['support-tools'].initialApiKey)
     if (!list(await call('GET', `/agents/${ag.support.id}/runs`), 'runs').length) {

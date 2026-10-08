@@ -42,6 +42,7 @@ async function ids(page) {
   const credentials = arr(await get('/credentials'), 'credentials')
   const runners = arr(await get('/runners'), 'runners')
   const approvals = arr(await get('/approvals'), 'approvals')
+  const environments = arr(await get('/environments'), 'environments')
   const by = (rows, name) => rows.find((r) => r.name === name)?.id
   const support = by(agents, 'Customer Support Orchestrator')
   const channels = support ? arr(await get(`/agents/${support}/channels`), 'channels') : []
@@ -56,6 +57,7 @@ async function ids(page) {
     tool: tools.find((t) => t.name === 'northwind_orders_track_shipment')?.id,
     runner: runners[0]?.id, approval: approvals.find((a) => a.status === 'pending')?.id ?? approvals[0]?.id,
     credential: credentials.find((c) => c.name === 'Northwind Slack app')?.id,
+    envWebApp: by(environments, 'web-app'),
   }
 }
 
@@ -114,6 +116,9 @@ export const SHOTS = {
   'approval-refund-820': ['approval-refund-820.png', () => '/approvals', 2560, 1600, 'Refund approval', src('frontend/src/pages/approvals.tsx', 'frontend/src/components/entitlement-gate.tsx'), async (p) => { await p.getByText(/Refund of \$820/).first().click().catch(() => {}); await p.waitForTimeout(600) }],
   'runners-list': ['runners-list.png', () => '/runners', 2880, 1800, 'Runners', src('frontend/src/pages/runners.tsx', 'frontend/src/pages/runners-shared.ts', 'frontend/src/components/runners')],
   'runner-detail': ['runner-detail.png', (i) => `/runners/${i.runner}`, 2880, 1800, 'Runner detail', src('frontend/src/pages/runner-detail.tsx', 'frontend/src/pages/runners-shared.ts', 'frontend/src/components/runners')],
+  'runners-hosted': ['runners-hosted.png', () => '/runners?tab=hosted', 2880, 1500, 'Hosted environments', src('frontend/src/pages/runners.tsx', 'frontend/src/pages/runners-shared.ts', 'frontend/src/components/runners')],
+  'environment-new': ['environment-new.png', () => '/runners/hosted/new', 2880, 2600, 'New environment', src('frontend/src/pages/environment-new.tsx', 'frontend/src/components/runners', 'frontend/src/components/plan-indicator.tsx')],
+  'environment-detail': ['environment-detail.png', (i) => `/runners/hosted/${i.envWebApp}`, 2880, 1800, 'Hosted environment', src('frontend/src/pages/environment-detail.tsx', 'frontend/src/pages/environment-new.tsx', 'frontend/src/components/runners')],
   'analytics-overview': ['analytics-overview.png', () => '/analytics', 2880, 1800, 'Analytics overview', src('frontend/src/pages/analytics.tsx', 'frontend/src/components/analytics')],
   'analytics-agents': ['analytics-agents.png', () => '/analytics/agents', 2880, 1800, 'Analytics: agents', src('frontend/src/pages/analytics.tsx', 'frontend/src/components/analytics')],
   'analytics-tools': ['analytics-tools.png', () => '/analytics/tools', 2880, 1800, 'Analytics: tools', src('frontend/src/pages/analytics.tsx', 'frontend/src/components/analytics')],

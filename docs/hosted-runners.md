@@ -12,9 +12,9 @@ needs, and every setting. The design is
 `docs/design/hosted-runners-and-always-on.md` (on the branch
 `design/hosted-runners-always-on` until it is merged).
 
-Status: phase 2, behind a switch, for staging. There is no page in the app
-yet, the runner images are not built yet, and nothing is billed yet (usage is
-recorded).
+Status: phase 2, behind a switch, for staging. The app has a Hosted tab on
+the Runners page (user guide: docs-site "Hosted machines"); the runner images
+are not built yet, and nothing is billed yet (usage is recorded).
 
 ## In short
 
@@ -228,7 +228,6 @@ pods on DOKS; the default-deny policy keeps it so elsewhere.
 
 ## Not yet
 
-- The Hosted tab in the app.
 - The `runner-env` images and `almyty-runner start --enroll` in the runner
   package.
 - A pod-scoped token for coding CLIs to call almyty's Anthropic- and
