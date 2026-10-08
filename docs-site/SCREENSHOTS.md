@@ -60,6 +60,10 @@ Include that package's `package.json` and command implementation in `--sources`.
 Normalize local home paths before rendering and state the normalization in
 `--notes`. Do not render help from source and call it a published-binary capture.
 
+An image of a file in this repository, such as the Compose file, is registered
+with `--file docker-compose.yml --command 'freeze ...'` and must list that file in
+`--sources`, so editing the file marks the image as drifted.
+
 Run `npm run test-screenshots` and `npm run check-screenshots` in `docs-site`.
 CI checks complete coverage, missing/broken references, duplicate entries,
 image hashes, per-image metadata, and source drift for refreshed images.
@@ -134,9 +138,8 @@ with `node scripts/demo-seed/guides.mjs --register`; they are published under
 `screenshots/guides/`. Walk the guides once per fresh stack: they create what
 they describe, so a second run meets its own leftovers.
 
-`self-hosting-compose.png` stays `needs-recapture`: it is a terminal capture
-of `docker compose up` from a clean checkout, which needs the compose stack's
-own ports (4000, 3002, 5432, 6379) free on the capturing machine.
+`self-hosting-compose.png` is not a browser capture: it renders the top of the
+repository `docker-compose.yml`, which is what the self-hosting guide shows.
 
 Nothing leaves the machine: the three model vendors and the Northwind Orders and
 Helpdesk APIs are `scripts/demo-seed/fake-upstream.mjs`, the password is a local

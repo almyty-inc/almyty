@@ -604,122 +604,116 @@
     },
     {
       "id": "cli-agents-help",
-      "title": "Agents CLI 1.5.2 help",
+      "title": "Agents CLI 1.5.3 help",
       "path": "screenshots/cli/agents-help.png",
-      "capturedAt": "2026-10-01T15:53:41.000Z",
-      "status": "needs-recapture",
-      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
-      "sha256": "b5a63b6dc10208fe660e0b274ad0d5210ce1888a52e8c8516ac6f14633922458",
+      "capturedAt": "2026-10-08T09:55:22.000Z",
+      "status": "current",
+      "sha256": "4d6c4ece5abc3d51f555037a4bcae4d96409d7007457052ac503020305bc37b7",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/agents@1.5.2",
+        "package": "@almyty/agents@1.5.3",
         "command": "almyty-agents --help"
       },
       "sources": [
         "packages/agents-cli/src",
         "packages/agents-cli/package.json"
       ],
-      "sourceDigest": "941bf2e92c94b71a84e976ce14bd27846ba3aa882684d50730f54fac3010903e",
+      "sourceDigest": "86773a2bb8de0dd258ef78c918e946b007a3b8b436c61f86826d9d95f0aa8faa",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-almyty-help",
-      "title": "almyty CLI 1.5.2 help",
+      "title": "almyty CLI 1.5.3 help",
       "path": "screenshots/cli/almyty-help.png",
-      "capturedAt": "2026-10-01T15:53:34.000Z",
-      "status": "needs-recapture",
-      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
-      "sha256": "47b40de6145ffc3d735b12ac03b92f26a6de1c634d358ce39ce035128af22a2c",
+      "capturedAt": "2026-10-08T09:55:22.000Z",
+      "status": "current",
+      "sha256": "db9dfbfedbce51fe80009360edaca3984067f9a5752985d0aa3d1f67ab20c76b",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/cli@1.5.2",
+        "package": "@almyty/cli@1.5.3",
         "command": "almyty --help"
       },
       "sources": [
         "packages/almyty-cli/src",
         "packages/almyty-cli/package.json"
       ],
-      "sourceDigest": "a8f9bb090057143444f8f27a29df35405317c03cd05afc9155dfc1b98bdb1ab0",
+      "sourceDigest": "948f4edba0b51bfdc2bff1c1711961e8214ad2250d5035696d01dc71faaa3181",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-auth-help",
-      "title": "Auth CLI 1.5.2 help",
+      "title": "Auth CLI 1.5.3 help",
       "path": "screenshots/cli/auth-help.png",
-      "capturedAt": "2026-10-06T12:05:23.248Z",
-      "status": "needs-recapture",
-      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
-      "sha256": "dade8f209ef3f57e45dcf77c47be67c30c4992503862ad701223e7fd5cd79627",
+      "capturedAt": "2026-10-08T09:55:22.000Z",
+      "status": "current",
+      "sha256": "b25222a1a669338dfb9185018f837fd0b07a8773c720d47a2cad0b4729b8f616",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/auth@1.5.2",
+        "package": "@almyty/auth@1.5.3",
         "command": "almyty-auth --help"
       },
       "sources": [
         "packages/auth-cli/src",
         "packages/auth-cli/package.json"
       ],
-      "sourceDigest": "e0744659421355c64909a6a63c011187d80eef5259a7c13e90be0e2129dd6244",
-      "notes": "Rendered from actual published CLI help output; local home path normalized to ~."
+      "sourceDigest": "29835beada4895fa99f22301d1a2230fe226eaf86329bd2e48ecd6414810d328",
+      "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-chat-help",
-      "title": "Chat CLI 1.5.2 help",
+      "title": "Chat CLI 1.5.3 help",
       "path": "screenshots/cli/chat-help.png",
-      "capturedAt": "2026-10-01T15:53:38.000Z",
-      "status": "needs-recapture",
-      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
-      "sha256": "c71b95c43fade9e47e7f9171e3a64c228d36f6dfe1aae389bb5e77e70a5ed510",
+      "capturedAt": "2026-10-08T09:55:22.000Z",
+      "status": "current",
+      "sha256": "fcd79a5397fb035862bf2c445fc08921cfca557bd7eecfc5847c41cab8d700dd",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/chat@1.5.2",
+        "package": "@almyty/chat@1.5.3",
         "command": "almyty-chat --help"
       },
       "sources": [
         "packages/chat-cli/src",
         "packages/chat-cli/package.json"
       ],
-      "sourceDigest": "6d938d70695c750dddf807fb5427bd4d9ad91707522ceaa9455e964c554461e3",
+      "sourceDigest": "35e6a5c34ea6a13702f2b3dbe4f43abf5d0c73b11976aeb2804e65ff865b8712",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-mcp-server-help",
-      "title": "MCP server CLI 1.5.2 help",
+      "title": "MCP server CLI 1.5.3 help",
       "path": "screenshots/cli/mcp-server-help.png",
-      "capturedAt": "2026-10-01T15:53:39.000Z",
-      "status": "needs-recapture",
-      "reason": "The --help text was fixed in source (duplicate 'run by hand.' line, missing blank line) after 1.5.2 was published. This image is still what 1.5.2 prints; recapture from the published binary once the next version is out.",
-      "sha256": "5614c3cfa0321b9490dc7d0ea0d1ea8303064a50353e203ff18d1e034b2c61da",
+      "capturedAt": "2026-10-08T09:55:22.000Z",
+      "status": "current",
+      "sha256": "34ce2355cb8e9621e3ad2feffc285256fbc0df92a43b1af352f3e08aec210205",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/mcp-server@1.5.2",
+        "package": "@almyty/mcp-server@1.5.3",
         "command": "almyty-mcp --help"
       },
       "sources": [
         "packages/mcp-server/src",
         "packages/mcp-server/package.json"
       ],
-      "sourceDigest": "abbcbc1603be253074b3764d1077d5a9c43e9b5434677b25e4161e89b28579c1",
+      "sourceDigest": "b4f5c5426796b4953585538bcc16996f96a007dc52dcdf764f3cf4b84885c07b",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-skills-help",
-      "title": "Skills CLI 1.5.2 help",
+      "title": "Skills CLI 1.5.3 help",
       "path": "screenshots/cli/skills-help.png",
-      "capturedAt": "2026-10-01T15:53:40.000Z",
-      "status": "needs-recapture",
-      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
-      "sha256": "8642c7c4b0670e4330c99c87c2d32799a5fd5de588aa3b66fcddf8d3080b9c7c",
+      "capturedAt": "2026-10-08T09:55:22.000Z",
+      "status": "current",
+      "sha256": "6c18746c1b8d9f7bb455c52c95d652fda2ca5d0dd8f087552a96347274c1aba3",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/skills@1.5.2",
+        "package": "@almyty/skills@1.5.3",
         "command": "almyty-skills --help"
       },
       "sources": [
         "packages/skills-cli/src",
         "packages/skills-cli/package.json"
       ],
-      "sourceDigest": "51fcd9519d2d1548d9e00fe86ff33239b775972bbc5a6d1b484c04a54336d1de",
+      "sourceDigest": "f51ce5829f9fc0d4473d978c16bd45e00b555a0765ad4e8910fa2a7d2e4124b8",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -2232,12 +2226,21 @@
     },
     {
       "id": "self-hosting-compose",
-      "title": "self hosting compose",
+      "title": "The Compose file for a self-hosted deployment",
       "path": "screenshots/self-hosting-compose.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "A terminal capture of `docker compose up`, not an app page; the #675 local browser pass does not produce it. Recapture from a clean compose run with the current images.",
-      "sha256": "44cc16af94a40f8e2260d0289bb385f90f7c18e51831f73f2281f2588419896a"
+      "capturedAt": "2026-10-08T09:57:16.000Z",
+      "status": "current",
+      "sha256": "4bb2f6806c98c67547bbc8d1c3552f31a4c6847dc652751f2f61c8828c871997",
+      "source": {
+        "kind": "repo-file",
+        "file": "docker-compose.yml",
+        "command": "freeze --window --language yaml --lines 1,52 docker-compose.yml"
+      },
+      "sources": [
+        "docker-compose.yml"
+      ],
+      "sourceDigest": "91c9b797693e2dbb24aef88eea0890e46e3ef0de3f6a47528d8c291e38ddbdc0",
+      "notes": "Lines 1-52 of the repository docker-compose.yml (postgres, redis and the backend service), rendered with freeze; the guide shows the Compose file, not a running stack."
     },
     {
       "id": "settings-approval-policies-enabled",
