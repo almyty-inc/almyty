@@ -1,7 +1,7 @@
 /**
  * Create or edit one connection policy, as a page:
- * /credentials/policies/new (optionally `?kind=<kind>`) and
- * /credentials/policies/:policyId.
+ * /settings/credential-rules/new (optionally `?kind=<kind>`) and
+ * /settings/credential-rules/:policyId.
  *
  * A kind picker (fixed when editing) switches the per-kind form:
  * connectors for allow and deny lists and rotation, principal kinds and
@@ -52,7 +52,7 @@ const SELECT_CLASS =
 const ENVIRONMENT_SUGGESTIONS = ['production', 'staging', 'development']
 
 /** Where the policies table lives; the form returns there. */
-export const CONNECTIONS_SETTINGS_PATH = '/credentials/advanced'
+export const CONNECTIONS_SETTINGS_PATH = '/settings/credential-rules'
 
 export interface PolicyFormProps {
   /** Editing this policy; absent means create. */
@@ -109,7 +109,7 @@ export function PolicyForm({ policy, initialKind, onSaved }: PolicyFormProps) {
     <FormPage
       title={editing ? 'Edit policy' : 'Add policy'}
       description={POLICY_KIND_DESCRIPTIONS[values.kind]}
-      back={{ to: CONNECTIONS_SETTINGS_PATH, label: 'Advanced' }}
+      back={{ to: CONNECTIONS_SETTINGS_PATH, label: 'Credential rules' }}
       guard={guard}
       onSubmit={submit}
       submitLabel={editing ? 'Save policy' : 'Add policy'}
@@ -256,7 +256,7 @@ export function ConnectionPolicyFormPage() {
         variant="panel"
         icon={ShieldCheck}
         title="Policy not found"
-        description="It may have been deleted. Credentials > Advanced lists the rules that exist."
+        description="It may have been deleted. Settings > Advanced > Credential rules lists the rules that exist."
       />
     )
   }

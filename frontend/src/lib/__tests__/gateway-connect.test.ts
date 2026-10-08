@@ -30,7 +30,7 @@ describe('gateway connect commands', () => {
   it('picks the command by protocol, and none where there is no one-liner', () => {
     expect(connectCommandFor(gw, 'acme', 'https://x')).toMatch(/^claude mcp add /)
     expect(connectCommandFor({ ...gw, type: 'skills' }, 'acme')).toBe(skillsInstallCommand(gw, 'acme'))
-    expect(skillsInstallCommand(gw, 'acme')).toBe('npx @almyty/skills install @acme/weather-api')
+    expect(skillsInstallCommand(gw, 'acme')).toBe('almyty skills install @acme/weather-api')
     expect(connectCommandFor({ ...gw, type: 'a2a' }, 'acme')).toBeNull()
   })
 
@@ -76,7 +76,7 @@ describe('gateway connect commands', () => {
   it('installs Skills by the address the server resolves, not the display name', () => {
     // GET /gateways/resolve/:org/:slug matches the endpoint first.
     const skills = { name: 'Swagger Petstore - OpenAPI 3.0', type: 'skills', endpoint: '/petstore-skills' }
-    expect(skillsInstallCommand(skills, 'acme')).toBe('npx @almyty/skills install @acme/petstore-skills')
+    expect(skillsInstallCommand(skills, 'acme')).toBe('almyty skills install @acme/petstore-skills')
   })
 
   it('leaves no hand-rolled name slug in the gateway screens', () => {
@@ -84,6 +84,20 @@ describe('gateway connect commands', () => {
       const src = readFileSync(join(__dirname, '..', '..', file), 'utf8')
       expect(src, file).not.toMatch(/(gateway|mcpGateway)\.name[^\n]*\.toLowerCase\(\)\.replace\(\/\\s\+\/g/)
     }
+  })
+
+  it('does not suggest a key header for internal or explicitly open access', () => {
+    for (const accessScope of ['private', 'team', 'org', 'external_open']) {
+      const snippets = gatewaySnippets({ ...gw, accessScope }, 'acme', null, 'https://x')
+      for (const snippet of snippets) expect(snippet.value).not.toContain('x-api-key')
+      expect(snippets.find(s => s.id === 'claude-code')?.value).toBe('claude mcp add weather-api --transport http https://x/acme/weather-api')
+    }
+  })
+  it('includes a key header only when keys are an allowed outside method', () => {
+    const snippets = gatewaySnippets({ ...gw, accessScope: 'external_protected', authConfigs: [{ type: 'api_key', isActive: true }] }, 'acme', 'gw_secret', 'https://x')
+    expect(snippets.find(s => s.id === 'claude-code')?.value).toContain('--header "x-api-key: gw_secret"')
+    const company = gatewaySnippets({ ...gw, accessScope: 'external_protected', authConfigs: [{ type: 'company_signin', isActive: true }] }, 'acme', null, 'https://x')
+    expect(company.find(s => s.id === 'claude-code')?.value).not.toContain('--header')
   })
 })
 
@@ -103,7 +117,7 @@ describe('one protocol per gateway', () => {
 
   it('points the Skills setup at the CLI and its sign-in, never at a URL to fetch with the key', () => {
     const [skills] = gatewaySnippets({ ...gw, type: 'skills' }, 'acme', null, 'https://x')
-    expect(skills.hint).toContain('npx @almyty/auth login')
+    expect(skills.hint).toContain('almyty login')
     expect(skills.hint).not.toContain('/skills')
   })
 })

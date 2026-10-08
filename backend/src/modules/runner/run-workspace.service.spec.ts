@@ -338,3 +338,24 @@ describe('workspaceFolderName', () => {
     expect(name).toMatch(/^[a-z0-9][a-z0-9-]{0,79}$/);
   });
 });
+
+describe('pinned runner workspaces', () => {
+  it('keeps the workspace on the chosen runner even with label requirements', async () => {
+    const { acquire, runners, prepare } = build({ runner: runner({ labels: { gpu: 'yes' } }) });
+    const ws = await acquire({ pinned: true, labels: { gpu: 'yes' } });
+    expect(ws.runnerId).toBe('runner-1');
+    expect(runners.resolveByLabels).not.toHaveBeenCalled();
+    expect(prepare).toHaveBeenCalledWith('runner-1', 'workspace.prepare', expect.anything(), undefined, expect.anything());
+  });
+  it('rejects label mismatch instead of searching another machine', async () => {
+    const { acquire, runners, prepare } = build();
+    await expect(acquire({ pinned: true, labels: { gpu: 'yes' } })).rejects.toMatchObject({ code: RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND });
+    expect(runners.resolveByLabels).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+  });
+  it('does not create a workspace on a runner outside the agent organization', async () => {
+    const { acquire, prepare } = build({ runner: runner({ organizationId: 'other-org' }) });
+    await expect(acquire({ pinned: true })).rejects.toMatchObject({ code: RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+});

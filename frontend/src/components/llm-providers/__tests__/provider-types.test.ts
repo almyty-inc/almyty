@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
 import { LlmProviderType } from '@/types'
-import { providerLogos, providerTypeLabels } from '../provider-type-config'
-import { PROVIDER_TILE_GROUPS, PROVIDER_TILE_ORDER, defaultProviderName, providerTileLabel } from '../provider-catalog'
+import { providerTypeLabels } from '../provider-type-config'
+import { PROVIDER_TILE_GROUPS, PROVIDER_TILE_ORDER, providerTileLabel } from '../provider-catalog'
 
 /**
  * The frontend's counterpart to the backend's dispatch-completeness spec.
@@ -39,16 +39,10 @@ describe('every provider type can be connected, and is named', () => {
     expect(strays).toEqual([])
   })
 
-  it('has a logo for every type, so no provider falls back to the generic icon', () => {
-    const missing = all.filter((t) => !providerLogos[t])
-    expect(missing).toEqual([])
-  })
-
   it('gives each tile a distinct, non-empty label, and your own server a plain one', () => {
     const labels = PROVIDER_TILE_ORDER.map(providerTileLabel)
     expect(labels.every((l) => l.trim().length > 0)).toBe(true)
     expect(new Set(labels).size).toBe(labels.length)
     expect(providerTileLabel('custom')).toBe('Your own server (OpenAI-compatible)')
-    expect(defaultProviderName('openai')).toBe('OpenAI')
   })
 })

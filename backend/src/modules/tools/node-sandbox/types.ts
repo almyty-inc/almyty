@@ -158,6 +158,99 @@ export interface WorkerReadyMessage {
   type: 'ready';
 }
 
+// ── The `code` profile: model-written code (docs/design/code-mode.md) ──
+
+/**
+ * What a script calls, as the worker posts it to the host. Every value is
+ * untrusted: it comes from model-written code, and the host's broker
+ * checks each one before anything runs.
+ */
+export type CodeCall =
+  | { op: 'tool'; namespace: string; fn: string; args: unknown }
+  | { op: 'search'; query: unknown; limit?: unknown }
+  | { op: 'get'; name: unknown; detail?: unknown }
+  | { op: 'call'; name: unknown; args: unknown }
+  | { op: 'extract'; value: unknown; schema: unknown };
+
+/** Names of the script's own globals; no namespace may take one of them (tool-signature.ts namespaceOf). */
+export const CODE_GLOBAL_NAMES = ['tools', 'log', 'extract', 'console', 'ToolError', 'context'] as const;
+/** A failed call, as the script sees it: `ToolError` with the tool's code name. */
+export class CodeCallError extends Error {
+  constructor(
+    message: string,
+    readonly tool?: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Run model-written code in the `code` profile: no network (no
+ * --allow-net, the net guard in deny-all mode), no credentials, no
+ * modules at all, a scrubbed environment, and its own worker pool
+ * (SANDBOX_CODE_*). The script reaches the outside only through `onCall`.
+ */
+export interface CodeSandboxRequest {
+  /** The script body, types already stripped. Runs as an async function. */
+  code: string;
+  /** The namespaces the script sees: namespace -> its function names. */
+  namespaces: Record<string, string[]>;
+  /** The pool bucket (SANDBOX_CODE_MAX_WORKERS_PER_ORG). */
+  organizationId: string;
+  timeoutMs: number;
+  memoryLimitMb: number;
+  /** Characters of log the worker keeps; the rest is counted, not kept. */
+  logCapChars: number;
+  /** Characters of the serialised return value the worker sends back. */
+  resultCapChars: number;
+  /** The script's `context` global: plain JSON the caller hands it (a workflow step's input), frozen; null when absent. */
+  context?: unknown;
+  /** Every call the script makes. Resolves with what the script receives, or rejects with CodeCallError. */
+  onCall: (call: CodeCall) => Promise<unknown>;
+  signal?: AbortSignal;
+  /** Test-only, like SandboxExecutionRequest.extraAllowReads. */
+  extraAllowReads?: string[];
+}
+
+export interface CodeSandboxResult {
+  success: boolean;
+  /** The return value as JSON text (undefined becomes null), at most resultCapChars. */
+  resultJson?: string;
+  /** The return value's full JSON length, when resultJson was cut. */
+  resultChars?: number;
+  /** log() output, one line per call, at most logCapChars. */
+  logs: string;
+  /** The full length of everything logged, when logs was cut. */
+  logChars?: number;
+  error?: { message: string; line?: number; tool?: string };
+  durationMs: number;
+  /** Time the worker's event loop was busy: the CPU the script used. */
+  cpuMs: number;
+  oom?: boolean;
+  timedOut?: boolean;
+}
+
+/** workerData of the code worker. */
+export interface CodeWorkerInput {
+  code: string;
+  namespaces: Record<string, string[]>;
+  logCapChars: number;
+  resultCapChars: number;
+  /** The script's `context` global: plain JSON the caller hands it (a workflow step's input), frozen; null when absent. */
+  context?: unknown;
+}
+
+/** The code worker's last message. */
+export interface CodeWorkerDone {
+  type: 'done';
+  success: boolean;
+  resultJson?: string;
+  resultChars?: number;
+  logs: string;
+  logChars: number;
+  error?: { message: string; line?: number; tool?: string };
+}
+
 /** Configuration for a private npm registry */
 export interface NpmRegistryConfig {
   url: string;

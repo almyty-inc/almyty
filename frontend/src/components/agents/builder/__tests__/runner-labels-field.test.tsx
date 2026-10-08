@@ -44,7 +44,7 @@ describe('machine labels on an agent', () => {
     const form = readFileSync(join(__dirname, '..', 'autonomous-config.tsx'), 'utf8')
     expect(form).toMatch(/<CapabilitiesSection[\s\S]*agentConfig=\{agentConfig\}/)
     const source = readFileSync(join(__dirname, '..', 'capabilities-section.tsx'), 'utf8')
-    expect(source).toMatch(/<Machine value=\{agentConfig\.runnerLabels\} onChange=\{\(runnerLabels\) => set\(\{ runnerLabels \}\)\}/)
+    expect(source).toContain('runnerId={agentConfig.runnerId}')
     expect(source).toMatch(/<RunnerLabelsField[\s\S]*value=\{value\}[\s\S]*onChange=\{onChange\}/)
   })
 })

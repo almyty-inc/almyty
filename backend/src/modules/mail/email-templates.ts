@@ -267,7 +267,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
   'run.failed': (p) => ({
     subject: sanitizeSubject(`Run failed: ${p.agentName || 'agent'}`),
     html: renderBaseLayout({
-      heading: `A ${p.triggerType === 'webhook' ? 'webhook-triggered' : 'scheduled'} run failed`,
+      heading: p.triggerType === 'always_on' ? 'An always-on run stopped' : `A ${p.triggerType === 'webhook' ? 'webhook-triggered' : 'scheduled'} run failed`,
       bodyHtml:
         para(`Agent <strong>${esc(p.agentName || 'unknown')}</strong> failed to complete a run.`) +
         (p.error ? para(`Error: <em>${esc(String(p.error).slice(0, 500))}</em>`) : ''),
@@ -278,6 +278,31 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     text: flattenText(
       `Run failed for agent ${p.agentName || 'unknown'}: ${p.error || 'unknown error'}.${p.agentUrl ? ` Inspect: ${p.agentUrl}` : ''}`,
     ),
+  }),
+
+  'agent.report': (p) => ({
+    subject: sanitizeSubject(`${p.agentName || 'Your agent'} reported`),
+    html: renderBaseLayout({
+      heading: `${p.agentName || 'Your always-on agent'} finished a wake`,
+      bodyHtml: para(esc(String(p.message || 'It finished a wake.').slice(0, 1000))),
+      button: p.agentUrl ? { label: 'See what it did', url: p.agentUrl } : undefined,
+      footerNote: 'You are receiving this because agent report emails are enabled in your notification preferences.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(`${p.agentName || 'Your agent'} reported: ${p.message || 'it finished a wake'}.${p.agentUrl ? ` See: ${p.agentUrl}` : ''}`),
+  }),
+
+  'agent.paused': (p) => ({
+    subject: sanitizeSubject(`${p.agentName || 'Your agent'} was paused`),
+    html: renderBaseLayout({
+      heading: `${p.agentName || 'Your always-on agent'} stopped itself`,
+      bodyHtml:
+        para(esc(String(p.message || 'Always on was paused.').slice(0, 1000))) +
+        para('Nothing runs until you look at it and turn Always on back on.'),
+      button: p.agentUrl ? { label: 'Open the agent', url: p.agentUrl } : undefined,
+      orgName: p.organizationName,
+    }),
+    text: flattenText(`${p.agentName || 'Your agent'} was paused: ${p.message || ''} Nothing runs until you turn Always on back on.${p.agentUrl ? ` Open: ${p.agentUrl}` : ''}`),
   }),
 
   'budget.alert': (p) => {

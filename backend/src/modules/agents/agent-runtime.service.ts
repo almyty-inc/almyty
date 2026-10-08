@@ -24,7 +24,6 @@ import { Message, MessageContent } from '../../entities/message.entity';
 import { withAttachedFiles } from './attached-files';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
-import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
 import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
@@ -32,6 +31,7 @@ import { AgentStepProcessor } from './agent-step-processor';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { describeLimitTrip } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
+import { conversationTitle } from './conversation-title';
 import {
   ExecutionAccessService,
   ExecutionPrincipal,
@@ -185,7 +185,6 @@ export class AgentRuntimeService implements OnModuleInit {
     readonly memoryService: CanonicalMemoryService,
     @InjectRedis() readonly redis: Redis,
     readonly builders: AgentRuntimeBuilders,
-    readonly heartbeat: AgentHeartbeatHelper,
     @Inject(forwardRef(() => AgentCollaborationHelper))
     readonly collaboration: AgentCollaborationHelper,
     @Inject(forwardRef(() => AgentBuiltInToolsHelper))
@@ -270,6 +269,11 @@ export class AgentRuntimeService implements OnModuleInit {
        * only worker while its child waits in the queue behind it.
        */
       inline?: boolean;
+      /**
+       * Take the agent's own run limits (Always on) instead of this call's
+       * maxSteps / maxCostCents / maxDurationMs and their defaults.
+       */
+      agentLimits?: boolean;
     },
 
   ): Promise<AgentRun> {
@@ -375,7 +379,10 @@ export class AgentRuntimeService implements OnModuleInit {
       }
     }
 
-    // Reuse an existing conversation or create a new one
+    // Reuse an existing conversation or create a new one. A conversation is
+    // titled after the first thing said in it, so a list of them (the
+    // visitor-data table, a chat's history) reads as what each was about.
+    const title = conversationTitle(input);
     let savedConversation: Conversation;
     if (options?.conversationId) {
       const existing = await this.conversationRepository.findOne({
@@ -385,6 +392,10 @@ export class AgentRuntimeService implements OnModuleInit {
         throw new BadRequestException('Conversation not found');
       }
       savedConversation = existing;
+      if (!existing.title && title) {
+        await this.conversationRepository.update({ id: existing.id }, { title });
+        existing.title = title;
+      }
     } else {
       const conversation = Conversation.createConversation({
         agentId,
@@ -392,6 +403,7 @@ export class AgentRuntimeService implements OnModuleInit {
         userId: userId ?? undefined,
         endUserId: options?.endUserId ?? null,
         ...(options?.gatewayId ? { gatewayId: options.gatewayId } : {}),
+        ...(title ? { title } : {}),
       });
       savedConversation = await this.conversationRepository.save(conversation);
     }
@@ -403,6 +415,13 @@ export class AgentRuntimeService implements OnModuleInit {
     );
     await this.messageRepository.save(userMessage);
 
+    // An always-on wake runs on the agent's own limits: the agent's, the
+    // organization's and the install's, resolved the way every step resolves
+    // them, not the fixed defaults below (which cap a run at 50 steps and $1
+    // whatever the agent says).
+    const agentLimits = options?.agentLimits
+      ? await this.misc.resolveLimits({ organizationId, agent, limits: {} } as unknown as AgentRun)
+      : null;
     const run = this.runRepository.create({
       agentId,
       organizationId,
@@ -415,13 +434,17 @@ export class AgentRuntimeService implements OnModuleInit {
       input,
       steps: [],
       currentStep: 0,
-      maxSteps: options?.maxSteps || 50,
-      limits: {
-        maxSteps: options?.maxSteps || 50,
-        maxDurationMs: options?.maxDurationMs || 3600000, // 1 hour
-        maxCostCents: options?.maxCostCents || 100,       // $1
-        maxToolCalls: 100,
-      },
+      // A run on its agent's own limits asks for nothing itself; the rest
+      // keep the defaults they always had.
+      maxSteps: agentLimits ? agentLimits.maxSteps : options?.maxSteps || 50,
+      limits: agentLimits
+        ? {}
+        : {
+            maxSteps: options?.maxSteps || 50,
+            maxDurationMs: options?.maxDurationMs || 3600000, // 1 hour
+            maxCostCents: options?.maxCostCents || 100,       // $1
+            maxToolCalls: 100,
+          },
       parentRunId: options?.parentRunId || null,
       // Whose scope the run executes in, for every step the queue worker
       // processes later: child runs and tool calls are authorized against
@@ -671,9 +694,6 @@ export class AgentRuntimeService implements OnModuleInit {
   // ── Delegations to AgentRuntimeMiscHelper ──
   waitForRun(...args: Parameters<AgentRuntimeMiscHelper['waitForRun']>) { return this.misc.waitForRun(...args); }
 
-  // ── Delegations to AgentHeartbeatHelper
-  enableHeartbeat(...args: Parameters<AgentHeartbeatHelper['enableHeartbeat']>) { return this.heartbeat.enableHeartbeat(...args); }
-  disableHeartbeat(...args: Parameters<AgentHeartbeatHelper['disableHeartbeat']>) { return this.heartbeat.disableHeartbeat(...args); }
 
   /**
    * React to an approval decision. On 'approved' the run is moved
@@ -685,6 +705,7 @@ export class AgentRuntimeService implements OnModuleInit {
     status: 'approved' | 'rejected' | 'expired';
     decisionReason: string | null;
     toolCallId: string | null;
+    payload?: Record<string, any> | null;
   }): Promise<void> {
     // A held tool call has no run: ToolApprovalGateService runs it.
     if (!approval.runId) return;
@@ -692,7 +713,10 @@ export class AgentRuntimeService implements OnModuleInit {
     if (!run) return;
     if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
 
-    if (approval.status === 'approved') {
+    // A script's change set (code mode) resumes the run whatever the
+    // decision: rejected or expired, none of it runs, the model is told so
+    // and carries on (docs/design/code-mode.md, part D).
+    if (approval.status === 'approved' || approval.payload?.kind === 'change_set') {
       run.status = AgentRunStatus.RUNNING;
       await this.runRepository.save(run);
       // Same seq-from-timestamp rule as the resume path above, and for

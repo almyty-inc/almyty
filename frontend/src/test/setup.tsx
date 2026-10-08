@@ -112,6 +112,13 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
   value: vi.fn(),
 })
 
+// jsdom has no layout engine. CodeMirror measures selections through Range;
+// keep the real editor mounted while supplying empty geometry in unit tests.
+Object.defineProperties(Range.prototype, {
+  getBoundingClientRect: { configurable: true, value: () => new DOMRect() },
+  getClientRects: { configurable: true, value: () => Object.assign([], { item: () => null }) },
+})
+
 // Mock Recharts ResponsiveContainer
 vi.mock('recharts', async () => {
   const actual = await vi.importActual('recharts')

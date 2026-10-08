@@ -148,7 +148,7 @@ describe('GatewayAuthService.authenticateRequest loads the gateway for the org c
     );
     const service = new GatewayAuthService(
       gatewayAuthRepository as any,
-      {} as any,
+      { findOne: async () => ({ id: 'gateway-1', organizationId: 'org-a' }) } as any,
       apiKeyRepository as any,
       validators,
     );

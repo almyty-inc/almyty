@@ -17,7 +17,7 @@ import { PageIntro } from '@/components/onboarding/page-intro'
 import { AvailabilityBadge, availability, effectivePrice, formatContext, formatPrice, isFree } from '@/components/models/model-row'
 import { useHostedModels } from '@/components/models/use-model-data'
 import { isHostedModelPlumbing } from '@/components/llm-providers/provider-catalog'
-import { providerLogos } from '@/components/llm-providers/provider-type-config'
+import { BrandIcon } from '@/components/brand-icon'
 import { connectProviderPath, providerPath } from '@/components/llm-providers/paths'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { deploymentForCard, readableModelName, unlistedDeployments } from '@/lib/model-hosting'
@@ -157,7 +157,7 @@ export function ModelsPage() {
           }
           return (
             <Link to={providerPath(provider.id)} className="inline-flex items-center gap-1.5 text-sm hover:underline" data-testid="catalog-connection">
-              <span aria-hidden>{providerLogos[provider.type] || '⚙️'}</span>
+              <BrandIcon brand={provider.type} name={provider.name} />
               {connection}
             </Link>
           )

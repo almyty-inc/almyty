@@ -19,7 +19,7 @@ vi.mock('posthog-js', () => ({ default: posthogMock }))
  * <input>/<textarea>/<select>. rrweb captures every other text node
  * verbatim.
  *
- * The one-time access key (/credentials/access-keys/new) is rendered as page text in a
+ * The one-time personal API key in Settings is rendered as page text in a
  * <code> block, not an input — so before this, minting a key in production
  * uploaded it in the clear to a third-party analytics vendor, where it sits
  * in a replay anyone with PostHog access can scrub to.
@@ -55,9 +55,9 @@ describe('session replay never records a secret rendered as text', () => {
    * would prove the same thing while breaking on any unrelated refactor of
    * the credentials page.
    */
-  it('marks the one-time access key on /credentials/access-keys/new as sensitive text', async () => {
+  it('marks the one-time Settings API key as sensitive text', async () => {
     const { SENSITIVE_TEXT_ATTRIBUTE } = await import('../analytics')
-    const source = readFileSync(resolve(__dirname, '../../components/access-keys/access-keys-section.tsx'), 'utf8')
+    const source = readFileSync(resolve(__dirname, '../../components/settings/api-keys-settings.tsx'), 'utf8')
 
     const keyElement = source
       .split('\n')
@@ -66,4 +66,12 @@ describe('session replay never records a secret rendered as text', () => {
     expect(keyElement, 'the one-time key is no longer rendered in a <code> element').toBeDefined()
     expect(keyElement).toContain(SENSITIVE_TEXT_ATTRIBUTE)
   })
+  it('masks a generated endpoint key before CopyField renders it as text', async () => {
+    const { SENSITIVE_TEXT_ATTRIBUTE } = await import('../analytics')
+    const source = readFileSync(resolve(__dirname, '../../components/gateways/detail/gateway-auth-section.tsx'), 'utf8')
+    const keyContainer = source.split('\n').find((line) => line.includes('generated-api-key') && line.includes('<div'))
+    expect(keyContainer).toBeDefined()
+    expect(keyContainer).toContain(SENSITIVE_TEXT_ATTRIBUTE)
+  })
+
 })

@@ -41,6 +41,8 @@ export interface RunnerConfig {
  */
 export interface ResolvedConfig {
   name: string;
+  /** True only when a name was chosen in flags, environment or config. */
+  explicitName?: boolean;
   labels: Record<string, string>;
   config: RunnerConfig;
   binaryProbeList: string[];

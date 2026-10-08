@@ -65,6 +65,17 @@ describe('OpenRouter PKCE connect end to end', () => {
     };
   }
 
+  it('keeps the name entered before the provider sign-in redirect', async () => {
+    const or = openrouter();
+    const h = buildHarness({ routes: or.routes });
+    const start = await h.service.connect(admin, ORG, 'openrouter', { owner: 'org', name: 'Research OpenRouter' });
+    if (!start.pending || !('authorizeUrl' in start)) throw new Error('expected a redirect');
+    const { callback } = or.approve(start.authorizeUrl);
+    const connection = await h.service.handleCallback(Object.fromEntries(callback!.searchParams.entries()));
+    expect(connection.name).toBe('Research OpenRouter');
+    expect(h.credentials.rows[0].name).toBe('Research OpenRouter');
+  });
+
   it('connect -> authorize URL with S256 challenge -> callback exchanges with the verifier -> key stored encrypted -> label from /key -> list masks', async () => {
     const or = openrouter();
     const h = buildHarness({ routes: or.routes });

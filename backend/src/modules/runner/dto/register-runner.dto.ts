@@ -117,16 +117,19 @@ const RUNNER_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const RUNNER_NAME_MESSAGE = 'name must match [a-zA-Z0-9_-]{1,64}';
 
 export class RegisterRunnerDto {
-  // The accepted name is `[a-zA-Z0-9_-]{1,64}`: it is published as part
-  // of a runner's capability tool names and shown in `/runners`, so it
-  // stays a single safe token. RunnerService.register enforces the same
-  // rule (it is the contract, not a nicety); declaring it here too means
-  // a bad name is refused by the validation pipe with a field-level
-  // error instead of a bare 400 from the service.
+  // Optional: a daemon started without --name sends none, and the runner
+  // keeps the name it already has, or a new one gets its machine's
+  // hostname (made unique in the organization). When sent, the accepted
+  // name is `[a-zA-Z0-9_-]{1,64}`: it is published as part of a runner's
+  // capability tool names and shown in `/runners`, so it stays a single
+  // safe token. RunnerService.register enforces the same rule; declaring
+  // it here too means a bad name is refused by the validation pipe with a
+  // field-level error instead of a bare 400 from the service.
+  @IsOptional()
   @IsString()
   @MaxLength(64)
   @Matches(RUNNER_NAME_RE, { message: RUNNER_NAME_MESSAGE })
-  name!: string;
+  name?: string;
 
   @IsOptional()
   @IsObject()
@@ -169,7 +172,7 @@ export class CreateRunnerDto {
   teamId?: string | null;
 }
 
-/** PATCH /runners/:id. The name only changes while the runner has never connected. */
+/** PATCH /runners/:id. Renaming republishes the runner's tools under the new name. */
 export class UpdateRunnerDto {
   @IsOptional()
   @IsString()

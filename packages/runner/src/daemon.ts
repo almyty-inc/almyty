@@ -14,7 +14,8 @@ import { dispatchHandler, HandlerContext } from './handlers.js';
 import { CodingSessionManager } from './coding-sessions.js';
 import { WorkspaceReclaimer } from './workspace-reclaimer.js';
 
-const STATE_DIR = join(homedir(), '.almyty', 'runner');
+// An override keeps independent local test/demo daemons away from the user's runner.
+const STATE_DIR = process.env.ALMYTY_RUNNER_STATE_DIR || join(homedir(), '.almyty', 'runner');
 const PID_FILE = join(STATE_DIR, 'daemon.pid');
 const STATUS_FILE = join(STATE_DIR, 'status.json');
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -73,10 +74,10 @@ export class RunnerDaemon {
    * register/connect — just prints and dies.
    */
   async start(flags: Partial<ResolvedConfig> & { configPath?: string }): Promise<void> {
-    const resolved = loadConfig({ flags });
+    const credentials = resolveCredentialsOrExit();
+    const resolved = loadConfig({ flags, credentials });
     this.resolved = resolved;
 
-    const credentials = resolveCredentialsOrExit();
     const backendUrl = resolved.backendUrl || credentials.url;
 
     process.stdout.write(`almyty-runner v${RUNNER_VERSION} starting\n`);
@@ -111,7 +112,7 @@ export class RunnerDaemon {
         ...(resolved.organizationId ? { 'X-Organization-Id': resolved.organizationId } : {}),
       },
       body: JSON.stringify({
-        name: resolved.name,
+        ...(resolved.explicitName ? { name: resolved.name } : {}),
         labels: resolved.labels,
         runtimeInfo: runtime,
         config: resolved.config,
@@ -121,8 +122,9 @@ export class RunnerDaemon {
       const text = await regResp.text();
       throw new Error(`register failed: ${regResp.status} ${text}`);
     }
-    const regBody = await regResp.json() as { data: { runner: { id: string }; effectiveConfig: typeof resolved.config } };
+    const regBody = await regResp.json() as { data: { runner: { id: string; name: string }; effectiveConfig: typeof resolved.config } };
     this.runnerId = regBody.data.runner.id;
+    resolved.name = regBody.data.runner.name;
     process.stdout.write(`registered as ${this.runnerId}\n`);
 
     // Construct the process manager with the effective config (backend

@@ -1,3 +1,6 @@
+import { GatewaysModule } from '../gateways/gateways.module';
+import { AgentApiAccessService } from './agent-api-access.service';
+import { AgentApiAccessController } from './agent-api-access.controller';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
@@ -18,6 +21,9 @@ import { Message } from '../../entities/message.entity';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { AgentFile } from '../../entities/file.entity';
 import { Workspace } from '../../entities/workspace.entity';
+import { AgentWake } from '../../entities/agent-wake.entity';
+import { AgentChannel } from '../../entities/agent-channel.entity';
+import { ConnectionGrant } from '../../entities/connection-grant.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -40,10 +46,14 @@ import { AgentStepProcessor } from './agent-step-processor';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentVerifierHelper } from './agent-verifier.helper';
 import { AgentContextCompactor } from './agent-context-compactor.helper';
-import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
+import { AlwaysOnService } from './always-on/always-on.service';
+import { AlwaysOnController } from './always-on/always-on.controller';
+import { AgentIdentityService } from './agent-identity';
+import { AgentIdentityReachController, AgentIdentityReachService } from './agent-identity-reach';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentRunReaperService } from './agent-run-reaper.service';
 import { AgentExecutionReaperService } from './agent-execution-reaper.service';
+import { WorkflowApprovalResumeService } from './workflow-approval-resume.service';
 import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentTechDocHelper } from './agent-tech-doc.helper';
 import { AgentsController } from './agents.controller';
@@ -66,6 +76,8 @@ import { OrchestratorService } from './strategies/orchestrator.service';
 import { Strategy } from '../../entities/strategy.entity';
 import { AgentConstraintsModule } from '../agent-constraints/agent-constraints.module';
 import { ToolsModule } from '../tools/tools.module';
+import { ToolDiscoveryModule } from '../tool-discovery/tool-discovery.module';
+import { CodeModeModule } from '../code-mode/code-mode.module';
 import { MemoryModule } from '../memory/memory.module';
 import { A2AModule } from '../a2a/a2a.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
@@ -92,6 +104,9 @@ import { BudgetsModule } from '../budgets/budgets.module';
       ApprovalRequest,
       AgentFile,
       Workspace,
+      AgentWake,
+      AgentChannel,
+      ConnectionGrant,
     ]),
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),
@@ -103,17 +118,30 @@ import { BudgetsModule } from '../budgets/budgets.module';
     // that looked like a missing license rather than a missing import.
     forwardRef(() => ModelCatalogModule),
     forwardRef(() => ToolsModule),
+    // ToolDiscoveryService answers search_tools and get_tool for agents in
+    // discover mode (agent-tool-mode.ts); without it they rank by keywords only.
+    forwardRef(() => ToolDiscoveryModule),
+    // run_code for agents in the code tool mode, and the traces the run view reads.
+    forwardRef(() => CodeModeModule),
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
     forwardRef(() => ApprovalsModule),
+    forwardRef(() => GatewaysModule),
     AuthorizationModule,
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
-    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
-  exports: [
-    AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService, AgentExecutionCancellationService],
+  providers: [AgentApiAccessService, AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
+    AgentIdentityService, AgentIdentityReachService,
+    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
+    // Carries a workflow run on once the change sets its Code steps wait on are decided.
+    WorkflowApprovalResumeService],
+  controllers: [AgentApiAccessController, AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
+    AgentIdentityReachController],
+  exports: [AgentApiAccessService,
+    AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService, AgentExecutionCancellationService,
+    // Channels and connections wake always-on agents through it.
+    AlwaysOnService,
+    AgentIdentityService],
 })
 export class AgentsModule {}

@@ -36,7 +36,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
-import { ToolApprovalGateService } from './tool-approval-gate.service';
+import { ToolApprovalGateService, hitDetail } from './tool-approval-gate.service';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
 import { decideToolCaller } from '../../common/security/gateway-tool-permissions';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -423,7 +423,7 @@ export class ToolExecutorService {
               approvalRequired: hit,
               ...extra,
             });
-            const why = hit.value === null ? `${hit.argument} is not a number` : `${hit.argument} is ${hit.value}`;
+            const why = hitDetail(hit);
             if (options.holdForApproval === 'caller') {
               if (!options.approvedGate) await this.approvalGate.record(hit, gateContext, 'held');
               return answer(`Needs approval: ${hit.summary} (${why}). The call was not made.`);
@@ -446,6 +446,7 @@ export class ToolExecutorService {
               gatewayId: options.gatewayId ?? null,
               scopes: options.scopes ?? null,
               runnerLabels: options.runnerLabels ?? null,
+              pinnedRunnerId: options.pinnedRunnerId ?? null,
               agentTeamId: options.agentTeamId ?? null,
             });
             return answer(
@@ -803,9 +804,15 @@ export class ToolExecutorService {
     const { workspaceId: _ws, ...callParams } = parameters;
 
     try {
+      // The agent's "Runs on": a pinned runner takes the call whichever
+      // runner published the tool, and nothing reroutes it (labels become
+      // a check on that runner).
+      const pinned = !!options.pinnedRunnerId;
+      let targetRunnerId = options.pinnedRunnerId ?? cfg.runnerId;
       if (cfg.requiresWorkspace && !workspaceId && runId && this.runWorkspaces) {
         const workspace = await this.runWorkspaces.acquire({
-          runnerId: cfg.runnerId,
+          runnerId: targetRunnerId,
+          pinned,
           organizationId: options.organizationId,
           runId,
           agentId: options.agentId ?? scope?.agentId ?? null,
@@ -815,9 +822,12 @@ export class ToolExecutorService {
           signal: options.signal,
         });
         workspaceId = workspace.id;
+        // The work goes where its workspace is, which labels may have
+        // chosen over the tool's own runner.
+        targetRunnerId = workspace.runnerId ?? targetRunnerId;
       }
       const response = await this.runnerCalls.dispatch(
-        cfg.runnerId,
+        targetRunnerId,
         cfg.method,
         callParams,
         workspaceId,
@@ -832,6 +842,7 @@ export class ToolExecutorService {
           // The agent's machine requirements (gpu=yes): the call goes to an
           // online runner with those labels, this tool's own when it has them.
           labels: options.runnerLabels,
+          pinned,
           organizationId: options.organizationId,
         },
       );

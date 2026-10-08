@@ -14,11 +14,12 @@ import { ArrowRightLeft, Plus, RefreshCw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { PickedService, ServiceIcon, ServiceTileGrid } from '@/components/connect/service-tiles'
-import { ConnectServiceForm, connectorIcon, connectorTileGroups, useConnectors } from '@/components/connections/connect-flow'
+import { ServiceIcon } from '@/components/connect/service-tiles'
+import { connectorIcon, useConnectors } from '@/components/connections/connect-flow'
+import { CredentialForm } from '@/components/credentials/credential-form'
 import { StatusLabel } from '@/components/connect/status-label'
 import { connectionCheck } from '@/components/connections/connection-status'
-import { CONNECTIONS_QUERY_KEY, CREDENTIALS_QUERY_KEY, credentialPath } from '@/components/credentials/paths'
+import { CONNECTIONS_QUERY_KEY, credentialPath } from '@/components/credentials/paths'
 import { connectionsApi } from '@/lib/connections-api'
 import { memoriesApi, type MemoryAccountRow, type MemoryAccountsOverview, type MemoryMove } from '@/lib/api'
 import { formatRelativeTime, pluralized } from '@/lib/utils'
@@ -274,12 +275,7 @@ export function whoseLabel(move: Pick<MemoryMove, 'scopeType' | 'mode'>): string
   return `${whose} ${move.mode === 'document' ? 'documents' : 'memories'}`
 }
 
-/**
- * Add a memory account: pick the service's tile, give it its key, done.
- * The same tiles and connect form as Add credential, limited to the memory
- * services almyty keeps memories in; the account is a credential like any
- * other and shows on the Credentials page too.
- */
+/** Add an account using the shared credential form, limited to memory services. */
 export function AddMemoryAccountFlow({
   services,
   service,
@@ -296,47 +292,22 @@ export function AddMemoryAccountFlow({
   onCancel?: () => void
   embedded?: boolean
 }) {
-  const [search, setSearch] = useState('')
   const qc = useQueryClient()
-  const connectorsQuery = useConnectors()
-  const allowed = new Set(services.map((s) => s.id))
-  const connectors = (connectorsQuery.data ?? []).filter((c) => c.kind === 'memory' && allowed.has(c.key))
-  const connector = service ? connectors.find((c) => c.key === service) ?? null : null
-
-  if (connectorsQuery.isError) return <p role="alert" className="text-sm text-destructive">The list of memory services could not be loaded.</p>
-  if (connector) {
-    const form = (
-      <ConnectServiceForm
-        key={connector.key}
-        connector={connector}
-        embedded={embedded}
-        onCancel={embedded ? onCancel : undefined}
-        onConnected={(connection) => {
-          qc.invalidateQueries({ queryKey: CONNECTIONS_QUERY_KEY })
-          qc.invalidateQueries({ queryKey: CREDENTIALS_QUERY_KEY })
-          qc.invalidateQueries({ queryKey: MEMORY_ACCOUNTS_QUERY_KEY })
-          qc.invalidateQueries({ queryKey: ['memories', 'accounts'] })
-          onConnected(connection)
-        }}
-      />
-    )
-    if (embedded) return form
-    return (
-      <PickedService icon={connectorIcon(connector)} title={connector.displayName} onChooseAnother={() => onPickService(null)} chooseAnotherLabel="Choose another service">
-        {form}
-      </PickedService>
-    )
-  }
-  if (connectorsQuery.isLoading) return null
   return (
-    <ServiceTileGrid
-      groups={connectorTileGroups(connectors, search)}
-      search={search}
-      onSearch={setSearch}
-      onPick={onPickService}
-      searchLabel="Search memory services"
-      testIdPrefix="memory-service-tile"
-      empty={<p className="text-sm text-muted-foreground">No memory service matches.</p>}
+    <CredentialForm
+      kind="memory"
+      withoutModels
+      allowedKeys={services.map((s) => s.id)}
+      service={service}
+      onServiceChange={onPickService}
+      embedded={embedded}
+      onCancel={embedded ? onCancel : undefined}
+      onSaved={(saved) => {
+        if (!saved.connection) return
+        qc.invalidateQueries({ queryKey: MEMORY_ACCOUNTS_QUERY_KEY })
+        qc.invalidateQueries({ queryKey: ['memories', 'accounts'] })
+        onConnected(saved.connection)
+      }}
     />
   )
 }

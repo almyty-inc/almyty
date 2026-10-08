@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import { agentsApi } from '@/lib/api'
 import type { Agent, AgentExecution } from '@/types'
 import { formatDateTime } from '@/lib/utils'
+import { WAITING_APPROVAL, WaitingApprovalBanner } from './waiting-approval'
 
 const FAILED = new Set(['failed', 'timeout'])
 
@@ -25,6 +26,8 @@ export function RunFailureBanner({ agent, executions }: { agent: Agent; executio
   })
 
   const latest = autonomous ? runs?.[0] : executions[0]
+  // Waiting for a person is not a failure: said in amber, with the way to Approvals.
+  if (latest?.status === WAITING_APPROVAL) return <WaitingApprovalBanner run={latest as { error?: string | null }} />
   if (!latest || !FAILED.has(latest.status)) return null
   const when = new Date(latest.createdAt)
   const whenLabel = Number.isNaN(when.getTime()) ? '' : formatDateTime(when)

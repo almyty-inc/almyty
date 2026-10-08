@@ -3,9 +3,19 @@
  *
  * Hashes tool definitions at creation time and verifies them at execution
  * time to detect tampering (rug pull attacks, unauthorized modifications).
+ *
+ * The hash covers the name, description, parameters, code, execution method
+ * and the tool's side-effect class (docs/design/code-mode.md, part A): a
+ * class changed outside the tool's own update path (a tool dropped from
+ * `destructive` to `read`, so code mode would no longer stage it) fails
+ * verification like any other edit. The class is the effective one,
+ * computed from the same columns the tool is classified from, so a hash
+ * stamped before the entity's classify hook runs matches the stored row.
  */
 
 import { createHash } from 'crypto';
+
+import { ClassifiableTool, toolClass } from '../../modules/tools/tool-side-effect';
 
 export interface ToolDefinitionHash {
   hash: string;
@@ -13,18 +23,20 @@ export interface ToolDefinitionHash {
   fields: string[];
 }
 
-/**
- * Compute a deterministic hash of a tool's definition.
- * Includes name, description, parameters, code, and execution method.
- */
-export function computeToolHash(tool: {
+export interface HashableTool extends ClassifiableTool {
   name: string;
   description?: string;
   parameters?: Record<string, any>;
   code?: string | null;
   executionMethod?: string | null;
-}): ToolDefinitionHash {
-  const fields = ['name', 'description', 'parameters', 'code', 'executionMethod'];
+}
+
+/**
+ * Compute a deterministic hash of a tool's definition.
+ * Includes name, description, parameters, code, execution method and side-effect class.
+ */
+export function computeToolHash(tool: HashableTool): ToolDefinitionHash {
+  const fields = ['name', 'description', 'parameters', 'code', 'executionMethod', 'sideEffect'];
 
   // Build a deterministic string from the tool definition
   const canonical = JSON.stringify({
@@ -33,30 +45,33 @@ export function computeToolHash(tool: {
     parameters: tool.parameters ? sortObjectKeys(tool.parameters) : {},
     code: tool.code || '',
     executionMethod: tool.executionMethod || '',
+    sideEffect: toolClass(tool).sideEffect,
   });
 
-  const hash = createHash('sha256').update(canonical).digest('hex');
+  return { hash: createHash('sha256').update(canonical).digest('hex'), algorithm: 'sha256', fields };
+}
 
-  return {
-    hash,
-    algorithm: 'sha256',
-    fields,
-  };
+/**
+ * The hash before the side-effect class was part of it. Only the migration
+ * that re-stamps existing hashes uses it (1750813799000-ToolSideEffectClass):
+ * a row whose stored hash still matches this is re-stamped with the current
+ * hash; one that does not stays refused, as it was.
+ */
+export function computeToolHashWithoutClass(tool: HashableTool): string {
+  const canonical = JSON.stringify({
+    name: tool.name || '',
+    description: tool.description || '',
+    parameters: tool.parameters ? sortObjectKeys(tool.parameters) : {},
+    code: tool.code || '',
+    executionMethod: tool.executionMethod || '',
+  });
+  return createHash('sha256').update(canonical).digest('hex');
 }
 
 /**
  * Verify a tool's current definition matches its stored hash.
  */
-export function verifyToolIntegrity(
-  tool: {
-    name: string;
-    description?: string;
-    parameters?: Record<string, any>;
-    code?: string | null;
-    executionMethod?: string | null;
-  },
-  storedHash: string,
-): { valid: boolean; currentHash: string } {
+export function verifyToolIntegrity(tool: HashableTool, storedHash: string): { valid: boolean; currentHash: string } {
   const { hash: currentHash } = computeToolHash(tool);
   return {
     valid: currentHash === storedHash,

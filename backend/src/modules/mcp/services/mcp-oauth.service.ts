@@ -1,3 +1,4 @@
+import type { CompanyGrant } from '../../gateways/company-signin.service';
 import {
   Injectable,
   Logger,
@@ -360,6 +361,7 @@ export class McpOAuthService {
       state?: string;
       /** RFC 8707 resource indicator the client asked for, already checked by the caller. */
       resource?: string;
+      companyGrant?: CompanyGrant;
     },
   ): Promise<string> {
     // Validate client: registered on this gateway, or a metadata document.
@@ -391,6 +393,7 @@ export class McpOAuthService {
       codeHash,
       clientId: client.clientId,
       userId,
+      companyGrant: params.companyGrant ?? null,
       gatewayId,
       organizationId,
       redirectUri: params.redirectUri,

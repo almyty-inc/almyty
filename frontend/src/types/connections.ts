@@ -19,17 +19,6 @@ export type ConnectorKind =
   | 'cloud'
   | 'registry'
 
-/** Gallery order. */
-export const CONNECTOR_KINDS: ConnectorKind[] = [
-  'inference',
-  'deployment',
-  'memory',
-  'mcp',
-  'tool_source',
-  'channel',
-  'cloud',
-  'registry',
-]
 
 export const CONNECTOR_KIND_LABELS: Record<ConnectorKind, string> = {
   inference: 'AI models',

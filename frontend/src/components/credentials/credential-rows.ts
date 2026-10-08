@@ -3,9 +3,10 @@
  * account added on Credentials or through the pick-or-create control
  * (with its service and whether it works), plus the keys a single API,
  * MCP server, channel or app keeps for itself, plus the model provider
- * connections (GET /llm-providers), one row each, in their own group. A
- * connection with no key (an Ollama or a server you run) is there too;
- * the key a connection keeps for itself is not listed a second time.
+ * connections (GET /llm-providers), one row each, used by that connection
+ * on Models. A connection with no key (an Ollama or a server you run) is
+ * there too; the key a connection keeps for itself is not listed a second
+ * time. One table: a model provider's key is a credential like any other.
  */
 import type { ServiceCheck } from '@/components/connect/status-label'
 import type { Connection, Connector, ConnectorKind } from '@/types/connections'
@@ -68,11 +69,7 @@ export interface CredentialRow {
   uses: CredentialUse[]
   createdAt: string | null
   href: string
-  group: 'models' | 'other'
 }
-
-/** Kinds whose keys are model provider keys, shown as their own group. */
-export const MODEL_KINDS: ConnectorKind[] = ['inference']
 
 /** What a key a single thing keeps is, in words. */
 export const CREDENTIAL_TYPE_LABELS: Record<string, string> = {
@@ -100,7 +97,7 @@ export function managedUse(managedBy: { kind: string; id?: string } | null | und
       return { label: 'An MCP server', href: '/tools' }
     case 'llm_provider':
     case 'llm_provider_usage':
-      return { label: 'A model provider', href: id ? providerPath(id) : connectProviderPath() }
+      return { label: 'A model connection', href: id ? providerPath(id) : connectProviderPath() }
     case 'gateway_channel':
       return { label: 'A channel', href: id ? `/gateways/${id}` : undefined }
     case 'channel_installation':
@@ -126,11 +123,15 @@ export function connectionRow(connection: Connection, connector?: Pick<Connector
     createdAt: connection.createdAt ?? null,
     // A provider connection's key is changed on that connection's page, with its models.
     href: connection.providerId ? providerPath(connection.providerId) : credentialPath(connection.id),
-    group: connection.providerId || (connection.kind && MODEL_KINDS.includes(connection.kind)) ? 'models' : 'other',
   }
 }
 
-/** A model provider connection: its page holds its key, its models and who can use it. */
+/** The words for "used by this model connection", the same in every row. */
+export function modelConnectionUse(name: string, id: string): CredentialUse {
+  return { label: `${name} connection`, href: providerPath(id) }
+}
+
+/** A model provider connection: its page, under Models, holds its key, its models and who can use it. */
 export function providerRow(provider: ProviderConnection): CredentialRow {
   const check = providerCheck(provider as Parameters<typeof providerCheck>[0])
   return {
@@ -141,10 +142,9 @@ export function providerRow(provider: ProviderConnection): CredentialRow {
     kind: 'inference',
     check: { state: check.state, label: check.label, error: check.error },
     who: provider.visibility === 'private' ? 'Only you' : provider.visibility === 'team' ? 'One team' : 'Everyone',
-    uses: [],
+    uses: [modelConnectionUse(provider.name, provider.id)],
     createdAt: provider.createdAt ?? null,
     href: providerPath(provider.id),
-    group: 'models',
   }
 }
 
@@ -153,7 +153,7 @@ export function storedRow(credential: StoredCredential): CredentialRow {
   const fromProvider = credential._source === 'llm_provider'
   const managed = managedUse(credential.metadata?.managedBy)
   const uses: CredentialUse[] = fromProvider
-    ? (credential.usedBy ?? []).map((u) => ({ label: u.name, href: providerPath(u.id) }))
+    ? (credential.usedBy ?? []).map((u) => modelConnectionUse(u.name, u.id))
     : managed
       ? [managed]
       : credential.apiId
@@ -172,7 +172,6 @@ export function storedRow(credential: StoredCredential): CredentialRow {
     createdAt: credential.createdAt ?? null,
     // A provider's own key has no page of its own here: it is changed on the provider connection.
     href: fromProvider ? uses[0]?.href ?? connectProviderPath() : providerKind && managed?.href ? managed.href : credentialPath(credential.id),
-    group: fromProvider || providerKind ? 'models' : 'other',
   }
 }
 

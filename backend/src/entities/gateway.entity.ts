@@ -12,6 +12,7 @@ import {
   BeforeUpdate,
 } from 'typeorm';
 import { VersionedEntity } from 'typeorm-versions';
+import type { AccessScope } from '../modules/gateways/gateway-access';
 import { Organization } from './organization.entity';
 import { Agent } from './agent.entity';
 import { GatewayTool } from './gateway-tool.entity';
@@ -199,6 +200,12 @@ export class Gateway {
   /** Who created it; required when visibility is 'private' (the owner). */
   @Column({ type: 'uuid', nullable: true })
   ownerUserId: string | null;
+
+  @Column({ type: 'varchar', length: 24, default: 'org' })
+  accessScope: AccessScope;
+
+  @Column({ type: 'uuid', nullable: true })
+  accessTeamId: string | null;
 
   @Column()
   endpoint: string; // e.g., /gateways/my-mcp-gateway

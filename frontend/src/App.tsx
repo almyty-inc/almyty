@@ -43,6 +43,7 @@ const AgentChannelSigningNewPage = lazy(() => import('@/pages/agent-channel-sign
 const AgentPublicSettingsPage = lazy(() => import('@/pages/agent-public-settings').then(m => ({ default: m.AgentPublicSettingsPage })))
 const AgentVisitorDataPage = lazy(() => import('@/pages/agent-visitor-data').then(m => ({ default: m.AgentVisitorDataPage })))
 const AgentSchedulePage = lazy(() => import('@/pages/agent-schedule').then(m => ({ default: m.AgentSchedulePage })))
+const AgentAlwaysOnPage = lazy(() => import('@/pages/agent-always-on').then(m => ({ default: m.AgentAlwaysOnPage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
 const ApiNewPage = lazy(() => import('@/pages/api-new').then(m => ({ default: m.ApiNewPage })))
@@ -73,7 +74,6 @@ const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m
 const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m => ({ default: m.ApprovalPolicyPage })))
 const ApprovalRulePage = lazy(() => import('@/pages/approval-rule').then(m => ({ default: m.ApprovalRulePage })))
 const CredentialDetailRoutePage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialDetailRoutePage })))
-const CustomServiceNewPage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CustomServiceNewPage })))
 const CredentialPolicyPage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialPolicyPage })))
 const OrganizationNewPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationNewPage })))
 const OrganizationDetailPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationDetailPage })))
@@ -200,6 +200,7 @@ export function createAppRoutes() {
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/agents/:id/channels/new" element={<AgentChannelNewPage />} />
           <Route path="/agents/:id/schedule" element={<AgentSchedulePage />} />
+          <Route path="/agents/:id/always-on" element={<AgentAlwaysOnPage />} />
           <Route path="/agents/:id/channels/settings" element={<AgentPublicSettingsPage />} />
           <Route path="/agents/:id/channels/visitor-data" element={<AgentVisitorDataPage />} />
           <Route path="/agents/:id/channels/:channelId" element={<AgentChannelPage />} />
@@ -212,9 +213,9 @@ export function createAppRoutes() {
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/models" element={<ModelsPage />} />
-          {/* Provider connections are credentials: they live under Credentials. */}
-          <Route path="/credentials/providers/new" element={<ConnectProviderPage />} />
-          <Route path="/credentials/providers/:id" element={<ProviderPage />} />
+          {/* Provider connections bring the models: they live under Models. */}
+          <Route path="/models/providers/new" element={<ConnectProviderPage />} />
+          <Route path="/models/providers/:id" element={<ProviderPage />} />
           <Route path="/models/hosting/:deploymentId" element={<HostedModelPage />} />
           <Route path="/analytics/budgets/new" element={<AnalyticsBudgetPage />} />
           <Route path="/analytics/budgets/:budgetId/edit" element={<AnalyticsBudgetPage />} />
@@ -228,14 +229,12 @@ export function createAppRoutes() {
           <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
           <Route path="/settings/approvals/rules/new" element={<ApprovalRulePage />} />
           <Route path="/settings/approvals/rules/:ruleId" element={<ApprovalRulePage />} />
+          <Route path="/settings/credential-rules/new" element={<CredentialPolicyPage />} />
+          <Route path="/settings/credential-rules/:policyId" element={<CredentialPolicyPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           {/* /credentials?connection=<id> is where a sign-in at a service comes back. */}
           <Route path="/credentials" element={<CredentialsPage />} />
-          <Route path="/credentials/advanced" element={<CredentialsPage />} />
           <Route path="/credentials/new" element={<AddCredentialPage />} />
-          <Route path="/credentials/custom/new" element={<CustomServiceNewPage />} />
-          <Route path="/credentials/policies/new" element={<CredentialPolicyPage />} />
-          <Route path="/credentials/policies/:policyId" element={<CredentialPolicyPage />} />
           <Route path="/credentials/:id" element={<CredentialDetailRoutePage />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/organizations/new" element={<OrganizationNewPage />} />

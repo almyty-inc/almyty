@@ -5,14 +5,18 @@
  *
  *  - Tools and APIs: single tools, or a whole API, which means every tool
  *    of it, including tools added to it later.
+ *  - How the model sees its tools: every tool, or search for them (the
+ *    server's agent-tool-mode.ts), the switch-over threshold and the tools
+ *    always shown in full.
  *  - Other agents: the ones it may call or hand work to, picked by name.
  *  - Machine: the labels of the machine its runner tools run on, and the
  *    machines that have them.
  *  - Temporary agents: whether it may create them, and how many per run
  *    and at once.
+ *  - Acts as: its owner, or itself with its own access (Business).
  */
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Bot, ChevronDown, ChevronRight, Search, Wrench, X } from 'lucide-react'
 
@@ -23,11 +27,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RunnerLabelsField, parseRunnerLabels } from '@/components/agents/builder/runner-labels-field'
-import { apisApi, runnersApi } from '@/lib/api'
+import { apiGet, apisApi, runnersApi } from '@/lib/api'
+import { connectionsApi } from '@/lib/connections-api'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { Button } from '@/components/ui/button'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
-import type { Agent } from '@/types'
+import { useEntitlement } from '@/hooks/use-entitlement'
+import type { Agent, CodeWriteAction } from '@/types'
 
 type AgentConfig = NonNullable<Agent['agentConfig']> & { runnerLabels?: Record<string, string> | string }
 
@@ -69,6 +78,11 @@ export function CapabilitiesSection({
           apiIds={agentConfig.apiIds ?? []}
           onApiIdsChange={(apiIds) => set({ apiIds })}
         />
+        <ToolModeSection
+          agentConfig={agentConfig}
+          usableTools={tools.filter((t) => toolIds.includes(t.id) || (t.apiId && (agentConfig.apiIds ?? []).includes(t.apiId)))}
+          onChange={set}
+        />
         <OtherAgents
           agentId={agentId}
           agents={availableAgents}
@@ -76,8 +90,9 @@ export function CapabilitiesSection({
           everyAgent={!!agentConfig.canCallAgents && !Array.isArray(agentConfig.callableAgentIds)}
           onChange={(callableAgentIds) => set({ callableAgentIds, canCallAgents: callableAgentIds.length > 0 })}
         />
-        <Machine value={agentConfig.runnerLabels} onChange={(runnerLabels) => set({ runnerLabels })} />
+        <Machine value={agentConfig.runnerLabels} runnerId={agentConfig.runnerId} onChange={(runnerLabels) => set({ runnerLabels })} onRunnerChange={(runnerId) => set({ runnerId })} />
         <TemporaryAgents agentConfig={agentConfig} onChange={set} />
+        <ActsAs agentId={agentId} agentConfig={agentConfig} onChange={set} />
       </CardContent>
     </Card>
   )
@@ -323,22 +338,33 @@ interface RunnerRow {
   labels: Record<string, string>
 }
 
-function Machine({ value, onChange }: { value: Record<string, string> | string | undefined; onChange: (text: string) => void }) {
+function Machine({ value, runnerId, onChange, onRunnerChange }: { value: Record<string, string> | string | undefined; runnerId?: string | null; onChange: (text: string) => void; onRunnerChange: (id: string | null) => void }) {
   const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
   const runnersQ = useQuery<RunnerRow[]>({ queryKey: ['runners', orgId], queryFn: () => runnersApi.getAll(), enabled: !!orgId })
   const wanted = parseRunnerLabels(value)
   const keys = Object.keys(wanted)
   const runners = Array.isArray(runnersQ.data) ? runnersQ.data : []
-  const matching = keys.length ? runners.filter((r) => keys.every((k) => r.labels?.[k] === wanted[k])) : []
+  const matching = keys.length ? runners.filter((r) => (!runnerId || r.id === runnerId) && keys.every((k) => r.labels?.[k] === wanted[k])) : []
   const online = matching.filter((r) => r.state === 'online' || r.state === 'busy')
   return (
     <section className="space-y-3" data-testid="capability-machine">
-      <SectionHeading title="Machine" hint="Where its tools that run on your machines run." />
+      <Label htmlFor="agent-runner">Runs on</Label>
+      <Select value={runnerId || '__any__'} onValueChange={(id) => onRunnerChange(id === '__any__' ? null : id)}>
+        <SelectTrigger id="agent-runner"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__any__">Any of my runners</SelectItem>
+          {runners.map(r => <SelectItem key={r.id} value={r.id}>{r.name} ({r.state})</SelectItem>)}
+          {runnerId && !runners.some(r => r.id === runnerId) && <SelectItem value={runnerId}>Selected runner (unavailable)</SelectItem>}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">{runnerId ? 'Runner work stays on this machine. It runs only when this runner is available; another machine is never substituted.' : 'Runner tools use their connected machine. Work needing a runner can use an available one.'}</p>
+      <details open={keys.length > 0} className="space-y-3">
+        <summary className="cursor-pointer text-sm font-medium">Advanced</summary>
       <RunnerLabelsField
         id="agent-runner-labels"
         value={value}
         onChange={onChange}
-        hint="Work goes to an online machine with all of these labels, and nowhere else. Leave empty to use each tool's own machine."
+        hint="Require these labels on the selected runner, or use them to choose an online runner when any runner is allowed."
       />
       {keys.length > 0 && (
         <p className="text-xs text-muted-foreground" data-testid="capability-machine-matches">
@@ -347,6 +373,7 @@ function Machine({ value, onChange }: { value: Record<string, string> | string |
             : `${pluralized(matching.length, 'machine')} with these labels: ${matching.map((r) => `${r.name}${online.includes(r) ? ' (online)' : ''}`).join(', ')}.`}
         </p>
       )}
+      </details>
     </section>
   )
 }
@@ -408,12 +435,295 @@ function TemporaryAgents({ agentConfig, onChange }: { agentConfig: AgentConfig; 
   )
 }
 
+/* ── Acts as ────────────────────────────────────────────────────────── */
+
+export const ACTS_AS_ENTITLEMENT = 'agent_identity'
+
+/**
+ * Who the agent's runs that nobody starts by hand (a schedule) act as:
+ * its owner, or the agent itself (backend agents/agent-identity.ts). As
+ * itself it uses only the connections given to it, and the audit log names
+ * the agent. Business plan; the server refuses turning it on without it.
+ */
+export function ActsAs({ agentId, agentConfig, onChange }: { agentId?: string; agentConfig: AgentConfig; onChange: (patch: Partial<AgentConfig>) => void }) {
+  const { enabled, isLoading } = useEntitlement(ACTS_AS_ENTITLEMENT)
+  const value = agentConfig.runAs === 'agent' ? 'agent' : 'owner'
+  const locked = !isLoading && !enabled
+  return (
+    <section className="space-y-3" data-testid="capability-acts-as">
+      <SectionHeading
+        title="Acts as"
+        hint="Who the agent is when it works on its own, for example on a schedule."
+      />
+      <div className="space-y-1.5">
+        <Label htmlFor="agent-acts-as" className="sr-only">Acts as</Label>
+        <Select value={value} onValueChange={(v) => onChange({ runAs: v as 'owner' | 'agent' })}>
+          <SelectTrigger id="agent-acts-as" className="h-9 sm:w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="owner">You, its owner</SelectItem>
+            <SelectItem value="agent" disabled={locked && value !== 'agent'}>Itself, with its own access</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground" data-testid="acts-as-hint">
+          {value === 'agent'
+            ? "It uses only the organization's model providers and the connections given to it, never yours, and the audit log names the agent as the one who acted."
+            : 'It uses what you can use, and the audit log names you.'}
+        </p>
+        {locked && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid="acts-as-locked">
+            <Badge variant="outline" className="border-primary/40 text-primary text-[10px] px-1.5 py-0">Business</Badge>
+            {value === 'agent'
+              ? 'Your plan does not include this any more, so its runs are paused rather than run as you. Switch it back to you, or upgrade.'
+              : 'An agent that acts as itself is part of the Business plan.'}
+            <Link to="/settings/billing" className="text-primary hover:underline">See plans</Link>
+          </div>
+        )}
+        {value === 'agent' && <WhatItCannotReach agentId={agentId} />}
+      </div>
+    </section>
+  )
+}
+
+/** One thing an agent acting as itself would not reach (backend agents/agent-identity-reach.ts). */
+export interface UnreachableItem {
+  kind: 'provider' | 'connection'
+  id: string
+  name: string
+  neededFor: string
+  scope: 'private' | 'personal' | 'team' | 'organization'
+  canGrant: boolean
+  note?: string
+}
+
+const SCOPE_WORDS: Record<UnreachableItem['scope'], string> = {
+  private: 'private',
+  personal: 'personal',
+  team: "a team's",
+  organization: "the organization's",
+}
+
+/**
+ * What the agent's own settings point at that it would no longer reach as
+ * itself: private or team model providers, and connections not given to it.
+ * Each connection a grant can open has its own button; nothing is given
+ * without that click.
+ */
+export function WhatItCannotReach({ agentId }: { agentId?: string }) {
+  const queryClient = useQueryClient()
+  const key = ['agents', agentId, 'identity', 'unreachable']
+  const query = useQuery<UnreachableItem[]>({
+    queryKey: key,
+    queryFn: () => apiGet<UnreachableItem[]>(`/agents/${agentId}/identity/unreachable`),
+    enabled: !!agentId,
+  })
+  const [error, setError] = useState<string | null>(null)
+  const give = useMutation({
+    mutationFn: (item: UnreachableItem) => connectionsApi.addGrant(item.id, { principalType: 'agent', principalId: agentId! }),
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: key })
+    },
+    onError: (err) => setError(getApiErrorMessage(err, 'Could not give it to the agent.')),
+  })
+  if (!agentId) {
+    return <p className="text-xs text-muted-foreground" data-testid="acts-as-unsaved">Save the agent to see what it would not reach as itself.</p>
+  }
+  if (query.isLoading) return null
+  const items = Array.isArray(query.data) ? query.data : []
+  if (query.isError) {
+    return <p className="text-xs text-destructive" data-testid="acts-as-reach-error">Could not check what it reaches.</p>
+  }
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground" data-testid="acts-as-reach-ok">Everything its settings use is open to it as itself.</p>
+  }
+  return (
+    <div className="space-y-2" data-testid="acts-as-unreachable">
+      <p className="text-xs font-medium">As itself it would not reach these, from the agent as last saved:</p>
+      <ul className="divide-y rounded-md border">
+        {items.map((item) => (
+          <li key={`${item.kind}-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 p-2" data-testid={`unreachable-${item.id}`}>
+            <div className="min-w-0">
+              <p className="text-sm">
+                {item.name}{' '}
+                <span className="text-xs text-muted-foreground">
+                  ({SCOPE_WORDS[item.scope]} {item.kind === 'provider' ? 'model provider' : 'connection'})
+                </span>
+              </p>
+              <p className="text-xs text-muted-foreground">{item.neededFor}</p>
+              {!item.canGrant && item.note && <p className="text-xs text-muted-foreground">{item.note}</p>}
+            </div>
+            {item.canGrant && (
+              <Button type="button" size="sm" variant="outline" disabled={give.isPending} onClick={() => give.mutate(item)}>
+                Let this agent use {item.scope === 'personal' && !/^my\s/i.test(item.name) ? 'my ' : ''}{item.name}
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+    </div>
+  )
+}
+
 /** Everything that would stop a save of this section, one sentence each. */
 export function capabilityProblems(agentConfig: AgentConfig): string[] {
-  const problems: string[] = []
+  const problems: string[] = [...toolModeProblems(agentConfig)]
   if (!agentConfig.canCreateAgents) return problems
   const bad = (n: unknown) => n !== undefined && (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > TEMPORARY_AGENTS_MAX)
   if (bad(agentConfig.maxTemporaryAgents)) problems.push(`Temporary agents per run: a whole number from 1 to ${TEMPORARY_AGENTS_MAX}`)
   if (bad(agentConfig.maxTemporaryAgentsAlive)) problems.push(`Temporary agents at once: a whole number from 1 to ${TEMPORARY_AGENTS_MAX}`)
   return problems
+}
+
+/* ── How the model sees its tools ───────────────────────────────────── */
+
+export const TOOL_MODE_LABEL: Record<ToolMode, string> = {
+  auto: 'Automatic',
+  direct: 'Show every tool',
+  discover: 'Search for tools',
+  code: 'Search, and write scripts',
+}
+
+const TOOL_MODE_HINT: Record<ToolMode, string> = {
+  auto: 'Every tool is shown to the model while the list is small. Once it would take a large share of the model\'s context, the model searches for the tools it needs instead.',
+  direct: 'The model sees every tool, in full, on every step. Best for a handful of tools.',
+  discover: 'The model gets three small tools to search for, read and run its tools, and finds the right one when it needs it. Best for many tools.',
+  code: 'As with searching, and the model can also write a short script that calls the tools many times, for example to go through a list. The script runs in a locked box with no network access; every call it makes is checked like any other.',
+}
+
+type ToolMode = 'auto' | 'direct' | 'discover' | 'code'
+
+export function ToolModeSection({
+  agentConfig,
+  usableTools,
+  onChange,
+}: {
+  agentConfig: AgentConfig
+  /** The tools this agent may use (picked singly or through an API): the ones that can be pinned. */
+  usableTools: Array<{ id: string; name: string }>
+  onChange: (patch: Partial<AgentConfig>) => void
+}) {
+  const mode: ToolMode = agentConfig.toolMode ?? 'auto'
+  const pinned = agentConfig.pinnedToolIds ?? []
+  const togglePin = (id: string, on: boolean) => {
+    const next = on ? [...pinned, id] : pinned.filter((p) => p !== id)
+    onChange({ pinnedToolIds: next.length ? next : undefined })
+  }
+  return (
+    <section className="space-y-3" data-testid="capability-tool-mode">
+      <SectionHeading
+        title="How the model sees its tools"
+        hint="Many tools take up room the model needs for the task itself. Searching keeps that small; every tool stays just as usable."
+      />
+      <div className="space-y-1.5">
+        <Label htmlFor="agent-tool-mode">Tool list</Label>
+        <Select value={mode} onValueChange={(v) => onChange({ toolMode: v as ToolMode })}>
+          <SelectTrigger id="agent-tool-mode" className="h-9 sm:w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(['auto', 'direct', 'discover', 'code'] as const).map((m) => (
+              <SelectItem key={m} value={m}>{TOOL_MODE_LABEL[m]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">{TOOL_MODE_HINT[mode]}</p>
+      </div>
+      {mode === 'auto' && (
+        <div className="space-y-1.5">
+          <Label htmlFor="agent-tool-mode-threshold">Switch to searching above (tokens)</Label>
+          <Input
+            id="agent-tool-mode-threshold"
+            type="number"
+            min={1}
+            className="sm:w-64"
+            placeholder="Default"
+            value={agentConfig.toolModeThresholdTokens ?? ''}
+            onChange={(e) => onChange({ toolModeThresholdTokens: e.target.value === '' ? undefined : Number(e.target.value) })}
+          />
+          <p className="text-xs text-muted-foreground">Leave empty for the default: a share of the model's context window (3% unless the server sets another).</p>
+        </div>
+      )}
+      {mode === 'code' && <ScriptChanges agentConfig={agentConfig} onChange={onChange} />}
+      {mode !== 'direct' && usableTools.length > 0 && (
+        <div className="space-y-1.5">
+          <Label>Always show in full</Label>
+          <p className="text-xs text-muted-foreground">Tools the model needs on almost every task, so it never has to search for them.</p>
+          {pinned.length > 0 && (
+            <p className="text-xs" data-testid="pin-summary">
+              Always shown: {usableTools.filter((t) => pinned.includes(t.id)).map((t) => t.name).sort().join(', ') || 'none of the tools above'}
+            </p>
+          )}
+          {/* By name; a long list scrolls in place. */}
+          <div className="grid max-h-56 grid-cols-1 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2" data-testid="pin-list">
+            {[...usableTools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
+              <label key={t.id} className="flex items-center gap-2 text-sm">
+                <Checkbox checked={pinned.includes(t.id)} onCheckedChange={(on) => togglePin(t.id, on === true)} aria-label={`Always show ${t.name}`} />
+                <span className="truncate font-mono text-xs">{t.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Problems with the tool-mode settings, one sentence each (the server checks the same: agent-tool-mode.ts). */
+export function toolModeProblems(agentConfig: AgentConfig): string[] {
+  const n = agentConfig.toolModeThresholdTokens
+  if (n === undefined) return []
+  return Number.isInteger(n) && n > 0 && n <= 10_000_000 ? [] : ['Switch to searching above: a whole number of tokens from 1 to 10,000,000']
+}
+
+/* ── What a script may change (code mode) ───────────────────────────── */
+
+const WRITE_ACTION_LABEL: Record<CodeWriteAction, string> = {
+  allow: 'Make them',
+  stage: 'Ask a person first',
+  deny: 'Never',
+}
+
+/**
+ * What happens to a change or a deletion a script makes (backend
+ * code-mode/code-write-policy.ts). Reads always run. Changes run unless
+ * a person asks to approve them; deletions wait for a person unless someone
+ * says otherwise. Every call still goes through the same permissions,
+ * approval rules and audit as a call the model makes directly.
+ */
+export function ScriptChanges({ agentConfig, onChange }: { agentConfig: AgentConfig; onChange: (patch: Partial<AgentConfig>) => void }) {
+  const writes = agentConfig.codeMode?.writes ?? {}
+  const set = (key: 'write' | 'destructive', value: CodeWriteAction) =>
+    onChange({ codeMode: { ...(agentConfig.codeMode ?? {}), writes: { ...writes, [key]: value } } })
+  const rows: Array<{ key: 'write' | 'destructive'; label: string; fallback: CodeWriteAction }> = [
+    { key: 'write', label: 'Changes to data', fallback: 'allow' },
+    { key: 'destructive', label: 'Deletions', fallback: 'stage' },
+  ]
+  return (
+    <div className="space-y-2" data-testid="script-changes">
+      <Label>When a script changes data</Label>
+      <p className="text-xs text-muted-foreground">
+        Reading always runs. Changes the script asks a person about are collected into one list, approved or rejected as a whole once the script is done.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {rows.map((row) => (
+          <div key={row.key} className="space-y-1.5">
+            <Label htmlFor={`script-${row.key}`} className="text-xs font-normal text-muted-foreground">{row.label}</Label>
+            <Select value={writes[row.key] ?? row.fallback} onValueChange={(v) => set(row.key, v as CodeWriteAction)}>
+              <SelectTrigger id={`script-${row.key}`} aria-label={row.label} className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(['allow', 'stage', 'deny'] as const).map((a) => (
+                  <SelectItem key={a} value={a}>{WRITE_ACTION_LABEL[a]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

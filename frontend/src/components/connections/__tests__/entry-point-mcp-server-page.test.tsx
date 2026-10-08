@@ -70,10 +70,9 @@ describe('Add MCP server: the token is a credential', () => {
     fireEvent.change(screen.getByLabelText(/server url/i), { target: { value: 'https://mcp.example.com/mcp' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Create one here' }))
-    const sheet = within(await screen.findByTestId('connect-flow'))
-    expect(await sheet.findByText('Add a key')).toBeInTheDocument()
+    const sheet = within(await screen.findByTestId('credential-form'))
     expect(sheet.getByLabelText('Name')).toHaveValue('weather token')
-    fireEvent.change(sheet.getByLabelText('Key'), { target: { value: 'tok-secret' } })
+    fireEvent.change(await sheet.findByLabelText('Key'), { target: { value: 'tok-secret' } })
     fireEvent.click(sheet.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('other', { method: 'api_key', owner: 'org', name: 'weather token', input: { apiKey: 'tok-secret' } }))
@@ -88,10 +87,9 @@ describe('Add MCP server: the token is a credential', () => {
   it('folds the create panel away on Cancel and sends no token', async () => {
     render(<McpServerForm organizationId="org-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Create one here' }))
-    const sheet = within(await screen.findByTestId('connect-flow'))
-    await sheet.findByText('Add a key')
+    const sheet = within(await screen.findByTestId('credential-form'))
     fireEvent.click(sheet.getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(screen.queryByTestId('connect-flow')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByTestId('credential-form')).not.toBeInTheDocument())
 
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
     fireEvent.change(screen.getByLabelText(/server url/i), { target: { value: 'https://mcp.example.com/mcp' } })

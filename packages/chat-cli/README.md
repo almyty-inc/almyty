@@ -7,8 +7,9 @@ Interactive chat REPL for almyty agents, and the terminal client a
 ## Quick start
 
 ```bash
-$ npx @almyty/auth login
-$ npx @almyty/chat acme/support-bot
+$ npm i -g @almyty/cli
+$ almyty login
+$ almyty chat acme/support-bot
 ```
 
 ## Usage
@@ -94,7 +95,7 @@ stays clean. The exit code follows the table every almyty CLI shares:
 | 0 | success |
 | 1 | unexpected error |
 | 2 | usage error (bad flags, unknown command) |
-| 3 | not authenticated — run `npx @almyty/auth login` |
+| 3 | not authenticated — run `almyty login` |
 | 4 | not found (no such agent) |
 | 5 | the run ran and failed |
 
@@ -156,7 +157,7 @@ can tell a missing login from a failed run.
 
 ## Authentication
 
-Requires `npx @almyty/auth login` first. Reads credentials from
+Requires `almyty login` first. Reads credentials from
 `~/.almyty/credentials.json`.
 
 | Variable | What it does |

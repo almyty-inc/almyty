@@ -47,6 +47,20 @@ A tool's page also has **Details**, **Exports** (how to use it through each gate
 
 Tools made from an API description start as **drafts**, so nothing is offered until you decide. On **Tools**, click **Select the drafts**, untick any you don't want, and click **Activate selected**. Only active tools are offered to assistants and AI apps.
 
+## What a tool does to your data
+
+Every tool says what calling it does to your data: it **only reads**, it **changes data**, or it **deletes data**. almyty works this out by itself when the tool is made: a tool that looks something up reads, one that creates or updates something changes data, one that removes something deletes data. When nothing about a tool says for sure (code you wrote, a SOAP or gRPC call), it counts as changing data, never as deleting by guess.
+
+You see it on the tool's **Details** tab under **What it does to your data**, with the reason. If almyty got it wrong, pick the right one under **Set it yourself**; **Automatic** goes back to almyty's answer. Your choice stays when the API is imported again.
+
+![The What it does to your data card on a tool's Details tab](/screenshots/tool-side-effect.png)
+
+It matters in two places: AI apps read it as a hint (a tool that deletes data is marked so), and when an agent works through code, calls that delete data wait for a person.
+
+## How assistants find the right tool
+
+With a few tools an assistant can read them all. With hundreds (three imported APIs is often enough) it searches instead: it asks for tools that fit what it is doing ("which pets are sold") and gets the few best matches, each saying what it does to your data, then asks for the full details of the one it picks. almyty matches the words of the request against each tool's name, operation, API, tags, description and parameter values, and, when the organization has connected a model provider that makes embeddings (OpenAI, Mistral or Ollama), also by meaning, so "stock levels" finds a tool called get inventory. A search only ever looks among the tools the assistant may use.
+
 ## Give tools to an AI app
 
 Your own almyty [agents](/agents) use tools directly. To offer tools to an outside AI app (Claude Code, Cursor, Claude Desktop), put them in a [gateway](/gateways): one address that offers a set of tools you choose.
@@ -62,6 +76,22 @@ $ npx @almyty/mcp-server acme/petstore
 
 See the [MCP server CLI](/cli/mcp-server) for client configuration.
 
+
+**Side-effect class.** Every tool has `sideEffect` (`read`, `write`, `destructive`), `openWorld` (it reaches a third party; `false` for LLM tools) and `sideEffectSource`, computed whenever the tool is written:
+
+| `sideEffectSource` | Rule |
+| --- | --- |
+| `override` | Set with `PUT /organizations/:organizationId/tools/:toolId` and `{"sideEffect": "read" \| "write" \| "destructive"}`; `"auto"` drops it. Survives re-import; audited. |
+| `annotation` | A tool from an MCP source: `readOnlyHint: true` reads, `destructiveHint: true` deletes, otherwise write; `openWorldHint` is copied. |
+| `http_method` | `GET`, `HEAD`, `OPTIONS` read; `DELETE` is destructive; `POST`, `PUT`, `PATCH` write. Generated tools and hand-made HTTP tools with a literal method. |
+| `graphql` | A query or subscription reads, a mutation writes. |
+| `default` | An LLM tool reads; anything else with no reliable signal (JavaScript, SOAP, gRPC, SDK, a templated HTTP method) is `write`. |
+
+The class is part of the tool's integrity hash: a tool whose stored class was changed outside its own update path fails verification and does not run. MCP gateways emit it as `readOnlyHint`, `destructiveHint` and `openWorldHint` (see [MCP gateway](/gateways/mcp)).
 **Statuses.** A tool's `status` is `draft`, `active`, `inactive`, `deprecated` or `deleted`. Gateways serve only `active` tools.
 
 **Exports.** Besides the per-gateway instructions on the **Exports** tab, the API exports any tool as a SKILL.md file (`GET /organizations/:organizationId/tools/:toolId/skill`), a command-line script (`GET /organizations/:organizationId/tools/:toolId/cli?format=bash` or `format=node`) and generated client code (`GET /organizations/:organizationId/tools/:toolId/sdk`). See the [Tools API](/api-reference/tools-api).
+
+**Search and signatures.** `POST /organizations/:organizationId/tools/search` with `{"query": "...", "limit": 10}` ranks the active tools the caller can see and returns `[{ name, summary, sideEffect, score }]`. `GET /organizations/:organizationId/tools/:toolId/signature` returns a tool's full description: `inputSchema`, `outputSchema` when known, `sideEffect`, its code name (`{ namespace, function }`: the API's name and the operation id, `custom` for a hand-made tool) and TypeScript signature as a script calls it, and one example call. On an MCP gateway, `tools/search` and `tools/get` answer the same way over exactly the gateway's `tools/list` set (and keep their earlier response fields); a tool the gateway does not serve is `-32602`.
+
+Ranking is reciprocal rank fusion of a keyword ranking (name 4, operation id and API name 2, tags 2, description 1, parameter names and enum values 1; a word's start counts fully, anywhere inside a field half; common English words are ignored) and an embedding ranking (cosine distance, only between vectors of the same model). Tools are embedded by a background job whenever they are written; a search that finds tools without a vector of the current model queues them. Without an embedding provider the hash fallback embeds, and its ranking counts a quarter (`TOOL_SEARCH_FALLBACK_VECTOR_WEIGHT`). Settings: `TOOL_SEARCH_DEFAULT_LIMIT` (10), `TOOL_SEARCH_MAX_LIMIT` (50), `TOOL_SEARCH_RRF_K` (60), `TOOL_SEARCH_VECTOR_CANDIDATES` (100), `TOOL_EMBEDDINGS_ENABLED` (true), `TOOL_SCOPE_MAX_TOOLS` (5000).

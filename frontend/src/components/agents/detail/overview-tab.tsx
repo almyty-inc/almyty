@@ -55,7 +55,9 @@ import { execStatusVariant, runStatusVariant, diffObjects, formatDiffValue } fro
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
-import { DeliveryNote, HeldCallNote, ScheduleCard } from './schedule-card'
+import { DeliveryNote, ScheduleCard } from './schedule-card'
+import { WaitingApprovalNote, runStatusLabel } from './waiting-approval'
+import { AlwaysOnCard } from './always-on-card'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
 import type { Agent, AgentExecution, AgentRun, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
@@ -305,6 +307,9 @@ export function OverviewTab({
 
         {/* Schedule */}
         <ScheduleCard agent={agent} />
+
+        {/* Always on: autonomous agents only */}
+        {agent.mode === 'autonomous' && <AlwaysOnCard agentId={agent.id} />}
       </div>
 
       {/* Recent Runs */}
@@ -354,10 +359,10 @@ export function OverviewTab({
                         <Badge variant={(row.kind === 'run' ? runStatusVariant[row.status] : execStatusVariant[row.status]) || 'secondary'}>
                           {row.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
                           {row.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
-                          {row.status.replace('_', ' ')}
+                          {runStatusLabel(row.status)}
                         </Badge>
                         <DeliveryNote outcome={(row.kind === 'run' ? row.run.metadata : row.exec.metadata)?.channelDelivery} />
-                        {row.kind === 'execution' && <HeldCallNote execution={row.exec} />}
+                        <WaitingApprovalNote run={(row.kind === 'run' ? row.run : row.exec) as { status: string; error?: string | null }} />
                       </TableCell>
                       <TableCell className="max-w-[320px]">
                         {row.kind === 'execution' ? (

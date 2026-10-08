@@ -108,6 +108,13 @@ export enum AuditAction {
   // owner answering their request. Counts and a hashed reference only.
   VISITOR_DATA_EXPORT = 'visitor_data_export',
   VISITOR_DATA_ERASE = 'visitor_data_erase',
+
+  // Always on (docs/always-on.md): switched on or off by a person, paused
+  // by the system (with its reason), and a wake that could not start a run.
+  ALWAYS_ON_ENABLE = 'always_on_enable',
+  ALWAYS_ON_DISABLE = 'always_on_disable',
+  ALWAYS_ON_PAUSE = 'always_on_pause',
+  WAKE_DROPPED = 'wake_dropped',
 }
 
 export enum AuditResource {

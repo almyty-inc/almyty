@@ -35,6 +35,13 @@ export interface ToolExecutionOptions {
    * the tool was published for. Ignored by every other tool type.
    */
   runnerLabels?: Record<string, string>;
+  /**
+   * The one runner a runner-backed tool runs on, from the agent's "Runs
+   * on" (agentConfig.runnerId), whichever runner published the tool.
+   * Labels, when also set, are a check on that runner. Ignored by every
+   * other tool type.
+   */
+  pinnedRunnerId?: string;
   timeout?: number;
   retries?: number;
   skipCache?: boolean;
@@ -123,6 +130,11 @@ export interface ToolExecutionOptions {
    * the call itself and it runs once approved (ToolApprovalGateService).
    */
   holdForApproval?: 'caller';
+  /**
+   * The run_code script making this call (code_executions.id): recorded on
+   * the tool_executions row, so a script's calls are its call tree.
+   */
+  codeExecutionId?: string | null;
   /**
    * The team of the agent making the call. A team's amount rule holds only
    * that team's agents; absent (no agent behind the call), every rule on

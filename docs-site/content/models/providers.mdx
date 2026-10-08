@@ -17,12 +17,12 @@ DigitalOcean is the clearest case of both: Gradient Serverless Inference is a pa
 
 If you run a model yourself (for example with vLLM, TGI, llama.cpp or a proxy), or use a vendor that is not on the list, connect it as **Your own server**. It works with anything that answers in the OpenAI chat format.
 
-1. Open **Credentials** and click **Connect a provider**.
+1. Open **Models** and click **Connect a provider**.
 2. Pick **Your own server (OpenAI-compatible)**.
 3. Give its address and, if the server asks for one, a key.
-4. Click **Connect**. almyty checks it with one real call and lists the models the server offers.
+4. Click **Save**. almyty checks it with one real call and lists the models the server offers.
 
-Ollama has its own tile: under **Where Ollama runs**, **Ollama Cloud** is picked first; pick **Your own server** for an Ollama you run.
+Choosing Ollama shows **Where Ollama runs**. **Ollama Cloud** is picked first; choose **Your own server** for an Ollama you run.
 
 Your own server has no price in the automatic price list. To let **Automatic** weigh its models by cost, give them a price under **Advanced** on the connection's page; otherwise they are tried last. Set their privacy level there too (`local` for a machine in your office). On hosted almyty the server must be reachable at a public address.
 

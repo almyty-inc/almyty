@@ -8,6 +8,7 @@ import {
   Index,
 } from 'typeorm';
 import { OAuthClient } from './oauth-client.entity';
+import type { CompanyGrant } from '../modules/gateways/company-signin.service';
 import { User } from './user.entity';
 import { Gateway } from './gateway.entity';
 import { Organization } from './organization.entity';
@@ -29,6 +30,9 @@ export class OAuthAccessToken {
 
   @Column()
   clientId: string;
+
+  @Column({ type: 'json', nullable: true })
+  companyGrant: CompanyGrant | null;
 
   @Column({ nullable: true })
   userId: string;

@@ -16,7 +16,6 @@ import { AgentStepProcessor } from '../../modules/agents/agent-step-processor';
 import { AgentVerifierHelper } from '../../modules/agents/agent-verifier.helper';
 import { AgentContextCompactor } from '../../modules/agents/agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../modules/agent-constraints/agent-constraints.service';
-import { AgentHeartbeatHelper } from '../../modules/agents/agent-heartbeat.helper';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -198,7 +197,6 @@ describe('Conversation reuse (integration)', () => {
         AgentBuiltInToolsHelper,
         { provide: ApprovalsService, useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         { provide: BudgetsService, useValue: { enforceForRun: jest.fn().mockResolvedValue(undefined) } },
-        AgentHeartbeatHelper,
         AgentRuntimeEventsHelper,
         AgentRuntimeMiscHelper,
         AgentStepProcessor,
@@ -247,6 +245,30 @@ describe('Conversation reuse (integration)', () => {
 
     expect(conversationStore).toHaveLength(1);
     expect(run.conversationId).toBe(conversationStore[0].id);
+  });
+
+  // A conversation is named after the first thing said in it, so a list of
+  // them (the visitor-data table, a chat history) reads as what each was
+  // about instead of "Untitled conversation".
+  it('titles a new conversation after the first message, trimmed', async () => {
+    await service.startRun('agent-1', 'org-1', 'user-1', '  Where is   my order #4411?\nIt was due Monday.  ');
+
+    expect(conversationStore[0].title).toBe('Where is my order #4411?');
+  });
+
+  it('keeps the title a conversation has, and names one that has none', async () => {
+    const run1 = await service.startRun('agent-1', 'org-1', 'user-1', 'First question');
+    await service.startRun('agent-1', 'org-1', 'user-1', 'Second question', { conversationId: run1.conversationId });
+    expect(conversationStore[0].title).toBe('First question');
+
+    const bare = Object.assign(new Conversation(), { id: 'conv-bare', organizationId: 'org-1', agentId: 'agent-1' });
+    conversationStore.push(bare);
+    mockConversationRepo.update = jest.fn(async (where: any, patch: any) => {
+      Object.assign(conversationStore.find((c) => c.id === where.id)!, patch);
+      return { affected: 1 };
+    });
+    await service.startRun('agent-1', 'org-1', 'user-1', 'Can I change the address?', { conversationId: 'conv-bare' });
+    expect(bare.title).toBe('Can I change the address?');
   });
 
   it('should reuse existing conversation when conversationId is provided', async () => {

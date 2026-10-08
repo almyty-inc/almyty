@@ -79,6 +79,8 @@ class QueryRecorder {
       }),
       count: jest.fn(async (options?: any) => ((await find(options)), 0)),
       find: jest.fn(find),
+      // A read of another table through the same connection is recorded too.
+      manager: { getRepository: () => this.repo() },
     } as any;
   }
 
@@ -152,6 +154,8 @@ describe('analytics reads are organization-scoped', () => {
 
   const reads: Array<[string, () => Promise<unknown>]> = [
     ['getAuditSummary', () => service.getAuditSummary(ORG)],
+    // Scripts (code mode) are summed for the organization, never per resource.
+    ['getScriptUsage', () => service.getScriptUsage(ORG, '7d')],
   ];
   // Per-resource reads: also never another member's private gateway,
   // provider, tool or agent.

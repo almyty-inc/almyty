@@ -321,7 +321,7 @@ describe('credential wording', () => {
   const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf-8');
 
   it.each([['index.ts', source], ['README.md', readme]])('%s points at @almyty/credentials, never connections', (_name, text) => {
-    expect(text).toContain('npx @almyty/credentials add');
+    expect(text).toMatch(/(?:npx @almyty\/credentials|almyty credentials) add/);
     expect(text).not.toMatch(/@almyty\/connections|almyty connections|connection id|connections flow/i);
   });
 });

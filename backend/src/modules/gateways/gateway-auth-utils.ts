@@ -1,3 +1,4 @@
+import { validateGatewayJwtConfiguration } from './gateway-jwks';
 import { BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
 
@@ -108,6 +109,10 @@ export function validateAuthConfiguration(
       break;
 
     case GatewayAuthType.JWT:
+      if (configuration.jwksUrl || configuration.jwksUri) {
+        try { validateGatewayJwtConfiguration(configuration); } catch (error) { throw new BadRequestException(error.message); }
+        break;
+      }
       // Require an explicit secret. The fallback to process.env.JWT_SECRET
       // silently accepted the backend's own login JWTs as gateway auth
       // tokens — a cross-org bypass.

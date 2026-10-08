@@ -67,7 +67,10 @@ export class FakeApprovals extends EventEmitter {
     this.created.push(saved);
     return saved;
   }
-  async decide(id: string, status: 'approved' | 'rejected', decisionReason: string | null = null) {
+  async findInOrganization(id: string, organizationId: string) {
+    return this.rows.findOne({ where: { id, organizationId } });
+  }
+  async decide(id: string, status: 'approved' | 'rejected' | 'expired', decisionReason: string | null = null) {
     await this.rows.update({ id }, { status, decisionReason });
     const row = await this.rows.findOne({ where: { id } });
     this.emit('approval.decided', row);
@@ -75,17 +78,22 @@ export class FakeApprovals extends EventEmitter {
   }
 }
 
-export function gatedExecutor(executionAccess: ExecutionAccessService, opts: { policies?: any[]; tools?: any[] } = {}) {
+export function gatedExecutor(
+  executionAccess: ExecutionAccessService,
+  opts: { policies?: any[]; tools?: any[]; agents?: any[]; runs?: any[] } = {},
+) {
   const policies = fakeRepository<any>(opts.policies ?? [REFUNDS_OVER_500]);
   const approvalRequests = fakeRepository<any>({ idPrefix: 'approval' } as any);
-  const agents = fakeRepository<any>([]);
+  const agents = fakeRepository<any>(opts.agents ?? []);
+  // Runs, for an always-on run's ask-first list.
+  const runs = fakeRepository<any>(opts.runs ?? []);
   const audit = { log: jest.fn(async () => null) };
   const approvals = new FakeApprovals(approvalRequests);
   let executor: ToolExecutorService;
   const moduleRef = {
     get: (token: unknown) => (token === ApprovalsService ? approvals : token === ToolExecutorService ? executor : null),
   };
-  const gate = new ToolApprovalGateService(policies as any, approvalRequests as any, audit as any, agents as any, moduleRef as any);
+  const gate = new ToolApprovalGateService(policies as any, approvalRequests as any, audit as any, agents as any, moduleRef as any, runs as any);
   executor = new ToolExecutorService(
     fakeRepository<any>(opts.tools ?? [REFUND_TOOL]) as any,
     {} as any,
@@ -112,5 +120,5 @@ export function gatedExecutor(executionAccess: ExecutionAccessService, opts: { p
   );
   // Subscribes to 'approval.decided', as Nest does at start-up.
   gate.onModuleInit();
-  return { executor, gate, policies, approvalRequests, agents, audit, approvals };
+  return { executor, gate, policies, approvalRequests, agents, runs, audit, approvals };
 }

@@ -18,8 +18,9 @@ import { gatewaysApi } from '@/lib/api'
 import { toolsQuery } from '@/lib/list-queries'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import { GatewayAuthSection } from '@/components/gateways/detail/gateway-auth-section'
+import { GatewayAccessSection } from '@/components/gateways/detail/gateway-access-section'
 import { GatewayConfigurationCard } from '@/components/gateways/detail/gateway-configuration-card'
+import { GatewayExposureCard } from '@/components/gateways/detail/gateway-exposure-card'
 import { IntegrationsSection } from '@/components/gateways/detail/integrations-section'
 import {
   GatewayToolsTab,
@@ -386,7 +387,7 @@ export function GatewayDetailPage() {
         </div>
       </div>
 
-      {initialApiKey && (
+      {initialApiKey && (!isToolGateway || gateway.accessScope === 'external_protected') && (
         <div
           data-testid="initial-api-key"
           className="space-y-3 rounded-lg border border-amber-400/60 bg-amber-50 p-4 dark:bg-amber-950/30"
@@ -467,9 +468,11 @@ export function GatewayDetailPage() {
         onCopyError={errorNotif}
       />
 
-      {/* Authentication */}
-      {gateway.type !== 'skills' && (
-        <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
+      {/* How apps see the tools: every tool, or search and scripts (code mode) */}
+      {['mcp', 'utcp', 'skills'].includes(gateway.type) && !managedBy && <GatewayExposureCard gateway={gateway} />}
+
+      {['mcp', 'utcp', 'skills'].includes(gateway.type) && !gateway.isSystem && !managedBy && (
+        <GatewayAccessSection gateway={gateway} />
       )}
 
       {/* Main Content. `?tab=` opens a tab directly: the guide's "connect a

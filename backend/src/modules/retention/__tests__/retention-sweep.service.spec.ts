@@ -1,4 +1,4 @@
-import { In, LessThan } from 'typeorm';
+import { In, LessThan, Not } from 'typeorm';
 import { RetentionSweepService } from '../retention-sweep.service';
 import { RetentionPolicy } from '../../../entities/retention-policy.entity';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
@@ -11,6 +11,7 @@ function mockRepo() {
   return {
     find: jest.fn().mockResolvedValue([]),
     delete: jest.fn().mockResolvedValue({ affected: 0 }),
+    query: jest.fn().mockResolvedValue([]),
   };
 }
 
@@ -217,6 +218,32 @@ describe('RetentionSweepService', () => {
     expect(messageRepo.delete.mock.invocationCallOrder[0]).toBeLessThan(
       conversationRepo.delete.mock.invocationCallOrder[0],
     );
+  });
+
+  it("keeps an always-on agent's standing thread and prunes its old messages inside it", async () => {
+    // The agents of this organization keep conv-standing as their standing thread.
+    conversationRepo.query.mockImplementation(async (sql: string) =>
+      /FROM "agents"/.test(sql) ? [{ id: 'conv-standing' }] : [],
+    );
+    messageRepo.delete.mockResolvedValueOnce({ affected: 4 });
+    conversationRepo.find.mockResolvedValueOnce([{ id: 'c1' }]);
+    conversationRepo.delete.mockResolvedValueOnce({ affected: 1 });
+
+    const counts = await service.sweepOrganization(policy({ conversationsDays: 90 }));
+
+    // Its old messages go; the conversation itself is never selected.
+    expect(messageRepo.delete.mock.calls[0][0]).toMatchObject({ conversationId: In(['conv-standing']) });
+    expect(conversationRepo.find.mock.calls[0][0].where.id).toEqual(Not(In(['conv-standing'])));
+    expect(counts.messages).toBeGreaterThanOrEqual(4);
+    // What woke the agent goes with the conversations.
+    expect(conversationRepo.query.mock.calls.some(([sql]: [string]) => /DELETE FROM "agent_wakes"/.test(sql))).toBe(true);
+  });
+
+  it('sweeps no conversations when it cannot tell which are standing threads', async () => {
+    conversationRepo.query.mockRejectedValue(new Error('db down'));
+    conversationRepo.find.mockResolvedValueOnce([{ id: 'c1' }]);
+    await expect(service.sweepOrganization(policy({ conversationsDays: 90 }))).rejects.toThrow(/standing conversations/);
+    expect(conversationRepo.delete).not.toHaveBeenCalled();
   });
 
   it('scopes request logs by their own organizationId, not through the gateways', async () => {

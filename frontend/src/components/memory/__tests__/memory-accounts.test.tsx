@@ -144,12 +144,13 @@ describe('/memories/accounts/new', () => {
     const user = userEvent.setup()
     renderAtRoute(<MemoryAccountNewPage />, { path: '/memories/accounts/new', paths: ['/memories'] })
 
-    expect(await screen.findByTestId('memory-service-tile-mem0')).toBeInTheDocument()
-    expect(screen.getByTestId('memory-service-tile-zep')).toBeInTheDocument()
-    expect(screen.queryByTestId('memory-service-tile-memory-custom')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('memory-service-tile-openai')).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('combobox', { name: 'Service' }))
+    expect(await screen.findByRole('option', { name: 'Mem0' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Zep' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Memory backend (HTTP)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'OpenAI' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByTestId('memory-service-tile-zep'))
+    await user.click(screen.getByRole('option', { name: 'Zep' }))
     await user.click(await screen.findByRole('button', { name: 'Connect Zep' }))
     expect(await screen.findByTestId('memory-account-added')).toHaveTextContent('New Zep is added.')
     await user.click(screen.getByRole('button', { name: 'Done' }))
@@ -218,8 +219,9 @@ describe('/memories/move', () => {
 
     await user.click(await screen.findByTestId('move-add-account'))
     const panel = screen.getByTestId('move-add-account-panel')
-    expect(within(panel).queryByTestId('memory-service-tile-memory-custom')).not.toBeInTheDocument()
-    await user.click(await within(panel).findByTestId('memory-service-tile-zep'))
+    await user.click(await within(panel).findByRole('combobox', { name: 'Service' }))
+    expect(screen.queryByRole('option', { name: 'Memory backend (HTTP)' })).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('option', { name: 'Zep' }))
     await user.click(within(panel).getByRole('button', { name: 'Connect Zep' }))
 
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'To' })).toHaveTextContent('New Zep'))

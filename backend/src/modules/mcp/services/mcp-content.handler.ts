@@ -356,7 +356,7 @@ export class McpContentHandler {
         const target = typeof gatewayId === 'string' && isUUID(gatewayId)
           ? await this.gatewayToolRepository.manager.getRepository(Gateway).findOne({
               where: { id: gatewayId, organizationId },
-              select: { id: true, organizationId: true, visibility: true, teamId: true, ownerUserId: true },
+              select: { id: true, organizationId: true, type: true, accessScope: true, accessTeamId: true, visibility: true, teamId: true, ownerUserId: true },
             })
           : null;
         if (!target || (await this.visibleOffGateway(organizationId, caller, [target])).length === 0) {

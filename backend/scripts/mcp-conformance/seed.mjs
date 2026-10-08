@@ -173,12 +173,17 @@ async function gateway(name, endpoint, toolIds, { open = false } = {}) {
   const have = list(await call('GET', '/gateways'), 'gateways')
   let row = have.find((g) => g.name === name)
   if (!row) {
-    row = await call('POST', '/gateways', { name, type: 'mcp', endpoint, configuration: { transport: 'http' }, toolIds, kind: 'tool', visibility: 'org' })
+    row = await call('POST', '/gateways', { name, type: 'mcp', endpoint, configuration: { transport: 'http' }, toolIds, kind: 'tool', visibility: 'org', accessScope: open ? 'external_open' : 'external_protected' })
     log('gateway', name)
   } else {
     await call('POST', `/gateways/${row.id}/tools/bulk`, { toolIds }).catch(() => undefined)
   }
-  if (!row.initialApiKey) {
+  await call('PATCH', `/gateways/${row.id}`, { accessScope: open ? 'external_open' : 'external_protected' })
+  if (!open) {
+    const auths = list(await call('GET', `/gateways/${row.id}/auth`), 'auths')
+    if (!auths.some(a => a.type === 'api_key' && a.isActive)) await call('POST', `/gateways/${row.id}/auth`, { type: 'api_key', isRequired: true, configuration: { keyHeader: 'x-api-key', keyQuery: 'api_key' } })
+  }
+  if (!open && !row.initialApiKey) {
     const key = await call('POST', `/gateways/${row.id}/auth/api-keys`, { name: `ci-${Date.now()}` })
     row.initialApiKey = key?.apiKey ?? key?.key ?? key?.plainKey
   }
@@ -189,9 +194,7 @@ async function gateway(name, endpoint, toolIds, { open = false } = {}) {
     // answers without credentials instead.
     const auths = list(await call('GET', `/gateways/${row.id}/auth`), 'auths')
     for (const a of auths) if (a.type !== 'none') await call('DELETE', `/gateways/${row.id}/auth/${a.id}`)
-    if (!auths.some((a) => a.type === 'none')) {
-      await call('POST', `/gateways/${row.id}/auth`, { type: 'none', isRequired: false, configuration: {} })
-    }
+
   }
   return row
 }
@@ -204,7 +207,7 @@ try {
   const petstore = await gateway('Petstore', '/petstore', await petstoreTools(org.id))
   const out = {
     MCP_ORG_SLUG: org.slug,
-    CONFORMANCE_URL: `${API}/${org.slug}/conformance?api_key=${conformance.initialApiKey}`,
+    CONFORMANCE_URL: `${API}/${org.slug}/conformance`,
     PETSTORE_URL: `${API}/${org.slug}/petstore?api_key=${petstore.initialApiKey}`,
     PETSTORE_API_KEY: petstore.initialApiKey,
   }

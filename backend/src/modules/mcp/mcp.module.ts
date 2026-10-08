@@ -1,4 +1,6 @@
+import { CompanySigninController } from './controllers/company-signin.controller';
 import { Module, forwardRef } from '@nestjs/common';
+import { ToolDiscoveryModule } from '../tool-discovery/tool-discovery.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -59,6 +61,7 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
       OAuthAccessToken,
     ]),
     forwardRef(() => ToolsModule),
+    ToolDiscoveryModule,
     forwardRef(() => GatewaysModule),
     PromotedSkillsModule,
     AuthorizationModule,
@@ -75,7 +78,7 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
       },
     }),
   ],
-  controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController],
+  controllers: [CompanySigninController, McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController],
   providers: [
     McpToolHandler,
     McpContentHandler,

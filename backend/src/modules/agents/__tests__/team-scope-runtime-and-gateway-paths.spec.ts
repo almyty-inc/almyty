@@ -4,8 +4,7 @@ import { NotFoundException } from '@nestjs/common';
 
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
-import { AgentRuntimeProcessor } from '../agent-runtime.processor';
-import { AgentHeartbeatHelper } from '../agent-heartbeat.helper';
+import { AlwaysOnService } from '../always-on/always-on.service';
 import { AgentStepProcessor } from '../agent-step-processor';
 import { ChannelGatewayService } from '../../gateways/channels/channel-gateway.service';
 import { ChatWidgetAdapter } from '../../gateways/channels/adapters/chat-widget.adapter';
@@ -168,8 +167,6 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       {} as any,
       {} as any,
       {} as any,
-      // The real helper over the same agents table, so what it writes is read back.
-      new AgentHeartbeatHelper(agents as any, queue as any),
       {} as any,
       {} as any,
       events as any,
@@ -358,44 +355,64 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
     });
   });
 
-  describe('a heartbeat, authorized as the agent owner at fire time', () => {
-    const beat = (agentId: string) =>
-      new AgentRuntimeProcessor(runtime, queue as any, agents as any, runs as any).handleHeartbeat({
-        data: { agentId, organizationId: CAST.org },
-      } as any);
-    const withHeartbeat = (id: string, createdBy: string) =>
-      agents.seed({ ...agents.row(id)!, createdBy, heartbeat: { enabled: true, intervalMinutes: 5, prompt: 'check in' } });
+  describe('an always-on wake, authorized as the agent owner at fire time', () => {
+    let wakes: ReturnType<typeof fakeRepository<any>>;
+    let alwaysOn: AlwaysOnService;
+    beforeEach(() => {
+      wakes = fakeRepository<any>({ idPrefix: 'wake' });
+      const lock = new Map<string, string>();
+      alwaysOn = new AlwaysOnService(
+        agents as any,
+        wakes as any,
+        runs as any,
+        fakeRepository<any>([]) as any,
+        fakeRepository<any>([{ id: CAST.org, plan: 'free', settings: {} }]) as any,
+        tools as any,
+        fakeRepository<any>({ idPrefix: 'msg' }) as any,
+        fakeRepository<any>([]) as any,
+        queue as any,
+        {
+          set: async (k: string, v: string) => (lock.has(k) ? null : (lock.set(k, v), 'OK')),
+          get: async (k: string) => lock.get(k) ?? null,
+          del: async (k: string) => lock.delete(k),
+        } as any,
+        runtime,
+      );
+    });
+    const wake = async (agentId: string) => {
+      await alwaysOn.wake(agentId, CAST.org, 'timer', { summary: 'the timer', dedupeKey: `t-${Date.now()}` });
+      return alwaysOn.process(agentId, CAST.org);
+    };
+    const alwaysOnFor = (id: string, createdBy: string) =>
+      agents.seed({
+        ...agents.row(id)!,
+        createdBy,
+        alwaysOn: { enabled: true, brief: 'check in', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'act', askFirstToolIds: [], report: 'when_acted' } as any,
+      });
 
     it('starts a team agent owned by a member of its team', async () => {
-      withHeartbeat('team-agent', CAST.member);
-      await beat('team-agent');
+      alwaysOnFor('team-agent', CAST.member);
+      expect(await wake('team-agent')).toBe('started');
       expect(runs.rows().map((r) => r.status)).toEqual([AgentRunStatus.RUNNING]);
     });
 
-    it('stops with a failed run that says why once the owner has left the team', async () => {
-      withHeartbeat('team-agent', CAST.member);
+    it('pauses with a reason, and runs nothing, once the owner has left the team', async () => {
+      alwaysOnFor('team-agent', CAST.member);
       m.leaveTeam(CAST.team, CAST.member);
-      await beat('team-agent');
-      const [refused] = runs.rows();
-      expect(refused.status).toBe(AgentRunStatus.FAILED);
-      expect(refused.error).toContain(`the agent's owner (${CAST.member}) can no longer run this agent`);
+      expect(await wake('team-agent')).toBe('paused');
+      expect(runs.rows()).toHaveLength(0);
       // Off, on the agent row, with the reason its page shows.
-      const { heartbeat } = agents.row('team-agent')!;
-      expect(heartbeat).toMatchObject({
-        enabled: false,
-        intervalMinutes: 5,
-        prompt: 'check in',
-        pausedReason: { code: 'OWNER_CANNOT_RUN', message: refused.error },
-      });
-      expect(queue.add).not.toHaveBeenCalled();
+      const { alwaysOn: saved } = agents.row('team-agent')! as any;
+      expect(saved).toMatchObject({ enabled: false, brief: 'check in', pausedReason: { code: 'OWNER_CANNOT_RUN' } });
+      expect(saved.pausedReason.message).toContain('can no longer run this agent');
     });
 
-    it('turning the heartbeat back on clears the reason', async () => {
-      withHeartbeat('team-agent', CAST.member);
+    it('turning it back on clears the reason', async () => {
+      alwaysOnFor('team-agent', CAST.member);
       m.leaveTeam(CAST.team, CAST.member);
-      await beat('team-agent');
-      await runtime.enableHeartbeat('team-agent', CAST.org, 5, 'check in');
-      expect(agents.row('team-agent')!.heartbeat).toEqual({ enabled: true, intervalMinutes: 5, prompt: 'check in' });
+      await wake('team-agent');
+      const view = await alwaysOn.configure('team-agent', CAST.org, { enabled: true });
+      expect(view.alwaysOn).toMatchObject({ enabled: true, pausedReason: null });
     });
   });
 
