@@ -226,6 +226,11 @@ describeIfDb('Always on daily summary and plan capacity (real Postgres)', () => 
       await ds.getRepository(Organization).update({ id: orgId }, { plan: 'pro' });
       const svc = service();
       expect(await svc.hostedAgentsOn(orgId)).toEqual([]);
+      // Each wake starts a real run row, so the wake can be stamped with it.
+      (svc as any).runtime.startRun = async (agentId: string) =>
+        save(ds.getRepository(AgentRun), {
+          agentId, organizationId: orgId, mode: 'autonomous', status: AgentRunStatus.RUNNING, metadata: { triggerType: 'always_on' }, steps: [],
+        });
       for (const a of agents) {
         await svc.wake(a.id, orgId, 'timer', { summary: 'the timer', dedupeKey: `t-${a.id}` });
         expect(await svc.process(a.id, orgId)).not.toBe('paused');
