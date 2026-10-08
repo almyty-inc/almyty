@@ -51,9 +51,19 @@ export interface OrganizationSettings {
   codeMode?: Partial<Record<string, number>>;
   /**
    * Tighter Always on limits than the plan's (agents/always-on/always-on-capacity.ts):
-   * timerFloorMinutes (longer only), maxWakesPerHour and includedAgents (fewer only).
+   * timerFloorMinutes (longer only), maxWakesPerHour and includedAgents (fewer
+   * only; it counts hosted-home agents alone). And a data-only fallback for
+   * when a daily summary goes out, behind the agent's own setting and the
+   * owner's time zone (agents/always-on/always-on-digest.ts): digestTime
+   * ("HH:MM") and digestTimezone.
    */
-  alwaysOn?: { timerFloorMinutes?: number; maxWakesPerHour?: number; includedAgents?: number };
+  alwaysOn?: {
+    timerFloorMinutes?: number;
+    maxWakesPerHour?: number;
+    includedAgents?: number;
+    digestTime?: string;
+    digestTimezone?: string;
+  };
 }
 
 @Entity('organizations')

@@ -108,6 +108,28 @@ describe('email templates', () => {
   });
 });
 
+describe('always-on emails', () => {
+  it('a daily summary keeps its lines, one paragraph each, and is titled as a summary', () => {
+    const message = 'Support agent, the last 24 hours:\n- It was woken twice by its timer.\n- Waiting for your OK: issue_refund <b>.';
+    const rendered = renderEmailTemplate('agent.report', { agentName: 'Support agent', message, agentUrl: 'https://app.example.com/a', digest: true });
+    expect(rendered.subject).toBe('Support agent: daily summary');
+    expect(rendered.html).toContain('the last 24 hours');
+    expect(rendered.html).toContain('- It was woken twice by its timer.');
+    expect(rendered.html).toContain('issue_refund &lt;b&gt;.');
+    expect(rendered.text.split('\n')).toEqual(message.split('\n'));
+    // A wake's report reads as before.
+    expect(renderEmailTemplate('agent.report', { agentName: 'Support agent', message: 'Done.' }).subject).toBe('Support agent reported');
+  });
+
+  it('a pause for plan room says it ends by itself; any other says nothing runs until you look', () => {
+    const capacity = renderEmailTemplate('agent.paused', { agentName: 'Support agent', message: 'Your plan includes 3.', resumesItself: true });
+    expect(capacity.text).toContain('It turns back on by itself when your plan has room again.');
+    expect(capacity.text).not.toContain('Nothing runs until');
+    const loop = renderEmailTemplate('agent.paused', { agentName: 'Support agent', message: 'It woke too often.' });
+    expect(loop.text).toContain('Nothing runs until you turn Always on back on.');
+  });
+});
+
 describe('MailService (template integration, dev mode: no RESEND_API_KEY)', () => {
   const restore = snapshotEnv('RESEND_API_KEY', 'MAIL_FROM', 'EMAIL_FROM');
 
