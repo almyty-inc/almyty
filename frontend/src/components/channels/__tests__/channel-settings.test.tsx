@@ -398,6 +398,21 @@ describe('a channel page', () => {
       expect(agentChannelsApi.publish).not.toHaveBeenCalled()
     })
 
+    it('name what a picked credential still lacks instead of asking to pick one', async () => {
+      // An Email channel with its Resend key picked but no receiving address
+      // said "Pick or create the Email credential first" next to the key.
+      vi.mocked(agentChannelsApi.check).mockResolvedValue({ ok: false, refusals: [{ code: 'MISSING_CREDENTIALS', message: 'This platform still needs its keys before it can go live: inbound_address' }] } as any)
+      const email = slack({ id: 'c-email', type: 'email', name: 'Email', endpoint: '/channels/c-email', configuration: { credentialId: 'cred-resend', reply_from: 'me@example.com' } })
+      render(<ChannelSettings agent={agent} channel={email} inherited={inherited} />)
+      const publish = await screen.findByRole('button', { name: 'Publish' })
+      await waitFor(() => expect(agentChannelsApi.check).toHaveBeenCalled())
+      await new Promise((r) => setTimeout(r, 0))
+      fireEvent.click(publish)
+      expect((await screen.findAllByText('The Email credential still needs: inbound address. Open it on Credentials and add it.')).length).toBeGreaterThan(0)
+      expect(screen.queryByText(/Pick or create/)).toBeNull()
+      expect(agentChannelsApi.publish).not.toHaveBeenCalled()
+    })
+
     it('name the platform for the others', () => {
       expect(missingKeysLine('telegram')).toBe('Pick or create the Telegram credential first.')
     })
