@@ -1,7 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
 import { EventEmitter } from 'events';
 
 import { WorkerStreamTransport } from './transport/worker-stream.transport';
+import { codingBacklogMaxLen, codingBacklogTtlSeconds } from './transport/stream-backlog.config';
 import { WorkerEnvelope } from '../mcp/types/worker-protocol.types';
 import { RunnerService } from './runner.service';
 
@@ -20,6 +23,12 @@ export interface CodingEvent {
 }
 
 /**
+ * Called with each event, and with its backlog entry id when Redis holds
+ * one: that id is the SSE event id a reconnect sends back as Last-Event-ID.
+ */
+export type CodingEventListener = (event: CodingEvent, eventId?: string) => void;
+
+/**
  * Relay for coding.* event envelopes riding the runner's Streamable HTTP
  * session — the backend half of the chat-to-runner coding bridge.
  *
@@ -29,10 +38,20 @@ export interface CodingEvent {
  * session -> runner (runner.hello cache first, RunnerSession table fallback)
  * and re-emits per runner so SSE subscribers can stream them out.
  *
- * Multi-replica note: an event lands on whichever pod the runner's POST hit,
- * while the SSE subscriber may be on another pod. v1 relays pod-locally
- * (fine for single-replica and dev); cross-pod fanout would ride the same
- * Redis bridge the transport already has and is deliberately deferred.
+ * Multi-replica: an event lands on whichever pod the runner's POST hit,
+ * while the viewer's SSE stream may be held by another pod. With Redis
+ * (docs/design/hosted-runners-and-always-on.md, "Cross-pod coding relay"):
+ *   1. the receiving pod appends the event to a per-session Redis stream,
+ *      `coding:evt:<runnerId>:<sessionId>` (bounded by MAXLEN ~, expiring
+ *      after the last event; CODING_RELAY_BACKLOG_MAXLEN / _TTL_S), whose
+ *      entry id doubles as the SSE event id, then publishes it on
+ *      `coding:evt:<runnerId>`;
+ *   2. every pod holds one pattern subscription and re-emits to its local
+ *      subscribers of that runner;
+ *   3. subscribeSession() reads the backlog (from Last-Event-ID, or from
+ *      the start for a late viewer) before going live.
+ * Without Redis (tests, single-pod dev) it relays pod-locally, without ids
+ * or backlog, as it always did.
  */
 
 /**
@@ -42,6 +61,12 @@ export interface CodingEvent {
  * to keep the map from growing for the life of the pod.
  */
 const SESSION_RUNNER_CACHE_MAX = 10_000;
+
+/** Prefix of the per-runner channels and the per-session backlog streams. */
+const CODING_EVT_PREFIX = 'coding:evt:';
+
+/** A Redis stream entry id: `<ms>-<seq>`. */
+const STREAM_ID_RE = /^\d+-\d+$/;
 
 /**
  * The transport hands each envelope the session it arrived on. `id` is
@@ -60,6 +85,8 @@ interface EnvelopeSession {
 export class CodingRelayService implements OnModuleDestroy {
   private readonly logger = new Logger(CodingRelayService.name);
   private readonly emitter = new EventEmitter();
+  /** Pattern-subscribed connection for cross-pod fan-out (Redis only). */
+  private subscriber?: Redis.Redis;
   /**
    * Fast local cache: streamable session id -> runner id (from runner.hello).
    *
@@ -91,6 +118,7 @@ export class CodingRelayService implements OnModuleDestroy {
   constructor(
     private readonly runners: RunnerService,
     private readonly transport: WorkerStreamTransport,
+    @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
   ) {
     this.envelopeListener = (env, session) => {
       void this.onEnvelope(env, session).catch((err) =>
@@ -100,21 +128,90 @@ export class CodingRelayService implements OnModuleDestroy {
     this.transport.on('envelope', this.envelopeListener);
     // One listener per open SSE subscription; lift the default cap.
     this.emitter.setMaxListeners(1000);
+    if (this.redis) this.startRedisFanout();
   }
 
   onModuleDestroy(): void {
     this.transport.off('envelope', this.envelopeListener);
     this.emitter.removeAllListeners();
+    if (this.subscriber) {
+      // disconnect, not quit: quit waits for a Redis that may be gone.
+      try { this.subscriber.disconnect(); } catch { /* */ }
+      this.subscriber = undefined;
+    }
   }
 
   /**
-   * Subscribe to all coding.* events from one runner. Caller filters by
-   * coding session id. Returns an unsubscribe function.
+   * Subscribe to all coding.* events from one runner, live only. Caller
+   * filters by coding session id. Returns an unsubscribe function.
    */
-  subscribe(runnerId: string, listener: (event: CodingEvent) => void): () => void {
+  subscribe(runnerId: string, listener: CodingEventListener): () => void {
     const channel = `coding:${runnerId}`;
     this.emitter.on(channel, listener);
     return () => this.emitter.off(channel, listener);
+  }
+
+  /**
+   * Subscribe to one coding session's events. With Redis the listener
+   * first gets the session's backlog -- everything after `lastEventId`, or
+   * the whole retained backlog when there is none -- then live events, in
+   * order and without duplicates. Without Redis it is live only, as
+   * subscribe() is. Returns an unsubscribe function.
+   */
+  subscribeSession(
+    runnerId: string,
+    sessionId: string,
+    listener: CodingEventListener,
+    lastEventId?: string,
+  ): () => void {
+    if (!this.redis) {
+      return this.subscribe(runnerId, (event, id) => {
+        if (event.sessionId === sessionId) listener(event, id);
+      });
+    }
+
+    let closed = false;
+    let live = false;
+    const from = lastEventId && STREAM_ID_RE.test(lastEventId) ? lastEventId : undefined;
+    const pending: Array<[CodingEvent, string | undefined]> = [];
+    // The backlog read and the live channel overlap: an event appended just
+    // before the read can still be in flight on the channel. Those are the
+    // only possible duplicates, so the backlog's ids are all that is kept.
+    // (Ids are not compared for order: two pods append independently, so a
+    // later live event can carry an earlier id.)
+    const fromBacklog = new Set<string>();
+    const deliver = (event: CodingEvent, id: string | undefined) => {
+      if (closed) return;
+      if (id && fromBacklog.has(id)) return;
+      listener(event, id);
+    };
+    const unsubscribe = this.subscribe(runnerId, (event, id) => {
+      if (event.sessionId !== sessionId) return;
+      if (live) deliver(event, id);
+      else pending.push([event, id]);
+    });
+
+    const key = `${CODING_EVT_PREFIX}${runnerId}:${sessionId}`;
+    void this.redis
+      .xrange(key, from ? `(${from}` : '-', '+')
+      .then((entries) => {
+        for (const [id, fields] of entries) {
+          const event = this.parseEntry(fields);
+          if (!event) continue;
+          deliver(event, id);
+          fromBacklog.add(id);
+        }
+      })
+      .catch((err) => this.logger.warn(`coding backlog read failed: ${err?.message ?? err}`))
+      .finally(() => {
+        live = true;
+        for (const [event, id] of pending.splice(0)) deliver(event, id);
+      });
+
+    return () => {
+      closed = true;
+      unsubscribe();
+    };
   }
 
   /** Visible for tests. */
@@ -167,6 +264,80 @@ export class CodingRelayService implements OnModuleDestroy {
       return;
     }
     this.rememberSession(session.id, runnerId);
-    this.emitter.emit(`coding:${runnerId}`, payload as CodingEvent);
+    const event = payload as CodingEvent;
+    if (!this.redis) {
+      this.emitter.emit(`coding:${runnerId}`, event);
+      return;
+    }
+    await this.relayViaRedis(runnerId, event);
+  }
+
+  /**
+   * Append to the session's backlog, then publish it to every pod (this
+   * one included -- its own subscribers hear it through the subscription
+   * like everyone else's). If Redis refuses, the event still reaches
+   * this pod's subscribers.
+   */
+  private async relayViaRedis(runnerId: string, event: CodingEvent): Promise<void> {
+    const key = `${CODING_EVT_PREFIX}${runnerId}:${event.sessionId}`;
+    const json = JSON.stringify(event);
+    let id: string | null;
+    try {
+      id = await this.redis!.xadd(key, 'MAXLEN', '~', codingBacklogMaxLen(), '*', 'event', json);
+    } catch (err: any) {
+      this.logger.warn(`coding backlog append failed: ${err?.message ?? err}`);
+      this.emitter.emit(`coding:${runnerId}`, event);
+      return;
+    }
+    this.redis!
+      .expire(key, codingBacklogTtlSeconds())
+      .catch((err) => this.logger.warn(`coding backlog expire failed: ${err?.message ?? err}`));
+    try {
+      await this.redis!.publish(`${CODING_EVT_PREFIX}${runnerId}`, JSON.stringify({ id, event }));
+    } catch (err: any) {
+      this.logger.warn(`coding event publish failed: ${err?.message ?? err}`);
+      this.emitter.emit(`coding:${runnerId}`, event, id ?? undefined);
+    }
+  }
+
+  private startRedisFanout(): void {
+    try {
+      this.subscriber = this.redis!.duplicate();
+      this.subscriber.on('error', (err) => this.logger.warn(`coding subscriber error: ${err?.message ?? err}`));
+      this.subscriber.on('pmessage', (_pattern: string, channel: string, message: string) =>
+        this.onRedisMessage(channel, message),
+      );
+      this.subscriber.psubscribe(`${CODING_EVT_PREFIX}*`).catch((err) =>
+        this.logger.error(`failed to subscribe to coding events: ${err?.message ?? err}`),
+      );
+    } catch (err: any) {
+      this.logger.error(`failed to start coding relay fan-out: ${err?.message ?? err}`);
+    }
+  }
+
+  private onRedisMessage(channel: string, message: string): void {
+    const runnerId = channel.slice(CODING_EVT_PREFIX.length);
+    // Backlog keys share the prefix but are never published on; a channel
+    // name carrying a session part is not one of ours.
+    if (!runnerId || runnerId.includes(':')) return;
+    let parsed: { id?: unknown; event?: CodingEvent };
+    try { parsed = JSON.parse(message); } catch { return; }
+    const event = parsed?.event;
+    if (!event || typeof event.kind !== 'string' || typeof event.sessionId !== 'string') return;
+    const id = typeof parsed.id === 'string' && STREAM_ID_RE.test(parsed.id) ? parsed.id : undefined;
+    this.emitter.emit(`coding:${runnerId}`, event, id);
+  }
+
+  private parseEntry(fields: string[]): CodingEvent | null {
+    for (let i = 0; i + 1 < fields.length; i += 2) {
+      if (fields[i] !== 'event') continue;
+      try {
+        const event = JSON.parse(fields[i + 1]);
+        return event && typeof event.kind === 'string' ? (event as CodingEvent) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   }
 }
