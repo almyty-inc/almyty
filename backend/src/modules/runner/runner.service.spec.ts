@@ -52,7 +52,7 @@ describe('RunnerService', () => {
     runners = fakeRepository<Runner>({
       idPrefix: 'r',
       make: () => Object.assign(new Runner(), {
-        labels: {}, runtimeInfo: null, config: null, lastHeartbeatAt: null,
+        labels: {}, runtimeInfo: null, config: null, lastHeartbeatAt: null, kind: 'self', hostedRunnerId: null,
         state: RunnerState.REGISTERED, registeredAt: new Date(), updatedAt: new Date(),
       }),
     });
@@ -70,6 +70,7 @@ describe('RunnerService', () => {
     const STRANDED_WORK_CLAUSES: Record<string, (ws: any, r: any, p: any) => boolean> = {
       'ws.status = :active': (ws, _r, p) => ws.status === p.active,
       'r.state IN (:...gone)': (_ws, r, p) => (p.gone as string[]).includes(r.state),
+      "r.kind = 'self'": (_ws, r) => (r.kind ?? 'self') === 'self',
     };
     workspaces.createQueryBuilder = jest.fn(() => {
       const clauses: Array<{ sql: string; params: any }> = [];

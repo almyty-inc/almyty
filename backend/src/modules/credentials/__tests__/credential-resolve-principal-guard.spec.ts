@@ -77,6 +77,8 @@ const OPTIONS_BUILT_FIRST: Record<string, string> = {
 const NO_PRINCIPAL_SITES: Record<string, string> = {
   'modules/gateways/channels/channel-installation.service.ts':
     'an inbound platform event for a multi-workspace install acts for nobody; the row is the installation\'s own managed token',
+  'modules/hosted-runners/hosted-runners.service.ts':
+    'the platform runner pool\'s cluster connection, named by the operator (HOSTED_RUNNERS_CLUSTER_CONNECTION): the reconcile loop acts for the platform, not for a person, and the row is an org row of the operator\'s organization',
 };
 
 interface Site {

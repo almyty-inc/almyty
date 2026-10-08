@@ -104,6 +104,7 @@ import { LifecycleModule } from './modules/lifecycle/lifecycle.module';
 import { ModelCatalogModule } from './modules/model-catalog/model-catalog.module';
 import { ModelRegistryModule } from './modules/model-registry/model-registry.module';
 import { ModelDeploymentsModule } from './modules/model-deployments/model-deployments.module';
+import { HostedRunnersModule } from './modules/hosted-runners/hosted-runners.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { CredentialRefModule } from './modules/credentials/credential-ref.module';
 
@@ -282,6 +283,8 @@ import { appDataSourceFactory } from './common/errors/redact-query-error';
     ModelCatalogModule,
     ModelRegistryModule,
     ModelDeploymentsModule,
+    // Hosted runners (docs/hosted-runners.md); inert unless HOSTED_RUNNERS_ENABLED=true.
+    HostedRunnersModule,
     ConnectionsModule,
     CredentialRefModule,
     KmsModule,

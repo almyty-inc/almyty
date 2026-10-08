@@ -241,6 +241,13 @@ export class Agent {
      */
     runnerId?: string;
     /**
+     * The hosted environment its runner-backed tools run on
+     * (docs/hosted-runners.md): each call goes to the caller's own
+     * persistent workspace there, woken if parked. Exclusive with runnerId
+     * and runnerLabels.
+     */
+    environmentId?: string;
+    /**
      * Who unattended runs act as: its owner (default), or the agent itself
      * with its own connection grants and audit actor. 'agent' requires the
      * agent_identity entitlement (agents/agent-identity.ts).

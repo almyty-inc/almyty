@@ -19,6 +19,7 @@ import { WorkspaceModule } from '../workspace/workspace.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { WorkerStreamTransport } from './transport/worker-stream.transport';
 import { WorkerStreamController } from './transport/worker-stream.controller';
+import { RunnerCredentialGuard, RunnerCredentialService } from './runner-credential';
 
 /**
  * Runner module: registration, heartbeat, FSM, the worker stream, and the
@@ -52,11 +53,15 @@ import { WorkerStreamController } from './transport/worker-stream.controller';
     CodingRelayService,
     RunWorkspaceService,
     WorkerStreamTransport,
+    // A hosted runner pod's credential (hosted runners): signed by the
+    // hosted-runners module's enrollment, checked on the hosted stream.
+    RunnerCredentialService,
+    RunnerCredentialGuard,
   ],
   // WorkerStreamController first: Express matches routes in registration
   // order, and RunnerController's GET /runners/:runnerId (ParseUUIDPipe)
   // would otherwise take GET /runners/stream and answer 400.
   controllers: [WorkerStreamController, RunnerController],
-  exports: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService, RunWorkspaceService],
+  exports: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService, RunWorkspaceService, RunnerCredentialService, RunnerCredentialGuard],
 })
 export class RunnerModule {}

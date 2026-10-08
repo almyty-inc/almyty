@@ -12,6 +12,9 @@ import { WorkerStreamTransport } from './worker-stream.transport';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { listenOnLoopback } from '../../../test/http';
+import { RunnerCredentialGuard } from '../runner-credential';
+
+const HOSTED_RUNNER_ID = '6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b';
 
 /**
  * GET /runners/stream must reach the worker stream. RunnerController owns
@@ -47,6 +50,18 @@ describe('worker stream routes', () => {
       })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(RunnerCredentialGuard)
+      .useValue({
+        canActivate: (ctx: any) => {
+          ctx.switchToHttp().getRequest().runnerCredential = {
+            runnerId: HOSTED_RUNNER_ID,
+            organizationId: 'org-hosted',
+            hostedRunnerId: 'hr-1',
+            actUserId: 'u-1',
+          };
+          return true;
+        },
+      })
       .compile();
     app = await listenOnLoopback(moduleRef.createNestApplication());
   });
@@ -67,5 +82,31 @@ describe('worker stream routes', () => {
 
   it.each(['/runners/stream', '/mcp/streamable'])('POST %s reaches the worker stream', async (path) => {
     await request(app.getHttpServer()).post(path).send({ v: 1 }).expect(202);
+  });
+
+  // A hosted runner's stream: the session belongs to its runner credential,
+  // known as `runner:<id>`, in the credential's organization -- never to a
+  // person.
+  it('POST /runners/hosted/stream reaches the worker stream as the runner credential', async () => {
+    stream.handlePost.mockClear();
+    await request(app.getHttpServer()).post('/runners/hosted/stream').send({ v: 1 }).expect(202);
+    const [, , organizationId, userId] = stream.handlePost.mock.calls[0] as unknown as [unknown, unknown, string, string];
+    expect(organizationId).toBe('org-hosted');
+    expect(userId).toBe(`runner:${HOSTED_RUNNER_ID}`);
+  });
+
+  it('GET /runners/hosted/stream reaches the worker stream as the runner credential', async () => {
+    stream.handleStream.mockClear();
+    await request(app.getHttpServer()).get('/runners/hosted/stream').expect(200);
+    const [, , organizationId, userId] = stream.handleStream.mock.calls[0] as unknown as [unknown, unknown, string, string];
+    expect(organizationId).toBe('org-hosted');
+    expect(userId).toBe(`runner:${HOSTED_RUNNER_ID}`);
+  });
+
+  it('guards the hosted routes with the runner credential and nothing else', () => {
+    for (const handler of ['hostedPost', 'hostedOpen'] as const) {
+      const guards = Reflect.getMetadata('__guards__', WorkerStreamController.prototype[handler]);
+      expect(guards).toEqual([RunnerCredentialGuard]);
+    }
   });
 });

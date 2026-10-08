@@ -21,6 +21,13 @@ export const REFRESH_TOKEN_AUDIENCE = 'almyty-refresh';
 /** Email verification link tokens: POST/GET /auth/verify-email only. */
 export const EMAIL_VERIFY_TOKEN_AUDIENCE = 'almyty-email-verify';
 
+/**
+ * Runner credentials: what a hosted runner pod holds instead of a login
+ * (runner/runner-credential.ts). Accepted on the hosted runner's own
+ * stream and renewal only; the session strategy refuses this audience.
+ */
+export const RUNNER_CREDENTIAL_AUDIENCE = 'almyty-runner';
+
 /** The one algorithm we sign with, and so the only one we verify. */
 export const JWT_ALGORITHM = 'HS256' as const;
 
