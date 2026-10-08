@@ -16,6 +16,7 @@ import { WorkspaceReclaimer } from './workspace-reclaimer.js';
 import { enroll, EnrollmentError, readEnrollSettings, RunnerCredential } from './enroll.js';
 import { parseAllowBinaries, withAllowBinaries } from './policy.js';
 import { prepareHostedWorkspace } from './hosted-setup.js';
+import { ModelToken, readModelAccess, startModelProxy } from './model-proxy.js';
 
 // An override keeps independent local test/demo daemons away from the user's runner.
 const STATE_DIR = process.env.ALMYTY_RUNNER_STATE_DIR || join(homedir(), '.almyty', 'runner');
@@ -93,6 +94,9 @@ export class RunnerDaemon {
   private status: DaemonStatus | null = null;
   /** A hosted runner's renewable credential (enroll mode only). */
   private credential: RunnerCredential | null = null;
+  /** The pod model token and the loopback proxy that serves it (enroll mode). */
+  private modelToken: ModelToken | null = null;
+  private closeModelProxy: (() => Promise<void>) | null = null;
   /** Guards against overlapping re-establish attempts. */
   private reestablishing = false;
   /** Consecutive failed re-establish attempts; bounds the retry loop. */
@@ -182,6 +186,9 @@ export class RunnerDaemon {
     const fetchImpl = opts.fetch ?? globalThis.fetch;
     const exit = opts.exit ?? ((code: number) => process.exit(code));
     const settings = readEnrollSettings(env, { url: opts.url });
+    // Out of the environment before anything is started, like the
+    // enrollment token: the coding CLIs reach models through the proxy.
+    const modelAccess = readModelAccess(env);
     // Read before the token is spent: a list the runner cannot read stops
     // it here (exit 1, the pod restarts) rather than running unrestricted.
     let allowBinaries: string[] | undefined;
@@ -216,6 +223,33 @@ export class RunnerDaemon {
       },
     });
     this.credential.start();
+
+    // The pod model token: served to the coding CLIs through the loopback
+    // model proxy and renewed while the pod runs (model-proxy.ts). A proxy
+    // that cannot listen leaves the CLIs without models, not the runner down.
+    if (modelAccess) {
+      this.modelToken = new ModelToken({
+        backendUrl: settings.backendUrl,
+        renewPath: modelAccess.renewPath,
+        token: modelAccess.token,
+        expiresAt: modelAccess.expiresAt,
+        fetch: fetchImpl,
+        log: (line) => process.stdout.write(`${line}\n`),
+      });
+      this.modelToken.start();
+      try {
+        const proxy = await startModelProxy({
+          backendUrl: settings.backendUrl,
+          port: modelAccess.port,
+          token: () => this.modelToken?.current() ?? '',
+          log: (line) => process.stdout.write(`${line}\n`),
+        });
+        this.closeModelProxy = proxy.close;
+        process.stdout.write(`model proxy listening on 127.0.0.1:${proxy.port}\n`);
+      } catch (err: any) {
+        process.stderr.write(`model proxy could not listen on 127.0.0.1:${modelAccess.port}: ${err?.code ?? err?.message ?? err}\n`);
+      }
+    }
 
     // The pod is the sandbox: the backend decides the policy (host
     // isolation, cwd limited to the workspace volume), narrowed by the
@@ -344,6 +378,9 @@ export class RunnerDaemon {
       if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
       this.credential?.stop();
+      this.modelToken?.stop();
+      await this.closeModelProxy?.().catch(() => undefined);
+      this.closeModelProxy = null;
       if (this.client) {
         await this.client.send(envelope('event', { kind: 'runner.draining' })).catch(() => {});
         this.client.stop();

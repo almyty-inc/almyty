@@ -26,11 +26,20 @@ export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$XDG_CACHE_HOME/pip}"
 export TMPDIR="${TMPDIR:-/tmp}"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 
-# Coding CLIs call almyty's Anthropic- and OpenAI-compatible endpoints with
-# the pod's model token (ALMYTY_MODEL_TOKEN), so vendor keys stay in the
-# store and every call is routed, budgeted and attributed (design:
-# hosted-runners-and-always-on.md, Decision 6). A family the pod already
-# configured itself (a base URL or a key of its own) is left alone.
+# Coding CLIs call almyty's model pass-through (POST /v1/messages,
+# /v1/chat/completions, /v1/responses) with the pod's model token, so
+# vendor keys stay in the store and every call is routed, budgeted and
+# attributed (design: hosted-runners-and-always-on.md, Decision 6). A
+# family the pod already configured itself (a base URL or a key of its
+# own) is left alone.
+#
+# When the pod names a model proxy port (ALMYTY_MODEL_PROXY_PORT), the CLIs
+# never see the token: they talk to the runner's loopback proxy with a
+# placeholder key, and the runner forwards each call with the current
+# token, which it renews while the pod runs (packages/runner,
+# model-proxy.ts). The runner also takes ALMYTY_MODEL_TOKEN out of its
+# environment, so nothing it starts inherits it. Without a port (an older
+# backend) the CLIs get the token directly.
 #   Claude Code  ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN, sent as a bearer
 #                to POST /v1/messages. Not ANTHROPIC_API_KEY, which makes it
 #                ask which credential to use.
@@ -42,19 +51,27 @@ export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 #                POST /v1/responses. The file is rewritten on every start
 #                while it carries the marker line; replace it to manage it.
 #   Gemini CLI   no almyty endpoint speaks its API; a vendor key from the
-#                store (GEMINI_API_KEY) is the pod's to inject.
+#                store (GEMINI_API_KEY) is the pod's to inject, on an
+#                environment that allows vendor keys.
 if [ -n "${ALMYTY_MODEL_TOKEN:-}" ] && [ -n "${ALMYTY_API_URL:-}" ]; then
-  api="${ALMYTY_API_URL%/}"
+  if [ -n "${ALMYTY_MODEL_PROXY_PORT:-}" ]; then
+    api="http://127.0.0.1:${ALMYTY_MODEL_PROXY_PORT}"
+    # The proxy replaces whatever key a CLI sends.
+    cli_key="almyty-pod-local"
+  else
+    api="${ALMYTY_API_URL%/}"
+    cli_key="$ALMYTY_MODEL_TOKEN"
+  fi
   if [ -z "${ANTHROPIC_BASE_URL:-}${ANTHROPIC_API_KEY:-}${ANTHROPIC_AUTH_TOKEN:-}" ]; then
     export ANTHROPIC_BASE_URL="$api"
-    export ANTHROPIC_AUTH_TOKEN="$ALMYTY_MODEL_TOKEN"
-    export AIDER_ANTHROPIC_API_KEY="${AIDER_ANTHROPIC_API_KEY:-$ALMYTY_MODEL_TOKEN}"
+    export ANTHROPIC_AUTH_TOKEN="$cli_key"
+    export AIDER_ANTHROPIC_API_KEY="${AIDER_ANTHROPIC_API_KEY:-$cli_key}"
   fi
   if [ -z "${OPENAI_BASE_URL:-}${OPENAI_API_KEY:-}" ]; then
     export OPENAI_BASE_URL="$api/v1"
-    export OPENAI_API_KEY="$ALMYTY_MODEL_TOKEN"
+    export OPENAI_API_KEY="$cli_key"
     export AIDER_OPENAI_API_BASE="${AIDER_OPENAI_API_BASE:-$OPENAI_BASE_URL}"
-    export AIDER_OPENAI_API_KEY="${AIDER_OPENAI_API_KEY:-$ALMYTY_MODEL_TOKEN}"
+    export AIDER_OPENAI_API_KEY="${AIDER_OPENAI_API_KEY:-$cli_key}"
     codex_home="${CODEX_HOME:-$HOME/.codex}"
     codex_config="$codex_home/config.toml"
     marker='# Written by the runner-env entrypoint on every start; replace this file to manage it yourself.'

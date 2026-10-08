@@ -25,6 +25,8 @@ Configured in the Data retention card under Settings → Organization, or over t
 
 `runner_usage_intervals` are billing records, so this class works the other way round. Null means the install's default, the hosted runner setting `usageRetention.months` (13 months as shipped), and that default applies to every organization, with a policy or without one. An organization's enabled policy may set `runnerUsageDays` instead. An interval still open (a pod running now) is never deleted, whatever its age. Each organization's deletions are written to the audit log as a `retention_sweep` entry with `runnerUsageIntervals`, the cutoff, and whether the policy or the install default set it.
 
+The model calls coding CLIs in hosted pods make through the model pass-through (`hosted_model_calls`) belong to the same class: kept for the same window, aged by when they were made, and audited as `hostedModelCalls`.
+
 A suspended hosted workspace has its own window, set in the hosted runner settings (see [Hosted runners](hosted-runners.md)).
 
 ### Before you set `auditLogDays`

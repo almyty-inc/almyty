@@ -866,20 +866,18 @@ runner credential is scoped to one runner and the runner surface; user
 tokens never enter a pod. Environment secrets resolve through grants at pod
 start (audited) into the pod's Secret, which is deleted at scale to zero and
 rewritten at wake, so a secret rotated in the store reaches the next wake.
-Model keys stay in the store (Decision 6): coding CLIs call almyty's
-compatible endpoints with a pod model token, and a vendor key is injected
-only for a CLI that cannot change its base URL, on an environment that
-allows it (`allowVendorKeys`, off by default). As built, the token is
+Model keys stay in the store (Decision 6): coding CLIs call almyty's model
+pass-through with a pod model token, and a vendor key is injected only for
+a CLI that cannot use almyty's endpoints (Gemini CLI), on an environment
+that allows it (`allowVendorKeys`, off by default). As built, the token is
 minted by the reconcile loop at every pod start (sha256 only in
-`hosted_model_tokens`), lives in the pod's Secret as `ALMYTY_MODEL_TOKEN`,
-`ANTHROPIC_API_KEY` and `OPENAI_API_KEY` next to `ANTHROPIC_BASE_URL` and
-`OPENAI_BASE_URL`, acts as the workspace's owner, is accepted only by
-`/v1/messages`, `/v1/chat/completions` and `/v1/models`, and is revoked when
-the pod stops or its owner leaves. Pods were meant to use the
-organization's org-wide model providers, the owner's private provider only
-through an explicit one-click grant; the token runs agents as their owner
-would, so an agent configured with the owner's private provider uses it.
-That narrowing is still open.
+`hosted_model_tokens`), lives an hour and is renewed by the runner with
+itself while the pod runs, sits in the pod's Secret as
+`ALMYTY_MODEL_TOKEN`, is served to the CLIs by the runner's loopback proxy
+(the CLIs hold a placeholder), and is revoked when the pod stops or its
+owner leaves. The pass-through forwards to organization-wide providers
+only; the owner's private provider through an explicit one-click grant is
+not built yet.
 
 **Abuse.** Hosted runners are paid-only, so every org that has one has a
 card on file. On top of that:
@@ -1382,25 +1380,37 @@ Decided after the phase 2 merge (Frane, 2026-10-08), and built:
   longest-standing owner, else the longest-standing admin. Audited; the
   files are kept. Their own workspaces have their pod stopped at once (its
   Secret holds their connections and their model token) and move to the
-  same person where that person has none on the environment yet.
+  same person. Where that person already has one on the environment they
+  keep both: the departed member's read-only (its volume mounted
+  read-only, used only by a call that names it), to copy from or delete,
+  with the normal suspended retention and the day-23 notice to them.
 - **A team is deleted.** An environment shared with it keeps its owner and
   becomes private; the owner is told in plain words and can share it again.
 - **Usage records** are kept 13 months after they close, a retention class
   (`runnerUsageDays`) an organization can set, with the 13 months as the
   install default (`usageRetention.months`); an open interval is never
-  deleted.
+  deleted. Pods' model calls are kept the same way.
 - **One folder per person per environment.** The two-folders idea under
   "Persistent workspaces" is replaced: a person's jobs on an environment
   share one `/workspace` and run one after another (a job holds the
   workspace while it runs; others wait, then sleep and retry).
 - **Decision 6, built.** A pod model token, minted at every pod start with
-  only its hash stored, bound to the hosted runner (so workspace,
-  environment and organization) and acting as the workspace's owner,
-  accepted only by `/v1/messages`, `/v1/chat/completions` and `/v1/models`,
-  attributed on the response, the run and the audit log, revoked when the
-  pod stops, and injected through the pod's Secret with
-  `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` beside it. Vendor keys are an
-  opt-in per environment (`allowVendorKeys`), off by default. Those
-  endpoints run almyty agents and refuse client-declared tools, so a coding
-  CLI that sends its own tools needs a model pass-through endpoint that
-  does not exist yet ([hosted-runners.md](../hosted-runners.md), "Not yet").
+  only its hash stored, an hour long (`modelAccess.tokenTtlMinutes`) and
+  renewed by the runner with itself while the pod runs; it dies when the
+  pod stops, fails or is torn down. It is bound to the hosted runner (so
+  workspace, environment and organization) and acts as the workspace's
+  owner. It lives in the pod's Secret as `ALMYTY_MODEL_TOKEN`, which the
+  runner takes out of its environment and serves to the CLIs through a
+  loopback model proxy, so the CLIs hold only a placeholder key and keep
+  working across renewals. What it reaches is the **model pass-through**:
+  the CLI's own request (tools, stream, thinking) forwarded to an
+  organization-wide provider of the catalog, never the owner's private or
+  a team provider, on `/v1/messages`, `/v1/chat/completions` and
+  `/v1/responses` (Codex), budgeted against the organization's budgets,
+  recorded as spend (`hosted_model_calls`), audited (`model_routed`,
+  `hosted_model_call`) and attributed on the response. An API key on the
+  first two still runs an agent; the pass-through takes a pod token only.
+  Vendor keys are an opt-in per environment (`allowVendorKeys`), off by
+  default; Gemini CLI needs one, since no almyty endpoint speaks its API.
+  The owner's private provider through an explicit one-click grant is not
+  built yet: until it is, pods use organization-wide providers only.
