@@ -12,6 +12,7 @@ const { values } = parseArgs({ options: {
   title: { type: 'string' }, 'captured-at': { type: 'string' }, route: { type: 'string' },
   sources: { type: 'string', multiple: true },
   package: { type: 'string' }, command: { type: 'string' }, notes: { type: 'string' }, environment: { type: 'string' },
+  file: { type: 'string' },
 } })
 let manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 if (values.init) {
@@ -36,7 +37,8 @@ if (values.init) {
   if (manifest.schemaVersion !== 2) throw new Error('Run --init once to migrate the manifest')
   if (!/^screenshots\/(?!.*(?:\.\.|\\))[^\s]+\.png$/.test(values.path || '')) throw new Error('Supply a safe screenshots/*.png --path')
   if (!values.title || !values['captured-at'] || !Number.isFinite(Date.parse(values['captured-at']))) throw new Error('Supply --title and observed --captured-at')
-  if (!values.route && !(values.package && values.command)) throw new Error('Supply --route or published --package and --command')
+  if (!values.route && !values.file && !(values.package && values.command)) throw new Error('Supply --route, --file, or published --package and --command')
+  if (values.file && !values.sources?.includes(values.file)) throw new Error('A --file capture must also be listed in --sources')
   const fingerprint = sourceDigest(repoRoot, values.sources)
   const destination = join(publicDir, values.path)
   if (values.image) {
@@ -51,7 +53,9 @@ if (values.init) {
     sha256: digest(readFileSync(destination)),
     source: values.package
       ? { kind: 'published-cli', package: values.package, command: values.command }
-      : { kind: 'browser', environment: values.environment || 'staging', route: values.route },
+      : values.file
+        ? { kind: 'repo-file', file: values.file, ...(values.command ? { command: values.command } : {}) }
+        : { kind: 'browser', environment: values.environment || 'staging', route: values.route },
     sources: values.sources, sourceDigest: fingerprint,
     ...(values.notes ? { notes: values.notes } : {}),
   }
