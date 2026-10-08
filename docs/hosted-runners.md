@@ -198,11 +198,12 @@ almyty.
 
 | Target | What it adds |
 |---|---|
+| `standard` | `node` and `python` together, and the coding CLIs: Claude Code, Codex, Gemini CLI, aider (see [Coding CLIs](#coding-clis)) |
+| `standard-browser` | `standard` and Playwright with headless Chromium (see [The browser](#the-browser)) |
 | `node` | pnpm and yarn |
 | `python` | pip, venv and the Python headers native wheels build against |
-| `standard` | both of the above |
 
-All three share a `base` stage: Debian slim with Node 26 (the repo's one
+All four share a `base` stage: Debian slim with Node 26 (the repo's one
 Node major), git and git-lfs, build-essential, curl, jq, tini, and
 `@almyty/runner` at the version pinned by `ARG RUNNER_VERSION`. The
 runner's PTY binding (node-pty) compiles against the build tools there.
@@ -227,11 +228,14 @@ They are made for the pod the backend writes:
 tagged `almyty/runner-env:<target>-<RUNNER_VERSION>`. Point the setting at
 that file (or copy its `images` into `HOSTED_RUNNERS_SETTINGS`) to offer
 them. Settings merge key by key, so names in the built-in defaults that
-the file does not mention stay offered. Once pushed, pin each entry by
-digest (`...:standard-1.6.0@sha256:...`). `scripts/check-runner-env-images.js`
-(in CI's repo-invariants job) fails when a listed name is not a target,
-when a tag does not carry the pinned version, or when the pin is ahead of
-`packages/runner`.
+the file does not mention stay offered. The built-in defaults name
+`standard` and `standard-browser` with the same tags as the file. Once
+pushed, pin each entry by digest (`...:standard-1.6.0@sha256:...`).
+`scripts/check-runner-env-images.js` (in CI's repo-invariants job) fails
+when a listed name is not a target, when a tag does not carry the pinned
+version, when the pin is ahead of `packages/runner`, when a built-in default
+is not in the file with the same reference, or when the workflow does not
+build and smoke-test exactly the listed flavours.
 
 Build one locally from the repository root:
 
@@ -252,15 +256,66 @@ To run it as the cluster does: `--user 1000:1000 --read-only --cap-drop
 ALL --tmpfs /tmp`, a volume owned by uid 1000 at `/workspace`,
 `HOME=/workspace/.home`, `ALMYTY_API_URL` and `ALMYTY_ENROLLMENT_TOKEN`.
 
-CI (`.github/workflows/runner-env-images.yml`) builds all three, with the
+CI (`.github/workflows/runner-env-images.yml`) builds all four, with the
 runner packed from the checkout, on every PR and push that touches
-`images/runner-env/**` or `packages/runner/**`, and checks each one as the
-pod runs it: uid 1000, `--enroll` present, and a failed enrollment exits 1.
-It pushes only from `master` and `v*` tags. The push builds with the
-pinned runner from npm and refuses an image whose runner has no
+`images/runner-env/**` or `packages/runner/**`, and runs
+`images/runner-env/smoke.sh` on each as the pod runs it: uid 1000,
+`--enroll` present, a failed enrollment exits 1, every coding CLI starts
+and the runner detects it, the model-token wiring, and (for
+`standard-browser`) a headless Chromium page load. Run the same script
+locally after a build: `images/runner-env/smoke.sh runner-env:standard
+standard`. CI pushes only from `master` and `v*` tags. The push builds with
+the pinned runner from npm and refuses an image whose runner has no
 `--enroll`. To release new images: publish the runner, bump
-`RUNNER_VERSION` in the Dockerfile and the tags in `settings.json` together,
-merge to `master`, then pin the pushed digests in `settings.json`.
+`RUNNER_VERSION` in the Dockerfile and the tags in `settings.json` and the
+backend's default `images` together, merge to `master`, then pin the pushed
+digests in `settings.json`.
+
+### Coding CLIs
+
+`standard` and `standard-browser` carry the coding CLIs the runner detects
+and drives, each from its vendor's package at a version pinned by an `ARG`
+in the Dockerfile: Claude Code (`@anthropic-ai/claude-code`), Codex
+(`@openai/codex`), Gemini CLI (`@google/gemini-cli`) and aider
+(`aider-chat`, in its own venv at `/opt/aider`). They are read-only in the
+image; their config, sessions and caches go under `HOME` on the volume.
+Self-updates, first-run questions and analytics are switched off.
+
+They call models through almyty, not a vendor, so keys stay in the store
+and every call is routed, budgeted and attributed. When the pod has
+`ALMYTY_MODEL_TOKEN` and `ALMYTY_API_URL`, the entrypoint sets:
+
+| CLI | Settings | Calls |
+|---|---|---|
+| Claude Code | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` (a bearer; `ANTHROPIC_API_KEY` would make it ask which to use) | `POST /v1/messages` |
+| aider | `AIDER_OPENAI_API_BASE`, `AIDER_OPENAI_API_KEY`, `AIDER_ANTHROPIC_API_KEY` | `/v1/chat/completions`, `/v1/messages` |
+| Codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, and an `almyty` provider in `~/.codex/config.toml` (Codex ignores `OPENAI_BASE_URL`) | `POST /v1/responses` |
+| Gemini CLI | nothing: no almyty endpoint speaks its API | a vendor key (`GEMINI_API_KEY`) the pod injects |
+
+A family the pod configured itself (its own base URL or key) is left
+alone. The Codex file is rewritten on every start while its first line is
+the entrypoint's marker; replace the file to manage it yourself. A session
+the runner starts with its own `CODEX_HOME` does not see it. Checked
+against a fake API in the image: Claude Code and aider reach
+`/v1/messages` and `/v1/chat/completions` with the token; Codex reaches
+`/v1/responses`, which almyty does not serve yet.
+
+### The browser
+
+`standard-browser` adds Playwright (pinned) with the headless Chromium
+build it was released against and the libraries it needs, in
+`/opt/ms-playwright` (`PLAYWRIGHT_BROWSERS_PATH`). `NODE_PATH` makes the
+global `playwright` requirable without a project install. A project that
+pins another Playwright release sets `PLAYWRIGHT_BROWSERS_PATH` under
+`HOME` and installs its own browser there.
+
+Chromium runs without its own sandbox, which is Playwright's default
+(`chromiumSandbox: false` adds `--no-sandbox`). Its sandbox needs a setuid
+helper, which `allowPrivilegeEscalation: false` rules out, or unprivileged
+user namespaces, which the `RuntimeDefault` seccomp profile refuses to a
+container without `CAP_SYS_ADMIN`. With the pod's restrictions,
+`chromiumSandbox: true` fails at launch ("Chromium sandboxing failed").
+The pod is the sandbox: gVisor, non-root, no capabilities, read-only root.
 
 ### Enroll mode
 
@@ -316,6 +371,32 @@ The code is `packages/runner/src/enroll.ts` (token, enrollment, renewal),
 tests run it against a fake API with the backend's rules
 (`test/fake-hosted-api.ts`, `test/enroll.spec.ts`).
 
+### Binary allowlist
+
+An environment may list the binaries its runner starts
+(`egress.allowBinaries`). The pod gets the list as `ALMYTY_ALLOW_BINARIES`,
+a JSON array, and the runner adds it to the policy the backend sent
+(`packages/runner/src/policy.ts`, next to `denyPatterns`). With a list:
+
+- a `process.spawn` or coding-agent start whose binary is not listed is
+  refused (`command_denied`);
+- every command a `shell.exec` line starts is checked: the first word of
+  each command, including those in `$( )`, backticks, `( )` and pipelines,
+  after variable assignments and redirections. Builtins that cannot start a
+  program (`cd`, `echo`, `export`, `test`, ...) need no listing; `exec`,
+  `eval`, `command`, `source` and `trap` do. A command name built at run
+  time (`$CMD`, a glob) is refused;
+- an entry without a slash allows that name, found on `PATH`; an entry with
+  a slash allows exactly that absolute path, so `./claude` is not `claude`.
+
+A list the runner cannot read stops it before it enrolls (exit 1), rather
+than letting it run unrestricted. No list, or an empty one, means no
+restriction.
+
+Inside the sandbox this is a guard rail, not the boundary: a listed shell,
+interpreter or wrapper (`bash`, `python`, `node`, `env`, `xargs`, an npm
+script) can still start anything. The boundary is the pod.
+
 ## Data
 
 | Table | What it holds |
@@ -362,9 +443,10 @@ tests run it against a fake API with the backend's rules
 - Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.3,
   which has no `--enroll`, so the push job refuses until the pin moves to
   the first release that has it.
-- A `standard-browser` image (headless Chromium and Playwright). The
-  built-in `images` default still names it; nothing builds it yet.
-- A pod-scoped token for coding CLIs to call almyty's Anthropic- and
-  OpenAI-compatible endpoints.
+- The pod-scoped model token. The images already turn `ALMYTY_MODEL_TOKEN`
+  into each CLI's settings (see [Coding CLIs](#coding-clis)); the backend
+  does not mint one or put it in the pod yet.
+- `POST /v1/responses`. Codex speaks only the Responses API, so until almyty
+  serves it, Codex in a hosted pod has no model to call.
 - Plan capacity and Stripe reporting (phase 3, in `ee`).
 - An organization's own cluster (phase 4).

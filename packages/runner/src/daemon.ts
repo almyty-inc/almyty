@@ -13,7 +13,8 @@ import { WorkerEnvelope, RequestPayload, ResponsePayload, HeartbeatPayload, WORK
 import { dispatchHandler, HandlerContext } from './handlers.js';
 import { CodingSessionManager } from './coding-sessions.js';
 import { WorkspaceReclaimer } from './workspace-reclaimer.js';
-import { enroll, readEnrollSettings, RunnerCredential } from './enroll.js';
+import { enroll, EnrollmentError, readEnrollSettings, RunnerCredential } from './enroll.js';
+import { parseAllowBinaries, withAllowBinaries } from './policy.js';
 import { prepareHostedWorkspace } from './hosted-setup.js';
 
 // An override keeps independent local test/demo daemons away from the user's runner.
@@ -181,6 +182,14 @@ export class RunnerDaemon {
     const fetchImpl = opts.fetch ?? globalThis.fetch;
     const exit = opts.exit ?? ((code: number) => process.exit(code));
     const settings = readEnrollSettings(env, { url: opts.url });
+    // Read before the token is spent: a list the runner cannot read stops
+    // it here (exit 1, the pod restarts) rather than running unrestricted.
+    let allowBinaries: string[] | undefined;
+    try {
+      allowBinaries = parseAllowBinaries(env.ALMYTY_ALLOW_BINARIES);
+    } catch (err: any) {
+      throw new EnrollmentError(err.message);
+    }
 
     process.stdout.write(`almyty-runner v${RUNNER_VERSION} starting in enroll mode\n`);
     process.stdout.write(`url=${settings.backendUrl}\n`);
@@ -209,8 +218,9 @@ export class RunnerDaemon {
     this.credential.start();
 
     // The pod is the sandbox: the backend decides the policy (host
-    // isolation, cwd limited to the workspace volume).
-    const config = enrolled.effectiveConfig;
+    // isolation, cwd limited to the workspace volume), narrowed by the
+    // environment's binary allowlist when it has one.
+    const config = withAllowBinaries(enrolled.effectiveConfig, allowBinaries);
     process.stdout.write(`${describeIsolationPosture(config)}\n`);
 
     // Before the stream opens, so the machine reports ready only once its

@@ -8,7 +8,9 @@
  * `<name>-<RUNNER_VERSION>` with the runner version the Dockerfile pins,
  * and that pin must be a release the runner package has reached. A tag
  * that names a flavour nobody builds, or a pin that moved without the
- * tags, is an environment that cannot start.
+ * tags, is an environment that cannot start. The backend's built-in image
+ * list must be a subset of settings.json, and the CI workflow must build
+ * and smoke-test exactly the listed flavours.
  *
  * Same shape as the other repo checks: Node + a checkout, no install.
  */
@@ -54,6 +56,37 @@ if (!images || typeof images !== 'object' || Object.keys(images).length === 0) {
     }
   }
 }
+
+// The backend's built-in `images` (what an install offers before any
+// settings file) name images CI pushes: each one is in settings.json, with
+// the same reference.
+const backendSettingsPath = path.join(root, 'backend', 'src', 'modules', 'hosted-runners', 'hosted-runner-settings.ts');
+const backendSettings = fs.readFileSync(backendSettingsPath, 'utf8');
+const defaultsBlock = (/DEFAULT_HOSTED_RUNNER_SETTINGS[\s\S]*?\n\s*images:\s*\{([\s\S]*?)\}/.exec(backendSettings) || [])[1];
+if (!defaultsBlock) {
+  findings.push('hosted-runner-settings.ts: no `images` in DEFAULT_HOSTED_RUNNER_SETTINGS.');
+} else {
+  const defaults = [...defaultsBlock.matchAll(/['"]?([A-Za-z0-9_-]+)['"]?\s*:\s*['"]([^'"]+)['"]/g)];
+  if (defaults.length === 0) findings.push('hosted-runner-settings.ts: DEFAULT_HOSTED_RUNNER_SETTINGS.images lists no image.');
+  for (const [, name, ref] of defaults) {
+    const listed = images && images[name];
+    if (!listed) {
+      findings.push(`hosted-runner-settings.ts: the default image "${name}" is not in settings.json, so CI does not build it.`);
+    } else if (listed !== ref) {
+      findings.push(`hosted-runner-settings.ts: the default image "${name}" is ${ref}; settings.json says ${listed}.`);
+    }
+  }
+}
+
+// CI builds, smoke-tests and pushes every listed image.
+const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'runner-env-images.yml'), 'utf8');
+const matrices = [...workflow.matchAll(/^\s*flavour:\s*\[([^\]]*)\]/gm)].map((m) => m[1].split(',').map((s) => s.trim()).filter(Boolean));
+if (matrices.length < 2) findings.push('runner-env-images.yml: expected a `flavour` matrix on both the build and the push job.');
+for (const list of matrices) {
+  const want = Object.keys(images || {}).sort().join(', ');
+  if ([...list].sort().join(', ') !== want) findings.push(`runner-env-images.yml: a flavour matrix lists [${list.join(', ')}]; settings.json lists [${want}].`);
+}
+if (!/images\/runner-env\/smoke\.sh/.test(workflow)) findings.push('runner-env-images.yml: the build job must run images/runner-env/smoke.sh.');
 
 if (!fs.existsSync(path.join(dir, 'entrypoint.sh'))) findings.push('entrypoint.sh is missing.');
 if (!/^USER 1000:1000\s*$/m.test(dockerfile)) findings.push('Dockerfile: the images must run as USER 1000:1000, the uid the hosted Deployment sets.');

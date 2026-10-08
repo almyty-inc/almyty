@@ -1,9 +1,9 @@
 name: Runner env images
 
-# Builds the curated hosted-runner images (images/runner-env: node, python,
-# standard) whenever they or the runner change, and checks each one starts
-# the way a hosted pod starts it. Nothing is pushed from a PR or from
-# development.
+# Builds the curated hosted-runner images (images/runner-env: standard,
+# standard-browser, node, python) whenever they or the runner change, and
+# checks each one starts the way a hosted pod starts it. Nothing is pushed
+# from a PR or from development.
 #
 #   build   every PR and push that touches images/runner-env, packages/runner
 #           or this file. The runner is installed from THIS checkout
@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavour: [node, python, standard]
+        flavour: [standard, standard-browser, node, python]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -85,26 +85,15 @@ jobs:
           cache-from: type=gha,scope=runner-env-${{ matrix.flavour }}
           cache-to: type=gha,scope=runner-env-${{ matrix.flavour }},mode=max
 
-      # The pod's own terms: uid 1000, read-only root, /tmp and /workspace
-      # the only writable places. Without an API it must fail enrollment
-      # and exit non-zero, which is what makes Kubernetes restart it.
+      # The pod's own terms: uid 1000, read-only root, no capabilities,
+      # /tmp and /workspace the only writable places. Without an API it must
+      # fail enrollment and exit non-zero, which is what makes Kubernetes
+      # restart it; the coding CLIs and the browser must start too. The same
+      # script runs locally after a `docker build`.
       - name: Smoke test as the hosted pod runs it
         env:
-          IMAGE: runner-env-ci:${{ matrix.flavour }}
-        run: |
-          test "$(docker run --rm "$IMAGE" id -u)" = 1000
-          docker run --rm "$IMAGE" almyty-runner --help | grep -q -- '--enroll'
-          set +e
-          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-            --tmpfs /tmp --tmpfs /workspace:uid=1000,gid=1000 \
-            -e HOME=/workspace/.home -e ALMYTY_API_URL=http://localhost:9 \
-            -e ALMYTY_ENROLLMENT_TOKEN=not-a-real-token "$IMAGE"
-          code=$?
-          set -e
-          if [ "$code" -ne 1 ]; then
-            echo "expected enrollment to fail with exit 1, got $code"
-            exit 1
-          fi
+          FLAVOUR: ${{ matrix.flavour }}
+        run: images/runner-env/smoke.sh "runner-env-ci:$FLAVOUR" "$FLAVOUR"
 
   push:
     name: Push runner-env (${{ matrix.flavour }})
@@ -115,7 +104,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flavour: [node, python, standard]
+        flavour: [standard, standard-browser, node, python]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
