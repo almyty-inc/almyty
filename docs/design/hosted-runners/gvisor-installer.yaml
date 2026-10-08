@@ -1,0 +1,148 @@
+# Reference manifest, not deployed by anything in this repository.
+# Tested on a throwaway DigitalOcean Kubernetes cluster on 2026-10-08; see
+# docs/design/hosted-runners-and-always-on.md, "gVisor on DigitalOcean: test
+# results".
+#
+# Installs gVisor (runsc + containerd shim + gvisor-bin/ sidecars) on nodes
+# labelled almyty.com/sandbox=gvisor, and is the only thing that sets the
+# almyty.com/gvisor=ready label: set after `runsc do` boots a sandbox,
+# removed on any failure, re-asserted every 60s. Never put that label in the
+# node-pool spec. The script appends the runsc runtime table only when its
+# marker is missing (v2 or v3 path from the config's `version`) and never
+# rewrites the containerd config of a live node. Bump REL and SHA together,
+# on purpose. For production, bake the binaries into the image instead of
+# downloading them.
+apiVersion: v1
+kind: Namespace
+metadata: {name: gvisor-system}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: gvisor-installer, namespace: gvisor-system}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: gvisor-installer}
+rules:
+- apiGroups: [""]
+  resources: [nodes]
+  verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: gvisor-installer}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: gvisor-installer}
+subjects: [{kind: ServiceAccount, name: gvisor-installer, namespace: gvisor-system}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: gvisor-installer, namespace: gvisor-system}
+data:
+  install.sh: |
+    #!/bin/sh
+    # Keeps runsc installed on this node and the node label honest.
+    set -u
+    REL=20260928.0
+    SHA=c8d3a9fd4d4c4f5b8ff213caa4517356be128d18659ec4cde37828fe797f61a9725a602a846c81a8ed19c057a996515d31c081eba343ed4613a89951ba32ed59
+    URL=https://storage.googleapis.com/gvisor/releases/release/$REL/x86_64/gvisor.tar.bz2
+    H=/host
+    CFG=$H/etc/containerd/config.toml
+    MARK="# almyty-gvisor runsc runtime"
+    LABEL=almyty.com/gvisor
+    TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+    CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    API=https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT
+    hostsh() { nsenter -t 1 -m -u -i -n -p -- sh -c "$1"; }
+    label() { # $1 = ready|null
+      v='"ready"'; [ "$1" = null ] && v=null
+      curl -sS --cacert $CA -H "Authorization: Bearer $TOKEN" -X PATCH \
+        -H 'Content-Type: application/merge-patch+json' \
+        --data "{\"metadata\":{\"labels\":{\"$LABEL\":$v,\"almyty.com/gvisor-release\":\"$REL\"}}}" \
+        "$API/api/v1/nodes/$NODE_NAME" -o /dev/null -w "label $1 -> %{http_code}\n"
+    }
+    installed() {
+      [ -x $H/usr/local/bin/runsc ] && [ -x $H/usr/local/bin/containerd-shim-runsc-v1 ] && [ -x $H/usr/local/bin/gvisor-bin/gvisor_sentry ] \
+        && [ "$(cat $H/usr/local/lib/gvisor-release 2>/dev/null)" = "$REL" ] \
+        && grep -qF "$MARK" $CFG
+    }
+    cfg_live() { # containerd (re)started after the runtime stanza was written
+      hostsh '[ "$(date -d "$(systemctl show -p ExecMainStartTimestamp --value containerd)" +%s)" -ge "$(stat -c %Y /etc/containerd/config.toml)" ]'
+    }
+    probe() { # runsc can boot a sandbox on this kernel/platform
+      out=$(hostsh 'cd /tmp && timeout 60 /usr/local/bin/runsc --network=none do dmesg' 2>&1)
+      echo "$out" | grep -q "Starting gVisor"
+    }
+    do_install() {
+      echo "$(date -u +%T) installing gVisor $REL"
+      cd /tmp && rm -rf g && mkdir g && cd g
+      curl -fsSL -o g.tbz "$URL" || return 1
+      echo "$SHA  g.tbz" | sha512sum -c - || return 1
+      tar xjf g.tbz || return 1
+      install -m 0755 runsc containerd-shim-runsc-v1 $H/usr/local/bin/ || return 1
+      rm -rf $H/usr/local/bin/gvisor-bin && cp -a gvisor-bin $H/usr/local/bin/ || return 1
+      mkdir -p $H/usr/local/lib && echo $REL > $H/usr/local/lib/gvisor-release
+      if ! grep -qF "$MARK" $CFG; then
+        cp $CFG $CFG.pre-gvisor
+        # containerd 2.x config schema v3 moved the CRI runtime table
+        if grep -qE '^version *= *3' $CFG; then T="plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc"
+        else T='plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc'; fi
+        printf '\n%s\n[%s]\n  runtime_type = "io.containerd.runsc.v1"\n' "$MARK" "$T" >> $CFG
+        echo "$(date -u +%T) appended runtime table [$T]"
+      fi
+    }
+    state=unknown
+    while true; do
+      if ! installed; then
+        echo "$(date -u +%T) runsc missing or containerd config lacks runtime; unlabel + install"
+        label null; state=notready
+        do_install || echo "$(date -u +%T) install failed"
+      fi
+      if installed && ! cfg_live; then
+        echo "$(date -u +%T) containerd has not loaded the runsc runtime; unlabel + restart containerd"
+        label null; state=notready
+        hostsh 'systemctl restart containerd'; sleep 5
+      fi
+      if installed && cfg_live && probe; then
+        if [ "$state" = ready ]; then label ready >/dev/null  # re-assert every loop (idempotent)
+        else echo "$(date -u +%T) probe ok, node ready"; label ready; state=ready; fi
+      elif [ "$state" != notready ]; then
+        echo "$(date -u +%T) probe failed; unlabel"; label null; state=notready
+      fi
+      sleep 60
+    done
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: gvisor-installer, namespace: gvisor-system}
+spec:
+  selector: {matchLabels: {app: gvisor-installer}}
+  template:
+    metadata: {labels: {app: gvisor-installer}}
+    spec:
+      serviceAccountName: gvisor-installer
+      hostPID: true
+      priorityClassName: system-node-critical
+      nodeSelector: {almyty.com/sandbox: gvisor}
+      tolerations: [{operator: Exists}]
+      containers:
+      - name: installer
+        image: alpine:3.20
+        command: ["sh","-c","apk add -q --no-cache curl >/dev/null && exec sh /scripts/install.sh"]
+        env: [{name: NODE_NAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}]
+        securityContext: {privileged: true}
+        resources: {requests: {cpu: 10m, memory: 32Mi}}
+        volumeMounts:
+        - {name: host, mountPath: /host}
+        - {name: scripts, mountPath: /scripts}
+      volumes:
+      - {name: host, hostPath: {path: /}}
+      - {name: scripts, configMap: {name: gvisor-installer}}
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata: {name: gvisor}
+handler: runsc
+scheduling:
+  nodeSelector: {almyty.com/gvisor: ready}
+  tolerations:
+  - {key: almyty.com/sandbox, operator: Equal, value: gvisor, effect: NoSchedule}
