@@ -15,6 +15,7 @@ import { ConnectorCatalogService } from './connector-catalog.service';
 import { CustomConnector } from './connector.entity';
 import { GrantsModule } from './grants/grants.module';
 import { RotationModule } from './rotation/rotation.module';
+import { McpOAuthClientModule } from './mcp-oauth/mcp-oauth-client.module';
 import { ConnectionsRotatorBridge } from './connections-rotator.bridge';
 import { ConnectionOffboardingService } from './connection-offboarding.service';
 
@@ -31,6 +32,7 @@ import { ConnectionOffboardingService } from './connection-offboarding.service';
     ModelDeploymentsModule,
     GrantsModule,
     RotationModule,
+    McpOAuthClientModule,
   ],
   controllers: [CredentialSignInController],
   providers: [

@@ -8,7 +8,8 @@ import {
 } from './protocol.js';
 
 /**
- * Client for the backend's Streamable HTTP endpoint at /mcp/streamable.
+ * Client for the backend's worker stream at /runners/stream (falling back
+ * to /mcp/streamable on a backend that predates that route).
  *
  * Two responsibilities:
  *
@@ -33,6 +34,11 @@ import {
  * time; rotation isn't a v1.0 concern (the daemon restarts on token
  * rotation anyway because credentials.json was overwritten).
  */
+/** The worker stream's route. */
+export const RUNNER_STREAM_PATH = '/runners/stream';
+/** Where it was before the MCP split; backends keep it for one runner release. */
+export const LEGACY_STREAM_PATH = '/mcp/streamable';
+
 export interface StreamableClientOptions {
   baseUrl: string;
   token: string;
@@ -53,6 +59,8 @@ export class StreamableClient extends EventEmitter {
   private streamAbort: AbortController | null = null;
   private stopped = false;
   private reconnectAttempt = 0;
+  /** The route this client talks to; see fellBackFrom404. */
+  private streamPath: string = RUNNER_STREAM_PATH;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly setTimeoutFn: typeof setTimeout;
 
@@ -77,16 +85,24 @@ export class StreamableClient extends EventEmitter {
   /** Send an envelope. Returns the parsed response envelope when the
    *  backend hands one back inline (for unary requests); otherwise null. */
   async send<T>(env: WorkerEnvelope<T>): Promise<WorkerEnvelope | null> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...this.authHeaders(),
+    const post = () => {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...this.authHeaders(),
+      };
+      if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
+      return this.fetchImpl(`${this.opts.baseUrl}${this.streamPath}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(env),
+      });
     };
-    if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
-    const res = await this.fetchImpl(`${this.opts.baseUrl}/mcp/streamable`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(env),
-    });
+    let res = await post();
+    if (res.status === 404) {
+      const text = await safeText(res);
+      if (!this.fellBackFrom404(text)) throw new Error(`backend POST failed: ${res.status} ${text}`);
+      res = await post();
+    }
     const sid = res.headers.get('mcp-session-id') ?? res.headers.get('Mcp-Session-Id');
     if (sid) this.sessionId = sid;
 
@@ -97,9 +113,23 @@ export class StreamableClient extends EventEmitter {
     }
     const json = await res.json();
     if (isWorkerEnvelope(json)) return json;
-    // JSON-RPC response shape (when the runner posts an MCP-shaped
-    // body, which it shouldn't, but the transport supports both).
     return null;
+  }
+
+  /**
+   * A 404 on `/runners/stream` from a backend that predates the route moves
+   * this client to `/mcp/streamable` for good, and the caller retries once.
+   * Only the framework's own "no such route" answer counts ("Cannot POST
+   * /runners/stream"); any other 404, such as the transport's unknown-session
+   * error, is the session being gone and never a reason to change route.
+   * Returns whether it switched.
+   */
+  private fellBackFrom404(body: string): boolean {
+    if (this.streamPath !== RUNNER_STREAM_PATH) return false;
+    if (!/Cannot (GET|POST) \/runners\/stream\b/.test(body)) return false;
+    this.streamPath = LEGACY_STREAM_PATH;
+    this.emit('route-fallback', { from: RUNNER_STREAM_PATH, to: LEGACY_STREAM_PATH });
+    return true;
   }
 
   /** Open the GET stream and dispatch envelopes via emit('envelope'). */
@@ -118,7 +148,7 @@ export class StreamableClient extends EventEmitter {
 
     let res: Response;
     try {
-      res = await this.fetchImpl(`${this.opts.baseUrl}/mcp/streamable`, {
+      res = await this.fetchImpl(`${this.opts.baseUrl}${this.streamPath}`, {
         method: 'GET',
         headers,
         signal: this.streamAbort.signal,
@@ -133,6 +163,12 @@ export class StreamableClient extends EventEmitter {
       // 404 UNKNOWN_SESSION means the server forgot us; we have to
       // re-establish a session by POSTing again. Drop the saved
       // session id and let the next send() mint a new one.
+      if (res.status === 404 && this.fellBackFrom404(text)) {
+        // An older backend without /runners/stream: same session, older
+        // route. Reconnect there.
+        this.scheduleReconnect(new Error('stream route not found; using the legacy route'));
+        return;
+      }
       if (res.status === 404) {
         this.sessionId = null;
         this.lastEventId = null;

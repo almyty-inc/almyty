@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Cpu, Trash2, Wrench } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -140,6 +142,18 @@ export function RunnerDetailPage() {
     },
     onError: (err: any) => errNotif('Could not save visibility', getApiErrorMessage(err)),
   })
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
+  const renameMutation = useMutation({
+    mutationFn: (name: string) => runnersApi.update(id, { name }),
+    onSuccess: () => {
+      success('Runner renamed')
+      setNameDraft(null)
+      queryClient.invalidateQueries({ queryKey: ['runner', id] })
+      queryClient.invalidateQueries({ queryKey: ['runners'] })
+      queryClient.invalidateQueries({ queryKey: ['runner-tools', id] })
+    },
+    onError: (err: any) => errNotif('Could not rename runner', getApiErrorMessage(err)),
+  })
   const isOwner = !!user?.id && runnerQuery.data?.ownerUserId === user.id
 
   if (runnerQuery.isLoading) {
@@ -217,7 +231,7 @@ export function RunnerDetailPage() {
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">
             This runner has never connected. Start it on its machine with{' '}
-            <code className="text-foreground">{runnerStartCommand(runner.name, currentOrganization?.id)}</code>
+            <code className="text-foreground">{runnerStartCommand()}</code>
             {' '}after <code className="text-foreground">{RUNNER_INSTALL_COMMAND}</code> and{' '}
             <code className="text-foreground">{RUNNER_LOGIN_COMMAND}</code>, or delete it.
           </CardContent>
@@ -233,6 +247,21 @@ export function RunnerDetailPage() {
           <RunnerWorkspacesTab runnerId={runner.id} poll={!runnerOffline} />
         </TabsContent>
         <TabsContent value="overview" className="space-y-6">
+      {isOwner && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Name</CardTitle></CardHeader>
+          <CardContent>
+            <form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); if (nameDraft?.trim()) renameMutation.mutate(nameDraft.trim()) }}>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Label htmlFor="runner-name">Runner name</Label>
+                <Input id="runner-name" value={nameDraft ?? runner.name} onChange={e => setNameDraft(e.target.value)} pattern="[a-zA-Z0-9_-]{1,64}" maxLength={64} required />
+              </div>
+              <Button type="submit" disabled={!nameDraft?.trim() || nameDraft.trim() === runner.name || renameMutation.isPending}>Save name</Button>
+            </form>
+            <p className="mt-2 text-xs text-muted-foreground">Starts with your machine's hostname. A new name stays when you restart the runner.</p>
+          </CardContent>
+        </Card>
+      )}
       {isOwner && (
         <Card>
           <CardHeader>
@@ -278,9 +307,12 @@ export function RunnerDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Labels</CardTitle>
+            <CardTitle className="text-base">Advanced</CardTitle>
           </CardHeader>
           <CardContent>
+            <details>
+              <summary className="cursor-pointer text-sm font-medium">Labels</summary>
+              <div className="mt-3">
             {Object.keys(runner.labels ?? {}).length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No labels. Labels are short tags that say what this machine has, such as{' '}
@@ -297,6 +329,8 @@ export function RunnerDetailPage() {
                 ))}
               </div>
             )}
+              </div>
+            </details>
           </CardContent>
         </Card>
       </div>

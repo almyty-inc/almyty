@@ -3,7 +3,7 @@ import type { RunStepRole } from './agent-models'
 
 export type AgentRunMode = 'workflow' | 'autonomous'
 
-export type AgentRunStatus = 'pending' | 'running' | 'waiting_input' | 'sleeping' | 'completed' | 'failed' | 'cancelled' | 'timeout'
+export type AgentRunStatus = 'pending' | 'running' | 'waiting_input' | 'waiting_approval' | 'sleeping' | 'completed' | 'failed' | 'cancelled' | 'timeout'
 
 export interface AgentRunStep {
   type: string
@@ -139,6 +139,7 @@ export type AuditAction =
   | 'login' | 'api_key_create' | 'api_key_revoke'
   | 'credential_create' | 'credential_update' | 'credential_delete' | 'credential_use'
   | 'ownership_transfer' | 'visibility_change'
+  | 'visitor_data_export' | 'visitor_data_erase'
 
 export type AuditResource =
   | 'agent' | 'agent_run' | 'tool' | 'gateway' | 'api'

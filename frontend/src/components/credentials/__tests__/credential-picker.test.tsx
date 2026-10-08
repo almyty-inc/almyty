@@ -119,27 +119,26 @@ describe('CredentialPicker', () => {
     at(<Harness onChange={onChange} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Create one here' }))
 
-    const flow = await screen.findByTestId('connect-flow')
+    const flow = await screen.findByTestId('credential-form')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     // Inside the consumer's <form>, so it renders no form of its own.
     expect(screen.getByRole('form', { name: 'Consumer form' }).querySelectorAll('form')).toHaveLength(0)
-    expect(await within(flow).findByText('Add a key')).toBeInTheDocument()
     expect(within(flow).getByLabelText('Name')).toHaveValue('Petstore key')
 
-    fireEvent.change(within(flow).getByLabelText('Key'), { target: { value: 'sk_live_1' } })
+    fireEvent.change(await within(flow).findByLabelText('Key'), { target: { value: 'sk_live_1' } })
     fireEvent.click(within(flow).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('other', { method: 'api_key', owner: 'org', name: 'Petstore key', input: { apiKey: 'sk_live_1' } }))
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(made))
-    expect(screen.queryByTestId('connect-flow')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('credential-form')).not.toBeInTheDocument()
     expect(await screen.findByTestId('credential-picker-open')).toHaveTextContent('Open Petstore key')
   })
 
   it('folds the create panel away on Cancel', async () => {
     at(<Harness onChange={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Create one here' }))
-    const flow = await screen.findByTestId('connect-flow')
+    const flow = await screen.findByTestId('credential-form')
     fireEvent.click(within(flow).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByTestId('connect-flow')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('credential-form')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create one here' })).toBeInTheDocument()
   })
 

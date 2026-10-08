@@ -36,7 +36,7 @@ export function ConnectSnippets({
   accessKey?: string | null
 }) {
   const snippets = gatewaySnippets(gateway, orgSlug, accessKey)
-  const usesKey = gatewayUsesAccessKey(gateway.type)
+  const usesKey = gatewayUsesAccessKey(gateway.type) && (!gateway.accessScope || gateway.accessScope === 'external_protected') && (!gateway.authConfigs || gateway.authConfigs.some(auth => auth.type === 'api_key' && auth.isActive !== false))
   const address = mcpEndpointFor(gateway, orgSlug)
   return (
     <Card data-testid="connect-snippets">
@@ -63,7 +63,7 @@ export function ConnectSnippets({
         </Tabs>
         {usesKey && !accessKey && (
           <p className="text-xs text-muted-foreground" data-testid="key-placeholder-note">
-            Replace {ACCESS_KEY_PLACEHOLDER} with an access key. Make one under Advanced, with Generate key.
+            Replace {ACCESS_KEY_PLACEHOLDER} with a key. Make one under Who can use it, with New key.
           </p>
         )}
       </CardContent>

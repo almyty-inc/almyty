@@ -25,11 +25,13 @@ vi.mock('@/lib/api', () => ({
     getAll: vi.fn().mockResolvedValue([{ id: 'cred-7', name: 'Support Zep', type: 'memory_backend' }]),
   },
 }))
-vi.mock('@/components/credentials/credential-picker', () => ({
-  CredentialPicker: ({ onChange }: { onChange: (c: any) => void }) => (
-    <button type="button" onClick={() => onChange({ id: 'cred-9', name: 'Team Mem0' })}>
-      Create one here
-    </button>
+vi.mock('@/lib/connections-api', () => ({ connectionsApi: { list: vi.fn().mockResolvedValue([
+  { id: 'cred-7', name: 'Support Zep', connectorKey: 'zep', kind: 'memory' },
+  { id: 'cred-8', name: 'Product Mem0', connectorKey: 'mem0', kind: 'memory' },
+]) } }))
+vi.mock('@/components/memory/memory-accounts', () => ({
+  AddMemoryAccountFlow: ({ onConnected }: { onConnected: (c: any) => void }) => (
+    <button type="button" onClick={() => onConnected({ id: 'cred-9', name: 'Team Mem0', connectorKey: 'mem0', kind: 'memory' })}>Connect Mem0</button>
   ),
 }))
 
@@ -54,12 +56,9 @@ describe("an agent's own memory account", () => {
     const onChange = vi.fn()
     renderWithProviders(<MemorySection value={{ enabled: true }} onChange={onChange} />)
 
-    await user.click(await screen.findByRole('button', { name: 'Add a memory account' }))
+    await user.click(await screen.findByRole('button', { name: 'Connect account' }))
     const add = screen.getByTestId('add-memory-account')
-    await user.click(within(add).getByRole('combobox', { name: 'Memory service' }))
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Mem0', 'Zep', 'Vertex AI Memory Bank'])
-    await user.click(screen.getByRole('option', { name: 'Mem0' }))
-    await user.click(within(add).getByRole('button', { name: 'Create one here' }))
+    await user.click(within(add).getByRole('button', { name: 'Connect Mem0' }))
 
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ account: 'mem0', credentialId: 'cred-9' })))
     expect(memoriesApi.updateConfig).not.toHaveBeenCalled()
@@ -69,10 +68,10 @@ describe("an agent's own memory account", () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
     renderWithProviders(<MemorySection value={{ enabled: true, account: 'zep', credentialId: 'cred-7' }} onChange={onChange} />)
-    const account = await screen.findByRole('combobox', { name: 'Memory account' })
-    await waitFor(() => expect(account).toHaveTextContent('Zep: Support Zep'))
+    const account = await screen.findByRole('combobox', { name: 'Keep memories in' })
+    await waitFor(() => expect(account).toHaveTextContent('Support Zep (Zep)'))
     await user.click(account)
-    await user.click(await screen.findByRole('option', { name: "almyty's own memory" }))
+    await user.click(await screen.findByRole('option', { name: 'almyty' }))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ account: 'almyty-native', credentialId: null }))
   })
 })

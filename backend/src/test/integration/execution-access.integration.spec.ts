@@ -140,7 +140,7 @@ describeIfDb('execution access gate (real Postgres)', () => {
 
     const gw = (key: keyof typeof gateways, fields: Record<string, unknown>) =>
       save(ds.getRepository(Gateway), {
-        name: `gw ${key}`, type: GatewayType.MCP, endpoint: `/gw-${key}`, configuration: {}, ...fields,
+        name: `gw ${key}`, type: GatewayType.MCP, endpoint: `/gw-${key}`, configuration: {}, ...fields, accessScope: fields.visibility ?? 'org', accessTeamId: fields.teamId ?? null,
       }).then((row) => { gateways[key] = row; });
     await gw('org', { organizationId: orgA, visibility: 'org' });
     await gw('teamT1', { organizationId: orgA, visibility: 'team', teamId: t1 });

@@ -2,26 +2,26 @@
 
 To use an AI model in almyty, you connect the provider that runs it, such as OpenAI, Anthropic or Mistral, with your own key. Once connected, every agent, workflow step and AI-powered tool can use that provider's models, and you pay the provider directly at their prices. For example: connect OpenAI once, and your support agent can answer with GPT-4o today and switch to another model tomorrow.
 
-A connection is a named key (or the address of a server you run, Ollama, or a cloud account). Connections live in [Credentials](/credentials), in the **Model providers** group, next to every other key. Connect one and its models appear on the [Models](/models) page by themselves; there is nothing to add per model. You can connect the same provider more than once, each connection with its own name, key and models.
+A connection is a named key (or the address of a server you run, Ollama, or a cloud account). Manage connections on [Models](/models); their keys also appear in [Credentials](/credentials). Connecting one makes its models available in every model picker. You can connect the same provider more than once, each with its own name, key and models.
 
 ![Models page](/screenshots/models.png)
 
 ## In the dashboard
 
-1. Open **Credentials** in the sidebar and click **Connect a provider** in the **Model providers** group (the **Models** page has the same button), or click **Add a connection** at the bottom of any model chooser to do the same without leaving the page.
-2. Search or scroll the tiles and click your provider. Your own server and Ollama have their own tiles.
+1. Open **Models** in the sidebar and click **Connect a provider**, or click **Add a connection** at the bottom of any model chooser to do the same without leaving the page.
+2. Choose your provider from the searchable **Provider** list, including **Your own server** and **Ollama**.
 3. **Name** the connection. It starts as the provider's name; give it one that says what it is for, such as "OpenAI - research team".
 4. Paste the API key, or click **Use a saved key instead** and pick a key already in Credentials (or add one there without leaving the page). Your own server asks for its address and an optional key; Ollama asks for an Ollama Cloud key, or the address of an Ollama you run (see [Ollama](#ollama)). A provider that needs something more asks only for that: AWS Bedrock the region, Azure the resource and the model name in Azure, Vertex AI the project and the model, RunPod the endpoint. A provider that does not publish its list of models (Qwen, Z.ai, Fireworks, SambaNova, Doubao Ark, Spark, Vertex AI) asks which model to use.
 5. **Who can use it** reads "everyone in your organization". Click **Change** to make it yours alone or a team's.
-6. Click **Connect**.
+6. Click **Save**.
 
 almyty checks the key with one real call. If the check fails you see one plain line, such as "OpenAI rejected this key.", next to the key field, with the provider's own words under **Details** and a link to get a key. Nothing is saved until the key works.
 
-When it works, every model the key reaches is listed, all ticked. Untick any this connection should not be used for, then click **Done**. It opens the new connection's page, or goes back to the page that sent you.
+When it works, the form opens the new connection under Models, or returns to the page that sent you. All models are offered initially; choose which ones it may offer on its connection page.
 
 ## A connection's page
 
-Click a connection in the **Model providers** group on Credentials, or from a row on the Models page. The header shows its name (the pencil renames it), whether its key works and which models it offers, with **Check again** to re-check the key and fetch its model list again.
+Click a connection on the Models page, or open its key from Credentials. The header shows its name (the pencil renames it), whether its key works and which models it offers, with **Check again** to re-check the key and fetch its model list again.
 
 When the provider refuses a connection's key, almyty turns the connection off. Its page then says **This connection is inactive**, gives the reason from its last check, and offers **Replace key** and **Check again** right there. While it is off, its models are not offered anywhere; once a check passes again, it is back on.
 
@@ -33,7 +33,7 @@ The connection's key is listed on Credentials under the connection's name; renam
 
 ## Ollama
 
-Ollama runs open models, either on Ollama's own hosted service or on a machine you run. The Ollama tile asks **Where Ollama runs**, with **Ollama Cloud** picked first.
+Ollama runs open models, either on Ollama's own hosted service or on a machine you run. Choosing Ollama asks **Where Ollama runs**, with **Ollama Cloud** picked first.
 
 - **Ollama Cloud** is Ollama's hosted service. Paste an API key from [ollama.com/settings/keys](https://ollama.com/settings/keys); nothing else is asked. You get Ollama's hosted models (large open models like `gpt-oss:120b` or `qwen3.5:397b`, without hardware of your own). Ollama bills them by plan, so their price reads "Price unknown" rather than zero; track that spend in your Ollama account.
 - **Your own server** is an Ollama you run. Give its address (for example `http://build-box:11434`) and, only if it sits behind a proxy that checks one, a key. Its models are the ones you pulled onto it, and they are free and marked as local. On hosted almyty the server must be reachable at a public address.
@@ -99,7 +99,7 @@ Each native type ships with the right default base URL; set `configuration.apiUr
 
 ### Types not in the table above
 
-Four more provider types ship and have tiles on the connect page, but no row above: the table is generated from the provider registry, and these four are still served by an older per-vendor code path. Nothing about connecting them differs. The [vendor reference](/models/providers) carries base URL, auth and model-listing detail for each.
+Four more provider types ship and appear in the Provider list, but have no row above: the table is generated from the provider registry, and these four still use an older per-vendor code path. The [vendor reference](/models/providers) gives the base URL, sign-in and model-listing details for each.
 
 | Type | Vendor | Notes |
 |------|--------|-------|
@@ -142,6 +142,6 @@ The [Memory](/memory) module embeds content with the organization's own provider
 
 ### Links and API
 
-Other setup pages can link to `/credentials/providers/new?type=openai` (open with that tile chosen) and `?returnTo=` to come back when done. A connection's page is `/credentials/providers/:id`. The MCP control plane exposes `add_provider` and `list_providers`.
+Other setup pages can link to `/models/providers/new?type=openai` (open with that provider chosen) and `?returnTo=` to come back when done. A connection's page is `/models/providers/:id`. The MCP control plane exposes `add_provider` and `list_providers`.
 
 Connecting (`POST /llm-providers/connect`), provider CRUD, key checks and chat sessions are available over REST. See the [Providers API reference](/api-reference/llm-providers-api).

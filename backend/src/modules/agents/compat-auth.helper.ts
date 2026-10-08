@@ -103,8 +103,8 @@ export async function resolveCompatAgent(
   const ref = model.replace(/^agent:/, '');
   const callerId = apiKey.userId || null;
 
-  let agent: Agent | null = null;
-  if (UUID_RE.test(ref)) {
+  let agent: Agent | null = (apiKey as any).endpointAgent ?? null;
+  if (!agent && UUID_RE.test(ref)) {
     try {
       agent = await agentsService.getAgent(ref, apiKey.organizationId, callerId ? { id: callerId } : null);
     } catch (err) {
@@ -115,6 +115,7 @@ export async function resolveCompatAgent(
   }
   if (!agent) agent = await agentsService.findByName(ref, apiKey.organizationId, callerId);
 
+  if (agent?.apiGatewayId && !(apiKey as any).endpointPrincipal) throw new NotFoundException(`Agent API access requires its configured endpoint: ${model}`);
   if (!agent || (apiKey.agentId && agent.id !== apiKey.agentId)) {
     throw new NotFoundException(`Agent not found: ${model}`);
   }
@@ -129,7 +130,7 @@ export async function resolveCompatAgent(
 
 /** Whose scope a compat request runs in: the key's user. */
 export function compatPrincipal(apiKey: ApiKey): ExecutionPrincipal {
-  return userPrincipal(apiKey.userId || null, 'api_key');
+  return (apiKey as any).endpointPrincipal ?? userPrincipal(apiKey.userId || null, 'api_key');
 }
 
 /** The agents a key may list: all visible ones, or the one it was minted for. */
@@ -151,6 +152,7 @@ const LAST_USED_THROTTLE_MS = 60_000;
  * a key used only through /v1/messages no longer looks unused.
  */
 export async function touchCompatKeyLastUsed(apiKeys: Pick<Repository<ApiKey>, 'update'>, apiKey: ApiKey): Promise<void> {
+  if ((apiKey as any).endpointPrincipal) return;
   const now = Date.now();
   const last = apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).getTime() : 0;
   if (now - last < LAST_USED_THROTTLE_MS) return;

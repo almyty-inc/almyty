@@ -16,6 +16,15 @@ import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agen
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
+import { CodeModeService } from '../code-mode/code-mode.service';
+import {
+  WAITING_FOR_APPROVAL_CODE,
+  WaitingCodeStep,
+  heldCallWords,
+  waitingForApprovalText,
+  waitingForCallText,
+} from './workflow-approval';
+import { hitDetail } from '../tools/tool-approval-gate.service';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentVerifierHelper, VerifyPolicy } from './agent-verifier.helper';
 import {
@@ -97,6 +106,12 @@ export interface NodeExecutionOptions {
    * tool call and sub-agent run this node makes. Never re-derived here.
    */
   principal?: ExecutionPrincipal;
+  /**
+   * The agent this run belongs to, and the run: a Code step's scope is the
+   * agent's tools and its trace hangs off the run. Set by the engine.
+   */
+  agent?: Pick<Agent, 'id' | 'organizationId' | 'toolIds' | 'agentConfig' | 'teamId'>;
+  runId?: string;
   nestingDepth?: number;
   maxNestingDepth?: number;
   /** The run whose runner workspaces this run's work shares (EngineInternalOptions). */
@@ -117,6 +132,8 @@ export interface NodeExecutionOptions {
    * runner. Set once per run by the engine.
    */
   runnerLabels?: Record<string, string>;
+  /** The one runner those calls go to when the agent is pinned to one (agentConfig.runnerId). */
+  pinnedRunnerId?: string;
   /**
    * The agent's roles, filled once for this run (L4). A node naming a
    * roleKey reads its model from here rather than deciding again, which
@@ -298,6 +315,8 @@ export class AgentNodeExecutor {
     @Optional() private readonly modelRouter?: ModelRouterService,
     @Optional() @InjectRepository(Organization)
     private readonly organizationRepository?: Repository<Organization>,
+    // A workflow Code step (code-mode/); without it the step says scripts are unavailable.
+    @Optional() @Inject(forwardRef(() => CodeModeService)) private readonly codeMode?: CodeModeService,
   ) {}
 
   /**
@@ -400,6 +419,9 @@ export class AgentNodeExecutor {
 
       case 'decision':
         return this.executeDecisionNode(node, context, organizationId, userId, execOptions);
+
+      case 'code':
+        return this.executeCodeNode(node, context, execOptions);
 
       default:
         throw new Error(`Unsupported node type: ${node.type}`);
@@ -749,6 +771,7 @@ export class AgentNodeExecutor {
       // client or parent-cancelled run.
       signal: options.signal,
       runnerLabels: options.runnerLabels,
+      pinnedRunnerId: options.pinnedRunnerId,
       // The run's tool-error retry budget. A tool's own configured retry
       // count still wins inside the executor; this replaces only the
       // executor's default, which is what applied to every workflow tool
@@ -761,21 +784,107 @@ export class AgentNodeExecutor {
     const executionTime = Date.now() - startTime;
 
     if (!result.success) {
+      const resolvedInput = { toolId, parameters: resolvedParams, ...(result.approvalId ? { approvalId: result.approvalId } : {}) };
+      // A call an approval rule held: it waits in Approvals, the run waits
+      // with it, and once a person approves, the approval gate makes the
+      // call (once, exactly as asked) and the run carries on with what it
+      // returned (workflow-approval.ts). The words are for people; the
+      // "call again with _approvalId" note is for clients that cannot wait.
+      if (result.approvalRequired && result.approvalStatus === 'pending' && result.approvalId) {
+        const call = heldCallWords(result.approvalRequired.toolName, hitDetail(result.approvalRequired));
+        const waiting: WaitingCodeStep = { nodeId: node.id, kind: 'tool_call', approvalId: result.approvalId, codeExecutionId: null, changes: 1, call };
+        throw Object.assign(new Error(waitingForCallText(call)), { resolvedInput, code: WAITING_FOR_APPROVAL_CODE, waiting });
+      }
       // The resolved parameters ride on the error so a failed tool call's
       // input is persisted too, not just its message.
-      throw Object.assign(new Error(result.error || 'Tool execution failed'), {
-        resolvedInput: { toolId, parameters: resolvedParams, ...(result.approvalId ? { approvalId: result.approvalId } : {}) },
-        // A call an approval policy held: it waits in Approvals and runs
-        // once a person approves it. A workflow cannot pause, so the run
-        // stops here and says so (the run history shows it as waiting).
-        ...(result.approvalRequired && result.approvalStatus === 'pending' ? { code: 'AWAITING_APPROVAL' } : {}),
-      });
+      throw Object.assign(new Error(result.error || 'Tool execution failed'), { resolvedInput });
     }
 
     return {
       output: result.data,
       executionTime,
       resolvedInput: { toolId, parameters: resolvedParams },
+    };
+  }
+
+  /**
+   * A Code step (docs/design/code-mode.md, part E): a script over the
+   * agent's tools, run in the code sandbox with the step's input as its
+   * `context` (`context.input`, and `context.steps`, every earlier step's
+   * output by id). Its output is what the script returns. The calls it
+   * makes come out of the run's tool-call budget. Changes that need a
+   * person are held in Approvals as one request and the step stops here:
+   * the run waits for the decision, then carries on from this step
+   * (workflow-approval.ts).
+   */
+  private async executeCodeNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    options: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const { code, timeoutMs } = node.data || node.config || {};
+    const startTime = Date.now();
+    if (typeof code !== 'string' || !code.trim()) {
+      throw new Error(`Code step '${node.id}' has no script`);
+    }
+    if (!this.codeMode || !options.agent) {
+      throw new Error('Scripts are not available on this server');
+    }
+    const toolBudget = context.runLimits?.maxToolCalls;
+    let maxCalls: number | undefined;
+    if (context.toolCalls && typeof toolBudget === 'number') {
+      if (context.toolCalls.count >= toolBudget) {
+        const trip = describeLimitTrip('TOOL_CALL_LIMIT_EXCEEDED');
+        throw Object.assign(new Error(`${trip.code}: ${trip.message}`), { code: trip.code });
+      }
+      context.toolCalls.count++;
+      maxCalls = toolBudget - context.toolCalls.count;
+    }
+    const steps: Record<string, unknown> = {};
+    for (const [id, entry] of Object.entries(context.nodes ?? {})) steps[id] = entry?.output ?? null;
+    const answer = await this.codeMode.runWorkflowStep({
+      agent: options.agent,
+      runId: options.runId ?? null,
+      userId: options.userId ?? null,
+      ...(options.principal ? { principal: options.principal } : {}),
+      code,
+      ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
+      scriptContext: { input: context.input ?? {}, steps },
+      ...(options.runnerLabels ? { runnerLabels: options.runnerLabels } : {}),
+      ...(options.pinnedRunnerId ? { pinnedRunnerId: options.pinnedRunnerId } : {}),
+      ...(maxCalls !== undefined ? { maxCalls } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    const made = Number((answer.forModel as any)?.calls?.made ?? 0);
+    if (context.toolCalls && made > 0) context.toolCalls.count += made;
+    const resolvedInput = { codeExecutionId: answer.codeExecutionId ?? null, ...(answer.approvalId ? { approvalId: answer.approvalId } : {}) };
+    if (answer.approvalId) {
+      // The run waits here for a person (workflow-approval.ts). The words
+      // are for people; the model-facing note ("call run_code again with
+      // the approvalId") is for a gateway client and is not a person's.
+      const forModel = answer.forModel as any;
+      const changes = Array.isArray(forModel?.staged) ? forModel.staged.length : Number(forModel?.calls?.staged ?? 0);
+      const waiting: WaitingCodeStep = {
+        nodeId: node.id,
+        approvalId: answer.approvalId,
+        codeExecutionId: answer.codeExecutionId ?? null,
+        changes,
+        ...(forModel && 'result' in forModel ? { result: forModel.result } : {}),
+      };
+      throw Object.assign(new Error(waitingForApprovalText(changes)), {
+        resolvedInput,
+        code: WAITING_FOR_APPROVAL_CODE,
+        waiting,
+      });
+    }
+    if (answer.isError) {
+      const error = (answer.forModel as any)?.error;
+      throw Object.assign(new Error(typeof error?.message === 'string' ? error.message : String(error ?? 'The script failed')), { resolvedInput });
+    }
+    return {
+      output: (answer.forModel as any).result ?? null,
+      executionTime: Date.now() - startTime,
+      resolvedInput,
     };
   }
 

@@ -42,7 +42,7 @@ import { MemoryTab } from '@/components/agents/detail/memory-tab'
 import { agentMemoryScope } from '@/components/agents/agent-memory-scope'
 import { FilesTab } from '@/components/agents/detail/files-tab'
 import { ChannelsTab } from '@/components/channels/channels-tab'
-import { AgentAccessKeysSection } from '@/components/access-keys/access-keys-section'
+import { AgentApiAccessSection } from '@/components/agents/detail/agent-api-access-section'
 import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { ConstraintsTab } from '@/components/agents/detail/constraints-tab'
 import { RunPanel } from '@/components/agents/detail/run-panel'
@@ -409,9 +409,7 @@ export function AgentDetailPage() {
             webhookUrl={webhookUrl}
             setWebhookUrl={setWebhookUrl}
           />
-          {/* The keys that call this agent's API sit by that API. A channel's
-              own keys (an A2A channel's callers) are on the channel. */}
-          <AgentAccessKeysSection agentId={id!} agentName={agent?.name} />
+          <AgentApiAccessSection agentId={id!} ownerUserId={agent?.createdBy} />
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
@@ -429,7 +427,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="channels" className="space-y-4">
-          <ChannelsTab agentId={id!} agentName={agent?.name} />
+          <ChannelsTab agentId={id!} agentName={agent?.name} agentOwnerId={agent?.createdBy} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">

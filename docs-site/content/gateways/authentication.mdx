@@ -1,86 +1,90 @@
-# Gateway authentication
+# Gateway access and sign-in
 
-A gateway only answers apps and people you have let in. Until you add a way to sign in, it turns every request away, so nothing is ever open by accident. The usual way in is an access key: a long secret you give to one app or person, and can cancel on its own at any time.
+Choose **Who can use it** on a gateway's page. The same choices appear under **API access** on an agent's page.
 
-For example, give Claude Code on your laptop one key and a partner's system another. If the partner's key leaks, delete that key; your own keeps working.
+- **Only you:** you, signed in to almyty.
+- **One team:** members of the team you choose, signed in to almyty.
+- **Everyone in the organization:** people in your organization, signed in to almyty.
+- **Outside, open:** anyone on the internet, without a key or sign-in.
+- **Outside, protected:** anyone who can use one of the sign-in methods you allow.
+
+New gateways start with internal access. Opening one to the internet takes an explicit choice and save. An open endpoint cannot run scripts through code mode. These choices control calls to the endpoint; **Who can manage it**, under the gateway's settings, controls access to its configuration in almyty.
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
-## Add a way in
+## Allow outside access
 
-1. Open the gateway and find the **Authentication** section.
-2. Click **Add auth method** and pick a **Method**:
-   - **API Key**: an access key the app sends with every request. The right choice for most cases.
-   - **OAuth 2.0**: people sign in with their almyty account in a browser, and the AI app keeps the sign-in (OAuth is the standard "sign in with..." flow). Good for AI apps that support it, so nobody pastes keys.
-   - **Bearer Token**, **Basic Auth**, **JWT** or **Custom**: for systems that already sign their requests one of those ways.
-   - **None (Public)**: anyone can call it. Only for tests and public tools.
-3. Fill in what the method asks for and click **Add auth method**.
+Choose **Outside, protected** and click **Save access**. For an agent, click **Save API access** instead. Then switch on any combination of these methods:
 
-The section then lists the **Active auth methods**; an app can get in with any of them.
+| Method | What you manage |
+|--------|-----------------|
+| **Keys** | Named keys, their expiry dates and revocation. |
+| **Usernames and passwords** | A list of usernames, each with its own password. |
+| **Company sign-in** | Google, Microsoft, Okta or Auth0, optionally restricted to email domains or groups. |
+| **Tokens from your own system** | The issuer, signing keys and audience for tokens your system creates. |
+
+A caller only needs one enabled method. Turning off a method stops it working while keeping its settings. Access stays closed until at least one method is ready.
 
 ## Give out keys
 
-With an **API Key** method in place, click **Generate key**, give it a **Key name** (such as "Claude Code, Ava's laptop") and click **Generate key**. The key appears once, under **Your new API key**: copy it now, because it is never shown again. The **API keys** list shows each key's name and lets you delete it.
+Switch on **Keys**, click **New key**, give it a **Name** and optionally an **Expires on** date, then click **Make key**. Copy the key immediately: it is shown once. The list shows its name, last-used date and expiry. **Revoke** stops a key working immediately.
 
-A gateway made with **Create gateway** already has an API Key method and a first key, shown once on the page that opens after creating it. The keys of an agent's **Other agents (A2A)** channel work the same way, managed on the channel's page. A Skills gateway has no **Authentication** section: the Skills tool signs in as you.
+For example, give a partner's system one key and an overnight job another. You can revoke the partner's key without interrupting the job.
+
+## Manage usernames
+
+Switch on **Usernames and passwords**. Add a username and password for each person or system you want to allow, then save the list. Edit the method to add or remove usernames or change a password. Leaving an existing password blank keeps it.
+
+## Set up company sign-in
+
+Switch on **Company sign-in**, choose your provider and enter the client ID and client secret for the sign-in application you registered there. Microsoft also needs your directory ID or verified domain; Okta and Auth0 need the issuer address from your provider.
+
+Under **Advanced**, copy the **Callback address** and register it with your provider. The secret is kept in Credentials and is never shown again.
+
+You can limit access to **Allowed email domains**, **Allowed groups**, or both. Separate entries with commas. Google domain restrictions check the verified Workspace domain. Microsoft needs a verified domain-owner claim configured for the application.
+
+For Google groups, use group email addresses or IDs, choose a **Google Directory credential** and enter a **Delegated administrator email**. The service account needs Workspace domain-wide delegation for `https://www.googleapis.com/auth/admin.directory.group.member.readonly`. You can create the credential inline; its key stays in Credentials. almyty checks membership through Google Directory and denies access if the check fails.
+
+Microsoft, Okta and Auth0 must include group names or IDs in the signed token when you restrict by group; **Advanced** lets you name the groups claim. Configure the provider to return that claim. Microsoft group overage without the required group claim does not grant access.
+
+People then use their company's sign-in in a browser. They do not need an almyty account. Compatible MCP clients start the sign-in flow when they connect.
+
+## Use tokens from your own system
+
+Switch on **Tokens from your own system** and open **Advanced**. Enter the exact **Issuer**, the HTTPS **Signing keys address** (your JSON Web Key Set) and the expected **Audience**. Save the method. almyty checks the token's signature, expiry, issuer and audience before allowing a call.
 
 ## For developers
 
-### Methods
+### Request credentials
 
-| Method | How clients send it | Use case |
-|--------|-------------------|----------|
-| **None** | (nothing) | Public or development gateways; must be added explicitly |
-| **API Key** | `x-api-key` header or `api_key` query parameter (both names configurable) | Machine to machine |
-| **Bearer Token** | `Authorization: Bearer <token>` | Programmatic access |
-| **Basic Auth** | `Authorization: Basic <base64>` | Older integrations |
-| **JWT** | `Authorization: Bearer <jwt>` | Signed, self-contained tokens |
-| **OAuth 2.0** | `Authorization: Bearer <oauth-token>` | MCP OAuth 2.1 authorization code flow with PKCE |
-| **Custom** | A header you name, optionally checked against a regex | Anything else |
+| Method | How clients send it |
+|--------|---------------------|
+| Keys | `x-api-key: <key>`; agent SDK endpoints also accept the key as a Bearer token. |
+| Usernames and passwords | `Authorization: Basic <base64(username:password)>` |
+| Company sign-in | An almyty-issued OAuth access token after the external sign-in and consent flow. |
+| Tokens from your own system | `Authorization: Bearer <jwt>` |
 
-In an MCP client config, send the key as a header:
-
-```json
-{
-  "mcpServers": {
-    "petstore": {
-      "url": "https://api.almyty.com/acme/petstore",
-      "headers": { "x-api-key": "gw_..." }
-    }
-  }
-}
-```
-
-**Keys.** A generated key looks like `gw_` followed by 43 random characters. The raw key is returned only in the create response; afterwards only a SHA-256 hash and the first eight characters are kept. The key API also takes an optional expiry and records `lastUsedAt`.
-
-**Basic Auth** decodes the header, looks the user up by email and checks the password with bcrypt.
-
-**JWT** verifies the signature with the secret configured on the auth method (or a JWKS URL or public key). There is no fallback to the server's own secret: a JWT method without one refuses every request. When the payload carries `sub` or `userId`, that user is looked up.
+Managed passwords are bcrypt hashes. The API never returns passwords or password hashes. A saved company client secret is held in the credential vault; reads report whether one is saved.
 
 ### Enforcement
 
-Every request to a gateway passes through the same steps:
+Endpoint access is independent of management visibility. `accessScope` and `accessTeamId` are the gateway's endpoint policy; an agent API target uses the same policy. Private, team and organization scopes require an almyty identity in the organization and check that scope. Stale outside keys cannot override an internal scope. Open access is explicit. Protected outside access tries the active methods and succeeds when one matches.
 
-1. Resolve the organization and gateway from the URL.
-2. Load the gateway's active auth methods.
-3. With none, reject with 401 (`NO_AUTH_CONFIGURED`).
-4. Try each required method in order; the first success wins.
-5. If all fail, reject with the last error (401 or 403).
-6. Otherwise, run the request.
-
-Discovery endpoints (`.well-known/*`, Agent Cards) are public, except on a private gateway.
+The tools and agents published outside still obey their publication checks. Opening a gateway does not expose private or team resources hidden behind it.
 
 ### OAuth 2.1 (MCP OAuth)
 
 almyty runs an OAuth 2.1 authorization server per the MCP specification:
 
 - Authorization code flow with PKCE (S256 required)
-- Dynamic Client Registration (RFC 7591)
+- Client ID Metadata Documents (MCP 2025-11-25): no registration step
+- Dynamic Client Registration (RFC 7591): deprecated in MCP 2026-07-28 and kept for clients without metadata-document support; metadata documents come first
+- `iss` in every authorization response (RFC 9207)
 - Token revocation (RFC 7009)
 - Authorization Server Metadata (RFC 8414)
 - Protected Resource Metadata (RFC 9728)
 
-MCP clients handle the flow themselves. On a 401 the gateway returns a `WWW-Authenticate` header pointing at the protected resource metadata; a compatible client registers itself, runs the code exchange and attaches the token.
+MCP clients handle the flow themselves. On a 401 the gateway returns a `WWW-Authenticate` header pointing at the protected resource metadata; a compatible client finds the authorization server, identifies itself, runs the code exchange and attaches the token.
 
 ```
 https://api.almyty.com/acme/petstore/.well-known/oauth-authorization-server
@@ -89,10 +93,29 @@ https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /acme/petstore/register` | Dynamic Client Registration |
+| `POST /acme/petstore/register` | Dynamic Client Registration (deprecated in MCP 2026-07-28; kept for clients without metadata-document support) |
 | `GET /acme/petstore/authorize` | Start the authorization code flow (`code_challenge`, `code_challenge_method=S256`) |
 | `POST /acme/petstore/token` | Exchange the code (with `code_verifier`) for tokens |
 | `POST /acme/petstore/revoke` | Revoke a token |
+
+**How a client identifies itself.** The metadata advertises both ways, in the order the specification asks clients to try them:
+
+1. **Client ID Metadata Document** (`client_id_metadata_document_supported: true`). The client uses an `https` URL as its `client_id`, for example `https://app.example.com/oauth/client.json`. almyty fetches that document, checks that its `client_id` is exactly that URL, that it names `client_name` and `redirect_uris`, and that the `redirect_uri` of the request is one of them. Only public clients (`token_endpoint_auth_method: none`) are accepted. The consent screen shows the client's name and the host of its URL, because the name is the client's own claim. The client is stored once, keyed by its URL, so codes, tokens and revocation work as for a registered client, on any gateway.
+2. **Dynamic Client Registration.** Deprecated in MCP 2026-07-28 and kept for clients that need it. A registration may name `application_type`: `web` needs `https` redirect URIs (loopback `http` only outside production), `native` may use loopback `http` on any port or a private-use scheme such as `cursor://`. A registration without it whose redirect URIs are all loopback is taken as `native`, since that is what CLIs and desktop apps send; set `MCP_OAUTH_INFER_APPLICATION_TYPE=false` for the plain OIDC default (`web`). The response echoes `application_type`.
+
+The metadata document is fetched through the same guard as every other outbound request (no private, loopback or cloud-metadata addresses, no redirects, a total deadline and a size cap), with nothing relaxed for self-hosted installs. Fetches are limited per host, and a document is cached for its `Cache-Control` lifetime within bounds. All of it is configuration:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `MCP_CIMD_ENABLED` | `true` | Accept metadata-document clients at all |
+| `MCP_CIMD_FETCH_TIMEOUT_MS` | `5000` | Total deadline per fetch |
+| `MCP_CIMD_MAX_BYTES` | `65536` | Largest document read |
+| `MCP_CIMD_CACHE_MIN_SECONDS` / `MCP_CIMD_CACHE_MAX_SECONDS` | `300` / `86400` | Bounds on the cache lifetime |
+| `MCP_CIMD_FETCHES_PER_HOST` / `MCP_CIMD_FETCH_WINDOW_SECONDS` | `30` / `60` | Fetches allowed per host per window |
+
+A gateway owner can accept registered clients only by setting `"oauth": { "clientMetadataDocuments": false }` in the gateway's configuration; the gateway's metadata then stops advertising the option.
+
+**`iss`.** Every authorization response, approval or denial, carries `iss` set to the gateway's issuer (`https://api.almyty.com/acme/petstore`), and the metadata says so with `authorization_response_iss_parameter_supported: true`.
 
 | Token | Lifetime |
 |-------|----------|
@@ -128,5 +151,4 @@ Or require headers:
 
 ### Several methods
 
-A gateway can carry several auth methods, each required or optional. Required methods are tried in order and the first match wins, so you can, for example, add OAuth while keeping API keys working.
-A gateway can carry several auth methods, each marked required or optional. Required methods are tried in order (first match wins), so you can combine them, for example adding OAuth while keeping API keys active.
+Outside protected methods are alternatives: one successful enabled method allows the request. Disabling or reconfiguring company sign-in also ends the validity of tokens issued under its previous settings.

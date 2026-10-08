@@ -6,16 +6,16 @@ You set up one thing: a **provider connection**. That is a named key for one pro
 
 ## Connect a provider
 
-1. Open **Credentials** in the sidebar and click **Connect a provider** in the **Model providers** group. (The **Models** page has the same button, and every model chooser has **Add a connection**, which opens the same steps right under the field.)
-2. Pick your provider from the tiles: first-party vendors (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Cohere and more), hosted services that run many models (Groq, Together, OpenRouter, Fireworks, Cerebras and more), clouds (Azure, AWS Bedrock, Vertex AI, Hugging Face, Modal and more), **Your own server** for anything that speaks the OpenAI format, and **Ollama**.
+1. Open **Models** and click **Connect a provider**. Every model chooser also has **Add a connection**, which opens the same form right under the field.
+2. Choose your provider from the searchable list: first-party vendors (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Cohere and more), hosted services that run many models (Groq, Together, OpenRouter, Fireworks, Cerebras and more), clouds (Azure, AWS Bedrock, Vertex AI, Hugging Face, Modal and more), **Your own server** for anything that speaks the OpenAI format, and **Ollama**.
 3. **Name** the connection. It starts as the provider's name; call it what it is for ("OpenAI - research team"). Every model chooser shows this name, and you can rename it later.
 4. Paste the API key (the secret the provider gave you), or click **Use a saved key instead** and pick one already in Credentials. A few providers also ask for the one or two things they cannot work without: the region for AWS Bedrock, the resource and deployment for Azure, the project for Vertex AI. Your own server asks for its address and an optional key. Ollama asks for an **Ollama Cloud** key, or the address of an Ollama you run (see [Ollama](/llm-providers#ollama)).
 5. **Who can use it** is everyone in your organization unless you change it to just you or a team.
-6. Click **Connect**.
+6. Click **Save**.
 
 almyty checks the key straight away with one real call. If it fails, you are told why in one line, for example "OpenAI rejected this key.", with a link to where the provider issues keys. Nothing is saved until the key works.
 
-When it works you see every model the key reaches, all ticked. Untick any you do not want used through this connection, then click **Done**. There is nothing else to fill in: the list of models comes from the provider, and prices and limits come from an automatic price list.
+When it works, its connection opens under Models. All models are offered initially; choose which models it may offer on that page. Prices and limits come from an automatic price list.
 
 ## Which models a connection offers
 
@@ -40,7 +40,7 @@ With no connection yet, the page offers to connect a provider.
 
 ## A connection's page
 
-Click a connection (in the **Model providers** group on Credentials, or from a row on the Models page). The header shows its name (click the pencil to rename it), the provider, whether its key works, and **Check again** to re-check the key and fetch the model list again.
+Click a connection on Models, or open its key on Credentials. The header shows its name (click the pencil to rename it), the provider, whether its key works, and **Check again** to re-check the key and fetch the model list again.
 
 - **Models**: every model the key reaches, with price, reading limit and status, a checkbox each, and **Allow new models automatically**. Save to apply.
 - **Settings**: its key (**Replace key**), who can use it, its default model, and under **Advanced**: your own price, reading limit, privacy level, region and abilities for a model, an admin key for matching usage with the provider's bill, and default settings for answers. **Remove connection** asks once and names the agents that use its models; their owners are told, and past runs keep their record.
@@ -52,7 +52,7 @@ The connection's key is also listed on Credentials under the same name; renaming
 
 Wherever you choose a model (an agent's slots, a workflow step, a connection's default) there is one search box listing every model your connections offer, grouped by connection, with its price. A model that cannot be used says why. **Automatic**, at the top, lets almyty choose for each call: the cheapest model that fits, or the fastest, within limits you set (see [Routing](/models/routing)).
 
-At the bottom, **Add a connection** connects a new provider right there without losing what you typed, and **Manage provider keys** goes to Credentials.
+At the bottom, **Add a connection** connects a new provider right there without losing what you typed, and **Manage provider connections** goes to Models.
 
 ## Models stay up to date by themselves
 
@@ -96,7 +96,7 @@ $ npx @almyty/models list --selectable        # what can be picked right now, an
 $ npx @almyty/models sync 7c1e...             # read one connection's list again
 ```
 
-Connecting a provider over the API is one call, `POST /llm-providers/connect`; which models a connection offers is `allowNewModels`, `hiddenModels` and `allowedModels` on the same call or on `PATCH /llm-providers/:id`. See the [Providers API](/api-reference/llm-providers-api#connect-a-provider). Every command is in [CLI](/models/cli). The connection page's URL is `/credentials/providers/:id`; the connect page is `/credentials/providers/new`.
+Connecting a provider over the API is one call, `POST /llm-providers/connect`; which models a connection offers is `allowNewModels`, `hiddenModels` and `allowedModels` on the same call or on `PATCH /llm-providers/:id`. See the [Providers API](/api-reference/llm-providers-api#connect-a-provider). Every command is in [CLI](/models/cli). The connection page's URL is `/models/providers/:id`; the connect page is `/models/providers/new`.
 
 A call naming an unticked model is refused with `MODEL_NOT_ALLOWED`; unticking a model an agent uses is refused with `MODEL_IN_USE`. When a step names a connection without a model, it uses the connection's default model if that is ticked, else the best ticked one.
 

@@ -137,7 +137,7 @@ describe('AgentRuntimeProcessor.onFailed — an exhausted retry is durable', () 
     expect(runRepo.update.mock.calls[0][1].status).toBe(AgentRunStatus.FAILED);
   });
 
-  it('records nothing for a job with no run (a heartbeat) and does not throw', async () => {
+  it('records nothing for a job with no run (a timer tick) and does not throw', async () => {
     const { processor, runRepo } = make(null);
 
     await expect(
@@ -170,5 +170,65 @@ describe('AgentRuntimeProcessor.handleTimeoutCheck', () => {
     await expect(
       processor.handleTimeoutCheck({ data: { runId: 'r1' } } as any),
     ).rejects.toThrow('timeout check exploded');
+  });
+});
+
+/**
+ * Always on's jobs run on this processor: the timer tick only writes a
+ * wake, the wake job turns wakes into a run, a heartbeat job left in Redis
+ * from before fires as a tick, and every finished run is handed to Always
+ * on so a standing thread can report and look at its inbox again.
+ */
+describe('AgentRuntimeProcessor and Always on', () => {
+  const build = (processResult: 'continue' | 'done' | 'waiting' = 'done') => {
+    const alwaysOn = {
+      tick: jest.fn().mockResolvedValue(null),
+      process: jest.fn().mockResolvedValue('started'),
+      onRunFinished: jest.fn().mockResolvedValue(undefined),
+    };
+    const scheduler = { deliverScheduledRun: jest.fn().mockResolvedValue(undefined) };
+    const processor = new AgentRuntimeProcessor(
+      { processStep: jest.fn().mockResolvedValue(processResult) } as any,
+      { add: jest.fn() } as any,
+      {} as any,
+      { findOne: jest.fn().mockResolvedValue(null), update: jest.fn() } as any,
+      undefined,
+      scheduler as any,
+      alwaysOn as any,
+    );
+    return { processor, alwaysOn, scheduler };
+  };
+  const job = { data: { agentId: 'a-1', organizationId: 'org-1' } } as any;
+
+  it('a tick writes a wake and nothing else', async () => {
+    const { processor, alwaysOn } = build();
+    await processor.handleAlwaysOnTick(job);
+    expect(alwaysOn.tick).toHaveBeenCalledWith('a-1', 'org-1');
+    expect(alwaysOn.process).not.toHaveBeenCalled();
+  });
+
+  it('a heartbeat job from before Always on fires as a tick', async () => {
+    const { processor, alwaysOn } = build();
+    await processor.handleLegacyHeartbeat(job);
+    expect(alwaysOn.tick).toHaveBeenCalledWith('a-1', 'org-1');
+  });
+
+  it('the wake job turns wakes into a run', async () => {
+    const { processor, alwaysOn } = build();
+    await processor.handleAlwaysOnWake(job);
+    expect(alwaysOn.process).toHaveBeenCalledWith('a-1', 'org-1');
+  });
+
+  it('a finished run is handed to Always on and to the scheduler', async () => {
+    const { processor, alwaysOn, scheduler } = build('done');
+    await processor.handleNextStep({ data: { runId: 'r1', seq: 3 } } as any);
+    expect(alwaysOn.onRunFinished).toHaveBeenCalledWith('r1');
+    expect(scheduler.deliverScheduledRun).toHaveBeenCalledWith('r1');
+  });
+
+  it('a run still going is not', async () => {
+    const { processor, alwaysOn } = build('waiting');
+    await processor.handleNextStep({ data: { runId: 'r1', seq: 3 } } as any);
+    expect(alwaysOn.onRunFinished).not.toHaveBeenCalled();
   });
 });

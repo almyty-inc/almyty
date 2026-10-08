@@ -58,7 +58,7 @@ describe('AgentTechDocHelper', () => {
     },
     settings: { schedule: { enabled: true, intervalMinutes: 30 } },
     webhookUrl: 'https://hooks.example.com/agent-1',
-    heartbeat: { enabled: true, intervalMinutes: 15, prompt: 'check queue' },
+    alwaysOn: { enabled: true, brief: 'check queue', wakeOn: { timer: { everyMinutes: 15 } }, actMode: 'act', askFirstToolIds: [], report: 'when_acted' },
     metadata: { versions: versionSnapshots },
     totalExecutions: 10,
     successfulExecutions: 9,
@@ -102,7 +102,7 @@ describe('AgentTechDocHelper', () => {
     agentConfig: null,
     settings: null,
     webhookUrl: null,
-    heartbeat: null,
+    alwaysOn: null,
     metadata: null,
     totalExecutions: 0,
     successfulExecutions: 0,
@@ -257,14 +257,14 @@ describe('AgentTechDocHelper', () => {
       });
     });
 
-    it('reports data governance: memory, files, webhook, schedule and heartbeat inputs', async () => {
+    it('reports data governance: memory, files, webhook, schedule and always-on inputs', async () => {
       const doc = await helper.build('agent-1', ORG, VIEWER);
 
       expect(doc.dataGovernance.memory).toEqual({ enabled: true, autoSave: true, scopes: ['workspace'] });
       expect(doc.dataGovernance.fileAttachments.count).toBe(3);
       expect(doc.dataGovernance.inputs.webhook.configured).toBe(true);
       expect(doc.dataGovernance.inputs.schedule).toEqual({ enabled: true, intervalMinutes: 30 });
-      expect(doc.dataGovernance.inputs.heartbeat).toEqual({ enabled: true, intervalMinutes: 15 });
+      expect(doc.dataGovernance.inputs.alwaysOn).toEqual({ enabled: true, intervalMinutes: 15 });
     });
 
     it('reports logging and traceability including run counts and versioning note', async () => {

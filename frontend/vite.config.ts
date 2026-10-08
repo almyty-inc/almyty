@@ -103,6 +103,11 @@ export default defineConfig({
         secure: true,
         rewrite: (p) => p.replace(/^\/ingest/, ''),
       },
+      // Browser redirects and callbacks must reach the API, including HTML GETs.
+      '/company-signin': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       '/auth': {
         target: apiTarget,
         changeOrigin: true,

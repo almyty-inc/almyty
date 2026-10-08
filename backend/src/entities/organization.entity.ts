@@ -42,6 +42,18 @@ export interface OrganizationSettings {
    * the one anybody is trying to make.
    */
   egressAllowlist?: string[];
+  /**
+   * Lower limits for run_code scripts than the install's (CODE_MODE_*;
+   * code-mode/code-mode.settings.ts): maxCalls, maxInFlight,
+   * defaultTimeoutMs, maxTimeoutMs, memoryMb, logCapChars, resultCapChars,
+   * maxCodeChars. A number above the install's is ignored.
+   */
+  codeMode?: Partial<Record<string, number>>;
+  /**
+   * Tighter Always on limits than the plan's (agents/always-on/always-on-capacity.ts):
+   * timerFloorMinutes (longer only), maxWakesPerHour and includedAgents (fewer only).
+   */
+  alwaysOn?: { timerFloorMinutes?: number; maxWakesPerHour?: number; includedAgents?: number };
 }
 
 @Entity('organizations')

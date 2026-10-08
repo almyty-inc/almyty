@@ -21,6 +21,10 @@ import { GrantsService } from './grants.service';
  *   agent or to its workspace gives, and nothing a role or a user grant
  *   gives. The resolver has already applied the team rule, so a team
  *   connection reaches only a gateway of that team.
+ * - an agent acting as itself (agent_identity): the agent. No user, no
+ *   role, no owner, no team: only a grant to that agent lets it use a
+ *   connection. Its owner's personal and private connections stay out of
+ *   reach.
  * - nobody (a scheduler, the reconcile loop): a system path. It may use an
  *   organization connection, never someone's personal one, because there
  *   is no one whose grant could be checked.
@@ -47,6 +51,15 @@ export class GrantsUsePolicy implements ConnectionUsePolicy {
     if (execution?.kind === 'gateway') {
       return this.grants.assertCanUse(GrantsUsePolicy.gatewayGrantPrincipal(execution), credential, useContext);
     }
+    // An agent acting as itself: the grants made to that agent, and only
+    // those. The agent named by the call's context cannot stand in for it,
+    // so its own id is pinned.
+    if (execution?.kind === 'agent') {
+      return this.grants.assertCanUse(GrantsUsePolicy.agentGrantPrincipal(execution), credential, {
+        ...useContext,
+        agentId: execution.agentId,
+      });
+    }
     if (credential.ownerUserId) {
       throw new ForbiddenException({
         code: 'CONNECTION_NOT_GRANTED',
@@ -67,6 +80,23 @@ export class GrantsUsePolicy implements ConnectionUsePolicy {
       roles: [],
       permissions: [],
       teamIds: gateway.visibility === 'team' && gateway.teamId ? [gateway.teamId] : [],
+    };
+  }
+
+  /**
+   * An agent acting as itself, as the grant check sees it: no user (the id
+   * names the agent and matches no user grant or owner), no role, no team
+   * (a team agent is not a member of its team), and itself as the agent a
+   * grant may name.
+   */
+  static agentGrantPrincipal(agent: { agentId: string; visibility: string; teamId: string | null }): GrantPrincipal {
+    return {
+      userId: `agent:${agent.agentId}`,
+      roles: [],
+      permissions: [],
+      // Not its team's: a team agent is no member of the team (Frane, 2026-10-06).
+      teamIds: [],
+      agentId: agent.agentId,
     };
   }
 }

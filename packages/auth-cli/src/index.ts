@@ -124,6 +124,7 @@ async function cmdLogin(args: ParsedArgs): Promise<void> {
       url: apiUrl,
       token: result.token,
       frontendUrl: result.frontendUrl,
+      organizationId: result.organizationId,
     });
     // Only once the login succeeded. Persisting the URLs first meant a
     // cancelled `login --api <typo>` left the typo behind for every
@@ -220,6 +221,7 @@ async function cmdWhoami(args: ParsedArgs): Promise<void> {
     if (verified?.email || summary.email) {
       console.log(`Email:     ${verified?.email ?? summary.email}`);
     }
+    if (summary.organizationId) console.log(`Runner org: ${summary.organizationId}`);
     console.log(`Token:     ${summary.tokenPreview}`);
     console.log(`Expiry:    ${expiry.message}`);
     if (verified?.organizations?.length) {

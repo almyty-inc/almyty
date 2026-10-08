@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 import { randomBytes } from 'crypto';
+import type { McpOAuthPending } from './mcp-oauth/mcp-oauth-client.service';
 
 /**
  * What a pending redirect connect remembers between the authorize
@@ -22,8 +23,16 @@ export interface PendingConnect {
   mode: 'browser' | 'headless';
   /** Set when the flow rotates an existing connection instead of creating one. */
   rotateConnectionId: string | null;
+  /** The name the new connection is saved under, when the person gave one. */
+  name?: string;
   /** Non-secret form values captured before the redirect. */
   input: Record<string, unknown>;
+  /**
+   * An MCP server sign-in: the endpoints discovered from the server, the
+   * client almyty is there, the issuer the callback must come from. Its
+   * client secret, if any, is encrypted.
+   */
+  mcpOAuth?: McpOAuthPending;
   createdAt: number;
 }
 

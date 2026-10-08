@@ -41,6 +41,8 @@ export interface McpCapabilities {
   tools?: {
     listChanged?: boolean;
   };
+  /** 2026-07-28: extensions this server supports, keyed by identifier (e.g. io.modelcontextprotocol/tasks). */
+  extensions?: Record<string, Record<string, unknown>>;
 }
 
 // MCP Initialization
@@ -67,8 +69,22 @@ export interface McpInitializeResult {
 // MCP Tool Types
 export interface McpTool {
   name: string;
+  /** Human-readable name (2025-06-18). */
+  title?: string;
   description?: string;
   inputSchema: any; // JSON Schema
+  /** JSON Schema of structuredContent (2025-06-18); always an object schema. */
+  outputSchema?: any;
+  /** Behaviour hints (2025-03-26): readOnlyHint, destructiveHint, idempotentHint, openWorldHint. */
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  /** Icons (2025-11-25). */
+  icons?: Array<{ src: string; mimeType?: string; sizes?: string[]; theme?: 'light' | 'dark' }>;
 }
 
 export interface McpToolsListRequest {
@@ -87,6 +103,8 @@ export interface McpCallToolRequest {
 
 export interface McpCallToolResult {
   content: McpContent[];
+  /** The result as a JSON object (2025-06-18), next to its serialized text block. */
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
 
@@ -311,6 +329,11 @@ export enum JsonRpcErrorCode {
   RESOURCE_NOT_FOUND = -32001,
   TOOL_NOT_FOUND = -32002,
   UNAUTHORIZED = -32003,
+  // Defined by MCP 2026-07-28 ("Error Codes"), the -32020..-32099 range
+  // the specification reserves for itself.
+  HEADER_MISMATCH = -32020,
+  MISSING_REQUIRED_CLIENT_CAPABILITY = -32021,
+  UNSUPPORTED_PROTOCOL_VERSION = -32022,
 }
 
 // Transport Types

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { v7 as uuidv7 } from 'uuid';
 
-import { StreamableHttpTransport } from '../mcp/transports/streamable-http.transport';
+import { WorkerStreamTransport } from './transport/worker-stream.transport';
 import {
   HeartbeatAckPayload,
   WorkerEnvelope,
@@ -87,6 +87,11 @@ export interface DispatchOptions {
   labels?: LabelRequirements;
   /** The organization to look for a matching runner in; needed with labels. */
   organizationId?: string;
+  /**
+   * The runner named is the agent's pinned runner ("Runs on"): the work
+   * goes there or fails, and labels never send it elsewhere.
+   */
+  pinned?: boolean;
 }
 
 interface PendingCall {
@@ -162,7 +167,7 @@ export class RunnerCallService implements OnModuleDestroy {
 
   constructor(
     private readonly runners: RunnerService,
-    private readonly transport: StreamableHttpTransport,
+    private readonly transport: WorkerStreamTransport,
     // forwardRef: WorkspaceModule imports RunnerModule for the TTL tick,
     // and this is the return edge.
     @Inject(forwardRef(() => WorkspaceService))
@@ -196,9 +201,9 @@ export class RunnerCallService implements OnModuleDestroy {
   ): Promise<RunnerResponsePayload> {
     const caller = options.principal ?? options.callerUserId;
     // Label requirements choose the machine, unless the work is in a
-    // workspace: a workspace lives on one runner, so the work goes there
-    // and the labels are a check on that runner instead of a search.
-    const routeByLabels = hasLabelRequirements(options.labels) && workspaceId === undefined;
+    // workspace or the agent is pinned to one runner: then the work goes to
+    // that runner and the labels are a check on it instead of a search.
+    const routeByLabels = hasLabelRequirements(options.labels) && workspaceId === undefined && !options.pinned;
     if (routeByLabels && !options.organizationId) {
       throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_UNAVAILABLE, 'label routing needs the organization to look in');
     }
@@ -214,8 +219,13 @@ export class RunnerCallService implements OnModuleDestroy {
     if (hasLabelRequirements(options.labels) && !labelsMatch(runner.labels, options.labels)) {
       throw new RunnerCallError(
         RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND,
-        `The workspace is on ${runner.name}, which does not have ${describeLabelRequirements(options.labels)}`,
+        workspaceId !== undefined ? `The workspace is on ${runner.name}, which does not have ${describeLabelRequirements(options.labels)}` : `${runner.name}, the runner this agent runs on, does not have ${describeLabelRequirements(options.labels)}`,
       );
+    }
+    // A pinned runner came from the agent's settings, not from a tool row
+    // of this organization: one in another organization is not there.
+    if (options.pinned && options.organizationId && runner.organizationId !== options.organizationId) {
+      throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND, 'runner not found');
     }
 
     // A named workspace must be a live one of the caller's on this runner.

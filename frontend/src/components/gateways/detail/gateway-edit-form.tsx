@@ -128,8 +128,9 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
       </FormSection>
 
       {!isSystem && (
-        <FormSection title="Who can use it">
+        <FormSection title="Who can manage it">
           <VisibilityField
+            label="Who can manage it"
             organizationId={currentOrganization?.id ?? ''}
             value={visibility}
             onChange={setVisibility}

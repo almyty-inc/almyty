@@ -76,7 +76,7 @@ describe('RunnerDetailPage', () => {
     render(<RunnerDetailPage />)
     await waitFor(() => expect(screen.getByText('never connected')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
-    expect(screen.getByText('almyty-runner start --name r1 --org o1')).toBeInTheDocument()
+    expect(screen.getByText('almyty runner start')).toBeInTheDocument()
   })
 
   it('Delete asks a one-line confirmation and calls the API on confirm', async () => {
@@ -164,6 +164,19 @@ describe('RunnerDetailPage', () => {
     const table = await screen.findByTestId('runner-workspaces')
     expect(await within(table).findByText('/foo/bar')).toBeInTheDocument()
     expect(within(table).getByText('/baz')).toBeInTheDocument()
+  })
+  it('lets the owner rename a connected machine without deleting it', async () => {
+    getRunner.mockResolvedValue(makeRunner({ name: 'hostname', ownerUserId: 'me', state: 'online' }))
+    update.mockResolvedValue(makeRunner({ name: 'Build box' }))
+    const user = userEvent.setup()
+    render(<RunnerDetailPage />)
+    await user.click(await screen.findByRole('tab', { name: 'Overview' }))
+    const field = await screen.findByRole('textbox', { name: 'Runner name' })
+    await user.clear(field)
+    await user.type(field, 'build-box')
+    await user.click(screen.getByRole('button', { name: 'Save name' }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('r1', { name: 'build-box' }))
+    expect(unregister).not.toHaveBeenCalled()
   })
 })
 

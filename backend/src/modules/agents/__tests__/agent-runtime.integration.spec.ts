@@ -15,7 +15,6 @@ import { ApprovalsService } from '../../approvals/approvals.service';
 import { AgentRuntimeEventsHelper } from '../agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from '../agent-runtime-misc.helper';
 import { AgentStepProcessor } from '../agent-step-processor';
-import { AgentHeartbeatHelper } from '../agent-heartbeat.helper';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 import { Organization } from '../../../entities/organization.entity';
@@ -186,7 +185,6 @@ describe('AgentRuntimeService (integration)', () => {
         AgentRuntimeBuilders,
         AgentCollaborationHelper,
         AgentBuiltInToolsHelper,
-        AgentHeartbeatHelper,
         AgentRuntimeEventsHelper,
         AgentRuntimeMiscHelper,
         AgentStepProcessor,

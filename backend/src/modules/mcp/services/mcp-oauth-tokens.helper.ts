@@ -1,8 +1,10 @@
+import { CompanySigninService, type CompanyGrant } from '../../gateways/company-signin.service';
 import {
   BadRequestException,
   Injectable,
   Logger,
   UnauthorizedException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,7 +15,7 @@ import { OAuthAccessToken } from '../../../entities/oauth-access-token.entity';
 import { OAuthClient } from '../../../entities/oauth-client.entity';
 import { User } from '../../../entities/user.entity';
 import { hasEffectiveMembership } from '../../../common/authorization/membership';
-import { hashValue, verifyClientAuth } from './mcp-oauth-helpers.helper';
+import { findGatewayClient, hashValue, verifyClientAuth } from './mcp-oauth-helpers.helper';
 
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 const REFRESH_TOKEN_LIFETIME_SECONDS = 30 * 24 * 3600;
@@ -60,6 +62,7 @@ export class McpOAuthTokensHelper {
     private readonly oauthTokenRepository: Repository<OAuthAccessToken>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @Optional() private readonly companySignin?: CompanySigninService,
   ) {}
 
   /**
@@ -88,9 +91,7 @@ export class McpOAuthTokensHelper {
     clientSecret?: string,
     resource?: string,
   ): Promise<TokenResponse> {
-    const client = await this.oauthClientRepository.findOne({
-      where: { clientId, gatewayId, isActive: true },
-    });
+    const client = await findGatewayClient(this.oauthClientRepository, clientId, gatewayId);
     if (!client) {
       throw new UnauthorizedException('Invalid client');
     }
@@ -150,7 +151,7 @@ export class McpOAuthTokensHelper {
       throw new UnauthorizedException('Authorization code has already been used');
     }
 
-    if (!(await this.holderIsMember(authCode.userId, authCode.organizationId))) {
+    if (!(authCode.companyGrant ? await this.companySignin?.validGrant(authCode.gatewayId, authCode.companyGrant) : await this.holderIsMember(authCode.userId, authCode.organizationId))) {
       this.logger.warn(`Code exchange refused for client ${clientId}: holder is no longer a member of the organization`);
       throw new UnauthorizedException('Invalid authorization code');
     }
@@ -165,6 +166,8 @@ export class McpOAuthTokensHelper {
       authCode.userId,
       authCode.scope,
       authCode.resource ?? undefined,
+      undefined,
+      authCode.companyGrant,
     );
 
     // A losing redemption can finish its revocation before this pair was
@@ -216,9 +219,7 @@ export class McpOAuthTokensHelper {
     gatewayId: string,
     clientSecret?: string,
   ): Promise<TokenResponse> {
-    const client = await this.oauthClientRepository.findOne({
-      where: { clientId, gatewayId, isActive: true },
-    });
+    const client = await findGatewayClient(this.oauthClientRepository, clientId, gatewayId);
     if (!client) {
       throw new UnauthorizedException('Invalid client');
     }
@@ -269,7 +270,7 @@ export class McpOAuthTokensHelper {
 
     // Checked after the claim, so a departed member's refresh token is
     // spent (revoked) by this attempt rather than left to be retried.
-    if (!(await this.holderIsMember(existingToken.userId, existingToken.organizationId))) {
+    if (!(existingToken.companyGrant ? await this.companySignin?.validGrant(existingToken.gatewayId, existingToken.companyGrant) : await this.holderIsMember(existingToken.userId, existingToken.organizationId))) {
       this.logger.warn(`Refresh refused for client ${clientId}: holder is no longer a member of the organization`);
       throw new UnauthorizedException('Refresh token has been revoked');
     }
@@ -282,6 +283,7 @@ export class McpOAuthTokensHelper {
       existingToken.scope,
       existingToken.resource ?? undefined,
       existingToken.id,
+      existingToken.companyGrant,
     );
 
     this.logger.log(`Token refreshed for client ${clientId}`);
@@ -298,6 +300,7 @@ export class McpOAuthTokensHelper {
     if (!token) return { valid: false };
     if (token.isRevoked) return { valid: false };
     if (new Date() > token.expiresAt) return { valid: false };
+    if (token.companyGrant && !await this.companySignin?.validGrant(token.gatewayId, token.companyGrant)) return { valid: false };
 
     return {
       valid: true,
@@ -315,9 +318,7 @@ export class McpOAuthTokensHelper {
     gatewayId: string,
     clientSecret?: string,
   ): Promise<void> {
-    const client = await this.oauthClientRepository.findOne({
-      where: { clientId, gatewayId, isActive: true },
-    });
+    const client = await findGatewayClient(this.oauthClientRepository, clientId, gatewayId);
     if (!client) {
       return;
     }
@@ -364,6 +365,7 @@ export class McpOAuthTokensHelper {
     scope: string,
     resource?: string,
     parentRefreshTokenId?: string,
+    companyGrant?: CompanyGrant,
   ): Promise<TokenResponse> {
     const rawAccessToken = `almyty_at_${crypto.randomBytes(48).toString('base64url')}`;
     const rawRefreshToken = `almyty_rt_${crypto.randomBytes(48).toString('base64url')}`;
@@ -380,6 +382,7 @@ export class McpOAuthTokensHelper {
       tokenType: 'access',
       clientId,
       userId,
+      companyGrant: companyGrant ?? null,
       gatewayId,
       organizationId,
       scope,
@@ -394,6 +397,7 @@ export class McpOAuthTokensHelper {
       tokenType: 'refresh',
       clientId,
       userId,
+      companyGrant: companyGrant ?? null,
       gatewayId,
       organizationId,
       scope,

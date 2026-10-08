@@ -132,6 +132,8 @@ export enum OrganizationRole {
 
 // Gateway Types
 export interface Gateway {
+  accessScope?: 'private' | 'team' | 'org' | 'external_open' | 'external_protected'
+  accessTeamId?: string | null
   id: string
   name: string
   description?: string
@@ -352,6 +354,10 @@ export interface Tool {
   id: string
   name: string
   description?: string
+  /** What calling it does to data (code-mode part A), where that came from, and whether it reaches a third party. */
+  sideEffect?: 'read' | 'write' | 'destructive'
+  sideEffectSource?: 'override' | 'annotation' | 'http_method' | 'graphql' | 'default'
+  openWorld?: boolean
   type: ToolType
   category: ToolCategory
   organizationId: string

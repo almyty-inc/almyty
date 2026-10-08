@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { EventEmitter } from 'events';
 
-import { StreamableHttpTransport } from '../mcp/transports/streamable-http.transport';
+import { WorkerStreamTransport } from './transport/worker-stream.transport';
 import { WorkerEnvelope } from '../mcp/types/worker-protocol.types';
 import { RunnerService } from './runner.service';
 
@@ -90,7 +90,7 @@ export class CodingRelayService implements OnModuleDestroy {
 
   constructor(
     private readonly runners: RunnerService,
-    private readonly transport: StreamableHttpTransport,
+    private readonly transport: WorkerStreamTransport,
   ) {
     this.envelopeListener = (env, session) => {
       void this.onEnvelope(env, session).catch((err) =>

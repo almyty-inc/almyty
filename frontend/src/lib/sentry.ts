@@ -34,6 +34,20 @@ let client: SentryModule | null = null
 // Guards against double-init (e.g. React StrictMode double-invoke).
 let initStarted = false
 
+/** What the SDK may attach to an event on its own: nothing. */
+export const SENTRY_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+} as const
+
 function readDsn(): string | undefined {
   const dsn = import.meta.env.ALMYTY_SENTRY_DSN
   return typeof dsn === 'string' && dsn.trim() !== '' ? dsn.trim() : undefined
@@ -64,9 +78,11 @@ export async function initSentry(): Promise<void> {
       // session replay unless explicitly turned on later. Keeps the bundle
       // and network footprint minimal for a pure error-tracking rollout.
       tracesSampleRate: 0,
-      // No IP address, cookies or user identity on events. Error reports
-      // carry the error and where it happened, nothing about who hit it.
-      sendDefaultPii: false,
+      // No IP address, cookies, headers, bodies, query strings or user
+      // identity on events. Error reports carry the error and where it
+      // happened, nothing about who hit it. @sentry/react 11 dropped
+      // sendDefaultPii and collects all of these unless told otherwise.
+      dataCollection: SENTRY_DATA_COLLECTION,
     })
     client = Sentry
   } catch {

@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RoutingPolicyField } from '@/components/models/routing-policy-editor'
 import { availability, effectivePrice, formatPrice, isFree } from '@/components/models/model-row'
-import { ProviderConnectionCreate } from '@/components/llm-providers/provider-connection-create'
+import { CredentialForm } from '@/components/credentials/credential-form'
 import { connectProviderPath } from '@/components/llm-providers/paths'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { modelsApi } from '@/lib/models-api'
@@ -392,10 +392,12 @@ export function ModelPicker({
           <X className="h-4 w-4" aria-hidden />
         </Button>
       </div>
-      <ProviderConnectionCreate
+      <CredentialForm
         idPrefix={`${idPrefix}-add`}
         onCancel={() => setAdding(false)}
-        onDone={() => {
+        modelsOnly
+        embedded
+        onSaved={() => {
           setAdding(false)
           queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
           queryClient.invalidateQueries({ queryKey: PICKER_MODELS_KEY })

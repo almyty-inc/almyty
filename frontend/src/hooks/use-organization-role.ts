@@ -51,3 +51,15 @@ export function useOrganizationRole(): OrganizationRoleState {
     }
   }, [user, currentOrganization?.id])
 }
+
+/**
+ * Whether the signed-in person may manage this agent, as the server decides
+ * it for agent editing: an admin or owner of the organization, or the member
+ * who owns the agent. A convenience for the interface: the server decides,
+ * and a team lead it also lets in is simply not offered the link.
+ */
+export function useCanManageAgent(ownerId: string | null | undefined): boolean {
+  const user = useAuthStore((s) => s.user)
+  const { canManage } = useOrganizationRole()
+  return canManage || (!!ownerId && !!user?.id && user.id === ownerId)
+}

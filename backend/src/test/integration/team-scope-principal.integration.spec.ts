@@ -357,7 +357,15 @@ describeIfDb('the run principal decides team scope on the execution path (real P
 
       beforeAll(async () => {
         callTool = jest.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
-        mcp = new McpSourcesService(repo(McpSource), repo(Tool), { callTool } as any, makeEnvelopeCryptoMock(), resolver);
+        // The service calls callToolOutcome; its result here is the callTool mock's.
+        const client = {
+          callTool,
+          callToolOutcome: async (config: any, name: string, args: any) => ({
+            outcome: { kind: 'result', result: await callTool(config, name, args) },
+            init: { era: 'legacy', protocolVersion: '2025-11-25', serverInfo: {}, sessionId: null, capabilities: {} },
+          }),
+        };
+        mcp = new McpSourcesService(repo(McpSource), repo(Tool), client as any, makeEnvelopeCryptoMock(), resolver);
         source = await insert(McpSource, {
           name: 'payments-mcp', url: 'https://mcp.example.com', authType: 'bearer', authConfig: null,
           credentialId: teamCredential.id, status: McpSourceStatus.ACTIVE, organizationId, toolCount: 0,

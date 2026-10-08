@@ -199,6 +199,6 @@ describe('the gateway call sites hand the executor a gatewayId', () => {
 
   it('the MCP JSON-RPC dispatcher forwards the gateway to tools/call', () => {
     const mcp = read('modules', 'mcp', 'mcp.service.ts');
-    expect(mcp).toMatch(/handleToolCall\([^)]*gatewayId\)/);
+    expect(mcp).toMatch(/handleToolCall\([^)]*\bgatewayId[,)]/);
   });
 });

@@ -1,3 +1,5 @@
+import { GatewayAuthManagementGuard } from './gateway-auth-management.guard';
+import { CompanySigninService } from './company-signin.service';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
@@ -23,6 +25,7 @@ import { ScheduledPostService } from './channels/scheduled-post.service';
 import { SCHEDULED_RESULT_POSTER } from '../agents/scheduled-result-poster';
 import { ChannelLinkService } from './channel-link.service';
 import { ChannelPolicyService } from './channel-policy.service';
+import { VisitorDataService } from './visitor-data.service';
 import { ChannelLinkController } from './channel-link.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
@@ -122,9 +125,13 @@ import { FilesModule } from '../files/files.module';
     FilesModule,
   ],
   providers: [
+    GatewayAuthManagementGuard,
+    CompanySigninService,
     HostedChatService,
     ChannelLinkService,
     ChannelPolicyService,
+    // What a visitor's self-service and an owner's data request read and erase.
+    VisitorDataService,
     VisitorEmailOtpService,
     CustomDomainService,
     { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
@@ -191,6 +198,7 @@ import { FilesModule } from '../files/files.module';
     ChannelInstallationsController,
   ],
   exports: [
+    CompanySigninService,
     GatewaysService,
     HostedChatService,
     SurfaceCorsService,
@@ -200,6 +208,7 @@ import { FilesModule } from '../files/files.module';
     GatewayToolService,
     ChannelLinkService,
     ChannelPolicyService,
+    VisitorDataService,
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,

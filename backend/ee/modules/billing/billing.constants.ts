@@ -95,6 +95,8 @@ export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
     EE_ENTITLEMENTS.COMPLIANCE_PACK,
     EE_ENTITLEMENTS.AUDIT_EXPORT,
     EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE,
+    // Specialist agents with their own identities (always-on design, decision 11).
+    EE_ENTITLEMENTS.AGENT_IDENTITY,
   ],
   // Enterprise (custom / contact sales) = Business + SCIM (part of SSO),
   // customer-managed keys/private cloud, cost attribution, and removing
@@ -113,6 +115,7 @@ export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
     EE_ENTITLEMENTS.BYO_KMS,
     EE_ENTITLEMENTS.CHARGEBACK,
     EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE,
+    EE_ENTITLEMENTS.AGENT_IDENTITY,
     EE_ENTITLEMENTS.WHITE_LABEL,
   ],
 };

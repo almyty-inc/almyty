@@ -105,7 +105,7 @@ packages/
 ## Key Facts
 
 - **Entities**: 73 (`ls backend/src/entities/*.entity.ts | wc -l` — count it, do not trust this line)
-- **Agent node types** (13): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`, `verify`, `extract_context`, `decision`. The dispatch switch in `agents/agent-node-executor.ts` is the list — count it there. `verify` runs a panel of refute-only checkers and emits a verdict a `condition` can branch on; `extract_context` compresses what upstream steps learned into a small structured brief. Both are load-bearing for the compiled strategies (cascade, best_of_n, explore_extract_patch). All 13 are in the builder's **Steps** palette (`node-palette.tsx`) — see `docs/strategies.md`.
+- **Agent node types** (14): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`, `verify`, `extract_context`, `decision`, `code` (a script over the agent's tools, code mode). The dispatch switch in `agents/agent-node-executor.ts` is the list — count it there. `verify` runs a panel of refute-only checkers and emits a verdict a `condition` can branch on; `extract_context` compresses what upstream steps learned into a small structured brief. Both are load-bearing for the compiled strategies (cascade, best_of_n, explore_extract_patch). All 14 are in the builder's **Steps** palette (`node-palette.tsx`) — see `docs/strategies.md`.
 - **Gateway types**: **Create gateway** makes exactly one of MCP, UTCP, Skills (`GATEWAY_PROTOCOLS` in `frontend/src/lib/gateway-connect.ts`). A2A, web chat, widget and messaging gateways are channel gateways (`CHANNEL_GATEWAY_TYPES`): `GatewaysService.create` refuses one without `forChannel`, so they exist only through an agent's channel.
 - **Channel types** (on the agent, `agent_channels`): `web`, `widget`, `a2a`, `tui`, `desktop` + 15 messaging platforms. `tui` compiles via `bun --compile`; `desktop` packages via electron-builder. Every gateway a channel stands up (web chat, widget, A2A, messaging) is made only through `upsertForChannel`. See `docs/channels.md`.
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM, SDK
@@ -207,10 +207,12 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 ## Design Documents
 
 - `docs/design/layers.md` — The six layers (L1 egress → L6 orchestrator), what belongs where, and the cross-cutting concerns. Twenty-nine code comments cite it by layer number; keep it true or fix the comments.
+- `docs/design/code-mode.md` — Code mode and tool discovery (design, under review): side-effect classes, search_tools/get_tool/run_code meta-tools, the server-side broker and staged change sets
 - `docs/architecture.md` — System architecture: the layers, the backend module map, and the five request paths
 - `docs/channels.md` — an agent's channels: publishing, builds, signing
 - `docs/runner.md` — Runner + workspace architecture
-- `docs/design/hosted-runners-and-always-on.md` — Design (for review, not built): hosted runner environments in k8s and always-on autonomous agents
+- `docs/design/hosted-runners-and-always-on.md` — Design: hosted runner environments in k8s (not built) and always-on autonomous agents (phase 1 shipped); decisions and gVisor test results
+- `docs/design/mcp-2026-07-28.md` — MCP spec compliance: gaps against 2025-06-18 / 2025-11-25 / 2026-07-28, one protocol core, runner transport split, phases P0-P2
 - `docs/models.md` — Models layer: catalog, routing, pricing, deployments (design: `docs/design/models-layer.md`)
 - `docs/enterprise.md` — EE entitlements, what each grants, and how per-org gating works
 - `docs/retention.md` — Data retention classes and the sweep
@@ -227,7 +229,7 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 - Fonts: Manrope (headings), DM Sans (body), JetBrains Mono (code). Google Fonts, SIL OFL.
 - Protocol badges: MCP=violet, A2A=cyan, UTCP=emerald, SOAP=amber, GraphQL=rose, REST=blue
 - Primary CTA buttons use violet-to-cyan gradient. One gradient CTA per page max.
-- Sidebar order: Dashboard → APIs → Tools → Gateways → Agents → Runners → Credentials → Approvals → Models → Memory → Analytics → Settings
+- Sidebar order: Dashboard → Agents → Approvals | Models → Memory → Tools → APIs → Gateways → Runners | Analytics → Credentials → Settings
 
 <!-- BEGIN agented section v0.1.0 -->
 - For files in this project, prefer `ae open <path>` over `Read`. ae returns the same content plus annotations from prior sessions and a state_token you'll thread through subsequent writes.

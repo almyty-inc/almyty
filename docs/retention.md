@@ -44,13 +44,28 @@ most.
 
 An agent can carry its own `privacy.retentionDays` in its visitor rules,
 and a channel can override it; the sweep removes the conversations reaching
-each channel through its gateway after the effective period, with the files sent in them. It never keeps
+each channel through its gateway after the effective period, with the files sent in them and the channel's stored deliveries and replies (`channel_events`, including the text kept for a message that never became a run). It never keeps
 data **longer** than the organization policy — the shorter of the two
 wins.
+
+## An always-on agent's standing conversation
+
+An always-on agent keeps one conversation for as long as it exists
+([always-on.md](always-on.md)). The sweep never deletes that conversation as
+a whole. It deletes its messages older than `conversationsDays` inside it,
+and the summary the agent keeps of older turns carries the gist. What woke
+the agent (`agent_wakes`, whose one-line summaries can name who wrote) goes
+with the conversations: rows older than `conversationsDays` are deleted,
+except wakes still waiting. If the sweep cannot read which conversations
+are standing ones, it deletes no conversations that run rather than guess.
 
 ## Attachments that were never sent
 
 A file a web chat or widget visitor uploads waits, with no conversation, for the message that names it; a channel attachment is stored before its run starts and filed under the run's conversation once it has one. An attachment that never reached a conversation (uploaded and not sent, or stored for a run that was refused) belongs to no policy, so it is removed deployment-wide a day after it was stored, on the same hourly tick. Erasing a web chat visitor or a widget thread removes that visitor's unsent uploads at once.
+
+## Erasure on request
+
+Retention is the schedule; a person can also ask for their data to go now. The web chat and widget offer it to their visitors, and whoever may manage the agent (an organization owner or admin, or the member who owns it) answers anyone else from the agent's Channels tab (`/agents/:id/channels/visitor-data`). Either way `VisitorDataService.erase` removes the person's conversations, messages, runs with their tool executions, files (stored objects included), memories in almyty's store and in an outside memory service, channel events (with the text of messages that never became a run) and visitor rows at once, whatever the retention periods say, and records a `visitor_data_erase` audit entry with counts only. See `docs/channels.md` (Visitor data).
 
 ## Entity snapshots
 

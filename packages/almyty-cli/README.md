@@ -5,7 +5,7 @@ Umbrella CLI for almyty. One install, one login, every command.
 ## Quick start
 
 ```bash
-$ npm install -g @almyty/cli
+$ npm i -g @almyty/cli
 $ almyty                  # a short tour
 $ almyty login
 $ almyty agents list
@@ -77,7 +77,7 @@ almyty agents run deploy-check --watch || case $? in
 esac
 ```
 
-## Standalone packages
+## Developer use: standalone packages
 
 Every subcommand is also a standalone package, so the umbrella is a
 convenience and not a requirement:

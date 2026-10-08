@@ -3,6 +3,7 @@ import { Agent } from '../../../entities/agent.entity';
 import { Api } from '../../../entities/api.entity';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
 import { Tool } from '../../../entities/tool.entity';
+import { Runner } from '../../../entities/runner.entity';
 import { fakeRepository } from '../../../test/fake-repository';
 import { orgMembersPolicy } from '../../../test/execution-access.fixture';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
@@ -14,6 +15,8 @@ import { AgentsService } from '../agents.service';
  * changed retention reaches what the agent already saved.
  */
 describe('saving the memory and capabilities sections', () => {
+  const STUDIO = '7b0f8d1e-5d7c-4c1e-9a55-2f3e4d5c6b7a';
+  const FOREIGN = '0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
   const service = () => {
     const agents = fakeRepository<Agent>({
       make: () => new Agent(),
@@ -37,9 +40,10 @@ describe('saving the memory and capabilities sections', () => {
       ],
     });
     const apis = fakeRepository<Api>([{ id: 'api-orders', organizationId: 'org-1' }, { id: 'api-foreign', organizationId: 'org-2' }] as any);
+    const runners = fakeRepository<Runner>([{ id: STUDIO, name: 'studio', organizationId: 'org-1' }, { id: FOREIGN, name: 'elsewhere', organizationId: 'org-2' }] as any);
     (agents as any).manager = {
       getRepository: (entity: unknown) =>
-        entity === Api ? apis : entity === LlmProvider ? fakeRepository([]) : entity === Tool ? fakeRepository([]) : fakeRepository([]),
+        entity === Api ? apis : entity === Runner ? runners : entity === LlmProvider ? fakeRepository([]) : entity === Tool ? fakeRepository([]) : fakeRepository([]),
     };
     const memoryAccounts = {
       accounts: jest.fn(async () => [
@@ -124,6 +128,20 @@ describe('saving the memory and capabilities sections', () => {
     expect(await refusal(svc.updateAgent('ag-1', { agentConfig: { callableAgentIds: ['ag-1'] } }, 'org-1', 'user-1'))).toBe(
       'Invalid settings: An agent cannot call itself',
     );
+  });
+
+  it('pins the agent to a runner of this organization, refuses one elsewhere, and null means any runner', async () => {
+    const { svc, agents } = service();
+    await svc.updateAgent('ag-1', { agentConfig: { runnerId: STUDIO } }, 'org-1', 'user-1');
+    expect(agents.row('ag-1')!.agentConfig).toEqual({ runnerId: STUDIO });
+    expect(await refusal(svc.updateAgent('ag-1', { agentConfig: { runnerId: FOREIGN } }, 'org-1', 'user-1'))).toBe(
+      'Invalid settings: The runner it runs on is not in this organization',
+    );
+    expect(await refusal(svc.updateAgent('ag-1', { agentConfig: { runnerId: 'studio' } }, 'org-1', 'user-1'))).toBe(
+      'Invalid settings: The runner it runs on must be a runner id',
+    );
+    await svc.updateAgent('ag-1', { agentConfig: { runnerId: null } }, 'org-1', 'user-1');
+    expect(agents.row('ag-1')!.agentConfig).toEqual({});
   });
 
   it('keeps the old switch equal to the list, and drops repeats', async () => {

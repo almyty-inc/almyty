@@ -218,4 +218,7 @@ other name is "not found". `callableAgentIds` are the only `call_agent_*`
 tools offered and the only agents `invoke_agent` starts (an API client
 that sets only `canCallAgents` still means every agent). `runnerLabels` go
 with every tool call. `create_agent` refuses past `maxTemporaryAgents` in
-the run or `maxTemporaryAgentsAlive` across the agent's runs.
+the run or `maxTemporaryAgentsAlive` across the agent's runs. `runAs`
+(`owner` or `agent`, Business) says who its unattended runs act as: an
+agent acting as itself uses only what is granted to it and is named as the
+actor in the audit log ([enterprise.md](enterprise.md#agents-that-act-as-themselves)).

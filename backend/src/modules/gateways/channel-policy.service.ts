@@ -51,7 +51,14 @@ export interface ChannelRunOptions {
   channelId: string | null;
   gatewayId: string;
   maxCostCents?: number;
-  metadata: { appVisitor: true; visitorMemory: boolean; channelId?: string };
+  metadata: {
+    appVisitor: true;
+    visitorMemory: boolean;
+    channelId?: string;
+    /** On an A2A channel: its gateway and the caller's credential (withA2ACaller). */
+    gatewayId?: string;
+    a2aCaller?: string;
+  };
 }
 
 export interface ChannelPolicy {
@@ -73,6 +80,23 @@ export function withChannelPolicy<T extends object>(
   const { metadata, ...rest } = policy.runOptions;
   const own = (options as { metadata?: Record<string, any> }).metadata ?? {};
   return { ...options, ...rest, metadata: { ...own, ...metadata } } as T & Partial<ChannelRunOptions>;
+}
+
+/**
+ * The channel's run options with the A2A caller stamped on them. A2A
+ * callers have no visitor row, so the gateway and the caller's credential
+ * on each run are how an owner answering that caller's data request finds
+ * the runs it started (VisitorDataService.forA2ACaller). A caller with no
+ * credential of its own is filed under the gateway alone.
+ */
+export function withA2ACaller(policy: ChannelPolicy, gatewayId: string, callerId: string | null): ChannelPolicy {
+  return {
+    ...policy,
+    runOptions: {
+      ...policy.runOptions,
+      metadata: { ...policy.runOptions.metadata, gatewayId, ...(callerId ? { a2aCaller: callerId } : {}) },
+    },
+  };
 }
 
 /** Raised when the spend allowance is used up. 429 with a stable code and the visitor's sentence. */

@@ -67,6 +67,15 @@ export interface PipelineExecutionFailed {
   timestamp: number;
 }
 
+/** The run stopped to wait for a person in Approvals (a Code step's changes); it carries on once they decide. */
+export interface PipelineExecutionWaiting {
+  type: 'execution.waiting';
+  nodeId?: string;
+  nodeType?: string;
+  data?: any;
+  timestamp: number;
+}
+
 /**
  * A piece of the run's answer, as the model writes it. Emitted only when
  * the caller asked for it (ExecuteAgentOptions.streamAnswer) and only by
@@ -183,6 +192,7 @@ export type PipelineStreamEvent =
   | PipelineNodeSkipped
   | PipelineExecutionCompleted
   | PipelineExecutionFailed
+  | PipelineExecutionWaiting
   | PipelineAnswerChunk;
 
 /** Runtime event types (emitted by autonomous runtime). */

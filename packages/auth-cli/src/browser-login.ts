@@ -40,6 +40,7 @@ import { spawn } from 'child_process';
 export interface BrowserLoginResult {
   token: string;
   frontendUrl: string;
+  organizationId?: string;
 }
 
 export interface BrowserLoginOptions {
@@ -272,6 +273,7 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
   var params = new URLSearchParams(hash);
   var token = params.get('token');
   var state = params.get('state');
+  var organizationId = params.get('organizationId');
   if (!token || !state) {
     document.getElementById('t').textContent = 'Login failed';
     document.getElementById('t').className = 'err';
@@ -284,7 +286,7 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
   fetch('/cb-complete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: token, state: state }),
+    body: JSON.stringify({ token: token, state: state, organizationId: organizationId }),
   }).then(function (r) {
     if (!r.ok) return r.text().then(function (t) { throw new Error(t || ('HTTP ' + r.status)); });
     window.location.href = '/success';
@@ -325,7 +327,7 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
           }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));
-          settleResolve({ token: body.token, frontendUrl });
+          settleResolve({ token: body.token, frontendUrl, ...(typeof body.organizationId === 'string' ? { organizationId: body.organizationId } : {}) });
           return;
         } catch (err: any) {
           res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -368,7 +370,7 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
             'Access-Control-Allow-Origin': frontendUrl,
           });
           res.end(JSON.stringify({ ok: true }));
-          settleResolve({ token: body.token, frontendUrl });
+          settleResolve({ token: body.token, frontendUrl, ...(typeof body.organizationId === 'string' ? { organizationId: body.organizationId } : {}) });
           return;
         } catch (err: any) {
           res.writeHead(400, {

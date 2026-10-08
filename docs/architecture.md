@@ -269,7 +269,7 @@ principal is, per surface:
 | Started by | Principal |
 |---|---|
 | dashboard session, API key, CLI JWT, `/v1` compat, the org's own (system) MCP endpoint | that user |
-| a schedule tick or heartbeat | the agent's owner **at fire time**; an owner who has left the team (or the org) stops it with a FAILED run that says why, and the schedule or heartbeat is paused |
+| a schedule tick or an always-on wake | the agent's owner **at fire time**; an owner who has left the team (or the org) stops it with a reason the agent page shows, and the schedule or Always on is paused |
 | a published gateway (MCP, A2A, UTCP, Skills, a chat channel, the Webhook channel, hosted chat) | the gateway |
 
 **The gateway rule.** A gateway is a publication: whoever its own auth admits

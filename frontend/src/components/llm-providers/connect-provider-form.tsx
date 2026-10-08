@@ -1,22 +1,21 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type SyntheticEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ExternalLink, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { SecretInput } from '@/components/ui/secret-input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { VisibilityValue } from '@/components/ui/visibility-field'
-import { Field, InlineFormActions } from '@/components/layout/form-page'
-import { ChoiceTile, ChoiceTiles } from '@/components/connect/service-tiles'
+import { Field } from '@/components/layout/form-page'
+import { FormBox } from '@/components/connections/connect-flow'
 import { CredentialPicker } from '@/components/credentials/credential-picker'
+import { WhoCanUse } from '@/components/connect/who-can-use'
 import { llmProvidersApi } from '@/lib/api'
 import type { Connection } from '@/types/connections'
 import type { ModelCard } from '@/types/models'
 import { buildProviderCreateBody, createProviderSchema, structuralFieldsFor } from './schema'
-import { defaultProviderName, keyUrlFor, needsModelName, providerTileLabel, readConnectFailure, takesBaseUrl, type ConnectFailure, type ProviderTypeInfo } from './provider-catalog'
-import { providerLogos } from './provider-type-config'
-import { WhoCanUse } from '@/components/connect/who-can-use'
+import { keyUrlFor, needsModelName, providerTileLabel, readConnectFailure, takesBaseUrl, type ConnectFailure, type ProviderTypeInfo } from './provider-catalog'
 
 /** What POST /llm-providers/connect answers with once the key works. */
 export interface ConnectResult {
@@ -43,30 +42,31 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-/** What the private-host rule is for a server you run, per type. */
-function privateHostHint(type: string): string {
-  const flag = type === 'ollama' ? 'OLLAMA_ALLOW_PRIVATE_URLS' : 'LLM_ALLOW_PRIVATE_URLS'
-  return `Private or LAN hosts (10.x, 192.168.x, .internal, localhost) need ${flag}=true on the almyty server.`
-}
 
 export interface ConnectProviderFormProps {
   type: string
+  /** The connection's name, from the add-credential form's Name field. */
+  name: string
+  /** Called instead of saving when the name is empty. */
+  onNameMissing?: () => void
   onConnected: (result: ConnectResult) => void
-  /** Present = a Cancel button next to Connect (inline use, in a model chooser). */
+  /** Present = a Cancel button next to Save (inline use). */
   onCancel?: () => void
   /** Prefix for element ids, so two forms on one screen stay distinct. */
   idPrefix?: string
+  /** Inside another form: no <form> of its own. */
+  embedded?: boolean
 }
 
 /**
- * Connect one provider: a name, its key (Ollama: an Ollama Cloud key, or
- * the URL of a server you run), only the settings that provider cannot
- * work without, and who can use it. Saving checks the key first; nothing
- * is saved when it fails, and the form stays filled so the key can be
- * fixed in place.
+ * The fields of one model provider's connection: its key (Ollama: an
+ * Ollama Cloud key, or the URL of a server you run), only the settings
+ * that provider cannot work without, and who can use it. Saving checks
+ * the key first; nothing is saved when it fails, and the form stays filled
+ * so the key can be fixed in place. Which models it offers is chosen on
+ * the connection's page afterwards (all of them, until then).
  */
-export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'connect' }: ConnectProviderFormProps) {
-  const [name, setName] = useState(defaultProviderName(type))
+export function ConnectProviderForm({ type, name, onNameMissing, onConnected, onCancel, idPrefix = 'connect', embedded = false }: ConnectProviderFormProps) {
   const [apiKey, setApiKey] = useState('')
   const [apiUrl, setApiUrl] = useState('')
   const [ollamaMode, setOllamaMode] = useState<OllamaMode>('cloud')
@@ -119,14 +119,16 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
     },
   })
 
-  const submit = (e: FormEvent) => {
+  const submit = (e: SyntheticEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     const next: Record<string, string> = {}
     const url = ollamaCloud ? OLLAMA_CLOUD_URL : apiUrl.trim() || undefined
+    const trimmedName = name.trim()
     // The same rules the backend applies, so a missing field is said here
     // rather than after a round trip.
     const parsed = createProviderSchema.safeParse({
-      name: name.trim() || defaultProviderName(type),
+      name: trimmedName || providerTileLabel(type),
       type,
       apiKey: account ? undefined : apiKey.trim() || undefined,
       apiUrl: url,
@@ -137,19 +139,19 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const key = String(issue.path[0] ?? '')
-        if (key && !next[key]) next[key] = issue.message
+        if (key && key !== 'name' && !next[key]) next[key] = issue.message
       }
     }
-    if (!name.trim()) next.name = 'Give the connection a name'
     if (ollamaCloud && !account && !apiKey.trim() && !next.apiKey) next.apiKey = useSaved ? 'Pick a saved key' : 'Paste your Ollama Cloud API key'
     if (useSaved && !account) next.apiKey = 'Pick a saved key, or paste one instead'
     if (ollama && !ollamaCloud && !isHttpUrl(apiUrl)) next.apiUrl = 'Enter the server URL, starting with http:// or https://'
     if (needsModel && !model.trim() && !next.model) next.model = 'Enter the model you want to use'
     setErrors(next)
-    if (Object.keys(next).length > 0) return
+    if (!trimmedName) onNameMissing?.()
+    if (Object.keys(next).length > 0 || !trimmedName) return
     setFailure(null)
     const body = buildProviderCreateBody({
-      name: name.trim(),
+      name: trimmedName,
       type,
       apiKey: account ? '' : apiKey.trim(),
       apiUrl: url,
@@ -175,55 +177,35 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
       </div>
     ) : null
 
+  const submitType = embedded ? 'button' : 'submit'
   return (
-    <form onSubmit={submit} className="space-y-5" noValidate aria-label={`Connect ${providerTileLabel(type)}`}>
-      <Field id={id('name')} label="Name" hint={'Shown wherever a model is picked. Name it for what it is for, e.g. "HF - Llama 70B only".'} error={errors.name}>
-        <Input
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value)
-            setErrors((prev) => ({ ...prev, name: '' }))
-          }}
-        />
-      </Field>
-
+    <FormBox embedded={embedded} onSubmit={submit} className="space-y-5" label={`Connect ${providerTileLabel(type)}`} testId="connect-provider-form">
       {ollama && (
-        <div className="space-y-1.5">
-          <Label>Where Ollama runs</Label>
-          <ChoiceTiles label="Where Ollama runs">
-            <ChoiceTile
-              testId={id('ollama-cloud')}
-              icon={providerLogos.ollama}
-              label="Ollama Cloud"
-              hint="ollama.com, with an API key"
-              selected={ollamaMode === 'cloud'}
-              onClick={() => {
-                setOllamaMode('cloud')
-                setErrors({})
-                setFailure(null)
-              }}
-            />
-            <ChoiceTile
-              testId={id('ollama-own')}
-              icon="🖥️"
-              label="Your own server"
-              hint="An Ollama you run, at its URL"
-              selected={ollamaMode === 'own'}
-              onClick={() => {
-                setOllamaMode('own')
-                setErrors({})
-                setFailure(null)
-              }}
-            />
-          </ChoiceTiles>
-        </div>
+        <Field id={id('ollama-where')} label="Where Ollama runs">
+          <Select
+            value={ollamaMode}
+            onValueChange={(v) => {
+              setOllamaMode(v as OllamaMode)
+              setErrors({})
+              setFailure(null)
+            }}
+          >
+            <SelectTrigger id={id('ollama-where')} aria-label="Where Ollama runs" data-testid={id('ollama-where')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cloud">Ollama Cloud (ollama.com, with an API key)</SelectItem>
+              <SelectItem value="own">Your own server (an Ollama you run, at its URL)</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
       )}
 
       {ownServer && (
         <Field
           id={id('api-url')}
           label="Server URL"
-          hint={`${type === 'custom' ? 'Any server that speaks the OpenAI API: vLLM, LM Studio, llama.cpp, a gateway. ' : 'The address your Ollama answers on. '}${privateHostHint(type)}`}
+          hint="The address of your model server, reachable from almyty."
           error={errors.apiUrl}
         >
           <Input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} placeholder={type === 'custom' ? 'https://llm.example.com/v1' : 'http://localhost:11434'} />
@@ -268,9 +250,9 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
             }}
             kind="inference"
             connectorKey={type}
+            allowCreate={false}
             placeholder="Pick a saved key"
             error={errors.apiKey}
-            hint="A key already in Credentials, or one you add here. It stays in Credentials under its own name."
           />
           {failureBox(false)}
           <button
@@ -302,41 +284,44 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
             />
           </Field>
           {failureBox(true)}
-          {keyUrl && (
-            <a href={keyUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-              Get a key
-              <ExternalLink className="h-3 w-3" aria-hidden />
-            </a>
-          )}
-          {!ownServer && (
-            <button
-              type="button"
-              className="block text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setUseSaved(true)
-                setApiKey('')
-                setFailure(null)
-              }}
-            >
-              Use a saved key instead
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {keyUrl && (
+              <a href={keyUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                Get a key
+                <ExternalLink className="h-3 w-3" aria-hidden />
+              </a>
+            )}
+            {!ownServer && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setUseSaved(true)
+                  setApiKey('')
+                  setFailure(null)
+                }}
+              >
+                Use a saved key instead
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       <WhoCanUse value={visibility} onChange={setVisibility} disabled={connect.isPending} noun="this connection and its models" />
 
-      {onCancel ? (
-        <InlineFormActions onCancel={onCancel} submitLabel={connect.isPending ? 'Checking your key...' : 'Connect'} submitting={connect.isPending} />
-      ) : (
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={connect.isPending}>
-            {connect.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
-            {connect.isPending ? 'Checking your key...' : 'Connect'}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type={submitType} onClick={embedded ? submit : undefined} disabled={connect.isPending}>
+          {connect.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
+          {connect.isPending ? 'Checking your key...' : 'Save'}
+        </Button>
+        {onCancel && (
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={connect.isPending}>
+            Cancel
           </Button>
-        </div>
-      )}
-      {connect.isPending && <p className="text-xs text-muted-foreground">This takes a few seconds.</p>}
-    </form>
+        )}
+        {connect.isPending && <span className="text-xs text-muted-foreground">This takes a few seconds.</span>}
+      </div>
+    </FormBox>
   )
 }

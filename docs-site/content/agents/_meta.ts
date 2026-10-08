@@ -5,6 +5,7 @@ export default {
   autonomous: 'Autonomous agents',
   execution: 'Roles and strategies',
   scheduling: 'Scheduling',
+  'always-on': 'Always on',
   webhooks: 'Webhooks',
   versioning: 'Versioning & rollback',
   'workflow-separator': { type: 'separator', title: 'Workflow builder' },

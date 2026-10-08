@@ -29,6 +29,12 @@ export interface RequestContextStore {
   /** The agent whose run this is, set with runId. */
   agentId?: string | null;
   /**
+   * Who acts in this scope when it is not a person: an agent acting as
+   * itself (agent_identity). Audit rows written in the scope record it as
+   * their actor (AuditLogService.log), next to a userId that stays empty.
+   */
+  actor?: { kind: 'agent'; agentId: string } | null;
+  /**
    * The run whose runner workspaces this one works in: the run itself, or
    * for a workflow sub-agent the top-level run (RunWorkspaceService).
    */
@@ -38,6 +44,12 @@ export interface RequestContextStore {
   /** Queue name + job id, when the scope is a background job. */
   jobId?: string | null;
   queue?: string | null;
+  /**
+   * W3C trace context an MCP client sent with this request (2026-07-28
+   * `_meta`: traceparent, tracestate, baggage). Audit rows written in this
+   * scope carry it, so a client's trace can be followed into almyty.
+   */
+  trace?: { traceparent: string; tracestate?: string; baggage?: string } | null;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContextStore>();

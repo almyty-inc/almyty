@@ -1,3 +1,5 @@
+import passport = require('passport');
+import { Strategy, ExtractJwt } from 'passport-jwt';
 import * as crypto from 'crypto';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -149,12 +151,12 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     privateGateway = await insert(Gateway, {
       name: 'Owner private MCP', type: GatewayType.MCP, kind: GatewayKind.TOOL,
       endpoint: '/owner-private', organizationId, status: GatewayStatus.ACTIVE,
-      configuration: {}, visibility: 'private', teamId: null, ownerUserId: users.owner,
+      configuration: {}, visibility: 'private', accessScope: 'private', teamId: null, ownerUserId: users.owner,
     });
     orgGateway = await insert(Gateway, {
       name: 'Shared MCP', type: GatewayType.MCP, kind: GatewayKind.TOOL,
       endpoint: '/shared', organizationId, status: GatewayStatus.ACTIVE,
-      configuration: {}, visibility: 'org', teamId: null, ownerUserId: users.peer,
+      configuration: {}, visibility: 'org', accessScope: 'external_protected', teamId: null, ownerUserId: users.peer,
     });
     for (const gw of [privateGateway, orgGateway]) {
       await repo(GatewayAuth).save(repo(GatewayAuth).create({
@@ -309,9 +311,13 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     let unified: UnifiedEndpointController;
     let delegation: { handleGatewayRequest: jest.Mock };
 
+    const sessionSecret = 'private-visibility-integration-session-secret';
     beforeAll(() => {
+      passport.use('jwt', new Strategy({ jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(), secretOrKey: sessionSecret }, async (payload, done) => {
+        try { done(null, await repo(User).findOne({ where: { id: payload.sub }, relations: { organizationMemberships: true } })); } catch (error) { done(error, false); }
+      }));
       const validators = new GatewayAuthValidators(repo(Gateway), repo(User), repo(ApiKey), repo(OAuthAccessToken), new JwtService({}));
-      const auth = new GatewayAuthService(repo(GatewayAuth), repo(Gateway), repo(ApiKey), validators);
+      const auth = new GatewayAuthService(repo(GatewayAuth), repo(Gateway), repo(ApiKey), validators, policy);
       resolver = new GatewayResolverService(repo(Gateway), repo(Organization), auth);
       delegation = { handleGatewayRequest: jest.fn().mockResolvedValue('served') };
       unified = new UnifiedEndpointController(
@@ -321,13 +327,15 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     });
 
     const req = (apiKey?: string, path = `/${'private-org'}/owner-private`) => ({
-      headers: apiKey ? { 'x-api-key': apiKey } : {},
+      headers: apiKey ? { 'x-api-key': apiKey, authorization: 'Bearer ' + new JwtService({ secret: sessionSecret }).sign({ sub: users[(Object.keys(keys) as Array<keyof typeof keys>).find(name => keys[name] === apiKey)!] }) } : {},
       query: {},
       body: {},
       path,
       method: 'POST',
       ip: '127.0.0.1',
     });
+
+    afterAll(() => passport.unuse('jwt'));
 
     it('serves the private gateway to its owner', async () => {
       const resolved = await resolver.resolveAndAuthenticate(orgSlug, '/owner-private', req(keys.owner));

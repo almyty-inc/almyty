@@ -496,7 +496,7 @@ describeIfDb('private visibility on agents, tools and APIs (real Postgres)', () 
       } as any)) as unknown as Gateway;
       const ownerGateway = await gateways.save(gateways.create({
         name: 'owner gw', type: GatewayType.MCP, endpoint: '/owner-gw', organizationId: orgId, configuration: {},
-        visibility: 'private', ownerUserId: users.owner,
+        visibility: 'private', accessScope: 'private', ownerUserId: users.owner,
       } as any)) as unknown as Gateway;
       await ds.getRepository(GatewayTool).save([
         { gatewayId: orgGateway.id, toolId: privateTool.id, isActive: true },

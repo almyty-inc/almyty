@@ -6,14 +6,15 @@ and agents — over stdio, with two tools in context instead of twenty.
 ## Quick start
 
 ```bash
-npx @almyty/auth login
-claude mcp add almyty -- npx -y @almyty/mcp-server
+npm i -g @almyty/cli
+almyty login
+claude mcp add almyty -- almyty mcp
 ```
 
 Or scope it to one gateway:
 
 ```bash
-npx @almyty/mcp-server acme/petstore
+almyty mcp acme/petstore
 ```
 
 The positional argument is `orgSlug/gatewaySlug`; with none, the server serves
@@ -47,7 +48,9 @@ Set `ALMYTY_MODE`:
 - **`skill-first`** (default) — the two tools above plus skills as prompts.
 - **`full`** — every gateway tool registered individually, traditional MCP.
   Higher context cost. The list is read once at startup, and the client is
-  notified when it arrives.
+  notified when it arrives. Each tool keeps its title, full input schema,
+  output schema and annotations as the gateway gives them, and a call returns
+  the gateway's structured result next to the text.
 
 ## Management tools
 
@@ -68,8 +71,8 @@ passed as a tool argument would be written into the assistant's transcript and
 the host editor's logs, so the key goes through `@almyty/credentials` instead:
 
 ```bash
-npx @almyty/credentials add openai
-npx @almyty/credentials list        # -> the id to hand the tool
+almyty credentials add openai
+almyty credentials list        # -> the id to hand the tool
 ```
 
 ## When almyty is not reachable
@@ -78,12 +81,22 @@ The server connects its transport before it fetches anything, so the MCP
 handshake always completes: an editor never sees the server die during
 startup because the API was down or the token had gone stale. Discovery then
 runs, and a failure is reported on the tool call that needed it, in words that
-name the fix — `run npx @almyty/auth login` for a stale token, `check
+name the fix — `run almyty login` for a stale token, `check
 ALMYTY_URL` for an unreachable host. The management tools keep working
 throughout.
 
 Every call is bounded: 15 seconds for discovery, 120 for a tool execution.
 A hung backend fails the call rather than hanging your editor.
+
+## MCP versions
+
+The server speaks MCP 2026-07-28 and the earlier versions (2024-11-05 to
+2025-11-25) alike: the client's first message decides. A client that opens with
+`initialize` (Claude Desktop, Cursor and most editors today) gets the earlier
+protocol, and no notification before it has sent `notifications/initialized`.
+A client that opens with a 2026-07-28 request is served statelessly and hears
+about tool and prompt changes only on a `subscriptions/listen` stream it
+opened.
 
 ## stdio discipline
 
@@ -98,7 +111,7 @@ server when you ask for either.
 ### Claude Code
 
 ```bash
-claude mcp add almyty -- npx -y @almyty/mcp-server
+claude mcp add almyty -- almyty mcp
 ```
 
 ### Cursor / Windsurf (`.cursor/mcp.json` or `~/.codeium/windsurf/mcp_config.json`)
@@ -107,8 +120,8 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 {
   "mcpServers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server"]
+      "command": "almyty",
+      "args": ["mcp"]
     }
   }
 }
@@ -120,8 +133,8 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 {
   "servers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server"]
+      "command": "almyty",
+      "args": ["mcp"]
     }
   }
 }
@@ -131,8 +144,8 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 
 ```toml
 [mcp_servers.almyty]
-command = "npx"
-args = ["-y", "@almyty/mcp-server"]
+command = "almyty"
+args = ["mcp"]
 ```
 
 ### Google Gemini CLI (`~/.gemini/settings.json`)
@@ -141,8 +154,8 @@ args = ["-y", "@almyty/mcp-server"]
 {
   "mcpServers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server"]
+      "command": "almyty",
+      "args": ["mcp"]
     }
   }
 }
@@ -156,10 +169,12 @@ args = ["-y", "@almyty/mcp-server"]
 | `ALMYTY_TOKEN` | Token; otherwise read from `~/.almyty/credentials.json` |
 | `ALMYTY_GATEWAY_ID` | Gateway as `orgSlug/gatewaySlug` (alternative to the positional argument) |
 | `ALMYTY_MODE` | `skill-first` (default) or `full` |
+| `ALMYTY_MCP_PROTOCOL` | How this server talks to almyty: `auto` (default: MCP 2026-07-28, falling back to the earlier protocol for an older almyty), `modern` or `legacy` |
+| `ALMYTY_DISCOVERY_WAIT_MS` | How long the client's first message waits for the gateway's tool list, so the first list is complete (default 5000; `0` never waits and announces the tools once they arrive) |
 
 ## Authentication
 
-Run `npx @almyty/auth login` once; credentials are read from
+Run `almyty login` once; credentials are read from
 `~/.almyty/credentials.json`. `ALMYTY_TOKEN` overrides the file. The old
 `mcp-server login` / `logout` / `whoami` subcommands now point at
 `@almyty/auth` and exit non-zero.

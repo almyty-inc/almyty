@@ -1,3 +1,4 @@
+import { AgentApiAccessService } from './agent-api-access.service';
 import {
   Controller,
   Post,
@@ -69,6 +70,7 @@ export class AgentOpenAICompatController {
     // The team/private execution gate. @Optional() only to keep the
     // positional spec harnesses' order; a request refuses to run without it.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
+    @Optional() private readonly endpointAccess?: AgentApiAccessService,
   ) {
     this.rateLimiter = new CompatRateLimiter('openai_rl', this.logger, this.redis);
   }
@@ -100,7 +102,7 @@ export class AgentOpenAICompatController {
       this.validateRequestBodySize(body);
 
       // 1. Authenticate via Bearer token (API key)
-      const apiKey = await this.authenticateApiKey(auth);
+      const apiKey = await this.endpointAccess?.authenticateTarget(body?.model, req) ?? await this.authenticateApiKey(auth);
       apiKeyLast4 = this.getKeyLast4(auth);
 
       // Rate limit tracking
@@ -205,14 +207,15 @@ export class AgentOpenAICompatController {
   async listModels(
     @Headers('authorization') auth: string,
     @Res() res: Response,
+    @Req() req: Request = undefined,
   ) {
     try {
-      const apiKey = await this.authenticateApiKey(auth);
+      const apiKey = await this.endpointAccess?.authenticateTarget(undefined, req) ?? await this.authenticateApiKey(auth);
 
       // Touch lastUsedAt (throttled partial update)
       await this.touchApiKeyLastUsed(apiKey);
 
-      const agents = agentsForKey(await this.agentsService.findAllActive(apiKey.organizationId, apiKey.userId), apiKey);
+      const agents = (apiKey as any).endpointAgent ? [(apiKey as any).endpointAgent].filter(a => a.status === 'active') : agentsForKey(await this.agentsService.findAllActive(apiKey.organizationId, apiKey.userId), apiKey).filter(a => !a.apiGatewayId);
 
       return res.json({ object: 'list', data: agents.map((a) => this.toModel(a)) });
     } catch (error) {
@@ -244,9 +247,10 @@ export class AgentOpenAICompatController {
     @Param('model') model: string,
     @Headers('authorization') auth: string,
     @Res() res: Response,
+    @Req() req: Request = undefined,
   ) {
     try {
-      const apiKey = await this.authenticateApiKey(auth);
+      const apiKey = await this.endpointAccess?.authenticateTarget(model, req) ?? await this.authenticateApiKey(auth);
       await this.touchApiKeyLastUsed(apiKey);
       if (!this.executionAccess) throw new Error('Agent execution access check is not configured');
       const agent = await resolveCompatAgent(this.agentsService, model, apiKey, this.executionAccess);

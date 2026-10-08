@@ -36,7 +36,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
-import { ToolApprovalGateService } from './tool-approval-gate.service';
+import { ToolApprovalGateService, hitDetail } from './tool-approval-gate.service';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
 import { decideToolCaller } from '../../common/security/gateway-tool-permissions';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -423,7 +423,7 @@ export class ToolExecutorService {
               approvalRequired: hit,
               ...extra,
             });
-            const why = hit.value === null ? `${hit.argument} is not a number` : `${hit.argument} is ${hit.value}`;
+            const why = hitDetail(hit);
             if (options.holdForApproval === 'caller') {
               if (!options.approvedGate) await this.approvalGate.record(hit, gateContext, 'held');
               return answer(`Needs approval: ${hit.summary} (${why}). The call was not made.`);
@@ -446,6 +446,7 @@ export class ToolExecutorService {
               gatewayId: options.gatewayId ?? null,
               scopes: options.scopes ?? null,
               runnerLabels: options.runnerLabels ?? null,
+              pinnedRunnerId: options.pinnedRunnerId ?? null,
               agentTeamId: options.agentTeamId ?? null,
             });
             return answer(
@@ -803,9 +804,15 @@ export class ToolExecutorService {
     const { workspaceId: _ws, ...callParams } = parameters;
 
     try {
+      // The agent's "Runs on": a pinned runner takes the call whichever
+      // runner published the tool, and nothing reroutes it (labels become
+      // a check on that runner).
+      const pinned = !!options.pinnedRunnerId;
+      let targetRunnerId = options.pinnedRunnerId ?? cfg.runnerId;
       if (cfg.requiresWorkspace && !workspaceId && runId && this.runWorkspaces) {
         const workspace = await this.runWorkspaces.acquire({
-          runnerId: cfg.runnerId,
+          runnerId: targetRunnerId,
+          pinned,
           organizationId: options.organizationId,
           runId,
           agentId: options.agentId ?? scope?.agentId ?? null,
@@ -815,9 +822,12 @@ export class ToolExecutorService {
           signal: options.signal,
         });
         workspaceId = workspace.id;
+        // The work goes where its workspace is, which labels may have
+        // chosen over the tool's own runner.
+        targetRunnerId = workspace.runnerId ?? targetRunnerId;
       }
       const response = await this.runnerCalls.dispatch(
-        cfg.runnerId,
+        targetRunnerId,
         cfg.method,
         callParams,
         workspaceId,
@@ -832,6 +842,7 @@ export class ToolExecutorService {
           // The agent's machine requirements (gpu=yes): the call goes to an
           // online runner with those labels, this tool's own when it has them.
           labels: options.runnerLabels,
+          pinned,
           organizationId: options.organizationId,
         },
       );
@@ -981,7 +992,17 @@ export class ToolExecutorService {
         cfg,
         parameters,
         // The source's connection is resolved as the run's principal.
-        { timeoutMs: tool.configuration?.timeout, signal: options.signal, principal: options.principal ?? userPrincipal(options.userId) },
+        {
+          timeoutMs: tool.configuration?.timeout,
+          signal: options.signal,
+          principal: options.principal ?? userPrincipal(options.userId),
+          // A 2026 server may stop to ask a person something. Only a caller
+          // that can ask one and call again (the autonomous runtime, which
+          // pauses on ask_user and holds approvals itself) gets its question;
+          // everyone else gets a tool error that says what it wanted.
+          runId: options.runId ?? null,
+          canAskPerson: options.holdForApproval === 'caller' && !!options.runId,
+        },
       );
       return {
         success: mapped.success,

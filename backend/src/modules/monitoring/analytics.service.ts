@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric, MetricType } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { CodeExecution } from '../../entities/code-execution.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
@@ -266,6 +267,36 @@ export class AnalyticsService {
       total,
       page: query.page,
       pages: Math.ceil(total / query.limit),
+    };
+  }
+
+  /**
+   * Scripts agents ran in code mode (docs/design/code-mode.md, decision 14):
+   * how many, how many failed or waited for a person, and the sandbox CPU
+   * they used, which is the platform's to pay for.
+   */
+  async getScriptUsage(organizationId: string, timeframe: string) {
+    if (!organizationId) {
+      throw new Error('getScriptUsage requires organizationId');
+    }
+    const since = this.getTimeframeDate(timeframe);
+    const row = await this.toolExecutionRepository.manager
+      .getRepository(CodeExecution)
+      .createQueryBuilder('ce')
+      .select('COUNT(*)', 'scripts')
+      .addSelect(`SUM(CASE WHEN ce.status = 'failed' THEN 1 ELSE 0 END)`, 'failed')
+      .addSelect(`SUM(CASE WHEN jsonb_array_length(ce.changeSet) > 0 THEN 1 ELSE 0 END)`, 'withChanges')
+      .addSelect('COALESCE(SUM(ce.cpuMs), 0)', 'cpuMs')
+      .addSelect('COALESCE(SUM(ce.callCount), 0)', 'calls')
+      .where('ce.organizationId = :orgId', { orgId: organizationId })
+      .andWhere('ce.createdAt >= :since', { since })
+      .getRawOne();
+    return {
+      scripts: Number(row?.scripts ?? 0),
+      failed: Number(row?.failed ?? 0),
+      withChanges: Number(row?.withChanges ?? 0),
+      cpuMs: Number(row?.cpuMs ?? 0),
+      calls: Number(row?.calls ?? 0),
     };
   }
 

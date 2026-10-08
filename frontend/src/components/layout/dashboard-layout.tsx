@@ -78,30 +78,21 @@ interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
-// Sidebar order follows the onboarding checklist on the
-// Dashboard (Connect API → Generate Tools → Create Gateway →
-// Build Agent) and the `docs/brand` IA rules — reading the
-// sidebar top-down tells a new user the same story the
-// onboarding flow tells them. Previously Agents was first,
-// which rewarded existing users who already knew they wanted
-// an agent but left newcomers wondering what to click first.
+// Work first, then the resources agents use, then organization controls.
 const navigation: { name: string; href: string; icon: any }[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  // Core workflow — follows the APIs → Tools → Gateways → Agents pipeline
-  // narrative. Where an agent is put in front of people (its channels)
-  // lives on the agent itself.
-  { name: 'APIs', href: '/apis', icon: Globe },
-  { name: 'Tools', href: '/tools', icon: Wrench },
-  { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'Runners', href: '/runners', icon: Cpu },
-  { name: 'Credentials', href: '/credentials', icon: KeyRound },
   { name: 'Approvals', href: '/approvals', icon: Shield },
-  // Configuration
   { name: 'divider', href: '', icon: null as any },
   { name: 'Models', href: '/models', icon: Brain },
   { name: 'Memory', href: '/memories', icon: Database },
+  { name: 'Tools', href: '/tools', icon: Wrench },
+  { name: 'APIs', href: '/apis', icon: Globe },
+  { name: 'Gateways', href: '/gateways', icon: Zap },
+  { name: 'Runners', href: '/runners', icon: Cpu },
+  { name: 'divider', href: '', icon: null as any },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Credentials', href: '/credentials', icon: KeyRound },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -331,9 +322,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               scrolls within its own box instead of pushing the footer off
               screen or sliding under the header above. */}
           <nav key={location.pathname} className={cn("flex-1 min-h-0 py-3 space-y-1 overflow-y-auto overscroll-contain", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation" data-testid="sidebar-nav">
-            {navigation.map((item) => {
+            {navigation.map((item, index) => {
               if (item.name === 'divider') {
-                return <div key="divider" className="my-2 mx-3 border-t border-border/40" />
+                return <div key={`divider-${index}`} className="my-2 mx-3 border-t border-border/40" />
               }
               // NavLink computes `isActive` per-render against the live
               // router location, sidestepping the React reconciliation

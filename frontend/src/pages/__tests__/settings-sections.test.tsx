@@ -61,7 +61,7 @@ describe('settings sections', () => {
 
   it('are a handful of sections holding every page Settings ever had, plus your API keys', () => {
     expect(SETTINGS_SECTIONS.length).toBeLessThanOrEqual(6)
-    expect([...SETTINGS_TABS].sort()).toEqual([...LEGACY_TABS, 'api-keys'].sort())
+    expect([...SETTINGS_TABS].sort()).toEqual([...LEGACY_TABS, 'api-keys', 'credential-rules'].sort())
     expect(SETTINGS_SECTIONS.map((s) => s.label)).toEqual([
       'Organization', 'Your account', 'API keys', 'People and access', 'Billing', 'Advanced',
     ])
@@ -86,7 +86,7 @@ describe('settings sections', () => {
 
   it('put the rarely used pages under Advanced', () => {
     const advanced = SETTINGS_SECTIONS.find((s) => s.key === 'advanced')!
-    expect(advanced.pages.map((p) => p.key)).toEqual(['approvals', 'compliance', 'audit-streams', 'encryption'])
+    expect(advanced.pages.map((p) => p.key)).toEqual(['approvals', 'credential-rules', 'compliance', 'audit-streams', 'encryption'])
   })
 
   it('open an old deep link inside its section, with the section pages listed', () => {
@@ -96,7 +96,7 @@ describe('settings sections', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(6)
     const pages = screen.getByRole('navigation', { name: 'Advanced pages' })
     expect(within(pages).getAllByRole('link').map((a) => a.textContent)).toEqual([
-      'Approvals', 'Compliance', 'Audit streaming', 'Encryption',
+      'Approvals', 'Credential rules', 'Compliance', 'Audit streaming', 'Encryption',
     ])
     expect(within(pages).getByRole('link', { name: 'Encryption' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByTestId('page-encryption')).toBeInTheDocument()

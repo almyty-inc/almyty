@@ -1,8 +1,11 @@
+import { GatewayAuthManagementGuard } from './gateway-auth-management.guard';
+import { CompanySigninService } from './company-signin.service';
 import {
   Controller,
   Get,
   Post,
   Delete,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -17,7 +20,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { IsBoolean, IsEnum, IsObject, IsOptional } from 'class-validator';
 
 import { GatewaysService } from './gateways.service';
-import { GatewayAuthService, CreateGatewayAuthDto } from './gateway-auth.service';
+import { GatewayAuthService, CreateGatewayAuthDto, UpdateGatewayAuthDto } from './gateway-auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrivateGatewayGuard } from './private-gateway.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -70,7 +73,7 @@ class CreateGatewayAuthBodyDto {
 @Controller('gateways')
 @ApiTags('Gateways')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard, PrivateGatewayGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateGatewayGuard, GatewayAuthManagementGuard)
 export class GatewayAuthController {
   private readonly logger = new Logger(GatewayAuthController.name);
 
@@ -81,7 +84,7 @@ export class GatewayAuthController {
 
   // Auth endpoints
   @Post(':gatewayId/auth')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Create gateway authentication configuration' })
   @ApiResponse({ status: 201, description: 'Gateway auth created successfully' })
   async createGatewayAuth(
@@ -121,6 +124,13 @@ export class GatewayAuthController {
     }
   }
 
+  @Get(':gatewayId/auth/company-signin-metadata')
+  @Roles('member', 'admin', 'owner')
+  async companyMetadata(@Param('gatewayId', ParseUUIDPipe) gatewayId: string, @Request() req: any) {
+    await this.gatewayAuthService.getGatewayAuths(gatewayId, req.user.currentOrganizationId);
+    return { success: true, data: CompanySigninService.metadata(gatewayId) };
+  }
+
   @Get(':gatewayId/auth')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get gateway authentication configurations' })
@@ -157,9 +167,24 @@ export class GatewayAuthController {
     }
   }
 
+  @Patch(':gatewayId/auth/:authId')
+  @Roles('member', 'admin', 'owner')
+  async updateGatewayAuth(
+    @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
+    @Param('authId', ParseUUIDPipe) authId: string,
+    @Body() body: UpdateGatewayAuthDto,
+    @Request() req: any,
+  ) {
+    const rows = await this.gatewayAuthService.getGatewayAuths(gatewayId, req.user.currentOrganizationId);
+    if (!rows.some(row => row.id === authId)) throw new HttpException('Gateway auth not found', HttpStatus.NOT_FOUND);
+    const allowed: UpdateGatewayAuthDto = {};
+    for (const key of ['isRequired', 'isActive', 'configuration', 'validationRules'] as const) if (body[key] !== undefined) (allowed as any)[key] = body[key];
+    return { success: true, data: await this.gatewayAuthService.updateGatewayAuth(authId, allowed, req.user.currentOrganizationId) };
+  }
+
   // Auth config management
   @Delete(':gatewayId/auth/:authId')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Delete gateway authentication configuration' })
   @ApiResponse({ status: 200, description: 'Gateway auth deleted successfully' })
   async deleteGatewayAuth(
@@ -176,7 +201,7 @@ export class GatewayAuthController {
         );
       }
 
-      await this.gatewayAuthService.deleteGatewayAuth(authId, organizationId);
+      await this.gatewayAuthService.deleteGatewayAuth(authId, organizationId, gatewayId);
 
       return {
         success: true,
@@ -196,7 +221,7 @@ export class GatewayAuthController {
 
   // Gateway API key management
   @Post(':gatewayId/auth/api-keys')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Generate a new API key for a gateway' })
   @ApiResponse({ status: 201, description: 'API key generated successfully' })
   async generateGatewayApiKey(
@@ -294,7 +319,7 @@ export class GatewayAuthController {
   }
 
   @Delete(':gatewayId/auth/api-keys/:keyId')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Revoke an API key for a gateway' })
   @ApiResponse({ status: 200, description: 'API key revoked successfully' })
   async revokeGatewayApiKey(

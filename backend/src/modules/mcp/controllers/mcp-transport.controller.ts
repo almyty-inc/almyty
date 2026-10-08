@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { SseTransport } from '../transports/sse.transport';
-import { StreamableHttpTransport } from '../transports/streamable-http.transport';
+import { setLegacySseDeprecationHeaders } from '../core/legacy-sse-deprecation';
 import { McpService } from '../mcp.service';
 import { JsonRpcRequest } from '../types/mcp.types';
 
@@ -27,38 +27,17 @@ export class McpTransportController {
   constructor(
     private readonly mcpService: McpService,
     private readonly sseTransport: SseTransport,
-    private readonly streamable: StreamableHttpTransport,
   ) {}
 
-
-  // Streamable HTTP endpoint (MCP 2025-03-26 revision). Single path
-  // hosting both directions: POST is client->server, GET opens an SSE
-  // stream for server->client. Sessions identified via Mcp-Session-Id
-  // header; Last-Event-ID drives reconnect replay.
-  @Post('/streamable')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('member', 'admin', 'owner')
-  async streamablePost(@Request() req, @Response() res): Promise<void> {
-    const organizationId = req.user?.currentOrganizationId;
-    const userId = req.user?.id;
-    if (!organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    await this.streamable.handlePost(req, res, organizationId, userId);
-  }
-
-  @Get('/streamable')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('member', 'admin', 'owner')
-  async streamableStream(@Request() req, @Response() res): Promise<void> {
-    const organizationId = req.user?.currentOrganizationId;
-    const userId = req.user?.id;
-    if (!organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    await this.streamable.handleStream(req, res, organizationId, userId);
-  }
-  // Server-Sent Events endpoint
+  // The Streamable HTTP session transport that used to live at
+  // /mcp/streamable is the runner's worker stream now
+  // (runner/transport/worker-stream.controller.ts, which keeps that path
+  // for envelopes for one runner release). MCP itself is served statelessly
+  // by gateways and POST /mcp.
+  // Server-Sent Events endpoint: the legacy HTTP+SSE transport (2024-11-05),
+  // deprecated in MCP 2026-07-28 (SEP-2596). Still served, and every response
+  // on these three routes carries Deprecation and Link headers (RFC 9745,
+  // core/legacy-sse-deprecation.ts). It goes once the request log shows no use.
   @Get('/sse')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('member', 'admin', 'owner')
@@ -70,6 +49,7 @@ export class McpTransportController {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
+    setLegacySseDeprecationHeaders(res);
     // Establish SSE connection
     await this.sseTransport.handleSseConnection(res, organizationId, userId, serverId);
   }
@@ -82,6 +62,7 @@ export class McpTransportController {
     @Param('connectionId') connectionId: string,
     @Body() message: JsonRpcRequest,
     @Request() req,
+    @Response({ passthrough: true }) res,
   ): Promise<any> {
     const organizationId = req.user?.currentOrganizationId;
 
@@ -89,6 +70,7 @@ export class McpTransportController {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
+    setLegacySseDeprecationHeaders(res);
     return this.sseTransport.handleSseMessage(connectionId, message, organizationId, req.user?.id);
   }
 
@@ -108,6 +90,7 @@ export class McpTransportController {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
+    setLegacySseDeprecationHeaders(res);
     // Establish SSE connection for specific server
     await this.sseTransport.handleSseConnection(res, organizationId, userId, serverId);
   }
@@ -140,7 +123,10 @@ export class McpTransportController {
       serverInfo: {
         name: 'almyty',
         version: '1.0.0',
-        supportedTransports: ['http', 'sse', 'streamable-http'],
+        supportedTransports: ['http', 'sse'],
+        // HTTP+SSE (2024-11-05) is deprecated in MCP 2026-07-28 and goes
+        // once the request log shows nobody uses it.
+        deprecatedTransports: ['sse'],
       },
     };
   }

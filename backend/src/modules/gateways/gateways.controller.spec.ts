@@ -1,3 +1,4 @@
+import { GatewayAuthManagementGuard } from './gateway-auth-management.guard';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { GatewaysController } from './gateways.controller';
@@ -50,6 +51,7 @@ describe('GatewaysController', () => {
       deleteAuth: jest.fn(),
       getAuthConfigs: jest.fn(),
       createGatewayAuth: jest.fn(),
+      generateApiKey: jest.fn(),
       getGatewayAuths: jest.fn(),
     };
 
@@ -97,6 +99,8 @@ describe('GatewaysController', () => {
     .overrideGuard(JwtAuthGuard)
     .useValue({ canActivate: jest.fn(() => true) })
     .overrideGuard(RolesGuard)
+    .useValue({ canActivate: jest.fn(() => true) })
+    .overrideGuard(GatewayAuthManagementGuard)
     .useValue({ canActivate: jest.fn(() => true) })
     .overrideGuard(PrivateGatewayGuard)
     .useValue({ canActivate: jest.fn(() => true) })
@@ -153,15 +157,17 @@ describe('GatewaysController', () => {
       const result = await controller.getGateway('gateway-1', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(result.data).toBe(mockGateway);
+      // The gateway, plus what the page needs to offer scripts (code mode).
+      expect(result.data).toEqual({ ...mockGateway, codeMode: { serverAllows: false, hasAuth: false, exposure: 'tools' } });
     });
   });
 
   describe('createGateway', () => {
-    it('should create gateway successfully', async () => {
+    it('creates an active API-key method before issuing the protected gateway key', async () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const createDto = {
         name: 'New Gateway',
+        accessScope: 'external_protected' as const,
         type: 'mcp' as any,
         endpoint: '/new',
         configuration: {},
@@ -181,6 +187,8 @@ describe('GatewaysController', () => {
 
       const result = await controller.createGateway(createDto, mockRequest);
 
+      expect(gatewayAuthService.createGatewayAuth).toHaveBeenCalledWith('gateway-1', { type: 'api_key', isActive: true, isRequired: true, configuration: { keyHeader: 'x-api-key', keyQuery: 'api_key' } }, 'org-1');
+      expect(gatewayAuthService.createGatewayAuth.mock.invocationCallOrder[0]).toBeLessThan((gatewayAuthService as any).generateApiKey.mock.invocationCallOrder[0]);
       expect(result.success).toBe(true);
       expect(result.data).toEqual(expect.objectContaining({
         id: 'gateway-1',
@@ -188,6 +196,24 @@ describe('GatewaysController', () => {
         organizationId: 'org-1',
         initialApiKey: 'gw_test_key',
       }));
+    });
+  });
+
+  describe('initial gateway credentials', () => {
+    const req = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
+    it.each(['private', 'team', 'org', 'external_open'])('does not issue a key or enable external methods for %s', async (accessScope) => {
+      gatewaysService.createGateway.mockResolvedValue({ id: 'gateway-1', name: 'Scoped', type: 'mcp', accessScope } as any);
+      const result = await controller.createGateway({ name: 'Scoped', type: 'mcp', accessScope } as any, req);
+      expect(gatewayAuthService.createGatewayAuth).not.toHaveBeenCalled();
+      expect((gatewayAuthService as any).generateApiKey).not.toHaveBeenCalled();
+      expect(result.data.initialApiKey).toBeUndefined();
+    });
+    it('leaves a protected gateway without a key when the method cannot be provisioned', async () => {
+      gatewaysService.createGateway.mockResolvedValue({ id: 'gateway-1', name: 'Protected', type: 'mcp', accessScope: 'external_protected' } as any);
+      gatewayAuthService.createGatewayAuth.mockRejectedValue(new Error('Method save failed'));
+      const result = await controller.createGateway({ name: 'Protected', type: 'mcp', accessScope: 'external_protected' } as any, req);
+      expect((gatewayAuthService as any).generateApiKey).not.toHaveBeenCalled();
+      expect(result.data.initialApiKey).toBeUndefined();
     });
   });
 

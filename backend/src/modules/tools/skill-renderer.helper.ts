@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 
 import { Tool } from '../../entities/tool.entity';
 import { buildGraphQLQueryTemplate } from './skill-graphql.helper';
+import { codeNames, toolSignature } from '../tool-discovery/tool-signature';
+import { toolOutputSchema } from '../tool-discovery/tool-discovery.service';
 import {
   bashSingleQuote,
   bashWord,
@@ -269,6 +271,58 @@ export class SkillRendererHelper {
       }
     }
 
+    return lines.join('\n');
+  }
+
+  /**
+   * A gateway in `code` exposure as one skill (docs/design/code-mode.md,
+   * part E): the typed functions a script can call, one namespace per API,
+   * and how to run a script on the gateway. The functions are the same
+   * code names and signatures get_tool shows.
+   */
+  renderCodeSkill(gateway: any, tools: Tool[], runCodePath: string): string {
+    const gatewayName = singleLine(gateway.name, 120);
+    const names = codeNames(tools);
+    const byNamespace = new Map<string, string[]>();
+    for (const tool of tools) {
+      const name = names.get(tool.id)!;
+      const list = byNamespace.get(name.namespace) ?? [];
+      list.push(toolSignature(tool, name, toolOutputSchema(tool)));
+      byNamespace.set(name.namespace, list);
+    }
+    const lines: string[] = [
+      '---',
+      `name: ${yamlScalar(this.slugify(gateway.name))}`,
+      `description: ${this.escapeYaml(`Scripts over the ${gatewayName} tools (${tools.length}). Use when a job needs several calls, a loop or filtering: write one script and run it.`)}`,
+      'metadata:',
+      '  author: almyty',
+      '  generated: "true"',
+      '---',
+      '',
+      `# ${markdownInline(gateway.name)}`,
+      '',
+      'Write one short JavaScript or TypeScript script that calls the functions below, and run it on the gateway. ' +
+        'Only what the script logs and returns comes back.',
+      '',
+      '## Running a script',
+      '',
+      markdownFence(`POST ${runCodePath}\n{ "code": "const sold = await petstore.findPetsByStatus({ status: 'sold' }); return sold.length;" }`),
+      '',
+      '- The script is the body of an async function: use `await`, and `return` the answer. `log(...)` adds a line to the log.',
+      '- There is no network, no files, no `require` or `import`: call the functions instead. A failed call throws a `ToolError`.',
+      '- A call that changes or deletes data may wait for a person instead of running. The answer then carries an `approvalId`; ' +
+        'send `{ "approvalId": "..." }` to the same address to learn what happened once they decide.',
+      '- `tools.search(query)` and `tools.get(name)` find and describe functions from inside a script.',
+      '',
+      '## Functions',
+      '',
+    ];
+    for (const [namespace, signatures] of [...byNamespace.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      lines.push(`### ${markdownCodeSpan(namespace)}`);
+      lines.push('');
+      lines.push(markdownFence(signatures.join('\n\n'), 'ts'));
+      lines.push('');
+    }
     return lines.join('\n');
   }
 

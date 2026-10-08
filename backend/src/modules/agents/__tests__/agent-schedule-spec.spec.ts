@@ -186,3 +186,22 @@ describe('agent schedule timing', () => {
     });
   });
 });
+
+describe('the next-run preview and the queue', () => {
+  // Bull fires repeatable jobs with the cron-parser it resolves itself.
+  // The preview is only honest while it resolves the very same copy: a
+  // second major (v5 next to bull's v4) disagrees on DST edges.
+  it('resolve the same cron-parser', () => {
+    const path = require('path');
+    const bullDir = path.dirname(require.resolve('bull/package.json'));
+    const queueParser = require.resolve('cron-parser', { paths: [bullDir] });
+    expect(queueParser).toBe(require.resolve('cron-parser'));
+  });
+
+  it('agrees with the queue across a half-hour DST change', () => {
+    const timing = { kind: 'days' as const, time: '03:00', days: [0, 1, 2, 3, 4, 5, 6], timezone: 'Australia/Lord_Howe' };
+    const runs = nextRuns(timing, new Date('2026-04-01T05:17:00Z'), 5).map((d) => d.toISOString());
+    expect(runs).toHaveLength(5);
+    expect(new Set(runs).size).toBe(5);
+  });
+});

@@ -8,6 +8,7 @@ import {
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
 import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
+import type { AgentWakeRow, AlwaysOnInput, AlwaysOnView } from '@/lib/always-on'
 
 const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
@@ -507,7 +508,8 @@ export const gatewaysApi = {
   // Auth configuration
   getAuthConfigs: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/auth`),
   createAuthConfig: (gatewayId: string, data: any) => apiPost(`/gateways/${gatewayId}/auth`, data),
-  deleteAuthConfig: (gatewayId: string, authId: string) => apiDel(`/gateways/${gatewayId}/auth/${authId}`),
+  updateAuthConfig: (gatewayId: string, authId: string, data: any) => apiPatch(`/gateways/${gatewayId}/auth/${authId}`, data),
+  getCompanySignInMetadata: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/auth/company-signin-metadata`),
 
   // API key management
   generateApiKey: (gatewayId: string, data: { name: string; scopes?: string[]; expiresAt?: string }) =>
@@ -652,6 +654,8 @@ export const toolsApi = {
   activate: (id: string, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/activate`),
   deactivate: (id: string, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/deactivate`),
 
+  update: (id: string, data: Record<string, any>, organizationId: string) => apiPut(`/organizations/${organizationId}/tools/${id}`, data),
+
   execute: (id: string, data: any, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/execute`, data),
 
   // Export formats
@@ -722,6 +726,8 @@ export const analyticsApi = {
     return apiGet(`/analytics/requests${qs}`)
   },
   getToolUsage: (timeframe = '7d') => apiGet(`/analytics/tool-usage?timeframe=${timeframe}`),
+  /** Scripts agents ran in code mode, and the sandbox CPU they used. */
+  getScriptUsage: (timeframe = '7d') => apiGet(`/analytics/script-usage?timeframe=${timeframe}`),
   getGatewayUsage: (timeframe = '7d') => apiGet(`/analytics/gateway-usage?timeframe=${timeframe}`),
   getLlmUsage: (timeframe = '7d') => apiGet(`/analytics/llm-usage?timeframe=${timeframe}`),
   getTimeline: (timeframe = '24h', granularity = 'hour') =>
@@ -907,6 +913,8 @@ export const complianceApi = {
 
 // Agents API
 export const agentsApi = {
+  getApiAccess: (id: string) => apiGet(`/agents/${id}/api-access`),
+  setApiAccess: (id: string, body: { accessScope: string; accessTeamId: string | null }) => apiPost(`/agents/${id}/api-access`, body),
   getAll: () => apiGet('/agents'),
   getById: (id: string) => apiGet(`/agents/${id}`),
   create: (data: any, _organizationId?: string) => apiPost('/agents', data),
@@ -938,8 +946,11 @@ export const agentsApi = {
   previewSchedule: (id: string, body: ScheduleRequest) => apiPost<SchedulePreview>(`/agents/${id}/schedule/preview`, body),
   scheduleDestinations: (id: string) => apiGet<DeliveryOptions>(`/agents/${id}/schedule/destinations`),
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
-  setHeartbeat: (id: string, body: { enabled: boolean; intervalMinutes?: number; prompt?: string }) =>
-    apiPatch(`/agents/${id}/heartbeat`, body),
+  // Always on (lib/always-on.ts has the shapes)
+  getAlwaysOn: (id: string) => apiGet<AlwaysOnView>(`/agents/${id}/always-on`),
+  setAlwaysOn: (id: string, body: AlwaysOnInput) => apiPatch<AlwaysOnView>(`/agents/${id}/always-on`, body),
+  wakeNow: (id: string) => apiPost(`/agents/${id}/always-on/wake`, {}),
+  listWakes: (id: string, limit = 20) => apiGet<AgentWakeRow[]>(`/agents/${id}/always-on/wakes`, { params: { limit } }),
   // Runs (autonomous mode)
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
   getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
@@ -1002,8 +1013,6 @@ export interface RunnerSetupInput {
 export const runnersApi = {
   getAll: () => apiGet('/runners'),
   getById: (id: string) => apiGet(`/runners/${id}`),
-  /** The pending record the setup page creates before the daemon connects. */
-  create: (data: RunnerSetupInput) => apiPost('/runners', data),
   update: (id: string, data: Partial<RunnerSetupInput>) => apiPatch(`/runners/${id}`, data),
   unregister: (id: string) => apiDel(`/runners/${id}`),
 }
@@ -1255,13 +1264,6 @@ export const credentialsApi = {
     scopes?: string[]
     credentialName?: string
   }): Promise<{ credentialId: string }> => apiPost('/credentials/oauth2/client-credentials', data),
-}
-
-// Access Keys API
-export const accessKeysApi = {
-  getAll: () => apiGet('/access-keys'),
-  create: (data: any) => apiPost('/access-keys', data),
-  revoke: (id: string) => apiDel(`/access-keys/${id}`),
 }
 
 // Versions API (entity version history via typeorm-versions)

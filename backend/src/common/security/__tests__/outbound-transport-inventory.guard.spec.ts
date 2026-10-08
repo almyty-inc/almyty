@@ -52,6 +52,7 @@ const INVENTORY: Record<string, [Kind, string]> = {
   'src/modules/agents/agent-webhook.service.ts': ['gated', 'agent webhook URL: validateUrl + pinned agents + maxRedirects 0 + cap'],
   'src/modules/credentials/oauth2.service.ts': ['gated', 'OAuth token endpoint: validateUrl + ssrfSafeDispatcher + redirect manual + capped read'],
   'src/modules/connections/connection-validation.service.ts': ['gated', 'connector probes: guardUrl + ssrfSafeDispatcher (host-scoped exemption under a hatch)'],
+  'src/modules/connections/mcp-oauth/mcp-oauth-client.service.ts': ['gated', 'MCP sign-in discovery, registration, token and revocation: validateUrl(AllowingPrivate under MCP_ALLOW_PRIVATE_URLS) + ssrfSafeDispatcher (host-scoped exemption under the hatch) + redirect manual + capped read'],
   'src/modules/mcp-sources/mcp-client.service.ts': ['gated', 'MCP source URL: validateUrl + ssrfSafeDispatcher + redirect error + capResponse'],
   'src/modules/memory/embedding.service.ts': ['gated', 'embedding provider URL: validateUrl + pinned agents'],
   'src/modules/model-registry/model-registry.service.ts': ['gated', 'S3-compatible registry endpoint: validateUrl + pinned NodeHttpHandler'],
@@ -73,6 +74,7 @@ const INVENTORY: Record<string, [Kind, string]> = {
   'src/modules/gateways/channels/adapters/irc.adapter.ts': ['gated', 'bridge webhook_url: assertEgress + egressInit'],
   'src/modules/gateways/channels/adapters/microsoft-teams.adapter.ts': ['gated', 'activity service_url: assertEgress + egressInit; JWKS/token are Microsoft constants'],
   'src/modules/gateways/channels/visitor-oauth.service.ts': ['gated', 'openid-client token/JWKS/userinfo: customFetch = safeFetch'],
+  'src/modules/gateways/company-signin.service.ts': ['gated', 'Company OIDC discovery/token/JWKS: customFetch = safeFetch, every issuer URL gated and pinned'],
   'ee/modules/sso/sso.service.ts': ['gated', 'org OIDC issuer discovery + token/JWKS: customFetch = safeFetch (SSO_ALLOW_PRIVATE_URLS exempts the issuer host only)'],
   'ee/modules/audit-export/audit-stream.service.ts': ['gated', 'SIEM endpoint: decideEgress at save, pinned + redirect error at delivery'],
 

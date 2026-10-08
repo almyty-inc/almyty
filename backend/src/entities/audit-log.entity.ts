@@ -102,6 +102,19 @@ export enum AuditAction {
   // A tool call held for a person's approval by an approval policy's
   // amount rule (ToolApprovalGate): asked, or refused where nobody can be asked.
   APPROVAL_GATE = 'approval_gate',
+
+  // A person's data on an agent's channels: their copy sent to them, or
+  // everything held about them erased, by the visitor themselves or by an
+  // owner answering their request. Counts and a hashed reference only.
+  VISITOR_DATA_EXPORT = 'visitor_data_export',
+  VISITOR_DATA_ERASE = 'visitor_data_erase',
+
+  // Always on (docs/always-on.md): switched on or off by a person, paused
+  // by the system (with its reason), and a wake that could not start a run.
+  ALWAYS_ON_ENABLE = 'always_on_enable',
+  ALWAYS_ON_DISABLE = 'always_on_disable',
+  ALWAYS_ON_PAUSE = 'always_on_pause',
+  WAKE_DROPPED = 'wake_dropped',
 }
 
 export enum AuditResource {

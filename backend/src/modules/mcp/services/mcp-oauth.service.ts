@@ -1,7 +1,9 @@
+import type { CompanyGrant } from '../../gateways/company-signin.service';
 import {
   Injectable,
   Logger,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -10,10 +12,15 @@ import * as crypto from 'crypto';
 import { OAuthClient } from '../../../entities/oauth-client.entity';
 import { OAuthAuthorizationCode } from '../../../entities/oauth-authorization-code.entity';
 import {
+  OAuthApplicationType,
   hashValue,
+  isMetadataDocumentClientId,
+  registrationApplicationType,
   validateRedirectUri,
 } from './mcp-oauth-helpers.helper';
 import { McpOAuthTokensHelper } from './mcp-oauth-tokens.helper';
+import { McpOAuthCimdService } from './mcp-oauth-cimd.service';
+import { MCP_OAUTH_SCOPES } from './mcp-oauth-scopes';
 
 // --- Interfaces ---
 
@@ -24,6 +31,8 @@ export interface RegisterClientDto {
   response_types?: string[];
   token_endpoint_auth_method?: string;
   scope?: string;
+  /** OIDC / RFC 7591: 'web' (https redirects) or 'native' (loopback, private-use schemes). */
+  application_type?: string;
 }
 
 export interface ClientRegistrationResponse {
@@ -35,6 +44,7 @@ export interface ClientRegistrationResponse {
   response_types: string[];
   token_endpoint_auth_method: string;
   scope: string;
+  application_type?: OAuthApplicationType;
   client_id_issued_at: number;
 }
 
@@ -59,15 +69,7 @@ export interface TokenValidationResult {
 
 const AUTHORIZATION_CODE_LIFETIME_SECONDS = 600; // 10 minutes
 
-/**
- * The scopes an MCP OAuth client can register and be granted: exactly the
- * `scopes_supported` both metadata documents advertise. Registration
- * refuses anything else, and a grant is a subset of what the client
- * registered, so a token never carries a scope string its caller made up
- * (such as one a gateway tool's `requiredScopes` names -- those are for
- * admin-minted gateway keys).
- */
-export const MCP_OAUTH_SCOPES = ['mcp:tools', 'mcp:resources', 'mcp:prompts', 'mcp:*'];
+export { MCP_OAUTH_SCOPES } from './mcp-oauth-scopes';
 
 /**
  * The scope a grant carries: what was asked for, provided every part of
@@ -128,6 +130,9 @@ export class McpOAuthService {
     @InjectRepository(OAuthAuthorizationCode)
     private oauthCodeRepository: Repository<OAuthAuthorizationCode>,
     private readonly tokens: McpOAuthTokensHelper,
+    // Optional so positional unit tests can construct the service; Nest
+    // always injects it. Without it an https client_id is an unknown client.
+    @Optional() private readonly cimd?: McpOAuthCimdService,
   ) {}
 
   // -----------------------------------------------------------------------
@@ -163,6 +168,10 @@ export class McpOAuthService {
       );
     }
 
+    // application_type decides which redirect URIs are allowed (an
+    // all-loopback registration without one is native, see the helper).
+    const applicationType: OAuthApplicationType = registrationApplicationType(dto);
+
     for (const uri of dto.redirect_uris) {
       if (typeof uri !== 'string' || uri.length === 0) {
         throw new BadRequestException('redirect_uri must be a non-empty string');
@@ -172,7 +181,7 @@ export class McpOAuthService {
           `redirect_uri exceeds ${MAX_REDIRECT_URI_LENGTH} characters`,
         );
       }
-      validateRedirectUri(uri);
+      validateRedirectUri(uri, applicationType);
     }
 
     // Per-gateway quota, so a loop of registrations cannot grow the
@@ -263,6 +272,7 @@ export class McpOAuthService {
       gatewayId,
       organizationId,
       isActive: true,
+      applicationType,
     });
 
     await this.oauthClientRepository.save(client);
@@ -279,6 +289,7 @@ export class McpOAuthService {
       response_types: responseTypes,
       token_endpoint_auth_method: authMethod,
       scope,
+      application_type: applicationType,
       client_id_issued_at: Math.floor(Date.now() / 1000),
     };
 
@@ -303,18 +314,35 @@ export class McpOAuthService {
     gatewayId: string,
     redirectUri: string,
     scope?: string,
-  ): Promise<{ clientName: string; scopes: string[] }> {
+  ): Promise<{ clientName: string; scopes: string[]; clientHost?: string | null }> {
+    const client = await this.clientFor(clientId, gatewayId);
+    if (!client.redirectUris.includes(redirectUri)) {
+      throw new BadRequestException('redirect_uri does not match any registered URI');
+    }
+    const scopes = grantedScope(client, scope).split(' ');
+    // A metadata-document client names itself, so the consent screen shows
+    // where that name came from next to it (design doc, decision 8).
+    const clientHost = client.isMetadataDocument ? new URL(client.clientId).host : null;
+    return { clientName: client.clientName, scopes, clientHost };
+  }
+
+  /**
+   * The client an authorization request names: registered on this gateway,
+   * or, for an https client_id, the client its metadata document describes
+   * (fetched and stored by McpOAuthCimdService).
+   */
+  private async clientFor(clientId: string, gatewayId: string): Promise<OAuthClient> {
+    if (isMetadataDocumentClientId(clientId)) {
+      if (!this.cimd) throw new BadRequestException('Invalid or inactive client');
+      return this.cimd.resolveClient(clientId);
+    }
     const client = await this.oauthClientRepository.findOne({
       where: { clientId, gatewayId, isActive: true },
     });
     if (!client) {
       throw new BadRequestException('Invalid or inactive client');
     }
-    if (!client.redirectUris.includes(redirectUri)) {
-      throw new BadRequestException('redirect_uri does not match any registered URI');
-    }
-    const scopes = grantedScope(client, scope).split(' ');
-    return { clientName: client.clientName, scopes };
+    return client;
   }
   // -----------------------------------------------------------------------
   // 4. Create Authorization Code
@@ -333,16 +361,11 @@ export class McpOAuthService {
       state?: string;
       /** RFC 8707 resource indicator the client asked for, already checked by the caller. */
       resource?: string;
+      companyGrant?: CompanyGrant;
     },
   ): Promise<string> {
-    // Validate client
-    const client = await this.oauthClientRepository.findOne({
-      where: { clientId, gatewayId, isActive: true },
-    });
-
-    if (!client) {
-      throw new BadRequestException('Invalid or inactive client');
-    }
+    // Validate client: registered on this gateway, or a metadata document.
+    const client = await this.clientFor(clientId, gatewayId);
 
     // Validate redirect URI matches a registered URI
     if (!client.redirectUris.includes(params.redirectUri)) {
@@ -370,6 +393,7 @@ export class McpOAuthService {
       codeHash,
       clientId: client.clientId,
       userId,
+      companyGrant: params.companyGrant ?? null,
       gatewayId,
       organizationId,
       redirectUri: params.redirectUri,

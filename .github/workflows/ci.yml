@@ -519,6 +519,165 @@ jobs:
         if: failure()
         run: tail -n 200 "$RUNNER_TEMP/api.log" | grep -v 'query:' || true
 
+  # ─── MCP: official conformance suite + real SDK clients ──────
+  # A seeded API (backend/scripts/mcp-conformance/seed.mjs) with two MCP
+  # gateways, tested the way MCP clients see them:
+  #   - @modelcontextprotocol/conformance, pinned, against a gateway, for
+  #     every version the docs claim (2025-11-25, 2025-06-18), with a
+  #     reviewed baseline of fixture-only scenarios
+  #     (expected-failures-2025-11-25.yml): BLOCKING;
+  #   - its authorization-server metadata scenario: BLOCKING;
+  #   - the 2026-07-28 requirements against their own reviewed baseline
+  #     (expected-failures-2026-07-28.yml): non-blocking until a stable
+  #     conformance release covers them (design doc, decision 14);
+  #   - MCP Inspector's CLI on the Petstore gateway (tools/list --strict),
+  #     in the legacy and the modern (2026-07-28) era;
+  #   - the official TypeScript SDK client pinned at the release that speaks
+  #     each version (sdk-check.mjs), since Inspector always negotiates its
+  #     newest.
+  mcp-conformance:
+    name: MCP conformance (2025-11-25 blocking)
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: almyty_mcp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CONFORMANCE: '@modelcontextprotocol/conformance@0.2.0-alpha.11'
+      INSPECTOR: '@modelcontextprotocol/inspector@2.9.0'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 26
+        uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts
+
+      - name: Build the API
+        working-directory: backend
+        run: npm run build:ee
+
+      # The conformance runner makes hundreds of requests a minute from one
+      # address; the per-client limits are configuration, raised here only.
+      - name: Start the API
+        working-directory: backend
+        env:
+          PORT: '4000'
+          NODE_ENV: development
+          DATABASE_HOST: 127.0.0.1
+          DATABASE_PORT: '5432'
+          DATABASE_USERNAME: postgres
+          DATABASE_PASSWORD: postgres
+          DATABASE_NAME: almyty_mcp
+          DB_SSL: 'false'
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '6379'
+          FRONTEND_URL: http://localhost:3002
+          BASE_URL: http://localhost:4000
+          API_BASE_URL: http://localhost:4000
+          MODEL_PRICE_FEED_DISABLED: 'true'
+          RATE_LIMIT_MAX: '100000'
+          UNIFIED_ENDPOINT_RATE_LIMIT: '100000'
+        run: |
+          export JWT_SECRET="$(openssl rand -hex 32)"
+          export JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
+          export ENCRYPTION_KEY="$(openssl rand -hex 32)"
+          nohup node dist-ee/src/main > "$RUNNER_TEMP/api.log" 2>&1 &
+          for _ in $(seq 1 90); do
+            curl -sf http://localhost:4000/health > /dev/null && exit 0
+            sleep 2
+          done
+          tail -n 100 "$RUNNER_TEMP/api.log"
+          exit 1
+
+      - name: Seed the MCP gateways
+        working-directory: backend
+        env:
+          MCP_SEED_API: http://localhost:4000
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/almyty_mcp
+        run: |
+          node scripts/mcp-conformance/seed.mjs > "$RUNNER_TEMP/seed.env"
+          echo "::add-mask::$(grep '^PETSTORE_API_KEY=' "$RUNNER_TEMP/seed.env" | cut -d= -f2-)"
+          for key in $(grep -o 'api_key=[^&]*' "$RUNNER_TEMP/seed.env" | cut -d= -f2 | sort -u); do echo "::add-mask::$key"; done
+          cat "$RUNNER_TEMP/seed.env" >> "$GITHUB_ENV"
+
+      - name: Conformance, 2025-11-25 (blocking)
+        run: |
+          npx -y "$CONFORMANCE" server --url "$CONFORMANCE_URL" --spec-version 2025-11-25 \
+            --expected-failures backend/scripts/mcp-conformance/expected-failures-2025-11-25.yml
+
+      - name: Conformance, 2025-06-18 (blocking)
+        run: |
+          npx -y "$CONFORMANCE" server --url "$CONFORMANCE_URL" --spec-version 2025-06-18 \
+            --expected-failures backend/scripts/mcp-conformance/expected-failures-2025-11-25.yml
+
+      - name: Conformance, authorization server metadata (blocking)
+        run: |
+          npx -y "$CONFORMANCE" authorization --url "http://localhost:4000/${MCP_ORG_SLUG}/conformance" \
+            --scenario authorization-server-metadata-endpoint --spec-version 2025-11-25
+
+      # Reviewed baseline: the same fixtures plus MRTR (design doc P2). Not
+      # blocking until a stable conformance release covers 2026-07-28
+      # (decision 14), but a regression shows as a red step.
+      - name: Conformance, 2026-07-28 (informational until a stable suite)
+        continue-on-error: true
+        run: |
+          npx -y "$CONFORMANCE" server --url "$CONFORMANCE_URL" --requirements 2026-07-28 \
+            --expected-failures backend/scripts/mcp-conformance/expected-failures-2026-07-28.yml
+
+      - name: MCP Inspector on the Petstore gateway
+        run: |
+          npx -y "$INSPECTOR" --cli "$PETSTORE_URL" --transport http --method tools/list --strict > /dev/null
+          npx -y "$INSPECTOR" --cli "$CONFORMANCE_URL" --transport http --method tools/call --tool-name test_simple_text
+          for era in legacy modern; do
+            npx -y "$INSPECTOR" --cli "$PETSTORE_URL" --transport http --protocol-era "$era" --method tools/list --strict > /dev/null
+          done
+          npx -y "$INSPECTOR" --cli "$CONFORMANCE_URL" --transport http --protocol-era modern --method tools/call --tool-name test_simple_text
+
+      - name: Official SDK client per claimed version
+        run: |
+          for pin in 2025-11-25:1.29.0 2025-06-18:1.13.3 2025-03-26:1.12.3; do
+            version="${pin%%:*}"; sdk="${pin##*:}"
+            npm install --silent --no-audit --no-fund --prefix "$RUNNER_TEMP/sdk-$version" "@modelcontextprotocol/sdk@$sdk"
+            node backend/scripts/mcp-conformance/sdk-check.mjs "$RUNNER_TEMP/sdk-$version/node_modules" "$CONFORMANCE_URL" "$version"
+          done
+
+      - name: API log on failure
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/api.log" | grep -v 'query:' || true
+
   # ─── Dependency vulnerability scan (npm audit) ───────────────
   # Fails the PR if npm audit finds a high- or critical-severity
   # advisory in backend/ or frontend/ dependencies. `--audit-level=high`

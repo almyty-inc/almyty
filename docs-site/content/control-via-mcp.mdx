@@ -12,7 +12,7 @@ Add almyty to your assistant as an MCP server with the address `https://api.almy
 
 ## What your assistant can do
 
-It has 69 tools covering almost everything in the dashboard. None of them depends on your plan.
+It has 71 tools covering almost everything in the dashboard. None of them depends on your plan.
 
 | Area | What it can do |
 | --- | --- |
@@ -20,7 +20,7 @@ It has 69 tools covering almost everything in the dashboard. None of them depend
 | **Tools** | List the tools made from your APIs, switch one on, delete one |
 | **Tool hub** | Search ready-made templates and install one as an API with its tools |
 | **Gateways** | Create and delete gateways, add tools to them, add or remove sign-in |
-| **Agents** | Create, change, switch on and off, delete and run agents |
+| **Agents** | Create, change, switch on and off, delete and run agents, and follow a long run until it is done |
 | **Channels** | Put an agent where people are: add, check, publish and unpublish channels, set branding and visitor rules, build downloadable apps |
 | **Providers** | Connect model vendors and list them |
 | **Models** | List models, refresh the list, check a model, preview which model an agent would use, list models on your own cloud accounts |
@@ -51,6 +51,16 @@ Or put an agent in front of people from start to finish:
 
 It sets the name and the limits a public channel needs, adds the Slack channel, checks it, and publishes it.
 
+## When an agent takes a while, or needs you
+
+An agent that works on its own can take minutes, and it may stop to ask you something or to wait for an approval. How your assistant follows the run depends on what the assistant can do:
+
+- **Assistants that follow tasks** (MCP 2026-07-28 with the tasks extension) treat the run as a task. They check on it, show you the agent's question or the approval in their own window, and pick up the result when it is done. A long run does not time out.
+- **Assistants that can ask you questions** (MCP 2026-07-28 with elicitation) wait for the run for up to 25 seconds. If it finishes, you get the answer; if the agent asks something, you are asked right there and the run carries on with your answer.
+- **Every other assistant** gets the run's id straight away. It follows the run with **get_run**, answers the agent's question with **answer_run**, and decides an approval with **decide_approval**.
+
+Only someone who could approve a request on the **Approvals** page is asked to approve it from their assistant. Anyone else is told the run is waiting for approval, and it is approved in the dashboard.
+
 ## What it cannot do
 
 A few things are left out on purpose:
@@ -77,7 +87,9 @@ Or in a client config file:
 }
 ```
 
-Authenticate once with `npx @almyty/auth login`; the server announces itself as `almyty`.
+Authenticate once with `npx @almyty/auth login`; the server announces itself as `almyty`. Use Streamable HTTP (`--transport http`, the address above); the older SSE address `/mcp/sse` is deprecated and goes away (see [Legacy SSE transport](/gateways/mcp#legacy-sse-transport)).
+
+The management server speaks the same MCP versions as every gateway: **2026-07-28**, **2025-11-25** and **2025-06-18**, plus 2025-03-26 and 2024-11-05 for older clients (see [MCP gateway, Protocol versions](/gateways/mcp#protocol-versions)). Its tools carry titles and annotations (`list_*` and `get_*` only read, `delete_*` destructive), and a tool that returns a record also returns it as `structuredContent`. An unknown tool name is a `-32602` error. Its tool set does not change, so it reports `tools.listChanged: false` and a `subscriptions/listen` stream on it only keeps alive.
 
 The tools, by area:
 
@@ -87,7 +99,7 @@ The tools, by area:
 | Tools | `list_tools`, `activate_tool`, `delete_tool` |
 | Tool hub | `list_tool_templates`, `install_tool_template` |
 | Gateways | `create_gateway`, `list_gateways`, `delete_gateway`, `assign_tools_to_gateway`, `add_auth_to_gateway`, `remove_auth_from_gateway` |
-| Agents | `create_agent`, `list_agents`, `update_agent`, `activate_agent`, `deactivate_agent`, `delete_agent`, `invoke_agent` |
+| Agents | `create_agent`, `list_agents`, `update_agent`, `activate_agent`, `deactivate_agent`, `delete_agent`, `invoke_agent`, `get_run`, `answer_run` |
 | Channels | `list_channels`, `add_channel`, `get_channel`, `check_channel`, `update_channel`, `delete_channel`, `publish_channel`, `unpublish_channel`, `get_public_settings`, `update_public_settings`, `build_channel`, `list_builds` |
 | Providers | `add_provider`, `list_providers` |
 | Models | `list_models`, `sync_models`, `validate_model`, `preview_model_routing`, `list_model_deployments`, `list_model_versions` |
@@ -102,6 +114,25 @@ The tools, by area:
 The first example chains `import_schema`, `check_import_status`, `list_tools`, `create_gateway`, `assign_tools_to_gateway` and `add_auth_to_gateway`. The second chains `update_public_settings`, `add_channel`, `check_channel` and `publish_channel`.
 
 What is left out: there is no `update_gateway` and no `create_tool` (`activate_tool` and `delete_tool` manage what an import produced). Status is not a settable field: `create_agent` always produces a draft, `activate_agent` is the only path to active because it runs pipeline validation first, and `invoke_agent` refuses an agent that is not active.
+
+### Agent runs: tasks, input_required, get_run
+
+`invoke_agent` on an autonomous agent answers by what the request can do (workflow agents still run inside the call):
+
+1. **Tasks extension** (the request's `clientCapabilities.extensions` has `io.modelcontextprotocol/tasks`): `resultType: "task"`, with `taskId` = the run id, `pollIntervalMs` (`MCP_TASK_POLL_INTERVAL_MS`, default 2000) and `ttlMs` (the organization's run retention, `null` without one). `server/discover` lists the extension under `capabilities.extensions`. `tasks/get`, `tasks/update` and `tasks/cancel` need the extension on each request (`-32021` otherwise) and `Mcp-Name` set to the task id.
+2. **Elicitation without tasks**: the call waits for the run for up to `MCP_INVOKE_WAIT_MS` (default 25000; `0` turns this off). Finished: the run's result. Stopped for this caller: `resultType: "input_required"` with the question or approval and a sealed `requestState`; the retry with `inputResponses` resumes the run and waits again. Otherwise the run id, as in 3.
+3. **Everyone else**: the run id (`runId`) and a pointer to `get_run`. `get_run` reports the status, the output when finished, and `waitingFor` (the question, or the approvals with `youMayDecide`); `answer_run` answers the question. Both need a run of an agent the caller may run.
+
+| Run status | Task status |
+| --- | --- |
+| `pending`, `running`, `sleeping` | `working` |
+| `waiting_input` | `input_required`, one `elicitation/create` keyed `question-<step>` with an `answer` field; `working` with a status message when the client did not declare elicitation |
+| `waiting_approval` | `input_required`, one form per pending approval the caller could decide, keyed `approval-<id>` (`decision`, `reason`); otherwise `working` with a status message |
+| `completed` | `completed`, `result` = the tool result `invoke_agent` returns (`resultType: "complete"`) |
+| `failed`, `timeout` | `completed`, `result` with `isError: true` (a run that failed is a tool error, not a JSON-RPC error) |
+| `cancelled` | `cancelled` |
+
+A task is readable, answerable and cancellable only by the user who started it through this server; for anyone else, and for an unknown id, `tasks/get` is `-32602` "Task not found". `tasks/update` ignores keys that are not outstanding (an older question, an approval already decided); a value that is not an elicitation result is `-32602`. `tasks/cancel` cancels the run and acknowledges a run that already ended. Approvals decided here go through the same checks as on the Approvals page, see [Approvals](/approvals).
 
 ## Related
 

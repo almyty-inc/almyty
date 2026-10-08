@@ -22,8 +22,8 @@ That's it. No agent CLIs, no API keys, no clones. The runner ships node-pty + no
 ## Step 1: Install and authenticate
 
 ```
-npm i -g @almyty/runner @almyty/auth
-almyty-auth login
+npm i -g @almyty/cli
+almyty login
 ```
 
 Or, if you already have the umbrella installed:
@@ -39,7 +39,7 @@ Opens a browser. One-time per machine. The runner picks the credential up from `
 Either of these works — the umbrella delegates `runner` to `@almyty/runner`, so they produce identical output:
 
 ```
-almyty-runner start --name laptop --label env=demo
+almyty runner start --name laptop --label env=demo
 # or, with the umbrella installed:
 almyty runner start --name laptop --label env=demo
 ```
@@ -115,7 +115,7 @@ Each one is a full request/response cycle: SaaS → backend → Streamable HTTP 
 ## What just happened, technically
 
 - **Step 2's runner** registered with the backend over `POST /runners/register`. The backend wrote a `Runner` row, then `RunnerCapabilityPublisher` minted two `Tool` rows (one for `runner.info`, one for `shell.exec`) with `runnerConfig` pointing at the runner.
-- **Step 2's runner** also opened a Streamable HTTP session on `GET /mcp/streamable` for server→client envelopes, and the backend recorded the session in `runner_sessions`.
+- **Step 2's runner** also opened a Streamable HTTP session on `GET /runners/stream` for server→client envelopes, and the backend recorded the session in `runner_sessions`.
 - **Step 3's Execute Tool** click hit `POST /organizations/:org/tools/:id/execute`, which loaded the Tool, saw `runnerConfig`, and called `RunnerCallService.dispatch(runnerId, 'runner.info', {})`.
 - `RunnerCallService` minted a uuid v7 correlation id, pushed a `request` envelope onto the streamable session via `transport.push`, and registered a pending entry keyed by the id.
 - The runner saw the envelope on its SSE stream, dispatched `runner.info` locally (`packages/runner/src/handlers.ts`), and POSTed a `response` envelope back. The transport emitted it; `RunnerCallService` matched the id and resolved the pending promise.

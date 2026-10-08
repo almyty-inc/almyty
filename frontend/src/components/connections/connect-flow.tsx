@@ -1,27 +1,19 @@
 /**
- * The add-a-credential flow every place uses: pick a service from the
- * tiles, then give it the one thing it needs (its key, or a sign-in at the
- * service), say who can use it, and it is checked on save. Everything else
- * (other ways to sign in, optional settings, pasting a sign-in code) waits
- * under Advanced.
+ * The fields of one service's credential: its key (or a sign-in at the
+ * service), who can use it, and Save, checked with the service on save.
+ * Optional settings and other ways to sign in wait under "More options".
  *
- * It is never a dialog. It renders in one of two places:
- *   - the Credentials page, /credentials/new (pages/credential-new.tsx);
- *   - inline, under "Create one here" in the pick-or-create control
- *     (components/credentials/credential-picker.tsx), so a half-filled form
- *     keeps its state and gets the new credential handed straight back.
+ * The add-credential form (components/credentials/credential-form.tsx)
+ * puts its Name and Service fields above this; the credential page uses it
+ * to replace a key (`rotateConnection`).
  *
- * Inline, it sits inside the other form's <form>, so it renders no <form>
- * of its own there (a nested form is invalid and would submit the outer
- * one): `embedded` swaps the forms for groups whose buttons and Enter key
- * call the handler directly.
- *
- * With `rotateConnection` the same form replaces the key of an existing
- * credential (POST /connections/:id/rotate) instead of making a new one.
+ * Inline inside another form (`embedded`) it renders no <form> of its own
+ * (a nested form is invalid and would submit the outer one): its buttons
+ * and Enter key call the handler directly.
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Brain, Cloud, Database, ExternalLink, KeyRound, Loader2, MessageSquare, Package, Plug, Server, Wrench } from 'lucide-react'
+import { ExternalLink, KeyRound, Loader2, LockKeyhole, LogIn, Plug, Settings2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Disclosure } from '@/components/ui/disclosure'
@@ -29,9 +21,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { JsonSchemaForm, isSecretProperty, schemaDefaults, validateSchemaValues, type SchemaFormValues } from '@/components/ui/json-schema-form'
 import type { VisibilityValue } from '@/components/ui/visibility-field'
-import { ServiceIcon, ServiceTileGrid, splitTileName, type ServiceTileGroup } from '@/components/connect/service-tiles'
 import { WhoCanUse } from '@/components/connect/who-can-use'
-import { providerLogos } from '@/components/llm-providers/provider-type-config'
+import { BrandIcon } from '@/components/brand-icon'
 import { useOrganizationRole } from '@/hooks/use-organization-role'
 import { organizationsApi } from '@/lib/api'
 import {
@@ -44,17 +35,13 @@ import {
   isConnectRedirect,
   isFormMethod,
   isRedirectMethod,
-  matchesConnectorSearch,
   pollForConnection,
   readValidationFailure,
   type PollTarget,
 } from '@/lib/connections-api'
-import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { JsonSchemaObject } from '@/types/deployments'
 import {
-  CONNECTOR_KINDS,
-  CONNECTOR_KIND_LABELS,
   CONNECT_METHOD_LABELS,
   type ConnectMethod,
   type ConnectRedirect,
@@ -62,7 +49,6 @@ import {
   type Connection,
   type ConnectionOwner,
   type Connector,
-  type ConnectorKind,
 } from '@/types/connections'
 
 export const CONNECTORS_QUERY_KEY = ['connectors'] as const
@@ -72,41 +58,20 @@ export const OTHER_SERVICE_KEY = 'other'
 
 const TEAM_MISSING = 'Pick the team that can use it.'
 
-const KIND_ICONS: Record<ConnectorKind, typeof Plug> = {
-  inference: Brain,
-  deployment: Server,
-  memory: Database,
-  mcp: Plug,
-  tool_source: Wrench,
-  channel: MessageSquare,
-  cloud: Cloud,
-  registry: Package,
+/** The general kinds of key have no brand: a plain icon says what they are. */
+const GENERAL_ICONS: Record<string, typeof Plug> = {
+  [OTHER_SERVICE_KEY]: KeyRound,
+  'basic-auth': LockKeyhole,
+  oauth2: LogIn,
+  custom: Settings2,
 }
 
-/** A connector's logo: the provider's own for AI models, else its kind's icon. */
-export function connectorIcon(connector: Pick<Connector, 'key' | 'kind' | 'providerType'> | null | undefined): ReactNode {
-  if (!connector) return <Plug className="h-4 w-4 text-primary" />
-  const logo = providerLogos[(connector.providerType ?? connector.key) as keyof typeof providerLogos]
-  if (logo) return logo
-  if (connector.key === OTHER_SERVICE_KEY) return <KeyRound className="h-4 w-4 text-primary" />
-  const Icon = KIND_ICONS[connector.kind] ?? Plug
-  return <Icon className="h-4 w-4 text-primary" />
-}
-
-/** The catalog as tile groups, in gallery order, with "Other service" last on its own. */
-export function connectorTileGroups(connectors: Connector[], search: string): ServiceTileGroup[] {
-  const shown = connectors.filter((c) => matchesConnectorSearch(c, search))
-  const groups: ServiceTileGroup[] = []
-  for (const kind of CONNECTOR_KINDS) {
-    const tiles = shown
-      .filter((c) => c.kind === kind && c.key !== OTHER_SERVICE_KEY)
-      .map((c) => ({ key: c.key, ...splitTileName(c.displayName), icon: connectorIcon(c) }))
-    if (tiles.length > 0) groups.push({ id: kind, title: CONNECTOR_KIND_LABELS[kind], tiles })
-  }
-  const other = connectors.find((c) => c.key === OTHER_SERVICE_KEY)
-  // "Other service" is the answer to a search that found nothing, so it stays.
-  if (other) groups.push({ id: 'other', title: 'Something else', tiles: [{ key: other.key, ...splitTileName(other.displayName), icon: connectorIcon(other) }] })
-  return groups
+/** A service's logo: its brand's mark, or the first letter of its name. */
+export function connectorIcon(connector: (Pick<Connector, 'key'> & Partial<Pick<Connector, 'providerType' | 'displayName'>>) | null | undefined): ReactNode {
+  if (!connector) return <Plug className="h-4 w-4 text-muted-foreground" aria-hidden />
+  const General = GENERAL_ICONS[connector.key]
+  if (General && !connector.providerType) return <General className="h-4 w-4 text-muted-foreground" aria-hidden />
+  return <BrandIcon brand={connector.providerType ?? connector.key} name={connector.displayName ?? connector.key} />
 }
 
 export function useConnectors() {
@@ -148,28 +113,6 @@ export function useConnectOwners(): { options: Array<'org' | 'team' | 'private'>
   return { options, loading: orgQuery.isLoading || teamsQuery.isLoading, firstTeamId: teams[0]?.id ?? null }
 }
 
-export interface ConnectFlowProps {
-  /** Only connectors of this kind are offered. */
-  kind?: ConnectorKind
-  /** Skip the tiles and go straight to this connector. */
-  connectorKey?: string
-  onConnected: (connection: Connection) => void
-  /** Cancel, inline. */
-  onCancel: () => void
-  /** Replace the key of this connection instead of making a new one. */
-  rotateConnection?: Connection | null
-  /** How often the sign-in wait asks for the connection. */
-  pollIntervalMs?: number
-  /** Inline inside another form: no <form> elements, and a title of its own. */
-  embedded?: boolean
-  /** Picking a tile. On a page this navigates to the tile's URL; absent, the pick is kept here. */
-  onPick?: (connector: Connector) => void
-  /** "Other service": the name the new credential starts with, e.g. "Acme API key". */
-  defaultName?: string
-  /** Told whether a value has been typed and not saved yet, so the host can ask before leaving. */
-  onDirtyChange?: (dirty: boolean) => void
-}
-
 type SignIn =
   | { phase: 'idle' }
   | { phase: 'waiting'; authorizeUrl: string; state: string; byCode: boolean }
@@ -190,7 +133,7 @@ export function connectTitle(connector: Connector | null | undefined, rotateConn
 }
 
 /** A <form> on a page; a group that submits on its buttons and Enter when embedded. */
-function FormBox({ embedded, onSubmit, children, className, testId, label }: { embedded?: boolean; onSubmit: (e: SyntheticEvent) => void; children: ReactNode; className?: string; testId?: string; label?: string }) {
+export function FormBox({ embedded, onSubmit, children, className, testId, label }: { embedded?: boolean; onSubmit: (e: SyntheticEvent) => void; children: ReactNode; className?: string; testId?: string; label?: string }) {
   if (!embedded) {
     return (
       <form onSubmit={onSubmit} className={className} noValidate data-testid={testId} aria-label={label}>
@@ -208,14 +151,15 @@ function FormBox({ embedded, onSubmit, children, className, testId, label }: { e
   )
 }
 
-/** The fields a first connect asks for (required and secret ones), and the rest for Advanced. */
+/** The fields a first connect asks for (required and secret ones), and the rest (and anything marked x-advanced) for Advanced. */
 export function splitConnectSchema(schema: JsonSchemaObject | null | undefined): { main: JsonSchemaObject; extra: JsonSchemaObject | null } {
   const props = schema?.properties ?? {}
   const required = new Set(schema?.required ?? [])
   const main: Record<string, any> = {}
   const extra: Record<string, any> = {}
   for (const [key, prop] of Object.entries(props)) {
-    if (required.has(key) || isSecretProperty(prop)) main[key] = prop
+    if (prop['x-advanced'] && !required.has(key)) extra[key] = prop
+    else if (required.has(key) || isSecretProperty(prop)) main[key] = prop
     else extra[key] = prop
   }
   // A schema with nothing required and nothing secret still asks for something.
@@ -242,97 +186,6 @@ function readFailure(error: unknown, connector: Connector): Failure {
   return { message: errorMessage(error, `${connector.displayName} was not saved.`) }
 }
 
-export function ConnectFlow({ kind, connectorKey, onConnected, onCancel, rotateConnection, pollIntervalMs = 2000, embedded = false, onPick, defaultName, onDirtyChange }: ConnectFlowProps) {
-  const targetKey = rotateConnection?.connectorKey ?? connectorKey
-  const [search, setSearch] = useState('')
-  const [pickedKey, setPickedKey] = useState<string | null>(targetKey ?? null)
-  const connectorsQuery = useConnectors()
-
-  const connectors: Connector[] = useMemo(() => (connectorsQuery.data ?? []).filter((c) => !kind || c.kind === kind), [connectorsQuery.data, kind])
-  const connector = useMemo(() => (pickedKey ? (connectorsQuery.data ?? []).find((c) => c.key === pickedKey) ?? null : null), [connectorsQuery.data, pickedKey])
-
-  // A different fixed connector starts over.
-  useEffect(() => {
-    setSearch('')
-    setPickedKey(targetKey ?? null)
-  }, [targetKey])
-
-  // One match for the requested kind: skip the tiles.
-  useEffect(() => {
-    if (!targetKey && !pickedKey && connectors.length === 1) setPickedKey(connectors[0].key)
-  }, [targetKey, pickedKey, connectors])
-
-  const pick = (key: string) => {
-    const c = connectors.find((x) => x.key === key)
-    if (!c) return
-    if (onPick) onPick(c)
-    else setPickedKey(c.key)
-  }
-
-  return (
-    <div className={cn('space-y-5', embedded && 'rounded-lg border bg-muted/30 p-4')} data-testid="connect-flow">
-      {embedded && (
-        <div className="flex items-center gap-2">
-          {connector && <ServiceIcon>{connectorIcon(connector)}</ServiceIcon>}
-          <h3 className="text-sm font-semibold">{connectTitle(connector, rotateConnection)}</h3>
-        </div>
-      )}
-
-      {connectorsQuery.isLoading && (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading services
-        </p>
-      )}
-      {connectorsQuery.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {errorMessage(connectorsQuery.error, 'The list of services could not be loaded.')}
-        </p>
-      )}
-
-      {!connectorsQuery.isLoading && !connectorsQuery.isError && !connector && !targetKey && (
-        <ServiceTileGrid
-          groups={connectorTileGroups(connectors, search)}
-          search={search}
-          onSearch={setSearch}
-          onPick={pick}
-          searchLabel="Search services"
-          testIdPrefix="service-tile"
-          empty={<p className="text-sm text-muted-foreground">Nothing to add here yet.</p>}
-        />
-      )}
-
-      {connector && (
-        <ConnectServiceForm
-          key={connector.key}
-          connector={connector}
-          embedded={embedded}
-          rotateConnection={rotateConnection}
-          pollIntervalMs={pollIntervalMs}
-          onConnected={onConnected}
-          onCancel={embedded ? onCancel : undefined}
-          onChooseAnother={embedded && !targetKey ? () => setPickedKey(null) : undefined}
-          defaultName={defaultName}
-          onDirtyChange={onDirtyChange}
-        />
-      )}
-
-      {!connectorsQuery.isLoading && targetKey && !connector && !connectorsQuery.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          This service is not available.
-        </p>
-      )}
-
-      {embedded && !connector && (
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-        </div>
-      )}
-    </div>
-  )
-}
-
 export interface ConnectServiceFormProps {
   connector: Connector
   onConnected: (connection: Connection) => void
@@ -341,10 +194,10 @@ export interface ConnectServiceFormProps {
   pollIntervalMs?: number
   /** Inline only: fold the flow away. */
   onCancel?: () => void
-  /** Inline only: back to the tiles. */
-  onChooseAnother?: () => void
-  /** "Other service": the name the new credential starts with. */
-  defaultName?: string
+  /** The name the new credential is saved under (the form's Name field). */
+  name?: string
+  /** Called instead of saving when `name` is given but empty, so the Name field can say so. */
+  onNameMissing?: () => void
   /** Told whether a value has been typed and not saved yet. */
   onDirtyChange?: (dirty: boolean) => void
 }
@@ -354,11 +207,10 @@ export interface ConnectServiceFormProps {
  * Save. Saving checks it with the service; a refusal is said in plain
  * words next to the key and the form stays filled.
  */
-export function ConnectServiceForm({ connector, onConnected, embedded = false, rotateConnection, pollIntervalMs = 2000, onCancel, onChooseAnother, defaultName, onDirtyChange }: ConnectServiceFormProps) {
+export function ConnectServiceForm({ connector, onConnected, embedded = false, rotateConnection, pollIntervalMs = 2000, onCancel, name, onNameMissing, onDirtyChange }: ConnectServiceFormProps) {
   const owners = useConnectOwners()
   const [methodType, setMethodType] = useState<ConnectMethod['type'] | null>(rotateConnection?.method ?? null)
   const [who, setWho] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
-  const [name, setName] = useState(defaultName ?? '')
   const [values, setValues] = useState<SchemaFormValues>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [failure, setFailure] = useState<Failure | null>(null)
@@ -369,7 +221,8 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   const method: ConnectMethod | null = useMemo(() => connector.connect.find((m) => m.type === methodType) ?? bestConnectMethod(connector), [connector, methodType])
   const { main, extra } = useMemo(() => splitConnectSchema(method?.schema), [method?.schema])
   const keyPageUrl = method?.keyPageUrl ?? connector.keyPageUrl ?? null
-  const isOther = connector.key === OTHER_SERVICE_KEY && !rotateConnection
+  const newName = !rotateConnection && name !== undefined ? name.trim() : undefined
+  const nameMissing = newName !== undefined && !newName
   const shapeOnly = connector.validation?.kind === 'format'
 
   // Whoever cannot keep an organization connection keeps a private one.
@@ -440,7 +293,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
       // try replaces its key rather than leaving a second, broken one behind.
       const existing = rotateConnection ?? failure?.connection ?? null
       if (existing) return connectionsApi.rotate(existing.id, input ? { input } : {})
-      return connectionsApi.connect(connector.key, { method: method?.type, owner, ...(owner === 'team' && who.teamId ? { teamId: who.teamId } : {}), ...(isOther ? { name: name.trim() } : {}), ...(input ? { input } : {}) })
+      return connectionsApi.connect(connector.key, { method: method?.type, owner, ...(owner === 'team' && who.teamId ? { teamId: who.teamId } : {}), ...(newName ? { name: newName } : {}), ...(input ? { input } : {}) })
     },
     onSuccess: handleResult,
     onError: (error: unknown) => setFailure((prev) => {
@@ -462,11 +315,11 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     e.stopPropagation()
     if (!method) return
     const errors: Record<string, string> = {}
-    if (isOther && !name.trim()) errors.__name = 'Give it a name you will recognise'
     const check = validateSchemaValues(method.schema, values, { mode: 'create' })
     if (!check.ok) Object.assign(errors, check.errors)
     setFieldErrors(errors)
-    if (Object.keys(errors).length > 0) return
+    if (nameMissing) onNameMissing?.()
+    if (Object.keys(errors).length > 0 || nameMissing) return
     if (teamMissing) {
       setFailure({ message: TEAM_MISSING })
       return
@@ -475,11 +328,24 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   }
 
   const startSignIn = () => {
+    if (nameMissing) {
+      onNameMissing?.()
+      return
+    }
     if (teamMissing) {
       setFailure({ message: TEAM_MISSING })
       return
     }
     setFailure(null)
+    // A sign-in that needs to know where first (an MCP server's address).
+    // Signing in again reuses what the connection already has.
+    if (method && !rotateConnection && Object.keys(method.schema?.properties ?? {}).length > 0) {
+      const check = validateSchemaValues(method.schema, values, { mode: 'create' })
+      setFieldErrors(check.ok ? {} : check.errors)
+      if (!check.ok) return
+      connect.mutate(check.value)
+      return
+    }
     connect.mutate(undefined)
   }
 
@@ -494,6 +360,8 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   const busy = connect.isPending || complete.isPending
   const submitType = embedded ? 'button' : 'submit'
   const redirect = !!method && isRedirectMethod(method.type)
+  // A sign-in that asks where first (an MCP server): its form comes before the button.
+  const signInForm = redirect && !rotateConnection && Object.keys(method?.schema?.properties ?? {}).length > 0
   const others = connector.connect.filter((m) => m.type !== method?.type)
 
   if (!method) return <p className="text-sm text-muted-foreground">This service can't be added yet.</p>
@@ -530,7 +398,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   )
 
   const advanced = (others.length > 0 || extra || method.description || (redirect && signIn.phase !== 'idle' && !signIn.byCode)) && (
-    <Disclosure title="Advanced" testId="connect-advanced">
+    <Disclosure title="More options" testId="connect-advanced">
       {others.length > 0 && (
         <div className="space-y-1.5">
           <Label>Another way to sign in</Label>
@@ -551,7 +419,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
           </p>
         </div>
       )}
-      {extra && !redirect && <JsonSchemaForm schema={extra} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
+      {extra && (!redirect || signInForm) && signIn.phase === 'idle' && <JsonSchemaForm schema={extra} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
       {redirect && signIn.phase !== 'idle' && !signIn.byCode && <PasteCode embedded={embedded} code={code} onCode={setCode} onSubmit={submitCode} busy={busy} submitType={submitType} pending={complete.isPending} />}
     </Disclosure>
   )
@@ -559,10 +427,15 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   if (redirect) {
     return (
       <div className="space-y-4" data-testid="connect-form">
-        <p className="text-sm text-muted-foreground">You sign in at {connector.displayName} and come back here. Nothing to paste.</p>
+        <p className="text-sm text-muted-foreground">
+          {signInForm
+            ? `Enter where it is, then sign in at ${connector.displayName} and come back here.`
+            : `You sign in at ${connector.displayName} and come back here. Nothing to paste.`}
+        </p>
         {failureBox}
         {signIn.phase === 'idle' && (
           <>
+            {signInForm && <JsonSchemaForm schema={main} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
             {whoLine}
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={startSignIn} disabled={busy}>
@@ -599,7 +472,6 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
         )}
         {signIn.phase !== 'idle' && signIn.byCode && <PasteCode embedded={embedded} code={code} onCode={setCode} onSubmit={submitCode} busy={busy} submitType={submitType} pending={complete.isPending} />}
         {advanced}
-        {onChooseAnother && <ChooseAnother onClick={onChooseAnother} />}
       </div>
     )
   }
@@ -608,28 +480,6 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
 
   return (
     <FormBox embedded={embedded} onSubmit={submitForm} className="space-y-4" testId="connect-form" label={connectTitle(connector, rotateConnection)}>
-      {isOther && (
-        <div>
-          <Label htmlFor="connect-other-name">Name</Label>
-          <Input
-            id="connect-other-name"
-            className="mt-1"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value)
-              setFieldErrors((prev) => ({ ...prev, __name: '' }))
-            }}
-            placeholder="e.g. Acme CRM"
-            aria-invalid={!!fieldErrors.__name}
-            disabled={busy}
-          />
-          {fieldErrors.__name && (
-            <p className="mt-1 text-xs text-destructive" role="alert">
-              {fieldErrors.__name}
-            </p>
-          )}
-        </div>
-      )}
       <JsonSchemaForm schema={main} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />
       {failureBox}
       {keyLink}
@@ -647,16 +497,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
         )}
         {busy && !shapeOnly && <span className="text-xs text-muted-foreground">This takes a few seconds.</span>}
       </div>
-      {onChooseAnother && <ChooseAnother onClick={onChooseAnother} />}
     </FormBox>
-  )
-}
-
-function ChooseAnother({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" className="text-xs text-muted-foreground hover:text-foreground hover:underline" onClick={onClick}>
-      Choose another service
-    </button>
   )
 }
 
