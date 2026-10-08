@@ -29,10 +29,10 @@ import {
  *   - Reconnect attempts emit `reconnect` events for observability;
  *     persistent failure emits `fatal` and the daemon exits.
  *
- * Auth: Bearer JWT in the Authorization header. The token comes from
- * @almyty/client's resolveCredentials and is passed in at construct
- * time; rotation isn't a v1.0 concern (the daemon restarts on token
- * rotation anyway because credentials.json was overwritten).
+ * Auth: Bearer JWT in the Authorization header. A self-hosted runner
+ * passes the login token from @almyty/client's resolveCredentials (the
+ * daemon restarts when credentials.json changes); a hosted runner passes a
+ * function returning its renewable runner credential (enroll.ts).
  */
 /** The worker stream's route. */
 export const RUNNER_STREAM_PATH = '/runners/stream';
@@ -41,7 +41,17 @@ export const LEGACY_STREAM_PATH = '/mcp/streamable';
 
 export interface StreamableClientOptions {
   baseUrl: string;
-  token: string;
+  /**
+   * The bearer token, or a function that returns the current one. A hosted
+   * runner passes a function: its credential is renewed while it runs, and
+   * every request reads the latest.
+   */
+  token: string | (() => string);
+  /**
+   * A fixed route, e.g. a hosted runner's /runners/hosted/stream. Unset:
+   * /runners/stream with the legacy fallback below.
+   */
+  streamPath?: string;
   /**
    * Sent as X-Organization-Id on every request, so a user in several
    * organizations opens the session in the same one it registered in.
@@ -68,6 +78,7 @@ export class StreamableClient extends EventEmitter {
     super();
     this.fetchImpl = opts.fetch ?? globalThis.fetch;
     this.setTimeoutFn = opts.setTimeoutFn ?? setTimeout;
+    if (opts.streamPath) this.streamPath = opts.streamPath;
   }
 
   /** Returns the session id once the first POST has assigned one. */
@@ -77,7 +88,8 @@ export class StreamableClient extends EventEmitter {
 
   /** Authorization plus, when configured, the organization header. */
   private authHeaders(): Record<string, string> {
-    const headers: Record<string, string> = { 'Authorization': `Bearer ${this.opts.token}` };
+    const token = typeof this.opts.token === 'function' ? this.opts.token() : this.opts.token;
+    const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` };
     if (this.opts.organizationId) headers['X-Organization-Id'] = this.opts.organizationId;
     return headers;
   }
@@ -132,6 +144,29 @@ export class StreamableClient extends EventEmitter {
     return true;
   }
 
+  /**
+   * Open the GET stream and resolve as soon as it is open, or as soon as
+   * its first attempt failed and a reconnect is scheduled; the stream is
+   * then read in the background. openStream() itself resolves only when
+   * the stream ends, so a caller that awaited it (the daemon did) waited
+   * the whole life of the stream before its first heartbeat.
+   */
+  startStream(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        this.off('open', onReady);
+        this.off('reconnect', onReady);
+        fn();
+      };
+      const onReady = () => settle(resolve);
+      this.on('open', onReady);
+      this.on('reconnect', onReady);
+      this.openStream().then(onReady, (err) => settle(() => reject(err)));
+    });
+  }
   /** Open the GET stream and dispatch envelopes via emit('envelope'). */
   async openStream(): Promise<void> {
     if (this.stopped) return;
