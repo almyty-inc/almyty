@@ -14,6 +14,7 @@ import {
   Optional,
   HttpCode,
   Param,
+  Inject,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -38,6 +39,7 @@ import {
 } from './compat-conversation.helper';
 import { agentsForKey, authenticateCompatKey, resolveCompatAgent, touchCompatKeyLastUsed } from './compat-auth.helper';
 import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
+import { HOSTED_MODEL_TOKENS, type HostedModelTokens, hostedAttributionHeaders, presentedToken } from '../hosted-runners/hosted-model-token.contract';
 import { BudgetExceededException } from '../budgets/budget-exceeded.exception';
 
 /** Maximum request body size in bytes (1 MB). */
@@ -71,6 +73,9 @@ export class AgentOpenAICompatController {
     // positional spec harnesses' order; a request refuses to run without it.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
     @Optional() private readonly endpointAccess?: AgentApiAccessService,
+    // Hosted pods' model tokens (hosted-runners). Optional: without hosted
+    // runners a pod token is just an unknown key.
+    @Optional() @Inject(HOSTED_MODEL_TOKENS) private readonly podTokens?: HostedModelTokens,
   ) {
     this.rateLimiter = new CompatRateLimiter('openai_rl', this.logger, this.redis);
   }
@@ -102,7 +107,9 @@ export class AgentOpenAICompatController {
       this.validateRequestBodySize(body);
 
       // 1. Authenticate via Bearer token (API key)
-      const apiKey = await this.endpointAccess?.authenticateTarget(body?.model, req) ?? await this.authenticateApiKey(auth);
+      // A hosted pod's model token is tried first and, when it is one, only:
+      // it is refused on every other route.
+      const apiKey = (await this.podTokens?.authenticate(presentedToken(auth))) ?? (await this.endpointAccess?.authenticateTarget(body?.model, req)) ?? (await this.authenticateApiKey(auth));
       apiKeyLast4 = this.getKeyLast4(auth);
 
       // Rate limit tracking
@@ -144,6 +151,10 @@ export class AgentOpenAICompatController {
       if (!this.executionAccess) throw new Error('Agent execution access check is not configured');
       const resolved = await resolveCompatAgent(this.agentsService, body.model, apiKey, this.executionAccess);
       agentId = resolved.id;
+      // A call from a hosted pod's coding CLI: attributed to its machine on
+      // the response and in the audit log (the run carries it too).
+      this.podTokens?.recordCall(apiKey, { protocol: 'openai_compat', model: body.model, agentId: resolved.id });
+      for (const [name, value] of Object.entries(hostedAttributionHeaders(apiKey))) res.setHeader(name, value);
 
       // 4. Map OpenAI messages to agent input
       const input = this.mapOpenAIToAgentInput(body);
@@ -210,7 +221,7 @@ export class AgentOpenAICompatController {
     @Req() req: Request = undefined,
   ) {
     try {
-      const apiKey = await this.endpointAccess?.authenticateTarget(undefined, req) ?? await this.authenticateApiKey(auth);
+      const apiKey = (await this.podTokens?.authenticate(presentedToken(auth))) ?? (await this.endpointAccess?.authenticateTarget(undefined, req)) ?? (await this.authenticateApiKey(auth));
 
       // Touch lastUsedAt (throttled partial update)
       await this.touchApiKeyLastUsed(apiKey);
@@ -250,7 +261,7 @@ export class AgentOpenAICompatController {
     @Req() req: Request = undefined,
   ) {
     try {
-      const apiKey = await this.endpointAccess?.authenticateTarget(model, req) ?? await this.authenticateApiKey(auth);
+      const apiKey = (await this.podTokens?.authenticate(presentedToken(auth))) ?? (await this.endpointAccess?.authenticateTarget(model, req)) ?? (await this.authenticateApiKey(auth));
       await this.touchApiKeyLastUsed(apiKey);
       if (!this.executionAccess) throw new Error('Agent execution access check is not configured');
       const agent = await resolveCompatAgent(this.agentsService, model, apiKey, this.executionAccess);

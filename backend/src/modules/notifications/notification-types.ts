@@ -21,6 +21,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   'connections.rotation_due',
   'connections.inactive',
   'environments.workspace_expiring',
+  'environments.handed_over',
+  'environments.unshared',
   'domains.unverified',
   'models.new',
   'models.unavailable',
@@ -69,6 +71,12 @@ export const NOTIFICATION_DEFAULTS: Record<NotificationEventType, ChannelPrefs> 
   // A suspended hosted workspace nobody has used will soon be deleted with
   // its files (hosted runners' retention window): in the app and by email.
   'environments.workspace_expiring': { inApp: true, email: true },
+  // A member left and their hosted environments are now this admin's to
+  // look after: in the app and by email.
+  'environments.handed_over': { inApp: true, email: true },
+  // A team was deleted and an environment shared with it is private to its
+  // owner again: in the app and by email, so they can share it again.
+  'environments.unshared': { inApp: true, email: true },
   'domains.unverified': { inApp: true, email: true },
   // A model appearing or going away on a provider connection: always in
   // the app; the email (at once for a model an agent uses, else in the

@@ -10,6 +10,7 @@ import { HostedRunner, HostedRunnerDesired, HostedRunnerState } from '../../enti
 import { Runner, RunnerIsolationTier, RunnerState } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { Agent } from '../../entities/agent.entity';
+import { LlmProviderType } from '../../entities/llm-provider-type';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -22,6 +23,7 @@ import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { canAcceptWork } from '../runner/runner-state';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { HostedRunnerSettingsService } from './hosted-runner-settings';
+import { WorkspaceLeaseService } from './workspace-lease.service';
 import {
   CapacityExhaustedError,
   HOSTED_CAPACITY_PROVIDER,
@@ -45,12 +47,21 @@ export interface HostedCaller {
   principal?: ExecutionPrincipal;
   callerUserId?: string | null;
   agentId?: string | null;
+  /** The run the call belongs to; its job holds the workspace while it works there. */
+  runId?: string | null;
+  /** Stops a call that is waiting for the workspace. */
+  signal?: AbortSignal;
 }
 
-/** Where a call to an environment goes now. */
+/**
+ * Where a call to an environment goes now. Ready carries the workspace
+ * lease the call holds (give it back after the call when
+ * `releaseAfterCall`); busy means another job is working in the workspace.
+ */
 export type HostedTarget =
-  | { kind: 'ready'; runnerId: string; workspaceId: string; hostedRunnerId: string }
-  | { kind: 'waking'; workspaceId: string; hostedRunnerId: string; retryAfterMs: number; message: string };
+  | { kind: 'ready'; runnerId: string; workspaceId: string; hostedRunnerId: string; lease?: { holder: string; releaseAfterCall: boolean } }
+  | { kind: 'waking'; workspaceId: string; hostedRunnerId: string; retryAfterMs: number; message: string }
+  | { kind: 'busy'; workspaceId: string; hostedRunnerId: string; retryAfterMs: number; message: string };
 
 /** A call to an environment that cannot be served: say why, with the runner-call error code. */
 export class HostedDispatchError extends Error {
@@ -91,6 +102,7 @@ export class HostedRunnersService {
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly leases?: WorkspaceLeaseService,
   ) {
     this.capacity = capacity ?? new SettingsCapacityProvider(settings);
   }
@@ -129,7 +141,26 @@ export class HostedRunnersService {
       runner &&
       canAcceptWork(runner.state)
     ) {
-      return { kind: 'ready', runnerId: runner.id, workspaceId: workspace.id, hostedRunnerId: hostedRunner.id };
+      // One folder, one job at a time: the call waits (within the queue's
+      // wait) for another job of the same person to finish with it.
+      if (!this.leases) return { kind: 'ready', runnerId: runner.id, workspaceId: workspace.id, hostedRunnerId: hostedRunner.id };
+      const holder = await this.leases.holderFor(caller.runId ?? null);
+      if (!(await this.leases.acquire(workspace.id, holder, caller.signal))) {
+        return {
+          kind: 'busy',
+          workspaceId: workspace.id,
+          hostedRunnerId: hostedRunner.id,
+          retryAfterMs: this.settings.current.workspaceQueue.retryAfterSeconds * 1000,
+          message: 'Another job is working in this workspace; this one runs after it. Try the call again shortly.',
+        };
+      }
+      return {
+        kind: 'ready',
+        runnerId: runner.id,
+        workspaceId: workspace.id,
+        hostedRunnerId: hostedRunner.id,
+        lease: { holder: holder.holder, releaseAfterCall: !holder.job },
+      };
     }
     if (hostedRunner.state === 'failed') {
       throw new HostedDispatchError('workspace_unavailable', `The machine for this environment failed to start: ${hostedRunner.lastError ?? 'see the environment page'}`);
@@ -328,6 +359,11 @@ export class HostedRunnersService {
     if (hr) await this.touch(hr.id, hr.workspaceId, now);
   }
 
+  /** A lone call returned: the workspace is free for the next job. */
+  async releaseLease(workspaceId: string, holder: string): Promise<void> {
+    await this.leases?.release(workspaceId, holder);
+  }
+
   // ── sweeps (called from the reconcile processor's sweep) ─────────
 
   /**
@@ -515,6 +551,9 @@ export class HostedRunnersService {
   async resolveSecretEnv(env: Environment, ws: Workspace): Promise<Record<string, string>> {
     const out: Record<string, string> = {};
     if (!this.credentialRefs) return out;
+    // Checked again at every start: the setting may have been turned off
+    // since the binding was saved.
+    await this.assertNoVendorKeys(env);
     // As the workspace's owner, whose connections these must be.
     const owner = { id: ws.ownerUserId };
     const context = { purpose: 'hosted_runner_env', resourceType: 'environment', resourceId: env.id };
@@ -533,6 +572,42 @@ export class HostedRunnersService {
       if (token) out.ALMYTY_GIT_TOKEN = token;
     }
     return out;
+  }
+
+  /**
+   * Which of these connections hold a model provider's own key: one a
+   * model provider of the organization uses (its inference or usage key),
+   * or one made from a model vendor's connector. Binding such a key into a
+   * pod is the vendor-key path of Decision 6, only for an environment that
+   * allows it.
+   */
+  async vendorKeyConnections(organizationId: string, connectionIds: string[]): Promise<string[]> {
+    const ids = [...new Set(connectionIds.filter(Boolean))];
+    if (ids.length === 0) return [];
+    const rows: Array<{ id: string }> = await this.dataSource.query(
+      `SELECT c.id FROM credentials c
+        WHERE c."organizationId" = $1 AND c.id = ANY($2::uuid[])
+          AND (c."connectorKey" = ANY($3::text[])
+               OR EXISTS (SELECT 1 FROM llm_providers p
+                           WHERE p."organizationId" = $1 AND (p."credentialId" = c.id OR p."usageCredentialId" = c.id)))`,
+      [organizationId, ids, Object.values(LlmProviderType)],
+    );
+    return rows.map((r) => r.id);
+  }
+
+  /** Refuse a model provider's key bound into an environment that does not allow vendor keys. */
+  async assertNoVendorKeys(env: Pick<Environment, 'organizationId' | 'allowVendorKeys' | 'envBindings'>): Promise<void> {
+    if (env.allowVendorKeys) return;
+    const vendor = await this.vendorKeyConnections(env.organizationId, (env.envBindings ?? []).map((b) => b.connectionId));
+    if (vendor.length) {
+      throw Object.assign(
+        new Error(
+          `These connections hold a model provider's key, which this environment does not put into its pods: ${vendor.join(', ')}. ` +
+            'Coding CLIs reach models through almyty with the pod token; turn on "allow vendor keys" only for a CLI that cannot change its base URL.',
+        ),
+        { code: 'VENDOR_KEY_NOT_ALLOWED', connectionIds: vendor },
+      );
+    }
   }
 
   /** Services own `desired`; this is their one write of it. */

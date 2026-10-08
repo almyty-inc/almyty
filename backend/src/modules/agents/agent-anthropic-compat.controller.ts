@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Headers,
+  Inject,
   HttpCode,
   Logger,
   NotFoundException,
@@ -35,6 +36,7 @@ import { CompatRateLimiter } from './compat-rate-limit.helper';
 import { renderConversation, unsupportedAnthropicField, withSamplingOverrides } from './compat-conversation.helper';
 import { authenticateCompatKey, resolveCompatAgent, touchCompatKeyLastUsed } from './compat-auth.helper';
 import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
+import { HOSTED_MODEL_TOKENS, type HostedModelTokens, hostedAttributionHeaders, presentedToken } from '../hosted-runners/hosted-model-token.contract';
 import {
   CompatAgentInvoker,
   CompatFailure,
@@ -92,6 +94,9 @@ export class AgentAnthropicCompatController {
     // positional spec harnesses' order; a request refuses to run without it.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
     @Optional() private readonly endpointAccess?: AgentApiAccessService,
+    // Hosted pods' model tokens (hosted-runners). Optional: without hosted
+    // runners a pod token is just an unknown key.
+    @Optional() @Inject(HOSTED_MODEL_TOKENS) private readonly podTokens?: HostedModelTokens,
   ) {
     this.rateLimiter = new CompatRateLimiter('anthropic_rl', this.logger, this.redis);
   }
@@ -117,7 +122,9 @@ export class AgentAnthropicCompatController {
     try {
       // Anthropic clients send x-api-key; accepting Bearer as well means a
       // caller that already has an almyty key does not need a second shape.
-      const apiKey = await this.endpointAccess?.authenticateTarget(body?.model, req) ?? await this.authenticate(auth, xApiKey);
+      // A hosted pod's model token is tried first and, when it is one, only:
+      // it is refused on every other route.
+      const apiKey = (await this.podTokens?.authenticate(presentedToken(auth, xApiKey))) ?? (await this.endpointAccess?.authenticateTarget(body?.model, req)) ?? (await this.authenticate(auth, xApiKey));
 
       // Per-key rate limit, at parity with /v1/chat/completions: headers on
       // every response, Retry-After on a refusal, the Anthropic error shape.
@@ -137,6 +144,10 @@ export class AgentAnthropicCompatController {
 
       if (!this.executionAccess) throw new Error('Agent execution access check is not configured');
       const resolved = await resolveCompatAgent(this.agentsService, internal.model, apiKey, this.executionAccess);
+      // A call from a hosted pod's coding CLI: attributed to its machine on
+      // the response and in the audit log (the run carries it too).
+      this.podTokens?.recordCall(apiKey, { protocol: 'anthropic_messages', model: body.model, agentId: resolved.id });
+      for (const [name, value] of Object.entries(hostedAttributionHeaders(apiKey))) res.setHeader(name, value);
 
       // The caller's sampling, on a throwaway copy of the agent. Nothing is
       // persisted; see withSamplingOverrides.

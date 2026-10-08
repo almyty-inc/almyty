@@ -6,7 +6,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThan, Not, Repository, FindOptionsWhere } from 'typeorm';
+import { And, In, IsNull, LessThan, Not, Repository, FindOptionsWhere } from 'typeorm';
 import { RetentionPolicy } from '../../entities/retention-policy.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Conversation } from '../../entities/conversation.entity';
@@ -25,6 +25,8 @@ import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ChannelEvent } from '../../entities/channel-event.entity';
 import { FilesService } from '../files/files.service';
+import { RunnerUsageInterval } from '../../entities/runner-usage-interval.entity';
+import { DEFAULT_HOSTED_RUNNER_SETTINGS, HostedRunnerSettingsService } from '../hosted-runners/hosted-runner-settings';
 
 const SWEEP_INTERVAL_MS =
   Number(process.env.RETENTION_SWEEP_INTERVAL_MS) || 60 * 60_000; // hourly
@@ -135,6 +137,13 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     // can build the sweep with repositories alone.
     @Optional()
     private readonly files?: FilesService,
+    // Hosted usage records and the install default for how long they are
+    // kept (hosted runner settings, global). Registered in forFeature.
+    @Optional()
+    @InjectRepository(RunnerUsageInterval)
+    private readonly usageIntervalRepository?: Repository<RunnerUsageInterval>,
+    @Optional()
+    private readonly hostedSettings?: HostedRunnerSettingsService,
   ) {}
 
   onModuleInit(): void {
@@ -142,7 +151,7 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     this.timer = setInterval(() => {
       // Both sweeps on the same tick: the per-org one, and the global
       // version prune the per-org one cannot express.
-      Promise.all([this.sweep(), this.sweepEntityVersions(), this.sweepUnsentAttachments()]).catch((err) => {
+      Promise.all([this.sweep(), this.sweepEntityVersions(), this.sweepUnsentAttachments(), this.sweepRunnerUsage()]).catch((err) => {
         this.logger.warn(`Retention sweep failed: ${err.message}`);
       });
     }, SWEEP_INTERVAL_MS);
@@ -188,6 +197,62 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     const removed = await this.files.removeUnsentAttachments(new Date(now.getTime() - UNSENT_ATTACHMENT_TTL_MS));
     if (removed > 0) this.logger.log(`Removed ${removed} unsent attachment(s)`);
     return removed;
+  }
+
+  /**
+   * Hosted usage records (runner_usage_intervals): the minutes a hosted pod
+   * ran, kept for the install's window (hosted runner settings
+   * `usageRetention.months`, 13 months as shipped) unless the organization's
+   * enabled policy sets `runnerUsageDays`. Unlike the other classes this
+   * one is swept for every organization, policy or not: null means the
+   * install's default, not forever. An interval is aged by when it ended,
+   * and one still open (a pod running now) is never deleted. Audited per
+   * organization like the per-org sweep.
+   */
+  async sweepRunnerUsage(now = new Date()): Promise<Map<string, number>> {
+    const deletedByOrg = new Map<string, number>();
+    if (!this.usageIntervalRepository) return deletedByOrg;
+    const months = (this.hostedSettings?.current ?? DEFAULT_HOSTED_RUNNER_SETTINGS).usageRetention.months;
+    const installCutoff = new Date(now);
+    installCutoff.setUTCMonth(installCutoff.getUTCMonth() - months);
+
+    const overrides = new Map<string, Date>();
+    for (const policy of await this.policyRepository.find()) {
+      if (policy.enabled === false || policy.runnerUsageDays == null) continue;
+      overrides.set(policy.organizationId, new Date(now.getTime() - policy.runnerUsageDays * 24 * 60 * 60 * 1000));
+    }
+    // The latest cutoff in force anywhere: no organization has anything to
+    // delete that ended after it.
+    const latest = new Date(Math.max(installCutoff.getTime(), ...[...overrides.values()].map((d) => d.getTime())));
+    const orgs: Array<{ organizationId: string }> = await this.usageIntervalRepository
+      .createQueryBuilder('i')
+      .select('DISTINCT i."organizationId"', 'organizationId')
+      .where('i."endedAt" IS NOT NULL')
+      .andWhere('i."endedAt" < :latest', { latest })
+      .getRawMany();
+
+    for (const { organizationId } of orgs) {
+      const cutoff = overrides.get(organizationId) ?? installCutoff;
+      try {
+        const deleted = await this.batchDelete(this.usageIntervalRepository, {
+          organizationId,
+          endedAt: And(Not(IsNull()), LessThan(cutoff)),
+        } as FindOptionsWhere<RunnerUsageInterval>);
+        if (deleted === 0) continue;
+        deletedByOrg.set(organizationId, deleted);
+        await this.auditLogService.log({
+          organizationId,
+          action: AuditAction.RETENTION_SWEEP,
+          resourceType: AuditResource.ORGANIZATION,
+          resourceId: organizationId,
+          resourceName: 'retention_sweep',
+          details: { runnerUsageIntervals: deleted, endedBefore: cutoff.toISOString(), source: overrides.has(organizationId) ? 'policy' : 'install_default' },
+        });
+      } catch (err: any) {
+        this.logger.warn(`Hosted usage retention failed for org ${organizationId}: ${err?.message ?? err}`);
+      }
+    }
+    return deletedByOrg;
   }
 
   /**
@@ -365,7 +430,9 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     for (let batch = 0; batch < MAX_BATCHES_PER_CLASS; batch++) {
       const rows = await repository.find({
         where,
-        select: ['id'] as any,
+        // Object syntax: TypeORM 1 refuses a string-array select outright,
+        // which made every batched class of this sweep throw.
+        select: { id: true } as any,
         take: SWEEP_BATCH,
       });
       if (rows.length === 0) break;

@@ -493,6 +493,40 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     ),
   }),
 
+  // A member left; their hosted environments are now this admin's.
+  'environments.handed_over': (p) => ({
+    subject: sanitizeSubject(Number(p.count) === 1 ? 'A hosted environment is now yours' : 'Hosted environments are now yours'),
+    html: renderBaseLayout({
+      heading: 'Hosted environments handed to you',
+      bodyHtml:
+        para(`A member left the organization, so these hosted environments are now yours to look after: <strong>${esc(p.environments ?? '')}</strong>.`) +
+        para('Nothing was deleted. The workspaces and their files are still there, and who could use each environment has not changed.'),
+      button: p.url ? { label: 'Open hosted environments', url: p.url } : undefined,
+      footerNote: 'You get this because you are an owner or admin of the organization. Turn these emails off under Settings, Your account, Notifications.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `A member left the organization, so these hosted environments are now yours to look after: ${p.environments ?? ''}. Nothing was deleted: the workspaces and their files are still there.${p.url ? ` ${p.url}` : ''}`,
+    ),
+  }),
+
+  // A team was deleted; environments shared with it are private again.
+  'environments.unshared': (p) => ({
+    subject: sanitizeSubject(Number(p.count) === 1 ? 'Your environment is private again' : 'Your environments are private again'),
+    html: renderBaseLayout({
+      heading: 'Environment no longer shared',
+      bodyHtml:
+        para(`${p.teamName ? `The team <strong>${esc(p.teamName)}</strong>` : 'A team'} was deleted, so <strong>${esc(p.environments ?? '')}</strong> is now private: only you can see and use it.`) +
+        para('If others still need it, share it again from the environment page.'),
+      button: p.url ? { label: 'Open hosted environments', url: p.url } : undefined,
+      footerNote: 'You get this because the environment is yours. Turn these emails off under Settings, Your account, Notifications.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `${p.teamName ? `The team ${p.teamName}` : 'A team'} was deleted, so ${p.environments ?? ''} is now private: only you can see and use it. Share it again from the environment page if others still need it.${p.url ? ` ${p.url}` : ''}`,
+    ),
+  }),
+
   'connections.rotation_due': (p) => ({
     subject: sanitizeSubject(`Rotation due: ${p.connectorName || p.connectorKey || 'a credential'}`),
     html: renderBaseLayout({

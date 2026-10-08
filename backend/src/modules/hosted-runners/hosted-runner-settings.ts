@@ -90,6 +90,27 @@ export interface HostedRunnerSettings {
     /** TCP ports the SNI allowlist opens (TLS only). */
     tlsPorts: number[];
   };
+  /**
+   * How long a usage interval (the minutes a pod ran) is kept after it
+   * closed, in calendar months. An organization's retention policy may
+   * set its own `runnerUsageDays` (docs/retention.md); an open interval is
+   * never deleted.
+   */
+  usageRetention: { months: number };
+  /**
+   * One person's workspace on an environment is one folder, and the jobs
+   * that use it run one after another. A job holds the workspace from its
+   * first call until it ends (or has not used it for `leaseMinutes`); a
+   * call of another job waits up to `waitSeconds`, looking every
+   * `pollSeconds`, and is then told to try again in `retryAfterSeconds`.
+   */
+  workspaceQueue: { waitSeconds: number; pollSeconds: number; leaseMinutes: number; retryAfterSeconds: number };
+  /**
+   * The pod-scoped model token coding CLIs use to call almyty's
+   * Anthropic- and OpenAI-compatible endpoints: its lifetime (it is also
+   * revoked when the pod stops), and how often its last use is recorded.
+   */
+  modelAccess: { tokenTtlMinutes: number; touchEverySeconds: number };
   /** The almyty API a pod connects to; empty falls back to PUBLIC_API_URL. */
   apiUrl: string;
 }
@@ -128,6 +149,9 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
     dnsPodLabels: { 'k8s-app': 'kube-dns' },
     tlsPorts: [443],
   },
+  usageRetention: { months: 13 },
+  workspaceQueue: { waitSeconds: 30, pollSeconds: 2, leaseMinutes: 30, retryAfterSeconds: 15 },
+  modelAccess: { tokenTtlMinutes: 480, touchEverySeconds: 60 },
   apiUrl: '',
 };
 
@@ -183,6 +207,14 @@ export function settingsProblems(s: HostedRunnerSettings): string[] {
   if (!k?.workspaceMountPath?.startsWith('/')) problems.push('cluster.workspaceMountPath must be an absolute path');
   if (!POSITIVE(k?.runAsUser) || !POSITIVE(k?.runAsGroup)) problems.push('cluster.runAsUser and cluster.runAsGroup must be positive (the runner never runs as root)');
   if (!Array.isArray(k?.tlsPorts) || k.tlsPorts.length === 0 || !k.tlsPorts.every(POSITIVE)) problems.push('cluster.tlsPorts must list at least one port');
+  if (!POSITIVE(s.usageRetention?.months)) problems.push('usageRetention.months must be a positive number');
+  const q = s.workspaceQueue as unknown as Record<string, unknown> | undefined;
+  if (!q || !['waitSeconds', 'pollSeconds', 'leaseMinutes', 'retryAfterSeconds'].every((key) => POSITIVE(q[key]))) {
+    problems.push('workspaceQueue.waitSeconds, pollSeconds, leaseMinutes and retryAfterSeconds must be positive numbers');
+  }
+  if (!POSITIVE(s.modelAccess?.tokenTtlMinutes) || !POSITIVE(s.modelAccess?.touchEverySeconds)) {
+    problems.push('modelAccess.tokenTtlMinutes and modelAccess.touchEverySeconds must be positive numbers');
+  }
   return problems;
 }
 

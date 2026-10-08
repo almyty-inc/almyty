@@ -24,6 +24,8 @@ import {
  * - auditLogDays      -> audit_logs
  * - toolExecutionsDays -> tool_executions
  * - notificationsDays  -> notifications
+ * - runnerUsageDays    -> runner_usage_intervals (closed ones only; null is the
+ *                        install default, not forever: see the column)
  */
 @Entity('retention_policies')
 @Index(['organizationId'], { unique: true })
@@ -70,6 +72,16 @@ export class RetentionPolicy {
    */
   @Column({ type: 'int', nullable: true })
   notificationsDays: number | null;
+
+  /**
+   * runner_usage_intervals: the minutes hosted pods ran. Unlike every
+   * other class, null does not mean "forever": it means the install's
+   * default (hosted runner settings `usageRetention.months`, 13 months as
+   * shipped), and that default applies to organizations with no policy
+   * at all. An interval still open is never deleted.
+   */
+  @Column({ type: 'int', nullable: true })
+  runnerUsageDays: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

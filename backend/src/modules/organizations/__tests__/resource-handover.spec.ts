@@ -94,7 +94,7 @@ describe('ResourceHandoverHelper', () => {
       expect(credentialsSql).toContain(`AND NOT ${memberConnectionSql()}`);
     });
 
-    it('deregisters every runner of the leaver, whatever its visibility, then audits one row per moved resource', async () => {
+    it('deregisters every self-hosted runner of the leaver, whatever its visibility, then audits one row per moved resource', async () => {
       const runner = { id: 'runner-1', name: 'leaver-mac', visibility: 'private', teamId: null };
       const shared = { id: 'runner-2', name: 'team-box', visibility: 'team', teamId: 'team-1' };
       const t = build(
@@ -110,7 +110,9 @@ describe('ResourceHandoverHelper', () => {
       expect(t.runners.deleteForDepartedOwner).toHaveBeenCalledWith(runner, t.manager);
       expect(t.runners.deleteForDepartedOwner).toHaveBeenCalledWith(shared, t.manager);
       const runnerLookup = t.manager.getRepository.mock.results[0].value.find.mock.calls[0][0];
-      expect(runnerLookup).toEqual({ where: { organizationId: 'org-1', ownerUserId: 'leaver' } });
+      // Self-hosted runners only: a hosted one is the organization's
+      // machine and stays, with its workspace (EnvironmentHandoverService).
+      expect(runnerLookup).toEqual({ where: { organizationId: 'org-1', ownerUserId: 'leaver', kind: 'self' } });
 
       expect(rows.map((r: any) => [r.action, r.resourceType, r.resourceId])).toEqual([
         [AuditAction.DELETE, AuditResource.RUNNER, 'runner-1'],
@@ -196,6 +198,44 @@ describe('ResourceHandoverHelper', () => {
         userId: 'owner',
         details: { reason: 'team_deleted', teamId: 'team-1', teamName: 'Platform' },
       });
+    });
+  });
+
+  // Hosted environments (Frane, 2026-10-08): handed to an admin when their
+  // owner leaves, made private when the team they were shared with goes.
+  describe('hosted environments', () => {
+    function withEnvironments() {
+      const t = build({});
+      const after = jest.fn(async () => undefined);
+      const environments = {
+        onMemberLeaving: jest.fn(async () => { t.order.push('environments'); return { audit: [{ id: 'audit-env' }], afterCommit: after }; }),
+        onTeamDeleted: jest.fn(async () => { t.order.push('environments'); return { audit: [{ id: 'audit-env-team' }], afterCommit: after }; }),
+      };
+      const helper = new ResourceHandoverHelper(t.audit as any, t.runners as any, new ConnectionOffboardingService({} as any, {} as any, t.audit as any), environments as any);
+      return { ...t, helper, environments, after };
+    }
+
+    it('a leaving member: last in the transaction, audited with the rest, its after-commit steps handed back', async () => {
+      const t = withEnvironments();
+      const afterCommit: Array<() => Promise<void>> = [];
+      const rows = await t.helper.handOverPrivateResources(t.manager, {
+        organizationId: 'org-1', fromUserId: 'leaver', toUserId: 'admin', actorUserId: 'admin', reason: 'member_left', afterCommit,
+      });
+      expect(t.environments.onMemberLeaving).toHaveBeenCalledWith(t.manager, { organizationId: 'org-1', fromUserId: 'leaver', actorUserId: 'admin', reason: 'member_left' });
+      expect(t.order[t.order.length - 1]).toBe('environments');
+      expect(rows.map((r: any) => r.id)).toContain('audit-env');
+      expect(afterCommit).toEqual([t.after]);
+      expect(t.after).not.toHaveBeenCalled();
+    });
+
+    it('a deleted team: after the demotion, so the environments end private, not org-wide', async () => {
+      const t = withEnvironments();
+      const afterCommit: Array<() => Promise<void>> = [];
+      const rows = await t.helper.demoteTeamResources(t.manager, { organizationId: 'org-1', teamId: 'team-1', teamName: 'Platform', actorUserId: 'admin', afterCommit });
+      expect(t.environments.onTeamDeleted).toHaveBeenCalledWith(t.manager, { organizationId: 'org-1', teamId: 'team-1', teamName: 'Platform', actorUserId: 'admin' });
+      expect(t.order[t.order.length - 1]).toBe('environments');
+      expect(rows.map((r: any) => r.id)).toContain('audit-env-team');
+      expect(afterCommit).toEqual([t.after]);
     });
   });
 });

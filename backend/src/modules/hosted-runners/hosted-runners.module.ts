@@ -23,6 +23,14 @@ import { HostedUsageService } from './hosted-usage.service';
 import { EnvironmentsService } from './environments.service';
 import { EnvironmentsController } from './environments.controller';
 import { HostedRunnerEnrollmentController } from './hosted-runner-enrollment.controller';
+import { HostedModelToken } from '../../entities/hosted-model-token.entity';
+import { User } from '../../entities/user.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { HostedModelTokenService } from './hosted-model-token.service';
+import { HOSTED_MODEL_TOKENS } from './hosted-model-token.contract';
+import { WorkspaceLeaseService } from './workspace-lease.service';
+import { EnvironmentHandoverService } from './environment-handover.service';
 
 /**
  * Hosted runners (docs/hosted-runners.md): environments, the persistent
@@ -39,7 +47,20 @@ import { HostedRunnerEnrollmentController } from './hosted-runner-enrollment.con
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Environment, HostedRunner, RunnerEnrollmentToken, RunnerUsageInterval, Runner, Workspace, Credential]),
+    TypeOrmModule.forFeature([
+      Environment,
+      HostedRunner,
+      RunnerEnrollmentToken,
+      RunnerUsageInterval,
+      Runner,
+      Workspace,
+      Credential,
+      HostedModelToken,
+      User,
+      // A job's runs, to tell whether it still holds its workspace.
+      AgentRun,
+      AgentExecution,
+    ]),
     BullModule.registerQueue({ name: HOSTED_RECONCILE_QUEUE }),
     AuthorizationModule,
     RunnerModule,
@@ -52,10 +73,21 @@ import { HostedRunnerEnrollmentController } from './hosted-runner-enrollment.con
     EnrollmentService,
     HostedUsageService,
     EnvironmentsService,
+    HostedModelTokenService,
+    WorkspaceLeaseService,
+    EnvironmentHandoverService,
     { provide: HOSTED_DISPATCH, useExisting: HostedRunnersService },
+    { provide: HOSTED_MODEL_TOKENS, useExisting: HostedModelTokenService },
   ],
   controllers: [EnvironmentsController, HostedRunnerEnrollmentController],
-  exports: [HostedRunnersService, HostedRunnerSettingsService, HOSTED_DISPATCH, EnvironmentsService],
+  exports: [
+    HostedRunnersService,
+    HostedRunnerSettingsService,
+    HOSTED_DISPATCH,
+    EnvironmentsService,
+    HOSTED_MODEL_TOKENS,
+    EnvironmentHandoverService,
+  ],
 })
 export class HostedRunnersModule implements OnModuleInit {
   constructor(

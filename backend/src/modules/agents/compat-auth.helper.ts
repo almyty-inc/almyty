@@ -152,7 +152,9 @@ const LAST_USED_THROTTLE_MS = 60_000;
  * a key used only through /v1/messages no longer looks unused.
  */
 export async function touchCompatKeyLastUsed(apiKeys: Pick<Repository<ApiKey>, 'update'>, apiKey: ApiKey): Promise<void> {
-  if ((apiKey as any).endpointPrincipal) return;
+  // Not an api_keys row: an endpoint principal, or a hosted pod's model
+  // token (which records its own last use).
+  if ((apiKey as any).endpointPrincipal || (apiKey as any).hostedModelToken) return;
   const now = Date.now();
   const last = apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).getTime() : 0;
   if (now - last < LAST_USED_THROTTLE_MS) return;
