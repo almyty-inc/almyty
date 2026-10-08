@@ -24,7 +24,13 @@ export async function authenticateManagedUser(config: any, header: string): Prom
   const credentials = Buffer.from(header.slice(6), 'base64').toString('utf8');
   const colon = credentials.indexOf(':');
   if (colon <= 0) return false;
-  const user = config?.users?.find((u: any) => u.username === credentials.slice(0, colon) && u.isActive !== false);
-  if (!user?.passwordHash) return false;
-  return bcrypt.compare(credentials.slice(colon + 1), user.passwordHash);
+  // One username may appear more than once when the GatewayEndpointAccess
+  // migration joined the lists of two duplicate rows; each password works.
+  const username = credentials.slice(0, colon);
+  const password = credentials.slice(colon + 1);
+  for (const user of Array.isArray(config?.users) ? config.users : []) {
+    if (user?.username !== username || user.isActive === false || !user.passwordHash) continue;
+    if (await bcrypt.compare(password, user.passwordHash)) return true;
+  }
+  return false;
 }
