@@ -3,7 +3,8 @@
 Every organization can say how long almyty keeps each class of
 event data. One `retention_policies` row per org; each `*Days` field is a
 number of days, and **null means keep forever**, which is the default for
-every class. An org with no policy row is never swept.
+every event class. An org with no policy row is never swept, except for
+hosted usage records, which have an install default (see below).
 
 Configured in the Data retention card under Settings → Organization, or over the API with `GET`/`PUT /organizations/:organizationId/retention`.
 
@@ -18,8 +19,13 @@ Configured in the Data retention card under Settings → Organization, or over t
 | `auditLogDays` | `audit_logs` | See the warning below. |
 | `toolExecutionsDays` | `tool_executions` | The largest table by bytes: each row keeps `parameters` and `result` as untruncated json, and a tool may return up to 10MB. |
 | `notificationsDays` | `notifications` | Written per failed scheduled or webhook run, and per approval request and decision. |
+| `runnerUsageDays` | `runner_usage_intervals` | The minutes hosted pods ran, aged by when each interval ended. See below: null here is not forever. |
 
-Hosted runners' usage records (`runner_usage_intervals`, the minutes a hosted pod ran) are not swept. They are billing records and are kept; how long is still to be decided. A suspended hosted workspace has its own window, set in the hosted runner settings (see [Hosted runners](hosted-runners.md)).
+### Hosted usage records
+
+`runner_usage_intervals` are billing records, so this class works the other way round. Null means the install's default, the hosted runner setting `usageRetention.months` (13 months as shipped), and that default applies to every organization, with a policy or without one. An organization's enabled policy may set `runnerUsageDays` instead. An interval still open (a pod running now) is never deleted, whatever its age. Each organization's deletions are written to the audit log as a `retention_sweep` entry with `runnerUsageIntervals`, the cutoff, and whether the policy or the install default set it.
+
+A suspended hosted workspace has its own window, set in the hosted runner settings (see [Hosted runners](hosted-runners.md)).
 
 ### Before you set `auditLogDays`
 
@@ -38,8 +44,8 @@ field is null. `notifications` grows slowly but relentlessly — a
 permanently broken five-minute schedule writes 288 rows a day, forever,
 and schedules do break.
 
-Like every other class, both default to null. Unlimited growth is the
-default for all seven; these two are simply the ones where it costs the
+Like every other event class, both default to null. Unlimited growth is the
+default for all seven event classes; these two are simply the ones where it costs the
 most.
 
 ## Per-agent and per-channel retention

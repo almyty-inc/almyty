@@ -515,10 +515,11 @@ Concretely:
   unchanged.
 - `sweepExpired` ignores persistent workspaces' `ttlAt` (it is null) and
   instead expires `suspended` ones untouched for the retention window.
-- Two jobs of one owner on one environment share the volume but work in
-  separate folders (`<agent-slug>-<run>`, as `workspace.prepare` names them
-  today), so they do not edit each other's checkout. An always-on agent's
-  home workspace is the exception: it owns its whole volume.
+- A person's jobs on one environment share one folder, the whole volume,
+  and run one after another (decided 2026-10-08). A job holds the
+  workspace while any of its runs is going (`WorkspaceLeaseService`); a
+  call of another job waits, then answers `workspace_busy` and the run
+  sleeps and retries.
 
 **Setup and cache.** On the first start of a volume, or when the environment
 version changed, the runner clones `repo` at `ref`, runs `setupScript`, and
@@ -866,10 +867,19 @@ tokens never enter a pod. Environment secrets resolve through grants at pod
 start (audited) into the pod's Secret, which is deleted at scale to zero and
 rewritten at wake, so a secret rotated in the store reaches the next wake.
 Model keys stay in the store (Decision 6): coding CLIs call almyty's
-compatible endpoints with a pod-scoped token, and a vendor key is injected
-only for a CLI that cannot change its base URL. Pods use the organization's
-org-wide model providers; the owner's private provider only through an
-explicit one-click grant.
+compatible endpoints with a pod model token, and a vendor key is injected
+only for a CLI that cannot change its base URL, on an environment that
+allows it (`allowVendorKeys`, off by default). As built, the token is
+minted by the reconcile loop at every pod start (sha256 only in
+`hosted_model_tokens`), lives in the pod's Secret as `ALMYTY_MODEL_TOKEN`,
+`ANTHROPIC_API_KEY` and `OPENAI_API_KEY` next to `ANTHROPIC_BASE_URL` and
+`OPENAI_BASE_URL`, acts as the workspace's owner, is accepted only by
+`/v1/messages`, `/v1/chat/completions` and `/v1/models`, and is revoked when
+the pod stops or its owner leaves. Pods were meant to use the
+organization's org-wide model providers, the owner's private provider only
+through an explicit one-click grant; the token runs agents as their owner
+would, so an agent configured with the owner's private provider uses it.
+That narrowing is still open.
 
 **Abuse.** Hosted runners are paid-only, so every org that has one has a
 card on file. On top of that:
@@ -1016,7 +1026,7 @@ pinned release and checksum on purpose, with the staging smoke.
 | An always-on run hits a limit | The run ends with the limit's sentence; the report says so | The next wake starts a new run on the same thread |
 | An approval is never answered | The agent waits; wakes queue | The existing approval expiry applies; the queue is capped at 100 wakes, oldest coalesced |
 | Wake storm (webhook flood) | Wakes coalesce into one message | Dedupe keys, `maxWakesPerHour`, the `WAKE_LOOP` pause |
-| The owner leaves the team or the org | Agent paused with `OWNER_CANNOT_RUN` or `OWNER_NOT_MEMBER` | As for heartbeats today; the hosted workspace is suspended |
+| The owner leaves the team or the org | Agent paused with `OWNER_CANNOT_RUN` or `OWNER_NOT_MEMBER` | As for heartbeats today. Leaving the org: their environments go to the longest-standing owner (else admin), their own hosted workspaces stop at once and keep their files, their pod model tokens are revoked. A deleted team's shared environments become private to their owner |
 | A gVisor node is replaced, upgraded or autoscaled | Runners on it go Pending for a few minutes (2.5 to 5.5 minutes measured on a one-node pool); a wake waits | The installer DaemonSet reinstalls gVisor on the new node and only then labels it ready; the Deployment reschedules the pod there. Two or more gVisor nodes and a PodDisruptionBudget keep this out of sight |
 | The gVisor install fails on a node (bad download, checksum mismatch, containerd config schema it does not know) | Nothing, if other gVisor nodes are ready; otherwise wakes wait | The installer removes the ready label and retries every minute; sandboxed pods never land there; the missing-label alert fires |
 | The org's plan lapses | Hosted workspaces suspended; always-on agents with a hosted home, or acting as themselves, paused; owner notified | No new pods; volumes kept for the retention window; turning the plan back on resumes |
@@ -1364,3 +1374,33 @@ Also decided:
 - **Model providers.** Unattended and hosted work uses the organization's
   org-wide model providers only. The owner's private provider reaches it
   only through an explicit one-click grant.
+
+Decided after the phase 2 merge (Frane, 2026-10-08), and built:
+
+- **The owner leaves.** Every environment the departing person owns goes to
+  one organization admin, chosen the same way every time: the
+  longest-standing owner, else the longest-standing admin. Audited; the
+  files are kept. Their own workspaces have their pod stopped at once (its
+  Secret holds their connections and their model token) and move to the
+  same person where that person has none on the environment yet.
+- **A team is deleted.** An environment shared with it keeps its owner and
+  becomes private; the owner is told in plain words and can share it again.
+- **Usage records** are kept 13 months after they close, a retention class
+  (`runnerUsageDays`) an organization can set, with the 13 months as the
+  install default (`usageRetention.months`); an open interval is never
+  deleted.
+- **One folder per person per environment.** The two-folders idea under
+  "Persistent workspaces" is replaced: a person's jobs on an environment
+  share one `/workspace` and run one after another (a job holds the
+  workspace while it runs; others wait, then sleep and retry).
+- **Decision 6, built.** A pod model token, minted at every pod start with
+  only its hash stored, bound to the hosted runner (so workspace,
+  environment and organization) and acting as the workspace's owner,
+  accepted only by `/v1/messages`, `/v1/chat/completions` and `/v1/models`,
+  attributed on the response, the run and the audit log, revoked when the
+  pod stops, and injected through the pod's Secret with
+  `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` beside it. Vendor keys are an
+  opt-in per environment (`allowVendorKeys`), off by default. Those
+  endpoints run almyty agents and refuse client-declared tools, so a coding
+  CLI that sends its own tools needs a model pass-through endpoint that
+  does not exist yet ([hosted-runners.md](../hosted-runners.md), "Not yet").

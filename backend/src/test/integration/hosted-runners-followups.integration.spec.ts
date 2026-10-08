@@ -49,6 +49,8 @@ import { HostedUsageService } from '../../modules/hosted-runners/hosted-usage.se
 import { HostedModelTokenService } from '../../modules/hosted-runners/hosted-model-token.service';
 import { WorkspaceLeaseService } from '../../modules/hosted-runners/workspace-lease.service';
 import { EnvironmentHandoverService } from '../../modules/hosted-runners/environment-handover.service';
+import { EnvironmentInsightsService } from '../../modules/hosted-runners/environment-insights.service';
+import { EnvironmentsService } from '../../modules/hosted-runners/environments.service';
 import { provisionExtensionsInPublic } from './test-db-extensions';
 
 /**
@@ -319,6 +321,87 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       const next = stub.pods.get(hostedRunnerId)!.secretEnv!.ALMYTY_MODEL_TOKEN;
       expect(next).not.toBe(token);
       expect(await repo(HostedModelToken).countBy({ hostedRunnerId })).toBe(2);
+    });
+  });
+
+  describe('what the Hosted tab reads', () => {
+    let insights: EnvironmentInsightsService;
+
+    beforeAll(() => {
+      const accessPolicy = new AccessPolicyService(repo(UserOrganization), repo(UserTeam));
+      const environments = new EnvironmentsService(
+        repo(Environment), repo(Credential), accessPolicy, settings, hosted, new RunnerCapabilityPublisher(repo(Tool)),
+      );
+      insights = new EnvironmentInsightsService(settings, hosted, environments, accessPolicy, ds);
+    });
+
+    it('offers the install\'s images, sizes, idle-timeout bounds and file keep days', async () => {
+      const organizationId = await org('options');
+      const options = await insights.options(organizationId);
+      expect(options.images.map((i) => i.name)).toEqual(Object.keys(settings.current.images));
+      expect(options.idleTimeoutMinutes).toEqual(settings.current.idleTimeoutMinutes);
+      expect(options.suspendedRetention).toEqual(settings.current.suspendedRetention);
+      expect(options.resourceClasses.map((c) => c.name)).toEqual(Object.keys(settings.current.resourceClasses));
+      expect(options).toMatchObject({ enabled: true, defaultResourceClass: settings.current.defaultResourceClass, usageRetentionMonths: 13 });
+    });
+
+    it('counts runner minutes this month per environment, and for the organization to its admins only', async () => {
+      const organizationId = await org('usage');
+      const owner = await member(organizationId, 'owner', OrganizationRole.OWNER);
+      const peer = await member(organizationId, 'peer', OrganizationRole.MEMBER);
+      const env = await environment(organizationId, owner);
+      const now = new Date();
+      const minute = 60_000;
+      const add = (startedAt: Date, endedAt: Date | null) =>
+        ds.query(
+          `INSERT INTO runner_usage_intervals ("organizationId", "hostedRunnerId", "environmentId", "workspaceId", "resourceClass", "startedAt", "endedAt") VALUES ($1, $2, $3, $4, 'small', $5, $6)`,
+          [organizationId, crypto.randomUUID(), env.id, crypto.randomUUID(), startedAt, endedAt],
+        );
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      await add(new Date(monthStart.getTime() - 60 * minute), new Date(monthStart.getTime() + 30 * minute)); // 30 of it this month
+      await add(new Date(now.getTime() - 10 * minute), null); // open: 10 so far
+      await add(new Date(monthStart.getTime() - 120 * minute), new Date(monthStart.getTime() - 90 * minute)); // last month only
+
+      const period = insights.period(undefined, undefined, now);
+      const mine = await insights.usage(owner, organizationId, period.from, period.to);
+      const row = mine.environments.find((e) => e.environmentId === env.id)!;
+      expect(row.minutes).toBeCloseTo(40, 0);
+      expect(row.byClass.small).toBeCloseTo(40, 0);
+      expect(mine.organization!.minutes).toBeCloseTo(40, 0);
+
+      // A member who cannot see the private environment sees neither it nor the totals.
+      const theirs = await insights.usage(peer, organizationId, period.from, period.to);
+      expect(theirs.environments.map((e) => e.environmentId)).not.toContain(env.id);
+      expect(theirs.organization).toBeNull();
+      expect(() => insights.period('2026-10-08', '2026-10-01')).toThrow(/before/);
+    });
+
+    it('lists the runs of agents that use the environment: yours, or all of them for an admin', async () => {
+      const organizationId = await org('runs');
+      const owner = await member(organizationId, 'owner', OrganizationRole.OWNER);
+      const peer = await member(organizationId, 'peer', OrganizationRole.MEMBER);
+      const env = await environment(organizationId, owner, { visibility: 'org' });
+      const onEnv = await repo(Agent).save(repo(Agent).create({
+        organizationId, name: `on env ${++seq}`, status: AgentStatus.ACTIVE, pipeline: { nodes: [], edges: [] }, createdBy: owner, visibility: 'org',
+        agentConfig: { environmentId: env.id },
+      } as any)) as any;
+      const elsewhere = await repo(Agent).save(repo(Agent).create({
+        organizationId, name: `elsewhere ${++seq}`, status: AgentStatus.ACTIVE, pipeline: { nodes: [], edges: [] }, createdBy: owner, visibility: 'org',
+      } as any)) as any;
+      const save = async (agentId: string, userId: string, parentRunId: string | null = null) =>
+        ((await repo(AgentRun).save(repo(AgentRun).create({ agentId, organizationId, userId, status: AgentRunStatus.COMPLETED, parentRunId } as any))) as any).id;
+      const ownerRun = await save(onEnv.id, owner);
+      const peerRun = await save(onEnv.id, peer);
+      await save(onEnv.id, owner, ownerRun); // a helper: part of its job, not listed apart
+      await save(elsewhere.id, owner);
+      const execution = ((await repo(AgentExecution).save(repo(AgentExecution).create({ agentId: onEnv.id, organizationId, userId: peer, status: 'completed', input: {} } as any))) as any).id;
+
+      const all = await insights.runs(env.id, owner, organizationId);
+      expect(all.map((r: any) => r.id).sort()).toEqual([ownerRun, peerRun, execution].sort());
+      expect(all.find((r: any) => r.id === execution)).toMatchObject({ kind: 'execution', agentName: onEnv.name });
+      const own = await insights.runs(env.id, peer, organizationId);
+      expect(own.map((r: any) => r.id).sort()).toEqual([peerRun, execution].sort());
+      expect(await insights.runs(env.id, owner, organizationId, 1)).toHaveLength(1);
     });
   });
 

@@ -89,6 +89,20 @@ describe('hosted runners follow-ups: wiring', () => {
     });
   });
 
+  describe('what the Hosted tab reads', () => {
+    it('is routed, with the fixed paths ahead of :id, and served by the insights service', () => {
+      const controller = read(MODULE, 'environments.controller.ts');
+      const at = (s: string) => controller.indexOf(s);
+      expect(at("@Get('options')")).toBeGreaterThan(-1);
+      expect(at("@Get('usage')")).toBeGreaterThan(-1);
+      expect(at("@Get('options')")).toBeLessThan(at("@Get(':id')"));
+      expect(at("@Get('usage')")).toBeLessThan(at("@Get(':id')"));
+      expect(controller).toMatch(/@Get\(':id\/runs'\)[\s\S]*?this\.insights\.runs\(/);
+      expect(controller).toMatch(/options: await this\.insights\.options\(organizationId\)/);
+      expect(read(MODULE, 'hosted-runners.module.ts')).toMatch(/providers: \[[\s\S]*\bEnvironmentInsightsService\b/);
+    });
+  });
+
   describe('the pod-scoped model token', () => {
     it('is accepted by the model endpoints and nowhere else', () => {
       const users = sources(SRC)

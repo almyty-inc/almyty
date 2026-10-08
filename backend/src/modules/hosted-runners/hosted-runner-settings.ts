@@ -111,6 +111,8 @@ export interface HostedRunnerSettings {
    * revoked when the pod stops), and how often its last use is recorded.
    */
   modelAccess: { tokenTtlMinutes: number; touchEverySeconds: number };
+  /** How many runs an environment's run list returns: by default, and at most. */
+  runsList: { defaultLimit: number; maxLimit: number };
   /** The almyty API a pod connects to; empty falls back to PUBLIC_API_URL. */
   apiUrl: string;
 }
@@ -152,6 +154,7 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   usageRetention: { months: 13 },
   workspaceQueue: { waitSeconds: 30, pollSeconds: 2, leaseMinutes: 30, retryAfterSeconds: 15 },
   modelAccess: { tokenTtlMinutes: 480, touchEverySeconds: 60 },
+  runsList: { defaultLimit: 50, maxLimit: 200 },
   apiUrl: '',
 };
 
@@ -214,6 +217,9 @@ export function settingsProblems(s: HostedRunnerSettings): string[] {
   }
   if (!POSITIVE(s.modelAccess?.tokenTtlMinutes) || !POSITIVE(s.modelAccess?.touchEverySeconds)) {
     problems.push('modelAccess.tokenTtlMinutes and modelAccess.touchEverySeconds must be positive numbers');
+  }
+  if (!POSITIVE(s.runsList?.defaultLimit) || !POSITIVE(s.runsList?.maxLimit) || s.runsList.defaultLimit > s.runsList.maxLimit) {
+    problems.push('runsList.defaultLimit and runsList.maxLimit must be positive, the default no more than the maximum');
   }
   return problems;
 }
