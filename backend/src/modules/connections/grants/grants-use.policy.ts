@@ -49,6 +49,15 @@ export class GrantsUsePolicy implements ConnectionUsePolicy {
       );
     }
     if (execution?.kind === 'gateway') {
+      // The gateway's own channel key -- the Slack app, the Resend key it
+      // was set up with -- used to talk to its own platform. The resolver
+      // has applied the team and private rules already; an organization
+      // connection serves the channel it is attached to, as it did before
+      // runs were judged as their gateway. Without this every org channel
+      // whose key lives on Credentials refused its own inbound events and
+      // could post nothing, and no grant could fix it: a grant cannot name
+      // a gateway.
+      if (!credential.ownerUserId && context?.resourceType === 'gateway' && context.resourceId === execution.gatewayId) return;
       return this.grants.assertCanUse(GrantsUsePolicy.gatewayGrantPrincipal(execution), credential, useContext);
     }
     // An agent acting as itself: the grants made to that agent, and only
