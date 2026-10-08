@@ -1,0 +1,22 @@
+# Reference manifest: the runner-shaped workload used in the 2026-10-08
+# gVisor test (see docs/design/hosted-runners-and-always-on.md). It shows the
+# two rules that matter here: runners run under a controller (a Deployment
+# or Job, never a bare pod, because node drains delete bare pods) and need
+# only runtimeClassName: gvisor to be scheduled onto ready gVisor nodes.
+# The production pod spec adds the security context, workspace volume,
+# limits and enrollment Secret described in the design doc.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: runner, namespace: runners}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: runner}}
+  template:
+    metadata: {labels: {app: runner}}
+    spec:
+      runtimeClassName: gvisor
+      containers:
+      - name: r
+        image: node:22-bookworm
+        command: ["node","-e","require('http').createServer((q,s)=>s.end('runner-ok\\n')).listen(8080);setInterval(()=>{},1e9)"]
+        resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 1Gi}}
