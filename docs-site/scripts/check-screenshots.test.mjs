@@ -97,3 +97,17 @@ test('rejects staging as the public docs base URL', (t) => {
   const f = fixture(t); f.manifest.baseUrl = 'https://app.staging.almyty.com'
   assert.match(f.check().errors.join('\n'), /public baseUrl/)
 })
+test('accepts a rendered repository file that fingerprints that file', (t) => {
+  const f = fixture(t); f.write('docker-compose.yml', 'services: {}')
+  f.entry.source = { kind: 'repo-file', file: 'docker-compose.yml' }
+  f.entry.sources = ['docker-compose.yml']
+  f.entry.sourceDigest = sourceDigest(f.root, f.entry.sources)
+  assert.deepEqual(f.check().errors, [])
+  f.write('docker-compose.yml', 'services: { api: {} }')
+  assert.match(f.check().errors.join('\n'), /source drift/)
+})
+test('rejects a rendered repository file that is not in its own sources', (t) => {
+  const f = fixture(t); f.write('docker-compose.yml', 'services: {}')
+  f.entry.source = { kind: 'repo-file', file: 'docker-compose.yml' }
+  assert.match(f.check().errors.join('\n'), /repo-file source must be listed/)
+})
