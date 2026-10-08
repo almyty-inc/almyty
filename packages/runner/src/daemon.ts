@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, chmodSync } from 'fs';
-import { homedir } from 'os';
+import { homedir, hostname } from 'os';
 import { join } from 'path';
 
 import { resolveCredentialsOrExit } from '@almyty/client';
 
-import { ResolvedConfig } from './types.js';
-import { describeIsolationPosture, loadConfig } from './config.js';
+import { ResolvedConfig, RunnerConfig } from './types.js';
+import { DEFAULT_BINARY_PROBE_LIST, describeIsolationPosture, loadConfig, runnerNameFromHostname } from './config.js';
 import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
 import { createDefaultAdapterFactory, ProcessManager } from './process-manager.js';
 import { StreamableClient, envelope } from './streamable-client.js';
@@ -13,6 +13,8 @@ import { WorkerEnvelope, RequestPayload, ResponsePayload, HeartbeatPayload, WORK
 import { dispatchHandler, HandlerContext } from './handlers.js';
 import { CodingSessionManager } from './coding-sessions.js';
 import { WorkspaceReclaimer } from './workspace-reclaimer.js';
+import { enroll, readEnrollSettings, RunnerCredential } from './enroll.js';
+import { prepareHostedWorkspace } from './hosted-setup.js';
 
 // An override keeps independent local test/demo daemons away from the user's runner.
 const STATE_DIR = process.env.ALMYTY_RUNNER_STATE_DIR || join(homedir(), '.almyty', 'runner');
@@ -33,6 +35,32 @@ export interface DaemonStatus {
   sessionId: string | null;
   inUseProcesses: number;
   connectionState: 'connecting' | 'online' | 'reconnecting' | 'fatal';
+}
+
+export interface EnrolledStartOptions {
+  /** --url: overrides ALMYTY_API_URL. */
+  url?: string;
+  /** Defaults to process.env; the token variables are removed from it once read. */
+  env?: Record<string, string | undefined>;
+  /** Test injection. */
+  fetch?: typeof globalThis.fetch;
+  /** How a fatal credential problem ends the process. Defaults to process.exit. */
+  exit?: (code: number) => void;
+  /** Tests leave the process's signal handlers alone. */
+  installSignals?: boolean;
+  /** Test injection for the first-start workspace setup. */
+  prepare?: typeof prepareHostedWorkspace;
+}
+
+interface ConnectOptions {
+  backendUrl: string;
+  token: string | (() => string);
+  organizationId?: string;
+  streamPath?: string;
+  /** The config the backend applied; sizes the process manager. */
+  effective: RunnerConfig;
+  fetch?: typeof globalThis.fetch;
+  installSignals: boolean;
 }
 
 /**
@@ -62,6 +90,8 @@ export class RunnerDaemon {
   private runnerId: string | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private status: DaemonStatus | null = null;
+  /** A hosted runner's renewable credential (enroll mode only). */
+  private credential: RunnerCredential | null = null;
   /** Guards against overlapping re-establish attempts. */
   private reestablishing = false;
   /** Consecutive failed re-establish attempts; bounds the retry loop. */
@@ -127,10 +157,96 @@ export class RunnerDaemon {
     resolved.name = regBody.data.runner.name;
     process.stdout.write(`registered as ${this.runnerId}\n`);
 
-    // Construct the process manager with the effective config (backend
-    // may have constrained max_concurrent below what we requested).
-    const effective = regBody.data.effectiveConfig;
-    this.processes = new ProcessManager(createDefaultAdapterFactory(), effective.maxConcurrent);
+    // The process manager takes the effective config (backend may have
+    // constrained max_concurrent below what we requested).
+    await this.connect({
+      backendUrl,
+      token: credentials.token,
+      organizationId: resolved.organizationId,
+      effective: regBody.data.effectiveConfig,
+      installSignals: true,
+    });
+  }
+
+  /**
+   * Enroll mode, for a runner inside a hosted pod (enroll.ts). Trades the
+   * pod's single-use enrollment token for a runner credential, sets the
+   * workspace up on its first start (hosted-setup.ts), and then holds the
+   * hosted stream like any runner holds its own. Throws EnrollmentError
+   * when enrollment fails; the CLI exits non-zero and Kubernetes restarts
+   * the container.
+   */
+  async startEnrolled(opts: EnrolledStartOptions = {}): Promise<void> {
+    const env = opts.env ?? process.env;
+    const fetchImpl = opts.fetch ?? globalThis.fetch;
+    const exit = opts.exit ?? ((code: number) => process.exit(code));
+    const settings = readEnrollSettings(env, { url: opts.url });
+
+    process.stdout.write(`almyty-runner v${RUNNER_VERSION} starting in enroll mode\n`);
+    process.stdout.write(`url=${settings.backendUrl}\n`);
+    const runtime = await detectRuntimeInfo({ binaries: DEFAULT_BINARY_PROBE_LIST });
+    process.stdout.write(`detected ${Object.values(runtime.binaries).filter(v => v).length}/${DEFAULT_BINARY_PROBE_LIST.length} binaries on PATH\n`);
+
+    const enrolled = await enroll(settings, { runtimeInfo: runtime }, fetchImpl);
+    // Spent either way; nothing else needs it.
+    settings.token = '';
+    this.runnerId = enrolled.runnerId;
+    process.stdout.write(`enrolled as ${enrolled.runnerId}; credential valid until ${enrolled.expiresAt.toISOString()}\n`);
+
+    this.credential = new RunnerCredential({
+      backendUrl: settings.backendUrl,
+      renewPath: enrolled.renewPath,
+      credential: enrolled.credential,
+      expiresAt: enrolled.expiresAt,
+      fetch: fetchImpl,
+      log: (line) => process.stdout.write(`${line}\n`),
+      onFatal: (reason) => {
+        process.stderr.write(`${reason}; exiting\n`);
+        this.updateState({ connectionState: 'fatal' });
+        void this.shutdown().finally(() => exit(1));
+      },
+    });
+    this.credential.start();
+
+    // The pod is the sandbox: the backend decides the policy (host
+    // isolation, cwd limited to the workspace volume).
+    const config = enrolled.effectiveConfig;
+    process.stdout.write(`${describeIsolationPosture(config)}\n`);
+
+    // Before the stream opens, so the machine reports ready only once its
+    // checkout and setup are in place. The credential renews meanwhile.
+    await (opts.prepare ?? prepareHostedWorkspace)({ env });
+
+    this.resolved = {
+      name: runnerNameFromHostname(hostname()) || 'hosted-runner',
+      labels: {},
+      config,
+      binaryProbeList: DEFAULT_BINARY_PROBE_LIST,
+      backendUrl: settings.backendUrl,
+    };
+    await this.connect({
+      backendUrl: settings.backendUrl,
+      token: () => this.credential?.current() ?? '',
+      streamPath: enrolled.streamPath,
+      effective: config,
+      fetch: opts.fetch,
+      installSignals: opts.installSignals ?? true,
+    });
+  }
+
+  /** Stop heartbeats, renewal and the stream; tell the backend it is draining. */
+  async shutdown(): Promise<void> {
+    await this.gracefulShutdown();
+  }
+
+  /**
+   * Everything after the runner knows who it is: the process manager,
+   * the stream, the heartbeat loop and the state file. Shared by the
+   * login path and enroll mode.
+   */
+  private async connect(o: ConnectOptions): Promise<void> {
+    const resolved = this.resolved!;
+    this.processes = new ProcessManager(createDefaultAdapterFactory(), o.effective.maxConcurrent);
     // Coding-session registry for the chat bridge. Output events are sent
     // through the same streamable client the heartbeats ride; the client is
     // captured lazily so construction order doesn't matter.
@@ -151,16 +267,18 @@ export class RunnerDaemon {
 
     // Open the Streamable HTTP stream.
     this.client = new StreamableClient({
-      baseUrl: backendUrl,
-      token: credentials.token,
-      organizationId: resolved.organizationId,
+      baseUrl: o.backendUrl,
+      token: o.token,
+      organizationId: o.organizationId,
+      streamPath: o.streamPath,
+      fetch: o.fetch,
     });
     this.wireClient();
 
     // First POST mints the session id; send a hello envelope so the
     // backend's worker stream (WorkerStreamTransport) assigns one.
     await this.client.send(envelope('event', { kind: 'runner.hello', runnerId: this.runnerId }));
-    await this.client.openStream();
+    await this.client.startStream();
 
     // Heartbeat loop. This timer is deliberately REF'd: it is the daemon's
     // keep-alive. The GET command stream can briefly drop (e.g. a reconnect
@@ -178,12 +296,12 @@ export class RunnerDaemon {
       process.stderr.write(`initial heartbeat failed: ${err.message}\n`);
     });
 
-    this.installSignalHandlers();
+    if (o.installSignals) this.installSignalHandlers();
     this.writeState({
       pid: process.pid,
       startedAt: new Date().toISOString(),
       runnerName: resolved.name,
-      backendUrl,
+      backendUrl: o.backendUrl,
       runnerId: this.runnerId,
       sessionId: this.client.getSessionId(),
       inUseProcesses: 0,
@@ -214,6 +332,8 @@ export class RunnerDaemon {
   private async gracefulShutdown(): Promise<void> {
     try {
       if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+      this.credential?.stop();
       if (this.client) {
         await this.client.send(envelope('event', { kind: 'runner.draining' })).catch(() => {});
         this.client.stop();
@@ -328,8 +448,8 @@ export class RunnerDaemon {
       await new Promise(r => setTimeout(r, delay));
       // Re-mint a session (client already cleared the stale id) and reopen.
       await this.client.send(envelope('event', { kind: 'runner.hello', runnerId: this.runnerId }));
-      await this.client.openStream();
-      // openStream's 'open' event resets connectionState to 'online'; a clean
+      await this.client.startStream();
+      // The stream's 'open' event resets connectionState to 'online'; a clean
       // reopen means the streak is broken.
       this.sessionLostStreak = 0;
       this.updateState({ connectionState: 'online', sessionId: this.client.getSessionId() });

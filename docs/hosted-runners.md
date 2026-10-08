@@ -14,7 +14,8 @@ needs, and every setting. The design is
 
 Status: phase 2, behind a switch, for staging. The app has a Hosted tab on
 the Runners page (user guide: docs-site "Hosted machines"); the runner images
-are not built yet, and nothing is billed yet (usage is recorded).
+are built in CI but not published yet, and nothing is billed yet (usage is
+recorded).
 
 ## In short
 
@@ -87,7 +88,7 @@ All numbers live here. Defaults in brackets.
 | `reconcile.batchSize` | Machines one sweep looks at. [200] |
 | `resourceClasses.<name>` | `cpu`, `memory`, `ephemeralStorage` and `volumeGi` of each size. [small 1/2Gi/4Gi/10, medium 2/4Gi/8Gi/20, large 4/8Gi/16Gi/40] |
 | `defaultResourceClass` | The size an environment gets when it names none. [small] |
-| `images.<name>` | The curated images an environment may pick, by name. Pin each by digest. Custom images are not offered. [standard, standard-browser] |
+| `images.<name>` | The curated images an environment may pick, by name. Pin each by digest. Custom images are not offered. [standard, standard-browser] `images/runner-env/settings.json` lists the images CI builds (see [Images and enroll mode](#images-and-enroll-mode)). |
 | `capacity.maxConcurrentRunners` / `.maxWorkspaces` / `.resourceClasses` | What every organization may use when no plan capacity is installed: pods at once, workspaces kept, sizes allowed (`null` for all). [2, 10, all] Plan capacity replaces this per plan in phase 3. |
 | `cluster.namespacePrefix` | Each organization's namespace is this plus its id. [`almyty-rt-`] |
 | `cluster.storageClassName` | StorageClass of workspace volumes; `null` for the cluster default. |
@@ -186,6 +187,136 @@ This is what passed on DigitalOcean (DOKS 1.35 and 1.36, containerd 1.7 and
 The cloud metadata address (169.254.169.254) was already unreachable from
 pods on DOKS; the default-deny policy keeps it so elsewhere.
 
+## Images and enroll mode
+
+A pod runs one of the curated `almyty/runner-env` images. Its entrypoint
+starts the runner in enroll mode; nothing else in the image is specific to
+almyty.
+
+### The images
+
+`images/runner-env/Dockerfile` builds every flavour as a target:
+
+| Target | What it adds |
+|---|---|
+| `node` | pnpm and yarn |
+| `python` | pip, venv and the Python headers native wheels build against |
+| `standard` | both of the above |
+
+All three share a `base` stage: Debian slim with Node 26 (the repo's one
+Node major), git and git-lfs, build-essential, curl, jq, tini, and
+`@almyty/runner` at the version pinned by `ARG RUNNER_VERSION`. The
+runner's PTY binding (node-pty) compiles against the build tools there.
+
+They are made for the pod the backend writes:
+
+- **uid and gid 1000** (`USER 1000:1000`, the node image's user renamed
+  `runner`), the `cluster.runAsUser` / `.runAsGroup` defaults. Change
+  those settings and the images no longer match.
+- **Read-only root.** Only `/workspace` (the volume) and `/tmp` (an
+  emptyDir) are written at run time. `HOME` is `/workspace/.home`, and the
+  entrypoint points npm's global prefix and cache, pip's cache and the XDG
+  folders under it and puts `~/.local/bin` and the npm prefix on `PATH`.
+  `npm i -g` and `pip install` therefore work, and what they install lives
+  on the volume. Outside a venv, `pip install` becomes a user install
+  (`PIP_BREAK_SYSTEM_PACKAGES=1`); system packages are not touched.
+- **tini** is PID 1, so the processes the runner starts are reaped.
+- The command is `almyty-runner start --enroll`.
+
+`images/runner-env/settings.json` is the curated list in the shape of
+`HOSTED_RUNNERS_SETTINGS_FILE`: one `images.<name>` entry per target,
+tagged `almyty/runner-env:<target>-<RUNNER_VERSION>`. Point the setting at
+that file (or copy its `images` into `HOSTED_RUNNERS_SETTINGS`) to offer
+them. Settings merge key by key, so names in the built-in defaults that
+the file does not mention stay offered. Once pushed, pin each entry by
+digest (`...:standard-1.6.0@sha256:...`). `scripts/check-runner-env-images.js`
+(in CI's repo-invariants job) fails when a listed name is not a target,
+when a tag does not carry the pinned version, or when the pin is ahead of
+`packages/runner`.
+
+Build one locally from the repository root:
+
+```bash
+docker build --target standard -t runner-env:standard images/runner-env
+```
+
+That installs the pinned runner from npm. To try the runner in this
+checkout instead, pack it and pass it as the `runner-pkg` build context:
+
+```bash
+(cd packages/runner && npm ci && npm run build && npm pack --pack-destination /tmp/runner-pkg)
+mv /tmp/runner-pkg/almyty-runner-*.tgz /tmp/runner-pkg/almyty-runner.tgz
+docker build --target standard --build-context runner-pkg=/tmp/runner-pkg -t runner-env:standard images/runner-env
+```
+
+To run it as the cluster does: `--user 1000:1000 --read-only --cap-drop
+ALL --tmpfs /tmp`, a volume owned by uid 1000 at `/workspace`,
+`HOME=/workspace/.home`, `ALMYTY_API_URL` and `ALMYTY_ENROLLMENT_TOKEN`.
+
+CI (`.github/workflows/runner-env-images.yml`) builds all three, with the
+runner packed from the checkout, on every PR and push that touches
+`images/runner-env/**` or `packages/runner/**`, and checks each one as the
+pod runs it: uid 1000, `--enroll` present, and a failed enrollment exits 1.
+It pushes only from `master` and `v*` tags. The push builds with the
+pinned runner from npm and refuses an image whose runner has no
+`--enroll`. To release new images: publish the runner, bump
+`RUNNER_VERSION` in the Dockerfile and the tags in `settings.json` together,
+merge to `master`, then pin the pushed digests in `settings.json`.
+
+### Enroll mode
+
+`almyty-runner start --enroll` (also `almyty runner start --enroll`) is the
+runner without a login. It takes `--url` and nothing that names an
+identity: `--name`, `--org`, `--label` and `--config` are refused, because
+the token decides which runner this is.
+
+1. It reads the token from `ALMYTY_ENROLLMENT_TOKEN` (the pod's Secret,
+   through `envFrom`), or from the file named by
+   `ALMYTY_ENROLLMENT_TOKEN_FILE`, and removes both variables from its
+   environment, so nothing it starts inherits them. The API is
+   `ALMYTY_API_URL` (`--url` overrides it); plain `http` is refused except
+   to localhost.
+2. It sends `POST /runners/enroll` with the token and its runtime info
+   (no config: the backend sets the policy, host isolation inside the
+   sandbox with the working folder limited to the volume). Any refusal, a
+   malformed answer or an unreachable API ends the process with exit 1,
+   and Kubernetes restarts the container. The token is single use, so the
+   restarted container is refused too until the reconcile loop writes a
+   fresh one (`reconcile.enrollWaitMinutes`).
+3. The credential stays in memory: never on disk, never in the
+   environment, never in a log line or error message (the state file
+   `almyty runner status` reads holds the session id, not the
+   credential). It is renewed at `POST /runners/hosted/credential` when
+   three quarters of its life have passed. A failed renewal is retried
+   every 30 seconds while there is time. A 401, 403 or 404 (the hosted
+   runner is gone), or a credential about to expire, ends the process
+   with exit 1.
+4. On the volume's first start, or when `ALMYTY_ENVIRONMENT_VERSION`
+   differs from `/workspace/.almyty/env-version`, it sets the workspace
+   up before connecting, so the machine is ready only after setup:
+   - `ALMYTY_REPO_URL` is cloned into `/workspace/repo` and `ALMYTY_REPO_REF`
+     checked out (a branch, a tag or a commit). `ALMYTY_GIT_TOKEN` reaches
+     git as an HTTP header through `GIT_CONFIG_*` variables of that one
+     process: not on a command line, not in a file, not in the remote
+     URL. An existing checkout is never touched again; a new version only
+     re-runs the setup script.
+   - `ALMYTY_SETUP_SCRIPT` runs with bash, in the checkout (or
+     `/workspace` without one), with the pod's environment, its output in
+     the pod log. It is stopped after `ALMYTY_SETUP_TIMEOUT_SECONDS`
+     (1800).
+   - On success the version is written to `/workspace/.almyty/env-version`.
+     On failure it is not, so the next start tries again, and the runner
+     still comes online, so the problem can be looked at from a shell
+     instead of from a restart loop.
+5. It holds `/runners/hosted/stream` with the credential (re-read on every
+   request, so a renewed one is used at once), says `runner.hello` and
+   heartbeats like any runner.
+
+The code is `packages/runner/src/enroll.ts` (token, enrollment, renewal),
+`hosted-setup.ts` (first start) and `RunnerDaemon.startEnrolled`. The
+tests run it against a fake API with the backend's rules
+(`test/fake-hosted-api.ts`, `test/enroll.spec.ts`).
+
 ## Data
 
 | Table | What it holds |
@@ -228,8 +359,11 @@ pods on DOKS; the default-deny policy keeps it so elsewhere.
 
 ## Not yet
 
-- The `runner-env` images and `almyty-runner start --enroll` in the runner
-  package.
+- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.3,
+  which has no `--enroll`, so the push job refuses until the pin moves to
+  the first release that has it.
+- A `standard-browser` image (headless Chromium and Playwright). The
+  built-in `images` default still names it; nothing builds it yet.
 - A pod-scoped token for coding CLIs to call almyty's Anthropic- and
   OpenAI-compatible endpoints.
 - Plan capacity and Stripe reporting (phase 3, in `ee`).
