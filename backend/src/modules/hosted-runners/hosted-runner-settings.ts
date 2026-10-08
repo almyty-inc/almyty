@@ -136,9 +136,12 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
     large: { cpu: '4', memory: '8Gi', ephemeralStorage: '16Gi', volumeGi: 40 },
   },
   defaultResourceClass: 'small',
+  // The images CI builds and pushes (images/runner-env), tagged with the
+  // runner version they carry; scripts/check-runner-env-images.js keeps
+  // these equal to images/runner-env/settings.json.
   images: {
-    standard: 'almyty/runner-env:standard',
-    'standard-browser': 'almyty/runner-env:standard-browser',
+    standard: 'almyty/runner-env:standard-1.5.3',
+    'standard-browser': 'almyty/runner-env:standard-browser-1.5.3',
   },
   capacity: { maxConcurrentRunners: 2, maxWorkspaces: 10, resourceClasses: null },
   cluster: {
