@@ -44,6 +44,25 @@ describe('ApprovalsPage', () => {
     vi.clearAllMocks()
   })
 
+  it('shows the email a held Gmail send would send, not its base64', async () => {
+    const raw = btoa('To: jonas.weber@bluefin.example\r\nSubject: Route planning at Bluefin Couriers\r\n\r\nHi Jonas, would a short call next week help?').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    ;(approvalsApi.list as any).mockResolvedValue([
+      {
+        id: 'a-mail', organizationId: 'org-1', teamId: null, visibility: 'org', runId: 'run-mail', agentId: 'agent-mail',
+        toolCallId: null, reason: 'Ask before "gmail.users.messages.send" (it is on the ask-first list).',
+        payload: { tool: 'Gmail gmail users messages send', parameters: { userId: 'me', raw } },
+        status: 'pending', decidedBy: null, decidedAt: null, decisionReason: null, expiresAt: null, createdAt: new Date().toISOString(),
+      },
+    ])
+
+    render(<ApprovalsPage />)
+
+    const preview = await screen.findByTestId('approval-email-preview')
+    expect(within(preview).getByText('jonas.weber@bluefin.example')).toBeInTheDocument()
+    expect(within(preview).getByText('Route planning at Bluefin Couriers')).toBeInTheDocument()
+    expect(within(preview).getByText('Hi Jonas, would a short call next week help?')).toBeInTheDocument()
+  })
+
   it('renders a pending approval from a flat array (post-extractData shape)', async () => {
     ;(approvalsApi.list as any).mockResolvedValue([
       {
