@@ -212,7 +212,7 @@ function forward(req: IncomingMessage, res: ServerResponse, base: URL, opts: Mod
     res.writeHead(404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: 'Only the model endpoints (/v1/...) are served here' } }));
     return;
   }
-  const target = new URL(`${base.pathname.replace(/\/+$/, '')}${path}`, base);
+  const target = new URL(`${base.pathname.replace(/(?<!\/)\/+$/, '')}${path}`, base);
   const headers: Record<string, string | string[]> = {};
   for (const [name, value] of Object.entries(req.headers)) {
     if (value !== undefined && !DROPPED_REQUEST_HEADERS.has(name.toLowerCase())) headers[name] = value;

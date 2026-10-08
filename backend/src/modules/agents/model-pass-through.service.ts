@@ -157,7 +157,7 @@ export class ModelPassThroughService {
       principal: null,
       context: { purpose: 'llm_call', resourceType: 'hosted_runner', resourceId: attribution.hostedRunnerId },
     });
-    const url = `${bindingBaseUrl(binding, withKey.configuration ?? {}).replace(/\/+$/, '')}${binding.path}${opts.countTokens ? COUNT_TOKENS_SUFFIX : ''}`;
+    const url = `${bindingBaseUrl(binding, withKey.configuration ?? {}).replace(/(?<!\/)\/+$/, '')}${binding.path}${opts.countTokens ? COUNT_TOKENS_SUFFIX : ''}`;
     const headers: Record<string, string> = { ...bindingAuthHeaders(binding, withKey.getDecryptedApiKey(), withKey.configuration ?? {}) };
     for (const name of FORWARDED_HEADERS) {
       const value = req.headers?.[name];
