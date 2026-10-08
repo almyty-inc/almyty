@@ -7,7 +7,7 @@
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": "2026-10-07T17:20:50.942Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "70e94fe45285b340864c3955b8db8e86458e1af852247c1665eaa2767848f096",
       "source": {
         "kind": "browser",
@@ -22,14 +22,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
       "capturedAt": "2026-10-07T17:20:53.647Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "90ce90323b6eb35a7e84c6bd4c0f2f7e7dc1d6d751180e341f3e18885f1c7dfe",
       "source": {
         "kind": "browser",
@@ -44,14 +45,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
       "capturedAt": "2026-10-07T17:20:56.267Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4213557076754aedaa257bdf9f27f29db5ff31f1b3dd502afbb53e05ed202e83",
       "source": {
         "kind": "browser",
@@ -66,14 +68,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
       "capturedAt": "2026-10-07T17:20:58.949Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e5646322127e059bd2b42be008641aba3edfc90f206b2680ec474386fb47d672",
       "source": {
         "kind": "browser",
@@ -89,14 +92,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0a6e3c00ee4a114d5fcf04c778b715bb5a36ecc694fe9f7da56769ff8762d885",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
       "capturedAt": "2026-10-07T17:21:01.648Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d83348102ea5ab0a32daca6e6c0ce8834a09c6ea2d1772bc16af5b30067dabf4",
       "source": {
         "kind": "browser",
@@ -111,14 +115,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-10-07T17:21:04.302Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f1fb2921f62e183d9c4335b216aced25238528a9ed6a442eabd8f5cef3275989",
       "source": {
         "kind": "browser",
@@ -133,14 +138,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
       "capturedAt": "2026-10-07T17:21:06.886Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c6bf1377edb58027a51c18856bb42ea76a3e149f6dc83edb820bb31dfdf2762b",
       "source": {
         "kind": "browser",
@@ -155,7 +161,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "agent-tool-mode",
@@ -183,7 +190,7 @@
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
       "capturedAt": "2026-10-07T17:21:10.019Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "86e523e4c2a5d908f8c015550d89e4bf2ab746982baa075a8e25e00af507e065",
       "source": {
         "kind": "browser",
@@ -198,14 +205,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
       "capturedAt": "2026-10-07T17:21:12.707Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b1f345ae2c9912877e47ae4b5b2a808b790a1be88019671a31f8e49514b87aea",
       "source": {
         "kind": "browser",
@@ -220,7 +228,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "663b5bdbcb508a39cf3f3deecf87c1b5081cf4be71500d22bcdf6386f5e101a3",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "analytics-agents",
@@ -476,7 +485,7 @@
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
       "capturedAt": "2026-10-07T17:23:00.292Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "198ce857bdf7c08ebff7161d3795b767a475d9421c513ab7f02a678bd34688b4",
       "source": {
         "kind": "browser",
@@ -490,7 +499,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6d34980842619c7b021005c0395ed1177660517b88dae4006424e24e284f93ec",
-      "notes": "Recaptured the existing local seeded demo gateway after repairs; no external changes approved. Code mode remains disabled in this demo."
+      "notes": "Recaptured the existing local seeded demo gateway after repairs; no external changes approved. Code mode remains disabled in this demo.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "channel-branding-rules",
@@ -1008,7 +1018,7 @@
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
       "capturedAt": "2026-10-07T17:23:37.864Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b9edd40dc3b9abf55a687e7bfc2d1c4e3940f6ee01f2b35aa3226c6158988b73",
       "source": {
         "kind": "browser",
@@ -1023,14 +1033,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-helpdesk-4-leave",
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
       "capturedAt": "2026-10-07T17:23:46.832Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9dca4db6fb76e6d039fb026eaa3e28a464d375f8ce93ec8129aba5c8e0d83007",
       "source": {
         "kind": "browser",
@@ -1045,14 +1056,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
       "capturedAt": "2026-10-07T17:23:48.911Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8b455f8cf9fb187695a94de5cb93a31565b55eee301368263171f23a884a3f97",
       "source": {
         "kind": "browser",
@@ -1067,7 +1079,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-helpdesk-6-teams",
@@ -1119,7 +1132,7 @@
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
       "capturedAt": "2026-10-07T17:21:20.247Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a40c7684fa1fc74d7cdebcc38520555635d2acfb60f3940eff9a9fecd33e729f",
       "source": {
         "kind": "browser",
@@ -1134,14 +1147,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-marketing-3-try",
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
       "capturedAt": "2026-10-07T17:21:29.255Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "186c36779e25b29c73d5876b8f9427d0e3100cdeba9e4f755c8f3c49c519a1a9",
       "source": {
         "kind": "browser",
@@ -1156,7 +1170,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-marketing-4-limits",
@@ -1252,7 +1267,7 @@
       "title": "The nightly check and its status tools",
       "path": "screenshots/guides/ops-2-agent.png",
       "capturedAt": "2026-10-07T17:21:19.011Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "54fa6be319a2b2759c5bd48e0f7834455780057084b2b14100510d61c0d2b689",
       "source": {
         "kind": "browser",
@@ -1267,14 +1282,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-ops-3-try",
       "title": "A test run writes the report",
       "path": "screenshots/guides/ops-3-try.png",
       "capturedAt": "2026-10-07T17:21:28.048Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1cf0344de41136d0ecfccb7ebd69afb9e0a1d157d7c612a84a0f6eab702ce9ed",
       "source": {
         "kind": "browser",
@@ -1289,7 +1305,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-ops-4-slack",
@@ -1364,7 +1381,7 @@
       "title": "A report run, step by step",
       "path": "screenshots/guides/ops-7-report-run.png",
       "capturedAt": "2026-10-07T17:21:49.857Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d0d5abd7748ac8f276983d360ab11f641855d23c0534543d2394d1340e4519b6",
       "source": {
         "kind": "browser",
@@ -1379,7 +1396,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-sales-1-connect-crm",
@@ -1408,7 +1426,7 @@
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
       "capturedAt": "2026-10-07T17:21:20.234Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e25a19a85df45d5672f1d9e3a9678dfd085e8cbf40cda000eea25b38d4c802f3",
       "source": {
         "kind": "browser",
@@ -1423,14 +1441,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-sales-3-brief",
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
       "capturedAt": "2026-10-07T17:21:29.284Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "39453a1699e3e427da851410c86cb7ed8aba65184ee0ac24e11ab58402ed56b8",
       "source": {
         "kind": "browser",
@@ -1445,14 +1464,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
       "capturedAt": "2026-10-07T17:21:31.393Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6d3339248d66bc320ee99b175542a4fc35338e2e4e0b588f733d264e20fbd799",
       "source": {
         "kind": "browser",
@@ -1467,7 +1487,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-sales-5-slack-keys",
@@ -1765,7 +1786,7 @@
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
       "capturedAt": "2026-10-07T17:21:19.517Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d06871a83c9399afaf1886637482f5cb2841a376c9decbb836042d8ad57ca9e9",
       "source": {
         "kind": "browser",
@@ -1780,14 +1801,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
       "capturedAt": "2026-10-07T17:21:20.120Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5eee5e25bae586f399eee24d8b819c2f994af643ceaff08b8c360f6f20cef101",
       "source": {
         "kind": "browser",
@@ -1802,14 +1824,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-support-6-activate",
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
       "capturedAt": "2026-10-07T17:21:23.537Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5ec0a60cde773d25a3c715ba36b0c42cc7f621dda11d250ddf3e2c42bdfacb83",
       "source": {
         "kind": "browser",
@@ -1824,14 +1847,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
       "capturedAt": "2026-10-07T17:21:25.626Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4bbf825b265166283516fe8802c89574e6a99d797ec390195d927498ae5fd40a",
       "source": {
         "kind": "browser",
@@ -1846,7 +1870,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "guides-support-8-amount-rule",
@@ -2207,7 +2232,7 @@
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
       "capturedAt": "2026-10-07T17:21:17.773Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2aacd0550d1957c1b7bfdeb407352fde80b3ae815add5db63c571b45449b6c06",
       "source": {
         "kind": "browser",
@@ -2222,7 +2247,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "self-hosting-compose",
@@ -2469,7 +2495,7 @@
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
       "capturedAt": "2026-10-07T17:21:20.857Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d83348102ea5ab0a32daca6e6c0ce8834a09c6ea2d1772bc16af5b30067dabf4",
       "source": {
         "kind": "browser",
@@ -2484,14 +2510,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
       "capturedAt": "2026-10-07T17:21:23.904Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f1fb2921f62e183d9c4335b216aced25238528a9ed6a442eabd8f5cef3275989",
       "source": {
         "kind": "browser",
@@ -2506,14 +2533,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
       "capturedAt": "2026-10-07T17:21:26.620Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "39d5e8d881c22e7a848127a07aa3fd60f0dca775c9fb57bf5f8e85a0f04e8bc7",
       "source": {
         "kind": "browser",
@@ -2528,7 +2556,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "tool-detail",
@@ -2601,7 +2630,7 @@
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
       "capturedAt": "2026-10-07T17:21:29.643Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3f76cc2f58660bc8006b8ce93b532a0900094211b6ed55322353fe5bda64ae2c",
       "source": {
         "kind": "browser",
@@ -2616,14 +2645,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
       "capturedAt": "2026-10-07T17:21:32.897Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "53e5db602951454d67b122fe28da438c0429115ec732b15458deca1e322e3fea",
       "source": {
         "kind": "browser",
@@ -2638,7 +2668,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "visitor-data-request",
@@ -2667,7 +2698,7 @@
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
       "capturedAt": "2026-10-07T17:21:36.141Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2aacd0550d1957c1b7bfdeb407352fde80b3ae815add5db63c571b45449b6c06",
       "source": {
         "kind": "browser",
@@ -2682,7 +2713,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents and frontend/src/lib changed: the Always on card says when it reports (a daily summary at a time), the paused banner explains a pause for plan room, and the Always on page gained the daily summary option and how many always-on agents the plan includes. Recapture where the page shows them, and re-register."
     },
     {
       "id": "widget-builder",
