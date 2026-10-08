@@ -42,7 +42,7 @@ export const SUBCOMMANDS: Record<string, Subcommand> = {
   skills: { pkg: '@almyty/skills', group: 'Skills', help: 'Install API skills into AI coding agents', subcommands: ['install', 'list', 'search', 'run', 'installed', 'remove', 'gateways', 'daemon', 'watch'] },
   models: { pkg: '@almyty/models', group: 'Platform', help: 'Model catalog: cards, validation, hosting' },
   credentials: { pkg: '@almyty/credentials', group: 'Platform', help: 'Keys, tokens and accounts: add, check, share' },
-  runner: { pkg: '@almyty/runner', group: 'Serving', help: 'Run agents on this machine as a daemon', subcommands: ['start', 'status', 'stop'] },
+  runner: { pkg: '@almyty/runner', group: 'Serving', help: 'Run agents on this machine as a daemon' },
   mcp: { pkg: '@almyty/mcp-server', group: 'Serving', help: 'Serve your agents and tools over MCP' },
   acp: { pkg: '@almyty/acp-server', group: 'Serving', help: 'Serve an agent over the Agent Client Protocol' },
 };

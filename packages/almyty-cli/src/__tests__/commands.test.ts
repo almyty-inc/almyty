@@ -230,15 +230,6 @@ describe('completion offers the subcommands each sibling CLI really has', () => 
     expect(SUBCOMMANDS.auth.subcommands ?? []).toEqual(expect.arrayContaining(dispatched));
   });
 
-  it('covers every command @almyty/runner dispatches', () => {
-    const source = sibling('runner/src/cli-args.ts');
-    const match = source.match(/COMMANDS = \[([^\]]+)\]/);
-    expect(match).not.toBeNull();
-    const dispatched = match![1].split(',').map((s) => s.trim().replace(/'/g, '')).filter((c) => !['help', 'version'].includes(c));
-    expect(dispatched).toEqual(['start', 'status', 'stop']);
-    expect(SUBCOMMANDS.runner.subcommands).toEqual(dispatched);
-  });
-
   it('passes `almyty runner start --enroll` through to the runner flag the runner-env images start with', () => {
     // The umbrella forwards argv after the command untouched, so the flag
     // only has to exist in the runner's own parser.
