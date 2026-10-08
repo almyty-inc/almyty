@@ -921,6 +921,12 @@ jobs:
       - name: Check no build/deploy value was eaten
         run: node scripts/check-empty-values.js
 
+      # The curated runner-env images (images/runner-env) and the list the
+      # backend is handed (settings.json there) name the same flavours, at
+      # the runner version the Dockerfile pins. Node + a checkout, no install.
+      - name: Check the runner-env images agree with their settings list
+        run: node scripts/check-runner-env-images.js
+
       - name: Test screenshot evidence validation
         run: node --test docs-site/scripts/check-screenshots.test.mjs
 
