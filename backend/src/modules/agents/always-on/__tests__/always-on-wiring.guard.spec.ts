@@ -64,4 +64,18 @@ describe('Always on is wired', () => {
   it('the builder save no longer schedules anything by itself', () => {
     expect(code('modules/agents/agents.controller.ts')).not.toMatch(/reconcileHeartbeat|enableHeartbeat/);
   });
+
+  it('the daily summary and the capacity check are handled by the runtime processor', () => {
+    expect(processor).toMatch(/@Process\(ALWAYS_ON_DIGEST_JOB\)[\s\S]*?this\.alwaysOn\.digest\(/);
+    expect(processor).toMatch(/@Process\(ALWAYS_ON_CAPACITY_JOB\)[\s\S]*?this\.alwaysOn\.resumeAllWithinCapacity\(/);
+    // ...and both are scheduled: the summary with the agent's other jobs, the check at boot.
+    expect(service).toMatch(/private async scheduleJobs[\s\S]*?ALWAYS_ON_DIGEST_JOB/);
+    expect(service).toMatch(/async restoreTimers\(\)[\s\S]*?await this\.scheduleCapacityCheck\(\)/);
+  });
+
+  it('CAPACITY_EXHAUSTED is raised where a wake turns into a run, before the run starts', () => {
+    const process = service.slice(service.indexOf('async process('), service.indexOf('private async claim('));
+    expect(process.indexOf('capacityPause(')).toBeGreaterThan(-1);
+    expect(process.indexOf('capacityPause(')).toBeLessThan(process.indexOf('this.runtime.startRun('));
+  });
 });

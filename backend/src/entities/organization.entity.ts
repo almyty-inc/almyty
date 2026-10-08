@@ -52,8 +52,16 @@ export interface OrganizationSettings {
   /**
    * Tighter Always on limits than the plan's (agents/always-on/always-on-capacity.ts):
    * timerFloorMinutes (longer only), maxWakesPerHour and includedAgents (fewer only).
+   * And when a daily summary goes out unless the agent says otherwise
+   * (agents/always-on/always-on-digest.ts): digestTime ("HH:MM") and digestTimezone.
    */
-  alwaysOn?: { timerFloorMinutes?: number; maxWakesPerHour?: number; includedAgents?: number };
+  alwaysOn?: {
+    timerFloorMinutes?: number;
+    maxWakesPerHour?: number;
+    includedAgents?: number;
+    digestTime?: string;
+    digestTimezone?: string;
+  };
 }
 
 @Entity('organizations')

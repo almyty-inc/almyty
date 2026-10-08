@@ -345,6 +345,8 @@ export class ScheduledPostService implements ScheduledResultPoster {
   /** Written onto the run, beside the webhook's outcome. Recording must not become its own failure. */
   private async record(execution: ScheduledResult, outcome: ChannelDeliveryOutcome): Promise<void> {
     execution.metadata = { ...(execution.metadata ?? {}), channelDelivery: outcome };
+    // A daily summary is no row of its own.
+    if (execution.kind === 'digest') return;
     try {
       if (execution.kind === 'run') await this.runs?.update(execution.id, { metadata: execution.metadata });
       else await this.executions.update(execution.id, { metadata: execution.metadata });
