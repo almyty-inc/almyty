@@ -1264,6 +1264,8 @@ export const credentialsApi = {
     scopes?: string[]
     credentialName?: string
   }): Promise<{ credentialId: string }> => apiPost('/credentials/oauth2/client-credentials', data),
+  /** The redirect address an OAuth app at the provider has to list for sign-ins to come back here. */
+  oauth2CallbackUrl: (): Promise<{ callbackUrl: string }> => apiGet('/credentials/oauth2/callback-url'),
 }
 
 // Versions API (entity version history via typeorm-versions)
