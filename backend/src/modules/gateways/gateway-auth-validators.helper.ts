@@ -112,11 +112,16 @@ export class GatewayAuthValidators {
     headers: Record<string, string>,
     query: Record<string, string>
   ): Promise<AuthenticationResult> {
-    const keyHeader = authConfig.configuration.keyHeader || 'x-api-key';
-    const keyQuery = authConfig.configuration.keyQuery || 'api_key';
+    // additionalKeyHeaders / additionalKeyQueries are where the
+    // GatewayEndpointAccess migration put the names of the duplicate rows
+    // it folded into this one, so a client still sending its key there
+    // keeps working.
+    const names = (primary: string, extra: unknown) => [primary, ...(Array.isArray(extra) ? extra.filter((n): n is string => typeof n === 'string' && n !== '') : [])];
+    const keyHeaders = names(authConfig.configuration.keyHeader || 'x-api-key', authConfig.configuration.additionalKeyHeaders);
+    const keyQueries = names(authConfig.configuration.keyQuery || 'api_key', authConfig.configuration.additionalKeyQueries);
 
     const authorization = headers.authorization || headers.Authorization || '';
-    const apiKey = headers[keyHeader.toLowerCase()] || query[keyQuery] || (authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '');
+    const apiKey = keyHeaders.map(h => headers[h.toLowerCase()]).find(Boolean) || keyQueries.map(n => query[n]).find(Boolean) || (authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '');
 
     if (!apiKey) {
       return {
