@@ -624,14 +624,27 @@ export const apisApi = {
   removeKey: (apiId: string): Promise<ApiKeyView> => apiDel(`/apis/${apiId}/key`),
 }
 
-// Tools API
+// Tools API. The server pages tool lists at 100; a picker reads up to 50 pages.
+const TOOLS_PAGE = 100
+const TOOLS_MAX_PAGES = 50
 export const toolsApi = {
-  getAll: (organizationId?: string, params?: { limit?: number; page?: number }) => {
-    const queryParams = params ? { params } : { params: { limit: 100 } }
-    if (organizationId) {
-      return apiGet(`/organizations/${organizationId}/tools`, queryParams)
-    }
-    return apiGet('/tools', queryParams)
+  /**
+   * With params: that one page. Without: every tool, for the pickers (an
+   * agent's Tools and APIs, a gateway, a tool step). The server answers at
+   * most 100 a page, so one request left an organization with Gmail (79
+   * tools) and Google Calendar (37) showing 7 of Calendar's.
+   */
+  getAll: async (organizationId?: string, params?: { limit?: number; page?: number }) => {
+    const url = organizationId ? `/organizations/${organizationId}/tools` : '/tools'
+    if (params) return apiGet(url, { params })
+    const first: any = await apiGet(url, { params: { limit: TOOLS_PAGE, page: 1 } })
+    const pages = Math.min(Number(first?.totalPages) || 1, TOOLS_MAX_PAGES)
+    if (Array.isArray(first) || pages <= 1) return first
+    const rest: any[] = await Promise.all(
+      Array.from({ length: pages - 1 }, (_, i) => apiGet(url, { params: { limit: TOOLS_PAGE, page: i + 2 } })),
+    )
+    const tools = [...(first.tools ?? []), ...rest.flatMap((r) => r?.tools ?? [])]
+    return { ...first, tools, page: 1, limit: tools.length, totalPages: 1 }
   },
   
   getById: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}`),
