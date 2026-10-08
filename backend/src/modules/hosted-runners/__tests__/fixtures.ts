@@ -6,8 +6,9 @@ import { DEFAULT_HOSTED_RUNNER_SETTINGS } from '../hosted-runner-settings';
 export const LAYOUT: ClusterLayout = DEFAULT_HOSTED_RUNNER_SETTINGS.cluster;
 
 /** A value that must never appear outside the runner's Secret. */
-export const ENROLLMENT_TOKEN = 'enroll-tok-9f8e7d6c5b4a39281706f5e4d3c2b1a0';
-export const BOUND_SECRET = 'sk-live-bound-connection-value-0123456789';
+/** Fake, low-entropy test values; nothing real. */
+export const ENROLLMENT_TOKEN = 'fake-enrollment-token-for-tests';
+export const BOUND_SECRET = 'fake-bound-connection-value';
 
 /** A provision request as the processor builds one, for one workspace of one org. */
 export function provisionRequest(overrides: Partial<HostedProvisionRequest> = {}): HostedProvisionRequest {
