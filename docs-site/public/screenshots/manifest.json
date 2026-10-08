@@ -607,7 +607,8 @@
       "title": "Agents CLI 1.5.2 help",
       "path": "screenshots/cli/agents-help.png",
       "capturedAt": "2026-10-01T15:53:41.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
       "sha256": "b5a63b6dc10208fe660e0b274ad0d5210ce1888a52e8c8516ac6f14633922458",
       "source": {
         "kind": "published-cli",
@@ -626,7 +627,8 @@
       "title": "almyty CLI 1.5.2 help",
       "path": "screenshots/cli/almyty-help.png",
       "capturedAt": "2026-10-01T15:53:34.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
       "sha256": "47b40de6145ffc3d735b12ac03b92f26a6de1c634d358ce39ce035128af22a2c",
       "source": {
         "kind": "published-cli",
@@ -645,7 +647,8 @@
       "title": "Auth CLI 1.5.2 help",
       "path": "screenshots/cli/auth-help.png",
       "capturedAt": "2026-10-06T12:05:23.248Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
       "sha256": "dade8f209ef3f57e45dcf77c47be67c30c4992503862ad701223e7fd5cd79627",
       "source": {
         "kind": "published-cli",
@@ -664,7 +667,8 @@
       "title": "Chat CLI 1.5.2 help",
       "path": "screenshots/cli/chat-help.png",
       "capturedAt": "2026-10-01T15:53:38.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
       "sha256": "c71b95c43fade9e47e7f9171e3a64c228d36f6dfe1aae389bb5e77e70a5ed510",
       "source": {
         "kind": "published-cli",
@@ -703,7 +707,8 @@
       "title": "Skills CLI 1.5.2 help",
       "path": "screenshots/cli/skills-help.png",
       "capturedAt": "2026-10-01T15:53:40.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.2; recapture from published 1.5.3",
       "sha256": "8642c7c4b0670e4330c99c87c2d32799a5fd5de588aa3b66fcddf8d3080b9c7c",
       "source": {
         "kind": "published-cli",
