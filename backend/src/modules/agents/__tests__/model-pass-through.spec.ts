@@ -64,7 +64,8 @@ const fakeReq = (headers: Record<string, string> = {}): any => ({ headers, on: j
 function harness(opts: { providers?: any[]; cards?: Model[]; budget?: () => Promise<void> } = {}) {
   const providers = opts.providers ?? [provider('p-anthropic', LlmProviderType.ANTHROPIC), provider('p-openai', LlmProviderType.OPENAI)];
   const cards = opts.cards ?? [card('m-sonnet', 'p-anthropic', 'claude-sonnet-4-5'), card('m-gpt', 'p-openai', 'gpt-5')];
-  const providerRepo = { find: jest.fn(async ({ where }: any) => providers.filter((p) => p.organizationId === where.organizationId && p.visibility === where.visibility && p.status === where.status)) };
+  // Filters by exactly what the service asks for, so a query that forgot the visibility would see every provider.
+  const providerRepo = { find: jest.fn(async ({ where }: any) => providers.filter((p) => Object.entries(where).every(([k, v]) => p[k] === v))) };
   const ids = (cond: any) => cond?._value ?? cond?.value ?? [];
   const modelRepo = {
     find: jest.fn(async ({ where }: any) => {
