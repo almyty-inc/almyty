@@ -1,4 +1,5 @@
 import { ArrayMaxSize, IsArray, IsEnum, IsIn, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { ACCESS_SCOPES, type AccessScope } from '../gateway-access';
 import { Type } from 'class-transformer';
 
 import { GatewayKind, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -98,6 +99,14 @@ export class CreateGatewayBodyDto {
   @IsOptional()
   @IsEnum(RESOURCE_VISIBILITIES)
   visibility?: ResourceVisibility;
+
+  @IsOptional()
+  @IsIn(ACCESS_SCOPES)
+  accessScope?: AccessScope;
+
+  @IsOptional()
+  @IsUUID()
+  accessTeamId?: string | null;
 
   @IsOptional()
   @IsString()
@@ -206,6 +215,14 @@ export class UpdateGatewayBodyDto {
   @IsOptional()
   @IsEnum(RESOURCE_VISIBILITIES)
   visibility?: ResourceVisibility;
+
+  @IsOptional()
+  @IsIn(ACCESS_SCOPES)
+  accessScope?: AccessScope;
+
+  @IsOptional()
+  @IsUUID()
+  accessTeamId?: string | null;
 
   @IsOptional()
   @IsString()

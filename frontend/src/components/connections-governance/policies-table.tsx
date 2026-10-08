@@ -32,7 +32,7 @@ import { POLICY_KIND_LABELS, type ConnectionPolicy, type ConnectionPolicyKind } 
 import { Link } from 'react-router-dom'
 
 /** The connection policy create/edit page (policy-form.tsx). */
-export const POLICIES_PAGE_PATH = '/credentials/policies'
+export const POLICIES_PAGE_PATH = '/settings/credential-rules'
 
 const KIND_BADGE_CLASS: Record<ConnectionPolicyKind, string> = {
   connector_allowlist: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',

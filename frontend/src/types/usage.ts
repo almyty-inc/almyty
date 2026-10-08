@@ -283,10 +283,12 @@ export interface Agent {
     codeMode?: CodeModeConfig
     /** Machine label requirements for runner-backed tools; the server stores an object, a save may send text. */
     runnerLabels?: Record<string, string> | string
+    /** Pin runner-backed work to one machine. */
+    runnerId?: string | null
     /**
-     * Who its unattended runs (a schedule) act as: its owner (default), or
-     * the agent itself, with only the connections granted to it and its own
-     * name in the audit log. 'agent' needs the agent_identity entitlement.
+     * Who unattended runs act as: its owner (default), or the agent itself
+     * with its own connection grants and audit identity. 'agent' needs the
+     * agent_identity entitlement.
      */
     runAs?: 'owner' | 'agent'
     verify?: {

@@ -1,3 +1,4 @@
+import { hasEndpointAccessScope } from './gateway-access';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -78,6 +79,7 @@ export class GatewayInitHelper {
   }
 
   async createDefaultAuth(gateway: Gateway): Promise<void> {
+    if (hasEndpointAccessScope(gateway) && gateway.accessScope) return;
     const defaultAuth = this.gatewayAuthRepository.create({
       gatewayId: gateway.id,
       type: GatewayAuthType.API_KEY,

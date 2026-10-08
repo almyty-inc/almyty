@@ -1,3 +1,4 @@
+import { normalizeGatewayAccess, type AccessScope } from './gateway-access';
 import { ConflictException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -104,6 +105,8 @@ export interface CreateGatewayDto {
   };
   metadata?: Record<string, any>;
   visibility?: ResourceVisibility;
+  accessScope?: AccessScope;
+  accessTeamId?: string | null;
   teamId?: string | null;
 }
 
@@ -153,6 +156,8 @@ export interface UpdateGatewayDto {
   };
   metadata?: Record<string, any>;
   visibility?: ResourceVisibility;
+  accessScope?: AccessScope;
+  accessTeamId?: string | null;
   teamId?: string | null;
 }
 
@@ -614,12 +619,15 @@ export class GatewaysService {
         createGatewayDto.teamId,
       );
       const scope = normaliseVisibility(createGatewayDto.visibility, createGatewayDto.teamId);
+      const endpointAccess = normalizeGatewayAccess(createGatewayDto.accessScope, createGatewayDto.accessTeamId);
+      await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, endpointAccess.accessScope === 'team' ? 'team' : 'org', endpointAccess.accessTeamId);
+      if (endpointAccess.accessScope === 'external_open' && ['code', 'both'].includes(createGatewayDto.configuration?.exposure)) throw new BadRequestException('Outside open endpoints cannot run code');
       if (scope.visibility === 'private') this.assertPrivateCapable(createGatewayDto.type);
       // What the gateway serves must be at least as private as the
       // gateway itself (a private agent only behind its owner's private
       // gateway). Checked on an unsaved row, so only the agent applies.
       await this.assertContentsServable(
-        { ...scope, ownerUserId: userId, organizationId, agentId: createGatewayDto.agentId } as Gateway,
+        { ...scope, ...endpointAccess, ownerUserId: userId, organizationId, agentId: createGatewayDto.agentId } as Gateway,
         userId,
       );
 
@@ -643,6 +651,7 @@ export class GatewaysService {
         status: initialStatus,
         visibility: scope.visibility,
         teamId: scope.teamId,
+        ...endpointAccess,
         // Always record who made it: a private gateway needs its owner,
         // and an org gateway flipped to private later keeps the creator.
         ownerUserId: userId,
@@ -756,8 +765,12 @@ export class GatewaysService {
       delete (updateGatewayDto as any).customDomain;
       delete (updateGatewayDto as any).visitorOAuth;
 
+      const endpointAccess = normalizeGatewayAccess(updateGatewayDto.accessScope ?? gateway.accessScope, updateGatewayDto.accessTeamId !== undefined ? updateGatewayDto.accessTeamId : gateway.accessTeamId);
+      await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, endpointAccess.accessScope === 'team' ? 'team' : 'org', endpointAccess.accessTeamId);
+      if (endpointAccess.accessScope === 'external_open' && ['code', 'both'].includes((updateGatewayDto.configuration ?? gateway.configuration)?.exposure)) throw new BadRequestException('Outside open endpoints cannot run code');
       // Update fields
       Object.assign(gateway, updateGatewayDto);
+      Object.assign(gateway, endpointAccess);
       gateway.ownerUserId = recordedOwner;
       // Sanitize scoping after the spread: 'org' and 'private' carry no
       // teamId, so flipping away from 'team' clears the dangling one.
@@ -779,7 +792,7 @@ export class GatewaysService {
           throw new ForbiddenException('Only the gateway\'s owner can make it private');
         }
       }
-      if (scopeChanged || updateAny.agentId !== undefined) {
+      if (scopeChanged || updateAny.accessScope !== undefined || updateAny.accessTeamId !== undefined || updateAny.agentId !== undefined) {
         await this.assertContentsServable(gateway, userId);
       }
 

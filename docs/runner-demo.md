@@ -22,8 +22,8 @@ That's it. No agent CLIs, no API keys, no clones. The runner ships node-pty + no
 ## Step 1: Install and authenticate
 
 ```
-npm i -g @almyty/runner @almyty/auth
-almyty-auth login
+npm i -g @almyty/cli
+almyty login
 ```
 
 Or, if you already have the umbrella installed:
@@ -39,7 +39,7 @@ Opens a browser. One-time per machine. The runner picks the credential up from `
 Either of these works — the umbrella delegates `runner` to `@almyty/runner`, so they produce identical output:
 
 ```
-almyty-runner start --name laptop --label env=demo
+almyty runner start --name laptop --label env=demo
 # or, with the umbrella installed:
 almyty runner start --name laptop --label env=demo
 ```

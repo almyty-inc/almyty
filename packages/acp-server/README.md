@@ -5,15 +5,16 @@ ACP (Agent Client Protocol) server for almyty. Exposes any almyty agent over ndj
 ## Quick start
 
 ```bash
-$ npx @almyty/auth login
-$ npx @almyty/acp-server my-agent
+$ npm i -g @almyty/cli
+$ almyty login
+$ almyty acp my-agent
 ```
 
 ## Usage
 
 ```bash
-$ npx @almyty/acp-server <agent>          # agent by name or slug
-$ npx @almyty/acp-server acme/my-agent    # org/slug format
+$ almyty acp <agent>          # agent by name or slug
+$ almyty acp acme/my-agent    # org/slug format
 ```
 
 ## Editor integration
@@ -26,8 +27,8 @@ Add to your Zed settings:
 {
   "agent_servers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/acp-server", "my-agent"]
+      "command": "almyty",
+      "args": ["acp", "my-agent"]
     }
   }
 }
@@ -35,7 +36,7 @@ Add to your Zed settings:
 
 ### JetBrains
 
-Configure as an external ACP agent with command `npx -y @almyty/acp-server <agent>`.
+Configure as an external ACP agent with command `almyty acp <agent>`.
 
 ## Environment variables
 
@@ -46,7 +47,7 @@ Configure as an external ACP agent with command `npx -y @almyty/acp-server <agen
 
 ## Authentication
 
-Requires `npx @almyty/auth login` first. Reads credentials from `~/.almyty/credentials.json`.
+Requires `almyty login` first. Reads credentials from `~/.almyty/credentials.json`.
 
 ## About almyty
 

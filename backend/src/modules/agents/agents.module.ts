@@ -1,3 +1,6 @@
+import { GatewaysModule } from '../gateways/gateways.module';
+import { AgentApiAccessService } from './agent-api-access.service';
+import { AgentApiAccessController } from './agent-api-access.controller';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
@@ -123,18 +126,19 @@ import { BudgetsModule } from '../budgets/budgets.module';
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
     forwardRef(() => ApprovalsModule),
+    forwardRef(() => GatewaysModule),
     AuthorizationModule,
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
+  providers: [AgentApiAccessService, AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentIdentityService, AgentIdentityReachService,
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
     // Carries a workflow run on once the change sets its Code steps wait on are decided.
     WorkflowApprovalResumeService],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
+  controllers: [AgentApiAccessController, AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
     AgentIdentityReachController],
-  exports: [
+  exports: [AgentApiAccessService,
     AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService, AgentExecutionCancellationService,
     // Channels and connections wake always-on agents through it.
     AlwaysOnService,

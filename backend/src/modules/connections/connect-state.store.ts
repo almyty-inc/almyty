@@ -23,6 +23,8 @@ export interface PendingConnect {
   mode: 'browser' | 'headless';
   /** Set when the flow rotates an existing connection instead of creating one. */
   rotateConnectionId: string | null;
+  /** The name the new connection is saved under, when the person gave one. */
+  name?: string;
   /** Non-secret form values captured before the redirect. */
   input: Record<string, unknown>;
   /**

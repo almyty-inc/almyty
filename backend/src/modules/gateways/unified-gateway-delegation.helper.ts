@@ -1,3 +1,4 @@
+import { hasEndpointAccessScope } from './gateway-access';
 import { HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -216,7 +217,7 @@ export class UnifiedGatewayDelegation {
     // A private gateway authenticates every request, discovery and channel
     // webhooks included: the resolver serves it to its owner only and
     // answers everyone else with the not-found a missing gateway gets.
-    if (isPrivateGateway(gateway) || (!isDiscovery && !isChannel)) {
+    if (isPrivateGateway(gateway) || (hasEndpointAccessScope(gateway) && ['team', 'org'].includes(gateway.accessScope) && !isChannel) || (!isDiscovery && !isChannel)) {
       // The org and the gateway (with its auth configs) are already in
       // hand from the unified controller — hand them over so the resolver
       // does not repeat both lookups.

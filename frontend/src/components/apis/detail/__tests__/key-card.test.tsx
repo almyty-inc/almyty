@@ -102,10 +102,10 @@ describe('the Key card', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add a key' }))
     await user.click(await screen.findByRole('button', { name: 'Create one here' }))
-    const flow = await screen.findByTestId('connect-flow')
+    const flow = await screen.findByTestId('credential-form')
     // It lands on Credentials under a name that says what it is for.
     expect(await within(flow).findByLabelText('Name')).toHaveValue('Petstore key')
-    const key = within(flow).getByLabelText('Key')
+    const key = await within(flow).findByLabelText('Key')
     // A secret: masked.
     expect(key).toHaveAttribute('type', 'password')
     await user.type(key, 'pk-live-1')
@@ -159,7 +159,7 @@ describe('the Key card', () => {
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Username and password' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Create one here' }))
-    const flow = await screen.findByTestId('connect-flow')
+    const flow = await screen.findByTestId('credential-form')
     await user.type(await within(flow).findByLabelText(/^Username\s*\*?$/), 'ops')
     const password = within(flow).getByLabelText(/^Password\s*\*?$/)
     expect(password).toHaveAttribute('type', 'password')
@@ -250,7 +250,7 @@ describe('the Key card asks before leaving', () => {
     const { router } = at()
     fireEvent.click(await screen.findByRole('button', { name: 'Replace key' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create one here' }))
-    const flow = await screen.findByTestId('connect-flow')
+    const flow = await screen.findByTestId('credential-form')
     fireEvent.change(await within(flow).findByLabelText(/^Password\s*\*?$/), { target: { value: 'pk-half' } })
     fireEvent.click(within(flow).getByRole('button', { name: 'Cancel' }))
     await expectLeavesWithoutAsking(router)

@@ -1,34 +1,25 @@
 /**
- * Credentials > Advanced > Governance (EE, `credentials_governance`).
+ * Settings > Advanced > Credential rules (EE, `credentials_governance`).
  * Locked without the entitlement; with it, a sub-navigation over the
  * policies table, the review dashboard, and expiry, rotation and export.
  */
-import { useState } from 'react'
-import { Eye, ShieldCheck, TimerReset } from 'lucide-react'
 
 import { EntitlementGate } from '@/components/entitlement-gate'
 import { UpgradePrompt } from '@/components/plan-indicator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CONNECTIONS_GOVERNANCE_ENTITLEMENT } from '@/lib/connections-governance-api'
-import { cn } from '@/lib/utils'
 import { ExpiryPanel } from './expiry-panel'
 import { PoliciesTable } from './policies-table'
 import { ReviewDashboard } from './review-dashboard'
 
 export type GovernanceView = 'policies' | 'review' | 'expiry'
 
-const VIEWS: Array<{ key: GovernanceView; label: string; icon: typeof ShieldCheck }> = [
-  { key: 'policies', label: 'Policies', icon: ShieldCheck },
-  { key: 'review', label: 'Review', icon: Eye },
-  { key: 'expiry', label: 'Expiry and rotation', icon: TimerReset },
-]
-
 export function ConnectionsGovernanceSection({ initialView = 'policies' }: { initialView?: GovernanceView }) {
   return (
-    <section className="space-y-3" aria-label="Governance" data-testid="connections-governance">
-      <div className="flex items-baseline gap-2">
-        <h2 className="font-heading text-lg font-semibold">Governance</h2>
-        <span className="text-xs text-muted-foreground">org-wide rules, review, expiry and rotation</span>
+    <section className="space-y-3" aria-label="Credential rules" data-testid="connections-governance">
+      <div className="space-y-1">
+        <h2 className="font-heading text-lg font-semibold">Credential rules</h2>
+        <p className="text-sm text-muted-foreground">Which services may be used and by whom, a review of keys given to agents, and when keys expire or are replaced.</p>
       </div>
       <EntitlementGate
         feature={CONNECTIONS_GOVERNANCE_ENTITLEMENT}
@@ -51,34 +42,20 @@ export function ConnectionsGovernanceSection({ initialView = 'policies' }: { ini
 }
 
 function GovernanceSurface({ initialView }: { initialView: GovernanceView }) {
-  const [view, setView] = useState<GovernanceView>(initialView)
   return (
-    <div className="space-y-4" data-testid="governance-unlocked">
-      <div className="flex items-center gap-1 border-b" role="tablist" aria-label="Governance views">
-        {VIEWS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={view === key}
-            aria-controls={`governance-${key}`}
-            data-testid={`governance-tab-${key}`}
-            onClick={() => setView(key)}
-            className={cn(
-              '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              view === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {label}
-          </button>
-        ))}
-      </div>
-      <div id={`governance-${view}`} role="tabpanel">
-        {view === 'policies' && <PoliciesTable />}
-        {view === 'review' && <ReviewDashboard />}
-        {view === 'expiry' && <ExpiryPanel />}
-      </div>
+    <div className="space-y-6" data-testid="governance-unlocked">
+      <details open={initialView === 'policies'}>
+        <summary className="cursor-pointer text-sm font-medium">Policies</summary>
+        <div className="pt-4"><PoliciesTable /></div>
+      </details>
+      <details open={initialView === 'review'}>
+        <summary className="cursor-pointer text-sm font-medium">Review</summary>
+        <div className="pt-4"><ReviewDashboard /></div>
+      </details>
+      <details open={initialView === 'expiry'}>
+        <summary className="cursor-pointer text-sm font-medium">Expiry and rotation</summary>
+        <div className="pt-4"><ExpiryPanel /></div>
+      </details>
     </div>
   )
 }

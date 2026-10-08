@@ -52,11 +52,10 @@ describe('RegisterRunnerDto', () => {
     expect(await violations(basePayload())).toEqual([]);
   });
 
-  it('rejects missing name', async () => {
+  it('accepts a missing name so registration can use the hostname', async () => {
     const payload = basePayload();
-    delete (payload as any).name;
-    const errs = await violations(payload);
-    expect(errs.some((e) => e.startsWith('name:'))).toBe(true);
+    delete payload.name;
+    expect(await violations(payload)).toEqual([]);
   });
 
   it('rejects an oversize name', async () => {

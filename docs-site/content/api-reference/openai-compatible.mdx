@@ -53,6 +53,16 @@ Authenticate with an almyty platform API key as a bearer token
 (`Authorization: Bearer ...`, which is what the SDKs send). An
 `OpenAI-Organization` or `OpenAI-Project` header is ignored: the key decides
 the organization.
+## Agent API access
+
+On the agent's page, **API access** decides who may call it: **Only you**, **One team**, **Everyone in the organization**, **Outside, open** or **Outside, protected**. Internal callers sign in to almyty. For protected outside access, enable any combination of keys, usernames and passwords, company sign-in, or signed tokens from your system. See [Access and sign-in](/gateways/authentication).
+
+For an agent with an API access target, set the model to agent: followed by its UUID. An SDK can send one of that endpoint's named keys as its Bearer token. The endpoint can also accept a company sign-in token or a token from your own system when you enable those methods. To list or retrieve that agent through /v1/models, send an x-almyty-agent-id header containing its UUID so the server knows which endpoint's access rules to apply before authentication.
+
+An explicitly open agent endpoint needs no credential. SDKs that require an API key argument can use a placeholder; the endpoint's open access choice admits the request.
+
+The organization and agent are resolved from the target; OpenAI-Organization and OpenAI-Project headers cannot change them. Revoked or expired keys are refused. Opening an endpoint does not bypass the agent's publication checks.
+
 
 ## Which agents a key can call
 
@@ -67,7 +77,7 @@ would run, each as `agent:<id>` in the OpenAI model shape, and
   (or an org owner or admin), and **private** agents of the key's own user;
 - a key minted for **one agent** lists and runs that agent only.
 
-A key is refused with a 401 when it is a gateway key, carries scopes, has
+For a platform-key request without an API target, a key is refused with a 401 when it is a gateway key, carries scopes, has
 expired or been revoked, or belongs to someone who is no longer an active
 member of the organization. Anything outside the set is the same 404
 (`model_not_found`) an agent that does not exist gets.

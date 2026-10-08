@@ -121,7 +121,7 @@ export class McpOAuthResolveHelper {
 
     const gateway = await this.gatewayRepository.findOne({
       where: { endpoint, organizationId, status: GatewayStatus.ACTIVE },
-      relations: { organization: true },
+      relations: { organization: true, authConfigs: true },
     });
 
     if (!gateway || (viewerId !== undefined && !gatewayServableTo(gateway, viewerId))) {

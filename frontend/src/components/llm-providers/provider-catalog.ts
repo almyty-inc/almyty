@@ -87,11 +87,6 @@ export function providerTileLabel(type: string): string {
   return providerTypeLabels[type as LlmProviderType] || type
 }
 
-/** The name a new provider gets; editable later on its page. */
-export function defaultProviderName(type: string): string {
-  if (type === LlmProviderType.CUSTOM) return 'My server'
-  return providerTypeLabels[type as LlmProviderType] || type
-}
 
 /**
  * A model hosted on your cloud gets a provider row written for it by the
@@ -103,9 +98,6 @@ export function isHostedModelPlumbing(provider: Record<string, any> | null | und
   return provider?.metadata?.managedBy?.kind === 'model_endpoint'
 }
 
-export function isProviderType(value: string | null | undefined): value is LlmProviderType {
-  return !!value && (Object.values(LlmProviderType) as string[]).includes(value)
-}
 
 /** Types reached at a server URL the person gives (your own server, Ollama); the key is optional for both. */
 export { baseUrlSupported as takesBaseUrl } from './schema'

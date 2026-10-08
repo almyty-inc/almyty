@@ -1,3 +1,4 @@
+import { endpointVisibility, endpointTeamId, type EndpointScopeLike } from '../../modules/gateways/gateway-access';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
 import {
@@ -122,7 +123,7 @@ export function userPrincipal(
   };
 }
 
-export interface GatewayScopeLike {
+export interface GatewayScopeLike extends EndpointScopeLike {
   id: string;
   organizationId: string;
   visibility?: ResourceVisibility | null;
@@ -147,8 +148,8 @@ export function gatewayPrincipal(
     kind: 'gateway',
     gatewayId: gateway.id,
     organizationId: gateway.organizationId,
-    visibility: gateway.visibility ?? 'org',
-    teamId: gateway.visibility === 'team' ? (gateway.teamId ?? null) : null,
+    visibility: endpointVisibility(gateway),
+    teamId: endpointTeamId(gateway),
     ownerUserId: gateway.ownerUserId ?? null,
   };
 }

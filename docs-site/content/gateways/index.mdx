@@ -1,6 +1,6 @@
 # Gateways
 
-A gateway is one address that offers a set of your tools to AI apps and other software, with a key to control who gets in. Make one, and an AI app such as Claude Code or Cursor can look up orders, track shipments or open tickets in your own systems, using only the tools you chose.
+A gateway is one address that offers a set of your tools to AI apps and other software, with access rules to control who gets in. Make one, and an AI app such as Claude Code or Cursor can look up orders, track shipments or open tickets in your own systems, using only the tools you chose.
 
 For example, a "Northwind Support Tools" gateway can offer the order and helpdesk tools to the support team's AI apps, while an "Orders for partners" gateway offers only order lookups to logistics partners.
 
@@ -14,12 +14,12 @@ For example, a "Northwind Support Tools" gateway can offer the order and helpdes
    - **UTCP**: programs and partner systems that call tools over plain web requests.
    - **Skills**: AI coding assistants, as installable skill files.
 3. Under **Tools**, pick a whole API or single tools. A draft tool can't be offered until it is active.
-4. Give it a **Name**; its address follows from the name. **Advanced** changes the path and who can use it.
-5. Click **Create gateway**. For MCP and UTCP, the next page shows the access key once, with a ready-made setup for each app filled in. Copy it now. A Skills gateway has no access key: the Skills tool signs in as you.
+4. Give it a **Name** and choose **Who can use it**. **Advanced** changes the path and who can manage it.
+5. Click **Create gateway**. If you chose **Outside, protected**, set up the keys or sign-in methods on the page that opens.
 
 An API's own page has **Create gateway** too, with that API's tools already picked.
 
-On the gateway's page, **Tool scoping** changes which tools it offers, the **Authentication** section manages keys and sign-in, and the **Integrations** tab gives the address and setup for each app:
+On the gateway's page, **Tool scoping** changes which tools it offers, **Who can use it** manages endpoint access, keys and sign-in, and the **Integrations** tab gives the address and setup for each app:
 
 ![A gateway's MCP endpoint, SSE, and discovery URLs](/screenshots/gateway-petstore-integration.png)
 
@@ -37,7 +37,7 @@ Each gateway speaks one protocol, the one it was created with. To offer the same
 
 ## Control what each gateway offers
 
-- **[Authentication](/gateways/authentication)**: a gateway turns everyone away until you add a way in. Use access keys, one per app or person, or OAuth sign-in.
+- **[Access and sign-in](/gateways/authentication)**: choose internal access, open outside access, or outside access protected by keys, usernames, company sign-in or your own tokens.
 - **[Tool scoping](/gateways/tool-scoping)**: choose exactly which tools a gateway offers, and limit what each may reach.
 - **[Search and scripts](#search-and-scripts-instead-of-every-tool)**: offer a search box and scripts instead of every tool.
 

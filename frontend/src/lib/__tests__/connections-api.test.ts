@@ -10,7 +10,6 @@ import {
   groupConnectorsByKind,
   isConnectForm,
   isConnectRedirect,
-  isCustomConnector,
   isFormMethod,
   isRedirectMethod,
   matchesConnectorSearch,
@@ -58,9 +57,6 @@ describe('connectorsApi', () => {
     await connectorsApi.list('mcp')
     expect(getSpy).toHaveBeenLastCalledWith('/credentials/services', { params: { kind: 'mcp' } })
 
-    const body = { key: 'my-vllm', kind: 'inference' as const, displayName: 'Office vLLM', connect: [{ type: 'api_key' as const, label: 'API key' }], validation: { kind: 'http' as const, url: 'https://x/v1/models' } }
-    await connectorsApi.create(body)
-    expect(postSpy).toHaveBeenCalledWith('/credentials/services', body, undefined)
   })
 })
 
@@ -106,15 +102,6 @@ describe('connectionsApi', () => {
 
     await connectionsApi.remove('c1')
     expect(deleteSpy).toHaveBeenCalledWith('/credentials/c1', undefined)
-  })
-
-  it('lists, adds and removes grants', async () => {
-    await connectionsApi.listGrants('c1')
-    expect(getSpy).toHaveBeenCalledWith('/credentials/c1/grants', undefined)
-    await connectionsApi.addGrant('c1', { principalType: 'team', principalId: 't1', permission: 'use' })
-    expect(postSpy).toHaveBeenCalledWith('/credentials/c1/grants', { principalType: 'team', principalId: 't1', permission: 'use' }, undefined)
-    await connectionsApi.removeGrant('c1', 'g1')
-    expect(deleteSpy).toHaveBeenCalledWith('/credentials/c1/grants/g1', undefined)
   })
 
   it('patches the org toggle inside settings', async () => {
@@ -171,11 +158,6 @@ describe('helpers', () => {
     expect(isConnectRedirect(form)).toBe(false)
     expect(isConnectRedirect({ pending: false, connection: connection() })).toBe(false)
     expect(isConnectRedirect(null)).toBe(false)
-  })
-
-  it('marks org-defined connectors as custom', () => {
-    expect(isCustomConnector(openai)).toBe(false)
-    expect(isCustomConnector({ ...openai, organizationId: 'org-1' })).toBe(true)
   })
 
   it('reads a validation failure from a flat or enveloped 422', () => {

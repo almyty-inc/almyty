@@ -45,6 +45,7 @@ export interface CodeCallContext {
   gatewayId?: string | null;
   scopes?: string[];
   runnerLabels?: Record<string, string>;
+  pinnedRunnerId?: string;
   retries?: number;
   /** The workflow run a Code step belongs to: its held change set is settled by that run when decided. */
   workflowExecutionId?: string | null;
@@ -95,6 +96,7 @@ export interface HeldChangeSetCall {
   gatewayId: string | null;
   scopes: string[] | null;
   runnerLabels: Record<string, string> | null;
+  pinnedRunnerId?: string | null;
   agentTeamId: string | null;
 }
 
@@ -227,6 +229,7 @@ export class CodeModeService implements OnModuleInit {
       ...(context.gatewayId ? { gatewayId: context.gatewayId } : {}),
       ...(context.scopes ? { scopes: context.scopes } : {}),
       ...(context.runnerLabels ? { runnerLabels: context.runnerLabels } : {}),
+      ...(context.pinnedRunnerId ? { pinnedRunnerId: context.pinnedRunnerId } : {}),
       ...(context.retries !== undefined ? { retries: context.retries } : {}),
       runId: context.runId ?? undefined,
       agentId: context.agentId ?? null,
@@ -360,6 +363,7 @@ export class CodeModeService implements OnModuleInit {
             ...(context.gatewayId ? { gatewayId: context.gatewayId } : {}),
             ...(context.scopes ? { scopes: context.scopes } : {}),
             ...(context.runnerLabels ? { runnerLabels: context.runnerLabels } : {}),
+            ...(context.pinnedRunnerId ? { pinnedRunnerId: context.pinnedRunnerId } : {}),
             runId: context.runId ?? undefined,
             agentId: context.agentId ?? null,
             agentTeamId: context.agentTeamId ?? null,
@@ -424,6 +428,7 @@ export class CodeModeService implements OnModuleInit {
       gatewayId: context.gatewayId ?? null,
       scopes: context.scopes ?? null,
       runnerLabels: context.runnerLabels ?? null,
+      pinnedRunnerId: context.pinnedRunnerId ?? null,
       agentTeamId: context.agentTeamId ?? null,
     };
     const row = await approvals.create({
@@ -478,6 +483,7 @@ export class CodeModeService implements OnModuleInit {
       gatewayId: call.gatewayId ?? null,
       ...(call.scopes ? { scopes: call.scopes } : {}),
       ...(call.runnerLabels ? { runnerLabels: call.runnerLabels } : {}),
+      ...(call.pinnedRunnerId ? { pinnedRunnerId: call.pinnedRunnerId } : {}),
       agentId: execution?.agentId ?? null,
       agentTeamId: call.agentTeamId ?? null,
     });
@@ -655,6 +661,7 @@ export class CodeModeService implements OnModuleInit {
     timeoutMs?: number;
     scriptContext: unknown;
     runnerLabels?: Record<string, string>;
+    pinnedRunnerId?: string;
     maxCalls?: number;
     signal?: AbortSignal;
   }): Promise<UnattendedRunAnswer> {
@@ -678,6 +685,7 @@ export class CodeModeService implements OnModuleInit {
         agentId: agent.id,
         agentTeamId: agent.teamId ?? null,
         ...(input.runnerLabels ? { runnerLabels: input.runnerLabels } : {}),
+        ...(input.pinnedRunnerId ? { pinnedRunnerId: input.pinnedRunnerId } : {}),
       },
       policy,
       grantsLeft: grantsLeftFor(policy, {}),

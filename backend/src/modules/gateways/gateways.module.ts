@@ -1,3 +1,5 @@
+import { GatewayAuthManagementGuard } from './gateway-auth-management.guard';
+import { CompanySigninService } from './company-signin.service';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
@@ -123,6 +125,8 @@ import { FilesModule } from '../files/files.module';
     FilesModule,
   ],
   providers: [
+    GatewayAuthManagementGuard,
+    CompanySigninService,
     HostedChatService,
     ChannelLinkService,
     ChannelPolicyService,
@@ -194,6 +198,7 @@ import { FilesModule } from '../files/files.module';
     ChannelInstallationsController,
   ],
   exports: [
+    CompanySigninService,
     GatewaysService,
     HostedChatService,
     SurfaceCorsService,

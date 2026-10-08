@@ -13,7 +13,7 @@ import { DEFAULT_TTL_MS } from '../workspace/workspace.service';
 import { RunnerService } from './runner.service';
 import { RunnerCallService, RunnerCallError, RUNNER_CALL_ERRORS, type RunnerResponsePayload } from './runner-call.service';
 import { canAcceptWork } from './runner-state';
-import { type LabelRequirements, hasLabelRequirements } from './runner-labels';
+import { type LabelRequirements, describeLabelRequirements, hasLabelRequirements, labelsMatch } from './runner-labels';
 
 export interface AcquireRunWorkspaceInput {
   /** The runner the tool was published for (preferred when labels route). */
@@ -26,6 +26,8 @@ export interface AcquireRunWorkspaceInput {
   principal?: ExecutionPrincipal;
   /** The agent's machine requirements; the workspace goes where the work would. */
   labels?: LabelRequirements;
+  /** runnerId is the agent's pinned runner: the workspace goes there, labels only check it. */
+  pinned?: boolean;
   signal?: AbortSignal;
 }
 
@@ -184,18 +186,28 @@ export class RunWorkspaceService {
 
   private activeFor(runId: string, runnerId: string): Promise<Workspace | null> {
     return this.workspaces.findOne({ where: { runId, runnerId, status: WorkspaceStatus.ACTIVE } });
-  }
 
+  }
   /** The runner the call is going to, by the same rules as RunnerCallService.dispatch. */
   private async resolveRunner(input: AcquireRunWorkspaceInput): Promise<Runner> {
     const caller = input.principal ?? input.callerUserId;
-    const resolved = hasLabelRequirements(input.labels)
+    const resolved = hasLabelRequirements(input.labels) && !input.pinned
       ? this.runners.resolveByLabels(input.labels, caller, input.organizationId, { preferRunnerId: input.runnerId })
       : this.runners.resolveForDispatch(input.runnerId, caller);
-    return resolved.catch((err) => {
+    const runner = await resolved.catch((err) => {
       if (err?.status === 404) throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND, err.message);
       throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_UNAVAILABLE, err?.message ?? String(err));
     });
+    if (input.pinned) {
+      if (runner.organizationId !== input.organizationId) throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND, 'runner not found');
+      if (hasLabelRequirements(input.labels) && !labelsMatch(runner.labels, input.labels)) {
+        throw new RunnerCallError(
+          RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND,
+          `${runner.name}, the runner this agent runs on, does not have ${describeLabelRequirements(input.labels)}`,
+        );
+      }
+    }
+    return runner;
   }
 
   /** `<agent-name>-<first 8 of the run id>`, the folder's name on the runner. */

@@ -1,3 +1,4 @@
+import { endpointVisibility, endpointTeamId, type EndpointScopeLike } from './gateway-access';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { GatewayType } from '../../entities/gateway.entity';
 import { resourceOwnerId, type AccessPolicyService, type ResourceVisibility } from '../../common/authorization/access-policy.service';
@@ -22,7 +23,7 @@ export const PRIVATE_CAPABLE_GATEWAY_TYPES: ReadonlySet<GatewayType> = new Set([
   GatewayType.A2A,
 ]);
 
-interface GatewayVisibilityLike {
+interface GatewayVisibilityLike extends EndpointScopeLike {
   visibility?: ResourceVisibility | null;
   ownerUserId?: string | null;
   teamId?: string | null;
@@ -36,7 +37,7 @@ interface ServableResourceLike {
 }
 
 export function isPrivateGateway(gateway: GatewayVisibilityLike | null | undefined): boolean {
-  return gateway?.visibility === 'private';
+  return !!gateway && endpointVisibility(gateway) === 'private';
 }
 
 /**
@@ -113,7 +114,7 @@ export function resourceServableThroughGateway(
   if (!resource) return false;
   if (resource.visibility === 'team') {
     if (isPrivateGateway(gateway)) return true;
-    return gateway.visibility === 'team' && !!resource.teamId && gateway.teamId === resource.teamId;
+    return endpointVisibility(gateway) === 'team' && !!resource.teamId && endpointTeamId(gateway) === resource.teamId;
   }
   if (resource.visibility !== 'private') return true;
   const owner = resourceOwnerId(resource);

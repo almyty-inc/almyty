@@ -9,8 +9,9 @@ directory) and shared by `@almyty/agents`, `@almyty/chat`,
 ## Quick start
 
 ```bash
-$ npx @almyty/auth login
-$ npx @almyty/auth whoami
+$ npm i -g @almyty/cli
+$ almyty login
+$ almyty whoami
 ```
 
 ## Commands
@@ -46,7 +47,7 @@ alongside it. An expired token exits `3`, so `whoami` is a usable
 precondition in a script:
 
 ```bash
-npx @almyty/auth whoami --verify > /dev/null || npx @almyty/auth login
+almyty whoami --verify > /dev/null || almyty login
 ```
 
 `whoami` never prints the token — only a first-8/last-4 preview, enough

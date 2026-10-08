@@ -1,3 +1,4 @@
+import type { AccessScope } from '../modules/gateways/gateway-access';
 import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
 import type { AgentCollaboration } from '../modules/agents/collaboration-participants';
 import type { AgentModels } from '../modules/agents/autonomous-models';
@@ -115,6 +116,15 @@ export class Agent {
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;
 
+  @Column({ type: 'uuid', nullable: true })
+  apiGatewayId: string | null;
+
+  @Column({ type: 'varchar', length: 24, default: 'org' })
+  apiAccessScope: AccessScope;
+
+  @Column({ type: 'uuid', nullable: true })
+  apiAccessTeamId: string | null;
+
   @Column({
     type: 'varchar',
     default: AgentStatus.DRAFT,
@@ -225,9 +235,14 @@ export class Agent {
      */
     runnerLabels?: Record<string, string>;
     /**
-     * Who the agent's unattended runs act as (a schedule; Always on once it
-     * lands): its owner (default), or the agent itself, with its own
-     * connection grants and its own audit actor. 'agent' needs the
+     * The one runner its runner-backed tools run on ("Runs on" on the
+     * agent page). Absent: any runner, each tool's own unless labels route
+     * it. The runner's labels must still include runnerLabels, if any.
+     */
+    runnerId?: string;
+    /**
+     * Who unattended runs act as: its owner (default), or the agent itself
+     * with its own connection grants and audit actor. 'agent' requires the
      * agent_identity entitlement (agents/agent-identity.ts).
      */
     runAs?: 'owner' | 'agent';

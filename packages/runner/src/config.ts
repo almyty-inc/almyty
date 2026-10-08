@@ -134,6 +134,8 @@ export const PROJECT_CONFIG_PATH = join(process.cwd(), '.almyty', 'config.json')
  * patching `fs` or `process.env`.
  */
 export interface LoadConfigInputs {
+  /** Defaults from the shared login, before config/env/flag overrides. */
+  credentials?: { url: string; organizationId?: string };
   /** CLI flag overrides. Highest precedence. */
   flags?: Partial<ResolvedConfig> & { configPath?: string };
   /** Explicit env map. Defaults to process.env at call site. */
@@ -172,6 +174,10 @@ export function loadConfig(inputs: LoadConfigInputs = {}): ResolvedConfig {
   const projectPath = inputs.projectPath ?? PROJECT_CONFIG_PATH;
 
   let resolved: ResolvedConfig = clone(DEFAULTS);
+  if (inputs.credentials) {
+    resolved.backendUrl = inputs.credentials.url;
+    resolved.organizationId = inputs.credentials.organizationId;
+  }
 
   // Layer 2: global config file.
   if (exists(globalPath)) {
@@ -216,6 +222,8 @@ export function loadConfig(inputs: LoadConfigInputs = {}): ResolvedConfig {
   if (f.binaryProbeList && f.binaryProbeList.length > 0) {
     resolved.binaryProbeList = f.binaryProbeList;
   }
+
+  resolved.explicitName = !!resolved.name;
 
   // No name anywhere: use the machine's own, which is what a person
   // would type anyway ("franes-macbook-pro").
@@ -278,6 +286,7 @@ function mergeIn(into: ResolvedConfig, layer: Partial<ResolvedConfig>): Resolved
     name: layer.name ?? into.name,
     labels: { ...into.labels, ...(layer.labels ?? {}) },
     backendUrl: layer.backendUrl ?? into.backendUrl,
+    organizationId: layer.organizationId ?? into.organizationId,
     binaryProbeList: layer.binaryProbeList && layer.binaryProbeList.length > 0
       ? layer.binaryProbeList
       : into.binaryProbeList,

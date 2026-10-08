@@ -1,51 +1,22 @@
 import type { ReactNode } from 'react'
-import { Search } from 'lucide-react'
 
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 /**
- * The connect pages' building blocks, shared by provider connections (/credentials/providers/new)
- * and Credentials (/credentials/new): a searchable grid of tiles, the
- * card a picked tile opens into, and the list of what is connected.
+ * Small shared pieces of the pick-something screens: the square a logo
+ * sits in, and a grid of choice tiles (a kind of API, a channel, who can
+ * open an app).
  */
-
-export interface ServiceTile {
-  key: string
-  label: string
-  icon: ReactNode
-  /** One short line under the label, e.g. where a tile leads. */
-  hint?: string
-}
-
-export interface ServiceTileGroup {
-  id: string
-  title: string
-  tiles: ServiceTile[]
-}
-
-/**
- * A tile has room for about fifteen characters of label, so a name that
- * carries a qualifier in parentheses ("WhatsApp (Meta)", "Your own server
- * (OpenAI-compatible)") shows the name as the label and the qualifier as
- * the line under it, instead of losing the qualifier to an ellipsis.
- */
-export function splitTileName(name: string): { label: string; hint?: string } {
-  const m = /^(.+?)\s*\(([^()]+)\)$/.exec(name.trim())
-  return m ? { label: m[1], hint: m[2] } : { label: name }
-}
 
 /** The square a logo sits in, on tiles, cards and page headers. */
 export function ServiceIcon({ children, size = 'sm' }: { children: ReactNode; size?: 'sm' | 'md' | 'lg' }) {
   return (
     <span
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-md bg-primary/10',
+        'flex shrink-0 items-center justify-center rounded-md border bg-background',
         size === 'sm' && 'h-7 w-7 text-base',
-        size === 'md' && 'h-10 w-10 rounded-lg text-xl',
-        size === 'lg' && 'h-12 w-12 rounded-lg text-2xl',
+        size === 'md' && 'h-10 w-10 rounded-lg text-xl [&>svg]:h-5 [&>svg]:w-5 [&>[data-brand-fallback]]:h-6 [&>[data-brand-fallback]]:w-6 [&>[data-brand-fallback]]:text-xs',
+        size === 'lg' && 'h-12 w-12 rounded-lg text-2xl [&>svg]:h-6 [&>svg]:w-6 [&>[data-brand-fallback]]:h-7 [&>[data-brand-fallback]]:w-7 [&>[data-brand-fallback]]:text-sm',
       )}
       aria-hidden
     >
@@ -54,84 +25,9 @@ export function ServiceIcon({ children, size = 'sm' }: { children: ReactNode; si
   )
 }
 
-export interface ServiceTileGridProps {
-  groups: ServiceTileGroup[]
-  search: string
-  onSearch: (next: string) => void
-  onPick: (key: string) => void
-  /** Placeholder and accessible name of the search box, e.g. "Search providers". */
-  searchLabel: string
-  /** Shown when no group is left after the search. */
-  empty?: ReactNode
-  /** Shown under the search box, above the tiles (e.g. "nothing matched, but..."). */
-  notice?: ReactNode
-  /** Each tile's data-testid is `${testIdPrefix}-${key}`. */
-  testIdPrefix: string
-}
-
-export function ServiceTileGrid({ groups, search, onSearch, onPick, searchLabel, empty, notice, testIdPrefix }: ServiceTileGridProps) {
-  return (
-    <div className="space-y-6">
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input className="pl-9" value={search} onChange={(e) => onSearch(e.target.value)} placeholder={searchLabel} aria-label={searchLabel} />
-      </div>
-      {groups.length === 0 && empty}
-      {groups.length > 0 && notice}
-      {groups.map((group) => (
-        <section key={group.id} aria-labelledby={`tiles-${group.id}`} className="space-y-2">
-          <h2 id={`tiles-${group.id}`} className="text-sm font-medium text-muted-foreground">
-            {group.title}
-          </h2>
-          <ChoiceTiles>
-            {group.tiles.map((tile) => (
-              <ChoiceTile key={tile.key} testId={`${testIdPrefix}-${tile.key}`} icon={tile.icon} label={tile.label} hint={tile.hint} onClick={() => onPick(tile.key)} />
-            ))}
-          </ChoiceTiles>
-        </section>
-      ))}
-    </div>
-  )
-}
-
-/** The picked tile, opened into a card: its logo and name, a way back, and the form. */
-export function PickedService({
-  icon,
-  title,
-  onChooseAnother,
-  chooseAnotherLabel,
-  children,
-}: {
-  icon: ReactNode
-  title: string
-  /** Absent once there is nothing to go back to (the result is showing). */
-  onChooseAnother?: () => void
-  chooseAnotherLabel: string
-  children: ReactNode
-}) {
-  return (
-    <Card>
-      <CardContent className="space-y-5 pt-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <ServiceIcon size="md">{icon}</ServiceIcon>
-            <h2 className="text-lg font-semibold">{title}</h2>
-          </div>
-          {onChooseAnother && (
-            <Button variant="ghost" size="sm" onClick={onChooseAnother}>
-              {chooseAnotherLabel}
-            </Button>
-          )}
-        </div>
-        {children}
-      </CardContent>
-    </Card>
-  )
-}
-
 /**
- * One tile in a grid of them: the connect pages' provider tiles, and any
- * other pick-one list (a sign-in provider, who can open an app).
+ * One tile in a grid of them: any pick-one list (a kind of API, a sign-in
+ * provider, who can open an app).
  * `selected` marks the current choice; `hint` is one short line under the label.
  */
 export function ChoiceTile({

@@ -25,12 +25,12 @@ vi.mock('@/components/models/routing-policy-editor', () => ({
 }))
 // The add-a-connection flow has its own tests; here it only has to open in
 // place and hand back a connection.
-vi.mock('@/components/llm-providers/provider-connection-create', () => ({
-  ProviderConnectionCreate: (props: any) =>
+vi.mock('@/components/credentials/credential-form', () => ({
+  CredentialForm: (props: any) =>
     React.createElement(
       'div',
       { 'data-testid': 'connection-create' },
-      React.createElement('button', { type: 'button', onClick: () => props.onDone({ id: 'prov-new', name: 'HF - Llama 70B only', type: 'huggingface' }) }, 'Finish adding'),
+      React.createElement('button', { type: 'button', onClick: () => props.onSaved({ provider: { id: 'prov-new', name: 'HF - Llama 70B only', type: 'huggingface' }, models: [] }) }, 'Finish adding'),
       React.createElement('button', { type: 'button', onClick: props.onCancel }, 'Stop adding'),
     ),
 }))

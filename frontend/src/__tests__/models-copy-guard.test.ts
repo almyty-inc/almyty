@@ -142,12 +142,12 @@ describe('one way to add models', () => {
 
   it('has no page at those addresses, and nothing links to them', () => {
     // lib/api.ts calls the /llm-providers API, which is not a page.
-    const GONE = /['"`]\/(llm-providers\/new|models\/new|models\/connect|models\/providers|llm-providers\/\$\{)|['"`]\/llm-providers['"`?]/
+    const GONE = /['"`]\/(llm-providers\/new|models\/new|models\/connect|credentials\/providers|llm-providers\/\$\{)|['"`]\/llm-providers['"`?]/
     const hits = sourceFiles(SRC)
       .filter((f) => !f.endsWith(join('lib', 'api.ts')))
       .filter((f) => GONE.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
     expect(hits.map((f) => relative(SRC, f))).toEqual([])
-    expect(readFileSync(join(SRC, 'App.tsx'), 'utf8')).not.toMatch(/path="\/(llm-providers|models\/(new|connect|providers|:id))/)
+    expect(readFileSync(join(SRC, 'App.tsx'), 'utf8')).not.toMatch(/path="\/(llm-providers|credentials\/providers|models\/(new|connect|:id))/)
   })
 })
 

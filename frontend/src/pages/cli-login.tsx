@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { useOrganizationStore } from '@/store/organization'
 
 /**
  * CLI login page — used by the @almyty/auth browser-based login flow.
@@ -35,6 +36,10 @@ export function CliLoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { isAuthenticated, user, hasHydrated } = useAuthStore()
+
+  const { organizations, currentOrganization } = useOrganizationStore()
+  const [chosenOrganization, setChosenOrganization] = useState('')
+  const organizationId = chosenOrganization || currentOrganization?.id || organizations[0]?.id || ''
 
   const params = new URLSearchParams(location.search)
   const callback = params.get('callback') || ''
@@ -84,6 +89,11 @@ export function CliLoginPage() {
       return
     }
 
+    if (!organizations.some(o => o.id === organizationId)) {
+      setStatus('error')
+      setErrorMessage('Choose an organization before connecting.')
+      return
+    }
     setStatus('sending')
     setErrorMessage(null)
     try {
@@ -124,7 +134,7 @@ export function CliLoginPage() {
       // tiny HTML page at /cb that reads the hash client-side and
       // POSTs it to /cb-complete as a same-origin fetch — which
       // is not subject to PNA because both sides are loopback.
-      const hash = `#token=${encodeURIComponent(rawKey)}&state=${encodeURIComponent(state)}`
+      const hash = `#token=${encodeURIComponent(rawKey)}&state=${encodeURIComponent(state)}&organizationId=${encodeURIComponent(organizationId)}`
       window.location.href = callback + hash
       // The above line navigates away from this page, so the
       // promise below is unreachable in practice — but we still
@@ -144,7 +154,7 @@ export function CliLoginPage() {
           <h1 className="text-xl font-semibold text-rose-400 mb-2">Invalid CLI login request</h1>
           <p className="text-sm text-zinc-400 mb-4">{callbackError}</p>
           <p className="text-xs text-zinc-500">
-            This page is only meant to be reached by the <code>npx @almyty/auth login</code> CLI flow,
+            This page is only meant to be reached by the <code>almyty login</code> CLI flow,
             which constructs the URL with a loopback callback.
           </p>
         </div>
@@ -199,6 +209,15 @@ export function CliLoginPage() {
           </div>
         </dl>
 
+        {organizations.length > 1 && (
+          <div className="mb-6 space-y-2">
+            <label htmlFor="cli-organization" className="text-sm text-zinc-300">Organization</label>
+            <select id="cli-organization" value={organizationId} onChange={e => setChosenOrganization(e.target.value)} disabled={status === 'sending'} className="w-full rounded border border-zinc-700 bg-zinc-950 p-2 text-sm">
+              {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+            </select>
+            <p className="text-xs text-zinc-400">Your runner uses this organization.</p>
+          </div>
+        )}
         {status === 'idle' && (
           <Button onClick={handleConnect} className="w-full">
             Connect CLI

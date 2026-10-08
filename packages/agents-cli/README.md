@@ -5,9 +5,10 @@ Run, inspect and debug almyty agents from the command line.
 ## Quick start
 
 ```bash
-$ npx @almyty/auth login
-$ npx @almyty/agents list
-$ npx @almyty/agents run my-agent --input '{"text": "hello"}' --watch
+$ npm i -g @almyty/cli
+$ almyty login
+$ almyty agents list
+$ almyty agents run my-agent --input '{"text": "hello"}' --watch
 ```
 
 ## Commands
@@ -73,7 +74,7 @@ an autonomous run, the node result for a workflow one. The CLI surfaces
 it, so a multi-model agent can be read from a terminal:
 
 ```
-$ npx @almyty/agents run research-bot --input "who acquired Figma" --watch
+$ almyty agents run research-bot --input "who acquired Figma" --watch
   1. Searching for recent coverage…  [claude-sonnet-4-5 · $0.0021 · 900 in / 12 out · 1.8s]
   2. llm_call → tools: web_search  [claude-sonnet-4-5 · $0.0009 · 1.2s]
   3. Adobe's offer was abandoned in December 2023.  [gpt-5-mini · attempt 2 · primary rate limited · $0.0004]
@@ -96,7 +97,7 @@ what each hop cost. A hop whose cost is not ours to know prints as
 | `0` | success |
 | `1` | unexpected error |
 | `2` | usage error (bad flags, unknown command, missing argument) |
-| `3` | not authenticated — run `npx @almyty/auth login` |
+| `3` | not authenticated — run `almyty login` |
 | `4` | no such agent, run, or execution |
 | `5` | the run finished in a non-success state |
 
@@ -105,7 +106,7 @@ with `status: "failed"`, and `--watch` returns on any terminal status,
 so a failed run has to be turned into a non-zero exit deliberately:
 
 ```bash
-npx @almyty/agents run deploy-check --watch && ./ship.sh
+almyty agents run deploy-check --watch && ./ship.sh
 ```
 
 ## Environment variables
@@ -118,7 +119,7 @@ npx @almyty/agents run deploy-check --watch && ./ship.sh
 
 ## Authentication
 
-Run `npx @almyty/auth login` once. Credentials come from
+Run `almyty login` once. Credentials come from
 `~/.almyty/credentials.json`, or from `ALMYTY_TOKEN`. With neither, every
 command prints the login instruction and exits `3`.
 

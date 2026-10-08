@@ -1,3 +1,4 @@
+import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import {
   Controller,
   Get,
@@ -109,10 +110,16 @@ export class GatewaysController {
         }
       }
 
-      // Auto-generate an API key for non-Skills gateways
+      // Provision the method before issuing its initial key; protected endpoints otherwise fail closed.
       let initialApiKey: string | undefined;
-      if (gateway.type !== 'skills') {
+      if (gateway.accessScope === 'external_protected') {
         try {
+          await this.gatewayAuthService.createGatewayAuth(gateway.id, {
+            type: GatewayAuthType.API_KEY,
+            isActive: true,
+            isRequired: true,
+            configuration: { keyHeader: 'x-api-key', keyQuery: 'api_key' },
+          }, organizationId);
           const apiKey = await this.gatewayAuthService.generateApiKey(
             `${gateway.name} Default Key`,
             organizationId,

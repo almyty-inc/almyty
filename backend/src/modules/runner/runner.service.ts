@@ -42,7 +42,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * expected to honor the constraint. Backend never escalates.
  */
 export interface RegisterRunnerInput {
-  name: string;
+  /** Absent: keep the runner's name, or name a new one after runtimeInfo.hostname. */
+  name?: string;
   labels?: Record<string, string>;
   runtimeInfo: RunnerRuntimeInfo;
   config: RunnerConfig;
@@ -94,6 +95,20 @@ export interface RegisterRunnerResult {
 export const DEFAULT_RUNNER_VISIBILITY: ResourceVisibility = 'private';
 
 const NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/**
+ * A machine's hostname as a runner name: "Franes-MacBook-Pro.local"
+ * becomes "franes-macbook-pro". The same rule as the runner package's
+ * runnerNameFromHostname; "runner" when nothing usable is left.
+ */
+export function runnerNameFromHostname(host: string): string {
+  const name = (host ?? '').split('.')[0].toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  let start = 0;
+  let end = name.length;
+  while (start < end && name[start] === '-') start++;
+  while (end > start && name[end - 1] === '-') end--;
+  return name.slice(start, Math.min(end, start + 64)) || 'runner';
+}
 
 /** A runner that has never registered from a daemon: created by the setup page only. */
 export function isPendingRunner(runner: Pick<Runner, 'runtimeInfo' | 'lastHeartbeatAt'>): boolean {
@@ -168,32 +183,37 @@ export class RunnerService {
    * ever claim a runner of the user it is logged in as, in an
    * organization that user belongs to.
    *
-   * v1.0 enforces single-runner-per-(user, organization). A second
-   * runner registration for the same (user, org) under another name
-   * returns 409 Conflict; the user must release the existing one first.
-   * The name is a label unique within the organization: a name already
-   * used by another member is refused with 409 rather than shared,
-   * because published tool names (`runner.<name>.<method>`) are unique
-   * per organization and publishing deletes by name.
+   * The name. A daemon started without `--name` sends none: a runner the
+   * caller already has keeps its name (so a rename on the runner page
+   * survives a restart), and a new one is named after its machine's
+   * hostname, made unique in the organization by a number ("studio",
+   * "studio-2"). A daemon started with `--name` asks for that name.
    *
-   * Re-registration with the same `name` (e.g. the runner restarted
-   * after a crash, or the pending record the setup page created) updates
-   * the existing row in place and resets runtimeInfo. Workspaces pinned
-   * to the prior incarnation are not recovered: the spec says
-   * stranded = stranded.
+   * v1.0 enforces single-runner-per-(user, organization). A registration
+   * asking for another name than the caller's existing runner has returns
+   * 409 Conflict; the user must release the existing one first. The name
+   * is a label unique within the organization: a name already used by
+   * another member is refused with 409 rather than shared, because
+   * published tool names (`runner.<name>.<method>`) are unique per
+   * organization and publishing deletes by name.
+   *
+   * Re-registration (the runner restarted after a crash, or the pending
+   * record the setup page created) updates the existing row in place and
+   * resets runtimeInfo. Workspaces pinned to the prior incarnation are
+   * not recovered: the spec says stranded = stranded.
    */
   async register(
     input: RegisterRunnerInput,
     ownerUserId: string,
     organizationId: string,
   ): Promise<RegisterRunnerResult> {
-    this.assertName(input.name);
+    if (input.name !== undefined) this.assertName(input.name);
 
     const existing = await this.runners.findOne({
       where: { ownerUserId, organizationId },
     });
 
-    if (existing && existing.name !== input.name) {
+    if (existing && input.name !== undefined && existing.name !== input.name) {
       // v1.0 single-runner cap. The data model could hold multiple but
       // the scheduler isn't there yet, and silently accepting a second
       // runner would force routing to make a choice it isn't allowed
@@ -202,7 +222,10 @@ export class RunnerService {
         `single runner per account in v1.0; release existing runner '${existing.name}' first`,
       );
     }
-    await this.assertNameFreeInOrganization(input.name, ownerUserId, organizationId);
+    const name = input.name
+      ?? existing?.name
+      ?? (await this.freeName(runnerNameFromHostname(input.runtimeInfo?.hostname ?? ''), organizationId));
+    await this.assertNameFreeInOrganization(name, ownerUserId, organizationId);
 
     const requested = input.visibility !== undefined
       ? normaliseVisibility(input.visibility, input.teamId)
@@ -217,12 +240,12 @@ export class RunnerService {
     }
 
     const target: Runner = existing ?? this.runners.create({
-      name: input.name,
+      name,
       ownerUserId,
       organizationId,
     });
 
-    target.name = input.name;
+    target.name = name;
     // Labels set on the web record survive a daemon that starts without
     // --label; labels passed on the command line replace them.
     if (input.labels && Object.keys(input.labels).length > 0) {
@@ -249,17 +272,18 @@ export class RunnerService {
 
     this.logger.log(
       `runner ${existing ? 're-registered' : 'registered'}: ` +
-        `name=${input.name} owner=${ownerUserId} org=${organizationId} visibility=${saved.visibility}`,
+        `name=${name} owner=${ownerUserId} org=${organizationId} visibility=${saved.visibility}`,
     );
 
     return { runner: saved, effectiveConfig: input.config };
   }
 
   /**
-   * Change a runner's name (only while it has never connected -- the
-   * daemon starts with `--name`, so renaming a live runner would orphan
-   * it), labels or visibility. Owner, or whoever the access policy lets
-   * manage it; another user's private runner answers 404.
+   * Change a runner's name, labels or visibility. Owner, or whoever the
+   * access policy lets manage it; another user's private runner answers
+   * 404. A connected runner can be renamed too: its tools are republished
+   * under the new name, and its daemon, which registers without a name
+   * unless started with `--name`, keeps the new one when it restarts.
    */
   async update(
     runnerId: string,
@@ -271,11 +295,6 @@ export class RunnerService {
 
     if (patch.name !== undefined && patch.name !== runner.name) {
       this.assertName(patch.name);
-      if (!isPendingRunner(runner)) {
-        throw new ConflictException(
-          'a runner that has connected keeps its name; delete it and start the daemon under the new name',
-        );
-      }
       await this.assertNameFreeInOrganization(patch.name, runner.ownerUserId, organizationId);
       runner.name = patch.name;
     }
@@ -687,6 +706,24 @@ export class RunnerService {
     if (!name || !NAME_RE.test(name)) {
       throw new BadRequestException('runner name must match [a-zA-Z0-9_-]{1,64}');
     }
+  }
+
+  /**
+   * `base`, or `base-2`, `base-3` ... : the first one no runner in the
+   * organization uses. Read as one list rather than a probe per number;
+   * a name taken between this read and the save is refused by
+   * assertNameFreeInOrganization like any other clash.
+   */
+  private async freeName(base: string, organizationId: string): Promise<string> {
+    const rows = await this.runners.find({ where: { organizationId }, select: { id: true, name: true } });
+    const taken = new Set(rows.map((r) => r.name));
+    if (!taken.has(base)) return base;
+    for (let n = 2; n < 10_000; n++) {
+      const suffix = `-${n}`;
+      const candidate = `${base.slice(0, 64 - suffix.length)}${suffix}`;
+      if (!taken.has(candidate)) return candidate;
+    }
+    throw new ConflictException(`every name like '${base}' is taken in this organization; start the runner with --name`);
   }
 
   /**

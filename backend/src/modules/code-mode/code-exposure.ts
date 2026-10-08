@@ -30,6 +30,7 @@ export function codeModeGatewaysEnabled(env: Env = process.env): boolean {
 /** A gateway as the exposure rules read it. */
 export interface ExposureGateway {
   type?: string | null;
+  accessScope?: string | null;
   configuration?: Record<string, any> | null;
   authConfigs?: Array<{ type: string; isActive?: boolean | null }> | null;
 }
@@ -39,6 +40,8 @@ export interface ExposureGateway {
  * is not "none". A Skills gateway is always reached by a signed-in member.
  */
 export function gatewayHasAuth(gateway: ExposureGateway): boolean {
+  if (gateway.accessScope === 'external_open') return false;
+  if (['private', 'team', 'org'].includes(gateway.accessScope ?? '')) return true;
   if (gateway.type === 'skills') return true;
   return (gateway.authConfigs ?? []).some((a) => a && a.isActive !== false && a.type !== GatewayAuthType.NONE);
 }

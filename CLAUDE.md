@@ -228,7 +228,7 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 - Fonts: Manrope (headings), DM Sans (body), JetBrains Mono (code). Google Fonts, SIL OFL.
 - Protocol badges: MCP=violet, A2A=cyan, UTCP=emerald, SOAP=amber, GraphQL=rose, REST=blue
 - Primary CTA buttons use violet-to-cyan gradient. One gradient CTA per page max.
-- Sidebar order: Dashboard → APIs → Tools → Gateways → Agents → Runners → Credentials → Approvals → Models → Memory → Analytics → Settings
+- Sidebar order: Dashboard → Agents → Approvals | Models → Memory → Tools → APIs → Gateways → Runners | Analytics → Credentials → Settings
 
 <!-- BEGIN agented section v0.1.0 -->
 - For files in this project, prefer `ae open <path>` over `Read`. ae returns the same content plus annotations from prior sessions and a state_token you'll thread through subsequent writes.

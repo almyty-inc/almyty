@@ -1,6 +1,12 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { hasEffectiveMembership } from '../../common/authorization/membership';
+import { CompanySigninService } from './company-signin.service';
+import { prepareManagedUsers } from './gateway-managed-users';
+import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import passport = require('passport');
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { endpointVisibility, endpointTeamId, hasEndpointAccessScope } from './gateway-access';
 import * as crypto from 'crypto';
 
 import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
@@ -118,6 +124,7 @@ export function maskAuthSecrets(configuration: any): any {
   for (const key of AUTH_SECRET_KEYS) {
     if (masked[key] !== undefined && masked[key] !== null && masked[key] !== '') masked[key] = '••••••••';
   }
+  if (Array.isArray(masked.users)) masked.users = masked.users.map(({ password, passwordHash, ...user }: any) => ({ ...user, hasPassword: !!passwordHash }));
   return masked;
 }
 
@@ -133,6 +140,8 @@ export class GatewayAuthService {
     @InjectRepository(ApiKey)
     private apiKeyRepository: Repository<ApiKey>,
     private readonly validators: GatewayAuthValidators,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
+    @Optional() private readonly companySignin?: CompanySigninService,
   ) {}
 
   async createGatewayAuth(
@@ -150,6 +159,7 @@ export class GatewayAuthService {
         throw new NotFoundException('Gateway not found');
       }
 
+      if (createGatewayAuthDto.type === GatewayAuthType.BASIC_AUTH) createGatewayAuthDto.configuration = await prepareManagedUsers(createGatewayAuthDto.configuration);
       // Validate configuration based on auth type
       this.validators.validateAuthConfiguration(createGatewayAuthDto.type, createGatewayAuthDto.configuration);
 
@@ -171,13 +181,20 @@ export class GatewayAuthService {
       const gatewayAuth = this.gatewayAuthRepository.create({
         gatewayId,
         ...createGatewayAuthDto,
+        id: crypto.randomUUID(),
+        isRequired: createGatewayAuthDto.isRequired !== false,
+        isActive: createGatewayAuthDto.isActive !== false,
       });
 
+      if (gatewayAuth.type === GatewayAuthType.COMPANY_SIGNIN) {
+        if (!this.companySignin) throw new BadRequestException('Company sign-in unavailable');
+        gatewayAuth.configuration = await this.companySignin.prepare(gateway, gatewayAuth.id, gatewayAuth.configuration);
+      }
       const savedAuth = await this.gatewayAuthRepository.save(gatewayAuth);
 
       this.logger.log(`Gateway auth created for gateway ${gatewayId} with type ${createGatewayAuthDto.type}`);
 
-      return savedAuth;
+      return { ...savedAuth, configuration: maskAuthSecrets(savedAuth.configuration) } as GatewayAuth;
 
     } catch (error) {
       this.logger.error(`Failed to create gateway auth: ${error.message}`);
@@ -200,6 +217,11 @@ export class GatewayAuthService {
         throw new NotFoundException('Gateway auth not found');
       }
 
+      if (updateGatewayAuthDto.configuration && gatewayAuth.type === GatewayAuthType.COMPANY_SIGNIN) {
+        if (!this.companySignin) throw new BadRequestException('Company sign-in unavailable');
+        updateGatewayAuthDto.configuration = await this.companySignin.prepare(gatewayAuth.gateway, gatewayAuth.id, updateGatewayAuthDto.configuration, gatewayAuth.configuration);
+      }
+      if (updateGatewayAuthDto.configuration && gatewayAuth.type === GatewayAuthType.BASIC_AUTH) updateGatewayAuthDto.configuration = await prepareManagedUsers(updateGatewayAuthDto.configuration, gatewayAuth.configuration);
       // Validate configuration if updated
       if (updateGatewayAuthDto.configuration) {
         this.validators.validateAuthConfiguration(gatewayAuth.type, updateGatewayAuthDto.configuration);
@@ -211,7 +233,7 @@ export class GatewayAuthService {
 
       this.logger.log(`Gateway auth ${authId} updated`);
 
-      return updatedAuth;
+      return { ...updatedAuth, configuration: maskAuthSecrets(updatedAuth.configuration) } as GatewayAuth;
 
     } catch (error) {
       this.logger.error(`Failed to update gateway auth: ${error.message}`);
@@ -245,7 +267,7 @@ export class GatewayAuthService {
     })) as typeof rows;
   }
 
-  async deleteGatewayAuth(authId: string, organizationId: string): Promise<void> {
+  async deleteGatewayAuth(authId: string, organizationId: string, gatewayId?: string): Promise<void> {
     const gatewayAuth = await this.gatewayAuthRepository.findOne({
       where: { id: authId },
       relations: { gateway: true },
@@ -255,7 +277,9 @@ export class GatewayAuthService {
       throw new NotFoundException('Gateway auth not found');
     }
 
+    if (gatewayId !== undefined && gatewayAuth.gatewayId !== gatewayId) throw new NotFoundException('Gateway auth not found');
     await this.gatewayAuthRepository.remove(gatewayAuth);
+    if (gatewayAuth.type === GatewayAuthType.COMPANY_SIGNIN) await this.companySignin?.release(gatewayAuth);
 
     this.logger.log(`Gateway auth ${authId} deleted`);
   }
@@ -266,9 +290,14 @@ export class GatewayAuthService {
     query: Record<string, string>,
     body?: any,
     clientIp?: string,
-    preloadedAuthConfigs?: GatewayAuth[]
+    preloadedAuthConfigs?: GatewayAuth[],
+    request?: any
   ): Promise<AuthenticationResult> {
     try {
+      const gateway = preloadedAuthConfigs?.find(c => c.gateway)?.gateway ?? await this.gatewayRepository.findOne({ where: { id: gatewayId } });
+      if (!gateway) return { isValid: false, errorCode: 'GATEWAY_NOT_FOUND', error: 'Gateway not found' };
+      if (hasEndpointAccessScope(gateway) && gateway.accessScope === 'external_open') return { isValid: true, organizationId: gateway.organizationId };
+      if (hasEndpointAccessScope(gateway) && !gateway.isSystem && gateway.accessScope && gateway.accessScope !== 'external_protected') return this.authenticateMember(gateway, request ?? { headers, cookies: {} });
       // Get all active auth configs for the gateway.
       //
       // `gateway` is loaded because validateOAuth2 compares the access
@@ -297,11 +326,11 @@ export class GatewayAuthService {
       }
 
       // Separate required and optional auth configs
-      const requiredConfigs = authConfigs.filter(c => c.isRequired);
+      const requiredConfigs = authConfigs.filter(c => c.isActive && c.isRequired && (gateway.accessScope !== 'external_protected' || gateway.isSystem || [GatewayAuthType.API_KEY, GatewayAuthType.BASIC_AUTH, GatewayAuthType.COMPANY_SIGNIN, GatewayAuthType.JWT].includes(c.type)));
 
       // If all configs are optional (type=none or isRequired=false), check if any is type NONE
       if (requiredConfigs.length === 0) {
-        const hasNoneType = authConfigs.some(c => c.type === GatewayAuthType.NONE);
+        const hasNoneType = gateway.accessScope !== 'external_protected' && authConfigs.some(c => c.type === GatewayAuthType.NONE);
         if (hasNoneType) {
           return { isValid: true };
         }
@@ -365,6 +394,24 @@ export class GatewayAuthService {
         errorCode: 'SYSTEM_ERROR',
       };
     }
+  }
+
+  private async authenticateMember(gateway: Gateway, request: any): Promise<AuthenticationResult> {
+    return new Promise(resolve => {
+      passport.authenticate('jwt', { session: false }, async (error: any, user: User | false) => {
+        try {
+          let identity: AuthenticationResult;
+          if (!error && user && hasEffectiveMembership(user.organizationMemberships, gateway.organizationId)) identity = { isValid: true, user, userId: user.id, organizationId: gateway.organizationId };
+          else {
+            const oauth = await this.validators.validateOAuth2({ gatewayId: gateway.id, gateway, configuration: {} } as GatewayAuth, request.headers ?? {});
+            if (!oauth.isValid || oauth.metadata?.authMethod !== 'oauth2' || !oauth.userId) return resolve({ isValid: false, error: 'Sign in to almyty to use this endpoint', errorCode: 'SESSION_MISSING' });
+            identity = oauth;
+          }
+          const allowed = await this.accessPolicy?.canAccess({ id: identity.userId }, { organizationId: gateway.organizationId, visibility: endpointVisibility(gateway), teamId: endpointTeamId(gateway), ownerUserId: gateway.ownerUserId }, 'use');
+          resolve(allowed?.allowed ? identity : { isValid: false, error: 'You cannot use this endpoint', errorCode: 'ENDPOINT_SCOPE_REFUSED' });
+        } catch { resolve({ isValid: false, error: 'You cannot use this endpoint', errorCode: 'ENDPOINT_SCOPE_REFUSED' }); }
+      })(request, {}, () => resolve({ isValid: false, errorCode: 'SESSION_MISSING' }));
+    });
   }
 
   async generateApiKey(

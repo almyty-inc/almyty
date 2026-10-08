@@ -1,4 +1,7 @@
 import * as crypto from 'crypto';
+import { JwtService } from '@nestjs/jwt';
+import { GatewayAuthValidators } from '../gateway-auth-validators.helper';
+import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 
 import { GatewaysController } from '../gateways.controller';
 import { GatewayAuthService } from '../gateway-auth.service';
@@ -46,13 +49,18 @@ describe('POST /gateways with toolIds: share tools in one step', () => {
   let gatewayTools: ReturnType<typeof fakeRepository<GatewayTool>>;
   let apiKeys: ReturnType<typeof fakeRepository<ApiKey>>;
   let created: any[];
+  let authConfigs: ReturnType<typeof fakeRepository<GatewayAuth>>;
+  let auth: GatewayAuthService;
   let controller: GatewaysController;
 
   beforeEach(() => {
     const m = castFixture();
     gateways = fakeRepository<Gateway>({ make: () => new Gateway() });
     gatewayTools = fakeRepository<GatewayTool>({ make: () => new GatewayTool() });
-    apiKeys = fakeRepository<ApiKey>({ make: () => new ApiKey() });
+    // TypeORM loads the owner relation when validating a key; the table fake
+    // keeps explicitly seeded relations, so each issued key carries this effective member.
+    apiKeys = fakeRepository<ApiKey>({ make: () => Object.assign(new ApiKey(), { user: { id: CAST.member, isActive: true, organizationMemberships: [{ organizationId: CAST.org, role: 'member', isActive: true }] } }) });
+    authConfigs = fakeRepository<GatewayAuth>({ make: () => new GatewayAuth() });
     const tools = fakeRepository<Tool>({ seed: Object.values(TOOLS), make: () => new Tool() });
     const users = { findOne: async () => ({ hasPermissionInOrganization: () => true }) };
     const redis = { del: jest.fn().mockResolvedValue(1) };
@@ -72,6 +80,8 @@ describe('POST /gateways with toolIds: share tools in one step', () => {
             ownerUserId: userId,
             status: GatewayStatus.ACTIVE,
             visibility: dto.visibility ?? 'org',
+            accessScope: dto.accessScope ?? 'org',
+            accessTeamId: dto.accessTeamId ?? null,
             teamId: dto.teamId ?? null,
           }),
         );
@@ -97,13 +107,14 @@ describe('POST /gateways with toolIds: share tools in one step', () => {
       queries,
       m.executionAccess,
     );
-    const auth = new GatewayAuthService({} as any, gateways as any, apiKeys as any, {} as any);
+    const validators = new GatewayAuthValidators(gateways as any, fakeRepository<any>() as any, apiKeys as any, fakeRepository<any>() as any, new JwtService());
+    auth = new GatewayAuthService(authConfigs as any, gateways as any, apiKeys as any, validators, m.accessPolicy);
     controller = new GatewaysController(gatewaysService as any, auth, gatewayToolService, {} as any, {} as any, {} as any, {} as any);
   });
 
   const share = (toolIds: string[] | undefined, extra: Record<string, any> = {}) =>
     controller.createGateway(
-      { name: 'Weather', type: GatewayType.MCP, endpoint: '/weather', configuration: { transport: 'http' }, toolIds, ...extra } as any,
+      { name: 'Weather', type: GatewayType.MCP, endpoint: '/weather', configuration: { transport: 'http' }, accessScope: 'external_protected', toolIds, ...extra } as any,
       { user: { id: CAST.member, sub: CAST.member, currentOrganizationId: CAST.org } },
     );
 
@@ -123,6 +134,12 @@ describe('POST /gateways with toolIds: share tools in one step', () => {
     const [stored] = await apiKeys.find({ where: { gatewayId: out.data.id } });
     expect(stored.keyHash).toBe(crypto.createHash('sha256').update(out.data.initialApiKey!).digest('hex'));
     expect(stored.organizationId).toBe(CAST.org);
+    expect(stored.gatewayId).toBe(out.data.id);
+    const [method] = await authConfigs.find({ where: { gatewayId: out.data.id } });
+    expect(method).toMatchObject({ type: GatewayAuthType.API_KEY, isActive: true, isRequired: true });
+    expect((await auth.authenticateRequest(out.data.id, { 'x-api-key': out.data.initialApiKey! }, {})).isValid).toBe(true);
+    expect((await auth.authenticateRequest(out.data.id, {}, { api_key: out.data.initialApiKey! })).isValid).toBe(true);
+    expect((await auth.authenticateRequest(out.data.id, { 'x-api-key': 'incorrect' }, {})).isValid).toBe(false);
   });
 
   it('reports each tool it could not share, with the reason, and shares the rest', async () => {
@@ -141,6 +158,14 @@ describe('POST /gateways with toolIds: share tools in one step', () => {
     await share([TOOLS.ready.id]);
     expect(created).toHaveLength(1);
     expect(created[0]).not.toHaveProperty('toolIds');
+  });
+
+  it('shares tools internally without issuing external credentials', async () => {
+    const out = await share([TOOLS.ready.id], { accessScope: 'org' });
+    expect(out.data.initialApiKey).toBeUndefined();
+    expect(out.data.sharedTools).toEqual({ associated: 1, skipped: [] });
+    expect(apiKeys.rows()).toEqual([]);
+    expect(authConfigs.rows()).toEqual([]);
   });
 
   it('creates a gateway with no tools when none are picked', async () => {

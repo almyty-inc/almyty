@@ -1,4 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { CompanySigninService } from './company-signin.service';
+import { verifyGatewayJwt } from './gateway-jwks';
+import { authenticateManagedUser } from './gateway-managed-users';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -32,6 +35,7 @@ export class GatewayAuthValidators {
     @InjectRepository(OAuthAccessToken)
     private oauthAccessTokenRepository: Repository<OAuthAccessToken>,
     private jwtService: JwtService,
+    @Optional() private readonly companySignin?: CompanySigninService,
   ) {}
 
   async validateAuthConfig(
@@ -84,6 +88,10 @@ export class GatewayAuthValidators {
       case GatewayAuthType.JWT:
         return this.validateJWT(authConfig, headers);
 
+      case GatewayAuthType.COMPANY_SIGNIN: {
+        const grant = await this.companySignin?.validateToken(authConfig.gatewayId, headers.authorization || headers.Authorization);
+        return grant ? { isValid: true, organizationId: authConfig.gateway?.organizationId, scopes: grant.scopes, metadata: { authMethod: grant.oauth ? 'oauth2' : 'company_signin', externalSubject: grant.subject } } : { isValid: false, error: 'Company sign-in required', errorCode: 'COMPANY_SIGNIN_MISSING' };
+      }
       case GatewayAuthType.OAUTH2:
         return this.validateOAuth2(authConfig, headers);
 
@@ -107,7 +115,8 @@ export class GatewayAuthValidators {
     const keyHeader = authConfig.configuration.keyHeader || 'x-api-key';
     const keyQuery = authConfig.configuration.keyQuery || 'api_key';
 
-    const apiKey = headers[keyHeader.toLowerCase()] || query[keyQuery];
+    const authorization = headers.authorization || headers.Authorization || '';
+    const apiKey = headers[keyHeader.toLowerCase()] || query[keyQuery] || (authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '');
 
     if (!apiKey) {
       return {
@@ -279,6 +288,10 @@ export class GatewayAuthValidators {
     headers: Record<string, string>
   ): Promise<AuthenticationResult> {
     const authHeader = headers.authorization || headers.Authorization;
+    if (Array.isArray(authConfig.configuration.users)) {
+      const isValid = await authenticateManagedUser(authConfig.configuration, authHeader);
+      return isValid ? { isValid: true, organizationId: authConfig.gateway?.organizationId, metadata: { authMethod: 'managed_username' } } : { isValid: false, error: 'Invalid username or password', errorCode: authHeader ? 'BASIC_AUTH_INVALID' : 'BASIC_AUTH_MISSING' };
+    }
     
     if (!authHeader || !authHeader.startsWith('Basic ')) {
       return {
@@ -383,6 +396,10 @@ export class GatewayAuthValidators {
     const token = authHeader.substring(7);
 
     try {
+      if (authConfig.configuration.jwksUrl || authConfig.configuration.jwksUri) {
+        const payload = await verifyGatewayJwt(token, authConfig.configuration);
+        return { isValid: true, organizationId: authConfig.gateway?.organizationId, scopes: typeof payload.scope === 'string' ? payload.scope.split(' ') : [], metadata: { authMethod: 'own_system_jwt', externalSubject: payload.sub } };
+      }
       // CRITICAL: do NOT fall back to process.env.JWT_SECRET. That would
       // accept the backend's own login JWTs as gateway auth tokens,
       // granting any authenticated backend user access to any gateway
