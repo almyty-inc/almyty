@@ -216,6 +216,10 @@ export class RunnerController {
    * SSE stream of one session's coding.output / coding.exit events. Ends
    * when the session exits or the client hangs up. Same streaming headers
    * as the agent-run stream (no-transform + no proxy buffering).
+   *
+   * With Redis the session's backlog comes first (after `Last-Event-ID`,
+   * or all of it for a viewer joining late), and every frame carries the
+   * backlog id, so a reconnect to any API pod resumes where it left off.
    */
   @Get(':id/coding/sessions/:sessionId/events')
   async codingEvents(
@@ -247,16 +251,18 @@ export class RunnerController {
       unsubscribe();
     };
 
-    unsubscribe = this.codingRelay.subscribe(id, (event) => {
-      if (event.sessionId !== sessionId || res.destroyed) return;
+    const lastEventId = (req.header?.('Last-Event-ID') || '').trim() || undefined;
+    unsubscribe = this.codingRelay.subscribeSession(id, sessionId, (event, eventId) => {
+      if (event.sessionId !== sessionId || res.destroyed || cleanedUp) return;
       try {
-        res.write(`event: ${event.kind}\ndata: ${JSON.stringify({ type: event.kind, ...event })}\n\n`);
+        const idLine = eventId ? `id: ${eventId}\n` : '';
+        res.write(`${idLine}event: ${event.kind}\ndata: ${JSON.stringify({ type: event.kind, ...event })}\n\n`);
       } catch { /* stream gone; close handler cleans up */ }
       if (event.kind === 'coding.exit') {
         cleanup();
         try { res.end(); } catch { /* */ }
       }
-    });
+    }, lastEventId);
     res.on('close', cleanup);
   }
 

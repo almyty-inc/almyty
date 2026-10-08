@@ -12,6 +12,7 @@ import {
   WORKER_PROTOCOL_VERSION,
   isWorkerEnvelope,
 } from '../../mcp/types/worker-protocol.types';
+import { workerReplayMax, workerReplayTtlSeconds } from './stream-backlog.config';
 
 /**
  * The worker stream: the long-lived channel between the backend and a
@@ -30,9 +31,10 @@ import {
  *
  * What runners depend on is unchanged: the `Mcp-Session-Id` header names
  * the session (minted on the first POST), the GET stream replays from
- * `Last-Event-ID` out of a per-session ring buffer, and the Redis keys and
- * channels (`strm:sess:<id>`, `strm:out`, `strm:resp`) keep their names so
- * a rolling deploy does not split old and new pods.
+ * `Last-Event-ID` out of a per-session ring buffer (shared through Redis
+ * when there is one), and the Redis keys and channels (`strm:sess:<id>`,
+ * `strm:out`, `strm:resp`) keep their names so a rolling deploy does not
+ * split old and new pods.
  */
 
 interface BufferedEvent {
@@ -50,13 +52,20 @@ interface StreamableSession {
   userId?: string;
   /** Monotonic sequence counter for events emitted on this session. */
   seq: number;
-  /** Ring buffer of recent events for Last-Event-ID replay. */
+  /**
+   * Ring buffer of recent events for Last-Event-ID replay: every frame
+   * without Redis, the frames this pod wrote to the stream with it.
+   */
   buffer: BufferedEvent[];
+  /**
+   * Set while a reconnect replays from the shared buffer: live frames wait
+   * here and are written after the replay. Null otherwise.
+   */
+  replayQueue: BufferedEvent[] | null;
   /** Last time we saw any client activity (POST or GET reconnect). */
   lastActivity: Date;
 }
 
-const REPLAY_BUFFER_MAX = 256;
 const STALE_AFTER_MS = 5 * 60 * 1000;
 /** TTL for the cross-pod session registry; refreshed on activity. */
 const SESSION_REGISTRY_TTL_S = 600;
@@ -65,20 +74,24 @@ const KEEPALIVE_INTERVAL_MS = 15_000;
 /** Redis channels for cross-replica delivery (see the multi-replica note). */
 const CH_OUT = 'strm:out';   // server->client frames, fan to the stream-holding pod
 const CH_RESP = 'strm:resp'; // client->server responses, fan to the dispatching pod
+/** Shared Last-Event-ID replay buffer, a list per session. */
+const SHARED_BUFFER_PREFIX = 'strm:buf:';
 
 /**
  * Multi-replica correctness
  * -------------------------
  * The live SSE GET stream is a TCP connection held by ONE pod, and the
  * in-memory `sessions` Map is pod-local. With >1 backend replica behind a
- * round-robin LB that breaks three ways:
+ * round-robin LB that breaks four ways:
  *   1. the GET stream lands on a pod that never minted the session -> 404.
  *   2. a server->client push (e.g. runner dispatch) runs on a different pod
  *      than the one holding the stream -> never delivered.
  *   3. a client->server response POST lands on a different pod than the one
  *      with the pending dispatch call -> never matched.
+ *   4. a reconnect with Last-Event-ID lands on a pod whose ring buffer never
+ *      saw those frames -> nothing replayed, frames lost.
  *
- * When a Redis client is present we fix all three without making the live
+ * When a Redis client is present we fix all four without making the live
  * stream itself shared:
  *   1. a shared session registry (strm:sess:<id>) lets any pod ADOPT a session
  *      it didn't mint, so the GET stream opens anywhere.
@@ -87,6 +100,9 @@ const CH_RESP = 'strm:resp'; // client->server responses, fan to the dispatching
  *   3. response/error envelopes are PUBLISHED to CH_RESP; every pod re-emits
  *      them locally so the pod with the pending call matches by correlation id
  *      (load-and-delete dedups the same-pod double-delivery).
+ *   4. every frame goes into a shared, bounded replay buffer
+ *      (strm:buf:<id>, WORKER_STREAM_REPLAY_MAX / _TTL_S) before it is
+ *      published, and a reconnect replays from it on whichever pod it lands.
  *
  * Redis is OPTIONAL: with no client (tests, single-pod dev) the transport is
  * exactly the in-memory implementation it always was.
@@ -289,54 +305,99 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
     });
 
     const lastEventId = (req.header('Last-Event-ID') || '').trim();
-    if (lastEventId) {
-      const replayed = this.replayFrom(session, lastEventId, res);
-      if (replayed === 'unavailable') {
-        // Spec's stance: send an error event but keep the stream open so
-        // the client can decide whether to start fresh or hang up. We
-        // emit and continue; client policy decides recovery.
-        this.writeRaw(res, this.formatEvent(
-          this.mintId(session),
-          'error',
-          this.envelope<WorkerErrorPayload>(session, 'error', {
-            code: WORKER_ERROR_CODES.REPLAY_UNAVAILABLE,
-            message: `event ${lastEventId} not in replay buffer`,
-          }, lastEventId),
-        ));
+    if (!lastEventId) return;
+    if (!this.redis) {
+      this.replayOrReport(session, this.replayFrom(session.buffer, lastEventId, res), lastEventId, res);
+      return;
+    }
+    // With Redis the authoritative buffer is the shared one: the frames may
+    // have been written by whichever pod held the stream before. Live frames
+    // that arrive while it is read wait in the queue so they land after the
+    // replay, in order.
+    const queue: BufferedEvent[] = [];
+    session.replayQueue = queue;
+    try {
+      const shared = await this.readShared(session.id);
+      if (session.stream === res && !res.destroyed) {
+        const result = this.replayFrom(shared ?? session.buffer, lastEventId, res);
+        // The stream has now seen everything in the shared buffer up to its
+        // end: adopt it locally so a queued frame the replay already wrote
+        // is not written again.
+        if (shared && result === 'replayed') session.buffer = shared.slice(-workerReplayMax());
+        this.replayOrReport(session, result, lastEventId, res);
+      }
+    } finally {
+      // A newer stream may have taken over the queue while this one read.
+      if (session.replayQueue === queue) {
+        session.replayQueue = null;
+        for (const entry of queue) this.writeFrame(session, entry);
       }
     }
+  }
+
+  /** After a replay: when the id aged out, say so on the stream. */
+  private replayOrReport(
+    session: StreamableSession,
+    result: 'replayed' | 'unavailable',
+    lastEventId: string,
+    res: Response,
+  ): void {
+    if (result !== 'unavailable') return;
+    // Spec's stance: send an error event but keep the stream open so
+    // the client can decide whether to start fresh or hang up. We
+    // emit and continue; client policy decides recovery.
+    this.writeRaw(res, this.formatEvent(
+      this.mintId(session),
+      'error',
+      this.envelope<WorkerErrorPayload>(session, 'error', {
+        code: WORKER_ERROR_CODES.REPLAY_UNAVAILABLE,
+        message: `event ${lastEventId} not in replay buffer`,
+      }, lastEventId),
+    ));
   }
 
   /**
    * Server-side push of an envelope to a session's open stream. Buffered
    * for replay regardless of whether a stream is currently open, so a
    * disconnected client that reconnects with Last-Event-ID gets the
-   * messages it missed.
+   * messages it missed. With Redis the buffer is shared, so the reconnect
+   * may land on any pod.
    */
   push<T>(sessionId: string, type: WorkerEnvelope['type'], payload: T, correlationId?: string): WorkerEnvelope<T> | null {
     const local = this.sessions.get(sessionId);
-    // Fast path: this pod holds the live stream — deliver directly.
-    if (local && local.stream && !local.stream.destroyed) {
-      return this.deliverLocal(local, type, payload, correlationId);
-    }
-    // No local stream here. If Redis is wired, the stream may live on another
-    // pod — publish and let the holder write it. (Offline is already checked
-    // by the caller via the RunnerSession table before push.)
+    const holdsStream = !!(local && local.stream && !local.stream.destroyed);
     if (this.redis) {
-      const env: WorkerEnvelope<T> = {
-        v: WORKER_PROTOCOL_VERSION,
-        type,
-        id: correlationId ?? `${sessionId}:${randomUUID().slice(0, 8)}`,
-        ts: Date.now(),
-        payload,
-      };
-      this.redis
-        .publish(CH_OUT, JSON.stringify({ sessionId, type, payload, correlationId }))
-        .catch((err) => this.logger.warn(`CH_OUT publish failed: ${err?.message ?? err}`));
+      // This pod builds the frame and records it in the shared replay buffer.
+      // If it holds the live stream it writes the frame itself; otherwise the
+      // stream may live on another pod, so the frame is published and the
+      // holder writes it. (Offline is already checked by the caller via the
+      // RunnerSession table before push.)
+      const env: WorkerEnvelope<T> = local
+        ? this.envelope(local, type, payload, correlationId)
+        : {
+            v: WORKER_PROTOCOL_VERSION,
+            type,
+            id: correlationId ?? `${sessionId}:${randomUUID().slice(0, 8)}`,
+            ts: Date.now(),
+            payload,
+          };
+      const entry: BufferedEvent = { id: env.id, seq: env.seq ?? 0, frame: this.formatEvent(env.id, type, env) };
+      if (holdsStream) {
+        this.appendShared(sessionId, entry);
+        this.writeFrame(local!, entry);
+      } else {
+        // type/payload/correlationId stay in the message for a pod that
+        // predates the shared buffer and builds its own frame.
+        this.appendShared(
+          sessionId,
+          entry,
+          JSON.stringify({ sessionId, type, payload, correlationId, id: entry.id, seq: entry.seq, frame: entry.frame }),
+        );
+      }
       return env;
     }
-    // No Redis and no local stream: buffer locally for replay if the session
-    // exists here, else report not-deliverable.
+    // No Redis: buffer locally for replay if the session exists here (and
+    // write it if the stream is open), else report not-deliverable.
     if (!local) return null;
     return this.deliverLocal(local, type, payload, correlationId);
   }
@@ -344,16 +405,9 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
   /** Build, buffer, and write an envelope to a locally-held session's stream. */
   private deliverLocal<T>(session: StreamableSession, type: WorkerEnvelope['type'], payload: T, correlationId?: string): WorkerEnvelope<T> {
     const env = this.envelope(session, type, payload, correlationId);
-    const frame = this.formatEvent(env.id, type, env);
-    this.buffer(session, env.id, env.seq!, frame);
-    if (session.stream && !session.stream.destroyed) {
-      try {
-        this.writeRaw(session.stream, frame);
-      } catch (err: any) {
-        this.logger.warn(`stream write failed for session=${session.id}: ${err.message}`);
-        session.stream = null;
-      }
-    }
+    const entry: BufferedEvent = { id: env.id, seq: env.seq!, frame: this.formatEvent(env.id, type, env) };
+    if (this.redis) this.appendShared(session.id, entry);
+    this.writeFrame(session, entry);
     return env;
   }
 
@@ -413,6 +467,7 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
       userId,
       seq: 0,
       buffer: [],
+      replayQueue: null,
       lastActivity: new Date(),
     };
     this.sessions.set(id, session);
@@ -467,6 +522,7 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
       userId: meta.userId ?? undefined,
       seq: 0,
       buffer: [],
+      replayQueue: null,
       lastActivity: new Date(),
     };
     this.sessions.set(sessionId, session);
@@ -496,8 +552,69 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
 
   private buffer(session: StreamableSession, id: string, seq: number, frame: string): void {
     session.buffer.push({ id, seq, frame });
-    if (session.buffer.length > REPLAY_BUFFER_MAX) {
+    const max = workerReplayMax();
+    while (session.buffer.length > max) {
       session.buffer.shift();
+    }
+  }
+
+  /**
+   * Write a frame to the session's open stream and keep it in the local
+   * replay buffer. While a reconnect is replaying from the shared buffer
+   * the frame waits in `replayQueue`, so live frames never jump ahead of
+   * the replayed ones; with Redis, a frame the replay already wrote is not
+   * written twice. (Without Redis there is no replay to overlap with, and
+   * every frame is written as it always was.)
+   */
+  private writeFrame(session: StreamableSession, entry: BufferedEvent): void {
+    if (session.replayQueue) {
+      session.replayQueue.push(entry);
+      return;
+    }
+    if (this.redis && session.buffer.some((e) => e.id === entry.id)) return;
+    this.buffer(session, entry.id, entry.seq, entry.frame);
+    if (session.stream && !session.stream.destroyed) {
+      try {
+        this.writeRaw(session.stream, entry.frame);
+      } catch (err: any) {
+        this.logger.warn(`stream write failed for session=${session.id}: ${err.message}`);
+        session.stream = null;
+      }
+    }
+  }
+
+  /**
+   * Record a frame in the session's shared replay buffer (bounded, with a
+   * TTL refreshed on every frame), then optionally publish to CH_OUT. One
+   * MULTI, so the frame is in the buffer before any pod can hear of it: a
+   * stream that reconnects in between replays it rather than missing it.
+   */
+  private appendShared(sessionId: string, entry: BufferedEvent, publish?: string): void {
+    const key = `${SHARED_BUFFER_PREFIX}${sessionId}`;
+    const tx = this.redis!
+      .multi()
+      .rpush(key, JSON.stringify(entry))
+      .ltrim(key, -workerReplayMax(), -1)
+      .expire(key, workerReplayTtlSeconds());
+    if (publish !== undefined) tx.publish(CH_OUT, publish);
+    tx.exec().catch((err) => this.logger.warn(`replay buffer write failed: ${err?.message ?? err}`));
+  }
+
+  /** The shared replay buffer, oldest first; null when Redis cannot be read. */
+  private async readShared(sessionId: string): Promise<BufferedEvent[] | null> {
+    try {
+      const raw = await this.redis!.lrange(`${SHARED_BUFFER_PREFIX}${sessionId}`, 0, -1);
+      const out: BufferedEvent[] = [];
+      for (const item of raw) {
+        try {
+          const e = JSON.parse(item);
+          if (e && typeof e.id === 'string' && typeof e.frame === 'string') out.push(e);
+        } catch { /* skip a corrupt entry */ }
+      }
+      return out;
+    } catch (err: any) {
+      this.logger.warn(`replay buffer read failed: ${err?.message ?? err}`);
+      return null;
     }
   }
 
@@ -507,19 +624,19 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
    * 'unavailable' if the requested event id has aged out of the buffer.
    */
   private replayFrom(
-    session: StreamableSession,
+    buffer: readonly BufferedEvent[],
     lastEventId: string,
     res: Response,
   ): 'replayed' | 'unavailable' {
-    const idx = session.buffer.findIndex((e) => e.id === lastEventId);
+    const idx = buffer.findIndex((e) => e.id === lastEventId);
     if (idx === -1) {
       // Two cases: the buffer is empty (nothing was sent yet, client
       // is reconnecting on a stale token) or the id aged out. Treat
       // both as unavailable; the client will decide how to recover.
-      return session.buffer.length === 0 ? 'replayed' : 'unavailable';
+      return buffer.length === 0 ? 'replayed' : 'unavailable';
     }
-    for (let i = idx + 1; i < session.buffer.length; i++) {
-      this.writeRaw(res, session.buffer[i].frame);
+    for (let i = idx + 1; i < buffer.length; i++) {
+      this.writeRaw(res, buffer[i].frame);
     }
     return 'replayed';
   }
@@ -583,10 +700,16 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
     try { parsed = JSON.parse(message); } catch { return; }
     if (channel === CH_OUT) {
       // Another pod wants to push to this session; write it only if WE hold
-      // the live stream. Other pods ignore it.
-      const { sessionId, type, payload, correlationId } = parsed;
+      // the live stream. Other pods ignore it. The sender built the frame
+      // and put it in the shared replay buffer already, so the holder writes
+      // that exact frame (same id a later Last-Event-ID names). A message
+      // without a frame is from a pod that predates the shared buffer.
+      const { sessionId, type, payload, correlationId, id, frame } = parsed;
       const session = this.sessions.get(sessionId);
-      if (session && session.stream && !session.stream.destroyed) {
+      if (!session || !session.stream || session.stream.destroyed) return;
+      if (typeof id === 'string' && typeof frame === 'string') {
+        this.writeFrame(session, { id, seq: Number(parsed.seq) || 0, frame });
+      } else {
         this.deliverLocal(session, type, payload, correlationId);
       }
     } else if (channel === CH_RESP) {
