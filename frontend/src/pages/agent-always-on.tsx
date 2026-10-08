@@ -21,6 +21,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { TimeZoneSelect } from '@/components/settings/time-zone-select'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { agentsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -33,6 +34,7 @@ import {
   type AlwaysOnReport,
   type AlwaysOnView,
   type ConnectionWakeEvent,
+  REPORT_LABELS,
   formatWakeTime,
   wakeSourceLabel,
 } from '@/lib/always-on'
@@ -60,6 +62,9 @@ export interface AlwaysOnForm {
   reportChannelId: string
   reportTo: string
   report: AlwaysOnReport
+  /** With report 'daily_digest': when the summary goes out ("HH:MM") and in which zone. */
+  digestTime: string
+  digestTimezone: string
 }
 
 /** The form a stored setting opens as; a new one starts off, every 30 minutes, asking first. */
@@ -83,6 +88,9 @@ export function formFromView(view: AlwaysOnView | undefined): AlwaysOnForm {
     reportChannelId: c?.reportTo?.channelId ?? NO_CHANNEL,
     reportTo: c?.reportTo?.to ?? '',
     report: c?.report ?? 'when_acted',
+    // The agent's own setting, else the defaults the server worked out (organization, your time zone, the install).
+    digestTime: c?.digest?.time ?? view?.digest?.time ?? '',
+    digestTimezone: c?.digest?.timezone ?? view?.digest?.timezone ?? '',
   }
 }
 
@@ -103,6 +111,9 @@ export function inputFromForm(form: AlwaysOnForm, floorMinutes: number): { input
   if (form.enabled && !form.timerOn && !form.channelIds.length && !form.connectionEvents.length && !owner) {
     return { error: 'Choose at least one thing that wakes it.' }
   }
+  if (form.report === 'daily_digest' && (!form.digestTime || !form.digestTimezone)) {
+    return { error: 'Choose when the daily summary goes out.' }
+  }
   const reports = form.reportChannelId !== NO_CHANNEL
   return {
     input: {
@@ -122,6 +133,7 @@ export function inputFromForm(form: AlwaysOnForm, floorMinutes: number): { input
         ? { kind: 'channel', channelId: form.reportChannelId, ...(form.reportTo.trim() ? { to: form.reportTo.trim() } : {}) }
         : null,
       report: form.report,
+      ...(form.report === 'daily_digest' ? { digest: { time: form.digestTime, timezone: form.digestTimezone } } : {}),
     },
   }
 }
@@ -236,6 +248,11 @@ function AlwaysOnPage({
             <p className="text-xs text-muted-foreground">
               {agent.status === 'active' ? 'Turn it on when the rest is set.' : 'Activate the agent first; an inactive agent never wakes.'}
             </p>
+            {view && view.capacity.includedAgents !== null && (
+              <p className="text-xs text-muted-foreground" data-testid="always-on-included">
+                Your plan includes {pluralized(view.capacity.includedAgents, 'always-on agent')}; {view.agentsOn} {view.agentsOn === 1 ? 'is' : 'are'} on.
+              </p>
+            )}
           </div>
           <Switch id="always-on-enabled" checked={form.enabled} onCheckedChange={(enabled) => set({ enabled })} />
         </div>
@@ -456,8 +473,11 @@ function AlwaysOnPage({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="when_acted">Only when it did something</SelectItem>
-                <SelectItem value="every_wake">After every wake</SelectItem>
+                {(Object.keys(REPORT_LABELS) as AlwaysOnReport[]).map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {REPORT_LABELS[r]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
@@ -486,6 +506,20 @@ function AlwaysOnPage({
               />
             )}
           </Field>
+        )}
+        {form.report === 'daily_digest' && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="always-on-digest">
+            <Field id="always-on-digest-time" label="Send the summary at" hint="A day it did nothing sends nothing.">
+              <Input id="always-on-digest-time" type="time" value={form.digestTime} onChange={(e) => set({ digestTime: e.target.value })} />
+            </Field>
+            <Field id="always-on-digest-timezone" label="Time zone" hint="At this time there, summer and winter.">
+              <TimeZoneSelect id="always-on-digest-timezone" value={form.digestTimezone} onChange={(z) => set({ digestTimezone: z })} />
+            </Field>
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              It says how often it woke and why, what it did, and what is waiting for your OK, with a link to{' '}
+              <Link className="underline" to="/approvals">Approvals</Link>.
+            </p>
+          </div>
         )}
       </FormSection>
 

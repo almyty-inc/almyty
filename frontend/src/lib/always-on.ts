@@ -10,7 +10,13 @@ export { formatRunTime as formatWakeTime } from '@/lib/schedule'
 
 export type ConnectionWakeEvent = 'expiring' | 'expired' | 'rotation_due'
 export type AlwaysOnActMode = 'propose' | 'act'
-export type AlwaysOnReport = 'every_wake' | 'when_acted'
+export type AlwaysOnReport = 'every_wake' | 'when_acted' | 'daily_digest'
+
+/** The daily summary's time of day ("HH:MM") and IANA time zone. */
+export interface DigestTiming {
+  time: string
+  timezone: string
+}
 
 export interface AlwaysOnConfig {
   enabled: boolean
@@ -29,6 +35,10 @@ export interface AlwaysOnConfig {
   standingConversationId?: string | null
   liveRunId?: string | null
   pausedReason?: AgentPauseReason | null
+  /** With report 'daily_digest': when the summary goes out. Either part may be empty: the defaults apply. */
+  digest?: Partial<DigestTiming> | null
+  /** When it was last turned on; the plan's included agents are the ones turned on first. */
+  enabledAt?: string | null
 }
 
 export interface AlwaysOnCapacity {
@@ -48,6 +58,10 @@ export interface AlwaysOnView {
   lastWake: { at: string; source: WakeSource; summary: string; runId: string | null } | null
   queued: number
   liveRunId: string | null
+  /** When the daily summary goes out: the agent's own setting, else the organization's, the owner's zone, the install's. */
+  digest: DigestTiming
+  /** The organization's always-on agents that are on now; capacity.includedAgents bounds it. */
+  agentsOn: number
   tools: Array<{ id: string; name: string; readOnly: boolean }>
 }
 
@@ -63,7 +77,7 @@ export interface AgentWakeRow {
 }
 
 export type AlwaysOnInput = Partial<
-  Pick<AlwaysOnConfig, 'enabled' | 'brief' | 'wakeOn' | 'ownerChannel' | 'actMode' | 'askFirstToolIds' | 'reportTo' | 'report' | 'maxWakesPerHour'>
+  Pick<AlwaysOnConfig, 'enabled' | 'brief' | 'wakeOn' | 'ownerChannel' | 'actMode' | 'askFirstToolIds' | 'reportTo' | 'report' | 'maxWakesPerHour' | 'digest'>
 >
 
 /** The one line on the card that says how Always on differs from a schedule. */
@@ -109,4 +123,27 @@ const SOURCE_WORDS: Record<WakeSource, string> = {
 
 export function wakeSourceLabel(source: WakeSource): string {
   return SOURCE_WORDS[source] ?? source
+}
+
+/** What the report picker says for each choice. */
+export const REPORT_LABELS: Record<AlwaysOnReport, string> = {
+  when_acted: 'Only when it did something',
+  every_wake: 'After every wake',
+  daily_digest: 'Once a day, a short summary of what it did',
+}
+
+/** "09:00" as the person's clock reads it: 9:00. */
+function clockTime(time: string): string {
+  const [h, m] = time.split(':')
+  return `${Number(h)}:${m}`
+}
+
+/** "Reports once a day at 9:00, Europe/Berlin" — when it reports, in words. */
+export function describeReport(config: AlwaysOnConfig | null | undefined, digest?: DigestTiming | null): string {
+  if (!config) return ''
+  if (config.report === 'daily_digest') {
+    const at = digest ? ` at ${clockTime(digest.time)}, ${digest.timezone.replace(/_/g, ' ')}` : ''
+    return `Sends a short summary once a day${at}`
+  }
+  return config.report === 'every_wake' ? 'Reports after every wake' : 'Reports when it did something'
 }
