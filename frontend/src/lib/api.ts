@@ -634,7 +634,7 @@ export const toolsApi = {
    * most 100 a page, so one request left an organization with Gmail (79
    * tools) and Google Calendar (37) showing 7 of Calendar's.
    */
-  getAll: async (organizationId?: string, params?: { limit?: number; page?: number }) => {
+  getAll: async (organizationId?: string, params?: { limit?: number; page?: number; search?: string }) => {
     const url = organizationId ? `/organizations/${organizationId}/tools` : '/tools'
     if (params) return apiGet(url, { params })
     const first: any = await apiGet(url, { params: { limit: TOOLS_PAGE, page: 1 } })
