@@ -645,7 +645,7 @@ export class HostedRunnersService {
   }
 
   /** The persistent workspaces of an environment the caller may see: their own; all of them for an org admin. */
-  async listWorkspaces(environmentId: string, userId: string, organizationId: string): Promise<Array<Workspace & { machine: Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> | null }>> {
+  async listWorkspaces(environmentId: string, userId: string, organizationId: string): Promise<Array<Workspace & { machine: (Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> & { desired: { replicas: number } }) | null }>> {
     await this.assertReadableEnvironment(environmentId, userId, organizationId);
     const role = await this.accessPolicy.getOrgRole(userId, organizationId);
     const admin = role === 'owner' || role === 'admin';
@@ -658,7 +658,8 @@ export class HostedRunnersService {
       : [];
     return rows.map((w) => {
       const m = machines.find((h) => h.workspaceId === w.id);
-      return Object.assign(w, { machine: m ? { id: m.id, state: m.state, lastActiveAt: m.lastActiveAt, lastError: m.lastError } : null });
+      // desired.replicas says whether anything asked for the pod (a fresh machine is pending, not waking).
+      return Object.assign(w, { machine: m ? { id: m.id, state: m.state, desired: { replicas: m.desired?.replicas ?? 0 }, lastActiveAt: m.lastActiveAt, lastError: m.lastError } : null });
     });
   }
 

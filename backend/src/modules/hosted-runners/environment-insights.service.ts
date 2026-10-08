@@ -35,7 +35,7 @@ export class EnvironmentInsightsService {
     const allowed = capacity.resourceClasses ?? Object.keys(s.resourceClasses);
     return {
       enabled: this.settings.enabled(),
-      images: Object.keys(s.images).map((name) => ({ name })),
+      images: Object.keys(s.images),
       resourceClasses: Object.entries(s.resourceClasses)
         .filter(([name]) => allowed.includes(name))
         .map(([name, size]) => ({ name, ...size })),
@@ -55,6 +55,35 @@ export class EnvironmentInsightsService {
       throw new BadRequestException('from and to must be ISO dates with from before to');
     }
     return { from: start, to: end };
+  }
+
+  /**
+   * The caller's own machine on each of these environments, for the list:
+   * their live persistent workspace there (not an agent's own) and its
+   * hosted runner's state, or null when they have none yet.
+   */
+  async machines(userId: string, organizationId: string, environmentIds: string[]) {
+    const out: Record<string, { workspaceId: string; status: string; lastActiveAt: Date | null; machine: { id: string; state: string; desired: { replicas: number }; lastError: string | null } | null } | null> = {};
+    for (const id of environmentIds) out[id] = null;
+    if (environmentIds.length === 0) return out;
+    const rows: Array<Record<string, any>> = await this.dataSource.query(
+      `SELECT w.id AS "workspaceId", w."environmentId", w.status, w."lastActiveAt",
+              h.id AS "machineId", h.state, h.desired, h."lastError"
+         FROM workspaces w
+         LEFT JOIN hosted_runners h ON h."workspaceId" = w.id AND h.state NOT IN ('torn_down', 'orphaned')
+        WHERE w."organizationId" = $1 AND w."ownerUserId" = $2 AND w."agentId" IS NULL
+          AND w.kind = 'persistent' AND w.status IN ('active', 'suspended') AND w."environmentId" = ANY($3::uuid[])`,
+      [organizationId, userId, environmentIds],
+    );
+    for (const r of rows) {
+      out[r.environmentId] = {
+        workspaceId: r.workspaceId,
+        status: r.status,
+        lastActiveAt: r.lastActiveAt,
+        machine: r.machineId ? { id: r.machineId, state: r.state, desired: { replicas: Number(r.desired?.replicas ?? 0) }, lastError: r.lastError } : null,
+      };
+    }
+    return out;
   }
 
   /**

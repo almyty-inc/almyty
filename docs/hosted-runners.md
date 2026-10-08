@@ -318,14 +318,14 @@ The pod itself also runs one thing at a time: enrollment sets
 
 | Route | What it does |
 |---|---|
-| `GET /environments` | The environments you may see, whether hosted runners are on, and `options` (as below). |
-| `GET /environments/options` | What an environment form may offer, from the settings and the plan: curated image names, the sizes this organization may use, the default size, the idle-timeout default and bounds, how long a suspended workspace's files are kept and when its owner is told, the usage retention, and the capacity. |
+| `GET /environments` | The environments you may see, each with `mine` (your own machine there: workspace, status, machine state and `desired.replicas`; null before you used it), whether hosted runners are on, and `settings` (as below). |
+| `GET /environments/settings` | What an environment form may offer, from the settings and the plan: curated image names, the sizes this organization may use, the default size, the idle-timeout default and bounds, how long a suspended workspace's files are kept and when its owner is told, the usage retention, and the capacity. |
 | `GET /environments/usage` | Runner minutes this month (UTC; or `?from=&to=`), per environment you may see and by size, and for the whole organization when you are an owner or admin (`null` otherwise). |
 | `POST /environments` | Create one. |
 | `GET /environments/:id` | One environment. |
 | `PATCH /environments/:id` | Change it. |
 | `DELETE /environments/:id` | Delete it; its machines and volumes go too. |
-| `GET /environments/:id/workspaces` | Its workspaces (yours; all of them for an admin) with their machine's state. |
+| `GET /environments/:id/workspaces` | Its workspaces (yours; all of them for an admin) with their machine's state and `desired.replicas` (whether anything asked for the pod). |
 | `GET /environments/:id/runs` | Runs of agents whose machine is this environment (`agentConfig.environmentId`), newest first: autonomous runs (top-level) and workflow executions. Yours; all of them for an owner or admin. `?limit=` up to `runsList.maxLimit`. |
 | `POST /environments/:id/workspaces/:workspaceId/suspend` | Park a workspace now. |
 | `POST /environments/:id/workspaces/:workspaceId/release` | Let it go, with its files. |

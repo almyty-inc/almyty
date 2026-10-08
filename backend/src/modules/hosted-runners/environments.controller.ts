@@ -51,19 +51,23 @@ export class EnvironmentsController {
   @Roles('viewer', 'member', 'admin', 'owner')
   async list(@Request() req: any) {
     const { userId, organizationId } = this.context(req);
+    const environments = await this.environments.list(userId, organizationId);
+    // Each row carries the caller's own machine there (`mine`, null when
+    // they have none yet), so the list needs no request per row.
+    const mine = await this.insights.machines(userId, organizationId, environments.map((e) => e.id));
     return {
       success: true,
-      data: await this.environments.list(userId, organizationId),
+      data: environments.map((e) => ({ ...e, mine: mine[e.id] ?? null })),
       enabled: this.hosted.enabled(),
       // The form's choices, from the install's settings and the plan.
-      options: await this.insights.options(organizationId),
+      settings: await this.insights.options(organizationId),
     };
   }
 
   /** What an environment form may offer: images, sizes, idle-timeout bounds and default, how long files are kept. */
-  @Get('options')
+  @Get('settings')
   @Roles('viewer', 'member', 'admin', 'owner')
-  async options(@Request() req: any) {
+  async settings(@Request() req: any) {
     const { organizationId } = this.context(req);
     return { success: true, data: await this.insights.options(organizationId) };
   }

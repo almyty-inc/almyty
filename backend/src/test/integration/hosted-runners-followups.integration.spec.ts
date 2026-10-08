@@ -335,10 +335,23 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       insights = new EnvironmentInsightsService(settings, hosted, environments, accessPolicy, ds);
     });
 
+    it('tells the list each caller\'s own machine, and whether anything asked for its pod', async () => {
+      const organizationId = await org('mine');
+      const owner = await member(organizationId, 'owner', OrganizationRole.OWNER);
+      const used = await environment(organizationId, owner);
+      const untouched = await environment(organizationId, owner);
+      const target = await hosted.resolveTarget(used.id, { organizationId, callerUserId: owner });
+      const mine = await insights.machines(owner, organizationId, [used.id, untouched.id]);
+      expect(mine[untouched.id]).toBeNull();
+      expect(mine[used.id]).toMatchObject({ workspaceId: target.workspaceId, status: WorkspaceStatus.SUSPENDED, machine: { id: target.hostedRunnerId, state: 'pending', desired: { replicas: 1 } } });
+      const [row] = await hosted.listWorkspaces(used.id, owner, organizationId);
+      expect(row.machine).toMatchObject({ desired: { replicas: 1 } });
+    });
+
     it('offers the install\'s images, sizes, idle-timeout bounds and file keep days', async () => {
       const organizationId = await org('options');
       const options = await insights.options(organizationId);
-      expect(options.images.map((i) => i.name)).toEqual(Object.keys(settings.current.images));
+      expect(options.images).toEqual(Object.keys(settings.current.images));
       expect(options.idleTimeoutMinutes).toEqual(settings.current.idleTimeoutMinutes);
       expect(options.suspendedRetention).toEqual(settings.current.suspendedRetention);
       expect(options.resourceClasses.map((c) => c.name)).toEqual(Object.keys(settings.current.resourceClasses));
