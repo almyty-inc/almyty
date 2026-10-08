@@ -106,11 +106,17 @@ export interface HostedRunnerSettings {
    */
   workspaceQueue: { waitSeconds: number; pollSeconds: number; leaseMinutes: number; retryAfterSeconds: number };
   /**
-   * The pod-scoped model token coding CLIs use to call almyty's
-   * Anthropic- and OpenAI-compatible endpoints: its lifetime (it is also
-   * revoked when the pod stops), and how often its last use is recorded.
+   * The pod model token coding CLIs use, through the runner's local model
+   * proxy, on almyty's model pass-through:
+   * - `tokenTtlMinutes`: its lifetime. The runner renews it while the pod
+   *   runs (POST /runners/hosted/model-token with the current token); it
+   *   also dies the moment the pod stops.
+   * - `touchEverySeconds`: how often its last use is recorded.
+   * - `localProxyPort`: the loopback port the runner's model proxy listens
+   *   on inside the pod; the CLIs' base URLs point there.
+   * - `upstreamTimeoutSeconds`: how long one forwarded call may take.
    */
-  modelAccess: { tokenTtlMinutes: number; touchEverySeconds: number };
+  modelAccess: { tokenTtlMinutes: number; touchEverySeconds: number; localProxyPort: number; upstreamTimeoutSeconds: number };
   /** How many runs an environment's run list returns: by default, and at most. */
   runsList: { defaultLimit: number; maxLimit: number };
   /** The almyty API a pod connects to; empty falls back to PUBLIC_API_URL. */
@@ -156,7 +162,7 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   },
   usageRetention: { months: 13 },
   workspaceQueue: { waitSeconds: 30, pollSeconds: 2, leaseMinutes: 30, retryAfterSeconds: 15 },
-  modelAccess: { tokenTtlMinutes: 480, touchEverySeconds: 60 },
+  modelAccess: { tokenTtlMinutes: 60, touchEverySeconds: 60, localProxyPort: 4319, upstreamTimeoutSeconds: 600 },
   runsList: { defaultLimit: 50, maxLimit: 200 },
   apiUrl: '',
 };
@@ -218,8 +224,9 @@ export function settingsProblems(s: HostedRunnerSettings): string[] {
   if (!q || !['waitSeconds', 'pollSeconds', 'leaseMinutes', 'retryAfterSeconds'].every((key) => POSITIVE(q[key]))) {
     problems.push('workspaceQueue.waitSeconds, pollSeconds, leaseMinutes and retryAfterSeconds must be positive numbers');
   }
-  if (!POSITIVE(s.modelAccess?.tokenTtlMinutes) || !POSITIVE(s.modelAccess?.touchEverySeconds)) {
-    problems.push('modelAccess.tokenTtlMinutes and modelAccess.touchEverySeconds must be positive numbers');
+  const m = s.modelAccess as unknown as Record<string, unknown> | undefined;
+  if (!m || !['tokenTtlMinutes', 'touchEverySeconds', 'localProxyPort', 'upstreamTimeoutSeconds'].every((key) => POSITIVE(m[key]))) {
+    problems.push('modelAccess.tokenTtlMinutes, touchEverySeconds, localProxyPort and upstreamTimeoutSeconds must be positive numbers');
   }
   if (!POSITIVE(s.runsList?.defaultLimit) || !POSITIVE(s.runsList?.maxLimit) || s.runsList.defaultLimit > s.runsList.maxLimit) {
     problems.push('runsList.defaultLimit and runsList.maxLimit must be positive, the default no more than the maximum');

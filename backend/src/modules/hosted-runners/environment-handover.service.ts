@@ -35,11 +35,12 @@ function returned(result: unknown): Row[] {
  * stays, its workspaces and their files stay. Their own workspaces (on any
  * environment of the organization) have their pod stopped at once, because
  * its Secret holds their connections and their model token, which is
- * revoked; the files are kept, and the workspace moves to the same admin
- * unless that admin already has one on that environment, in which case it
- * stays suspended under the departed owner until the retention window ends
- * (an admin can release it sooner). Every move is audited; the admin is
- * told.
+ * revoked; the files are kept, and the workspace moves to the same admin.
+ * Where that admin already has one on that environment they keep both: the
+ * leaver's becomes read-only (its pod mounts the volume read-only, only a
+ * call that names it works there), to copy from or delete, and expires
+ * after the usual suspended retention with the notice to the admin. Every
+ * move is audited; the admin is told.
  *
  * **A team is deleted.** An environment shared with the team keeps its
  * owner and becomes private (only the owner), with its tools; the owner can
@@ -127,6 +128,7 @@ export class EnvironmentHandoverService {
     }
 
     const stopped: string[] = [];
+    let inherited = 0;
     for (const ws of workspaces) {
       const machine = returned(
         await manager.query(
@@ -148,35 +150,47 @@ export class EnvironmentHandoverService {
       }
       // The files stay. The workspace goes to the same admin, unless they
       // already keep one on that environment (one per person and agent).
+      // Then they keep both (Frane, 2026-10-08): the leaver's stays beside
+      // theirs, read-only, to copy from or delete, and expires like any
+      // suspended workspace, with the notice going to them.
       const clash = returned(
         await manager.query(
           `SELECT id FROM workspaces
-            WHERE "environmentId" = $1 AND "ownerUserId" = $2 AND kind = 'persistent' AND status IN ('active', 'suspended')
+            WHERE "environmentId" = $1 AND "ownerUserId" = $2 AND kind = 'persistent' AND status IN ('active', 'suspended') AND "readOnly" = false
               AND COALESCE("agentId", '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
           [ws.environmentId, toUserId, ws.agentId ?? null],
         ),
       ).length > 0;
-      if (!clash) {
-        await manager.query(`UPDATE workspaces SET "ownerUserId" = $1, "leaseHolder" = NULL, "leaseJob" = false, "leaseUntil" = NULL WHERE id = $2`, [toUserId, ws.id]);
-        await manager.query(`UPDATE runners SET "ownerUserId" = $1 WHERE id = $2 AND kind = 'hosted'`, [toUserId, ws.runnerId]);
-      }
+      await manager.query(
+        `UPDATE workspaces SET "ownerUserId" = $1, "leaseHolder" = NULL, "leaseJob" = false, "leaseUntil" = NULL,
+                "readOnly" = ("readOnly" OR $3), "inheritedFromUserId" = CASE WHEN $3 THEN $4::uuid ELSE "inheritedFromUserId" END,
+                "lastActiveAt" = CASE WHEN $3 THEN now() ELSE "lastActiveAt" END,
+                "expiryNoticeAt" = CASE WHEN $3 THEN NULL ELSE "expiryNoticeAt" END
+          WHERE id = $2`,
+        [toUserId, ws.id, clash, fromUserId],
+      );
+      await manager.query(`UPDATE runners SET "ownerUserId" = $1 WHERE id = $2 AND kind = 'hosted'`, [toUserId, ws.runnerId]);
+      if (clash) inherited++;
       audit.push(
         await this.auditLog.logInTransaction(manager, {
           organizationId,
           userId: actorUserId,
-          action: clash ? AuditAction.WORKSPACE_SUSPENDED : AuditAction.OWNERSHIP_TRANSFER,
+          action: AuditAction.OWNERSHIP_TRANSFER,
           resourceType: AuditResource.HOSTED_RUNNER,
           resourceId: machine?.id ?? ws.id,
-          ...(clash ? {} : { changes: [{ field: 'ownerUserId', from: fromUserId, to: toUserId }] }),
+          changes: [
+            { field: 'ownerUserId', from: fromUserId, to: toUserId },
+            ...(clash ? [{ field: 'readOnly', from: false, to: true }] : []),
+          ],
           details: {
             reason,
             workspaceId: ws.id,
             environmentId: ws.environmentId,
             fromUserId,
-            toUserId: clash ? null : toUserId,
+            toUserId,
             podStopped: !!machine,
             filesKept: true,
-            ...(clash ? { keptUnder: fromUserId, why: 'the receiver already has a workspace on this environment' } : {}),
+            ...(clash ? { readOnly: true, why: 'the receiver already has a workspace on this environment; they keep both' } : {}),
           },
         }),
       );
@@ -186,16 +200,17 @@ export class EnvironmentHandoverService {
       audit,
       afterCommit: async () => {
         for (const id of stopped) await this.hosted.enqueue(id);
-        if (handedOver.length === 0) return;
+        if (handedOver.length === 0 && inherited === 0) return;
         const list = handedOver.join(', ');
+        const kept = inherited === 0 ? '' : ` ${inherited === 1 ? 'One of their workspaces is' : `${inherited} of their workspaces are`} kept for you read-only, beside your own, to copy from or delete; ${inherited === 1 ? 'it is' : 'they are'} deleted after the usual time unused.`;
         await this.notify({
           type: 'environments.handed_over',
           organizationId,
           userIds: [toUserId],
           title: handedOver.length === 1 ? 'A hosted environment is now yours' : 'Hosted environments are now yours',
-          body: `A member left the organization, so ${handedOver.length === 1 ? 'their environment' : 'their environments'} ${list} ${handedOver.length === 1 ? 'is' : 'are'} now yours to look after. Nothing was deleted: the workspaces and their files are still there.`,
+          body: `${handedOver.length ? `A member left the organization, so ${handedOver.length === 1 ? 'their environment' : 'their environments'} ${list} ${handedOver.length === 1 ? 'is' : 'are'} now yours to look after. Nothing was deleted: the workspaces and their files are still there.` : 'A member left the organization and their hosted workspaces are now yours.'}${kept}`,
           link: '/runners',
-          email: { template: 'environments.handed_over', params: { environments: list, count: handedOver.length } },
+          email: { template: 'environments.handed_over', params: { environments: list, count: handedOver.length, readOnlyKept: inherited } },
         });
       },
     };

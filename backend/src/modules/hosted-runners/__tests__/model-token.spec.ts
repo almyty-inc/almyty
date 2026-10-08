@@ -6,7 +6,7 @@ import { WorkspaceStatus } from '../../../entities/workspace.entity';
 import { DEFAULT_HOSTED_RUNNER_SETTINGS, HostedRunnerSettingsService, deepMerge, settingsProblems } from '../hosted-runner-settings';
 import { HostedModelTokenService } from '../hosted-model-token.service';
 import { HOSTED_MODEL_TOKEN_PREFIX, hostedAttributionHeaders, isHostedModelToken, presentedToken } from '../hosted-model-token.contract';
-import { modelBaseUrls, modelTokenEnv } from '../hosted-runners.processor';
+import { modelProxyEnv, modelTokenEnv } from '../hosted-runners.processor';
 
 /**
  * The pod-scoped model token (Decision 6) on its own: minted with only its
@@ -77,8 +77,7 @@ describe('the pod-scoped model token', () => {
     const key: any = await t.service.authenticate(token);
     expect(key).toMatchObject({ organizationId: ORG, userId: OWNER, agentId: null, gatewayId: null, hostedModelToken: { hostedRunnerId: HR, environmentId: ENV, workspaceId: WS } });
     expect(hostedAttributionHeaders(key)).toEqual({ 'X-Almyty-Hosted-Runner': HR, 'X-Almyty-Environment': ENV, 'X-Almyty-Workspace': WS });
-    t.service.recordCall(key, { protocol: 'anthropic_messages', model: 'agent:x', agentId: 'agent-1' });
-    expect(t.audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: AuditAction.HOSTED_MODEL_CALL, resourceId: HR, details: expect.objectContaining({ workspaceId: WS, protocol: 'anthropic_messages' }) }));
+    // The model calls themselves are the pass-through's to record (agents/model-pass-through.service.ts).
   });
 
   it('is not its business when the bearer is anything else (an API key goes its own way)', async () => {
@@ -111,16 +110,41 @@ describe('the pod-scoped model token', () => {
     await expect(t.service.authenticate(token)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('reaches the pod only through its Secret: the plain variables carry base URLs, never the token', () => {
+  it('reaches the pod only through its Secret, under the names the images read; the plain variables name the proxy', () => {
     const token = `${HOSTED_MODEL_TOKEN_PREFIX}plainly-fake-test-value`;
-    expect(modelTokenEnv(token)).toEqual({ ALMYTY_MODEL_TOKEN: token, ANTHROPIC_API_KEY: token, OPENAI_API_KEY: token });
-    expect(modelTokenEnv(null)).toEqual({});
-    const plain = modelBaseUrls('https://api.almyty.test', { envBindings: [] });
-    expect(plain).toEqual({ ANTHROPIC_BASE_URL: 'https://api.almyty.test', OPENAI_BASE_URL: 'https://api.almyty.test/v1' });
+    const expiresAt = new Date('2026-10-08T12:00:00Z');
+    expect(modelTokenEnv(token, expiresAt)).toEqual({ ALMYTY_MODEL_TOKEN: token, ALMYTY_MODEL_TOKEN_EXPIRES_AT: expiresAt.toISOString() });
+    expect(modelTokenEnv(null, null)).toEqual({});
+    const plain = modelProxyEnv(DEFAULT_HOSTED_RUNNER_SETTINGS);
+    expect(plain).toEqual({ ALMYTY_MODEL_PROXY_PORT: String(DEFAULT_HOSTED_RUNNER_SETTINGS.modelAccess.localProxyPort), ALMYTY_MODEL_RENEW_PATH: '/runners/hosted/model-token' });
     expect(JSON.stringify(plain)).not.toContain(token);
-    // A vendor key the environment binds itself (allowVendorKeys) takes that
-    // vendor's CLI off almyty's endpoint.
-    expect(modelBaseUrls('https://api.almyty.test', { envBindings: [{ connectionId: 'c', field: 'apiKey', envVar: 'ANTHROPIC_API_KEY' }] })).toEqual({ OPENAI_BASE_URL: 'https://api.almyty.test/v1' });
+  });
+
+  it('is renewed with itself while its pod runs: a new one, an hour long, and the old one stops at once', async () => {
+    const t = harness();
+    const first = await t.service.mint(hr, OWNER, new Date());
+    const renewed = await t.service.renew(first);
+    expect(renewed.token).not.toBe(first);
+    expect(isHostedModelToken(renewed.token)).toBe(true);
+    expect(renewed.expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(t.settings.minutes(DEFAULT_HOSTED_RUNNER_SETTINGS.modelAccess.tokenTtlMinutes));
+    await expect(t.service.authenticate(first)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(t.rows[0]).toMatchObject({ revokedReason: 'renewed' });
+    await expect(t.service.authenticate(renewed.token)).resolves.toMatchObject({ userId: OWNER });
+    // The spent token cannot renew again, nor can anything that is not a live pod token.
+    await expect(t.service.renew(first)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(t.service.renew('ak_live_not_a_pod_token')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(t.service.renew(undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it.each([
+    ['after it expired', (t: any) => { t.rows[t.rows.length - 1].expiresAt = new Date(Date.now() - 1); }],
+    ['once its pod was asked to stop', (t: any) => { t.state.hr.desired = { replicas: 0 }; }],
+    ['once its machine failed', (t: any) => { t.state.hr.state = 'failed'; }],
+  ])('cannot be renewed %s', async (_label, change) => {
+    const t = harness();
+    const token = await t.service.mint(hr, OWNER);
+    change(t);
+    await expect(t.service.renew(token)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('is read from Authorization or x-api-key, as the two endpoints receive it', () => {

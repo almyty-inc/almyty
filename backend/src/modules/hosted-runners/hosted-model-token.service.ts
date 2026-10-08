@@ -58,10 +58,15 @@ export class HostedModelTokenService implements HostedModelTokens {
   ) {}
 
   /** A fresh token for the pod about to start; any earlier one of this hosted runner stops working. */
-  async mint(hr: Pick<HostedRunner, 'id' | 'organizationId' | 'environmentId' | 'workspaceId'>, ownerUserId: string, now = new Date()): Promise<string> {
-    await this.revoke(hr.id, 'replaced', now);
+  async mint(
+    hr: Pick<HostedRunner, 'id' | 'organizationId' | 'environmentId' | 'workspaceId'>,
+    ownerUserId: string,
+    now = new Date(),
+    previous: HostedModelTokenRevokeReason = 'replaced',
+  ): Promise<string> {
+    await this.revoke(hr.id, previous, now);
     const token = `${HOSTED_MODEL_TOKEN_PREFIX}${randomBytes(TOKEN_BYTES).toString('base64url')}`;
-    const expiresAt = new Date(now.getTime() + this.settings.minutes(this.settings.current.modelAccess.tokenTtlMinutes));
+    const expiresAt = this.expiryFrom(now);
     const inserted = await this.tokens.insert({
       organizationId: hr.organizationId,
       hostedRunnerId: hr.id,
@@ -82,12 +87,32 @@ export class HostedModelTokenService implements HostedModelTokens {
     });
     return token;
   }
+  /**
+   * A running pod trades its current token for a fresh one before it
+   * expires (POST /runners/hosted/model-token). Only the current token of
+   * a pod that is still running is accepted, exactly as on the model
+   * endpoints; the old one stops working at once.
+   */
+  async renew(token: string | null | undefined, now = new Date()): Promise<{ token: string; expiresAt: Date }> {
+    const key = await this.authenticate(token, now);
+    const a = hostedAttributionOf(key);
+    if (!key || !a) throw new UnauthorizedException('This pod token is not valid');
+    const hr = { id: a.hostedRunnerId, organizationId: key.organizationId, environmentId: a.environmentId, workspaceId: a.workspaceId };
+    const next = await this.mint(hr, key.userId as string, now, 'renewed');
+    const expiresAt = new Date(now.getTime() + this.settings.minutes(this.settings.current.modelAccess.tokenTtlMinutes));
+    return { token: next, expiresAt };
+  }
+
+  /** When a token minted now expires. */
+  expiryFrom(now = new Date()): Date {
+    return new Date(now.getTime() + this.settings.minutes(this.settings.current.modelAccess.tokenTtlMinutes));
+  }
 
   /** Stop every live token of a hosted runner. Idempotent. */
   async revoke(hostedRunnerId: string, reason: HostedModelTokenRevokeReason, now = new Date()): Promise<number> {
     const result = await this.tokens.update({ hostedRunnerId, revokedAt: IsNull() }, { revokedAt: now, revokedReason: reason });
     const count = result.affected ?? 0;
-    if (count > 0 && reason !== 'replaced') {
+    if (count > 0 && reason !== 'replaced' && reason !== 'renewed') {
       const hr = await this.hostedRunners.findOne({ where: { id: hostedRunnerId }, select: { id: true, organizationId: true, environmentId: true, workspaceId: true } });
       if (hr) this.audit(hr.organizationId, null, AuditAction.HOSTED_MODEL_TOKEN_REVOKED, hr.id, { reason, count, environmentId: hr.environmentId, workspaceId: hr.workspaceId });
     }
@@ -136,19 +161,6 @@ export class HostedModelTokenService implements HostedModelTokens {
       isExpired: () => false,
       hostedModelToken: attribution,
     } as unknown as ApiKey;
-  }
-
-  recordCall(apiKey: ApiKey, call: { protocol: string; model?: string | null; agentId?: string | null }): void {
-    const a = hostedAttributionOf(apiKey);
-    if (!a) return;
-    this.audit(apiKey.organizationId, apiKey.userId ?? null, AuditAction.HOSTED_MODEL_CALL, a.hostedRunnerId, {
-      tokenId: a.tokenId,
-      environmentId: a.environmentId,
-      workspaceId: a.workspaceId,
-      protocol: call.protocol,
-      model: call.model ?? null,
-      agentId: call.agentId ?? null,
-    });
   }
 
   /** lastUsedAt, at most once per `modelAccess.touchEverySeconds`. */

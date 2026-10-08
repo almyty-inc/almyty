@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 /** Why a pod-scoped model token stopped working before it expired. */
-export type HostedModelTokenRevokeReason = 'pod_stopped' | 'replaced' | 'torn_down' | 'owner_left' | 'failed';
+export type HostedModelTokenRevokeReason = 'pod_stopped' | 'replaced' | 'renewed' | 'torn_down' | 'owner_left' | 'failed';
 
 /**
  * The token a coding CLI in a hosted pod uses to call almyty's

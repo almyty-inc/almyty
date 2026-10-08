@@ -13,7 +13,7 @@ import { canAcceptWork } from '../runner/runner-state';
 import { HostedAdapterRegistry } from './adapters/adapter.registry';
 import { HostedActual, HostedAdapterCredentials, HostedProvisionRequest, HostedRef, HostedRunnerAdapter } from './adapters/hosted-runner-adapter.interface';
 import { EnrollmentService, HOSTED_RENEW_PATH, HOSTED_STREAM_PATH } from './enrollment.service';
-import { HostedRunnerSettingsService } from './hosted-runner-settings';
+import { HostedRunnerSettings, HostedRunnerSettingsService } from './hosted-runner-settings';
 import { HostedUsageService } from './hosted-usage.service';
 import { HOSTED_RECONCILE_JOB, HOSTED_RECONCILE_QUEUE, HostedRunnersService, TERMINAL_HOSTED_STATES } from './hosted-runners.service';
 import { HostedModelTokenService } from './hosted-model-token.service';
@@ -145,7 +145,7 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
 
       if (!hr.externalRef) {
         if (!(await this.claim(hr))) return hr;
-        const ref = await adapter.provision(await this.provisionRequest(hr, env), creds);
+        const ref = await adapter.provision(await this.provisionRequest(hr, env, workspace), creds);
         await this.writeObserved(hr, { externalRef: ref, environmentVersion: env.version, lastError: null });
         await this.workspaces.update({ id: workspace!.id }, { volumeRef: { name: String(ref.volume ?? ''), sizeGi: this.sizeOf(hr).volumeGi, provider: adapter.key } });
         this.service.audit(hr, AuditAction.HOSTED_RUNNER_TRANSITION, null, { provisioned: true });
@@ -196,20 +196,24 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
     }
 
     if (actual.replicas === 0) {
-      // A newer environment version is applied while there is no pod yet.
-      if (hr.environmentVersion !== env.version) {
-        await adapter.provision(await this.provisionRequest(hr, env), creds);
+      // A newer environment version is applied while there is no pod yet,
+      // and an inherited workspace's objects are re-applied with its volume
+      // read-only (it may have been handed over since they were made).
+      if (hr.environmentVersion !== env.version || workspace.readOnly) {
+        await adapter.provision(await this.provisionRequest(hr, env, workspace), creds);
         await this.writeObserved(hr, { environmentVersion: env.version });
       }
       // A fresh single-use token and freshly resolved variables every
       // start, so a secret rotated in the store reaches this wake. The
-      // pod-scoped model token is minted here too (the previous one of this
+      // pod model token is minted here too (the previous one of this
       // machine stops) and, like every secret, reaches the pod only through
-      // its Secret; a vendor key the environment binds itself wins.
+      // its Secret. A vendor key the environment binds itself (only with
+      // allowVendorKeys) makes the entrypoint leave that vendor's CLI alone.
       const token = await this.enrollment.mint(hr, now);
       const bound = await this.service.resolveSecretEnv(env, workspace);
       const modelToken = this.modelTokens ? await this.modelTokens.mint(hr, workspace.ownerUserId, now) : null;
-      const secretEnv = { ...modelTokenEnv(modelToken), ...bound, ALMYTY_ENROLLMENT_TOKEN: token };
+      const modelExpiry = this.modelTokens && modelToken ? this.modelTokens.expiryFrom(now) : null;
+      const secretEnv = { ...bound, ...modelTokenEnv(modelToken, modelExpiry), ALMYTY_ENROLLMENT_TOKEN: token };
       await adapter.rotateEnrollment(ref, secretEnv, creds);
       await adapter.scale(ref, 1, creds);
       return this.transition(hr, 'provisioning', { actual: { ...observed, enrollIssuedAt: now.toISOString(), readyAt: null } }, { reason: 'wake' });
@@ -348,7 +352,7 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
   }
 
   /** Everything the adapter needs; plain settings only, secrets go through rotateEnrollment. */
-  async provisionRequest(hr: HostedRunner, env: Environment): Promise<HostedProvisionRequest> {
+  async provisionRequest(hr: HostedRunner, env: Environment, workspace?: Pick<Workspace, 'readOnly'> | null): Promise<HostedProvisionRequest> {
     const s = this.settings.current;
     const capacity = await this.service.capacityFor(hr.organizationId);
     const size = this.sizeOf(hr);
@@ -386,15 +390,14 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
         ...(env.setupScript ? { ALMYTY_SETUP_SCRIPT: env.setupScript } : {}),
         ALMYTY_CACHE_PATHS: JSON.stringify(env.cache?.paths ?? []),
         ...(env.egress?.allowBinaries?.length ? { ALMYTY_ALLOW_BINARIES: JSON.stringify(env.egress.allowBinaries) } : {}),
-        // Coding CLIs reach models through almyty with the pod-scoped token
-        // (Decision 6). A vendor key the environment binds itself (only
-        // with allowVendorKeys) replaces the token for that vendor, and then
-        // that vendor's CLI is not pointed at almyty either.
-        ...modelBaseUrls(api.url, env),
+        // Coding CLIs reach models through the runner's loopback model proxy,
+        // which holds the pod model token (Decision 6).
+        ...modelProxyEnv(s),
       },
       secretEnv: {},
       quota: { maxConcurrentRunners: capacity.maxConcurrentRunners, maxWorkspaces: capacity.maxWorkspaces, podResources: { name: biggestName, ...biggest } },
       providerConfig: hr.providerConfig ?? {},
+      readOnlyWorkspace: workspace?.readOnly === true,
     };
   }
 }
@@ -407,29 +410,25 @@ function safeHost(url: string): string | null {
   }
 }
 
-/**
- * The variable names a vendor's CLI reads its key from. The pod-scoped
- * token goes into each (through the Secret), unless the environment binds
- * its own value there.
- */
-export const MODEL_KEY_VARS = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY' } as const;
+/** Where the runner renews the pod model token, with the token itself. */
+export const HOSTED_MODEL_TOKEN_RENEW_PATH = '/runners/hosted/model-token';
 
-/** The pod-scoped model token, as the Secret carries it. */
-export function modelTokenEnv(token: string | null): Record<string, string> {
+/**
+ * The pod model token, as the Secret carries it: the names the runner-env
+ * images read (images/runner-env/entrypoint.sh). The runner takes it out
+ * of the environment, serves it to the coding CLIs through its loopback
+ * model proxy and renews it before it expires; the CLIs never hold it.
+ */
+export function modelTokenEnv(token: string | null, expiresAt: Date | null): Record<string, string> {
   if (!token) return {};
-  return { ALMYTY_MODEL_TOKEN: token, [MODEL_KEY_VARS.anthropic]: token, [MODEL_KEY_VARS.openai]: token };
+  return { ALMYTY_MODEL_TOKEN: token, ...(expiresAt ? { ALMYTY_MODEL_TOKEN_EXPIRES_AT: expiresAt.toISOString() } : {}) };
 }
 
-/**
- * The plain variables that point coding CLIs at almyty's Anthropic- and
- * OpenAI-compatible endpoints. Not set for a vendor whose key variable
- * the environment binds itself: that CLI talks to its vendor directly.
- */
-export function modelBaseUrls(apiUrl: string, env: Pick<Environment, 'envBindings'>): Record<string, string> {
-  const bound = new Set((env.envBindings ?? []).map((b) => b.envVar));
+/** The plain variables of the runner's model proxy: where it listens and where it renews. */
+export function modelProxyEnv(settings: Pick<HostedRunnerSettings, 'modelAccess'>): Record<string, string> {
   return {
-    ...(bound.has(MODEL_KEY_VARS.anthropic) ? {} : { ANTHROPIC_BASE_URL: apiUrl }),
-    ...(bound.has(MODEL_KEY_VARS.openai) ? {} : { OPENAI_BASE_URL: `${apiUrl}/v1` }),
+    ALMYTY_MODEL_PROXY_PORT: String(settings.modelAccess.localProxyPort),
+    ALMYTY_MODEL_RENEW_PATH: HOSTED_MODEL_TOKEN_RENEW_PATH,
   };
 }
 

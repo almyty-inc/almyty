@@ -22,6 +22,7 @@ export interface HostedDispatch {
       callerUserId?: string | null;
       agentId?: string | null;
       runId?: string | null;
+      workspaceId?: string | null;
       signal?: AbortSignal;
     },
   ): Promise<

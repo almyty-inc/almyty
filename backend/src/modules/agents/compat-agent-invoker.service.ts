@@ -10,13 +10,6 @@ import { compatPrincipal } from './compat-auth.helper';
 import { answerStreamFilter } from './answer-stream.filter';
 import { withholdsCandidateAnswers } from './final-answer';
 import { BudgetExceededException } from '../budgets/budget-exceeded.exception';
-import { hostedAttributionOf } from '../hosted-runners/hosted-model-token.contract';
-
-/** A run a hosted pod asked for carries which machine it came from (routing attribution). */
-function hostedRunMetadata(apiKey: ApiKey): { hosted?: Record<string, string> } {
-  const a = hostedAttributionOf(apiKey);
-  return a ? { hosted: { hostedRunnerId: a.hostedRunnerId, environmentId: a.environmentId, workspaceId: a.workspaceId } } : {};
-}
 
 /**
  * One agent run for a /v1 compat request, whichever protocol asked for it.
@@ -219,7 +212,7 @@ export class CompatAgentInvoker {
         input,
         signal: options.signal,
         principal: compatPrincipal(apiKey),
-        metadata: { triggerType: 'api', protocol: options.protocol, ...hostedRunMetadata(apiKey) },
+        metadata: { triggerType: 'api', protocol: options.protocol },
         streamAnswer: !!streamed,
       },
       streamed
@@ -288,7 +281,7 @@ export class CompatAgentInvoker {
       // A streamed request has its answer written by a no-tools call, so it
       // streams word by word; that costs one more call, which a request
       // that waits for the whole answer anyway does not pay.
-      metadata: { source: options.protocol, ...hostedRunMetadata(apiKey), ...(streamed ? { composeFinalAnswer: true } : {}) },
+      metadata: { source: options.protocol, ...(streamed ? { composeFinalAnswer: true } : {}) },
     });
     const deadline = Date.now() + AUTONOMOUS_ANSWER_TIMEOUT_MS;
 

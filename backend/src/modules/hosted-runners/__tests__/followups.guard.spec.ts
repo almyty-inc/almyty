@@ -105,20 +105,36 @@ describe('hosted runners follow-ups: wiring', () => {
   });
 
   describe('the pod-scoped model token', () => {
-    it('is accepted by the model endpoints and nowhere else', () => {
+    it('is accepted by the model endpoints and nowhere else, and gets the pass-through there, never an agent', () => {
       const users = sources(SRC)
         .filter((f) => !f.startsWith(MODULE + sep))
         .filter((f) => /HOSTED_MODEL_TOKENS|HostedModelTokenService/.test(readFileSync(f, 'utf8')))
         .map((f) => relative(SRC, f).split(sep).join('/'))
         .sort();
-      expect(users).toEqual(['modules/agents/agent-anthropic-compat.controller.ts', 'modules/agents/agent-openai-compat.controller.ts']);
-      for (const file of users) {
+      expect(users).toEqual([
+        'modules/agents/agent-anthropic-compat.controller.ts',
+        'modules/agents/agent-openai-compat.controller.ts',
+        'modules/agents/model-pass-through.controller.ts',
+      ]);
+      for (const file of users.filter((f) => f.includes('-compat.'))) {
         const source = read(SRC, file);
-        // Asked first; a pod token never falls through to another key path.
-        expect(source).toMatch(/\(await this\.podTokens\?\.authenticate\(presentedToken\(/);
-        expect(source).toMatch(/this\.podTokens\?\.recordCall\(apiKey,/);
-        expect(source).toMatch(/hostedAttributionHeaders\(apiKey\)/);
+        // Asked first; a pod token goes to the pass-through and returns.
+        expect(source).toMatch(/const podKey = await this\.podTokens\?\.authenticate\(presentedToken\(/);
+        expect(source).toMatch(/if \(podKey\) \{\s*if \(!this\.passThrough\)[^\n]*\n\s*return await this\.passThrough\.forward\(podKey, '(anthropic_messages|openai_chat)'/);
       }
+      const own = read(SRC, 'modules', 'agents', 'model-pass-through.controller.ts');
+      expect(own).toMatch(/@Post\('responses'\)[\s\S]*?this\.passThrough\.forward\(key, 'openai_responses'/);
+      // Inside the module only the renewal route takes it.
+      const enrollment = read(MODULE, 'hosted-runner-enrollment.controller.ts');
+      expect(enrollment).toMatch(/@Post\('hosted\/model-token'\)[\s\S]*?this\.modelTokens\.renew\(presentedToken\(authorization\)\)/);
+    });
+
+    it('the pass-through uses organization-wide providers only, and counts as spend', () => {
+      const pass = read(SRC, 'modules', 'agents', 'model-pass-through.service.ts');
+      expect(pass).toMatch(/where: \{ organizationId, visibility: 'org', status: LlmProviderStatus\.ACTIVE \}/);
+      expect(pass).toMatch(/this\.budgets\?\.enforceForOrganization\(organizationId\)/);
+      expect(pass).not.toMatch(/AgentExecutionEngine|CompatAgentInvoker|startRun\(/);
+      expect(read(SRC, 'modules', 'budgets', 'spend.service.ts')).toMatch(/repo: this\.hostedCallRepo, alias: 'run', perAgent: false/);
     });
 
     it('is minted at every pod start and revoked whenever the pod stops', () => {

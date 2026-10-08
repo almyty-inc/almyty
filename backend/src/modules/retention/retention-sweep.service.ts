@@ -252,6 +252,39 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`Hosted usage retention failed for org ${organizationId}: ${err?.message ?? err}`);
       }
     }
+    // Hosted pods' model calls (hosted_model_calls) are the same kind of
+    // record, kept for the same window, aged by when they were made.
+    const callOrgs: Array<{ organizationId: string }> = await this.policyRepository
+      .query(`SELECT DISTINCT "organizationId" FROM "hosted_model_calls" WHERE "createdAt" < $1`, [latest])
+      .catch(() => []);
+    for (const { organizationId } of callOrgs) {
+      const cutoff = overrides.get(organizationId) ?? installCutoff;
+      try {
+        let deleted = 0;
+        for (let batch = 0; batch < MAX_BATCHES_PER_CLASS; batch++) {
+          const result = await this.policyRepository.query(
+            `DELETE FROM "hosted_model_calls" WHERE "id" IN (
+               SELECT "id" FROM "hosted_model_calls" WHERE "organizationId" = $1 AND "createdAt" < $2 LIMIT $3
+             )`,
+            [organizationId, cutoff, SWEEP_BATCH],
+          );
+          const affected = Array.isArray(result) ? (typeof result[1] === 'number' ? result[1] : result.length) : 0;
+          deleted += affected;
+          if (affected < SWEEP_BATCH) break;
+        }
+        if (deleted === 0) continue;
+        await this.auditLogService.log({
+          organizationId,
+          action: AuditAction.RETENTION_SWEEP,
+          resourceType: AuditResource.ORGANIZATION,
+          resourceId: organizationId,
+          resourceName: 'retention_sweep',
+          details: { hostedModelCalls: deleted, madeBefore: cutoff.toISOString(), source: overrides.has(organizationId) ? 'policy' : 'install_default' },
+        });
+      } catch (err: any) {
+        this.logger.warn(`Hosted model call retention failed for org ${organizationId}: ${err?.message ?? err}`);
+      }
+    }
     return deletedByOrg;
   }
 

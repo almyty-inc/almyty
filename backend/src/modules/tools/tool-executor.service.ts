@@ -834,6 +834,9 @@ export class ToolExecutorService {
             // The job this call belongs to holds the person's workspace
             // while it works there; another job's calls wait their turn.
             runId,
+            // A workspace the call names: one of the caller's inherited,
+            // read-only workspaces there (anything else is ignored).
+            workspaceId: workspaceId ?? null,
             signal: options.signal,
           });
         } catch (err: any) {

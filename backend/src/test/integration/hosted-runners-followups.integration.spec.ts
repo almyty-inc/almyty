@@ -52,6 +52,20 @@ import { EnvironmentHandoverService } from '../../modules/hosted-runners/environ
 import { EnvironmentInsightsService } from '../../modules/hosted-runners/environment-insights.service';
 import { EnvironmentsService } from '../../modules/hosted-runners/environments.service';
 import { provisionExtensionsInPublic } from './test-db-extensions';
+import { ModelPassThroughService } from '../../modules/agents/model-pass-through.service';
+import { ModelPassThroughController } from '../../modules/agents/model-pass-through.controller';
+import { HostedRunnerEnrollmentController } from '../../modules/hosted-runners/hosted-runner-enrollment.controller';
+import { SpendService } from '../../modules/budgets/spend.service';
+import { HostedModelCall } from '../../entities/hosted-model-call.entity';
+import { Model } from '../../entities/model.entity';
+import { callLlmProviderHttp } from '../../modules/llm-providers/providers/safe-request';
+
+// The vendor's side of the model pass-through; everything of ours is real.
+jest.mock('../../modules/llm-providers/providers/safe-request', () => ({
+  ...jest.requireActual('../../modules/llm-providers/providers/safe-request'),
+  callLlmProviderHttp: jest.fn(),
+}));
+const httpCall = callLlmProviderHttp as jest.Mock;
 
 /**
  * The hosted-runner follow-ups of 2026-10-08 against a real Postgres, with
@@ -248,23 +262,26 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       hostedRunnerId = first.hostedRunnerId;
     });
 
-    it('is minted at pod start into the Secret only, with just its hash stored', async () => {
+    it('is minted at pod start into the Secret only, under the names the images read, with just its hash stored', async () => {
       await processor.reconcile(hostedRunnerId);
       const secret = stub.pods.get(hostedRunnerId)!.secretEnv!;
       token = secret.ALMYTY_MODEL_TOKEN;
       expect(token).toMatch(/^almyty_pod_/);
-      expect(secret.ANTHROPIC_API_KEY).toBe(token);
-      expect(secret.OPENAI_API_KEY).toBe(token);
+      expect(new Date(secret.ALMYTY_MODEL_TOKEN_EXPIRES_AT).getTime()).toBeGreaterThan(Date.now());
+      // The CLIs never get it: no vendor key names carry it.
+      expect(secret.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(secret.OPENAI_API_KEY).toBeUndefined();
       const rows = await repo(HostedModelToken).findBy({ hostedRunnerId });
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ tokenHash: crypto.createHash('sha256').update(token).digest('hex'), ownerUserId: owner, environmentId: env.id, revokedAt: null });
+      expect(rows[0].expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(settings.minutes(settings.current.modelAccess.tokenTtlMinutes));
       expect(JSON.stringify(await ds.query(`SELECT * FROM hosted_model_tokens`))).not.toContain(token);
 
-      // The pod spec carries the base URLs and the Secret by reference; the
-      // token itself only in the Secret.
+      // The pod spec names the runner's model proxy and the Secret by
+      // reference; the token itself is only in the Secret.
       const hr = await repo(HostedRunner).findOneByOrFail({ id: hostedRunnerId });
       const req = await processor.provisionRequest(hr, env);
-      expect(req.env).toMatchObject({ ANTHROPIC_BASE_URL: 'https://api.almyty.test', OPENAI_BASE_URL: 'https://api.almyty.test/v1' });
+      expect(req.env).toMatchObject({ ALMYTY_API_URL: 'https://api.almyty.test', ALMYTY_MODEL_PROXY_PORT: String(settings.current.modelAccess.localProxyPort), ALMYTY_MODEL_RENEW_PATH: '/runners/hosted/model-token' });
       const layout = settings.current.cluster;
       expect(JSON.stringify(buildDeployment(req, layout, 1))).not.toContain(token);
       expect(JSON.stringify(req)).not.toContain(token);
@@ -275,30 +292,72 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       await expect(modelTokens.authenticate(token)).rejects.toThrow(/not valid/);
     });
 
-    it('works on the model endpoints once the pod runs, as its owner, attributed to the machine', async () => {
+    it('reaches models through the pass-through only: organization-wide providers, recorded as spend, never an agent', async () => {
       await ready(hostedRunnerId);
       const key: any = await modelTokens.authenticate(token);
       expect(key).toMatchObject({ organizationId, userId: owner, hostedModelToken: { hostedRunnerId, environmentId: env.id } });
 
+      // An organization-wide Anthropic provider with one validated model,
+      // and the owner's private one with the same model: only the first may answer.
+      const shared = await repo(LlmProvider).save(repo(LlmProvider).create({ organizationId, visibility: 'org', name: `shared ${++seq}`, type: LlmProviderType.ANTHROPIC, configuration: {}, status: LlmProviderStatus.ACTIVE } as any)) as any;
+      const mine = await repo(LlmProvider).save(repo(LlmProvider).create({ organizationId, visibility: 'private', ownerUserId: owner, name: `mine ${++seq}`, type: LlmProviderType.ANTHROPIC, configuration: {}, status: LlmProviderStatus.ACTIVE } as any)) as any;
+      await ds.query(
+        `INSERT INTO models ("organizationId", name, "providerId", "providerType", "vendorModelId", status, "validationStatus", pricing, "createdAt")
+         VALUES ($1, 'claude-sonnet-4-5', $2, 'anthropic', 'claude-sonnet-4-5', 'active', 'passed', '{"inPerMTok":3,"outPerMTok":15,"currency":"USD"}', now() - interval '1 minute'),
+                ($1, 'claude-sonnet-4-5', $3, 'anthropic', 'claude-sonnet-4-5', 'active', 'passed', '{"inPerMTok":3,"outPerMTok":15,"currency":"USD"}', now())`,
+        [organizationId, mine.id, shared.id],
+      );
+      const passThrough = new ModelPassThroughService(
+        repo(Model), repo(LlmProvider), repo(HostedModelCall),
+        { withResolvedSecrets: async (p: any) => Object.assign(p, { getDecryptedApiKey: () => 'fake-vendor-key-for-tests' }) } as any,
+        { enforceForOrganization: async () => undefined } as any, undefined, audit, settings,
+      );
+      httpCall.mockResolvedValue({ status: 200, data: { id: 'msg_1', type: 'message', content: [], usage: { input_tokens: 1000, output_tokens: 100 } }, headers: {} });
+
       const agents = { findAllActive: jest.fn(async () => []), findByName: jest.fn(async () => null), getAgent: jest.fn() };
       const allow = { canExecute: jest.fn(async () => ({ allowed: true })) };
-      const openai = new AgentOpenAICompatController(agents as any, {} as any, repo(ApiKey), {} as any, undefined, allow as any, undefined, modelTokens);
+      const anthropic = new AgentAnthropicCompatController(agents as any, {} as any, repo(ApiKey), undefined, allow as any, undefined, modelTokens, passThrough);
+      const answered = fakeRes();
+      const tools = [{ name: 'Bash', input_schema: { type: 'object' } }];
+      await anthropic.messages({ model: 'claude-sonnet-4-5', max_tokens: 16, tools, messages: [{ role: 'user', content: 'hi' }] } as any, undefined as any, token, { headers: {}, on: () => undefined, off: () => undefined } as any, answered);
+      expect(answered.statusCode).toBe(200);
+      expect(httpCall.mock.calls[0][0].data.tools).toEqual(tools);
+      expect(answered.headers).toMatchObject({ 'X-Almyty-Hosted-Runner': hostedRunnerId, 'X-Almyty-Route-Provider': shared.id });
+      expect(agents.findByName).not.toHaveBeenCalled();
+
+      const [call] = await repo(HostedModelCall).findBy({ hostedRunnerId });
+      expect(call).toMatchObject({ providerId: shared.id, agentId: null, userId: owner, inputTokens: 1000, outputTokens: 100, status: 200 });
+      expect(call.totalCost).toBeCloseTo((1000 * 3 + 100 * 15) / 1_000_000, 10);
+      // The organization's spend, which its budgets are measured against, includes it.
+      const spend = new SpendService(repo(AgentRun), repo(AgentExecution), repo(HostedModelCall));
+      expect(await spend.periodToDateCents({ organizationId, from: new Date(Date.now() - 60_000) })).toBe(Math.round(call.totalCost * 100));
+
+      // A pod lists the shared provider's models, not agents.
+      const openai = new AgentOpenAICompatController(agents as any, {} as any, repo(ApiKey), {} as any, undefined, allow as any, undefined, modelTokens, passThrough);
       const listed = fakeRes();
       await openai.listModels(`Bearer ${token}`, listed, {} as any);
-      expect(listed.statusCode).toBe(200);
-      expect(listed.body).toEqual({ object: 'list', data: [] });
-      expect(agents.findAllActive).toHaveBeenCalledWith(organizationId, owner);
+      expect(listed.body.data.map((m: any) => m.id)).toEqual(['claude-sonnet-4-5']);
+      expect(agents.findAllActive).not.toHaveBeenCalled();
 
-      // Past authentication on /v1/messages too: the model is what is not found.
-      const anthropic = new AgentAnthropicCompatController(agents as any, {} as any, repo(ApiKey), undefined, allow as any, undefined, modelTokens);
-      const answered = fakeRes();
-      await anthropic.messages({ model: 'no-such-agent', max_tokens: 16, messages: [{ role: 'user', content: 'hi' }] } as any, undefined as any, token, {} as any, answered);
-      expect(answered.statusCode).toBe(404);
-
-      // A refused pod token is a 401 there, never a fall-through to another key path.
+      // A refused pod token is a 401, never a fall-through to another key path.
       const refused = fakeRes();
       await openai.listModels(`Bearer almyty_pod_plainly-fake-unknown-token`, refused, {} as any);
       expect(refused.statusCode).toBe(401);
+      // And /v1/responses takes nothing but a pod token.
+      const responses = new ModelPassThroughController(passThrough, modelTokens);
+      const keyed = fakeRes();
+      await responses.responses({ model: 'gpt-5', input: 'hi' }, 'Bearer ak_live_not_a_pod_token', { headers: {} } as any, keyed);
+      expect(keyed.statusCode).toBe(401);
+    });
+
+    it('is renewed with itself while the pod runs; the old one stops at once', async () => {
+      const controller = new HostedRunnerEnrollmentController({} as any, modelTokens);
+      const renewed = (await controller.renewModelToken(`Bearer ${token}`)).data;
+      expect(renewed.token).not.toBe(token);
+      await expect(modelTokens.authenticate(token)).rejects.toThrow(/not valid/);
+      await expect(controller.renewModelToken(`Bearer ${token}`)).rejects.toThrow(/not valid/);
+      expect(await modelTokens.authenticate(renewed.token)).toMatchObject({ userId: owner });
+      token = renewed.token;
     });
 
     it('is refused by the platform API and the runner surface', async () => {
@@ -312,15 +371,19 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       await hosted.suspendIdle(new Date());
       await processor.reconcile(hostedRunnerId);
       await expect(modelTokens.authenticate(token)).rejects.toThrow(/not valid/);
-      expect((await repo(HostedModelToken).findOneByOrFail({ hostedRunnerId })).revokedReason).toBe('pod_stopped');
+      const hash = crypto.createHash('sha256').update(token).digest('hex');
+      expect((await repo(HostedModelToken).findOneByOrFail({ tokenHash: hash })).revokedReason).toBe('pod_stopped');
       expect(await audit['auditLogRepository'].countBy({ action: AuditAction.HOSTED_MODEL_TOKEN_REVOKED, resourceId: hostedRunnerId })).toBe(1);
+      // A stopped pod's token cannot be renewed either.
+      await expect(modelTokens.renew(token)).rejects.toThrow(/not valid/);
 
       await processor.reconcile(hostedRunnerId);
       await hosted.resolveTarget(env.id, { organizationId, callerUserId: owner });
       await processor.reconcile(hostedRunnerId);
       const next = stub.pods.get(hostedRunnerId)!.secretEnv!.ALMYTY_MODEL_TOKEN;
       expect(next).not.toBe(token);
-      expect(await repo(HostedModelToken).countBy({ hostedRunnerId })).toBe(2);
+      // The first, its renewal, and the new start's.
+      expect(await repo(HostedModelToken).countBy({ hostedRunnerId })).toBe(3);
     });
   });
 
@@ -558,6 +621,50 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       expect(stub.calls).not.toContain(`teardown:${target.hostedRunnerId}:delete`);
     });
 
+    it('gives the receiver both workspaces when they already had one there: the leaver\'s read-only, with the normal retention and notice', async () => {
+      const org2 = await org('both');
+      const boss = await member(org2, 'boss', OrganizationRole.OWNER, new Date('2023-01-01'));
+      const gone = await member(org2, 'gone', OrganizationRole.MEMBER, new Date('2024-01-01'));
+      const shared = await environment(org2, boss, { visibility: 'org' });
+      const own = await hosted.resolveTarget(shared.id, { organizationId: org2, callerUserId: boss });
+      const theirs = await hosted.resolveTarget(shared.id, { organizationId: org2, callerUserId: gone });
+      notifications.emit.mockClear();
+
+      await orgs.removeMember(org2, gone, boss);
+
+      const kept = await repo(Workspace).findOneByOrFail({ id: theirs.workspaceId });
+      expect(kept).toMatchObject({ ownerUserId: boss, readOnly: true, inheritedFromUserId: gone, expiryNoticeAt: null });
+      expect([WorkspaceStatus.ACTIVE, WorkspaceStatus.SUSPENDED]).toContain(kept.status);
+      expect((await repo(Workspace).findOneByOrFail({ id: own.workspaceId })).readOnly).toBe(false);
+      const [transfer] = await repo(AuditLog).findBy({ organizationId: org2, action: AuditAction.OWNERSHIP_TRANSFER, resourceType: AuditResource.HOSTED_RUNNER, resourceId: theirs.hostedRunnerId });
+      expect(transfer.details).toMatchObject({ readOnly: true, toUserId: boss, filesKept: true });
+      expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'environments.handed_over', userIds: [boss], email: expect.objectContaining({ params: expect.objectContaining({ readOnlyKept: 1 }) }) }));
+
+      // The boss's calls go to their own workspace; one that names the kept
+      // one works there, and its pod mounts the volume read-only.
+      expect((await hosted.resolveTarget(shared.id, { organizationId: org2, callerUserId: boss })).workspaceId).toBe(own.workspaceId);
+      expect((await hosted.resolveTarget(shared.id, { organizationId: org2, callerUserId: boss, workspaceId: theirs.workspaceId })).workspaceId).toBe(theirs.workspaceId);
+      const hr = await repo(HostedRunner).findOneByOrFail({ id: theirs.hostedRunnerId });
+      const req = await processor.provisionRequest(hr, shared, kept);
+      expect(req.readOnlyWorkspace).toBe(true);
+      const mount = buildDeployment(req, settings.current.cluster, 1).spec.template.spec.containers[0].volumeMounts.find((m: any) => m.name === 'workspace');
+      expect(mount).toMatchObject({ readOnly: true });
+      // Nobody else can name it.
+      const other = await member(org2, 'other', OrganizationRole.MEMBER);
+      const theirsNow = await hosted.resolveTarget(shared.id, { organizationId: org2, callerUserId: other, workspaceId: theirs.workspaceId });
+      expect(theirsNow.workspaceId).not.toBe(theirs.workspaceId);
+
+      // Unused, it gets the notice on the notice day, to the boss, and then expires.
+      const day = settings.minutes(24 * 60);
+      await repo(Workspace).update({ id: kept.id }, { status: WorkspaceStatus.SUSPENDED, lastActiveAt: new Date(Date.now() - (settings.current.suspendedRetention.noticeDay + 1) * day) });
+      notifications.emit.mockClear();
+      await hosted.sweepSuspended(new Date());
+      expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'environments.workspace_expiring', userIds: [boss] }));
+      await repo(Workspace).update({ id: kept.id }, { lastActiveAt: new Date(Date.now() - (settings.current.suspendedRetention.keepDays + 1) * day) });
+      await hosted.sweepSuspended(new Date());
+      expect((await repo(Workspace).findOneByOrFail({ id: kept.id })).status).toBe(WorkspaceStatus.EXPIRED);
+    });
+
     it('falls back to the longest-standing admin when no other owner is left to receive', async () => {
       const lone = await org('lone');
       const soleOwner = await member(lone, 'sole', OrganizationRole.OWNER, new Date('2022-01-01'));
@@ -651,6 +758,25 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
 
       const [entry] = await repo(AuditLog).findBy({ organizationId: short, action: AuditAction.RETENTION_SWEEP });
       expect(entry.details).toMatchObject({ runnerUsageIntervals: 1, source: 'policy' });
+    });
+
+    it('keeps pods\' model calls for the same window', async () => {
+      const orgId = await org('ret-calls');
+      const call = async (createdAt: Date) => {
+        const [row] = await ds.query(
+          `INSERT INTO hosted_model_calls ("organizationId", "hostedRunnerId", "environmentId", "workspaceId", "vendorModelId", protocol, status, "createdAt")
+           VALUES ($1, $2, $3, $4, 'claude-sonnet-4-5', 'anthropic_messages', 200, $5) RETURNING id`,
+          [orgId, crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID(), createdAt],
+        );
+        return row.id as string;
+      };
+      const old = await call(monthsAgo(14));
+      const recent = await call(monthsAgo(12));
+      await sweep().sweepRunnerUsage(new Date());
+      expect(await repo(HostedModelCall).countBy({ id: old })).toBe(0);
+      expect(await repo(HostedModelCall).countBy({ id: recent })).toBe(1);
+      const [entry] = await repo(AuditLog).findBy({ organizationId: orgId, action: AuditAction.RETENTION_SWEEP });
+      expect(entry.details).toMatchObject({ hostedModelCalls: 1, source: 'install_default' });
     });
   });
 });

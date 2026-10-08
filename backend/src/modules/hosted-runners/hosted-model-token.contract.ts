@@ -2,13 +2,16 @@ import type { ApiKey } from '../../entities/api-key.entity';
 
 /**
  * What the model endpoints (`/v1/messages`, `/v1/chat/completions`,
- * `/v1/models`) need of hosted runners' pod-scoped model tokens, as a
- * token, so the agents module does not import the hosted-runners module.
+ * `/v1/responses`, `/v1/models`) need of hosted runners' pod model tokens,
+ * as a token, so the agents module does not import the hosted-runners
+ * module.
  *
  * A pod token is recognisable by its prefix and nothing else: it is not
  * an API key row and not a session, so every other route refuses it the
  * way it refuses any unknown bearer. The model endpoints ask this first
- * and, for a pod token, only this.
+ * and, for a pod token, only this; what a pod token gets there is the
+ * model pass-through (agents/model-pass-through.service.ts), never an
+ * agent run.
  */
 export const HOSTED_MODEL_TOKENS = Symbol('HOSTED_MODEL_TOKENS');
 
@@ -32,8 +35,6 @@ export interface HostedModelTokens {
    * revoked, or whose pod, workspace, environment or owner is gone.
    */
   authenticate(token: string | null | undefined): Promise<ApiKey | null>;
-  /** Audit one model call a pod made. Never throws. */
-  recordCall(apiKey: ApiKey, call: { protocol: string; model?: string | null; agentId?: string | null }): void;
 }
 
 export function isHostedModelToken(token: unknown): token is string {

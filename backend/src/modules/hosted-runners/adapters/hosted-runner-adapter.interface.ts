@@ -57,6 +57,8 @@ export interface HostedProvisionRequest {
   quota: { maxConcurrentRunners: number; maxWorkspaces: number; podResources: HostedResourceSpec };
   /** Adapter-specific, opaque to the caller. */
   providerConfig: Record<string, any>;
+  /** Mount the workspace volume read-only (an inherited workspace, kept to copy from). */
+  readOnlyWorkspace?: boolean;
 }
 
 /** Adapter-owned handle to what it made. Opaque to everyone else. */

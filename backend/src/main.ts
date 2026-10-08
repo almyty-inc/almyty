@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { json } from 'express';
 import { AppModule } from './app.module';
 import { createSpaRootMiddleware } from './common/frontend/frontend-static';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
@@ -61,6 +62,12 @@ async function bootstrap() {
   // the AsyncLocalStorage scope and the id is on the response header even
   // for a request that never reaches a handler.
   app.use(requestContextMiddleware);
+
+  // A coding CLI in a hosted pod sends its whole conversation and tool list
+  // on every model call, routinely past the default 100kb JSON limit. The
+  // model routes parse their own JSON with a larger one (Nest's parser then
+  // sees the body already read); every other route keeps the default.
+  app.use(['/v1/messages', '/v1/chat/completions', '/v1/responses'], json({ limit: process.env.MODEL_PASSTHROUGH_BODY_LIMIT || '32mb' }));
 
   // Security middleware
   app.use(helmet({

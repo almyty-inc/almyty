@@ -49,6 +49,8 @@ export interface HostedCaller {
   agentId?: string | null;
   /** The run the call belongs to; its job holds the workspace while it works there. */
   runId?: string | null;
+  /** An inherited read-only workspace of the caller's to work in, named by the call. */
+  workspaceId?: string | null;
   /** Stops a call that is waiting for the workspace. */
   signal?: AbortSignal;
 }
@@ -213,6 +215,22 @@ export class HostedRunnersService {
     const env = await this.environments.findOne({ where: { id: environmentId, organizationId: caller.organizationId } });
     if (!env || !(await this.mayUse(env, caller))) throw new HostedDispatchError('runner_not_found', 'environment not found');
     const owner = this.ownerOf(caller);
+    // A call that names one of the caller's inherited, read-only
+    // workspaces on this environment works there; nothing else reaches one.
+    if (caller.workspaceId) {
+      const named = await this.workspaces.findOne({
+        where: {
+          id: caller.workspaceId,
+          environmentId: env.id,
+          ownerUserId: owner.ownerUserId,
+          kind: 'persistent',
+          readOnly: true,
+          status: In([WorkspaceStatus.ACTIVE, WorkspaceStatus.SUSPENDED]),
+        },
+      });
+      const hr = named ? await this.hostedRunners.findOne({ where: { workspaceId: named.id, state: Not(In(TERMINAL_HOSTED_STATES)) } }) : null;
+      if (named && hr) return { workspace: named, hostedRunner: hr, environment: env };
+    }
     const existing = await this.liveWorkspace(env.id, owner.ownerUserId, owner.agentId);
     if (existing) {
       const hr = await this.hostedRunners.findOne({ where: { workspaceId: existing.id, state: Not(In(TERMINAL_HOSTED_STATES)) } });
@@ -244,6 +262,7 @@ export class HostedRunnersService {
         ownerUserId,
         agentId: agentId ?? IsNull(),
         kind: 'persistent',
+        readOnly: false,
         status: In([WorkspaceStatus.ACTIVE, WorkspaceStatus.SUSPENDED]),
       },
     });

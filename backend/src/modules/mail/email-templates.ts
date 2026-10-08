@@ -500,7 +500,10 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       heading: 'Hosted environments handed to you',
       bodyHtml:
         para(`A member left the organization, so these hosted environments are now yours to look after: <strong>${esc(p.environments ?? '')}</strong>.`) +
-        para('Nothing was deleted. The workspaces and their files are still there, and who could use each environment has not changed.'),
+        para('Nothing was deleted. The workspaces and their files are still there, and who could use each environment has not changed.') +
+        (Number(p.readOnlyKept) > 0
+          ? para(`${esc(p.readOnlyKept)} of their workspaces ${Number(p.readOnlyKept) === 1 ? 'is' : 'are'} kept for you read-only, beside your own, to copy from or delete. Unused, ${Number(p.readOnlyKept) === 1 ? 'it is' : 'they are'} deleted after the usual time.`)
+          : ''),
       button: p.url ? { label: 'Open hosted environments', url: p.url } : undefined,
       footerNote: 'You get this because you are an owner or admin of the organization. Turn these emails off under Settings, Your account, Notifications.',
       orgName: p.organizationName,

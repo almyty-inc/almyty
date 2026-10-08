@@ -202,4 +202,18 @@ export class Workspace {
 
   @Column({ type: 'timestamptz', nullable: true })
   leaseUntil: Date | null;
+
+  /**
+   * A departed member's workspace kept for an admin who already had one on
+   * the environment (Frane, 2026-10-08): the admin keeps both, this one
+   * read-only. Its pod mounts the volume read-only, nothing dispatches
+   * into it unless a call names it, and it expires like any suspended
+   * workspace.
+   */
+  @Column({ type: 'boolean', default: false })
+  readOnly: boolean;
+
+  /** Whose it was before it was handed over. */
+  @Column({ type: 'uuid', nullable: true })
+  inheritedFromUserId: string | null;
 }
