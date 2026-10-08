@@ -17,7 +17,7 @@ describe('RunnerController coding.* endpoints', () => {
   function make(over: {
     getUsable?: jest.Mock;
     dispatch?: jest.Mock;
-    subscribe?: jest.Mock;
+    subscribeSession?: jest.Mock;
   } = {}) {
     const service = {
       getUsable: over.getUsable ?? jest.fn().mockResolvedValue({ id: 'r1', organizationId: 'org1' }),
@@ -26,7 +26,7 @@ describe('RunnerController coding.* endpoints', () => {
       dispatch: over.dispatch ?? jest.fn().mockResolvedValue({ ok: true, result: { x: 1 } }),
     } as any;
     const relay = {
-      subscribe: over.subscribe ?? jest.fn().mockReturnValue(() => {}),
+      subscribeSession: over.subscribeSession ?? jest.fn().mockReturnValue(() => {}),
     } as any;
     return { ctrl: new RunnerController(service, calls, relay), service, calls, relay };
   }
@@ -118,17 +118,17 @@ describe('RunnerController coding.* endpoints', () => {
 
   describe('SSE event stream', () => {
     it('streams matching coding.output frames and ends on coding.exit', async () => {
-      let listener: ((event: any) => void) | undefined;
+      let listener: ((event: any, id?: string) => void) | undefined;
       const unsubscribe = jest.fn();
-      const subscribe = jest.fn().mockImplementation((_runnerId: string, l: any) => {
+      const subscribeSession = jest.fn().mockImplementation((_runnerId: string, _sid: string, l: any) => {
         listener = l;
         return unsubscribe;
       });
-      const { ctrl } = make({ subscribe });
+      const { ctrl } = make({ subscribeSession });
       const res = fakeRes();
 
       await ctrl.codingEvents(req, 'r1', SID, res);
-      expect(subscribe).toHaveBeenCalledWith('r1', expect.any(Function));
+      expect(subscribeSession).toHaveBeenCalledWith('r1', SID, expect.any(Function), undefined);
       expect(res.headers['Content-Type']).toBe('text/event-stream');
 
       listener!({ kind: 'coding.output', sessionId: SID, data: 'hello\n', seq: 1 });
@@ -138,15 +138,33 @@ describe('RunnerController coding.* endpoints', () => {
       expect(res.writes).toHaveLength(2); // other-session event filtered out
       expect(res.writes[0]).toContain('event: coding.output');
       expect(res.writes[0]).toContain('"data":"hello\\n"');
+      expect(res.writes[0]).not.toContain('id: '); // no backlog id without Redis
       expect(res.writes[1]).toContain('event: coding.exit');
       expect(res.ended).toBe(true);
       expect(unsubscribe).toHaveBeenCalled();
     });
 
+    it('passes Last-Event-ID to the relay and stamps each frame with its backlog id', async () => {
+      let listener: ((event: any, id?: string) => void) | undefined;
+      const subscribeSession = jest.fn().mockImplementation((_r: string, _s: string, l: any) => {
+        listener = l;
+        return () => {};
+      });
+      const { ctrl } = make({ subscribeSession });
+      const res = fakeRes();
+      const withHeader = { ...req, header: (name: string) => (name === 'Last-Event-ID' ? '1700000000000-3' : undefined) };
+
+      await ctrl.codingEvents(withHeader, 'r1', SID, res);
+      expect(subscribeSession).toHaveBeenCalledWith('r1', SID, expect.any(Function), '1700000000000-3');
+
+      listener!({ kind: 'coding.output', sessionId: SID, data: 'x' }, '1700000000000-4');
+      expect(res.writes[0].startsWith('id: 1700000000000-4\nevent: coding.output\n')).toBe(true);
+    });
+
     it('unsubscribes when the client disconnects', async () => {
       const unsubscribe = jest.fn();
-      const subscribe = jest.fn().mockReturnValue(unsubscribe);
-      const { ctrl } = make({ subscribe });
+      const subscribeSession = jest.fn().mockReturnValue(unsubscribe);
+      const { ctrl } = make({ subscribeSession });
       const res = fakeRes();
 
       await ctrl.codingEvents(req, 'r1', SID, res);
@@ -156,11 +174,11 @@ describe('RunnerController coding.* endpoints', () => {
 
     it('org gate applies to the stream too', async () => {
       const getUsable = jest.fn().mockRejectedValue(new ForbiddenException('nope'));
-      const subscribe = jest.fn();
-      const { ctrl } = make({ getUsable, subscribe });
+      const subscribeSession = jest.fn();
+      const { ctrl } = make({ getUsable, subscribeSession });
       await expect(ctrl.codingEvents(req, 'r1', SID, fakeRes()))
         .rejects.toBeInstanceOf(ForbiddenException);
-      expect(subscribe).not.toHaveBeenCalled();
+      expect(subscribeSession).not.toHaveBeenCalled();
     });
   });
 });

@@ -302,6 +302,7 @@ describe('WorkerStreamTransport', () => {
     // quit() -- a command -- waits in ioredis's offline queue for good.
     function makeRedisBus(opts: { down?: boolean } = {}) {
       const kv = new Map<string, string>();
+      const lists = new Map<string, string[]>();
       const bus = new EventEmitter();
       bus.setMaxListeners(0);
       const clients: any[] = [];
@@ -312,6 +313,28 @@ describe('WorkerStreamTransport', () => {
           open: true,
           async set(k: string, v: string) { kv.set(k, v); return 'OK'; },
           async get(k: string) { return kv.get(k) ?? null; },
+          // Lists (the shared replay buffer) and MULTI, run in order at exec.
+          rpush(k: string, v: string) { const l = lists.get(k) ?? []; l.push(v); lists.set(k, l); return l.length; },
+          ltrim(k: string, start: number, stop: number) {
+            const l = lists.get(k) ?? [];
+            const from = start < 0 ? Math.max(l.length + start, 0) : start;
+            const to = stop < 0 ? l.length + stop : stop;
+            lists.set(k, l.slice(from, to + 1));
+            return 'OK';
+          },
+          async lrange(k: string) { return [...(lists.get(k) ?? [])]; },
+          expire() { return 1; },
+          multi() {
+            const ops: Array<() => unknown> = [];
+            const tx: any = {
+              rpush: (k: string, v: string) => { ops.push(() => client.rpush(k, v)); return tx; },
+              ltrim: (k: string, a: number, b: number) => { ops.push(() => client.ltrim(k, a, b)); return tx; },
+              expire: () => { ops.push(() => 1); return tx; },
+              publish: (ch: string, msg: string) => { ops.push(() => bus.emit(ch, msg)); return tx; },
+              exec: () => Promise.resolve(ops.map((op) => [null, op()])),
+            };
+            return tx;
+          },
           async publish(ch: string, msg: string) { bus.emit(ch, msg); return 1; },
           async subscribe(...chs: string[]) { chs.forEach(c => subs.add(c)); return chs.length; },
           on(ev: string, cb: any) {
@@ -458,6 +481,35 @@ describe('WorkerStreamTransport', () => {
         resB, 'org', 'user',
       );
       expect(seenOnA.some(e => e.id === 'corr-1' && e.type === 'response')).toBe(true);
+      await podA.shutdown(); await podB.shutdown();
+    });
+
+    it('a reconnect with Last-Event-ID on another pod replays what the first pod wrote', async () => {
+      const redis = makeRedisBus();
+      const podA = makeTransport(redis);
+      const podB = makeTransport(redis);
+      const resMint = mockRes();
+      await podA.handlePost(mockReq({}, hb(1)), resMint, 'org');
+      const sid = resMint._headers['Mcp-Session-Id'];
+
+      // Stream on A, two frames, drop; two more pushed while nobody holds it.
+      const streamA = mockRes();
+      await podA.handleStream(mockReq({ 'Mcp-Session-Id': sid }), streamA, 'org');
+      podA.push(sid, 'event', { n: 1 });
+      podA.push(sid, 'event', { n: 2 });
+      const lastSeen = parseEventFrames(streamA._writes).pop()!.id;
+      streamA._events.emit('close');
+      podA.push(sid, 'event', { n: 3 });
+      podB.push(sid, 'event', { n: 4 });
+
+      // The runner reconnects to B, which never wrote any of them.
+      const streamB = mockRes();
+      await podB.handleStream(mockReq({ 'Mcp-Session-Id': sid, 'Last-Event-ID': lastSeen }), streamB, 'org');
+      expect(parseEventFrames(streamB._writes).map(f => f.data.payload)).toEqual([{ n: 3 }, { n: 4 }]);
+
+      // Live frames after the replay arrive once, in order.
+      podA.push(sid, 'event', { n: 5 });
+      expect(parseEventFrames(streamB._writes).map(f => f.data.payload)).toEqual([{ n: 3 }, { n: 4 }, { n: 5 }]);
       await podA.shutdown(); await podB.shutdown();
     });
   });
