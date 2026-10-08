@@ -115,6 +115,17 @@ export enum AuditAction {
   ALWAYS_ON_DISABLE = 'always_on_disable',
   ALWAYS_ON_PAUSE = 'always_on_pause',
   WAKE_DROPPED = 'wake_dropped',
+
+  // Hosted runners (docs/hosted-runners.md): an environment's changes, every
+  // move of its machines (details.from/to: provisioned, woken, suspended,
+  // torn down, failed), a pod enrolling, and a workspace parked or resumed.
+  ENVIRONMENT_CREATED = 'environment_created',
+  ENVIRONMENT_UPDATED = 'environment_updated',
+  ENVIRONMENT_DELETED = 'environment_deleted',
+  HOSTED_RUNNER_TRANSITION = 'hosted_runner_transition',
+  RUNNER_ENROLLED = 'runner_enrolled',
+  WORKSPACE_SUSPENDED = 'workspace_suspended',
+  WORKSPACE_RESUMED = 'workspace_resumed',
 }
 
 export enum AuditResource {
@@ -141,6 +152,8 @@ export enum AuditResource {
 
   REFERRAL = 'referral',
   RUNNER = 'runner',
+  ENVIRONMENT = 'environment',
+  HOSTED_RUNNER = 'hosted_runner',
 }
 
 @Entity('audit_logs')

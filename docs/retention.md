@@ -19,6 +19,8 @@ Configured in the Data retention card under Settings → Organization, or over t
 | `toolExecutionsDays` | `tool_executions` | The largest table by bytes: each row keeps `parameters` and `result` as untruncated json, and a tool may return up to 10MB. |
 | `notificationsDays` | `notifications` | Written per failed scheduled or webhook run, and per approval request and decision. |
 
+Hosted runners' usage records (`runner_usage_intervals`, the minutes a hosted pod ran) are not swept. They are billing records and are kept; how long is still to be decided. A suspended hosted workspace has its own window, set in the hosted runner settings (see [Hosted runners](hosted-runners.md)).
+
 ### Before you set `auditLogDays`
 
 The audit log is the record you will be asked for. Deleting it on a

@@ -20,6 +20,7 @@ import {
   isExecutionPrincipal,
 } from '../../common/authorization/execution-access.service';
 import { type LabelRequirements, labelsMatch, noMatchingRunnerMessage } from './runner-labels';
+import { runnerIdOfSessionUser } from './runner-credential';
 
 /**
  * Runner ids are uuids. Checked before an id that arrived over the wire
@@ -144,7 +145,7 @@ export class RunnerService {
    */
   async create(input: CreateRunnerInput, ownerUserId: string, organizationId: string): Promise<Runner> {
     this.assertName(input.name);
-    const existing = await this.runners.findOne({ where: { ownerUserId, organizationId } });
+    const existing = await this.runners.findOne({ where: { ownerUserId, organizationId, kind: 'self' } });
     if (existing && existing.name !== input.name) {
       throw new ConflictException(
         `single runner per account in v1.0; delete your existing runner '${existing.name}' first`,
@@ -210,7 +211,7 @@ export class RunnerService {
     if (input.name !== undefined) this.assertName(input.name);
 
     const existing = await this.runners.findOne({
-      where: { ownerUserId, organizationId },
+      where: { ownerUserId, organizationId, kind: 'self' },
     });
 
     if (existing && input.name !== undefined && existing.name !== input.name) {
@@ -292,6 +293,9 @@ export class RunnerService {
     patch: UpdateRunnerInput,
   ): Promise<Runner> {
     const runner = await this.loadManageable(runnerId, userId, organizationId);
+    if (runner.kind === 'hosted') {
+      throw new ConflictException('This machine belongs to a hosted environment; its name and sharing come from the environment');
+    }
 
     if (patch.name !== undefined && patch.name !== runner.name) {
       this.assertName(patch.name);
@@ -431,7 +435,7 @@ export class RunnerService {
       const moved = await this.transitionState(runner.id, runner.state, next, manager);
       if (!moved) continue;
       transitioned++;
-      if (next === RunnerState.OFFLINE) markStrandedFor.push(runner.id);
+      if (next === RunnerState.OFFLINE && runner.kind !== 'hosted') markStrandedFor.push(runner.id);
     }
 
     // Self-heal the leftovers: a runner that is OFFLINE, or that has
@@ -578,7 +582,15 @@ export class RunnerService {
    */
   async isOwnedBy(runnerId: string, organizationId: string, userId: string | null | undefined): Promise<boolean> {
     if (!organizationId || !userId || !UUID_RE.test(runnerId ?? '')) return false;
-    const count = await this.runners.count({ where: { id: runnerId, organizationId, ownerUserId: userId } });
+    // A hosted runner's session is its runner credential's, known as
+    // `runner:<id>` (RunnerCredentialGuard): it owns that one hosted runner
+    // and nothing else, and no person's session owns a hosted runner.
+    const credentialRunner = runnerIdOfSessionUser(userId);
+    if (credentialRunner) {
+      if (credentialRunner !== runnerId) return false;
+      return (await this.runners.count({ where: { id: runnerId, organizationId, kind: 'hosted' } })) > 0;
+    }
+    const count = await this.runners.count({ where: { id: runnerId, organizationId, ownerUserId: userId, kind: 'self' } });
     return count > 0;
   }
 
@@ -620,6 +632,9 @@ export class RunnerService {
     await this.accessPolicy.applyListFilter(qb, { id: userId }, organizationId, 'r', {
       ownerColumn: 'ownerUserId',
     });
+    // Hosted runners are an environment's machines, listed with the
+    // environment (GET /environments/:id/workspaces), not here.
+    qb.andWhere(`r.kind = 'self'`);
     return qb.orderBy('r."registeredAt"', 'DESC').getMany();
   }
 
@@ -663,6 +678,9 @@ export class RunnerService {
 
   async unregister(runnerId: string, userId: string, organizationId: string): Promise<void> {
     const runner = await this.loadManageable(runnerId, userId, organizationId);
+    if (runner.kind === 'hosted') {
+      throw new ConflictException('This machine belongs to a hosted environment; release its workspace from the environment instead');
+    }
     await this.deleteRunner(runner);
   }
 
@@ -804,6 +822,9 @@ export class RunnerService {
       .andWhere('r.state IN (:...gone)', {
         gone: [RunnerState.OFFLINE, RunnerState.REGISTERED],
       })
+      // A hosted runner's workspaces are suspended, never stranded: its
+      // pod comes back on the same volume.
+      .andWhere(`r.kind = 'self'`)
       .getRawMany();
     return rows.map((row) => row.runnerId);
   }

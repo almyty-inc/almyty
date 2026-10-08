@@ -97,6 +97,8 @@ export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
     EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE,
     // Specialist agents with their own identities (always-on design, decision 11).
     EE_ENTITLEMENTS.AGENT_IDENTITY,
+    // Hosted environments shared with a team or the organization (Pro keeps them private).
+    EE_ENTITLEMENTS.HOSTED_SHARED_ENVIRONMENTS,
   ],
   // Enterprise (custom / contact sales) = Business + SCIM (part of SSO),
   // customer-managed keys/private cloud, cost attribution, and removing
@@ -116,6 +118,7 @@ export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
     EE_ENTITLEMENTS.CHARGEBACK,
     EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE,
     EE_ENTITLEMENTS.AGENT_IDENTITY,
+    EE_ENTITLEMENTS.HOSTED_SHARED_ENVIRONMENTS,
     EE_ENTITLEMENTS.WHITE_LABEL,
   ],
 };

@@ -67,7 +67,7 @@ export const PLANS: Record<PlanKey, PlanMeta> = {
 export const PLAN_ENTITLEMENTS: Record<PlanKey, string[]> = {
   free: [],
   pro: [],
-  business: ['sso', 'advanced_rbac', 'approval_policy', 'compliance_pack', 'audit_export', 'credentials_governance', 'agent_identity'],
+  business: ['sso', 'advanced_rbac', 'approval_policy', 'compliance_pack', 'audit_export', 'credentials_governance', 'agent_identity', 'hosted_shared_environments'],
   enterprise: [
     'sso',
     'advanced_rbac',
@@ -75,6 +75,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanKey, string[]> = {
     'compliance_pack',
     'audit_export',
     'credentials_governance',
+    'hosted_shared_environments',
     'agent_identity',
     'byo_kms',
     'chargeback',
@@ -113,6 +114,7 @@ export const FEATURE_MATRIX: FeatureRow[] = [
   { label: 'Audit export', entitlement: 'audit_export' },
   { label: 'Credentials governance', entitlement: 'credentials_governance' },
   { label: 'Agents that act as themselves', entitlement: 'agent_identity' },
+  { label: 'Shared hosted environments', entitlement: 'hosted_shared_environments' },
   { label: 'BYO-KMS (customer-managed keys)', entitlement: 'byo_kms' },
   { label: 'Cost attribution / chargeback', entitlement: 'chargeback' },
   { label: 'White label (remove the almyty mark)', entitlement: 'white_label' },

@@ -134,6 +134,8 @@ export interface NodeExecutionOptions {
   runnerLabels?: Record<string, string>;
   /** The one runner those calls go to when the agent is pinned to one (agentConfig.runnerId). */
   pinnedRunnerId?: string;
+  /** The hosted environment those calls go to instead (agentConfig.environmentId). */
+  environmentId?: string;
   /**
    * The agent's roles, filled once for this run (L4). A node naming a
    * roleKey reads its model from here rather than deciding again, which
@@ -772,6 +774,7 @@ export class AgentNodeExecutor {
       signal: options.signal,
       runnerLabels: options.runnerLabels,
       pinnedRunnerId: options.pinnedRunnerId,
+      environmentId: options.environmentId,
       // The run's tool-error retry budget. A tool's own configured retry
       // count still wins inside the executor; this replaces only the
       // executor's default, which is what applied to every workflow tool
@@ -852,6 +855,7 @@ export class AgentNodeExecutor {
       scriptContext: { input: context.input ?? {}, steps },
       ...(options.runnerLabels ? { runnerLabels: options.runnerLabels } : {}),
       ...(options.pinnedRunnerId ? { pinnedRunnerId: options.pinnedRunnerId } : {}),
+      ...(options.environmentId ? { environmentId: options.environmentId } : {}),
       ...(maxCalls !== undefined ? { maxCalls } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
     });

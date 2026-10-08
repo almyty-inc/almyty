@@ -51,6 +51,10 @@ export enum RunnerIsolationTier {
   HOST = 'host',
 }
 
+/** Who runs the machine: its owner (`self`) or almyty for an environment (`hosted`). */
+export type RunnerKind = 'self' | 'hosted';
+export const RUNNER_KINDS: readonly RunnerKind[] = ['self', 'hosted'];
+
 /**
  * Runtime info detected by the runner at startup. Every field is
  * read-only from the user's perspective; the runner reports it on
@@ -121,7 +125,7 @@ export interface RunnerConfig {
 @Index(['ownerUserId'])
 @Index(['organizationId'])
 @Index(['state'])
-@Index(['ownerUserId', 'organizationId'], { unique: true })
+@Index('UQ_runners_owner_org', ['ownerUserId', 'organizationId'], { unique: true, where: `"kind" = 'self'` })
 export class Runner {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -153,6 +157,20 @@ export class Runner {
 
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;
+
+  /**
+   * `self`: a machine its owner runs `almyty-runner` on (every runner
+   * before hosted runners). `hosted`: a pod almyty runs for an environment
+   * (docs/hosted-runners.md), authenticated by a runner credential, never
+   * by its owner's login. The one-runner-per-account rule and capability
+   * tool publishing apply to `self` only.
+   */
+  @Column({ type: 'varchar', length: 8, default: 'self' })
+  kind: RunnerKind;
+
+  /** The hosted_runners row behind a `hosted` runner; null for `self`. */
+  @Column({ type: 'uuid', nullable: true })
+  hostedRunnerId: string | null;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerUserId' })

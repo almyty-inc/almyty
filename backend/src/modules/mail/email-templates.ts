@@ -476,6 +476,23 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     ),
   }),
 
+  // A suspended hosted workspace nobody used is about to be deleted.
+  'environments.workspace_expiring': (p) => ({
+    subject: sanitizeSubject('A hosted workspace will be deleted soon'),
+    html: renderBaseLayout({
+      heading: 'Hosted workspace expiring',
+      bodyHtml:
+        para(`A hosted workspace of yours has not been used for <strong>${esc(p.days ?? '')}</strong> days. It will be deleted, with its files, on <strong>${esc(p.goneOn ?? '')}</strong>.`) +
+        para('Run an agent in it, or open it, before then to keep it.'),
+      button: p.url ? { label: 'Open the environment', url: p.url } : undefined,
+      footerNote: 'You get this because the workspace is yours. Turn these emails off under Settings, Your account, Notifications.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `A hosted workspace of yours has not been used for ${p.days ?? ''} days. It will be deleted, with its files, on ${p.goneOn ?? ''}. Use it before then to keep it.${p.url ? ` ${p.url}` : ''}`,
+    ),
+  }),
+
   'connections.rotation_due': (p) => ({
     subject: sanitizeSubject(`Rotation due: ${p.connectorName || p.connectorKey || 'a credential'}`),
     html: renderBaseLayout({

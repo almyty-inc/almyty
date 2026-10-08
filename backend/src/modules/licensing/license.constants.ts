@@ -45,6 +45,12 @@ export const EE_ENTITLEMENTS = {
    */
   AGENT_IDENTITY: 'agent_identity',
   /**
+   * Hosted environments shared with a team or the whole organization
+   * (docs/hosted-runners.md). A private environment needs no entitlement;
+   * the gate is on the visibility write only.
+   */
+  HOSTED_SHARED_ENVIRONMENTS: 'hosted_shared_environments',
+  /**
    * Removes the almyty mark from a hosted chat app, and permits removing
    * the AI disclosure line. The chat app itself is core: this gates the
    * branding removal, not the feature. Visitor sign-in (the sso auth mode
