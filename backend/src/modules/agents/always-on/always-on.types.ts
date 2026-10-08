@@ -108,8 +108,8 @@ export interface AlwaysOnConfig {
   maxWakesPerHour?: number | null;
   /**
    * With `report: 'daily_digest'`: when the summary goes out. Either part
-   * may be left out; it then comes from the organization's settings, the
-   * owner's time zone, or the install's default (always-on-digest.ts).
+   * may be left out; it is then 09:00 in the owner's time zone, unless data
+   * fallbacks say otherwise (always-on-digest.ts).
    */
   digest?: AlwaysOnDigest | null;
   /** The conversation every wake continues; set on the first wake. */
@@ -118,8 +118,22 @@ export interface AlwaysOnConfig {
   liveRunId?: string | null;
   /** Set when the system paused it on its own; see AgentPauseReason. */
   pausedReason?: AgentPauseReason | null;
-  /** When it was last turned on; the plan's included agents are the ones turned on first. */
+  /** When it was last turned on; the hosted-home agents the plan includes are the ones turned on first. */
   enabledAt?: string | null;
+  /**
+   * Its home machine, when that is a hosted environment (hosted runners,
+   * docs/design/hosted-runners-and-always-on.md). Only agents with a hosted
+   * home count toward the plan's `includedAgents`; an agent on the owner's
+   * own machines, or with no machine, is never limited by the plan. Set by
+   * the system once hosted homes ship; nothing sets it yet.
+   */
+  home?: { environmentId: string } | null;
+}
+
+/** Whether an agent lives on a hosted machine, the only kind the plan's agent limit counts. */
+export function hasHostedHome(config: Pick<AlwaysOnConfig, 'home'> | null | undefined): boolean {
+  const id = config?.home?.environmentId;
+  return typeof id === 'string' && id.length > 0;
 }
 
 /** A new agent's always-on settings. */

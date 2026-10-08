@@ -18,11 +18,13 @@ export interface AlwaysOnCapacity {
   /** The most wakes an agent may act on in an hour before it pauses itself. */
   maxWakesPerHour: number;
   /**
-   * Always-on agents an organization may have on at once. Null is no limit.
-   * Turning one more on is refused; an agent beyond it after the plan
-   * changed (fewer included, a lapse) is paused with CAPACITY_EXHAUSTED at
-   * its next wake, the last turned on first, and turned back on when there
-   * is room again (AlwaysOnService.resumeWithinCapacity).
+   * Always-on agents with a hosted home (`alwaysOn.home.environmentId`) an
+   * organization may have on at once. Null is no limit. Agents on the
+   * owner's own machines, or with no machine, never count and are never
+   * limited, on any plan. Turning one more hosted-home agent on is refused;
+   * one beyond it after the plan changed (fewer included, a lapse) is paused
+   * with CAPACITY_EXHAUSTED at its next wake, the last turned on first, and
+   * turned back on when there is room again (AlwaysOnService.resumeWithinCapacity).
    */
   includedAgents: number | null;
 }

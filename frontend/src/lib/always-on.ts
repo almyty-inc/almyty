@@ -37,8 +37,10 @@ export interface AlwaysOnConfig {
   pausedReason?: AgentPauseReason | null
   /** With report 'daily_digest': when the summary goes out. Either part may be empty: the defaults apply. */
   digest?: Partial<DigestTiming> | null
-  /** When it was last turned on; the plan's included agents are the ones turned on first. */
+  /** When it was last turned on; the hosted-home agents the plan includes are the ones turned on first. */
   enabledAt?: string | null
+  /** Its hosted home machine; only agents with one count toward the plan's always-on limit. */
+  home?: { environmentId: string } | null
 }
 
 export interface AlwaysOnCapacity {
@@ -58,10 +60,16 @@ export interface AlwaysOnView {
   lastWake: { at: string; source: WakeSource; summary: string; runId: string | null } | null
   queued: number
   liveRunId: string | null
-  /** When the daily summary goes out: the agent's own setting, else the organization's, the owner's zone, the install's. */
+  /** When the daily summary goes out: the agent's own setting, else 09:00 in the owner's time zone. */
   digest: DigestTiming
-  /** The organization's always-on agents that are on now; capacity.includedAgents bounds it. */
-  agentsOn: number
+  /**
+   * Whether this agent lives on a hosted machine. Only those count toward
+   * capacity.includedAgents; an agent on the owner's own machines, or with
+   * no machine, is never limited, so the page names the limit only for these.
+   */
+  hostedHome: boolean
+  /** The organization's always-on agents with a hosted home that are on now. */
+  hostedAgentsOn: number
   tools: Array<{ id: string; name: string; readOnly: boolean }>
 }
 

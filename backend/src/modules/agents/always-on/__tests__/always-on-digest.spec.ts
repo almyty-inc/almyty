@@ -23,13 +23,18 @@ describe('Always on daily summary: when it goes out', () => {
     expect(t).toEqual({ time: '07:30', timezone: 'Asia/Tokyo' });
   });
 
-  it('falls back to the organization, then the owner\'s zone, then the install', () => {
+  it('left alone, it is 09:00 in the owner\'s own time zone, even when the organization\'s data names another zone', () => {
+    const org = { settings: { alwaysOn: { digestTimezone: 'Europe/Berlin' } } };
+    expect(digestTiming({ digest: null }, org, 'America/New_York', {})).toEqual({ time: '09:00', timezone: 'America/New_York' });
+    expect(digestTiming({ digest: null }, { settings: {} }, 'Asia/Tokyo', {})).toEqual({ time: '09:00', timezone: 'Asia/Tokyo' });
+    // The agent's own time keeps the owner's zone when it names none.
+    expect(digestTiming({ digest: { time: '17:00' } }, org, 'Asia/Tokyo', {})).toEqual({ time: '17:00', timezone: 'Asia/Tokyo' });
+  });
+
+  it('without an owner zone, falls back to the organization\'s data, then the install', () => {
     const org = { settings: { alwaysOn: { digestTime: '18:00', digestTimezone: 'Europe/Berlin' } } };
-    expect(digestTiming({ digest: null }, org, 'America/New_York', {})).toEqual({ time: '18:00', timezone: 'Europe/Berlin' });
-    expect(digestTiming({ digest: null }, { settings: {} }, 'America/New_York', {})).toEqual({
-      time: ALWAYS_ON_DIGEST_SEED.time,
-      timezone: 'America/New_York',
-    });
+    expect(digestTiming({ digest: null }, org, null, {})).toEqual({ time: '18:00', timezone: 'Europe/Berlin' });
+    expect(digestTiming({ digest: null }, org, 'nowhere', {})).toEqual({ time: '18:00', timezone: 'Europe/Berlin' });
     expect(digestTiming(null, null, null, {})).toEqual(ALWAYS_ON_DIGEST_SEED);
   });
 
@@ -111,18 +116,19 @@ describe('Always on daily summary: the words', () => {
 });
 
 describe('Always on daily summary: the service', () => {
-  it('choosing it schedules one job a day at the organization\'s time, in the owner\'s zone; choosing another removes it', async () => {
+  it('left alone, it goes out once a day at 09:00 in the owner\'s zone; choosing another report removes it', async () => {
     const w = world({ agent: digestAgent({ report: 'when_acted' }), ownerZone: 'Europe/Berlin' });
-    await w.organizations.update({ id: ORG }, { settings: { alwaysOn: { digestTime: '17:45' } } });
+    // The organization's data names another zone; the owner's comes first.
+    await w.organizations.update({ id: ORG }, { settings: { alwaysOn: { digestTimezone: 'Asia/Tokyo' } } });
     await w.service.configure(AGENT, ORG, { report: 'daily_digest' });
     const jobs = w.queue.repeatable.filter((j) => j.name === ALWAYS_ON_DIGEST_JOB);
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ id: `always-on-digest-${AGENT}`, cron: '45 17 * * *', tz: 'Europe/Berlin' });
+    expect(jobs[0]).toMatchObject({ id: `always-on-digest-${AGENT}`, cron: '0 9 * * *', tz: 'Europe/Berlin' });
     // The timer is unchanged beside it.
     expect(w.queue.repeatable.filter((j) => j.name === ALWAYS_ON_TICK_JOB)).toHaveLength(1);
 
     const view = await w.service.view(AGENT, ORG);
-    expect(view.digest).toEqual({ time: '17:45', timezone: 'Europe/Berlin' });
+    expect(view.digest).toEqual({ time: '09:00', timezone: 'Europe/Berlin' });
 
     await w.service.configure(AGENT, ORG, { report: 'every_wake' });
     expect(w.queue.repeatable.filter((j) => j.name === ALWAYS_ON_DIGEST_JOB)).toHaveLength(0);

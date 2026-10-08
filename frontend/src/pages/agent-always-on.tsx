@@ -88,7 +88,7 @@ export function formFromView(view: AlwaysOnView | undefined): AlwaysOnForm {
     reportChannelId: c?.reportTo?.channelId ?? NO_CHANNEL,
     reportTo: c?.reportTo?.to ?? '',
     report: c?.report ?? 'when_acted',
-    // The agent's own setting, else the defaults the server worked out (organization, your time zone, the install).
+    // The agent's own setting, else the default the server worked out: 09:00 in your time zone.
     digestTime: c?.digest?.time ?? view?.digest?.time ?? '',
     digestTimezone: c?.digest?.timezone ?? view?.digest?.timezone ?? '',
   }
@@ -248,9 +248,10 @@ function AlwaysOnPage({
             <p className="text-xs text-muted-foreground">
               {agent.status === 'active' ? 'Turn it on when the rest is set.' : 'Activate the agent first; an inactive agent never wakes.'}
             </p>
-            {view && view.capacity.includedAgents !== null && (
+            {view && view.hostedHome && view.capacity.includedAgents !== null && (
               <p className="text-xs text-muted-foreground" data-testid="always-on-included">
-                Your plan includes {pluralized(view.capacity.includedAgents, 'always-on agent')}; {view.agentsOn} {view.agentsOn === 1 ? 'is' : 'are'} on.
+                Your plan includes {pluralized(view.capacity.includedAgents, 'always-on agent')} on hosted machines; {view.hostedAgentsOn}{' '}
+                {view.hostedAgentsOn === 1 ? 'is' : 'are'} on.
               </p>
             )}
           </div>

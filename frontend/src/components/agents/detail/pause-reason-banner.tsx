@@ -45,10 +45,10 @@ const COPY: Record<AgentPauseReason['code'], { what: (kind: Kind) => string; fix
       'Look at what woke it on its Always on page, change that, then turn Always on back on.',
   },
   CAPACITY_EXHAUSTED: {
-    what: () => 'Always on was paused because your plan includes fewer always-on agents than were on.',
+    what: () => 'Always on was paused because your plan includes fewer always-on agents on hosted machines than were on.',
     fix: () =>
-      'It turns back on by itself as soon as there is room. To make room now, turn Always on off for another agent, ' +
-      'or move to a plan that includes more. Once there is room you can also turn it back on here.',
+      'It turns back on by itself as soon as there is room. To make room now, turn Always on off for another agent on a hosted machine, ' +
+      'run this one on your own machine, or move to a plan that includes more. Once there is room you can also turn it back on here.',
   },
   IDENTITY_LAPSED: {
     what: (kind) =>

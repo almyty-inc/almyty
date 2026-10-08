@@ -756,9 +756,9 @@ behaviour) and is reported.
   on). `run.failed` keeps its default (email off).
 - `report: 'daily_digest'` batches into one post a day in the owner's
   timezone, reusing the schedule's time-of-day logic. As built, the time
-  and zone come from the agent, then the organization, then the owner's
-  zone, then the install (`always-on-digest.ts`), and a quiet day posts
-  nothing.
+  and zone are set per agent; left alone, 09:00 in the owner's zone, with
+  data-only fallbacks after that (`always-on-digest.ts`). A quiet day
+  posts nothing.
 
 ## Metering and tiers
 
@@ -1103,8 +1103,8 @@ start with `frontend/`.
 | `tool_call` approval trigger, `propose` and `act` | done, different shape | not a stored `ApprovalToolCallTrigger`: `asksFirst` and `askFirstHit` in `modules/tools/tool-approval-gate.service.ts` read the agent's `alwaysOn`. `propose` asks before every tool that is not read-only (`sideEffect !== 'read'`); `act` asks before `askFirstToolIds`. Amount rules apply in both |
 | Reporting through the scheduled-post path | done | `AlwaysOnService.onRunFinished` posts through `ScheduledResultPoster` (`modules/agents/scheduled-result-poster.ts`) to `reportTo` and to the owner's channel |
 | Notification types `agent.report`, `agent.paused` | done | `modules/notifications/notification-types.ts`; report email off by default, pause email on |
-| `report: 'daily_digest'` | done | `always-on/always-on-digest.ts`; a repeatable `always-on-digest` job per agent (`{ cron, tz }`), `AlwaysOnService.digest`. Time and zone: the agent's `alwaysOn.digest`, else `organizations.settings.alwaysOn.digestTime/digestTimezone`, else the owner's zone, else `ALWAYS_ON_DIGEST_DEFAULT` |
-| `CAPACITY_EXHAUSTED` pause | done for the always-on agent count | `includedAgents` from `always-on-capacity.ts` bounds the agents on at once: one more is refused in `configure`, one beyond it after a plan change pauses in `process`, and `resumeWithinCapacity` (on turn-off, on another pause, and the `always-on-capacity` job) turns it back on. A hosted wake refused by `CapacityExhaustedError` does not reach this pause yet (no `alwaysOn.home`) |
+| `report: 'daily_digest'` | done | `always-on/always-on-digest.ts`; a repeatable `always-on-digest` job per agent (`{ cron, tz }`), `AlwaysOnService.digest`. Set per agent (`alwaysOn.digest`); left alone, 09:00 in the owner's zone. Data-only fallbacks: `organizations.settings.alwaysOn.digestTime/digestTimezone`, then `ALWAYS_ON_DIGEST_DEFAULT` (no organization UI) |
+| `CAPACITY_EXHAUSTED` pause | done for hosted-home agents | `includedAgents` from `always-on-capacity.ts` bounds only the agents with a hosted home (`alwaysOn.home.environmentId`) on at once: one more is refused in `configure`, one beyond it after a plan change pauses in `process`, and `resumeWithinCapacity` (on turn-off, on another pause, and the `always-on-capacity` job) turns it back on. Agents on the owner's own machines or with no machine are never counted, refused or paused (Frane, 2026-10-08), so a Free to Pro change pauses nothing. Nothing sets `alwaysOn.home` yet, so the count is zero until hosted homes ship; a hosted wake refused by `CapacityExhaustedError` does not reach this pause yet |
 | Redis-backed coding relay with `Last-Event-ID` replay | **open** | `modules/runner/coding-relay.service.ts` still relays pod-locally (its multi-replica note says so). The `Last-Event-ID` ring buffer in `modules/runner/transport/worker-stream.transport.ts` replays a runner session's own stream on one pod; it does not carry `coding.*` events across pods. With 2 API replicas the bug in the recon table is still live |
 | Agent identity (planned for phase 4) | done early | `modules/agents/agent-identity.ts`, `agent-identity-reach.ts`; `kind: 'agent'` in `common/authorization/execution-access.service.ts`; entitlement `agent_identity` in `frontend/src/lib/plan-catalog.ts` and `docs/enterprise.md`. A lapsed plan pauses the agent with `IDENTITY_LAPSED` and tells the owner; it never falls back to running as the owner. Always-on wakes run as the agent when it acts as itself |
 

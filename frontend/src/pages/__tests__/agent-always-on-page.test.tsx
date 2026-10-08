@@ -203,10 +203,29 @@ describe('/agents/:id/always-on', () => {
     })
   })
 
-  it('says how many always-on agents the plan includes and how many are on', async () => {
-    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({ ...empty, capacity: { ...CAP, includedAgents: 3 }, agentsOn: 2 } as any)
+  it('for an agent on a hosted machine, says how many always-on agents the plan includes there and how many are on', async () => {
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      capacity: { ...CAP, includedAgents: 3 },
+      hostedHome: true,
+      hostedAgentsOn: 2,
+    } as any)
     open()
-    expect(await screen.findByTestId('always-on-included')).toHaveTextContent('Your plan includes 3 always-on agents; 2 are on.')
+    expect(await screen.findByTestId('always-on-included')).toHaveTextContent(
+      'Your plan includes 3 always-on agents on hosted machines; 2 are on.',
+    )
+  })
+
+  it('says nothing about a limit for an agent on your own machine or with no machine, even on a plan with one', async () => {
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      capacity: { ...CAP, includedAgents: 3 },
+      hostedHome: false,
+      hostedAgentsOn: 0,
+    } as any)
+    open()
+    await screen.findByText('Set up always on')
+    expect(screen.queryByTestId('always-on-included')).toBeNull()
   })
 
   it('says nothing about a count on a plan with no limit', async () => {

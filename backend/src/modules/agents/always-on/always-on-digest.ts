@@ -6,16 +6,17 @@
  * changed, and what waits for the owner's OK. A day with nothing in it
  * posts nothing.
  *
- * When it goes out is configuration, never a constant in the code that
- * uses it, in the same layers as the plan's limits (always-on-capacity.ts):
+ * When it goes out is set per agent; left alone, it is 09:00 in the
+ * owner's own time zone. In order:
  *
- * 1. The agent's own setting (`alwaysOn.digest.time`, `.timezone`).
- * 2. The organization's default (`settings.alwaysOn.digestTime`,
- *    `.digestTimezone`).
- * 3. For the time zone, the owner's profile.
- * 4. The install's default: ALWAYS_ON_DIGEST_DEFAULT, JSON like
+ * 1. The agent's own setting (`alwaysOn.digest.time`, `.timezone`), the
+ *    only one the product shows.
+ * 2. For the time zone, the owner's profile.
+ * 3. Fallbacks set by data, with no screen of their own: the
+ *    organization's `settings.alwaysOn.digestTime` / `.digestTimezone`,
+ *    then the install's ALWAYS_ON_DIGEST_DEFAULT, JSON like
  *    `{"time":"08:00","timezone":"Europe/Berlin"}`, over the seeded row
- *    below.
+ *    below (09:00 UTC).
  */
 import { isTimeZone } from '../agent-schedule-spec';
 import type { WakeSource } from '../../../entities/agent-wake.entity';
@@ -65,7 +66,7 @@ export function installDigestDefault(env: Env = process.env): DigestTiming {
   return out;
 }
 
-/** When an agent's summary goes out: its own setting, else the organization's, the owner's zone, the install's. */
+/** When an agent's summary goes out: its own setting, else 09:00 in the owner's time zone, then the data fallbacks. */
 export function digestTiming(
   config: Pick<AlwaysOnConfig, 'digest'> | null | undefined,
   org: { settings?: { alwaysOn?: { digestTime?: unknown; digestTimezone?: unknown } | null } | null } | null | undefined,
@@ -76,7 +77,7 @@ export function digestTiming(
   const own = org?.settings?.alwaysOn;
   return {
     time: asTime(config?.digest?.time) ?? asTime(own?.digestTime) ?? install.time,
-    timezone: asZone(config?.digest?.timezone) ?? asZone(own?.digestTimezone) ?? asZone(ownerZone) ?? install.timezone,
+    timezone: asZone(config?.digest?.timezone) ?? asZone(ownerZone) ?? asZone(own?.digestTimezone) ?? install.timezone,
   };
 }
 

@@ -78,4 +78,16 @@ describe('Always on is wired', () => {
     expect(process.indexOf('capacityPause(')).toBeGreaterThan(-1);
     expect(process.indexOf('capacityPause(')).toBeLessThan(process.indexOf('this.runtime.startRun('));
   });
+
+  it('the plan\'s agent limit only ever counts or pauses hosted-home agents', () => {
+    const counted = service.slice(service.indexOf('async hostedAgentsOn('), service.indexOf('async resumeAllWithinCapacity('));
+    // The count, the pause and the room all ask hasHostedHome first.
+    expect(counted).toMatch(/async hostedAgentsOn\([\s\S]*?hasHostedHome\(c\)/);
+    expect(counted).toMatch(/async beyondIncluded\([^\n]*\n\s*if \(!hasHostedHome\(readAlwaysOn\(agent\.alwaysOn\)\)\) return null;/);
+    expect(counted).toMatch(/async resumeWithinCapacity\([\s\S]*?hasHostedHome\(c\)/);
+    // Turning one on is refused only for a hosted-home agent.
+    expect(service).toMatch(/next\.enabled && !before\?\.enabled && hasHostedHome\(next\) && capacity\.includedAgents !== null/);
+    // Nothing counts every agent that is on.
+    expect(service).not.toMatch(/async agentsOn\(/);
+  });
 });

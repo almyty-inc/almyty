@@ -129,17 +129,17 @@ describe('PauseReasonBanner', () => {
   })
 
 
-  it('says an always-on agent was paused for plan room, what limit it hit, that it comes back by itself, and how to make room', async () => {
+  it('says an always-on agent on a hosted machine was paused for plan room, what limit it hit, that it comes back by itself, and how to make room', async () => {
     vi.mocked(agentsApi.setAlwaysOn).mockResolvedValue({} as any)
     const message =
-      'Your plan includes 3 always-on agents, and 4 were on. This one was turned on last, so it was paused. ' +
-      'It turns back on by itself when there is room: turn Always on off for another agent, or move to a plan that includes more.'
+      'Your plan includes 3 always-on agents on hosted machines, and 4 were on. This one was turned on last, so it was paused. ' +
+      'It turns back on by itself when there is room: turn Always on off for another agent on a hosted machine, move this one to your own machine, or move to a plan that includes more.'
     renderIt(agent({ alwaysOn: { ...ALWAYS_ON, enabled: false, pausedReason: { code: 'CAPACITY_EXHAUSTED', message, detectedAt } } }))
     const alert = screen.getByRole('alert')
-    expect(alert).toHaveTextContent('Always on was paused because your plan includes fewer always-on agents than were on.')
-    expect(alert).toHaveTextContent('Your plan includes 3 always-on agents, and 4 were on.')
+    expect(alert).toHaveTextContent('Always on was paused because your plan includes fewer always-on agents on hosted machines than were on.')
+    expect(alert).toHaveTextContent('Your plan includes 3 always-on agents on hosted machines, and 4 were on.')
     expect(alert).toHaveTextContent('It turns back on by itself as soon as there is room.')
-    expect(alert).toHaveTextContent('turn Always on off for another agent, or move to a plan that includes more')
+    expect(alert).toHaveTextContent('turn Always on off for another agent on a hosted machine, run this one on your own machine, or move to a plan that includes more')
     // Inline, never a dialog; one click turns it back on.
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     await userEvent.click(within(alert).getByRole('button', { name: 'Turn it back on' }))

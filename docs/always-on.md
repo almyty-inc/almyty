@@ -76,9 +76,8 @@ get it by email, turn on email for agent reports in your notification
 settings. Two things still come straight away: its answers to your own
 messages, and a note when it is waiting for your OK.
 
-You pick the time and the time zone next to the choice. Until you change
-them they come from your organization's default, then your own time zone,
-then 9:00 UTC.
+You pick the time and the time zone next to the choice, for each agent.
+Until you change them, it goes out at 9:00 in your own time zone.
 
 ## What happens at a wake
 
@@ -109,12 +108,14 @@ The agent page says why, and you get a notification:
   lapses it pauses instead of running as you. Switch it back to acting as
   you, or upgrade, then turn it back on.
 - **Its timer could not be restored after a restart.** Turn it back on.
-- **Your plan has room for fewer always-on agents than were on.** This
-  happens when a plan changes or lapses. The ones turned on last pause
-  first, at their next wake, and the message says how many your plan
-  includes. They turn back on by themselves as soon as there is room: when
-  you turn Always on off for another agent, or your plan includes more.
-  Once there is room you can also turn one back on yourself.
+- **Your plan has room for fewer always-on agents on almyty-hosted
+  machines than were on.** This only concerns agents that live on an
+  almyty-hosted machine; one on your own machine, or with no machine, is
+  never paused for it. It happens when a plan changes or lapses. The ones
+  turned on last pause first, at their next wake, and the message says how
+  many your plan includes. They turn back on by themselves as soon as there
+  is room: when you turn Always on off for another of them, or your plan
+  includes more. Once there is room you can also turn one back on yourself.
 
 ## Limits
 
@@ -126,10 +127,10 @@ The agent page says why, and you get a notification:
 
 These are settings, not fixed numbers: an install changes them for any plan
 (`ALWAYS_ON_PLAN_CAPACITY`), and an organization can set tighter ones for
-itself. The Always on page says how many always-on agents your plan
-includes and how many are on. Turning on one more than your plan includes
-is refused, and the message names the ones that are on, so you can choose
-which to turn off.
+itself. On machines you run yourself or with no machine at all, the number
+of always-on agents is not limited on any plan, and changing plans never
+pauses one. The included count is for almyty-hosted machines when they
+arrive.
 
 ## For developers
 
@@ -198,10 +199,12 @@ request of an always-on run is posted to the same places, digest or not.
 per agent, `always-on-digest` (job id `always-on-digest-<agentId>`,
 `repeat: { cron: 'M H * * *', tz }`), added by `reconcileTimer` and
 `restoreTimers` beside the timer and removed with it. When it goes out is
-`digestTiming` in `always-on-digest.ts`: `alwaysOn.digest.time`/`.timezone`,
-else `organizations.settings.alwaysOn.digestTime`/`.digestTimezone`, else the
-owner's `users.timezone` (zone only), else `ALWAYS_ON_DIGEST_DEFAULT`
-(`{"time":"08:00","timezone":"Europe/Berlin"}`), else the seeded 09:00 UTC.
+`digestTiming` in `always-on-digest.ts`, set per agent: `alwaysOn.digest.time`
+/ `.timezone`, else 09:00 in the owner's `users.timezone`. Data-only
+fallbacks with no screen: `organizations.settings.alwaysOn.digestTime`
+(and `.digestTimezone` when the owner has no zone), then
+`ALWAYS_ON_DIGEST_DEFAULT` (`{"time":"08:00","timezone":"Europe/Berlin"}`),
+then the seeded 09:00 UTC.
 `GET /agents/:id/always-on` returns the result as `digest`. The job calls
 `AlwaysOnService.digest`: a Redis `SET NX` on
 `always-on:digest:<agentId>:<local day>` makes it once a day whatever the
@@ -217,18 +220,24 @@ outcome on) and notified as `agent.report` with email params
 `ALWAYS_ON_PLAN_CAPACITY` (JSON keyed by plan) for the install, and
 `organizations.settings.alwaysOn` to tighten one organization.
 `includedAgents` bounds how many of an organization's active autonomous
-agents may have Always on enabled at once, counted in the order they were
-turned on (`alwaysOn.enabledAt`, set by `mergeAlwaysOn`; the agent's
-`createdAt` for one turned on before that existed):
+agents with a hosted home (`alwaysOn.home.environmentId`, `hasHostedHome`)
+may have Always on enabled at once, counted in the order they were turned
+on (`alwaysOn.enabledAt`, set by `mergeAlwaysOn`; the agent's `createdAt`
+for one turned on before that existed). Agents on the owner's own machines
+or with no machine never count and are never refused or paused for it, on
+any plan, so a plan change such as Free to Pro pauses none of them. Nothing
+sets `alwaysOn.home` until hosted homes ship, so today the count is zero.
 
-- `configure` refuses turning one more on (`capacityRefusal`, naming the
-  agents that are on).
+- `configure` refuses turning one more hosted-home agent on
+  (`capacityRefusal`, naming the hosted-home agents that are on).
 - `process` checks the agent's place before anything else
-  (`beyondIncluded`); past the limit it pauses with `CAPACITY_EXHAUSTED`
-  (`capacityPause`: the limit, how many were on, how to make room) and the
-  `agent.paused` email says it comes back by itself (`resumesItself`).
+  (`beyondIncluded`, null for an agent without a hosted home); past the
+  limit it pauses with `CAPACITY_EXHAUSTED` (`capacityPause`: the limit, how
+  many were on, how to make room) and the `agent.paused` email says it comes
+  back by itself (`resumesItself`).
 - `resumeWithinCapacity(org)` turns paused-for-capacity agents back on,
-  oldest pause first, as far as there is room, and tells each owner
+  oldest pause first, as far as there is room among hosted-home agents (one
+  without a hosted home takes no room), and tells each owner
   (`agent.report`, "is back on"). It runs when an agent is turned off or
   pauses for another reason, and from the `always-on-capacity` repeatable
   job (`resumeAllWithinCapacity`, every `ALWAYS_ON_CAPACITY_CHECK_MINUTES`,
@@ -239,8 +248,9 @@ turned on (`alwaysOn.enabledAt`, set by `mergeAlwaysOn`; the agent's
 resumed automatically.
 
 **API.** `GET/PATCH /agents/:id/always-on` (`PATCH` also takes `report:
-'daily_digest'` and `digest: { time, timezone }`; `GET` also returns `digest`
-and `agentsOn`), `POST /agents/:id/always-on/wake`,
+'daily_digest'` and `digest: { time, timezone }`; `GET` also returns `digest`,
+`hostedHome` and `hostedAgentsOn`; the page names the plan's limit only when
+`hostedHome`), `POST /agents/:id/always-on/wake`,
 `GET /agents/:id/always-on/wakes`. Audit actions: `always_on_enable`,
 `always_on_disable`, `always_on_pause`, `wake_dropped`.
 

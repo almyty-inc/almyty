@@ -165,19 +165,24 @@ describeIfDb('Always on daily summary and plan capacity (real Postgres)', () => 
   });
 
   describe('plan capacity', () => {
-    it('pauses the agent turned on last when the plan has fewer places, stores the pause, and resumes it when one frees up', async () => {
+    // Only agents whose home is a hosted machine count against the plan.
+    const hosted = (extra: Record<string, unknown> = {}) => ({ home: { environmentId: randomUUID() }, ...extra });
+
+    it('pauses the hosted-home agent turned on last when the plan has fewer places, stores the pause, and resumes it when one frees up', async () => {
       const limit = planCapacity('pro').includedAgents!;
       const hour = 3_600_000;
       const now = Date.now();
       const earlier: Agent[] = [];
       for (let i = 0; i < limit; i++) {
-        earlier.push(await makeAgent(`Agent ${i + 1}`, { enabledAt: new Date(now - (limit - i + 1) * hour).toISOString() }));
+        earlier.push(await makeAgent(`Agent ${i + 1}`, hosted({ enabledAt: new Date(now - (limit - i + 1) * hour).toISOString() })));
       }
-      const last = await makeAgent('Support agent', { enabledAt: new Date(now - hour).toISOString() });
+      // Own-machine and machine-less agents on beside them take no place.
+      await makeAgent('Laptop agent', { enabledAt: new Date(now - 10 * hour).toISOString() });
+      const last = await makeAgent('Support agent', hosted({ enabledAt: new Date(now - hour).toISOString() }));
       const svc = service();
 
       // The order the plan counts them in, read back from the real column.
-      expect((await svc.agentsOn(orgId)).map((a) => a.name)).toEqual([...earlier.map((a) => a.name), 'Support agent']);
+      expect((await svc.hostedAgentsOn(orgId)).map((a) => a.name)).toEqual([...earlier.map((a) => a.name), 'Support agent']);
 
       await svc.wake(last.id, orgId, 'timer', { summary: 'the timer', dedupeKey: 't1' });
       expect(await svc.process(last.id, orgId)).toBe('paused');
@@ -188,8 +193,10 @@ describeIfDb('Always on daily summary and plan capacity (real Postgres)', () => 
       expect(await ds.getRepository(AgentWake).countBy({ agentId: last.id, status: 'dropped' })).toBe(1);
       expect(notified.map((n) => n.type)).toEqual(['agent.paused']);
 
-      // Turning one of the others on again, past the limit, is refused.
-      await expect(svc.configure(last.id, orgId, { enabled: true })).rejects.toThrow(/includes 3 always-on agents, and 3 are on already/);
+      // Turning it on again, past the limit, is refused.
+      await expect(svc.configure(last.id, orgId, { enabled: true })).rejects.toThrow(
+        /includes 3 always-on agents on hosted machines, and 3 are on already/,
+      );
 
       // One of the others is turned off: the paused one is back, in the database.
       await svc.configure(earlier[0].id, orgId, { enabled: false });
@@ -202,13 +209,30 @@ describeIfDb('Always on daily summary and plan capacity (real Postgres)', () => 
 
     it('the capacity check resumes it once the organization\'s plan has room', async () => {
       const limit = planCapacity('pro').includedAgents!;
-      for (let i = 0; i < limit; i++) await makeAgent(`Agent ${i + 1}`);
-      const paused = await makeAgent('Support agent', { enabled: false, pausedReason: capacityPause(limit, limit + 1) });
+      for (let i = 0; i < limit; i++) await makeAgent(`Agent ${i + 1}`, hosted());
+      const paused = await makeAgent('Support agent', hosted({ enabled: false, pausedReason: capacityPause(limit, limit + 1) }));
       const svc = service();
       expect(await svc.resumeAllWithinCapacity()).toBe(0);
       await ds.getRepository(Organization).update({ id: orgId }, { plan: 'business' });
       expect(await svc.resumeAllWithinCapacity()).toBe(1);
       expect((await ds.getRepository(Agent).findOneByOrFail({ id: paused.id })).alwaysOn.enabled).toBe(true);
+    });
+
+    it('Free to Pro with more own-machine agents on than Pro includes pauses nothing', async () => {
+      await ds.getRepository(Organization).update({ id: orgId }, { plan: 'free' });
+      const limit = planCapacity('pro').includedAgents!;
+      const agents: Agent[] = [];
+      for (let i = 0; i < limit + 2; i++) agents.push(await makeAgent(`Agent ${i + 1}`));
+      await ds.getRepository(Organization).update({ id: orgId }, { plan: 'pro' });
+      const svc = service();
+      expect(await svc.hostedAgentsOn(orgId)).toEqual([]);
+      for (const a of agents) {
+        await svc.wake(a.id, orgId, 'timer', { summary: 'the timer', dedupeKey: `t-${a.id}` });
+        expect(await svc.process(a.id, orgId)).not.toBe('paused');
+      }
+      const stored = await ds.getRepository(Agent).findBy({ organizationId: orgId });
+      expect(stored.every((a) => a.alwaysOn.enabled && !a.alwaysOn.pausedReason)).toBe(true);
+      expect(notified.some((n) => n.type === 'agent.paused')).toBe(false);
     });
   });
 

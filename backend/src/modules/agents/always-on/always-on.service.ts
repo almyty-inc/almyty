@@ -47,6 +47,7 @@ import {
   AlwaysOnConfig,
   AlwaysOnInput,
   ConnectionWakeEvent,
+  hasHostedHome,
   isReadOnlyTool,
   mergeAlwaysOn,
   readAlwaysOn,
@@ -78,7 +79,7 @@ const PAUSE_WORDS: Record<AgentPauseReason['code'], string> = {
   CAPACITY_EXHAUSTED: 'the plan has no room for it',
   IDENTITY_LAPSED: 'the plan no longer lets it act as itself',
 };
-const agentsWord = (n: number) => `${n} always-on ${n === 1 ? 'agent' : 'agents'}`;
+const agentsWord = (n: number) => `${n} always-on ${n === 1 ? 'agent' : 'agents'} on hosted machines`;
 
 /** The pause of an agent beyond what the plan includes, in words the owner can act on. */
 export function capacityPause(included: number, on: number, at = new Date()): AgentPauseReason {
@@ -86,7 +87,7 @@ export function capacityPause(included: number, on: number, at = new Date()): Ag
     code: 'CAPACITY_EXHAUSTED',
     message:
       `Your plan includes ${agentsWord(included)}, and ${on} were on. This one was turned on last, so it was paused. ` +
-      'It turns back on by itself when there is room: turn Always on off for another agent, or move to a plan that includes more.',
+      'It turns back on by itself when there is room: turn Always on off for another agent on a hosted machine, move this one to your own machine, or move to a plan that includes more.',
     detectedAt: at.toISOString(),
   };
 }
@@ -98,7 +99,7 @@ export function capacityRefusal(included: number, onNames: string[]): string {
   const names = rest > 0 ? `${shown.join(', ')} and ${rest} more` : shown.join(', ');
   return (
     `Your plan includes ${agentsWord(included)}, and ${onNames.length === 1 ? 'one is' : `${onNames.length} are`} on already: ${names}. ` +
-    'Turn Always on off for one of them first, or move to a plan that includes more.'
+    'Turn Always on off for one of them first, run this one on your own machine, or move to a plan that includes more.'
   );
 }
 
@@ -141,10 +142,15 @@ export interface AlwaysOnView {
   lastWake: { at: string; source: WakeSource; summary: string; runId: string | null } | null;
   queued: number;
   liveRunId: string | null;
-  /** When the daily summary goes out, after the agent's, the organization's and the install's defaults. */
+  /** When the daily summary goes out: the agent's own setting, else 09:00 in the owner's time zone. */
   digest: DigestTiming;
-  /** The organization's always-on agents that are on now (capacity.includedAgents bounds it). */
-  agentsOn: number;
+  /**
+   * Whether this agent lives on a hosted machine. Only those count toward
+   * capacity.includedAgents; the page names the limit only for them.
+   */
+  hostedHome: boolean;
+  /** The organization's always-on agents with a hosted home that are on now. */
+  hostedAgentsOn: number;
 }
 
 function bounded(text: string, max: number): string {
@@ -404,7 +410,8 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       queued,
       liveRunId: live?.id ?? null,
       digest: await this.digestTimingFor(agent, config),
-      agentsOn: (await this.agentsOn(organizationId)).length,
+      hostedHome: hasHostedHome(config),
+      hostedAgentsOn: (await this.hostedAgentsOn(organizationId)).length,
     };
   }
 
@@ -441,11 +448,12 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     if (next.maxWakesPerHour && next.maxWakesPerHour > capacity.maxWakesPerHour) {
       throw new BadRequestException(`On your plan it can wake up to ${capacity.maxWakesPerHour} times an hour.`);
     }
-    // Turning one more on than the plan includes is refused here, with the
-    // ones that are on named; one beyond it after the plan changed pauses at
-    // its next wake instead (process).
-    if (next.enabled && !before?.enabled && capacity.includedAgents !== null) {
-      const others = (await this.agentsOn(organizationId)).filter((a) => a.id !== agentId);
+    // Turning one more hosted-home agent on than the plan includes is
+    // refused here, with the ones that are on named; one beyond it after the
+    // plan changed pauses at its next wake instead (process). An agent on
+    // the owner's own machines, or with no machine, is never limited.
+    if (next.enabled && !before?.enabled && hasHostedHome(next) && capacity.includedAgents !== null) {
+      const others = (await this.hostedAgentsOn(organizationId)).filter((a) => a.id !== agentId);
       if (others.length >= capacity.includedAgents) {
         throw new BadRequestException(capacityRefusal(capacity.includedAgents, others.map((a) => a.name)));
       }
@@ -752,8 +760,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         await this.dropQueued(agentId, 'Always on is off');
         return 'off';
       }
-      // The plan has room for fewer always-on agents than are on (it changed,
-      // or lapsed): the last turned on pause, and turn back on when there is room.
+      // The plan has room for fewer hosted-home agents than are on (it changed,
+      // or lapsed): the last turned on pause, and turn back on when there is
+      // room. An agent without a hosted home is never beyond it.
       const beyond = await this.beyondIncluded(agent);
       if (beyond) {
         await this.pause(agent, capacityPause(beyond.included, beyond.on));
@@ -964,40 +973,47 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ---------------------------------------------------------------------
-  // Plan capacity: how many always-on agents may be on at once
+  // Plan capacity: how many always-on agents with a hosted home may be on
+  // at once. Agents on the owner's own machines, or with no machine, are
+  // never counted and never limited, on any plan.
   // ---------------------------------------------------------------------
 
   /**
-   * The organization's always-on agents that are on, in the order the plan
-   * counts them: the first turned on first. An agent turned on before
-   * `enabledAt` was recorded counts from when it was made.
+   * The organization's always-on agents with a hosted home that are on, in
+   * the order the plan counts them: the first turned on first. An agent
+   * turned on before `enabledAt` was recorded counts from when it was made.
    */
-  async agentsOn(organizationId: string): Promise<Agent[]> {
+  async hostedAgentsOn(organizationId: string): Promise<Agent[]> {
     const rows = await this.agents.find({ where: { organizationId, status: AgentStatus.ACTIVE, mode: 'autonomous' as any } });
     const since = (a: Agent) => readAlwaysOn(a.alwaysOn)?.enabledAt ?? (a.createdAt ? new Date(a.createdAt).toISOString() : '');
     return rows
-      .filter((a) => readAlwaysOn(a.alwaysOn)?.enabled)
+      .filter((a) => {
+        const c = readAlwaysOn(a.alwaysOn);
+        return !!c?.enabled && hasHostedHome(c);
+      })
       .sort((a, b) => since(a).localeCompare(since(b)) || a.id.localeCompare(b.id));
   }
 
   /**
-   * Whether this agent is beyond the always-on agents the plan includes:
-   * null when it is within them (or the plan has no limit), else the
-   * numbers the pause names.
+   * Whether this agent is beyond the hosted-home agents the plan includes:
+   * null when it is within them, the plan has no limit, or the agent has no
+   * hosted home (then it is never limited), else the numbers the pause names.
    */
   async beyondIncluded(agent: Agent, capacity?: AlwaysOnCapacity): Promise<{ included: number; on: number } | null> {
+    if (!hasHostedHome(readAlwaysOn(agent.alwaysOn))) return null;
     const cap = capacity ?? (await this.capacityFor(agent.organizationId));
     if (cap.includedAgents === null) return null;
-    const on = await this.agentsOn(agent.organizationId);
+    const on = await this.hostedAgentsOn(agent.organizationId);
     const rank = on.findIndex((a) => a.id === agent.id);
     return rank >= cap.includedAgents ? { included: cap.includedAgents, on: on.length } : null;
   }
 
   /**
    * Turn back on the agents paused because the plan had no room, oldest
-   * pause first, as far as the plan has room now. Called when an agent is
-   * turned off or paused for another reason, and by the capacity check
-   * (ALWAYS_ON_CAPACITY_JOB), which notices a plan that changed.
+   * pause first, as far as the plan has room for hosted-home agents now. One
+   * without a hosted home takes no room, so it always comes back. Called
+   * when an agent is turned off or paused for another reason, and by the
+   * capacity check (ALWAYS_ON_CAPACITY_JOB), which notices a plan that changed.
    */
   async resumeWithinCapacity(organizationId: string): Promise<number> {
     const all = await this.agents.find({ where: { organizationId, status: AgentStatus.ACTIVE, mode: 'autonomous' as any } });
@@ -1011,10 +1027,21 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       );
     if (!waiting.length) return 0;
     const capacity = await this.capacityFor(organizationId);
-    const on = all.filter((a) => readAlwaysOn(a.alwaysOn)?.enabled).length;
-    const room = capacity.includedAgents === null ? waiting.length : Math.max(0, capacity.includedAgents - on);
+    const on = all.filter((a) => {
+      const c = readAlwaysOn(a.alwaysOn);
+      return !!c?.enabled && hasHostedHome(c);
+    }).length;
+    let room = capacity.includedAgents === null ? Infinity : Math.max(0, capacity.includedAgents - on);
+    const back: Agent[] = [];
+    for (const agent of waiting) {
+      if (!hasHostedHome(readAlwaysOn(agent.alwaysOn))) back.push(agent);
+      else if (room > 0) {
+        back.push(agent);
+        room--;
+      }
+    }
     let resumed = 0;
-    for (const agent of waiting.slice(0, room)) {
+    for (const agent of back) {
       const config = readAlwaysOn(agent.alwaysOn)!;
       config.enabled = true;
       config.pausedReason = null;
