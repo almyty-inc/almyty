@@ -1023,6 +1023,20 @@ export const workspacesApi = {
   getById: (id: string) => apiGet(`/workspaces/${id}`),
   release: (id: string) => apiDel(`/workspaces/${id}`),
 }
+
+// Hosted environments (backend hosted-runners/environments.controller.ts).
+// The list keeps its whole body: next to the rows it says whether hosted
+// machines are switched on for this server (`enabled`).
+export const environmentsApi = {
+  list: () => api.get('/environments').then((r) => r.data as { data: any[]; enabled?: boolean; settings?: unknown }),
+  getById: (id: string) => apiGet(`/environments/${id}`),
+  create: (data: Record<string, unknown>) => apiPost('/environments', data),
+  update: (id: string, data: Record<string, unknown>) => apiPatch(`/environments/${id}`, data),
+  remove: (id: string) => apiDel(`/environments/${id}`),
+  workspaces: (id: string) => apiGet(`/environments/${id}/workspaces`),
+  suspend: (id: string, workspaceId: string) => apiPost(`/environments/${id}/workspaces/${workspaceId}/suspend`),
+  release: (id: string, workspaceId: string) => apiPost(`/environments/${id}/workspaces/${workspaceId}/release`),
+}
 // Canonical Memory API (v1)
 //
 // Talks to /memory/canonical/* — the canonical-schema-v1 backend.

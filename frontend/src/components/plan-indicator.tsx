@@ -10,6 +10,7 @@
  * org apart from a Free one. Entitlements still drive per-feature gating, which
  * is what <UpgradePrompt/> and the feature matrix use.
  */
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Lock, Sparkles } from 'lucide-react'
 
@@ -177,5 +178,22 @@ export function UpgradePrompt({ feature, title, description, className }: Upgrad
         </Button>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * The one-line form of a plan lock, for a single locked choice inside a
+ * form (a disabled option, a switch): the tier that unlocks it, a plain
+ * sentence, and a link to the plans. A whole locked surface uses
+ * <UpgradePrompt/> instead.
+ */
+export function PlanHint({ feature, children, className, testId }: { feature: string; children: ReactNode; className?: string; testId?: string }) {
+  const tier = tierForEntitlement(feature)
+  return (
+    <div className={cn('flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground', className)} data-testid={testId}>
+      <Badge variant="outline" className="border-primary/40 text-primary text-[10px] px-1.5 py-0">{tier.label}</Badge>
+      {children}
+      <Link to={BILLING_PATH} className="text-primary hover:underline">See plans</Link>
+    </div>
   )
 }
