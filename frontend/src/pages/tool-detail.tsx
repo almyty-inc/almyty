@@ -26,6 +26,7 @@ import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
 import { isPublishable } from '@/components/tools/publish-tool-form'
 import { gatewayClientName } from '@/lib/gateway-connect'
+import { SideEffectCard } from '@/components/tools/side-effect-card'
 
 export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -271,6 +272,8 @@ export function ToolDetailPage() {
             )}
           </CardContent>
         </Card>
+
+        <SideEffectCard tool={tool} organizationId={currentOrganization!.id} canEdit />
 
         {tool.runnerConfig ? (
           <Card className="border-cyan-200 dark:border-cyan-900">
@@ -762,9 +765,9 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
               <Label className="text-xs font-medium">Install</Label>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">
-                  npx @almyty/skills install @{orgSlug}{skillsGateway.endpoint}
+                  almyty skills install @{orgSlug}{skillsGateway.endpoint}
                 </code>
-                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`npx @almyty/skills install @${orgSlug}${skillsGateway.endpoint}`, 'skills-install')}>
+                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`almyty skills install @${orgSlug}${skillsGateway.endpoint}`, 'skills-install')}>
                   {copiedField === 'skills-install' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 </Button>
               </div>
@@ -772,8 +775,8 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
             <div>
               <Label className="text-xs font-medium">Daemon mode</Label>
               <div className="flex items-center gap-2 mt-1">
-                <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">npx @almyty/skills daemon</code>
-                <Button variant="outline" size="sm" onClick={() => copyToClipboard('npx @almyty/skills daemon', 'daemon')}>
+                <code className="flex-1 text-xs bg-muted p-2.5 rounded font-mono">almyty skills daemon</code>
+                <Button variant="outline" size="sm" onClick={() => copyToClipboard('almyty skills daemon', 'daemon')}>
                   {copiedField === 'daemon' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 </Button>
               </div>

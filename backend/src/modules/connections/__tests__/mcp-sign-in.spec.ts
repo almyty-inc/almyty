@@ -33,6 +33,16 @@ async function startSignIn(h: ReturnType<typeof buildHarness>, input: Record<str
 describe('signing in to an MCP server (Credentials)', () => {
   const restore = snapshotEnv('MCP_CLIENT_CIMD_ENABLED');
   afterEach(restore);
+  it('keeps the name entered before an MCP sign-in redirect', async () => {
+    const w = world();
+    const h = buildHarness({ routes: w.routes });
+    const start = await h.service.connect(admin, ORG, 'mcp-custom', { method: 'oauth2_pkce', owner: 'org', name: 'Production docs', input: { serverUrl: SERVER } });
+    if (!start.pending || !('authorizeUrl' in start)) throw new Error('expected a redirect');
+    const connection = await h.service.handleCallback(w.approve(start.authorizeUrl));
+    expect(connection.name).toBe('Production docs');
+    expect(h.credentials.rows[0].name).toBe('Production docs');
+  });
+
 
   it('discovers the sign-in from the 401, registers almyty, and stores the tokens encrypted with their issuer', async () => {
     const w = world();

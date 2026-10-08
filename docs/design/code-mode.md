@@ -1,7 +1,14 @@
 # Code mode and tool discovery
 
-Status: design, for review. Nothing here is built yet. Recon taken on
-`development` at `b0281c1a` (after #886, #889, #892).
+Status: accepted (all 15 recommendations in "Decisions for Frane"). Being built phase
+by phase. Done: part A, the stored side-effect class (#915); part B, search_tools and get_tool
+with embeddings (#917); part E for autonomous agents, `toolMode` and the benchmark harness
+(#920); P2, code mode for autonomous agents: the `code` sandbox profile, the broker, write
+policy, change sets, grants, `extract`, traces and sandbox CPU in usage (#924). P3 (#925): gateway exposure on MCP, UTCP and Skills behind `CODE_MODE_GATEWAYS`
+(default off; scripts from outside clients run in QuickJS in a worker of their own, decided at the P3 gate below, `feat/code-mode-quickjs`), held change sets for
+callers that cannot pause, the workflow Code step, the UTCP aliases, and code mode in the
+benchmark harness; the full benchmark run is still to come. Recon taken on `development` at
+`b0281c1a` (after #886, #889, #892).
 
 ## In plain words
 
@@ -393,7 +400,8 @@ can change after P2 without touching anything above it.
   exposure.
 - REST: `POST /tools/search` (hybrid), `GET /tools/:id/signature`,
   `PATCH /tools/:id` accepts a `sideEffect` override, `GET
-  /code-executions/:id` with its call tree.
+  /agents/:id/runs/:runId/code-executions/:codeExecutionId` with its call tree (built under
+  the run so access follows the agent, as for the run itself), `GET /analytics/script-usage`.
 - Codegen: the gateway and tool SDK downloads gain return types.
 - Approvals: a change-set view (the calls, their class, any rule hits),
   approved or rejected as a whole.
@@ -523,6 +531,150 @@ benchmark report below exists.
 - **Hosted CPU cost.** Server-side sandboxes move client CPU onto the
   platform; CPU time is recorded from the first release.
 
+## P3 as built
+
+- **The switch.** `CODE_MODE_GATEWAYS` (default off) decides whether any
+  gateway may serve `code` or `both`. While it is off, saving either is
+  refused with a plain sentence, and a gateway that has one serves its
+  tools as before. A gateway whose only auth method is "none" also serves
+  its tools as before (decision 12); a Skills gateway counts as
+  authenticated, because only signed-in members reach it.
+- **MCP.** `tools/list` in `code` lists exactly `search_tools`, `get_tool`
+  and `run_code`; in `both` it lists the gateway's tools, then those three
+  and `call_tool`. The listing cache key carries the exposure. `tools/call`
+  answers the meta-tools over `discoveryScope`, the set `tools/list` reads;
+  `run_code` runs through `CodeModeService.runOnGateway` with the gateway's
+  principal and `gatewayId`, so the executor re-checks every brokered call.
+- **Held change sets.** A caller that cannot pause (a gateway client, a
+  workflow step) gets its staged changes held as one approval request with
+  no run (`payload.kind: 'change_set'`, the caller in `payload._call`). On
+  approval the set runs once (the script row is claimed first), in order,
+  through the executor with the approval and the caller's gateway; on
+  rejection or expiry none of it runs. The client calls `run_code` again
+  with only `{ approvalId }` and gets the outcome; another gateway asking
+  with that id gets "not found".
+- **UTCP.** In `code` and `both` the manual lists the meta-tools with call
+  templates at `<gateway>/execute/meta/<name>`, authenticated like the
+  gateway. UTCP's code-mode library calls the same tools `tool_info` and
+  `call_tool_chain`; both names are accepted there (decision 2). It runs
+  scripts on the client, in its own sandbox; here the script runs on the
+  server and the client needs none.
+- **Skills.** A Skills gateway in `code` is one skill: the typed functions,
+  one namespace per API, and how to post a script to
+  `POST /gateways/:id/skills/run-code`, which a member runs as themselves.
+- **Workflow Code step.** The 14th node type, `code`: a script over the
+  agent's tools, with `context.input` (the run's input) and
+  `context.steps` (earlier steps' outputs) as a frozen `context` global.
+  Its result is what the script returns. Its calls come out of the run's
+  tool-call budget. Held changes stop the run in `waiting_approval` (the
+  change set's approval carries `payload.workflowExecutionId`); once it is
+  decided, `WorkflowApprovalResumeService` settles the set and carries the
+  run on from the step, replaying the steps before it from the run's
+  record. Approved, the step's output is the script's return value;
+  rejected or expired, the step fails with `APPROVAL_REJECTED` and the run
+  ends cancelled. The model-facing "call run_code again with the
+  approvalId" note is for gateway clients only.
+
+## P3 gate: the sandbox runtime (decision 1)
+
+**Decided (Frane, 2026-10-02):** scripts sent by outside clients through a
+gateway run in QuickJS compiled to WebAssembly, in a worker of their own.
+Agents and workflows inside almyty keep the Node `code` profile.
+`CODE_MODE_GATEWAYS` stays off by default; it is switched on per install.
+
+**In plain words.** A script an outside app sends now runs in a box that
+contains nothing but the JavaScript language: no files, no network, no
+other software, not even a way to ask the server for anything except the
+one door to your tools. Each script gets a fresh box, which is thrown away
+when the script ends, so it can never slow the server down or keep memory.
+A script that uses too much memory, computes for too long or simply takes
+too long is stopped.
+
+**As built** (`tools/node-sandbox/quickjs-sandbox.service.ts`,
+`quickjs-sandbox-worker.ts`):
+
+- **Its own pool.** `QuickJsSandboxService` runs each script in a fresh
+  worker thread, terminated when the script ends, so the interpreter never
+  runs on the server's event loop and all its memory, the WebAssembly
+  memory included, is given back. The pool is separate from JavaScript
+  tools and from the Node profile (`SANDBOX_QUICKJS_MAX_WORKERS`, default
+  4; `_PER_ORG`, half; `_MAX_QUEUE_SIZE`, 50; `_MAX_QUEUE_PER_ORG`, a
+  quarter; past a queue limit the script is refused, not queued).
+- **The worker.** Started with the permission model, read access to its
+  own files and the interpreter's packages only, no network, no child
+  processes, no workers, and an empty environment. Its own JavaScript heap
+  is capped (64 MB).
+- **Inside the interpreter.** No `require`, `import`, `process`, timers,
+  network or message port. The prelude builds the script's globals (one
+  object per API, `tools`, `extract`, `log`, `console`, `ToolError`, a
+  frozen `context`) around a single host function, then deletes that
+  function from the global object. Calls use the same broker protocol as
+  the Node profile, so the broker, the write policy and staging are the
+  same code.
+- **Memory.** The WebAssembly memory is created with a hard maximum of
+  `CODE_MODE_MEMORY_MB` (default 128) and cannot grow past it; QuickJS's
+  own allocator is capped a little under it, so a script gets a clean
+  "out of memory" and its worker is terminated.
+- **CPU.** The time spent inside the interpreter is summed across every
+  entry, and the interrupt handler stops the script past
+  `CODE_MODE_CPU_MS` (default 10 s). Time waiting on tool calls does not
+  count.
+- **Wall time.** The host terminates the worker at the script's timeout
+  (`CODE_MODE_TIMEOUT_MS`, at most `CODE_MODE_MAX_TIMEOUT_MS`), whatever
+  it is doing.
+- Every limit is set for the install by its variable, and an organization
+  may lower each one in `settings.codeMode`, never raise it.
+- **Tests.** `quickjs-sandbox-profile.spec.ts` runs the escape suite and
+  every limit against real workers, in CI with the backend tests.
+  Gateway `run_code` (MCP, UTCP, Skills) goes through `runOnGateway`, which
+  asks for `runtime: 'quickjs'`; without the QuickJS service it refuses
+  rather than falling back to Node (`code-mode-runtime.spec.ts`).
+
+The measurements behind the decision:
+
+**In plain words.** Both boxes kept every escape attempt out. The Node box
+runs scripts at full speed, but it is Node with its doors locked, so its
+safety rests on every lock holding. The WebAssembly box has no doors at
+all: nothing is in it but the language. Its cost is that heavy computation
+runs 30 to 50 times slower, which matters little for scripts that mostly
+wait on tool calls, and that it still needs its own worker to keep its
+memory and its CPU away from the server.
+
+**What was measured.** QuickJS (`quickjs-emscripten` 0.32, MIT, about
+1 MB of WebAssembly) against the compiled Node `code` profile, on the same
+machine (Apple silicon, Node 26), with the same broker protocol: each tool
+function is an async call to the host with JSON in and out, and calls run
+4 at a time. The spike code is not in the repository; each number is one
+run of 20 to 50 scripts.
+
+| | Node `code` profile (a worker per script) | QuickJS in WebAssembly (in the server process) |
+|---|---|---|
+| Escape attempts | All of the P2 suite refused (sockets, DNS, files, environment, modules, `process` bindings, the `Function` constructor, timers outliving the script, a forged last message) | 9 of 9 refused (`require`, `process`, `fetch`, `import()`, `WebSocket`, the `Function` constructor, a host function's constructor, timers): none of them exist |
+| A trivial script, start to answer | p50 51 ms, p95 61 ms (mostly starting the worker) | p50 0.5 ms, p95 1 ms |
+| 100 brokered calls, 4 at a time | p50 75 ms | p50 41 ms |
+| A CPU-bound loop (2e7 iterations) | 61 ms | 2,000 to 3,000 ms |
+| Memory cap | Killed at 128 MB after about 0.5 s | Refused at 64 MB, but only after about 10 s; the server process kept the WebAssembly memory (2.3 GB resident after the run) |
+| Endless loop | Killed at the timeout | Interrupted at the deadline |
+
+**What it means.**
+
+- The interpreter's attack surface is the language and the one host
+  function. The Node profile's is Node itself, held by the permission
+  model, the module hooks and the removed bindings. An escape from the
+  Node profile needs a hole in any of those; an escape from QuickJS needs a
+  bug in the interpreter or the WebAssembly runtime.
+- In the server's own process QuickJS would block the event loop while a
+  script computes, and would not give its memory back. It would run in a
+  worker of its own, as the Node profile does, so most of its start-up
+  advantage goes (a worker costs about 50 ms either way).
+- Scripts orchestrate tool calls, and their own computation is small. The
+  slower interpreter is unlikely to matter, but a script that sorts or
+  filters large results will feel it.
+
+**Recommendation at the time.** Run scripts from outside clients in QuickJS
+inside a dedicated worker, behind the same broker protocol and limits.
+Decided as recommended; see the top of this section.
+
 ## Decisions for Frane
 
 1. **Sandbox runtime for model-written code.** Options: Node workers with
@@ -531,6 +683,8 @@ benchmark report below exists.
    `code` profile for P2 (agents, organization-internal callers), and a
    WebAssembly-interpreter spike behind the same broker protocol, decided
    at the P3 gate before gateways expose `run_code` to external clients.
+   **Decided at the P3 gate:** QuickJS in a dedicated worker for outside
+   clients; the Node `code` profile for agents and workflows.
 2. **Meta-tool names.** `search_tools` / `get_tool` / `run_code` (spec part
    2) or the MCP best-practices spelling (spec part 1 says
    `get_tool_details`). **Recommended:** one canonical set matching the MCP

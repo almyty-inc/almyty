@@ -15,6 +15,7 @@ export enum GatewayAuthType {
   BEARER_TOKEN = 'bearer_token',
   BASIC_AUTH = 'basic_auth',
   OAUTH2 = 'oauth2',
+  COMPANY_SIGNIN = 'company_signin',
   JWT = 'jwt',
   CUSTOM = 'custom',
 }

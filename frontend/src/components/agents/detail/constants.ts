@@ -17,6 +17,7 @@ export const execStatusVariant: Record<string, 'default' | 'secondary' | 'destru
   failed: 'destructive',
   cancelled: 'secondary',
   timeout: 'destructive',
+  waiting_approval: 'outline',
 }
 
 export const runStatusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success'> = {
@@ -27,6 +28,7 @@ export const runStatusVariant: Record<string, 'default' | 'secondary' | 'destruc
   failed: 'destructive',
   cancelled: 'secondary',
   timeout: 'destructive',
+  waiting_approval: 'outline',
 }
 
 export function formatFileSize(bytes: number): string {

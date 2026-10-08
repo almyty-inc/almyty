@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ToolDiscoveryService } from '../tool-discovery/tool-discovery.service';
 import { ToolsController } from './tools.controller';
 import { ToolsService } from './tools.service';
 import { ToolGeneratorService } from './tool-generator.service';
@@ -74,6 +75,8 @@ describe('ToolsController', () => {
             generateGatewaySdk: jest.fn(),
           },
         },
+        // Keyword ranking only: no embeddings in this harness.
+        { provide: ToolDiscoveryService, useValue: new ToolDiscoveryService() },
       ],
     })
     .overrideGuard(JwtAuthGuard)

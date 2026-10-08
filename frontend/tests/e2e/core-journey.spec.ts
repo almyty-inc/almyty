@@ -140,29 +140,25 @@ test('core journey: sign up, credentials, API, gateway, agent, channel', async (
       await page.waitForURL(/\/dashboard/)
     })
 
-    await test.step('Credentials: the Add credential tiles, then a provider connection to your own server', async () => {
+    await test.step('Credentials: one searchable form; Models: connect your own server', async () => {
       await page.getByTestId('sidebar-nav').getByRole('link', { name: 'Credentials', exact: true }).click()
-      await expect(page.getByRole('heading', { name: 'Credentials', level: 1 })).toBeVisible()
       await page.getByRole('link', { name: 'Add credential' }).first().click()
       await expect(page).toHaveURL(/\/credentials\/new$/)
-      await expect(page.getByRole('heading', { name: 'Add credential', level: 1 })).toBeVisible()
-      await expect(page.locator('[data-testid^="service-tile-"]').first()).toBeVisible()
-      await page.getByLabel('Search services').fill('zzzz-no-such-service')
-      await expect(page.getByRole('button', { name: 'Save its key as another service' })).toBeVisible()
-
-      // Model providers are one tile here, which leads to their own connect flow.
-      await page.getByLabel('Search services').fill('')
-      await page.getByTestId('service-tile-ai-models').click()
-      await expect(page).toHaveURL(/\/credentials\/providers\/new$/)
-      await page.getByRole('textbox', { name: 'Search providers' }).fill('own server')
-      await page.getByTestId('provider-tile-custom').click()
+      await expect(page.getByLabel('Name', { exact: true })).toBeVisible()
+      await page.getByTestId('service-select-trigger').click()
+      await page.getByRole('searchbox', { name: 'Search services' }).fill('zzzz-no-such-service')
+      await expect(page.getByText('No service matches. Pick API key or token, or Custom.')).toBeVisible()
+      await page.goto('/models')
+      await page.getByRole('link', { name: 'Connect a provider', exact: true }).first().click()
+      await expect(page).toHaveURL(/\/models\/providers\/new$/)
+      await page.getByTestId('service-select-trigger').click()
+      await page.getByRole('searchbox', { name: 'Search providers' }).fill('own server')
+      await page.getByTestId('service-select-option-model:custom').click()
+      await page.getByLabel('Name', { exact: true }).fill('E2E model server')
       await page.getByLabel('Server URL').fill(fake.llmUrl)
-      await page.getByRole('button', { name: 'Connect', exact: true }).click()
-      const done = page.getByTestId('connect-success')
-      await expect(done).toContainText(MODEL_ID)
-      await done.getByRole('button', { name: 'Done' }).click()
-      // Done opens the new connection, with its models ticked.
-      await expect(page).toHaveURL(/\/credentials\/providers\/[0-9a-f-]{36}$/)
+      await page.getByRole('button', { name: 'Save', exact: true }).click()
+      await expect(page).toHaveURL(/\/models\/providers\/[0-9a-f-]{36}$/)
+      await expect(page.getByText(MODEL_ID, { exact: true }).first()).toBeVisible()
     })
 
     let apiId = ''
@@ -188,6 +184,7 @@ test('core journey: sign up, credentials, API, gateway, agent, channel', async (
       // One gateway per protocol over the same tools: each its own path.
       await page.getByRole('button', { name: /^Advanced/ }).click()
       await page.getByLabel('Path').fill(path)
+      if (protocol !== 'skills') await page.getByRole('radio', { name: /^Outside, protected/ }).click()
       await page.getByRole('button', { name: 'Create gateway' }).click()
       await page.waitForURL(/\/gateways\/[0-9a-f-]{36}$/)
       const id = new URL(page.url()).pathname.split('/')[2]
@@ -203,6 +200,7 @@ test('core journey: sign up, credentials, API, gateway, agent, channel', async (
       await page.getByRole('link', { name: 'Create gateway' }).click()
       await expect(page).toHaveURL(new RegExp(`/gateways/new\\?api=${apiId}$`))
       await page.getByTestId('gateway-protocol-mcp').click()
+      await page.getByRole('radio', { name: /^Outside, protected/ }).click()
       await page.getByRole('button', { name: 'Create gateway' }).click()
       await page.waitForURL(/\/gateways\/[0-9a-f-]{36}$/)
       accessKey = (await page.getByTestId('initial-api-key').locator('code').innerText()).trim()

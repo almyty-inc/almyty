@@ -1,3 +1,4 @@
+import { AgentApiAccessService } from './agent-api-access.service';
 import {
   BadRequestException,
   Body,
@@ -90,6 +91,7 @@ export class AgentAnthropicCompatController {
     // The team/private execution gate. @Optional() only to keep the
     // positional spec harnesses' order; a request refuses to run without it.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
+    @Optional() private readonly endpointAccess?: AgentApiAccessService,
   ) {
     this.rateLimiter = new CompatRateLimiter('anthropic_rl', this.logger, this.redis);
   }
@@ -115,7 +117,7 @@ export class AgentAnthropicCompatController {
     try {
       // Anthropic clients send x-api-key; accepting Bearer as well means a
       // caller that already has an almyty key does not need a second shape.
-      const apiKey = await this.authenticate(auth, xApiKey);
+      const apiKey = await this.endpointAccess?.authenticateTarget(body?.model, req) ?? await this.authenticate(auth, xApiKey);
 
       // Per-key rate limit, at parity with /v1/chat/completions: headers on
       // every response, Retry-After on a refusal, the Anthropic error shape.

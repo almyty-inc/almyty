@@ -61,6 +61,8 @@ export interface CreateToolDto {
 }
 
 export interface UpdateToolDto {
+  // A person's side-effect class (read/write/destructive), or auto to drop it.
+  sideEffect?: 'read' | 'write' | 'destructive' | 'auto';
   name?: string;
   description?: string;
   parameters?: Record<string, any>;

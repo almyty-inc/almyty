@@ -3,15 +3,12 @@
  *
  * In order: Work mode (the mode first, then the model slots it needs),
  * Personality & style, Instructions, the verifier panel when there is one,
- * Memory, Capabilities, Run limits and Heartbeat. All state is owned by
+ * Memory, Capabilities, Run limits and Always on. All state is owned by
  * the parent (AgentBuilderPage) and threaded via props.
  */
 import { Link } from 'react-router-dom'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { VerifierPanelList } from '@/components/agents/verifier-panel'
 import { RunLimitsSection, useOrgRunLimits, type RunLimitsConfig } from '@/components/agents/builder/run-limits-section'
@@ -20,6 +17,7 @@ import { MemorySection } from '@/components/agents/builder/memory-section'
 import { CapabilitiesSection } from '@/components/agents/builder/capabilities-section'
 import type { AgentMemoryConfig, AgentModels } from '@/types/agent-models'
 import type { Agent } from '@/types'
+import { AlwaysOnCard } from '@/components/agents/detail/always-on-card'
 
 export interface AutonomousConfigProps {
   agentId?: string
@@ -42,8 +40,8 @@ export interface AutonomousConfigProps {
   onAgentConfigChange: (v: AutonomousConfigProps['agentConfig']) => void
   /** The organization's agents: the ones it may call, and what a panelist can be. */
   availableAgents: any[]
-  heartbeat: { enabled: boolean; intervalMinutes: number; prompt: string }
-  onHeartbeatChange: (v: AutonomousConfigProps['heartbeat']) => void
+  // Always on is edited on its own page (/agents/:id/always-on); the
+  // builder shows its card.
 }
 
 export function AutonomousConfig({
@@ -55,7 +53,6 @@ export function AutonomousConfig({
   memoryConfig, onMemoryConfigChange,
   agentConfig, onAgentConfigChange,
   availableAgents,
-  heartbeat, onHeartbeatChange,
 }: AutonomousConfigProps) {
   // The organization's defaults sit above this agent's limits; the run
   // limits line counts them in, so it says what a run will really get.
@@ -126,34 +123,7 @@ export function AutonomousConfig({
         inherited={orgRunLimits}
       />
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Heartbeat</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Label htmlFor="autonomous-heartbeat" className="text-sm font-medium">Wake up on a schedule</Label>
-              <p className="text-xs text-muted-foreground">Agent wakes up periodically to check conditions or process tasks</p>
-            </div>
-            <Switch id="autonomous-heartbeat" checked={heartbeat.enabled} onCheckedChange={(enabled) => onHeartbeatChange({ ...heartbeat, enabled })} />
-          </div>
-          {heartbeat.enabled && (
-            <div className="space-y-4 pt-2">
-              <div className="space-y-2">
-                <Label htmlFor="autonomous-interval" className="text-sm">Interval (minutes)</Label>
-                <Input id="autonomous-interval" type="number" min={1} value={heartbeat.intervalMinutes}
-                  onChange={(e) => onHeartbeatChange({ ...heartbeat, intervalMinutes: parseInt(e.target.value) || 60 })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="autonomous-heartbeat-prompt" className="text-sm">Heartbeat prompt</Label>
-                <Textarea id="autonomous-heartbeat-prompt" value={heartbeat.prompt} onChange={(e) => onHeartbeatChange({ ...heartbeat, prompt: e.target.value })}
-                  placeholder="Check my inbox for new messages. If there are urgent items, summarize them."
-                  className="min-h-[100px] font-mono text-sm" />
-                <p className="text-xs text-muted-foreground">What the agent should do on each heartbeat wake-up.</p>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <AlwaysOnCard agentId={agentId} />
 
       <div className="h-8" />
     </div>

@@ -64,6 +64,7 @@ describe('GatewayAuthService', () => {
   };
 
   beforeEach(async () => {
+    Object.assign(mockGatewayAuth, { type: GatewayAuthType.API_KEY, isRequired: true, isActive: true, configuration: { keyHeader: 'x-api-key' }, validationRules: {}, gateway: mockGateway });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GatewayAuthValidators,

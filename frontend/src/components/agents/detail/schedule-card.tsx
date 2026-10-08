@@ -35,22 +35,6 @@ export function deliveryWords(deliverTo: ScheduleDelivery | null | undefined): s
 }
 
 /**
- * Under a workflow run a tool call stopped for approval: the call waits in
- * Approvals and runs once a person approves it (an amount rule held it).
- */
-export function HeldCallNote({ execution }: { execution: { nodeResults?: Record<string, any> | null } }) {
-  const held = Object.values(execution.nodeResults ?? {}).some((r: any) => r?.errorCode === 'AWAITING_APPROVAL')
-  if (!held) return null
-  return (
-    <p className="mt-1 max-w-[260px] text-xs text-amber-600 dark:text-amber-400">
-      A tool call is waiting for a person to approve it; it runs once they do.{' '}
-      <Link className="underline" to="/approvals">
-        See what is waiting
-      </Link>
-    </p>
-  )
-}
-/**
  * Under a run's status in Recent runs: whether its scheduled result reached
  * its channel, and if not, why (the platform's own words).
  */

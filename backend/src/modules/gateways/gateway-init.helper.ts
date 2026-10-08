@@ -1,3 +1,4 @@
+import { hasEndpointAccessScope } from './gateway-access';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,6 +11,7 @@ import {
 } from '../../entities/gateway.entity';
 import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { ALLOWED_ORIGINS_KEY, normalizeAllowedOrigins } from './channels/surface-origins';
+import { exposureProblems } from '../code-mode/code-exposure';
 
 /**
  * Gateway init / configuration helpers extracted from GatewaysService:
@@ -31,6 +33,12 @@ export class GatewayInitHelper {
   ) {}
 
   validateGatewayConfiguration(type: GatewayType, configuration: Record<string, any>): void {
+    // How a tool gateway shows its tools, and its scripts' write policy
+    // (code-mode/code-exposure.ts).
+    if (type === GatewayType.MCP || type === GatewayType.UTCP || type === GatewayType.SKILLS) {
+      const problems = exposureProblems(configuration);
+      if (problems.length) throw new BadRequestException(problems.join('. '));
+    }
     switch (type) {
       case GatewayType.MCP:
         if (!configuration.transport) {
@@ -71,6 +79,7 @@ export class GatewayInitHelper {
   }
 
   async createDefaultAuth(gateway: Gateway): Promise<void> {
+    if (hasEndpointAccessScope(gateway) && gateway.accessScope) return;
     const defaultAuth = this.gatewayAuthRepository.create({
       gatewayId: gateway.id,
       type: GatewayAuthType.API_KEY,

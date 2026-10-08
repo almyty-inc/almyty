@@ -571,6 +571,45 @@ describe('ToolExecutorService', () => {
         expect.objectContaining({ labels: { gpu: 'yes' }, organizationId: 'org-1' }),
       );
     });
+
+    it('sends the call to the agent\'s pinned runner, whichever runner published the tool', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool());
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      } as any);
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      const runnerCalls = (service as any).runnerCalls;
+
+      await service.executeTool('tool-runner-1', { command: 'uname' }, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+        runnerLabels: { gpu: 'yes' },
+        pinnedRunnerId: 'runner-studio',
+      });
+
+      expect(runnerCalls.dispatch).toHaveBeenCalledWith(
+        'runner-studio',
+        'shell.exec',
+        { command: 'uname' },
+        undefined,
+        expect.objectContaining({ pinned: true, labels: { gpu: 'yes' }, organizationId: 'org-1' }),
+      );
+    });
+
+    it('without a pin, still goes to the tool\'s own runner and lets labels route', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool());
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      } as any);
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      const runnerCalls = (service as any).runnerCalls;
+
+      await service.executeTool('tool-runner-1', { command: 'uname' }, { userId: 'user-1', organizationId: 'org-1' });
+
+      expect(runnerCalls.dispatch).toHaveBeenCalledWith('runner-1', 'shell.exec', { command: 'uname' }, undefined, expect.objectContaining({ pinned: false }));
+    });
   });
 
   // A runner method that works inside a workspace, called by an agent run
@@ -619,6 +658,31 @@ describe('ToolExecutorService', () => {
         labels: { os: 'mac' },
       }));
       expect(runnerCalls.dispatch).toHaveBeenCalledWith('runner-1', 'shell.exec', { command: 'ls' }, 'ws-auto', expect.any(Object));
+    });
+
+    it('makes the workspace on the pinned runner and dispatches there', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      const runnerCalls = (service as any).runnerCalls;
+      runWorkspaces.acquire.mockResolvedValueOnce({ id: 'ws-studio', runnerId: 'runner-studio' });
+
+      await service.executeTool('tool-runner-ws', { command: 'ls' }, {
+        userId: 'user-1', organizationId: 'org-1', runId: 'run-1', agentId: 'agent-1', pinnedRunnerId: 'runner-studio',
+      });
+
+      expect(runWorkspaces.acquire).toHaveBeenCalledWith(expect.objectContaining({ runnerId: 'runner-studio', pinned: true }));
+      expect(runnerCalls.dispatch).toHaveBeenCalledWith('runner-studio', 'shell.exec', { command: 'ls' }, 'ws-studio', expect.objectContaining({ pinned: true }));
+    });
+
+    it('dispatches to the runner the workspace is on when labels chose another runner for it', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      const runnerCalls = (service as any).runnerCalls;
+      runWorkspaces.acquire.mockResolvedValueOnce({ id: 'ws-gpu', runnerId: 'runner-gpu' });
+
+      await service.executeTool('tool-runner-ws', { command: 'ls' }, {
+        userId: 'user-1', organizationId: 'org-1', runId: 'run-1', agentId: 'agent-1', runnerLabels: { gpu: 'yes' },
+      });
+
+      expect(runnerCalls.dispatch).toHaveBeenCalledWith('runner-gpu', 'shell.exec', { command: 'ls' }, 'ws-gpu', expect.any(Object));
     });
 
     it('takes the run and agent from the correlation scope (workflow tool_call nodes)', async () => {

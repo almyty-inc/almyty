@@ -23,6 +23,8 @@ import { AuditStreamsSettings } from '@/components/settings/audit-streams-settin
 import { KmsSettings } from '@/components/settings/kms-settings'
 import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
+import { PersonalKeysCard } from '@/components/settings/personal-keys-card'
+import { ConnectionsGovernanceSection } from '@/components/connections-governance/governance-section'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings'
 import { DEFAULT_TIME_ZONE, TimeZoneSelect } from '@/components/settings/time-zone-select'
@@ -46,7 +48,7 @@ export const SETTINGS_SECTIONS = [
     key: 'organization',
     label: 'Organization',
     icon: Building,
-    description: 'Your organization\'s name and the defaults new agents start with.',
+    description: 'Your organization\'s name, the defaults new agents start with, and whether members may add their own keys.',
     pages: [{ key: 'organization', label: 'Details' }],
   },
   {
@@ -92,9 +94,10 @@ export const SETTINGS_SECTIONS = [
     key: 'advanced',
     label: 'Advanced',
     icon: SlidersHorizontal,
-    description: 'Controls most teams never need: sign-off before actions, compliance, audit export and your own encryption keys.',
+    description: 'Controls most teams never need: sign-off before actions, rules for credentials, compliance, audit export and your own encryption keys.',
     pages: [
       { key: 'approvals', label: 'Approvals' },
+      { key: 'credential-rules', label: 'Credential rules' },
       { key: 'compliance', label: 'Compliance' },
       { key: 'audit-streams', label: 'Audit streaming' },
       { key: 'encryption', label: 'Encryption' },
@@ -202,6 +205,7 @@ export function SettingsPage() {
         {settingsTab === 'sso' && <SsoSettings />}
         {settingsTab === 'rbac' && <RbacSettings />}
         {settingsTab === 'approvals' && <ApprovalPoliciesSettings />}
+        {settingsTab === 'credential-rules' && <ConnectionsGovernanceSection />}
         {settingsTab === 'compliance' && <ComplianceSettings />}
         {settingsTab === 'audit-streams' && <AuditStreamsSettings />}
         {settingsTab === 'encryption' && <KmsSettings />}
@@ -468,6 +472,8 @@ function OrganizationTab({ organization }: { organization: any }) {
           </Button>
         </CardContent>
       </Card>
+
+      <PersonalKeysCard organizationId={organization.id} />
 
       <DataRetentionCard organizationId={organization.id} />
     </div>

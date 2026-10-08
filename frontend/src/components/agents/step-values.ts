@@ -28,6 +28,7 @@ export const STEP_NAMES: Record<string, string> = {
   verify: 'Verify',
   extract_context: 'Extract context',
   decision: 'Decision',
+  code: 'Code',
 }
 
 export type TemplateSegment = { kind: 'text'; text: string } | { kind: 'ref'; path: string; raw: string }
@@ -123,6 +124,7 @@ function outputFields(node: Node, tools: ToolLike[]): StepField[] {
       ]
     case 'transform':
     case 'merge':
+    case 'code':
       return [{ label: 'Result', path: out }]
     default:
       // Output, condition and parallel hand nothing on worth naming.

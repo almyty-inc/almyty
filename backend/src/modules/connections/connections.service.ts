@@ -177,7 +177,7 @@ export class ConnectionsService {
       const plainInput = this.plainInput(method, body.input);
       return this.startRedirect({
         connector, method, organizationId, userId: principal.id, ownerUserId, visibility, teamId,
-        mode: body.mode ?? 'browser', input: plainInput, rotateConnectionId: null, requestBase, secretInput: body.input,
+        mode: body.mode ?? 'browser', input: plainInput, rotateConnectionId: null, requestBase, secretInput: body.input, name: body.name,
       });
     }
 
@@ -258,7 +258,7 @@ export class ConnectionsService {
     }
     return this.finalize({
       connector, method, organizationId: pending.organizationId, userId: pending.userId, ownerUserId: pending.ownerUserId,
-      config, existing, expiresAt, scopesGranted, visibility: pending.visibility, teamId: pending.teamId ?? null,
+      config, existing, expiresAt, scopesGranted, visibility: pending.visibility, teamId: pending.teamId ?? null, name: pending.rotateConnectionId ? undefined : pending.name,
       action: pending.rotateConnectionId ? AuditAction.CONNECTION_ROTATE : AuditAction.CONNECTION_CONNECT,
     });
   }
@@ -769,6 +769,7 @@ export class ConnectionsService {
     visibility?: 'org' | 'team' | 'private';
     teamId?: string | null;
     secretInput?: Record<string, unknown>;
+    name?: string;
   }): Promise<PendingRedirect> {
     if (!this.mcpOAuth) throw new BadRequestException({ code: 'CONNECT_METHOD_UNSUPPORTED', message: 'signing in to MCP servers is not available on this API' });
     const values = { ...args.input, ...(args.secretInput ?? {}) };
@@ -800,6 +801,7 @@ export class ConnectionsService {
       callbackUrl,
       mode: 'browser',
       rotateConnectionId: args.rotateConnectionId,
+      ...(args.name ? { name: args.name } : {}),
       input: { serverUrl },
       mcpOAuth,
       createdAt: Date.now(),
@@ -839,7 +841,7 @@ export class ConnectionsService {
       config: this.mcpOAuth.connectionConfig(pending.mcpOAuth, tokens),
       existing, expiresAt: tokens.expiresAt,
       scopesGranted: (tokens.scope ?? pending.mcpOAuth.scope ?? '').split(/\s+/).filter(Boolean),
-      visibility: pending.visibility, teamId: pending.teamId ?? null,
+      visibility: pending.visibility, teamId: pending.teamId ?? null, name: pending.rotateConnectionId ? undefined : pending.name,
       action: pending.rotateConnectionId ? AuditAction.CONNECTION_ROTATE : AuditAction.CONNECTION_CONNECT,
     });
   }
@@ -861,6 +863,8 @@ export class ConnectionsService {
     teamId?: string | null;
     /** The form's secret values too (an MCP sign-in's client secret); never stored in the state as given. */
     secretInput?: Record<string, unknown>;
+    /** The name the new connection is saved under. */
+    name?: string;
   }): Promise<PendingRedirect> {
     const { connector, method } = args;
     if (method.oauth?.discover === 'mcp') return this.startMcpSignIn(args);
@@ -909,6 +913,7 @@ export class ConnectionsService {
       callbackUrl,
       mode: args.mode,
       rotateConnectionId: args.rotateConnectionId,
+      ...(args.name ? { name: args.name } : {}),
       input: args.input,
       createdAt: Date.now(),
     };

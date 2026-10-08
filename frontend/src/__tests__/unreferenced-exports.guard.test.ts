@@ -75,7 +75,6 @@ function uncalledClientMethods(clients: Map<string, string[]>): string[] {
 const KNOWN_UNREFERENCED_EXPORTS = [
   'components/connections/health-badge.tsx:healthLabel',
   'components/llm-providers/credential-slot.tsx:MASKED_KEY',
-  'components/llm-providers/provider-catalog.ts:PROVIDER_TILE_ORDER',
   'components/llm-providers/schema.ts:MASKED_PROVIDER_KEY',
   'components/model-picker.tsx:keyRejected',
   'components/models/hosting/host-body.ts:adapterHasSecrets',

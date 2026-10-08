@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'crypto';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { EndUser } from '../../../entities/end-user.entity';
 import { Conversation, ConversationStatus } from '../../../entities/conversation.entity';
+import { conversationTitle } from '../../agents/conversation-title';
 import { Message } from '../../../entities/message.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import {
@@ -495,7 +496,7 @@ export class HostedChatService {
         agentId: gateway.agentId,
         endUserId: endUser.id,
         status: ConversationStatus.ACTIVE,
-        title: (title || '').slice(0, 120) || 'New chat',
+        title: conversationTitle(title) ?? 'New chat',
       }),
     );
   }

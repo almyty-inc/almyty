@@ -87,10 +87,12 @@ export function retentionSeconds(s: Pick<MemorySettings, 'retentionDays'>): numb
  * off, or "per person" on a run that is for nobody (a heartbeat, an A2A
  * caller). A visitor's own memory is a scope of its own, apart from every
  * member's; whether the run may write it is runMayWriteSharedMemory's call.
+ * An agent acting as itself (agent_identity) is the person: "per person"
+ * keeps its memories in the agent's own scope, never its owner's.
  */
 export function memoryScopeFor(
   agent: Pick<Agent, 'id' | 'memoryConfig'>,
-  run: Pick<AgentRun, 'organizationId' | 'userId' | 'endUserId'>,
+  run: Pick<AgentRun, 'organizationId' | 'userId' | 'endUserId'> & { principal?: { kind?: string } | null },
 ): ScopeRef | null {
   const s = memorySettings(agent.memoryConfig as AgentMemoryConfig);
   if (!s.enabled) return null;
@@ -100,6 +102,7 @@ export function memoryScopeFor(
     case 'agent':
       return { scope_type: 'agent', scope_id: agentScopeId(run.organizationId, agent.id) };
     case 'person':
+      if (run.principal?.kind === 'agent') return { scope_type: 'agent', scope_id: agentScopeId(run.organizationId, agent.id) };
       if (run.userId) return { scope_type: 'user', scope_id: userScopeId(run.organizationId, run.userId) };
       if (run.endUserId) return { scope_type: 'user', scope_id: visitorScopeId(run.organizationId, run.endUserId) };
       return null;

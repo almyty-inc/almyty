@@ -43,7 +43,14 @@ export class AgentRuntimeBuilders {
     private readonly constraintsService: AgentConstraintsService,
   ) {}
 
-  async buildMessages(agent: Agent, run: AgentRun, tools: Tool[], memoryContext: string, org?: Organization): Promise<any[]> {
+  async buildMessages(
+    agent: Agent,
+    run: AgentRun,
+    tools: Tool[],
+    memoryContext: string,
+    org?: Organization,
+    options: { discover?: boolean; codeNamespaces?: string[] } = {},
+  ): Promise<any[]> {
     const messages: any[] = [];
 
     // Build structured system prompt
@@ -101,8 +108,15 @@ export class AgentRuntimeBuilders {
       parts.push(`[RELEVANT MEMORIES]\nRelevant memories:${memoryContext}`);
     }
 
-    // [TOOLS] — available tools
+    // [TOOLS] — available tools. In discover mode (agent-tool-mode.ts) only the
+    // tools offered in full are listed; the rest are found with search_tools.
     const toolLines: string[] = [];
+    if (options.discover) {
+      toolLines.push('- search_tools: Find the tools that fit what you need to do');
+      toolLines.push("- get_tool: Get one tool's arguments and an example call");
+      toolLines.push('- call_tool: Run a tool by name with its arguments');
+      if (options.codeNamespaces) toolLines.push('- run_code: Run a short script that calls the tools');
+    }
     if (tools.length > 0) {
       for (const tool of tools) {
         toolLines.push(`- ${tool.name}: ${tool.description || 'No description'}`);
@@ -116,6 +130,21 @@ export class AgentRuntimeBuilders {
       toolLines.push('- recall_memory: Search your memory');
     }
     parts.push(`[AVAILABLE TOOLS]\nYou have access to these tools:\n${toolLines.join('\n')}`);
+    if (options.discover) {
+      parts.push(
+        '[FINDING TOOLS]\nMore tools are available than are listed here. Use search_tools to find the ones that fit, ' +
+          'get_tool to see how to call one, and call_tool to run it.',
+      );
+    }
+    if (options.codeNamespaces) {
+      // Code mode: run_code, and the namespaces a script can call. The
+      // functions themselves are found with search_tools and get_tool.
+      parts.push(
+        '[CODE]\nFor a job that needs several calls, a loop or filtering, write one script and run it with run_code. ' +
+          'A script calls tools as functions in these namespaces (get_tool shows a tool\'s namespace, function and signature):\n' +
+          (options.codeNamespaces.length ? options.codeNamespaces.map((n) => `- ${n}`).join('\n') : '- (none)'),
+      );
+    }
 
     const systemPrompt = parts.join('\n\n');
 

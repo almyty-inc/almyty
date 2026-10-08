@@ -6,14 +6,15 @@ and agents — over stdio, with two tools in context instead of twenty.
 ## Quick start
 
 ```bash
-npx @almyty/auth login
-claude mcp add almyty -- npx -y @almyty/mcp-server
+npm i -g @almyty/cli
+almyty login
+claude mcp add almyty -- almyty mcp
 ```
 
 Or scope it to one gateway:
 
 ```bash
-npx @almyty/mcp-server acme/petstore
+almyty mcp acme/petstore
 ```
 
 The positional argument is `orgSlug/gatewaySlug`; with none, the server serves
@@ -70,8 +71,8 @@ passed as a tool argument would be written into the assistant's transcript and
 the host editor's logs, so the key goes through `@almyty/credentials` instead:
 
 ```bash
-npx @almyty/credentials add openai
-npx @almyty/credentials list        # -> the id to hand the tool
+almyty credentials add openai
+almyty credentials list        # -> the id to hand the tool
 ```
 
 ## When almyty is not reachable
@@ -80,7 +81,7 @@ The server connects its transport before it fetches anything, so the MCP
 handshake always completes: an editor never sees the server die during
 startup because the API was down or the token had gone stale. Discovery then
 runs, and a failure is reported on the tool call that needed it, in words that
-name the fix — `run npx @almyty/auth login` for a stale token, `check
+name the fix — `run almyty login` for a stale token, `check
 ALMYTY_URL` for an unreachable host. The management tools keep working
 throughout.
 
@@ -110,7 +111,7 @@ server when you ask for either.
 ### Claude Code
 
 ```bash
-claude mcp add almyty -- npx -y @almyty/mcp-server
+claude mcp add almyty -- almyty mcp
 ```
 
 ### Cursor / Windsurf (`.cursor/mcp.json` or `~/.codeium/windsurf/mcp_config.json`)
@@ -119,8 +120,8 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 {
   "mcpServers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server"]
+      "command": "almyty",
+      "args": ["mcp"]
     }
   }
 }
@@ -132,8 +133,8 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 {
   "servers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server"]
+      "command": "almyty",
+      "args": ["mcp"]
     }
   }
 }
@@ -143,8 +144,8 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 
 ```toml
 [mcp_servers.almyty]
-command = "npx"
-args = ["-y", "@almyty/mcp-server"]
+command = "almyty"
+args = ["mcp"]
 ```
 
 ### Google Gemini CLI (`~/.gemini/settings.json`)
@@ -153,8 +154,8 @@ args = ["-y", "@almyty/mcp-server"]
 {
   "mcpServers": {
     "almyty": {
-      "command": "npx",
-      "args": ["-y", "@almyty/mcp-server"]
+      "command": "almyty",
+      "args": ["mcp"]
     }
   }
 }
@@ -173,7 +174,7 @@ args = ["-y", "@almyty/mcp-server"]
 
 ## Authentication
 
-Run `npx @almyty/auth login` once; credentials are read from
+Run `almyty login` once; credentials are read from
 `~/.almyty/credentials.json`. `ALMYTY_TOKEN` overrides the file. The old
 `mcp-server login` / `logout` / `whoami` subcommands now point at
 `@almyty/auth` and exit non-zero.

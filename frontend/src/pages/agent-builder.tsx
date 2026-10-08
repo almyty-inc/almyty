@@ -56,7 +56,6 @@ export function AgentBuilderPage() {
   const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>('workflow')
   const [agentPersonality, setAgentSoul] = useState('')
   const [agentInstructions, setAgentInstructions] = useState('')
-  const [agentHeartbeat, setAgentHeartbeat] = useState<{ enabled: boolean; intervalMinutes: number; prompt: string }>({ enabled: false, intervalMinutes: 60, prompt: '' })
   const [agentToolIds, setAgentToolIds] = useState<string[]>([])
   // An autonomous agent's roles and strategy. A new agent starts with one
   // Main role, no model chosen yet, running Single.
@@ -134,7 +133,6 @@ export function AgentBuilderPage() {
       setAgentMode(agent.mode || 'workflow')
       setAgentSoul(agent.personality || '')
       setAgentInstructions(agent.instructions || '')
-      setAgentHeartbeat(agent.heartbeat || { enabled: false, intervalMinutes: 60, prompt: '' })
       setAgentToolIds(agent.toolIds || [])
       // Agent teammates are listed under Capabilities, as agents it may call.
       const split = splitAgentTeammates(modelsFromAgent(agent))
@@ -363,10 +361,9 @@ export function AgentBuilderPage() {
         // Run limits and the rest of agentConfig, saved back whole.
         payload.agentConfig = agentConfig
       } else {
-        // Autonomous mode -- save instructions + soul + heartbeat + tools + models
+        // Autonomous mode -- save instructions + soul + tools + models (Always on has its own page)
         payload.personality = agentPersonality || undefined
         payload.instructions = agentInstructions
-        payload.heartbeat = agentHeartbeat.enabled ? agentHeartbeat : { enabled: false, intervalMinutes: agentHeartbeat.intervalMinutes, prompt: agentHeartbeat.prompt }
         payload.toolIds = agentToolIds
         payload.memoryConfig = agentMemoryConfig
         payload.agentConfig = agentConfig
@@ -559,8 +556,6 @@ export function AgentBuilderPage() {
           agentConfig={agentConfig}
           onAgentConfigChange={setAgentConfig}
           availableAgents={availableAgents}
-          heartbeat={agentHeartbeat}
-          onHeartbeatChange={setAgentHeartbeat}
         />
       ) : (
         <CanvasArea

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Wrench } from 'lucide-react'
+import { AlertTriangle, Code2, Cpu, Wrench } from 'lucide-react'
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
@@ -14,7 +14,16 @@ import type { Tool, ToolUsageEntry } from '@/types'
 import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatDate, formatMs } from './format'
 import { TimeframeSelector } from './timeframe-selector'
+import { StatCard } from './stat-card'
 
+/** GET /analytics/script-usage. */
+interface ScriptUsage {
+  scripts: number
+  failed: number
+  withChanges: number
+  cpuMs: number
+  calls: number
+}
 export function ToolsTab() {
   const { currentOrganization } = useOrganizationStore()
   const [timeframe, setTimeframe] = useState('7d')
@@ -32,9 +41,25 @@ export function ToolsTab() {
   const tools: Tool[] = toolsPage?.items ?? []
   const toolMap = Object.fromEntries(tools.map((t: Tool) => [t.id, t]))
 
+  // Scripts agents ran in code mode, and the sandbox CPU they used: shown
+  // only once there are any.
+  const { data: scripts } = useQuery({
+    queryKey: ['analytics-script-usage', currentOrganization?.id, timeframe],
+    queryFn: () => analyticsApi.getScriptUsage(timeframe) as Promise<ScriptUsage>,
+    enabled: !!currentOrganization,
+  })
+
   return (
     <div>
       <TimeframeSelector value={timeframe} onChange={setTimeframe} />
+      {scripts && scripts.scripts > 0 && (
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="script-usage">
+          <StatCard icon={Code2} label="Scripts run" value={scripts.scripts.toLocaleString()} />
+          <StatCard icon={Wrench} label="Calls from scripts" value={scripts.calls.toLocaleString()} />
+          <StatCard icon={Cpu} label="Sandbox CPU" value={formatMs(scripts.cpuMs)} />
+          <StatCard icon={AlertTriangle} label="Scripts that failed" value={scripts.failed.toLocaleString()} />
+        </div>
+      )}
       {isLoading ? (
         <div className="flex items-center justify-center h-48">
           <LoadingSpinner size="lg" />

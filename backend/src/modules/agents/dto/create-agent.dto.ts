@@ -5,6 +5,7 @@ import { AgentStatus } from '../../../entities/agent.entity';
 import type { AgentCollaboration } from '../collaboration-participants';
 import type { AgentModels } from '../autonomous-models';
 import type { AgentMemoryConfig } from '../agent-memory-settings';
+import type { CodeModeConfig } from '../../code-mode/code-write-policy';
 
 import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
@@ -60,14 +61,6 @@ export class CreateAgentDto {
   personality?: string;
 
   @IsOptional()
-  @IsObject()
-  heartbeat?: {
-    enabled: boolean;
-    intervalMinutes: number;
-    prompt: string;
-  };
-
-  @IsOptional()
   @IsArray()
   toolIds?: string[];
 
@@ -98,6 +91,14 @@ export class CreateAgentDto {
     maxTemporaryAgentsAlive?: number;
     /** Machine label requirements, as `gpu=yes, os=mac` or an object; see Agent.agentConfig. */
     runnerLabels?: Record<string, string> | string;
+    /** The one runner its runner tools run on; null or absent for any of the caller's runners. */
+    runnerId?: string | null;
+    /** How the model sees its tools (agent-tool-mode.ts); checked by toolModeProblems. */
+    toolMode?: 'direct' | 'discover' | 'code' | 'auto';
+    toolModeThresholdTokens?: number;
+    pinnedToolIds?: string[];
+    /** run_code's write policy, grants and extract() model (code-mode/code-write-policy.ts); checked by codeModeProblems. */
+    codeMode?: CodeModeConfig;
   };
 
   // Shape checked in AgentsService (collaborationProblems) so a bad

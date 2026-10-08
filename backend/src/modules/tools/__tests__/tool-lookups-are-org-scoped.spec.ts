@@ -88,6 +88,7 @@ describe('ToolsController.generateToolsFromApi reads the API in the caller org',
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
   });
 

@@ -32,6 +32,8 @@ import { assertManageable, assertReadable } from '../../common/authorization/rea
 import { assertNoSharedDependents, narrowsScope } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { precheckToolQuota, withToolQuota } from './tool-quota';
+import { computeToolHash, verifyToolIntegrity } from '../../common/security/tool-integrity';
+import { allPagesOfTools } from './tool-pages';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -249,7 +251,9 @@ export class ToolsService {
       }
 
       // Capture old values for change tracking (before mutation)
-      const oldValues = { name: tool.name, description: tool.description, parameters: tool.parameters, code: tool.code, configuration: tool.configuration, metadata: tool.metadata };
+      const oldValues = { name: tool.name, description: tool.description, parameters: tool.parameters, code: tool.code, configuration: tool.configuration, metadata: tool.metadata, sideEffect: tool.sideEffect };
+      // Whether the integrity hash held before this change (re-stamped below).
+      const hashHeld = !!tool.definitionHash && verifyToolIntegrity(tool, tool.definitionHash).valid;
 
       // Handle categories update
       if (updateToolDto.categoryIds !== undefined) {
@@ -378,6 +382,29 @@ export class ToolsService {
         if (scope.ownerId) tool.createdBy = scope.ownerId;
       }
 
+      // The side-effect class a person sets (docs/design/code-mode.md, part
+      // A): it overrides the class derived from the definition and survives
+      // re-import. `auto` drops the override, and the class is derived again
+      // when the tool is saved (Tool.classify).
+      if (updateToolDto.sideEffect !== undefined) {
+        if (updateToolDto.sideEffect === 'auto') {
+          tool.sideEffectSource = 'default';
+          if (tool.metadata && 'sideEffect' in tool.metadata) {
+            const { sideEffect: _dropped, ...rest } = tool.metadata;
+            tool.metadata = rest;
+          }
+        } else {
+          tool.sideEffect = updateToolDto.sideEffect;
+          tool.sideEffectSource = 'override';
+        }
+      }
+
+      // An update made here is the tool's owner changing it, so a tool whose
+      // integrity hash held before the change gets a new one for its new
+      // definition. A hash that did not hold (the row was changed some other
+      // way) is not blessed: the tool stays refused at execution.
+      if (hashHeld) tool.definitionHash = computeToolHash(tool).hash;
+
       // Increment version
       const versionParts = tool.version.split('.').map(Number);
       versionParts[2]++; // Increment patch version
@@ -393,7 +420,7 @@ export class ToolsService {
       this.logger.log(`Tool '${updatedTool.name}' updated by user ${userId}`);
 
       // Audit log (fire-and-forget)
-      const changes = this.auditLogService.computeChanges(oldValues, updateToolDto, ['name', 'description', 'parameters', 'code', 'configuration', 'metadata']);
+      const changes = this.auditLogService.computeChanges(oldValues, updateToolDto, ['name', 'description', 'parameters', 'code', 'configuration', 'metadata', 'sideEffect']);
       this.auditLogService.logUpdate(organizationId, userId, AuditResource.TOOL, updatedTool.id, updatedTool.name, changes);
 
       // A gateway serving this tool lists it differently now (name, schema,
@@ -548,6 +575,11 @@ export class ToolsService {
       limit,
       totalPages,
     };
+  }
+
+  /** Every tool the filters cover (allPagesOfTools), not one page of them. */
+  async getAllTools(filters: Omit<ToolSearchFilters, 'page' | 'limit'>): Promise<Tool[]> {
+    return allPagesOfTools(this, filters);
   }
 
   async activateTool(

@@ -38,6 +38,7 @@ describe('every dashboard route has a way in', () => {
     '/verify-email', '/accept-invite', '/oauth/callback',
     // Entered by following a link or a CLI prompt from outside the app.
     '/invite/accept', '/cli-login', '/oauth/consent',
+    '/models/providers/new', '/settings/credential-rules/new',
   ])
 
   it('is listed in the sidebar or the command palette', () => {

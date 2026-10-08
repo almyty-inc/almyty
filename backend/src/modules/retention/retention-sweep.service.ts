@@ -14,6 +14,7 @@ import { Message } from '../../entities/message.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { CodeExecution } from '../../entities/code-execution.entity';
 import { Notification } from '../../entities/notification.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
@@ -295,6 +296,15 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         organizationId,
         createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
       } as FindOptionsWhere<ToolExecution>);
+      // run_code scripts (code_executions) are the same retention class:
+      // the trace a script's tool executions hang off. Counted with them.
+      const scripts = this.toolExecutionRepository.manager?.getRepository?.(CodeExecution);
+      if (scripts) {
+        counts.toolExecutions += await this.batchDelete(scripts, {
+          organizationId,
+          createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
+        } as FindOptionsWhere<CodeExecution>);
+      }
     }
 
     // notifications is the other per-event table nothing swept. A
@@ -460,9 +470,25 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ conversations: number; messages: number }> {
     let conversations = 0;
     let messages = 0;
+    // An always-on agent's standing thread lives as long as the agent does
+    // (docs/always-on.md, "Retention"): the conversation is kept, and its
+    // messages older than the cutoff are pruned inside it. The compaction
+    // summary keeps the gist of what was pruned.
+    const standing = await this.standingConversationIds(organizationId);
+    if (standing.length) {
+      const pruned = await this.messageRepository.delete({
+        conversationId: In(standing),
+        createdAt: LessThan(cutoff),
+      } as FindOptionsWhere<Message>);
+      messages += pruned.affected ?? 0;
+    }
     for (let batch = 0; batch < MAX_BATCHES_PER_CLASS; batch++) {
       const rows = await this.conversationRepository.find({
-        where: { organizationId, createdAt: LessThan(cutoff) },
+        where: {
+          organizationId,
+          createdAt: LessThan(cutoff),
+          ...(standing.length ? { id: Not(In(standing)) } : {}),
+        },
         select: { id: true },
         take: SWEEP_BATCH,
       });
@@ -480,7 +506,29 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       conversations += conversationResult.affected ?? ids.length;
       if (rows.length < SWEEP_BATCH) break;
     }
+    // What woke an always-on agent goes with the conversations: a wake's
+    // line can name who wrote.
+    await this.conversationRepository
+      .query(
+        `DELETE FROM "agent_wakes" WHERE "organizationId" = $1 AND "status" <> 'queued' AND "createdAt" < $2`,
+        [organizationId, cutoff],
+      )
+      .catch((err: any) => this.logger?.warn?.(`Could not prune wakes for ${organizationId}: ${err?.message ?? err}`));
     return { conversations, messages };
+  }
+
+  /** The conversations always-on agents of this organization keep as their standing threads. */
+  private async standingConversationIds(organizationId: string): Promise<string[]> {
+    try {
+      const rows: Array<{ id: string | null }> = await this.conversationRepository.query(
+        `SELECT "alwaysOn"->>'standingConversationId' AS id FROM "agents" WHERE "organizationId" = $1 AND "alwaysOn" IS NOT NULL AND "alwaysOn"->>'standingConversationId' IS NOT NULL`,
+        [organizationId],
+      );
+      return rows.map((r) => r.id).filter((id): id is string => typeof id === 'string' && id.length > 0);
+    } catch {
+      // Not knowing which threads are standing must not delete them: sweep nothing this time.
+      throw new Error('could not read the standing conversations of always-on agents');
+    }
   }
 
   /**

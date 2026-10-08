@@ -76,6 +76,8 @@ const CALL_SITES: Record<string, 'gateway' | string> = {
   'src/modules/agents/agent-node-executor.ts': 'a pipeline agent node: the agent is what was published, its tools are its own',
   'src/modules/agents/agent-step-processor.ts': 'an autonomous agent step: the agent is what was published',
   'src/modules/llm-providers/llm-chat-runner.helper.ts': 'an LLM chat turn calling the tools it was configured with',
+  'src/modules/code-mode/code-mode.service.ts':
+    "a run_code script: its scope is the caller's own tools, and each brokered call carries the outer call's gatewayId when there is one, so the executor re-checks it",
   'src/modules/tools/tool-approval-gate.service.ts':
     'a held call, once approved: it runs again through the executor with the gatewayId it was first made with, so the executor re-checks the gateway',
 };
@@ -167,6 +169,8 @@ describe('a gateway executes only what it publishes (source guard)', () => {
  */
 const GATEWAY_TOOL_READERS: Record<string, string> = {
   'src/modules/gateways/gateway-servable.ts': 'the servable rule itself',
+  'src/modules/code-mode/code-mode.service.ts':
+    "a script's scope on a gateway: servableToolsOnGateway, the set tools/list serves",
   'src/modules/tools/tool-executor.service.ts':
     'the executor backstop: loads the one row a gateway call names and answers isServableGatewayTool',
   'src/modules/gateways/gateways.service.ts':
@@ -195,6 +199,7 @@ const LISTING_SURFACES = [
   'src/modules/mcp/services/mcp-tool.handler.ts',
   'src/modules/mcp/services/mcp-content.handler.ts',
   'src/modules/mcp/utcp.service.ts',
+  'src/modules/code-mode/code-mode.service.ts',
 ];
 
 describe('a gateway lists only what it serves (source guard)', () => {

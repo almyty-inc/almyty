@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -26,6 +26,9 @@ import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
 import { ExecutionPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 import { batchAsync } from '../../common/utils/batch-async';
+import { GATEWAY_META_NAMES, GatewayExposure, UTCP_CODE_MODE_ALIASES, effectiveExposure, gatewayMetaTools } from '../code-mode/code-exposure';
+import { CALL_TOOL } from '../tool-discovery/meta-tools';
+import { McpToolHandler } from './services/mcp-tool.handler';
 
 const UTCP_VERSION = '1.0.0';
 
@@ -62,6 +65,8 @@ export class UtcpService {
     private toolsService: ToolsService,
     private toolExecutorService: ToolExecutorService,
     @InjectRedis() private readonly redis: Redis.Redis,
+    // The meta-tools of a gateway in code or both exposure (executeMetaTool).
+    @Optional() private readonly mcpTools?: McpToolHandler,
   ) {}
 
   /**
@@ -78,7 +83,11 @@ export class UtcpService {
    */
   async generateManual(opts: ManualOptions): Promise<UtcpManual> {
     const { organizationId, gateway } = opts;
-    const cacheKey = `utcp:manual:gw:${gateway.id}`;
+    // The gateway's exposure decides what the manual lists, and is part of the key.
+    const exposure: GatewayExposure = this.mcpTools
+      ? (await this.mcpTools.exposureOf(gateway.id, organizationId)).exposure
+      : effectiveExposure(gateway);
+    const cacheKey = `utcp:manual:gw:${gateway.id}:${exposure}`;
 
     try {
       const cached = await this.redis.get(cacheKey);
@@ -97,7 +106,27 @@ export class UtcpService {
     const tools = await this.resolveTools(gateway);
     const gatewayBase = gatewayBaseUrl(opts.baseUrl, opts.orgSlug, gateway);
 
-    const utcpTools: UtcpTool[] = await batchAsync(tools, 5, (tool) => this.convertToolToUtcp(tool, gateway, gatewayBase));
+    // `code` exposure lists the meta-tools only, `both` after the gateway's
+    // own tools; each runs here, at `<gateway>/execute/meta/<name>`.
+    let utcpTools: UtcpTool[] = exposure === 'code' ? [] : await batchAsync(tools, 5, (tool) => this.convertToolToUtcp(tool, gateway, gatewayBase));
+    if (exposure !== 'tools') {
+      const [auth] = this.buildGatewayAuth(gateway);
+      const meta: UtcpTool[] = gatewayMetaTools(exposure).map((d) => ({
+        name: d.name,
+        description: d.description,
+        inputs: d.parameters as any,
+        outputs: { type: 'object' } as any,
+        tags: ['almyty', 'code-mode'],
+        tool_call_template: {
+          call_template_type: 'http',
+          url: `${gatewayBase}/execute/meta/${d.name}`,
+          http_method: 'POST',
+          content_type: 'application/json',
+          ...(auth ? { auth } : {}),
+        } as UtcpHttpCallTemplate,
+      }));
+      utcpTools = [...utcpTools.filter((t) => !GATEWAY_META_NAMES.has(t.name)), ...meta];
+    }
 
     const manual: UtcpManual = {
       utcp_version: UTCP_VERSION,
@@ -388,6 +417,43 @@ export class UtcpService {
     }
     const parameters = utcpCallArguments(served.tool.parameters, request.query, request.body);
     return this.executeUtcpTool({ toolId, parameters }, organizationId, userId, gatewayId, principal);
+  }
+
+  /**
+   * A meta-tool of a gateway in `code` or `both` exposure, called at
+   * `<gateway>/execute/meta/<name>` (code-mode/code-exposure.ts). UTCP's
+   * code-mode names (`tool_info`, `call_tool_chain`) are accepted for the
+   * same tools (decision 2). The work is the MCP handler's, over the same
+   * servable set; in `tools` exposure there is nothing here.
+   */
+  async executeMetaTool(
+    name: string,
+    body: unknown,
+    organizationId: string,
+    userId: string | null,
+    gatewayId: string,
+  ): Promise<UtcpExecutionResult> {
+    const startTime = Date.now();
+    const canonical = UTCP_CODE_MODE_ALIASES[name] ?? name;
+    const found = this.mcpTools ? await this.mcpTools.exposureOf(gatewayId, organizationId) : null;
+    if (
+      !found?.gateway ||
+      found.exposure === 'tools' ||
+      !GATEWAY_META_NAMES.has(canonical) ||
+      (canonical === CALL_TOOL && found.exposure !== 'both')
+    ) {
+      return this.toolNotFound(name, startTime);
+    }
+    const args = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, any>) : {};
+    const result = (await this.mcpTools!.callGatewayMetaTool({ name: canonical, arguments: args } as any, organizationId, userId ?? undefined, found.gateway)) as any;
+    const text = Array.isArray(result?.content) ? result.content.map((c: any) => c?.text ?? '').join('\n') : '';
+    const data = result?.structuredContent ?? text;
+    return {
+      success: !result?.isError,
+      data,
+      ...(result?.isError ? { error: { code: 'EXECUTION_ERROR', message: typeof data === 'string' ? data : text } } : {}),
+      metadata: { executionTime: Date.now() - startTime, toolId: canonical, requestId: this.requestId(), timestamp: new Date().toISOString() },
+    } as UtcpExecutionResult;
   }
 
   // UTCP Tool Execution (Proxy Mode — almyty extension)

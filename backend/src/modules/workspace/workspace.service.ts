@@ -152,6 +152,7 @@ export class WorkspaceService {
    *   team is not covered, as the admin's own machine is not the team's.
    * - an org-wide gateway: none. It answers the whole organization (or
    *   whoever its auth admits), and a workspace is one person's.
+   * - an agent acting as itself: only the workspaces made for that agent.
    *
    * RunnerCallService.dispatch asks this before any envelope leaves.
    */
@@ -169,6 +170,8 @@ export class WorkspaceService {
     }
     const ws = await this.liveWorkspace({ id, runnerId, organizationId: principal.organizationId }, now);
     if (!ws) return null;
+    // An agent acting as itself works only in the workspaces made for it.
+    if (principal.kind === 'agent') return ws.agentId === principal.agentId ? ws : null;
     return (await this.gatewayCovers(principal, ws)) ? ws : null;
   }
 

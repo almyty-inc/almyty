@@ -141,7 +141,9 @@ export async function runAgent(opts: {
   /** The files resolver the model calls go through (message-attachments.resolver.ts). */
   attachmentResolver?: MessageAttachmentResolver;
   /** The approvals service double (its create), for a case whose tool calls an approval rule holds. */
-  approvals?: { create: jest.Mock };
+  approvals?: { create: jest.Mock; findInOrganization?: jest.Mock };
+  /** run_code (code mode): a CodeModeService, for a case whose agent writes scripts. */
+  codeMode?: any;
   /** More members of the organization, besides u-1 (a scheduled run acts as the agent's owner). */
   members?: string[];
 }) {
@@ -354,7 +356,7 @@ export async function runAgent(opts: {
     },
   };
   const verifier = new AgentVerifierHelper(llmProvidersService as any);
-  processor = new AgentStepProcessor(s, verifier, {} as any, {} as any);
+  processor = new AgentStepProcessor(s, verifier, {} as any, {} as any, undefined, opts.codeMode);
 
   // A visitor's view, through the hosted chat controller's own stream().
   let tokens: string[] = [];

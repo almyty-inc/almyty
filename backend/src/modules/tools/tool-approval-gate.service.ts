@@ -7,6 +7,7 @@ import { createHash } from 'crypto';
 import { ApprovalPolicy, ApprovalToolAmountTrigger } from '../../entities/approval-policy.entity';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ApprovalsService } from '../approvals/approvals.service';
@@ -19,6 +20,13 @@ import { NamedTool, readableToolName } from './tool-readable-name';
  * which rule, and what the call asked for.
  */
 export interface ApprovalGateHit {
+  /**
+   * What held the call: an approval policy's amount rule, or the calling
+   * always-on agent's ask-first list (its `tool_call` rule; the amount
+   * fields are then empty).
+   */
+  kind?: 'tool_amount' | 'tool_call';
+  /** The policy's id; for the ask-first list, `always-on:<agentId>`. */
   policyId: string;
   policyName: string;
   /** The rule in plain words: "Ask before issue_refund when amount is over 500". */
@@ -32,6 +40,33 @@ export interface ApprovalGateHit {
   amount: number;
   /** A fingerprint of the call's parameters, so an approval covers this call and no other. */
   paramsHash: string;
+}
+
+/**
+ * Emitted on ApprovalsService once an approved held call has been made and
+ * its outcome kept on the request (runHeld), with the request row: workflow
+ * runs waiting on it carry on (agents/workflow-approval-resume.service.ts).
+ */
+export const HELD_CALL_SETTLED = 'approval.held_call_settled';
+
+/** What about this call tripped the rule, in words: "amount is 820", "it is on the ask-first list". */
+export function hitDetail(hit: Pick<ApprovalGateHit, 'kind' | 'argument' | 'value'>): string {
+  if (hit.kind === 'tool_call') return 'it is on the list of things to ask about first';
+  return hit.value === null ? `${hit.argument} is not a number` : `${hit.argument} is ${hit.value}`;
+}
+
+/**
+ * Whether an always-on run must ask before this tool (docs/always-on.md,
+ * "Act or propose"): in `propose`, before anything that is not read-only;
+ * in `act`, before the tools on the agent's ask-first list.
+ */
+export function asksFirst(
+  config: { enabled?: boolean; actMode?: string; askFirstToolIds?: string[] } | null | undefined,
+  tool: { id: string; sideEffect?: string | null },
+): boolean {
+  if (!config) return false;
+  if (config.actMode === 'act') return Array.isArray(config.askFirstToolIds) && config.askFirstToolIds.includes(tool.id);
+  return tool.sideEffect !== 'read';
 }
 
 /** Where a gated call came from, for the audit row and the team scoping of the rules. */
@@ -120,6 +155,7 @@ export interface HeldCallContext {
   gatewayId: string | null;
   scopes: string[] | null;
   runnerLabels: Record<string, string> | null;
+  pinnedRunnerId?: string | null;
   agentTeamId: string | null;
 }
 
@@ -160,6 +196,10 @@ export class ToolApprovalGateService implements OnModuleInit {
     // module imports the agents module, which imports this one, and the
     // executor injects this service.
     @Optional() private readonly moduleRef?: ModuleRef,
+    // The run a call belongs to: an always-on run's ask-first list holds it.
+    @Optional()
+    @InjectRepository(AgentRun)
+    private readonly runs?: Repository<AgentRun>,
   ) {}
 
   private approvalsService(): ApprovalsService | null {
@@ -197,7 +237,7 @@ export class ToolApprovalGateService implements OnModuleInit {
     if (pending) return pending;
     const approvals = this.approvalsService();
     if (!approvals) return null;
-    const why = hit.value === null ? `${hit.argument} is not a number` : `${hit.argument} is ${hit.value}`;
+    const why = hitDetail(hit);
     const row = await approvals.create({
       organizationId: context.organizationId,
       teamId: call.agentTeamId ?? null,
@@ -210,6 +250,7 @@ export class ToolApprovalGateService implements OnModuleInit {
         tool: readableToolName(tool as NamedTool),
         parameters,
         _gate: {
+          kind: hit.kind ?? 'tool_amount',
           policyId: hit.policyId,
           toolId: hit.toolId,
           argument: hit.argument,
@@ -255,21 +296,32 @@ export class ToolApprovalGateService implements OnModuleInit {
     const call = (row.payload?._gate?.call ?? {}) as Partial<HeldCallContext>;
     const executor = this.moduleRef?.get(ToolExecutorService, { strict: false });
     if (!executor) return;
-    const result = await executor.executeTool(row.toolId, row.payload?.parameters ?? {}, {
-      organizationId,
-      userId: call.userId ?? (undefined as any),
-      ...(call.principal ? { principal: call.principal } : {}),
-      ...(call.gatewayId ? { gatewayId: call.gatewayId } : {}),
-      ...(call.scopes ? { scopes: call.scopes } : {}),
-      ...(call.runnerLabels ? { runnerLabels: call.runnerLabels } : {}),
-      agentId: row.agentId ?? null,
-      agentTeamId: call.agentTeamId ?? null,
-      approvedGate: { approvalId: row.id },
-    });
-    await this.requests.update(
-      { id: row.id },
-      { result: { success: result.success, data: result.data ?? null, error: result.error ?? null } as any },
-    );
+    let result: { success: boolean; data?: unknown; error?: string };
+    try {
+      result = await executor.executeTool(row.toolId, row.payload?.parameters ?? {}, {
+        organizationId,
+        userId: call.userId ?? (undefined as any),
+        ...(call.principal ? { principal: call.principal } : {}),
+        ...(call.gatewayId ? { gatewayId: call.gatewayId } : {}),
+        ...(call.scopes ? { scopes: call.scopes } : {}),
+        ...(call.runnerLabels ? { runnerLabels: call.runnerLabels } : {}),
+        ...(call.pinnedRunnerId ? { pinnedRunnerId: call.pinnedRunnerId } : {}),
+        agentId: row.agentId ?? null,
+        agentTeamId: call.agentTeamId ?? null,
+        approvedGate: { approvalId: row.id },
+      });
+    } catch (err: any) {
+      // Kept as the call's outcome, so whoever waits on it hears that it failed instead of waiting forever.
+      result = { success: false, error: err?.message ?? 'The call failed' };
+    }
+    const kept = { success: result.success, data: result.data ?? null, error: result.error ?? null };
+    await this.requests.update({ id: row.id }, { result: kept as any });
+    // Whoever waits on this call (a workflow run, WorkflowApprovalResumeService) carries on now.
+    try {
+      this.approvalsService()?.emit(HELD_CALL_SETTLED, { ...row, result: kept });
+    } catch (err: any) {
+      this.logger.error(`Could not announce the outcome of the approved call ${row.id}: ${err?.message ?? err}`);
+    }
   }
 
   /** The first enabled rule on this tool the call is over, highest priority first. */
@@ -318,22 +370,66 @@ export class ToolApprovalGateService implements OnModuleInit {
         paramsHash: paramsHash(params),
       };
     }
-    return null;
+    return this.askFirstHit(tool, params, context);
   }
 
   /**
-   * Whether `approvalId` is an approved request raised by this rule for
-   * exactly this call (same tool, same parameters) in this organization.
+   * The ask-first rule of an always-on run: the run's agent is always on,
+   * this run is one of its standing thread's, and the tool is one it asks
+   * about first (asksFirst). Other runs of the same agent (a visitor's chat,
+   * a scheduled run) are not held by it.
+   */
+  private async askFirstHit(
+    tool: NamedTool & { id: string; sideEffect?: string | null },
+    params: unknown,
+    context: GateContext,
+  ): Promise<ApprovalGateHit | null> {
+    if (!context.runId || !context.agentId || !this.runs || !this.agents) return null;
+    const run = await this.runs
+      .findOne({ where: { id: context.runId, organizationId: context.organizationId }, select: { id: true, agentId: true, metadata: true } as any })
+      .catch(() => null);
+    if (!run || run.metadata?.triggerType !== 'always_on' || run.agentId !== context.agentId) return null;
+    const agent = await this.agents
+      .findOne({ where: { id: context.agentId, organizationId: context.organizationId }, select: { id: true, name: true, alwaysOn: true } as any })
+      .catch(() => null);
+    const config = (agent as any)?.alwaysOn ?? null;
+    if (!asksFirst(config, tool)) return null;
+    const name = readableToolName(tool);
+    return {
+      kind: 'tool_call',
+      policyId: `always-on:${context.agentId}`,
+      policyName: 'Ask first',
+      summary:
+        config?.actMode === 'act'
+          ? `Ask before “${name}” (it is on the ask-first list)`
+          : `Ask before “${name}” (it changes something, and this agent asks before it changes anything)`,
+      toolId: tool.id,
+      toolName: tool.name,
+      argument: '',
+      value: null,
+      op: 'gt',
+      amount: 0,
+      paramsHash: paramsHash(params),
+    };
+  }
+
+  /**
+   * Whether `approvalId` is an approved request that covers exactly this
+   * call (same tool, same parameters) in this organization: one raised by
+   * this rule for the call, or a script's change set with the call in it
+   * (docs/design/code-mode.md, part D: the person saw the call and its rule
+   * in the set and approved the set as a whole).
    */
   async approved(approvalId: string, hit: ApprovalGateHit, organizationId: string): Promise<boolean> {
     const row = await this.requests.findOne({ where: { id: approvalId, organizationId } });
-    const gate = row?.payload?._gate;
+    if (!row || row.status !== 'approved') return false;
+    const gate = row.payload?._gate;
+    if (gate && gate.toolId === hit.toolId && gate.paramsHash === hit.paramsHash) return true;
+    const changeSet = row.payload?.changeSet;
     return (
-      !!row &&
-      row.status === 'approved' &&
-      !!gate &&
-      gate.toolId === hit.toolId &&
-      gate.paramsHash === hit.paramsHash
+      row.payload?.kind === 'change_set' &&
+      Array.isArray(changeSet) &&
+      changeSet.some((entry: any) => entry?.toolId === hit.toolId && entry?.paramsHash === hit.paramsHash)
     );
   }
 
@@ -351,6 +447,7 @@ export class ToolApprovalGateService implements OnModuleInit {
         status: outcome,
         details: {
           rule: hit.summary,
+          kind: hit.kind ?? 'tool_amount',
           policyId: hit.policyId,
           policyName: hit.policyName,
           argument: hit.argument,

@@ -75,7 +75,7 @@ const CARDS = [
   card(GROQ.id, 'llama-4', { selectable: false }),
 ]
 
-const at = (url = '/models') => renderAtRoute(<ModelsPage />, { path: '/models', url, paths: ['/credentials/providers/new', '/credentials/providers/:id'] })
+const at = (url = '/models') => renderAtRoute(<ModelsPage />, { path: '/models', url, paths: ['/models/providers/new', '/models/providers/:id'] })
 const rowOf = async (id: string) => (await screen.findByTestId(`catalog-row-${id}`)).closest('tr') as HTMLElement
 const listedIds = () => screen.queryAllByTestId(/^catalog-row-/).map((el) => el.getAttribute('data-testid')!.replace('catalog-row-', ''))
 
@@ -90,7 +90,7 @@ describe('ModelsPage', () => {
     at()
     const gpt4o = await rowOf('card-prov-openai-gpt-4o')
     expect(within(gpt4o).getByTestId('catalog-connection')).toHaveTextContent('OpenAI')
-    expect(within(gpt4o).getByTestId('catalog-connection')).toHaveAttribute('href', '/credentials/providers/prov-openai')
+    expect(within(gpt4o).getByTestId('catalog-connection')).toHaveAttribute('href', '/models/providers/prov-openai')
     expect(within(gpt4o).getByTestId('model-price')).toHaveTextContent('$2.50 in / $10.00 out')
     expect(within(gpt4o).getByTestId('model-context')).toHaveTextContent('128k')
     expect(within(gpt4o).getByTestId('model-availability')).toHaveTextContent('Available')
@@ -109,7 +109,7 @@ describe('ModelsPage', () => {
   it('manages no connections itself: the one action is connecting a provider', async () => {
     at()
     await rowOf('card-prov-openai-gpt-4o')
-    expect(screen.getByRole('link', { name: /Connect a provider/ })).toHaveAttribute('href', '/credentials/providers/new')
+    expect(screen.getByRole('link', { name: /Connect a provider/ })).toHaveAttribute('href', '/models/providers/new')
     expect(screen.queryByTestId(/^provider-card-/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove|Rename|Replace key/ })).not.toBeInTheDocument()
   })
@@ -149,7 +149,7 @@ describe('ModelsPage', () => {
   it('opens a model on its connection\'s page', async () => {
     const { router } = at()
     fireEvent.click(within(await rowOf('card-prov-openai-o3')).getByText('o3'))
-    expect(await screen.findByText('at /credentials/providers/prov-openai')).toBeInTheDocument()
+    expect(await screen.findByText('at /models/providers/prov-openai')).toBeInTheDocument()
     expect(router.state.location.hash).toBe('#model-card-prov-openai-o3')
   })
 
@@ -167,7 +167,7 @@ describe('ModelsPage', () => {
     vi.mocked(modelsApi.list).mockResolvedValue([])
     at()
     expect(await screen.findByText('No models yet')).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: /Connect a provider/ }).every((l) => l.getAttribute('href') === '/credentials/providers/new')).toBe(true)
+    expect(screen.getAllByRole('link', { name: /Connect a provider/ }).every((l) => l.getAttribute('href') === '/models/providers/new')).toBe(true)
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 

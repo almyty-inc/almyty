@@ -62,14 +62,6 @@ export class UpdateAgentDto {
   personality?: string;
 
   @IsOptional()
-  @IsObject()
-  heartbeat?: {
-    enabled: boolean;
-    intervalMinutes: number;
-    prompt: string;
-  };
-
-  @IsOptional()
   @IsArray()
   toolIds?: string[];
 

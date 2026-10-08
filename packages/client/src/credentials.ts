@@ -2,7 +2,7 @@
  * Shared credential resolver for all almyty CLI packages.
  *
  * Reads from ALMYTY_TOKEN env var first, then falls back to
- * ~/.almyty/credentials.json written by `npx @almyty/auth login`.
+ * ~/.almyty/credentials.json written by `almyty login`.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -16,6 +16,7 @@ export interface StoredCredentials {
   token: string;
   email?: string;
   frontendUrl?: string;
+  organizationId?: string;
   /**
    * When the token stops working, from the JWT's own `exp` claim.
    *
@@ -78,12 +79,12 @@ export function resolveCredentialsOrExit(): StoredCredentials {
   const stored = loadCredentials();
   if (stored?.token && credentialsExpired(stored)) {
     console.error(`Your login expired on ${stored.expiresAt}. Run:`);
-    console.error('  npx @almyty/auth login');
+    console.error('  almyty login');
     process.exit(3);
   }
 
   console.error('Not authenticated. Run one of:');
-  console.error('  npx @almyty/auth login');
+  console.error('  almyty login');
   console.error('  export ALMYTY_TOKEN=<your-token>');
   process.exit(3);
 }

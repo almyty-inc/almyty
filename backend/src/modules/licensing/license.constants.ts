@@ -39,6 +39,12 @@ export const EE_ENTITLEMENTS = {
   /** Credentials governance: policy rules, review, scheduled rotation and expiry, audit export. */
   CREDENTIALS_GOVERNANCE: 'credentials_governance',
   /**
+   * An agent can act as itself instead of as its owner: its own execution
+   * principal, the connections granted to it, and its own audit actor
+   * (agentConfig.runAs = 'agent'; agents/agent-identity.ts).
+   */
+  AGENT_IDENTITY: 'agent_identity',
+  /**
    * Removes the almyty mark from a hosted chat app, and permits removing
    * the AI disclosure line. The chat app itself is core: this gates the
    * branding removal, not the feature. Visitor sign-in (the sso auth mode

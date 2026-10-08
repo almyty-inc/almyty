@@ -16,14 +16,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
-
 import {
   CreateToolBodyDto,
   UpdateToolBodyDto,
   GenerateToolsFromApiDto,
   ExecuteToolDto,
   ToolSearchQueryDto,
+  SearchToolsBodyDto,
 } from './dto/tools-controller.dto';
+import { ToolStatus } from '../../entities/tool.entity';
+import { ToolDiscoveryService } from '../tool-discovery/tool-discovery.service';
 
 import { ToolsService, CreateToolDto, UpdateToolDto, ToolSearchFilters } from './tools.service';
 import { ToolGeneratorService, ToolGenerationOptions } from './tool-generator.service';
@@ -50,6 +52,7 @@ export class ToolsController {
     private readonly skillGeneratorService: SkillGeneratorService,
     private readonly cliGeneratorService: CliGeneratorService,
     private readonly codegenService: CodegenService,
+    private readonly toolDiscovery: ToolDiscoveryService,
   ) {}
 
   @Post()
@@ -118,6 +121,56 @@ export class ToolsController {
           error: 'TOOLS_RETRIEVAL_FAILED',
         },
         error.status || HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * search_tools over the caller's tools (docs/design/code-mode.md, part
+   * B): hybrid keyword and embedding ranking, only within what the caller
+   * may see. Each hit carries its side-effect class.
+   */
+  @Post('search')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Search tools (keywords and meaning)' })
+  @ApiResponse({ status: 200, description: 'Ranked tools: name, summary, side-effect class, score' })
+  async searchTools(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+    @Body(ValidationPipe) body: SearchToolsBodyDto,
+    @Request() req: any,
+  ) {
+    const caller = { id: req.user?.sub || req.user?.id };
+    const scope = await this.toolsService.getAllTools({ organizationId, status: ToolStatus.ACTIVE, caller });
+    const data = await this.toolDiscovery.search(scope, body.query, { organizationId, limit: body.limit, nameOf: (t) => t.name });
+    return { success: true, data };
+  }
+
+  /**
+   * get_tool's full detail for one tool: its code name and TypeScript
+   * signature (as a script calls it, among the caller's tools), schemas,
+   * side-effect class and an example call.
+   */
+  @Get(':toolId/signature')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: "A tool's code signature and full description" })
+  @ApiResponse({ status: 200, description: 'Signature, schemas, side-effect class and example call' })
+  @ApiResponse({ status: 404, description: 'Tool not found' })
+  async toolSignature(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+    @Param('toolId', ParseUUIDPipe) toolId: string,
+    @Request() req: any,
+  ) {
+    const caller = { id: req.user?.sub || req.user?.id };
+    try {
+      const tool = await this.toolsService.getTool(toolId, organizationId, true, caller);
+      const scope = await this.toolsService.getAllTools({ organizationId, status: ToolStatus.ACTIVE, caller });
+      // Names are unique within the scope a script sees; a tool not active yet is named as if it were.
+      const inScope = scope.some((t) => t.id === tool.id) ? scope.map((t) => (t.id === tool.id ? tool : t)) : [...scope, tool];
+      return { success: true, data: this.toolDiscovery.describe(inScope, tool, 'full', (t) => t.name) };
+    } catch (error) {
+      throw new HttpException(
+        { success: false, message: error.message, error: 'TOOL_NOT_FOUND' },
+        error.status || HttpStatus.NOT_FOUND,
       );
     }
   }

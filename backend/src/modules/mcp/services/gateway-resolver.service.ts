@@ -181,7 +181,7 @@ export class GatewayResolverService {
     // forbids and which makes browsers skip the credential prompt.
     const challenges: string[] = [];
 
-    if (types.has(GatewayAuthType.OAUTH2)) {
+    if (types.has(GatewayAuthType.OAUTH2) || types.has(GatewayAuthType.COMPANY_SIGNIN) || ['private', 'team', 'org'].includes(gateway.accessScope)) {
       const resourceMetadataUrl = `${baseUrl}/${orgSlug}/${gatewaySlug}/.well-known/oauth-protected-resource`;
       challenges.push(`Bearer resource_metadata="${resourceMetadataUrl}"${errorParam}`);
     }
@@ -258,6 +258,7 @@ export class GatewayResolverService {
         req?.body,
         req?.ip || req?.connection?.remoteAddress,
         this.activeAuthConfigs(gateway),
+        req,
       );
     } catch {
       return null;
@@ -313,6 +314,7 @@ export class GatewayResolverService {
       req.body,
       clientIp,
       this.activeAuthConfigs(gateway),
+        req,
     );
     if (!auth.isValid) {
       const statusCode = isCredentialFailure(auth.errorCode) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;

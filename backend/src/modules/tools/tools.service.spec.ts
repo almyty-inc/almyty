@@ -17,6 +17,7 @@ import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { computeToolHash, verifyToolIntegrity } from '../../common/security/tool-integrity';
 
 // ─── Helper factories ───────────────────────────────────────────────────────
 
@@ -696,6 +697,65 @@ describe('ToolsService', () => {
 
       expect((tool as any).visibility).toBe('org');
       expect((tool as any).teamId).toBeNull();
+    });
+
+    describe('the side-effect class a person sets (code-mode part A)', () => {
+      // A row as the database returns it: every column loaded, null where empty.
+      const loaded = { executionMethod: null, httpConfig: null, graphqlConfig: null, llmConfig: null } as Partial<Tool>;
+      const saveEcho = () => toolRepo.save.mockImplementation(async (t: any) => {
+        t.classify?.();
+        return t;
+      });
+
+      beforeEach(() => {
+        userRepo.findOne.mockResolvedValue(makeUser());
+        toolVersionRepo.create.mockReturnValue({});
+        toolVersionRepo.save.mockResolvedValue({});
+      });
+
+      it('overrides the derived class and records it as the source', async () => {
+        const tool = makeTool({ ...loaded, metadata: { sourceOperation: { method: 'DELETE' } }, sideEffect: 'destructive', sideEffectSource: 'http_method' });
+        toolRepo.findOne.mockResolvedValue(tool);
+        saveEcho();
+        const saved = await service.updateTool('tool-1', { sideEffect: 'write' }, 'org-1', 'user-1');
+        expect([saved.sideEffect, saved.sideEffectSource]).toEqual(['write', 'override']);
+      });
+
+      it('drops the override with auto, and the class is derived again, older metadata.sideEffect included', async () => {
+        const tool = makeTool({ ...loaded, metadata: { sourceOperation: { method: 'DELETE' }, sideEffect: 'read' }, sideEffect: 'read', sideEffectSource: 'override' });
+        toolRepo.findOne.mockResolvedValue(tool);
+        saveEcho();
+        const saved = await service.updateTool('tool-1', { sideEffect: 'auto' }, 'org-1', 'user-1');
+        expect([saved.sideEffect, saved.sideEffectSource]).toEqual(['destructive', 'http_method']);
+        expect(saved.metadata.sideEffect).toBeUndefined();
+      });
+
+      it('re-stamps an integrity hash that held, so the tool keeps running with its new class', async () => {
+        const tool = makeTool({ ...loaded, metadata: { sourceOperation: { method: 'DELETE' } } });
+        tool.classify();
+        tool.definitionHash = computeToolHash(tool).hash;
+        toolRepo.findOne.mockResolvedValue(tool);
+        saveEcho();
+        const saved = await service.updateTool('tool-1', { sideEffect: 'read' }, 'org-1', 'user-1');
+        expect(verifyToolIntegrity(saved, saved.definitionHash!).valid).toBe(true);
+      });
+
+      it('does not bless a hash that no longer held before the update', async () => {
+        const tool = makeTool({ ...loaded, metadata: { sourceOperation: { method: 'DELETE' } }, definitionHash: 'f'.repeat(64) });
+        toolRepo.findOne.mockResolvedValue(tool);
+        saveEcho();
+        const saved = await service.updateTool('tool-1', { sideEffect: 'read' }, 'org-1', 'user-1');
+        expect(saved.definitionHash).toBe('f'.repeat(64));
+      });
+
+      it('audits the change of class', async () => {
+        const tool = makeTool({ ...loaded, metadata: { sourceOperation: { method: 'GET' } }, sideEffect: 'read', sideEffectSource: 'http_method' });
+        toolRepo.findOne.mockResolvedValue(tool);
+        saveEcho();
+        const computeChanges = jest.spyOn((service as any).auditLogService, 'computeChanges');
+        await service.updateTool('tool-1', { sideEffect: 'destructive' }, 'org-1', 'user-1');
+        expect(computeChanges).toHaveBeenCalledWith(expect.objectContaining({ sideEffect: 'read' }), expect.objectContaining({ sideEffect: 'destructive' }), expect.arrayContaining(['sideEffect']));
+      });
     });
   });
 

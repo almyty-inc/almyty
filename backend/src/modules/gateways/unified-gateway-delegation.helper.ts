@@ -1,3 +1,4 @@
+import { hasEndpointAccessScope } from './gateway-access';
 import { HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -216,7 +217,7 @@ export class UnifiedGatewayDelegation {
     // A private gateway authenticates every request, discovery and channel
     // webhooks included: the resolver serves it to its owner only and
     // answers everyone else with the not-found a missing gateway gets.
-    if (isPrivateGateway(gateway) || (!isDiscovery && !isChannel)) {
+    if (isPrivateGateway(gateway) || (hasEndpointAccessScope(gateway) && ['team', 'org'].includes(gateway.accessScope) && !isChannel) || (!isDiscovery && !isChannel)) {
       // The org and the gateway (with its auth configs) are already in
       // hand from the unified controller — hand them over so the resolver
       // does not repeat both lookups.
@@ -569,6 +570,20 @@ export class UnifiedGatewayDelegation {
       return res.json(manual);
     }
 
+    // A meta-tool of a gateway in code or both exposure (code mode).
+    const metaName = utcpMetaToolName(action);
+    if (metaName && req.method === 'POST') {
+      const userId = auth?.userId || (req as any).user?.sub || null;
+      const result = await this.utcpService.executeMetaTool(metaName, body, organization.id, userId, gateway.id);
+      this.metrics?.record(MetricType.UTCP_DIRECT_CALL, {
+        organizationId: organization.id,
+        gatewayId: gateway.id,
+        userId,
+        status: result?.success === false ? MetricStatus.ERROR : MetricStatus.SUCCESS,
+      });
+      return res.json(result);
+    }
+
     const toolId = utcpExecuteToolId(action);
     if ((action === 'execute' || toolId) && req.method === 'POST') {
       const userId = auth?.userId || (req as any).user?.sub || null;
@@ -626,5 +641,11 @@ export class UnifiedGatewayDelegation {
 /** The tool id of an `execute/<toolId>` path: one plain segment, or null. */
 export function utcpExecuteToolId(action: string): string | null {
   const match = /^execute\/([A-Za-z0-9_-]+)$/.exec(action);
+  return match ? match[1] : null;
+}
+
+/** `execute/meta/<name>`: a code-mode meta-tool's address on a UTCP gateway. */
+export function utcpMetaToolName(action: string): string | null {
+  const match = /^execute\/meta\/([a-z_]{1,40})$/.exec(action);
   return match ? match[1] : null;
 }

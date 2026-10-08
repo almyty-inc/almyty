@@ -466,11 +466,11 @@ Usage:
   npx @almyty/mcp-server                 Serve every gateway the token can see
   npx @almyty/mcp-server --help          This help
   npx @almyty/mcp-server --version       Print the version
+
 The server speaks MCP over stdio: stdout carries the protocol and every
 diagnostic goes to stderr. It is meant to be launched by an MCP client, not
 run by hand. It speaks MCP 2026-07-28 and the earlier versions (2024-11-05 to
 2025-11-25) alike: the client's first message decides.
-run by hand.
 
 Modes (ALMYTY_MODE):
   skill-first  (default) almyty_execute + almyty_search, and skills as prompts.
