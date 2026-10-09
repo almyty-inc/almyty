@@ -69,6 +69,8 @@ interface StreamableSession {
 const STALE_AFTER_MS = 5 * 60 * 1000;
 /** TTL for the cross-pod session registry; refreshed on activity. */
 const SESSION_REGISTRY_TTL_S = 600;
+/** How long minting a session waits for its registry write before answering. */
+const REGISTRY_WRITE_WAIT_MS = 2_000;
 /** SSE keep-alive comment cadence — well under typical proxy idle timeouts. */
 const KEEPALIVE_INTERVAL_MS = 15_000;
 /** Redis channels for cross-replica delivery (see the multi-replica note). */
@@ -94,7 +96,8 @@ const SHARED_BUFFER_PREFIX = 'strm:buf:';
  * When a Redis client is present we fix all four without making the live
  * stream itself shared:
  *   1. a shared session registry (strm:sess:<id>) lets any pod ADOPT a session
- *      it didn't mint, so the GET stream opens anywhere.
+ *      it didn't mint, so the GET stream and later POSTs land anywhere. The
+ *      minting POST answers only once the registry write has landed.
  *   2. push() PUBLISHES frames to CH_OUT; whichever pod holds the stream
  *      (subscribed) writes them.
  *   3. response/error envelopes are PUBLISHED to CH_RESP; every pod re-emits
@@ -179,10 +182,18 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
       session = known;
     } else {
       session = this.createSession(organizationId, userId);
+      // The id goes back on this response, and the worker's next request
+      // may land on any pod, which can adopt the session only once the
+      // registry holds it. Answering first let that request reach Redis
+      // ahead of this write and 404, so the worker dropped a session that
+      // was alive. Wait for the write, bounded so a slow Redis cannot hold
+      // the POST: past the bound the session still works on this pod.
+      await this.registerSession(session, REGISTRY_WRITE_WAIT_MS);
     }
 
     session.lastActivity = new Date();
-    this.registerSession(session); // refresh cross-pod registry TTL on activity
+    // Refresh the registry TTL on activity; a known session is already in it.
+    if (sessionId) void this.registerSession(session);
     res.setHeader('Mcp-Session-Id', session.id);
 
     const body = req.body;
@@ -472,7 +483,6 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
     };
     this.sessions.set(id, session);
     this.sessionMintedHere.add(id);
-    this.registerSession(session); // cross-pod registry (no-op without redis)
     return session;
   }
 
@@ -486,12 +496,30 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
     return session.userId === userId;
   }
 
-  /** Publish a session's existence so any replica can adopt it. */
-  private registerSession(session: StreamableSession): void {
-    if (!this.redis) return;
-    this.redis
+  /**
+   * Publish a session's existence so any replica can adopt it. With
+   * `waitMs` the returned promise settles once the write has landed, or
+   * after `waitMs` if Redis is slow or away; without it, it settles when
+   * the write does (callers refreshing the TTL do not wait on it).
+   */
+  private registerSession(session: StreamableSession, waitMs?: number): Promise<void> {
+    if (!this.redis) return Promise.resolve();
+    const write = this.redis
       .set(`strm:sess:${session.id}`, JSON.stringify({ org: session.organizationId, userId: session.userId ?? null }), 'EX', SESSION_REGISTRY_TTL_S)
-      .catch((err) => this.logger.warn(`session registry write failed: ${err?.message ?? err}`));
+      .then(
+        () => undefined,
+        (err) => this.logger.warn(`session registry write failed: ${err?.message ?? err}`),
+      );
+    if (waitMs === undefined) return write;
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        this.logger.warn(`session registry write for ${session.id} still pending after ${waitMs}ms; other pods may not adopt it yet`);
+        resolve();
+      }, waitMs);
+      timer.unref?.();
+    });
+    return Promise.race([write, late]).finally(() => clearTimeout(timer));
   }
 
   /**
