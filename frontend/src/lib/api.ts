@@ -427,6 +427,7 @@ export const organizationsApi = {
       auditLogDays: number | null
       toolExecutionsDays: number | null
       notificationsDays: number | null
+      runnerUsageDays: number | null
     }>,
   ) => apiPut(`/organizations/${id}/retention`, data),
 }
@@ -1037,8 +1038,8 @@ export const workspacesApi = {
   release: (id: string) => apiDel(`/workspaces/${id}`),
 }
 
-// Hosted environments (backend hosted-runners/environments.controller.ts).
 // The list keeps its whole body: next to the rows it says whether hosted
+// machines are switched on for this server (`enabled`) and what a form may offer (`settings`).
 // machines are switched on for this server (`enabled`).
 export const environmentsApi = {
   list: () => api.get('/environments').then((r) => r.data as { data: any[]; enabled?: boolean; settings?: unknown }),
@@ -1047,6 +1048,8 @@ export const environmentsApi = {
   update: (id: string, data: Record<string, unknown>) => apiPatch(`/environments/${id}`, data),
   remove: (id: string) => apiDel(`/environments/${id}`),
   workspaces: (id: string) => apiGet(`/environments/${id}/workspaces`),
+  runs: (id: string, limit?: number) => apiGet(`/environments/${id}/runs`, limit ? { params: { limit } } : undefined),
+  usage: () => apiGet('/environments/usage'),
   suspend: (id: string, workspaceId: string) => apiPost(`/environments/${id}/workspaces/${workspaceId}/suspend`),
   release: (id: string, workspaceId: string) => apiPost(`/environments/${id}/workspaces/${workspaceId}/release`),
 }

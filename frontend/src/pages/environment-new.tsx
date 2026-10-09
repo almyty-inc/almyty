@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { EnvironmentForm } from '@/components/runners/environment-form'
-import { HostedUnavailable, environmentPath, useEnvironments } from '@/components/runners/hosted-environments-tab'
+import { HostedUnavailable, SettingsMissing, environmentPath, useEnvironments } from '@/components/runners/hosted-environments-tab'
 import { environmentsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
@@ -56,6 +56,8 @@ export function EnvironmentNewPage() {
         <QueryError error={list.error as Error} onRetry={() => list.refetch()} title="Couldn't load hosted environments" />
       ) : list.enabled === false ? (
         <HostedUnavailable />
+      ) : !list.settings ? (
+        <SettingsMissing />
       ) : (
         <Card>
           <CardContent className="pt-6">

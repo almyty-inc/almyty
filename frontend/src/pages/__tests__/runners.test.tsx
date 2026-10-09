@@ -11,7 +11,7 @@ vi.mock('react-router-dom', async () => ({ ...(await vi.importActual<typeof impo
 
 vi.mock('../../lib/api', () => ({
   runnersApi: { getAll: vi.fn(), unregister: vi.fn() },
-  environmentsApi: { list: vi.fn(), workspaces: vi.fn().mockResolvedValue([]) },
+  environmentsApi: { list: vi.fn(), usage: vi.fn().mockResolvedValue({ from: '', to: '', environments: [], organization: null }) },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
 }))
 

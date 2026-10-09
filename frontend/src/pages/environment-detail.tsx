@@ -19,13 +19,15 @@ import { QueryError } from '@/components/ui/query-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { VisibilityBadge, useTeamLookup } from '@/components/ui/team-filter'
 import { EnvironmentForm } from '@/components/runners/environment-form'
-import { HostedUnavailable, useEnvironmentWorkspaces, useEnvironments } from '@/components/runners/hosted-environments-tab'
+import { HostedUnavailable, SettingsMissing, useEnvironmentUsage, useEnvironmentWorkspaces, useEnvironments } from '@/components/runners/hosted-environments-tab'
 import {
   MACHINE_STATUS_LABEL,
   MACHINE_STATUS_VARIANT,
   filesKeptUntil,
+  formatMinutes,
   isLiveWorkspace,
   machineStatus,
+  type EnvironmentRun,
   type HostedEnvironment,
   type HostedWorkspace,
 } from '@/components/runners/hosted-shared'
@@ -127,6 +129,7 @@ export function EnvironmentDetailPage() {
               <Badge variant="outline">hosted</Badge>
               <VisibilityBadge visibility={env.visibility} teamId={env.teamId} teamLookup={teamLookup} />
               <span className="text-sm text-muted-foreground">Parks after {pluralized(env.idleTimeoutMinutes, 'minute')} without use</span>
+              <UsageThisMonth environmentId={env.id} />
             </div>
           </div>
         </div>
@@ -156,7 +159,9 @@ export function EnvironmentDetailPage() {
 
       {hostedOff && <HostedUnavailable />}
 
-      <MachinesCard environment={env} keepDays={list.settings.suspendedRetention.keepDays} userId={userId} confirm={confirm} />
+      <MachinesCard environment={env} keepDays={list.settings?.suspendedRetention.keepDays} userId={userId} confirm={confirm} />
+
+      <RecentRunsCard environmentId={env.id} />
 
       <AgentsCard environmentId={env.id} />
 
@@ -168,16 +173,22 @@ export function EnvironmentDetailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <EnvironmentForm
-            key={`${env.id}-${env.version}-${env.updatedAt ?? ''}`}
-            organizationId={orgId ?? ''}
-            settings={list.settings}
-            initial={env}
-            submitLabel="Save changes"
-            submitting={update.isPending}
-            disabled={!mayChange || hostedOff}
-            onSubmit={(body) => update.mutate(body)}
-          />
+          {list.settings ? (
+            <EnvironmentForm
+              key={`${env.id}-${env.version}-${env.updatedAt ?? ''}`}
+              organizationId={orgId ?? ''}
+              settings={list.settings}
+              initial={env}
+              submitLabel="Save changes"
+              submitting={update.isPending}
+              disabled={!mayChange || hostedOff}
+              onSubmit={(body) => update.mutate(body)}
+            />
+          ) : list.isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <SettingsMissing />
+          )}
         </CardContent>
       </Card>
 
@@ -202,7 +213,7 @@ function MachinesCard({
   confirm,
 }: {
   environment: HostedEnvironment
-  keepDays: number
+  keepDays: number | undefined
   userId?: string
   confirm: ReturnType<typeof useConfirm>['confirm']
 }) {
@@ -228,15 +239,19 @@ function MachinesCard({
   const suspend = useMutation({ mutationFn: (w: HostedWorkspace) => environmentsApi.suspend(environment.id, w.id), ...after('Machine parked') })
   const release = useMutation({ mutationFn: (w: HostedWorkspace) => environmentsApi.release(environment.id, w.id), ...after('Workspace released') })
 
+  const nameOf = (id: string | null | undefined): string => {
+    if (!id) return 'a member'
+    if (id === userId) return 'You'
+    const list = Array.isArray(members.data) ? members.data : []
+    const m = list.find((x) => (x.userId ?? x.id) === id)
+    return m ? [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'a member' : 'a member'
+  }
   const whose = (w: HostedWorkspace): string => {
-    const person = w.ownerUserId === userId
-      ? 'You'
-      : (() => {
-          const list = Array.isArray(members.data) ? members.data : []
-          const m = list.find((x) => (x.userId ?? x.id) === w.ownerUserId)
-          return m ? [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'A member' : 'A member'
-        })()
-    return w.agentId ? `${person}, for an agent` : person
+    const person = nameOf(w.ownerUserId)
+    // Kept from someone who left the organization, beside the receiver's own.
+    if (w.readOnly) return person === 'You' ? 'Kept for you from a member who left' : `Kept for ${person} from a member who left`
+    const name = person === 'a member' ? 'A member' : person
+    return w.agentId ? `${name}, for an agent` : name
   }
 
   const columns: ColumnDef<HostedWorkspace>[] = [
@@ -248,7 +263,10 @@ function MachinesCard({
         const status = machineStatus(row.original)
         return (
           <div className="space-y-0.5">
-            <Badge variant={MACHINE_STATUS_VARIANT[status]}>{MACHINE_STATUS_LABEL[status]}</Badge>
+            <div className="flex flex-wrap items-center gap-1">
+              <Badge variant={MACHINE_STATUS_VARIANT[status]}>{MACHINE_STATUS_LABEL[status]}</Badge>
+              {row.original.readOnly && <Badge variant="outline">read-only</Badge>}
+            </div>
             {status === 'failed' && row.original.machine?.lastError && (
               <p className="max-w-xs text-xs text-destructive">{row.original.machine.lastError}</p>
             )}
@@ -269,7 +287,7 @@ function MachinesCard({
       header: 'Files',
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
-          {machineStatus(row.original) === 'parked' ? `kept until ${formatDate(filesKeptUntil(row.original, keepDays))}` : 'kept'}
+          {machineStatus(row.original) === 'parked' && keepDays ? `kept until ${formatDate(filesKeptUntil(row.original, keepDays))}` : 'kept'}
         </span>
       ),
     },
@@ -314,16 +332,21 @@ function MachinesCard({
       <CardHeader>
         <CardTitle className="text-base">{othersShown ? 'Machines' : 'Your machine'}</CardTitle>
         <CardDescription className="text-xs">
-          Everyone who uses this environment gets a machine and files of their own. A machine parks itself after {pluralized(environment.idleTimeoutMinutes, 'minute')} without use; a parked machine's files are kept for {keepDays} days after its last use.
+          Everyone who uses this environment gets a machine and files of their own. A machine parks itself after {pluralized(environment.idleTimeoutMinutes, 'minute')} without use{keepDays ? `; a parked machine's files are kept for ${pluralized(keepDays, 'day')} after its last use` : ''}.
         </CardDescription>
       </CardHeader>
-      <CardContent data-testid="environment-machines">
+      <CardContent className="space-y-3" data-testid="environment-machines">
         {query.isError ? (
           <QueryError error={query.error as Error} onRetry={() => query.refetch()} title="Couldn't load the machines" />
         ) : !query.isLoading && rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No machine yet. Yours starts the first time one of your agents or tools uses this environment.</p>
         ) : (
           <DataTable columns={columns} data={rows} loading={query.isLoading} hideSelectionCount hideColumnsButton hidePaginationWhenSinglePage />
+        )}
+        {rows.some((w) => w.readOnly) && (
+          <p className="text-xs text-muted-foreground" data-testid="inherited-note">
+            A read-only workspace was kept for you from a member who left the organization. Nothing runs in it unless you ask for it by name: copy what you need, then release it. It is deleted after the usual time unused.
+          </p>
         )}
       </CardContent>
     </Card>
@@ -352,6 +375,79 @@ function AgentsCard({ environmentId }: { environmentId: string }) {
               <Link key={a.id} to={`/agents/${a.id}`} className="flex items-center gap-2 border rounded-md px-3 py-2 hover:bg-muted/50 transition-colors">
                 <Bot className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">{a.name}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/** "Ran 3 h 5 min this month", from GET /environments/usage. */
+function UsageThisMonth({ environmentId }: { environmentId: string }) {
+  const usage = useEnvironmentUsage()
+  const row = usage.data?.environments.find((u) => u.environmentId === environmentId)
+  if (!row) return null
+  return (
+    <>
+      <span className="text-sm text-muted-foreground" aria-hidden="true">·</span>
+      <span className="text-sm text-muted-foreground" data-testid="environment-usage">
+        Ran {formatMinutes(row.minutes)} this month
+      </span>
+    </>
+  )
+}
+
+const RUN_STATUS_VARIANT: Record<string, 'success' | 'destructive' | 'warning' | 'secondary' | 'outline'> = {
+  completed: 'success',
+  failed: 'destructive',
+  timed_out: 'destructive',
+  cancelled: 'outline',
+  running: 'warning',
+  pending: 'secondary',
+  queued: 'secondary',
+  waiting: 'warning',
+}
+
+/** The latest runs of agents whose machine is this environment: yours, or everyone's for an owner or admin. */
+function RecentRunsCard({ environmentId }: { environmentId: string }) {
+  const runs = useQuery<EnvironmentRun[]>({
+    queryKey: ['environment-runs', environmentId],
+    queryFn: async () => {
+      const rows = await environmentsApi.runs(environmentId, 10)
+      return Array.isArray(rows) ? rows : []
+    },
+  })
+  const rows = runs.data ?? []
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Recent runs</CardTitle>
+      </CardHeader>
+      <CardContent data-testid="environment-runs">
+        {runs.isError ? (
+          <QueryError error={runs.error as Error} onRetry={() => runs.refetch()} title="Couldn't load the runs" />
+        ) : runs.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No runs yet. Runs of agents set to run here show up as they happen.</p>
+        ) : (
+          <div className="space-y-2">
+            {rows.map((r) => (
+              <Link
+                key={`${r.kind}-${r.id}`}
+                to={`/agents/${r.agentId}?tab=runs`}
+                className="flex items-center justify-between gap-3 border rounded-md px-3 py-2 hover:bg-muted/50 transition-colors"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-sm font-medium">{r.agentName}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-3">
+                  <Badge variant={RUN_STATUS_VARIANT[r.status] ?? 'outline'}>{r.status.replace(/_/g, ' ')}</Badge>
+                  <span className="text-xs text-muted-foreground" title={formatDateTime(r.createdAt)}>{formatRelativeTime(r.createdAt)}</span>
+                </span>
               </Link>
             ))}
           </div>

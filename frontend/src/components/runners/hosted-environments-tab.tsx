@@ -1,7 +1,9 @@
 /**
  * The Hosted tab on /runners: the environments the caller may see, each
- * with the state of the caller's own machine on it. Creating one is a page
- * (/runners/hosted/new), never a dialog.
+ * with the state of the caller's own machine on it (`mine` on each row of
+ * GET /environments) and its runner minutes this month
+ * (GET /environments/usage). Creating one is a page (/runners/hosted/new),
+ * never a dialog.
  */
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -18,24 +20,25 @@ import { QueryError } from '@/components/ui/query-error'
 import { VisibilityBadge, useTeamLookup } from '@/components/ui/team-filter'
 import { environmentsApi } from '@/lib/api'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
-import { useAuthStore } from '@/store/auth'
 import { useOrganizationStore } from '@/store/organization'
 import { RUNNER_HEARTBEAT_POLL_MS } from '@/pages/runners-shared'
 import {
   MACHINE_STATUS_LABEL,
   MACHINE_STATUS_VARIANT,
   filesKeptUntil,
+  formatMinutes,
   imageLabel,
   machineStatus,
-  ownWorkspace,
   readHostedSettings,
+  type EnvironmentUsage,
   type HostedEnvironment,
-  type HostedSettings,
   type HostedWorkspace,
+  type MyMachine,
 } from './hosted-shared'
 
 export const NEW_ENVIRONMENT_PATH = '/runners/hosted/new'
 export const environmentPath = (id: string) => `/runners/hosted/${encodeURIComponent(id)}`
+export const HOSTED_DOCS_URL = 'https://docs.almyty.com/hosted-machines'
 
 /** The environments list, whether hosted machines are on, and the install's settings: one query, shared by every hosted page. */
 export function useEnvironments() {
@@ -44,15 +47,28 @@ export function useEnvironments() {
     queryKey: ['environments', orgId],
     queryFn: () => environmentsApi.list(),
     enabled: !!orgId,
+    // Each row carries the caller's machine, so the list polls like runners.
+    refetchInterval: RUNNER_HEARTBEAT_POLL_MS,
   })
   const body = query.data
   return {
     ...query,
     environments: (Array.isArray(body?.data) ? body.data : []) as HostedEnvironment[],
-    /** Unknown until loaded; the API leaves it out only when it predates the flag, so absent counts as on. */
+    /** Unknown until loaded. */
     enabled: body ? body.enabled !== false : undefined,
+    /** The install's choices; null until the API has sent them. */
     settings: readHostedSettings(body?.settings),
   }
+}
+
+/** Runner minutes this month: per environment the caller can see, and the organization's total for owners and admins. */
+export function useEnvironmentUsage() {
+  const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
+  return useQuery<EnvironmentUsage>({
+    queryKey: ['environment-usage', orgId],
+    queryFn: () => environmentsApi.usage(),
+    enabled: !!orgId,
+  })
 }
 
 /** One environment's workspaces (the caller's own; every one for an org admin), polled like runners. */
@@ -69,11 +85,7 @@ export function useEnvironmentWorkspaces(environmentId: string, { poll = true }:
 }
 
 /** The caller's machine on an environment, in a word, with when it was last used or how long its files are kept. */
-export function MachineCell({ environmentId, keepDays }: { environmentId: string; keepDays: number }) {
-  const userId = useAuthStore((s) => s.user?.id)
-  const query = useEnvironmentWorkspaces(environmentId)
-  if (query.isLoading) return <span className="text-sm text-muted-foreground">…</span>
-  const mine = ownWorkspace(query.data ?? [], userId)
+export function MachineCell({ mine, keepDays }: { mine: MyMachine | null | undefined; keepDays: number | undefined }) {
   if (!mine) {
     return <span className="text-sm text-muted-foreground" data-testid="machine-none">Not started yet</span>
   }
@@ -82,7 +94,7 @@ export function MachineCell({ environmentId, keepDays }: { environmentId: string
     <div className="space-y-0.5" data-testid="machine-cell">
       <Badge variant={MACHINE_STATUS_VARIANT[status]}>{MACHINE_STATUS_LABEL[status]}</Badge>
       <div className="text-xs text-muted-foreground">
-        {status === 'parked'
+        {status === 'parked' && keepDays
           ? `Files kept until ${formatDate(filesKeptUntil(mine, keepDays))}`
           : mine.lastActiveAt
             ? `Last active ${formatRelativeTime(mine.lastActiveAt)}`
@@ -91,8 +103,6 @@ export function MachineCell({ environmentId, keepDays }: { environmentId: string
     </div>
   )
 }
-
-export const HOSTED_DOCS_URL = 'https://docs.almyty.com/hosted-machines'
 
 /**
  * The Hosted tab's one line, in the PageIntro look. The runners intro is
@@ -125,14 +135,30 @@ export function HostedUnavailable() {
   )
 }
 
+/** The server sent no usable form choices (images, idle bounds, how long files are kept), so there is nothing honest to offer. */
+export function SettingsMissing() {
+  return (
+    <Card>
+      <CardContent className="pt-6 text-sm text-muted-foreground" data-testid="hosted-settings-missing">
+        This server did not say what an environment may use, so one cannot be set up here right now. Try again later, or ask whoever runs the server.
+      </CardContent>
+    </Card>
+  )
+}
+
 export function HostedEnvironmentsTab() {
   const navigate = useNavigate()
   const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
   const { byId: teamLookup } = useTeamLookup(orgId)
   const list = useEnvironments()
-  const { settings } = list
+  const usage = useEnvironmentUsage()
+  const keepDays = list.settings?.suspendedRetention.keepDays
+  const minutesById = useMemo(
+    () => new Map((usage.data?.environments ?? []).map((u) => [u.environmentId, u.minutes])),
+    [usage.data],
+  )
 
-  const columns = useMemo(() => hostedColumns(settings, teamLookup), [settings, teamLookup])
+  const columns = useMemo(() => hostedColumns(keepDays, minutesById, teamLookup), [keepDays, minutesById, teamLookup])
 
   if (list.isError) return <QueryError error={list.error as Error} onRetry={() => list.refetch()} title="Couldn't load hosted environments" />
   if (list.enabled === false) return <HostedUnavailable />
@@ -152,9 +178,15 @@ export function HostedEnvironmentsTab() {
       />
     )
   }
+  const organization = usage.data?.organization
   return (
     <Card>
-      <CardContent className="pt-6" data-testid="hosted-environments">
+      <CardContent className="pt-6 space-y-4" data-testid="hosted-environments">
+        {organization && (
+          <p className="text-sm text-muted-foreground" data-testid="hosted-org-usage">
+            Your organization's hosted machines ran <span className="font-medium text-foreground">{formatMinutes(organization.minutes)}</span> this month.
+          </p>
+        )}
         <DataTable
           columns={columns}
           data={list.environments}
@@ -170,7 +202,11 @@ export function HostedEnvironmentsTab() {
   )
 }
 
-function hostedColumns(settings: HostedSettings, teamLookup: ReturnType<typeof useTeamLookup>['byId']): ColumnDef<HostedEnvironment>[] {
+function hostedColumns(
+  keepDays: number | undefined,
+  minutesById: Map<string, number>,
+  teamLookup: ReturnType<typeof useTeamLookup>['byId'],
+): ColumnDef<HostedEnvironment>[] {
   return [
     {
       ...createSortableColumn<HostedEnvironment>('name', 'Name'),
@@ -195,7 +231,12 @@ function hostedColumns(settings: HostedSettings, teamLookup: ReturnType<typeof u
     {
       id: 'machine',
       header: 'Your machine',
-      cell: ({ row }) => <MachineCell environmentId={row.original.id} keepDays={settings.suspendedRetention.keepDays} />,
+      cell: ({ row }) => <MachineCell mine={row.original.mine} keepDays={keepDays} />,
+    },
+    {
+      id: 'usage',
+      header: 'This month',
+      cell: ({ row }) => <span className="text-sm text-muted-foreground">{formatMinutes(minutesById.get(row.original.id) ?? 0)}</span>,
     },
     {
       id: 'image',

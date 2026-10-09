@@ -34,24 +34,39 @@ Everyone who uses an environment gets a machine and files of their own. The envi
 |---|---|
 | **running** | The machine is on and doing work, or waiting for the next call. |
 | **waking** | It is starting because something needs it. An agent waits for it and then carries on. |
+| **not started** | The machine exists, but nothing has asked for it yet. |
 | **parked** | It stopped after its idle time. Its files are kept until the date shown, counted from the last time it was used. Using it again starts it and resets the date. |
 | **failed** | It could not start. The reason is shown next to it. |
 
-![An environment's page: your machine, the agents that run there, and its settings](/screenshots/environment-detail.png)
+![An environment's page: your machine, recent runs, and its settings](/screenshots/environment-detail.png)
 
 On the same page:
 
 - **Suspend** parks a running machine now. Its files stay.
 - **Release** lets the workspace go and deletes its files. You are asked once before it happens.
+- How long the machine **ran this month**, next to its name. The Hosted tab shows the same for each environment; organization owners and admins also see the total for the whole organization.
+- **Recent runs** lists the latest runs of agents set to run here: yours, or everyone's for an owner or admin.
 - **Agents that run here** lists the agents set to run on this environment.
 - **Settings** is the same form as when you created it. Changes apply to machines that start after you save.
 - **Delete** removes the environment, and every machine on it with its files.
 
 Organization owners and admins see everyone's machines on an environment they can see, and can suspend or release them.
 
+**When a member leaves**, their environments pass to an admin, files and all. If the admin already has a machine on one of them, the member's is kept beside it **read-only**: nothing runs in it unless you ask for it by name, so copy what you need and then release it. It is deleted after the usual time unused. You get a notification when this happens, and another when a team an environment was shared with is deleted and the environment becomes private again.
+
+## Coding tools and model keys
+
+Coding tools on a hosted machine reach models through almyty, so no provider key is put on the machine. Two switches change that:
+
+- **Let coding tools use the provider's own key instead of almyty**, on the environment's settings. Off by default. Turn it on only for a tool that cannot work through almyty; the key then sits on the machine.
+- **Let my hosted machines use this provider**, on a model provider you keep private (open it from **Credentials**). Only you, its owner, can turn it on, and only your own hosted machines can then use it. Providers shared with the whole organization need no switch.
+
+How long the record of machine minutes is kept is set in **Settings, Data retention**, under **Hosted machine minutes**. Left empty, the server's own default applies.
+
 ## For developers
 
-- The pages call the `/environments` API: `GET /environments` (with `enabled`, whether hosted machines are on), `POST`, `GET`, `PATCH` and `DELETE /environments/:id`, `GET /environments/:id/workspaces`, and `POST /environments/:id/workspaces/:workspaceId/suspend` and `/release`.
+- The pages call the `/environments` API: `GET /environments` (each row with `mine`, the caller's own machine, plus `enabled` and the form's `settings`), `POST`, `GET`, `PATCH` and `DELETE /environments/:id`, `GET /environments/:id/workspaces`, `GET /environments/:id/runs`, `GET /environments/usage`, and `POST /environments/:id/workspaces/:workspaceId/suspend` and `/release`.
 - An agent's choice is `agentConfig.environmentId`. The server refuses it together with `runnerId` or `runnerLabels`.
+- The vendor-key switch is `allowVendorKeys` on the environment; the provider switch is `hostedPodAccess` on the provider; the retention field is `runnerUsageDays`.
 - The Hosted tab is `/runners?tab=hosted`; an environment's page is `/runners/hosted/:id`.
 - Hosted machines are off unless the server runs with `HOSTED_RUNNERS_ENABLED=true`. The idle time range, the images offered and how long parked files are kept are server settings; see `docs/hosted-runners.md` in the repository.

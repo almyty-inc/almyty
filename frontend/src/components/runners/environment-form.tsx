@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { PlanHint } from '@/components/plan-indicator'
@@ -47,6 +48,7 @@ export function EnvironmentForm({ organizationId, settings, initial, submitLabel
   const [setupScript, setSetupScript] = useState(initial?.setupScript ?? '')
   const [sites, setSites] = useState((initial?.egress.allowHosts ?? []).join('\n'))
   const [idleMinutes, setIdleMinutes] = useState(String(initial?.idleTimeoutMinutes ?? idle.default))
+  const [allowVendorKeys, setAllowVendorKeys] = useState(initial?.allowVendorKeys ?? false)
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: initial?.visibility ?? 'private', teamId: initial?.teamId ?? null })
   const [tried, setTried] = useState(false)
   const shared = useEntitlement(SHARED_ENVIRONMENTS_ENTITLEMENT)
@@ -76,6 +78,7 @@ export function EnvironmentForm({ organizationId, settings, initial, submitLabel
       setupScript: setupScript.trim() ? setupScript : null,
       egress: { allowHosts, ...(initial?.egress.allowBinaries?.length ? { allowBinaries: initial.egress.allowBinaries } : {}) },
       idleTimeoutMinutes: minutes,
+      allowVendorKeys,
       visibility: visibility.visibility,
       teamId: visibility.visibility === 'team' ? visibility.teamId : null,
     })
@@ -146,6 +149,16 @@ export function EnvironmentForm({ organizationId, settings, initial, submitLabel
           ) : (
             <p className={hint}>The machine stops when nobody has used it for this long, and starts again when it is needed. Its files are kept. From {idle.min} to {idle.max}; {idle.default} if you leave it.</p>
           )}
+        </div>
+
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="env-vendor-keys">Let coding tools use the provider's own key instead of almyty</Label>
+            <p className={hint}>
+              Off: coding tools on the machine reach models through almyty, and no provider key is put on the machine. Turn it on only for a tool that cannot work through almyty; the key then sits on the machine.
+            </p>
+          </div>
+          <Switch id="env-vendor-keys" checked={allowVendorKeys} onCheckedChange={setAllowVendorKeys} />
         </div>
 
         <VisibilityField

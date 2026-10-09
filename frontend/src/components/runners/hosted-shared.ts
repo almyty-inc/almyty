@@ -26,9 +26,13 @@ export interface HostedEnvironment {
   egress: { allowHosts: string[]; allowBinaries?: string[] }
   resourceClass: string
   idleTimeoutMinutes: number
+  /** Let a model provider's own key into the machines, for a coding tool that cannot go through almyty. */
+  allowVendorKeys?: boolean
   version: number
   createdAt: string
   updatedAt?: string
+  /** The caller's own machine here; null when they have none yet. */
+  mine?: MyMachine | null
 }
 
 export type HostedMachineState =
@@ -42,6 +46,15 @@ export type HostedMachineState =
   | 'torn_down'
   | 'orphaned'
 
+export interface HostedMachine {
+  id: string
+  state: HostedMachineState
+  /** 1 when something asked for the pod; a fresh machine is pending with 0. */
+  desired?: { replicas: number } | null
+  lastActiveAt?: string | null
+  lastError: string | null
+}
+
 export interface HostedWorkspace {
   id: string
   ownerUserId: string
@@ -50,27 +63,36 @@ export interface HostedWorkspace {
   status: 'active' | 'suspended' | 'released' | 'expired' | 'stranded'
   lastActiveAt: string | null
   createdAt: string
-  machine: { id: string; state: HostedMachineState; lastActiveAt: string | null; lastError: string | null } | null
+  /** Kept from a member who left, beside the receiver's own: to copy from or delete, never to work in by default. */
+  readOnly?: boolean
+  inheritedFromUserId?: string | null
+  machine: HostedMachine | null
 }
 
-/** What the install allows. Read from the list response once the API sends it (`settings`); these are the shipped defaults until then. */
+/** The caller's own machine on an environment, as the list carries it (`mine`). */
+export interface MyMachine {
+  workspaceId: string
+  status: string
+  lastActiveAt: string | null
+  machine: HostedMachine | null
+}
+
+/** What the install allows, from the `settings` of GET /environments (also GET /environments/settings). */
 export interface HostedSettings {
   images: string[]
   idleTimeoutMinutes: { default: number; min: number; max: number }
   suspendedRetention: { keepDays: number }
 }
-
-export const HOSTED_DEFAULT_SETTINGS: HostedSettings = {
-  images: ['standard', 'standard-browser'],
-  idleTimeoutMinutes: { default: 15, min: 5, max: 120 },
-  suspendedRetention: { keepDays: 30 },
-}
-
 const positive = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0
 
-/** The settings a list response carries, each part falling back to the defaults when absent or unusable. */
-export function readHostedSettings(raw: unknown): HostedSettings {
-  const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, any>
+/**
+ * The install's settings as the API sends them, or null when it sent none
+ * that hold together. Nothing here invents a default: the form waits for
+ * the server's choices.
+ */
+export function readHostedSettings(raw: unknown): HostedSettings | null {
+  if (!raw || typeof raw !== 'object') return null
+  const s = raw as Record<string, any>
   const images = Array.isArray(s.images)
     ? s.images.filter((i: unknown) => typeof i === 'string' && i)
     : s.images && typeof s.images === 'object'
@@ -78,10 +100,12 @@ export function readHostedSettings(raw: unknown): HostedSettings {
       : []
   const idle = s.idleTimeoutMinutes ?? {}
   const idleOk = positive(idle.min) && positive(idle.max) && positive(idle.default) && idle.min <= idle.default && idle.default <= idle.max
+  const keepDays = s.suspendedRetention?.keepDays
+  if (!images.length || !idleOk || !positive(keepDays)) return null
   return {
-    images: images.length ? images : HOSTED_DEFAULT_SETTINGS.images,
-    idleTimeoutMinutes: idleOk ? { default: idle.default, min: idle.min, max: idle.max } : HOSTED_DEFAULT_SETTINGS.idleTimeoutMinutes,
-    suspendedRetention: positive(s.suspendedRetention?.keepDays) ? { keepDays: s.suspendedRetention.keepDays } : HOSTED_DEFAULT_SETTINGS.suspendedRetention,
+    images,
+    idleTimeoutMinutes: { default: idle.default, min: idle.min, max: idle.max },
+    suspendedRetention: { keepDays },
   }
 }
 
@@ -94,17 +118,18 @@ export function imageLabel(name: string): string {
   return IMAGE_LABELS[name] ?? name
 }
 
-/** The four states people see, plus a workspace that was let go. */
-export type MachineStatus = 'running' | 'parked' | 'waking' | 'failed' | 'released'
+/** The four states people see, a machine nothing has asked for yet, and a workspace that was let go. */
+export type MachineStatus = 'running' | 'parked' | 'waking' | 'idle' | 'failed' | 'released'
 
-export function machineStatus(w: Pick<HostedWorkspace, 'status' | 'machine'>): MachineStatus {
+export function machineStatus(w: { status: string; machine: { state: string; desired?: { replicas: number } | null } | null }): MachineStatus {
   if (w.status === 'released' || w.status === 'expired') return 'released'
   switch (w.machine?.state) {
     case 'ready':
       return 'running'
     case 'pending':
     case 'provisioning':
-      return 'waking'
+      // Starting only when something asked for the machine (desired.replicas 1).
+      return w.machine.desired && w.machine.desired.replicas === 0 ? 'idle' : 'waking'
     case 'failed':
       return 'failed'
     case 'tearing_down':
@@ -120,6 +145,7 @@ export const MACHINE_STATUS_LABEL: Record<MachineStatus, string> = {
   running: 'running',
   parked: 'parked',
   waking: 'waking',
+  idle: 'not started',
   failed: 'failed',
   released: 'released',
 }
@@ -128,6 +154,7 @@ export const MACHINE_STATUS_VARIANT: Record<MachineStatus, BadgeVariant> = {
   running: 'success',
   parked: 'secondary',
   waking: 'warning',
+  idle: 'outline',
   failed: 'destructive',
   released: 'outline',
 }
@@ -138,15 +165,9 @@ export function isLiveWorkspace(w: Pick<HostedWorkspace, 'status'>): boolean {
 }
 
 /** When a parked workspace's files are deleted if nobody uses it: last use plus the retention window. */
-export function filesKeptUntil(w: Pick<HostedWorkspace, 'lastActiveAt' | 'createdAt'>, keepDays: number): Date {
-  const from = new Date(w.lastActiveAt ?? w.createdAt).getTime()
-  return new Date(from + keepDays * 24 * 60 * 60 * 1000)
-}
-
-/** The caller's own live workspace (not an agent's), newest first; the one the list summarises. */
-export function ownWorkspace(rows: HostedWorkspace[], userId: string | undefined): HostedWorkspace | undefined {
-  if (!userId) return undefined
-  return rows.filter((w) => w.ownerUserId === userId && !w.agentId && isLiveWorkspace(w))[0]
+export function filesKeptUntil(w: { lastActiveAt: string | null; createdAt?: string }, keepDays: number, now = new Date()): Date {
+  const from = w.lastActiveAt ?? w.createdAt
+  return new Date((from ? new Date(from).getTime() : now.getTime()) + keepDays * 24 * 60 * 60 * 1000)
 }
 
 /** Lowercase letters, digits and dashes, starting with a letter: the name becomes part of its tools' names. */
@@ -165,3 +186,33 @@ export function isPlainHost(host: string): boolean {
 }
 
 export const SHARED_ENVIRONMENTS_ENTITLEMENT = 'hosted_shared_environments'
+
+/** GET /environments/usage: runner minutes in a period (this month by default). */
+export interface EnvironmentUsage {
+  from: string
+  to: string
+  environments: Array<{ environmentId: string; name: string; minutes: number; byClass: Record<string, number> }>
+  /** The whole organization; only owners and admins get it, null for everyone else. */
+  organization: { minutes: number; byClass: Record<string, number> } | null
+}
+
+/** GET /environments/:id/runs: runs of agents whose machine is this environment. */
+export interface EnvironmentRun {
+  id: string
+  kind: 'run' | 'execution'
+  agentId: string
+  agentName: string
+  status: string
+  userId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** Machine time in plain words: "0 min", "42 min", "3 h 5 min". */
+export function formatMinutes(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes))
+  if (total < 60) return `${total} min`
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return m ? `${h} h ${m} min` : `${h} h`
+}
