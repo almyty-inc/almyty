@@ -3038,7 +3038,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "1c65434857f2c56715ca7b3e39c68803ab0bd19caba89c84ff53ddc68dc4fa4b",
+      "sourceDigest": "9d8333608cadff0301eb066efb5aece3520781f8c30d4055ba14a4ed900ba862",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
@@ -3082,7 +3082,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a1e401e712ba66f17ac3099b486bfe6c5317976e388dca96a6a6c87f463451dc",
+      "sourceDigest": "46309c94159d1fdc8c21802a7d0ae1b9ccce853ae4ee069de896d024002719a1",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
