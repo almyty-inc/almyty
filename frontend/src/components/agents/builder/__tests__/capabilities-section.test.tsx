@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/setup'
 import { CapabilitiesSection } from '../capabilities-section'
@@ -7,6 +7,7 @@ vi.mock('@/store/organization', () => ({ useOrganizationStore: (select: any) => 
 vi.mock('@/lib/api', () => ({
   apisApi: { getAll: vi.fn().mockResolvedValue([]) },
   runnersApi: { getAll: vi.fn().mockResolvedValue([{ id: 'r1', name: 'Studio', state: 'online', labels: {} }, { id: 'r2', name: 'Build box', state: 'offline', labels: {} }]) },
+  environmentsApi: { list: vi.fn().mockResolvedValue({ success: true, enabled: true, data: [{ id: 'e1', name: 'web-app' }] }) },
 }))
 
 describe('agent runner choice', () => {
@@ -29,5 +30,25 @@ describe('agent runner choice', () => {
     renderWithProviders(<CapabilitiesSection toolIds={[]} onToolIdsChange={vi.fn()} tools={[]} agentConfig={{ runnerId: 'deleted-runner' }} onAgentConfigChange={vi.fn()} availableAgents={[]} />)
     expect(screen.getByRole('combobox', { name: 'Runs on' })).toHaveTextContent('Selected runner (unavailable)')
     expect(screen.getByText(/another machine is never substituted/)).toBeInTheDocument()
+  })
+  it('offers hosted environments and picking one clears the pinned runner and labels', async () => {
+    const user = userEvent.setup()
+    const change = vi.fn()
+    renderWithProviders(<CapabilitiesSection toolIds={[]} onToolIdsChange={vi.fn()} tools={[]} agentConfig={{ runnerId: 'r1', runnerLabels: { gpu: 'yes' } }} onAgentConfigChange={change} availableAgents={[]} />)
+    await user.click(screen.getByRole('combobox', { name: 'Runs on' }))
+    await user.click(await screen.findByRole('option', { name: 'web-app' }))
+    expect(change).toHaveBeenLastCalledWith({ runnerId: null, runnerLabels: '', environmentId: 'e1' })
+  })
+  it('shows a chosen environment, hides machine labels, and picking a runner clears the environment', async () => {
+    const user = userEvent.setup()
+    const change = vi.fn()
+    renderWithProviders(<CapabilitiesSection toolIds={[]} onToolIdsChange={vi.fn()} tools={[]} agentConfig={{ environmentId: 'e1' }} onAgentConfigChange={change} availableAgents={[]} />)
+    const select = screen.getByRole('combobox', { name: 'Runs on' })
+    await waitFor(() => expect(select).toHaveTextContent('web-app'))
+    expect(screen.getByText(/hosted environment/)).toBeInTheDocument()
+    expect(screen.queryByText('Advanced')).toBeNull()
+    await user.click(select)
+    await user.click(await screen.findByRole('option', { name: 'Studio (online)' }))
+    expect(change).toHaveBeenLastCalledWith({ runnerId: 'r1', environmentId: null })
   })
 })

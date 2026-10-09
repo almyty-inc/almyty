@@ -145,6 +145,15 @@ export class CreateLlmProviderBodyDto extends ModelAccessBodyDto {
 }
 
 export class UpdateLlmProviderBodyDto extends ModelAccessBodyDto {
+  /**
+   * The owner's one-click grant: let their hosted workspaces' coding CLIs
+   * use this private provider through the model pass-through. Only the
+   * owner of a private provider sets it.
+   */
+  @IsOptional()
+  @IsBoolean()
+  hostedPodAccess?: boolean;
+
   @IsOptional()
   @IsString()
   @MaxLength(100)

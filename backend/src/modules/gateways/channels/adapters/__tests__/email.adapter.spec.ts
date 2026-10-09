@@ -230,7 +230,14 @@ describe('EmailAdapter', () => {
       // HTML it arrived as one run-on line with part of it swallowed.
       const out = adapter.formatOutbound({ text: 'Meetings (2)\n- 10:00 Investor call\n- 14:00 Intro <Kestrel> & co' });
       expect(out.text).toBe('Meetings (2)\n- 10:00 Investor call\n- 14:00 Intro <Kestrel> & co');
-      expect(out.html).toBe('<div style="white-space:pre-wrap">Meetings (2)<br>- 10:00 Investor call<br>- 14:00 Intro &lt;Kestrel&gt; &amp; co</div>');
+      expect(out.html).toBe('<div style="white-space:pre-wrap">Meetings (2)<br>&bull; 10:00 Investor call<br>&bull; 14:00 Intro &lt;Kestrel&gt; &amp; co</div>');
+    });
+
+    it('shows the answer\'s markdown as formatting, and leaves the markers out of the text part', () => {
+      // The morning brief arrived with "**Conflicts**" in it.
+      const out = adapter.formatOutbound({ text: '## Your brief\n**Conflicts**: two\nSee [the calendar](https://calendar.example.com)' });
+      expect(out.html).toBe('<div style="white-space:pre-wrap"><strong>Your brief</strong><br><strong>Conflicts</strong>: two<br>See <a href="https://calendar.example.com">the calendar</a></div>');
+      expect(out.text).toBe('Your brief\nConflicts: two\nSee the calendar (https://calendar.example.com)');
     });
   });
 

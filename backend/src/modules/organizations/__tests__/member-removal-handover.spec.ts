@@ -55,10 +55,15 @@ describe('OrganizationsService: resource handover', () => {
       handOverPrivateResources: jest.fn(async (_m: any, args: any) => {
         calls.push('handover');
         args.wipedConnections?.push(wiped);
+        args.afterCommit?.push(async () => { calls.push('after commit'); });
         return auditRows;
       }),
       revokeWipedConnectionsAtProviders: jest.fn(async () => { calls.push('provider revoke'); }),
-      demoteTeamResources: jest.fn(async () => { calls.push('demote'); return auditRows; }),
+      demoteTeamResources: jest.fn(async (_m: any, args: any) => {
+        calls.push('demote');
+        args.afterCommit?.push(async () => { calls.push('after commit'); });
+        return auditRows;
+      }),
       // The real lookup, against the transaction's membership repository.
       longestStandingOtherOwner: jest.fn((m: any, orgId: string, exclude: string) =>
         ResourceHandoverHelper.prototype.longestStandingOtherOwner.call(null, m, orgId, exclude)),
@@ -87,12 +92,15 @@ describe('OrganizationsService: resource handover', () => {
         actorUserId: 'admin-1',
         reason: 'member_removed',
         wipedConnections: [t.wiped],
+        afterCommit: [expect.any(Function)],
       });
       expect(t.txMembership.remove).toHaveBeenCalledWith(target);
       // Handover and removal in one transaction; audit streamed after
       // commit; the wiped connections revoked at their providers last,
       // where a provider failing cannot undo the removal.
-      expect(t.calls).toEqual(['begin', 'handover', 'membership.remove', 'commit', 'publish', 'provider revoke']);
+      // What the hosted-environment handover left for after commit (stopping
+      // the leaver's pods, telling the new owner) runs only once it committed.
+      expect(t.calls).toEqual(['begin', 'handover', 'membership.remove', 'commit', 'publish', 'after commit', 'provider revoke']);
       expect(t.audit.publishCommitted).toHaveBeenCalledWith(t.auditRows);
       expect(t.handover.revokeWipedConnectionsAtProviders).toHaveBeenCalledWith([t.wiped], {
         userId: 'leaver',
@@ -168,9 +176,11 @@ describe('OrganizationsService: resource handover', () => {
         teamId: 'team-1',
         teamName: 'Platform',
         actorUserId: null,
+        afterCommit: [expect.any(Function)],
       });
       expect(t.txTeam.remove).toHaveBeenCalledWith(team);
-      expect(t.calls).toEqual(['begin', 'demote', 'team.remove', 'commit', 'publish']);
+      // Owners of environments the team shared are told after commit.
+      expect(t.calls).toEqual(['begin', 'demote', 'team.remove', 'commit', 'publish', 'after commit']);
       expect(t.teams.remove).not.toHaveBeenCalled();
     });
 

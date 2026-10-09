@@ -11,7 +11,7 @@ The screenshots in this tutorial come from a test installation with made-up peop
 ## What you need
 
 - **An almyty account** with an AI model connected (step 1 of the [founder's associate tutorial](/tutorials/founders-associate#1-connect-an-ai-model)).
-- **Gmail connected**, which the assistant sends from: steps 2 to 4 of the [founder's associate tutorial](/tutorials/founders-associate#2-register-almyty-with-google-once) (only the Gmail part).
+- **Gmail connected**, which the assistant sends from: steps 2 to 4 of the [founder's associate tutorial](/tutorials/founders-associate#2-register-your-own-google-app-once) (only the Gmail part; [Connect Google](/credentials/connect-google) has the details). Keep the `gmail.send` and `gmail.readonly` permissions ticked when you sign in.
 - **A HubSpot account** with your target companies and their contacts in it, and permission to create a private app (usually a HubSpot admin).
 - **A Slack workspace** where you can create an app (usually a Slack admin).
 - **Time:** about an hour.
@@ -30,20 +30,20 @@ https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/mai
 ![The link to HubSpot's companies description, pasted](/screenshots/tutorials/bizdev/01-hubspot-link.png)
 
 3. Open **Advanced**, set **Name** to `HubSpot Companies` and click **Connect API**.
-4. On **Finish connecting**, the key is set to **Sent as the hapikey query parameter**. That is HubSpot's old developer key, which no longer reads CRM data. Click **Change**.
+4. On **Finish connecting**, almyty has picked HubSpot's sign-in. Under **Sign-in**, click **Create one here**.
 
-![Finish connecting: 12 tools, the key sent as hapikey](/screenshots/tutorials/bizdev/02-hubspot-default-key.png)
+![Finish connecting: 12 tools, and a HubSpot sign-in needed](/screenshots/tutorials/bizdev/02-hubspot-default-key.png)
 
-5. Set **How it is sent** to **As a bearer token**.
+5. The form offers to sign in with a HubSpot app of your own. A private app's token is simpler: click **Paste an access token instead**.
 
-![How it is sent: As a bearer token](/screenshots/tutorials/bizdev/03-hubspot-bearer.png)
+![The HubSpot sign-in form, with Paste an access token instead](/screenshots/tutorials/bizdev/03-hubspot-bearer.png)
 
 6. **In HubSpot**, create a private app (**Settings → Integrations → Private Apps**; newer accounts find it under **Development** as a legacy app). Give it these scopes: `crm.objects.companies.read`, `crm.objects.contacts.read`, `crm.objects.deals.read` and `crm.objects.deals.write`. Copy its **access token**.
-7. **Back in almyty**, click **Create one here**, name it `HubSpot private app`, paste the token and click **Save**.
+7. **Back in almyty**, name it `HubSpot private app`, paste the token and click **Save**.
 
 ![The HubSpot private app token](/screenshots/tutorials/bizdev/04-hubspot-token.png)
 
-8. Do the same for contacts and deals, with these links. This time, after **Change → As a bearer token**, pick **HubSpot private app** from the list instead of creating a new one.
+8. Do the same for contacts and deals, with these links. This time, under **Sign-in**, pick **HubSpot private app** from the list instead of creating a new one.
 
 | Part | Link to paste |
 |---|---|
@@ -89,7 +89,7 @@ At every wake, check for replies to your outreach:
 
 ![The assistant's instructions and memory](/screenshots/tutorials/bizdev/06-agent-instructions.png)
 
-5. **Capabilities → Tools and APIs:** search for and tick these eight:
+5. **Capabilities → Tools and APIs:** search for and tick these eight. Each shows what it does, with the name below it:
 
 | Tool | What it does |
 |---|---|
@@ -145,7 +145,7 @@ Keep the outreach moving. At every wake, check Maya's sent emails for replies fr
 ![Standing instructions and a timer every 4 hours](/screenshots/tutorials/bizdev/11-always-on.png)
 
 3. **Talk to it yourself:** **Channel: Slack**, and your Slack member ID under **Your address there** (in Slack: your profile, the three dots, **Copy member ID**). Your messages then go into its standing conversation, and it answers you there.
-4. **What it may do on its own:** **Does things, and asks you first only before what you pick below**. Under **Ask me first before**, leave only `gmail_gmail_users_messages_send` ticked. (The HubSpot searches are ticked at first because HubSpot searches with the kind of request that usually changes data; untick them, or every search waits for you.)
+4. **What it may do on its own:** **Does things, and asks you first only before what you pick below**. Under **Ask me first before**, almyty ticks every tool that changes something. Leave only Gmail's send ticked ("Sends the specified message to the recipients ...", `gmail_gmail_users_messages_send`) and untick the HubSpot deal tools if you want it to add and move deals on its own.
 
 ![Ask me first before sending an email, and nothing else](/screenshots/tutorials/bizdev/12-ask-first.png)
 
@@ -195,21 +195,21 @@ Every 4 hours it wakes and checks your sent emails for answers. When a prospect 
 
 ## Good to know
 
-- **Ask first only applies to Always on.** The **Ask me first before** list holds the emails it sends while it works on its own, including everything you ask it in Slack as "you". If you try it with **Try it** on the Overview tab, or someone else writes to it, it sends straight away. Try it on a test address first.
-- **Only you, as "you".** Messages from other people in Slack run as the channel, and the channel cannot use your HubSpot or Gmail connections. The assistant then reports finding nothing.
+- **Ask first holds everywhere.** A tool on the **Ask me first before** list waits for your OK on every run: in Slack, in **Try it**, on a schedule, and when someone else writes to it.
+- **Other people in Slack.** When someone other than you writes to it, it can use only the accounts given to the agent. Open the agent's **Overview** tab and, under **Access**, click **Let this agent use ...** next to HubSpot and Gmail if they should be able to ask it too. Without access it answers "I don't have access to HubSpot Companies" instead of guessing.
 - **LinkedIn stays manual.** It only writes the messages; you send them.
 
 ## If something goes wrong
 
 | What you see | What to do |
 |---|---|
-| HubSpot calls fail with **401** | The key is still sent as `hapikey`. On the API's page, **Key → Change → As a bearer token**. |
+| HubSpot calls fail with **401** | The token is wrong or has expired, or the private app lacks a scope from step 1. Create a new token in HubSpot and replace it on **Credentials**. |
 | Every HubSpot search waits in **Approvals** | Untick the HubSpot tools under **Ask me first before** (step 4). |
 | Saving Always on does nothing | Look for the message in the corner: a Slack report needs a channel ID starting with `C`, not your member ID. |
 | It says it found no companies | Check the target profile against your CRM's own values (HubSpot's industries are codes such as `TRANSPORTATION_TRUCKING_RAILROAD`), and that you wrote to it as yourself. |
 | A reply it should have seen is not mentioned | It reads Gmail at most every few minutes; the next wake picks it up. |
 | Slack shows nothing after you write | Check **Event Subscriptions** in Slack shows the Request URL as **Verified**, and that `message.im` is subscribed. |
-| Always on was **paused because the agent woke more often in an hour than it may** | **Wake now** counts too. Wait an hour, or click **Turn it back on**. |
+| Always on was **paused because the agent woke more often in an hour than it may** | It woke itself in a loop (its own timer or channel messages; **Wake now** does not count). Check **What woke it lately** on its Always on page, then click **Turn it back on**. |
 
 ## Related
 

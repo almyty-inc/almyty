@@ -5,24 +5,30 @@ import userEvent from '@testing-library/user-event'
 import { render } from '../../test/setup'
 import { RunnersPage } from '../runners'
 
+// A pass-through mock, as runner-detail.test has: without it the tab switch
+// (setSearchParams) never reached the rendered location in this suite.
+vi.mock('react-router-dom', async () => ({ ...(await vi.importActual<typeof import('react-router-dom')>('react-router-dom')) }))
+
 vi.mock('../../lib/api', () => ({
   runnersApi: { getAll: vi.fn(), unregister: vi.fn() },
+  environmentsApi: { list: vi.fn(), usage: vi.fn().mockResolvedValue({ from: '', to: '', environments: [], organization: null }) },
+  organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
 }))
 
-vi.mock('../../store/organization', () => ({
-  useOrganizationStore: () => ({
-    currentOrganization: { id: 'test-org-id', name: 'Test Org' },
-  }),
-}))
+vi.mock('../../store/organization', () => {
+  const state = { currentOrganization: { id: 'test-org-id', name: 'Test Org' } }
+  return { useOrganizationStore: (select?: any) => (select ? select(state) : state) }
+})
 
 vi.mock('../../store/app', () => ({
   useNotifications: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }))
 
-import { runnersApi } from '../../lib/api'
+import { environmentsApi, runnersApi } from '../../lib/api'
 
 const mockedGetAll = runnersApi.getAll as ReturnType<typeof vi.fn>
 const mockedUnregister = runnersApi.unregister as ReturnType<typeof vi.fn>
+const mockedEnvList = environmentsApi.list as ReturnType<typeof vi.fn>
 
 describe('RunnersPage', () => {
   beforeEach(() => {
@@ -109,6 +115,32 @@ describe('RunnersPage', () => {
       const { user, dialog } = await openDelete()
       await user.click(within(dialog).getByRole('button', { name: 'Delete runner' }))
       await waitFor(() => expect(mockedUnregister).toHaveBeenCalledWith('r3'))
+    })
+  })
+  describe('tabs', () => {
+    it('opens on Your machines and switches to Hosted, where the header offers a new environment', async () => {
+      mockedGetAll.mockResolvedValue([makeRunner({ id: 'r1', name: 'mac-laptop', state: 'online' })])
+      mockedEnvList.mockResolvedValue({ success: true, enabled: true, data: [] })
+      const user = userEvent.setup()
+      render(<RunnersPage />)
+      expect(await screen.findByText('mac-laptop')).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Your machines' })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getByRole('button', { name: /start a runner/i })).toBeInTheDocument()
+      await user.click(screen.getByRole('tab', { name: 'Hosted' }))
+      expect(await screen.findByText('No hosted environments yet')).toBeInTheDocument()
+      expect(screen.queryByText('mac-laptop')).toBeNull()
+      expect(screen.queryByRole('button', { name: /start a runner/i })).toBeNull()
+      expect(screen.getAllByRole('button', { name: 'New environment' }).length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('shows the unavailable note and no create button when hosted machines are off', async () => {
+      mockedGetAll.mockResolvedValue([])
+      mockedEnvList.mockResolvedValue({ success: true, enabled: false, data: [] })
+      const user = userEvent.setup()
+      render(<RunnersPage />)
+      await user.click(await screen.findByRole('tab', { name: 'Hosted' }))
+      expect(await screen.findByText(/Hosted machines aren't available on this server/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'New environment' })).toBeNull()
     })
   })
 })

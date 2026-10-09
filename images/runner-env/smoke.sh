@@ -39,22 +39,32 @@ fi
 case "$FLAVOUR" in
   standard|standard-browser)
     # Every coding CLI starts as uid 1000 on a read-only root, and the
-    # entrypoint points them at almyty when the pod carries a model token.
-    pod -e ALMYTY_API_URL=https://api.example.test -e ALMYTY_MODEL_TOKEN=not-a-real-model-token \
+    # entrypoint points them at the runner's loopback model proxy, with a
+    # placeholder key, when the pod carries a model token and a proxy port.
+    pod -e ALMYTY_API_URL=https://api.example.test -e ALMYTY_MODEL_TOKEN=not-a-real-model-token -e ALMYTY_MODEL_PROXY_PORT=4319 \
       "$IMAGE" bash -euo pipefail -c '
         claude --version
         codex --version
         gemini --version
         aider --version
+        test "$ANTHROPIC_BASE_URL" = http://127.0.0.1:4319
+        test "$ANTHROPIC_AUTH_TOKEN" = almyty-pod-local
+        test -z "${ANTHROPIC_API_KEY:-}"
+        test "$OPENAI_BASE_URL" = http://127.0.0.1:4319/v1
+        test "$OPENAI_API_KEY" = almyty-pod-local
+        test "$AIDER_OPENAI_API_BASE" = http://127.0.0.1:4319/v1
+        test "$AIDER_ANTHROPIC_API_KEY" = almyty-pod-local
+        grep -qxF "base_url = \"http://127.0.0.1:4319/v1\"" "$HOME/.codex/config.toml"
+        test -f "$HOME/.claude.json"
+      '
+    # Without a proxy port (an older backend) they get the token directly.
+    pod -e ALMYTY_API_URL=https://api.example.test -e ALMYTY_MODEL_TOKEN=not-a-real-model-token \
+      "$IMAGE" bash -euo pipefail -c '
         test "$ANTHROPIC_BASE_URL" = https://api.example.test
         test "$ANTHROPIC_AUTH_TOKEN" = not-a-real-model-token
-        test -z "${ANTHROPIC_API_KEY:-}"
         test "$OPENAI_BASE_URL" = https://api.example.test/v1
         test "$OPENAI_API_KEY" = not-a-real-model-token
-        test "$AIDER_OPENAI_API_BASE" = https://api.example.test/v1
-        test "$AIDER_ANTHROPIC_API_KEY" = not-a-real-model-token
         grep -qxF "base_url = \"https://api.example.test/v1\"" "$HOME/.codex/config.toml"
-        test -f "$HOME/.claude.json"
       '
     # Without a model token nothing is set for them, and a family the pod
     # configured itself is left alone.

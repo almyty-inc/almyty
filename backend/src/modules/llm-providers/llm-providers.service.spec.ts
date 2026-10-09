@@ -410,6 +410,31 @@ describe('LlmProvidersService', () => {
       expect(store.rows).toHaveLength(1);
     });
 
+    it('lets the owner of a private provider grant it to their hosted workspaces in one click, and nobody grants an org-wide one', async () => {
+      const mine: any = {
+        id: 'provider-1', name: 'Mine', type: LlmProviderType.OPENAI, organizationId: 'org-1',
+        visibility: 'private', ownerUserId: 'user-1', hostedPodAccess: false, configuration: {}, capabilities: {},
+      };
+      Object.setPrototypeOf(mine, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mine);
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider('provider-1', { hostedPodAccess: true }, 'org-1', 'user-1');
+      expect(mine.hostedPodAccess).toBe(true);
+      await service.updateProvider('provider-1', { hostedPodAccess: false }, 'org-1', 'user-1');
+      expect(mine.hostedPodAccess).toBe(false);
+
+      const shared: any = {
+        id: 'provider-2', name: 'Shared', type: LlmProviderType.OPENAI, organizationId: 'org-1',
+        visibility: 'org', ownerUserId: 'user-1', hostedPodAccess: false, configuration: {}, capabilities: {},
+      };
+      Object.setPrototypeOf(shared, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(shared);
+      await expect(service.updateProvider('provider-2', { hostedPodAccess: true }, 'org-1', 'user-1')).rejects.toThrow(BadRequestException);
+      expect(shared.hostedPodAccess).toBe(false);
+    });
+
     it('points at a shared connection on credentialId, releases the managed row, and null clears it', async () => {
       const shared = store.seed({ organizationId: 'org-1', name: 'Team OpenAI', config: { apiKey: 'shared-key' }, connectorKey: 'openai', healthStatus: 'valid' });
       const mockProvider: any = {

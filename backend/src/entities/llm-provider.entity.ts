@@ -380,6 +380,14 @@ export class LlmProvider {
   @Column({ type: 'jsonb', nullable: true })
   allowedModels: string[] | null;
 
+  /**
+   * The owner's one-click grant (2026-10-02): a private provider their
+   * hosted workspaces' coding CLIs may use through the model pass-through.
+   * Organization-wide providers need no grant; a team's is never used.
+   */
+  @Column({ type: 'boolean', default: false })
+  hostedPodAccess: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

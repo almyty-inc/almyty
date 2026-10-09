@@ -144,6 +144,8 @@ export async function runAgent(opts: {
   approvals?: { create: jest.Mock; findInOrganization?: jest.Mock };
   /** run_code (code mode): a CodeModeService, for a case whose agent writes scripts. */
   codeMode?: any;
+  /** The trace privacy pass (RunTracePrivacyService), when a case checks what the stored steps keep. */
+  tracePrivacy?: any;
   /** More members of the organization, besides u-1 (a scheduled run acts as the agent's owner). */
   members?: string[];
 }) {
@@ -324,6 +326,7 @@ export async function runAgent(opts: {
     // double a memory case hands in, or nothing.
     memoryAccounts: opts.memoryAccounts,
     toolExecutorService,
+    tracePrivacy: opts.tracePrivacy,
     // The approvals service, for a case whose tool calls an approval rule holds.
     approvals: opts.approvals,
     llmProvidersService,

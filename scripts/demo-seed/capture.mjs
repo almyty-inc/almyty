@@ -42,6 +42,7 @@ async function ids(page) {
   const credentials = arr(await get('/credentials'), 'credentials')
   const runners = arr(await get('/runners'), 'runners')
   const approvals = arr(await get('/approvals'), 'approvals')
+  const environments = arr(await get('/environments'), 'environments')
   const by = (rows, name) => rows.find((r) => r.name === name)?.id
   const support = by(agents, 'Customer Support Orchestrator')
   const channels = support ? arr(await get(`/agents/${support}/channels`), 'channels') : []
@@ -56,6 +57,8 @@ async function ids(page) {
     tool: tools.find((t) => t.name === 'northwind_orders_track_shipment')?.id,
     runner: runners[0]?.id, approval: approvals.find((a) => a.status === 'pending')?.id ?? approvals[0]?.id,
     credential: credentials.find((c) => c.name === 'Northwind Slack app')?.id,
+    envWebApp: by(environments, 'web-app'),
+    keeper: by(agents, 'Pet store keeper'),
   }
 }
 
@@ -114,6 +117,9 @@ export const SHOTS = {
   'approval-refund-820': ['approval-refund-820.png', () => '/approvals', 2560, 1600, 'Refund approval', src('frontend/src/pages/approvals.tsx', 'frontend/src/components/entitlement-gate.tsx'), async (p) => { await p.getByText(/Refund of \$820/).first().click().catch(() => {}); await p.waitForTimeout(600) }],
   'runners-list': ['runners-list.png', () => '/runners', 2880, 1800, 'Runners', src('frontend/src/pages/runners.tsx', 'frontend/src/pages/runners-shared.ts', 'frontend/src/components/runners')],
   'runner-detail': ['runner-detail.png', (i) => `/runners/${i.runner}`, 2880, 1800, 'Runner detail', src('frontend/src/pages/runner-detail.tsx', 'frontend/src/pages/runners-shared.ts', 'frontend/src/components/runners')],
+  'runners-hosted': ['runners-hosted.png', () => '/runners?tab=hosted', 2880, 1500, 'Hosted environments', src('frontend/src/pages/runners.tsx', 'frontend/src/pages/runners-shared.ts', 'frontend/src/components/runners')],
+  'environment-new': ['environment-new.png', () => '/runners/hosted/new', 2880, 2600, 'New environment', src('frontend/src/pages/environment-new.tsx', 'frontend/src/components/runners', 'frontend/src/components/plan-indicator.tsx')],
+  'environment-detail': ['environment-detail.png', (i) => `/runners/hosted/${i.envWebApp}`, 2880, 1800, 'Hosted environment', src('frontend/src/pages/environment-detail.tsx', 'frontend/src/pages/environment-new.tsx', 'frontend/src/components/runners')],
   'analytics-overview': ['analytics-overview.png', () => '/analytics', 2880, 1800, 'Analytics overview', src('frontend/src/pages/analytics.tsx', 'frontend/src/components/analytics')],
   'analytics-agents': ['analytics-agents.png', () => '/analytics/agents', 2880, 1800, 'Analytics: agents', src('frontend/src/pages/analytics.tsx', 'frontend/src/components/analytics')],
   'analytics-tools': ['analytics-tools.png', () => '/analytics/tools', 2880, 1800, 'Analytics: tools', src('frontend/src/pages/analytics.tsx', 'frontend/src/components/analytics')],
@@ -130,6 +136,14 @@ export const SHOTS = {
   'settings-compliance-enabled': ['settings-compliance-enabled.png', () => '/settings/compliance', 2880, 2400, 'Compliance', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings')],
   'settings-audit-streams-enabled': ['settings-audit-streams-enabled.png', () => '/settings/audit-streams', 2880, 2400, 'Audit streaming', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings')],
   'settings-encryption-locked': ['settings-encryption-locked.png', () => '/settings/encryption', 2880, 1440, 'Encryption (Enterprise, locked)', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings')],
+  // Code mode and tool details. The script run and its change set are fixtures seed.mjs writes (codeMode).
+  'agent-tool-mode': ['agent-tool-mode.png', (i) => `/agents/${i.support}/edit`, 2880, 1800, 'How the model sees its tools', src('frontend/src/components/agents/builder/capabilities-section.tsx', 'frontend/src/pages/agent-builder.tsx'), heading('How the model sees its tools')],
+  'builder-code-step': ['builder-code-step.png', (i) => `/agents/${i.keeper}/edit`, 2880, 1800, 'A Code step in the builder', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (p) => { await p.locator('.react-flow__node-code').first().click(); await p.waitForTimeout(800) }],
+  'run-script-step': ['run-script-step.png', (i) => `/agents/${i.support}?tab=runs`, 2880, 1944, 'A script step in a run', src('frontend/src/components/agents/detail/code-step.tsx', 'frontend/src/components/agents/detail/runs-tab.tsx', 'frontend/src/components/approvals'), async (p) => { await p.getByText(/Brightway wants \$820 back/).first().click(); await p.waitForTimeout(1000); await p.getByRole('button', { name: /Show script/ }).first().click(); await p.waitForTimeout(1000); const s = p.getByText('Steps', { exact: true }).first(); await s.evaluate((e) => e.scrollIntoView({ block: 'start' })); await p.evaluate(() => { const m = document.querySelector('main'); if (m) m.scrollBy(0, -200); window.scrollBy(0, -200) }); await p.waitForTimeout(400) }],
+  'approvals-change-set': ['approvals-change-set.png', () => '/approvals', 2880, 1944, "A script's changes in Approvals", src('frontend/src/pages/approvals.tsx', 'frontend/src/components/approvals'), async (p) => { const c = p.getByText(/A script wants to make 1 change/).first(); await c.evaluate((e) => e.scrollIntoView({ block: 'start' })); await p.evaluate(() => { const m = document.querySelector('main'); if (m) m.scrollBy(0, -90); window.scrollBy(0, -90) }); await p.waitForTimeout(400) }],
+  'gateway-exposure': ['gateway-exposure.png', (i) => `/gateways/${i.gwPetstore}`, 2800, 1750, "How apps see a gateway's tools", src('frontend/src/pages/gateway-detail.tsx', 'frontend/src/components/gateways', 'frontend/src/components/agents/builder/capabilities-section.tsx'), heading('How apps see the tools')],
+  'tool-side-effect': ['tool-side-effect.png', (i) => `/tools/${i.tool}?tab=details`, 2880, 1800, 'What a tool does to your data', src('frontend/src/pages/tool-detail.tsx', 'frontend/src/components/tools'), section('What it does to your data')],
+  'visitor-data-request': ['visitor-data-request.png', (i) => `/agents/${i.support}/channels/visitor-data`, 2800, 1750, 'Visitor data request', src('frontend/src/pages/agent-visitor-data.tsx', 'frontend/src/components/channels/visitor-data-request.tsx')],
   'auth-register': ['auth-register.png', () => '/auth/register', 1440, 989, 'Create account', src('frontend/src/pages/auth'), null, 1, true],
 }
 

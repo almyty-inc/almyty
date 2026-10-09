@@ -1,4 +1,9 @@
 import { GatewaysModule } from '../gateways/gateways.module';
+import { RunTracePrivacyService } from './run-trace-privacy.service';
+import { Model } from '../../entities/model.entity';
+import { HostedModelCall } from '../../entities/hosted-model-call.entity';
+import { ModelPassThroughService } from './model-pass-through.service';
+import { ModelPassThroughController } from './model-pass-through.controller';
 import { AgentApiAccessService } from './agent-api-access.service';
 import { AgentApiAccessController } from './agent-api-access.controller';
 import { Module, forwardRef } from '@nestjs/common';
@@ -94,6 +99,9 @@ import { BudgetsModule } from '../budgets/budgets.module';
       AgentRun,
       Tool,
       LlmProvider,
+      // The model pass-through: catalog cards, and the spend a pod's calls make.
+      Model,
+      HostedModelCall,
       Gateway,
       GatewayTool,
       User,
@@ -135,9 +143,15 @@ import { BudgetsModule } from '../budgets/budgets.module';
     AgentIdentityService, AgentIdentityReachService,
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
     // Carries a workflow run on once the change sets its Code steps wait on are decided.
-    WorkflowApprovalResumeService],
+    WorkflowApprovalResumeService,
+    // Personal data hidden in the traces runs store.
+    RunTracePrivacyService,
+    // Hosted pods' coding CLIs: their own calls, forwarded to an organization-wide provider.
+    ModelPassThroughService],
   controllers: [AgentApiAccessController, AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
-    AgentIdentityReachController],
+    AgentIdentityReachController,
+    // The model pass-through's own routes: /v1/responses, /v1/messages/count_tokens (hosted pods only).
+    ModelPassThroughController],
   exports: [AgentApiAccessService,
     AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService, AgentExecutionCancellationService,
     // Channels and connections wake always-on agents through it.

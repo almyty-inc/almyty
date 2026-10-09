@@ -1,10 +1,10 @@
 # Compliance pack
 
-Make safety filters mandatory for every agent in your organization, and get a report you can hand to an auditor. For example: every agent must hide credit card numbers and email addresses before they reach a model, and any risky request is blocked, not just logged.
+Make safety filters mandatory for every agent in your organization, and get a report you can hand to an auditor. For example: credit card numbers and email addresses never appear in your logs or in answers to outside systems, and any risky request is blocked, not just logged.
 
 almyty has two built-in safety filters that any agent can use:
 
-- **PII filter**: hides personal data (PII, personally identifiable information) such as email addresses, phone numbers, credit card numbers and social security numbers.
+- **PII filter**: hides personal data (PII, personally identifiable information) such as email addresses, phone numbers, credit card numbers and social security numbers, wherever it is kept or leaves almyty: the record of each tool call, the steps a run shows under **Runs** (a workflow run's once it has finished), the audit log, and the answers a tool gives to an outside caller through a gateway. It does not change what a tool is called with: a tool that looks up a calendar or searches mail gets the real address, or it would look up the wrong thing.
 - **Security scanner**: checks requests, responses and tool inputs for attack patterns (such as attempts to inject database commands or scripts) and acts on what it finds above a severity you choose.
 
 Without the compliance pack each agent opts in on its own. The compliance pack, on the **Business** and **Enterprise** plans, turns them into an organization-wide rule. It is the practical side of the [Compliance](/compliance) page: regulators want controls that apply everywhere, not good intentions agent by agent.

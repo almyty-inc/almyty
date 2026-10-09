@@ -14,6 +14,7 @@ import {
   Optional,
   HttpCode,
   Param,
+  Inject,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -38,6 +39,8 @@ import {
 } from './compat-conversation.helper';
 import { agentsForKey, authenticateCompatKey, resolveCompatAgent, touchCompatKeyLastUsed } from './compat-auth.helper';
 import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
+import { HOSTED_MODEL_TOKENS, type HostedModelTokens, presentedToken } from '../hosted-runners/hosted-model-token.contract';
+import { ModelPassThroughService } from './model-pass-through.service';
 import { BudgetExceededException } from '../budgets/budget-exceeded.exception';
 
 /** Maximum request body size in bytes (1 MB). */
@@ -71,6 +74,11 @@ export class AgentOpenAICompatController {
     // positional spec harnesses' order; a request refuses to run without it.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
     @Optional() private readonly endpointAccess?: AgentApiAccessService,
+    // Hosted pods' model tokens (hosted-runners). Optional: without hosted
+    // runners a pod token is just an unknown key.
+    @Optional() @Inject(HOSTED_MODEL_TOKENS) private readonly podTokens?: HostedModelTokens,
+    // Where a pod token's calls go: the model pass-through, never an agent.
+    @Optional() private readonly passThrough?: ModelPassThroughService,
   ) {
     this.rateLimiter = new CompatRateLimiter('openai_rl', this.logger, this.redis);
   }
@@ -98,11 +106,20 @@ export class AgentOpenAICompatController {
     let agentId = 'unknown';
 
     try {
+      // A hosted pod's model token is tried first and, when it is one,
+      // only: the call is the CLI's own, forwarded to an organization-wide
+      // provider (the model pass-through), never an agent run.
+      const podKey = await this.podTokens?.authenticate(presentedToken(auth));
+      if (podKey) {
+        if (!this.passThrough) throw new Error('The model pass-through is not configured');
+        return await this.passThrough.forward(podKey, 'openai_chat', body, req, res);
+      }
+
       // 0. Validate request body size
       this.validateRequestBodySize(body);
 
       // 1. Authenticate via Bearer token (API key)
-      const apiKey = await this.endpointAccess?.authenticateTarget(body?.model, req) ?? await this.authenticateApiKey(auth);
+      const apiKey = (await this.endpointAccess?.authenticateTarget(body?.model, req)) ?? (await this.authenticateApiKey(auth));
       apiKeyLast4 = this.getKeyLast4(auth);
 
       // Rate limit tracking
@@ -210,7 +227,13 @@ export class AgentOpenAICompatController {
     @Req() req: Request = undefined,
   ) {
     try {
-      const apiKey = await this.endpointAccess?.authenticateTarget(undefined, req) ?? await this.authenticateApiKey(auth);
+      const podKey = await this.podTokens?.authenticate(presentedToken(auth));
+      if (podKey) {
+        // A pod lists the models of the organization-wide providers, not agents.
+        const models = (await this.passThrough?.listModels(podKey.organizationId, podKey.userId)) ?? [];
+        return res.json({ object: 'list', data: models.map((m) => ({ id: m.id, object: 'model', created: m.created, owned_by: m.ownedBy })) });
+      }
+      const apiKey = (await this.endpointAccess?.authenticateTarget(undefined, req)) ?? (await this.authenticateApiKey(auth));
 
       // Touch lastUsedAt (throttled partial update)
       await this.touchApiKeyLastUsed(apiKey);
@@ -250,7 +273,14 @@ export class AgentOpenAICompatController {
     @Req() req: Request = undefined,
   ) {
     try {
-      const apiKey = await this.endpointAccess?.authenticateTarget(model, req) ?? await this.authenticateApiKey(auth);
+      const podKey = await this.podTokens?.authenticate(presentedToken(auth));
+      if (podKey) {
+        // A pod's CLI checks the model it was given: answered from the pass-through's list.
+        const found = (await this.passThrough?.listModels(podKey.organizationId, podKey.userId))?.find((m) => m.id === model);
+        if (!found) return this.sendOpenAIError(res, 404, `The model '${model}' does not exist or you do not have access to it.`, 'invalid_request_error', 'model_not_found');
+        return res.json({ id: found.id, object: 'model', created: found.created, owned_by: found.ownedBy });
+      }
+      const apiKey = (await this.endpointAccess?.authenticateTarget(model, req)) ?? (await this.authenticateApiKey(auth));
       await this.touchApiKeyLastUsed(apiKey);
       if (!this.executionAccess) throw new Error('Agent execution access check is not configured');
       const agent = await resolveCompatAgent(this.agentsService, model, apiKey, this.executionAccess);

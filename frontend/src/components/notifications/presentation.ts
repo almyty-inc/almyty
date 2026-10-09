@@ -7,6 +7,7 @@ import {
   Archive,
   Bell,
   CircleSlash,
+  Cloud,
   Sparkles,
   Coins,
   Gift,
@@ -144,6 +145,24 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
     accentClass: 'text-amber-500',
     label: 'Model no longer available',
     description: 'A model stopped working on a provider connection. Emailed at once when an agent uses it, otherwise in the daily summary.',
+  },
+  'environments.workspace_expiring': {
+    icon: Cloud,
+    accentClass: 'text-amber-500',
+    label: 'Hosted files to be deleted',
+    description: 'A parked hosted machine nobody has used for a while will have its files deleted soon. Use it before then to keep them.',
+  },
+  'environments.handed_over': {
+    icon: Cloud,
+    accentClass: 'text-cyan-500',
+    label: 'Hosted environment handed to you',
+    description: 'A member left the organization, so their hosted environments are now yours to look after. Nothing was deleted.',
+  },
+  'environments.unshared': {
+    icon: Cloud,
+    accentClass: 'text-amber-500',
+    label: 'Hosted environment private again',
+    description: 'The team an environment was shared with was deleted, so only you can see and use it now. Share it again from its page if others need it.',
   },
   'account.welcome': {
     icon: User,

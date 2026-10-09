@@ -1,5 +1,5 @@
 import { InjectQueue, OnQueueFailed, Process, Processor } from '@nestjs/bull';
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Job, Queue } from 'bull';
 import { In, Not, Repository } from 'typeorm';
@@ -13,15 +13,16 @@ import { canAcceptWork } from '../runner/runner-state';
 import { HostedAdapterRegistry } from './adapters/adapter.registry';
 import { HostedActual, HostedAdapterCredentials, HostedProvisionRequest, HostedRef, HostedRunnerAdapter } from './adapters/hosted-runner-adapter.interface';
 import { EnrollmentService, HOSTED_RENEW_PATH, HOSTED_STREAM_PATH } from './enrollment.service';
-import { HostedRunnerSettingsService } from './hosted-runner-settings';
+import { HostedRunnerSettings, HostedRunnerSettingsService } from './hosted-runner-settings';
 import { HostedUsageService } from './hosted-usage.service';
 import { HOSTED_RECONCILE_JOB, HOSTED_RECONCILE_QUEUE, HostedRunnersService, TERMINAL_HOSTED_STATES } from './hosted-runners.service';
+import { HostedModelTokenService } from './hosted-model-token.service';
 
 const SWEEP_JOB = 'sweep';
 const REPEAT_JOB_ID = 'hosted-runner-reconcile-sweep';
 
 /** Errors that say the configuration is wrong, not that the cluster blinked. */
-const TERMINAL_ERROR_CODES = ['CREDENTIAL_NOT_FOUND', 'CREDENTIAL_INACTIVE', 'CREDENTIAL_EXPIRED', 'CREDENTIAL_INVALID', 'CONNECTION_NOT_GRANTED'];
+const TERMINAL_ERROR_CODES = ['CREDENTIAL_NOT_FOUND', 'CREDENTIAL_INACTIVE', 'CREDENTIAL_EXPIRED', 'CREDENTIAL_INVALID', 'CONNECTION_NOT_GRANTED', 'VENDOR_KEY_NOT_ALLOWED'];
 
 /** What the reconcile loop is allowed to write, by column. */
 type ObservedColumns = Partial<Pick<HostedRunner, 'state' | 'actual' | 'externalRef' | 'lastError' | 'lastReconcileAt' | 'environmentVersion' | 'desired'>>;
@@ -54,6 +55,8 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
     private readonly enrollment: EnrollmentService,
     private readonly usage: HostedUsageService,
     private readonly settings: HostedRunnerSettingsService,
+    // Optional only for the positional harnesses; Nest always injects it.
+    @Optional() private readonly modelTokens?: HostedModelTokenService,
   ) {}
 
   cron(): string | undefined {
@@ -142,7 +145,7 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
 
       if (!hr.externalRef) {
         if (!(await this.claim(hr))) return hr;
-        const ref = await adapter.provision(await this.provisionRequest(hr, env), creds);
+        const ref = await adapter.provision(await this.provisionRequest(hr, env, workspace), creds);
         await this.writeObserved(hr, { externalRef: ref, environmentVersion: env.version, lastError: null });
         await this.workspaces.update({ id: workspace!.id }, { volumeRef: { name: String(ref.volume ?? ''), sizeGi: this.sizeOf(hr).volumeGi, provider: adapter.key } });
         this.service.audit(hr, AuditAction.HOSTED_RUNNER_TRANSITION, null, { provisioned: true });
@@ -193,15 +196,24 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
     }
 
     if (actual.replicas === 0) {
-      // A newer environment version is applied while there is no pod yet.
-      if (hr.environmentVersion !== env.version) {
-        await adapter.provision(await this.provisionRequest(hr, env), creds);
+      // A newer environment version is applied while there is no pod yet,
+      // and an inherited workspace's objects are re-applied with its volume
+      // read-only (it may have been handed over since they were made).
+      if (hr.environmentVersion !== env.version || workspace.readOnly) {
+        await adapter.provision(await this.provisionRequest(hr, env, workspace), creds);
         await this.writeObserved(hr, { environmentVersion: env.version });
       }
       // A fresh single-use token and freshly resolved variables every
-      // start, so a secret rotated in the store reaches this wake.
+      // start, so a secret rotated in the store reaches this wake. The
+      // pod model token is minted here too (the previous one of this
+      // machine stops) and, like every secret, reaches the pod only through
+      // its Secret. A vendor key the environment binds itself (only with
+      // allowVendorKeys) makes the entrypoint leave that vendor's CLI alone.
       const token = await this.enrollment.mint(hr, now);
-      const secretEnv = { ...(await this.service.resolveSecretEnv(env, workspace)), ALMYTY_ENROLLMENT_TOKEN: token };
+      const bound = await this.service.resolveSecretEnv(env, workspace);
+      const modelToken = this.modelTokens ? await this.modelTokens.mint(hr, workspace.ownerUserId, now) : null;
+      const modelExpiry = this.modelTokens && modelToken ? this.modelTokens.expiryFrom(now) : null;
+      const secretEnv = { ...bound, ...modelTokenEnv(modelToken, modelExpiry), ALMYTY_ENROLLMENT_TOKEN: token };
       await adapter.rotateEnrollment(ref, secretEnv, creds);
       await adapter.scale(ref, 1, creds);
       return this.transition(hr, 'provisioning', { actual: { ...observed, enrollIssuedAt: now.toISOString(), readyAt: null } }, { reason: 'wake' });
@@ -233,6 +245,8 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
     now: Date,
   ): Promise<HostedRunner> {
     const ref = hr.externalRef as HostedRef;
+    // The pod is going: its model token stops now, not when it is gone.
+    await this.modelTokens?.revoke(hr.id, 'pod_stopped', now);
     if (actual.replicas > 0) {
       await adapter.scale(ref, 0, creds);
       return this.transition(hr, 'suspending', { actual: observed });
@@ -252,6 +266,7 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
 
   private async teardown(hr: HostedRunner, adapter: HostedRunnerAdapter, creds: HostedAdapterCredentials, now: Date, keepVolume: boolean): Promise<HostedRunner> {
     if (hr.state !== 'tearing_down') await this.transition(hr, 'tearing_down');
+    await this.modelTokens?.revoke(hr.id, 'torn_down', now);
     if (hr.externalRef) await adapter.teardown(hr.externalRef as HostedRef, { keepVolume }, creds);
     await this.usage.close(hr.id, now);
     if (hr.runnerId) await this.runners.update({ id: hr.runnerId }, { state: RunnerState.OFFLINE });
@@ -295,6 +310,7 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
       return hr;
     }
     await this.usage.close(hr.id, now);
+    await this.modelTokens?.revoke(hr.id, 'torn_down', now);
     await this.workspaces.update(
       { id: workspace.id, status: In([WorkspaceStatus.ACTIVE, WorkspaceStatus.SUSPENDED]) },
       { status: WorkspaceStatus.RELEASED, closedAt: now, closeReason: { kind: 'released', detail: 'its volume no longer exists in the cluster' } },
@@ -304,6 +320,7 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
   }
 
   private async fail(hr: HostedRunner, message: string): Promise<HostedRunner> {
+    await this.modelTokens?.revoke(hr.id, 'failed');
     return this.transition(hr, 'failed', { lastError: message.slice(0, 2000) }, { error: message.slice(0, 500) });
   }
 
@@ -335,7 +352,7 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
   }
 
   /** Everything the adapter needs; plain settings only, secrets go through rotateEnrollment. */
-  async provisionRequest(hr: HostedRunner, env: Environment): Promise<HostedProvisionRequest> {
+  async provisionRequest(hr: HostedRunner, env: Environment, workspace?: Pick<Workspace, 'readOnly'> | null): Promise<HostedProvisionRequest> {
     const s = this.settings.current;
     const capacity = await this.service.capacityFor(hr.organizationId);
     const size = this.sizeOf(hr);
@@ -373,10 +390,14 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
         ...(env.setupScript ? { ALMYTY_SETUP_SCRIPT: env.setupScript } : {}),
         ALMYTY_CACHE_PATHS: JSON.stringify(env.cache?.paths ?? []),
         ...(env.egress?.allowBinaries?.length ? { ALMYTY_ALLOW_BINARIES: JSON.stringify(env.egress.allowBinaries) } : {}),
+        // Coding CLIs reach models through the runner's loopback model proxy,
+        // which holds the pod model token (Decision 6).
+        ...modelProxyEnv(s),
       },
       secretEnv: {},
       quota: { maxConcurrentRunners: capacity.maxConcurrentRunners, maxWorkspaces: capacity.maxWorkspaces, podResources: { name: biggestName, ...biggest } },
       providerConfig: hr.providerConfig ?? {},
+      readOnlyWorkspace: workspace?.readOnly === true,
     };
   }
 }
@@ -387,6 +408,28 @@ function safeHost(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Where the runner renews the pod model token, with the token itself. */
+export const HOSTED_MODEL_TOKEN_RENEW_PATH = '/runners/hosted/model-token';
+
+/**
+ * The pod model token, as the Secret carries it: the names the runner-env
+ * images read (images/runner-env/entrypoint.sh). The runner takes it out
+ * of the environment, serves it to the coding CLIs through its loopback
+ * model proxy and renews it before it expires; the CLIs never hold it.
+ */
+export function modelTokenEnv(token: string | null, expiresAt: Date | null): Record<string, string> {
+  if (!token) return {};
+  return { ALMYTY_MODEL_TOKEN: token, ...(expiresAt ? { ALMYTY_MODEL_TOKEN_EXPIRES_AT: expiresAt.toISOString() } : {}) };
+}
+
+/** The plain variables of the runner's model proxy: where it listens and where it renews. */
+export function modelProxyEnv(settings: Pick<HostedRunnerSettings, 'modelAccess'>): Record<string, string> {
+  return {
+    ALMYTY_MODEL_PROXY_PORT: String(settings.modelAccess.localProxyPort),
+    ALMYTY_MODEL_RENEW_PATH: HOSTED_MODEL_TOKEN_RENEW_PATH,
+  };
 }
 
 /** What the adapter saw, minus anything that is not a plain observation. */

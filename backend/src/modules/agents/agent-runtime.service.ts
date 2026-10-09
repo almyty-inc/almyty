@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef, OnModuleInit } from '@nestjs/common';
+import { RunTracePrivacyService } from './run-trace-privacy.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Workspace } from '../../entities/workspace.entity';
@@ -212,6 +213,9 @@ export class AgentRuntimeService implements OnModuleInit {
     @Optional()
     @InjectRepository(Workspace)
     readonly workspaceRepository?: Repository<Workspace>,
+    // Personal data hidden in the steps a run stores (run-trace-privacy.service).
+    @Optional()
+    readonly tracePrivacy?: RunTracePrivacyService,
   ) {}
 
   /**

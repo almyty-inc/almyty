@@ -818,6 +818,9 @@ export class ChannelGatewayService {
     gateway: Gateway,
     parts: string[],
     threadContext: Record<string, any>,
+    // Where it went and whether it carried the AI disclosure, kept on the
+    // first part's event row: disclosedTo reads it back.
+    post?: { destination: string; disclosed: boolean },
   ): Promise<{ sent: number }> {
     const adapter = this.getAdapter(gateway.type);
     const config = await this.channelConfig(gateway, 'channel_outbound');
@@ -831,10 +834,35 @@ export class ChannelGatewayService {
         await this.logEvent(gateway, 'outbound', 'failed', this.truncatePayload(formatted), err?.message ?? String(err));
         throw err;
       }
-      await this.logEvent(gateway, 'outbound', 'processed', this.truncatePayload(formatted), null);
+      const logged = this.truncatePayload(formatted);
+      await this.logEvent(gateway, 'outbound', 'processed', sent === 0 && post ? { ...(logged ?? {}), post } : logged, null);
       sent++;
     }
     return { sent };
+  }
+
+  /** How far back disclosedTo looks: the channel's most recent posts. */
+  static readonly DISCLOSURE_LOOKBACK = 500;
+
+  /**
+   * Whether a post the agent started already told this destination it is
+   * talking to an AI: a delivered post to it, among the channel's recent
+   * ones, that carried the disclosure. A post to a destination that has
+   * none (or whose record the retention sweep removed) discloses again.
+   */
+  async disclosedTo(gateway: Pick<Gateway, 'id' | 'organizationId'>, destination: string): Promise<boolean> {
+    try {
+      const rows = await this.eventRepository.find({
+        where: { gatewayId: gateway.id, organizationId: gateway.organizationId, direction: 'outbound', status: 'processed' } as any,
+        order: { createdAt: 'DESC' },
+        take: ChannelGatewayService.DISCLOSURE_LOOKBACK,
+      });
+      return rows.some((r) => r.payload?.post?.disclosed === true && r.payload.post.destination === destination);
+    } catch (err: any) {
+      // Unknown means disclose: a repeated line is better than a missing one.
+      this.logger.warn(`Could not read the channel's earlier posts: ${err?.message ?? err}`);
+      return false;
+    }
   }
 
   /**

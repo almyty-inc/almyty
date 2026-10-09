@@ -22,13 +22,13 @@ describe('how the model sees its tools', () => {
     render(<ToolModeSection agentConfig={{}} usableTools={TOOLS} onChange={vi.fn()} />)
     expect(screen.getByLabelText('Tool list')).toHaveTextContent('Automatic')
     expect(screen.getByLabelText('Switch to searching above (tokens)')).toHaveAttribute('placeholder', 'Default')
-    expect(screen.getByLabelText('Always show crm_lookup')).toBeInTheDocument()
+    expect(screen.getByLabelText('Always show Crm lookup')).toBeInTheDocument()
   })
 
   it('shows every tool: no threshold, nothing to pin', () => {
     render(<ToolModeSection agentConfig={{ toolMode: 'direct' }} usableTools={TOOLS} onChange={vi.fn()} />)
     expect(screen.queryByLabelText('Switch to searching above (tokens)')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Always show crm_lookup')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Always show Crm lookup')).not.toBeInTheDocument()
   })
 
   it('writes the mode, the threshold and the pinned tools into agentConfig', async () => {
@@ -43,12 +43,12 @@ describe('how the model sees its tools', () => {
     await user.type(screen.getByLabelText('Switch to searching above (tokens)'), '5')
     expect(onChange).toHaveBeenLastCalledWith({ toolModeThresholdTokens: 5 })
 
-    await user.click(screen.getByLabelText('Always show issue_refund'))
+    await user.click(screen.getByLabelText('Always show Issue refund'))
     expect(onChange).toHaveBeenLastCalledWith({ pinnedToolIds: ['t-2'] })
 
     rerender(<ToolModeSection agentConfig={{ pinnedToolIds: ['t-2'] }} usableTools={TOOLS} onChange={onChange} />)
-    expect(screen.getByTestId('pin-summary')).toHaveTextContent('Always shown: issue_refund')
-    await user.click(screen.getByLabelText('Always show issue_refund'))
+    expect(screen.getByTestId('pin-summary')).toHaveTextContent('Always shown: Issue refund')
+    await user.click(screen.getByLabelText('Always show Issue refund'))
     expect(onChange).toHaveBeenLastCalledWith({ pinnedToolIds: undefined })
   })
 

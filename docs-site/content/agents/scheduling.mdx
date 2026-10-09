@@ -44,7 +44,9 @@ Every result is kept in the agent's run history. You can also send it on:
 | WhatsApp, SMS, iMessage, Signal | A phone number with its country code, such as +14155550100. |
 | Matrix, IRC | A room or channel. |
 
-The message goes out the way the channel's replies do: from the same bot, with the AI disclosure line at the top, and counted against the same spending limit. If the channel has reached its limit for the day or month, that run is skipped and you are told why. A long result is split into several messages where an app limits their length.
+The message goes out the way the channel's replies do: from the same bot, and counted against the same spending limit. If the channel has reached its limit for the day or month, that run is skipped and you are told why. A long result is split into several messages where an app limits their length.
+
+The AI disclosure line comes once per conversation, as it does for replies: on the first post to a Slack channel, chat or phone number, not on every result after it. Each email starts a conversation of its own, so every emailed result carries it.
 
 WhatsApp only delivers a business message to someone who wrote to that number in the last 24 hours. Outside that window WhatsApp refuses the message, and you are told.
 

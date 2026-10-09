@@ -9,8 +9,8 @@
  *    server's agent-tool-mode.ts), the switch-over threshold and the tools
  *    always shown in full.
  *  - Other agents: the ones it may call or hand work to, picked by name.
- *  - Machine: the labels of the machine its runner tools run on, and the
- *    machines that have them.
+ *  - Machine: where its runner tools run (any of your runners, one runner,
+ *    or a hosted environment), and the labels a machine must have.
  *  - Temporary agents: whether it may create them, and how many per run
  *    and at once.
  *  - Acts as: its owner, or itself with its own access (Business).
@@ -27,15 +27,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useEnvironments } from '@/components/runners/hosted-environments-tab'
 import { RunnerLabelsField, parseRunnerLabels } from '@/components/agents/builder/runner-labels-field'
 import { apiGet, apisApi, runnersApi } from '@/lib/api'
 import { connectionsApi } from '@/lib/connections-api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Button } from '@/components/ui/button'
 import { pluralized } from '@/lib/utils'
+import { readableToolName } from '@/lib/tool-names'
 import { useOrganizationStore } from '@/store/organization'
 import { useEntitlement } from '@/hooks/use-entitlement'
+import { PlanHint } from '@/components/plan-indicator'
 import type { Agent, CodeWriteAction } from '@/types'
 
 type AgentConfig = NonNullable<Agent['agentConfig']> & { runnerLabels?: Record<string, string> | string }
@@ -90,7 +93,7 @@ export function CapabilitiesSection({
           everyAgent={!!agentConfig.canCallAgents && !Array.isArray(agentConfig.callableAgentIds)}
           onChange={(callableAgentIds) => set({ callableAgentIds, canCallAgents: callableAgentIds.length > 0 })}
         />
-        <Machine value={agentConfig.runnerLabels} runnerId={agentConfig.runnerId} onChange={(runnerLabels) => set({ runnerLabels })} onRunnerChange={(runnerId) => set({ runnerId })} />
+        <Machine agentConfig={agentConfig} onChange={set} />
         <TemporaryAgents agentConfig={agentConfig} onChange={set} />
         <ActsAs agentId={agentId} agentConfig={agentConfig} onChange={set} />
       </CardContent>
@@ -157,7 +160,10 @@ function ToolsAndApis({
   const toggleTool = (id: string, on: boolean) => onToolIdsChange(on ? [...toolIds, id] : toolIds.filter((t) => t !== id))
   const toggleApi = (id: string, on: boolean) => onApiIdsChange(on ? [...apiIds, id] : apiIds.filter((a) => a !== id))
   const apiName = (id: string) => apis.find((a) => a.id === id)?.name ?? id
-  const toolName = (id: string) => tools.find((t) => t.id === id)?.name ?? id
+  const toolName = (id: string) => {
+    const tool = tools.find((t) => t.id === id)
+    return tool ? readableToolName(tool) : id
+  }
 
   return (
     <section className="space-y-3" data-testid="capability-tools">
@@ -198,7 +204,7 @@ function ToolsAndApis({
           </div>
           <div className="max-h-[400px] overflow-y-auto space-y-1">
             {groups.map((g) => {
-              const shown = g.tools.filter(matches)
+              const shown = g.tools.filter(matches).sort((a, b) => readableToolName(a).localeCompare(readableToolName(b)))
               if (q && shown.length === 0 && !g.name.toLowerCase().includes(q)) return null
               const whole = !!g.id && apiIds.includes(g.id)
               const expanded = open.has(g.id) || !!q
@@ -245,8 +251,9 @@ function ToolsAndApis({
                             aria-label={t.name}
                           />
                           <div className="min-w-0">
-                            <p className="text-sm truncate">{t.name}</p>
-                            {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
+                            {/* People read what it does; the machine name is what the model and the approvals log call it. */}
+                            <p className="text-sm truncate">{readableToolName(t)}</p>
+                            <p className="font-mono text-[11px] text-muted-foreground truncate">{t.name}</p>
                           </div>
                         </label>
                       ))}
@@ -338,32 +345,71 @@ interface RunnerRow {
   labels: Record<string, string>
 }
 
-function Machine({ value, runnerId, onChange, onRunnerChange }: { value: Record<string, string> | string | undefined; runnerId?: string | null; onChange: (text: string) => void; onRunnerChange: (id: string | null) => void }) {
+const ENV_PREFIX = 'env:'
+
+/**
+ * Where its runner work runs: any of the caller's runners, one pinned
+ * runner, or a hosted environment (agentConfig.environmentId). The server
+ * refuses an environment together with a runner or labels, so picking an
+ * environment clears both, and picking a machine clears the environment.
+ */
+function Machine({ agentConfig, onChange }: { agentConfig: AgentConfig; onChange: (patch: Partial<AgentConfig>) => void }) {
+  const value = agentConfig.runnerLabels
+  const runnerId = agentConfig.runnerId
+  const environmentId = agentConfig.environmentId || null
   const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
   const runnersQ = useQuery<RunnerRow[]>({ queryKey: ['runners', orgId], queryFn: () => runnersApi.getAll(), enabled: !!orgId })
+  const hosted = useEnvironments()
+  const environments = hosted.enabled === false ? [] : hosted.environments
   const wanted = parseRunnerLabels(value)
   const keys = Object.keys(wanted)
   const runners = Array.isArray(runnersQ.data) ? runnersQ.data : []
   const matching = keys.length ? runners.filter((r) => (!runnerId || r.id === runnerId) && keys.every((k) => r.labels?.[k] === wanted[k])) : []
   const online = matching.filter((r) => r.state === 'online' || r.state === 'busy')
+  const selected = environmentId ? `${ENV_PREFIX}${environmentId}` : runnerId || '__any__'
+  const pick = (v: string) => {
+    if (v.startsWith(ENV_PREFIX)) {
+      onChange({ environmentId: v.slice(ENV_PREFIX.length), ...(runnerId ? { runnerId: null } : {}), ...(keys.length ? { runnerLabels: '' } : {}) })
+      return
+    }
+    onChange({ runnerId: v === '__any__' ? null : v, ...(environmentId ? { environmentId: null } : {}) })
+  }
+  const hint = environmentId
+    ? 'Runner work runs on your own machine in this hosted environment. It starts when needed and parks itself when idle.'
+    : runnerId
+      ? 'Runner work stays on this machine. It runs only when this runner is available; another machine is never substituted.'
+      : 'Runner tools use their connected machine. Work needing a runner can use an available one.'
   return (
     <section className="space-y-3" data-testid="capability-machine">
       <Label htmlFor="agent-runner">Runs on</Label>
-      <Select value={runnerId || '__any__'} onValueChange={(id) => onRunnerChange(id === '__any__' ? null : id)}>
+      <Select value={selected} onValueChange={pick}>
         <SelectTrigger id="agent-runner"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="__any__">Any of my runners</SelectItem>
-          {runners.map(r => <SelectItem key={r.id} value={r.id}>{r.name} ({r.state})</SelectItem>)}
-          {runnerId && !runners.some(r => r.id === runnerId) && <SelectItem value={runnerId}>Selected runner (unavailable)</SelectItem>}
+          <SelectGroup>
+            <SelectLabel>Your machines</SelectLabel>
+            <SelectItem value="__any__">Any of my runners</SelectItem>
+            {runners.map(r => <SelectItem key={r.id} value={r.id}>{r.name} ({r.state})</SelectItem>)}
+            {runnerId && !runners.some(r => r.id === runnerId) && <SelectItem value={runnerId}>Selected runner (unavailable)</SelectItem>}
+          </SelectGroup>
+          {(environments.length > 0 || environmentId) && (
+            <SelectGroup>
+              <SelectLabel>Hosted</SelectLabel>
+              {environments.map(e => <SelectItem key={e.id} value={`${ENV_PREFIX}${e.id}`}>{e.name}</SelectItem>)}
+              {environmentId && !environments.some(e => e.id === environmentId) && (
+                <SelectItem value={`${ENV_PREFIX}${environmentId}`}>Selected environment (unavailable)</SelectItem>
+              )}
+            </SelectGroup>
+          )}
         </SelectContent>
       </Select>
-      <p className="text-xs text-muted-foreground">{runnerId ? 'Runner work stays on this machine. It runs only when this runner is available; another machine is never substituted.' : 'Runner tools use their connected machine. Work needing a runner can use an available one.'}</p>
+      <p className="text-xs text-muted-foreground">{hint}</p>
+      {!environmentId && (
       <details open={keys.length > 0} className="space-y-3">
         <summary className="cursor-pointer text-sm font-medium">Advanced</summary>
       <RunnerLabelsField
         id="agent-runner-labels"
         value={value}
-        onChange={onChange}
+        onChange={(runnerLabels) => onChange({ runnerLabels })}
         hint="Require these labels on the selected runner, or use them to choose an online runner when any runner is allowed."
       />
       {keys.length > 0 && (
@@ -374,6 +420,7 @@ function Machine({ value, runnerId, onChange, onRunnerChange }: { value: Record<
         </p>
       )}
       </details>
+      )}
     </section>
   )
 }
@@ -472,13 +519,11 @@ export function ActsAs({ agentId, agentConfig, onChange }: { agentId?: string; a
             : 'It uses what you can use, and the audit log names you.'}
         </p>
         {locked && (
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid="acts-as-locked">
-            <Badge variant="outline" className="border-primary/40 text-primary text-[10px] px-1.5 py-0">Business</Badge>
+          <PlanHint feature={ACTS_AS_ENTITLEMENT} testId="acts-as-locked">
             {value === 'agent'
               ? 'Your plan does not include this any more, so its runs are paused rather than run as you. Switch it back to you, or upgrade.'
               : 'An agent that acts as itself is part of the Business plan.'}
-            <Link to="/settings/billing" className="text-primary hover:underline">See plans</Link>
-          </div>
+          </PlanHint>
         )}
         {value === 'agent' && <WhatItCannotReach agentId={agentId} />}
       </div>
@@ -510,7 +555,15 @@ const SCOPE_WORDS: Record<UnreachableItem['scope'], string> = {
  * Each connection a grant can open has its own button; nothing is given
  * without that click.
  */
-export function WhatItCannotReach({ agentId }: { agentId?: string }) {
+export function WhatItCannotReach({
+  agentId,
+  intro = 'As itself it would not reach these, from the agent as last saved:',
+  okText = 'Everything its settings use is open to it as itself.',
+}: {
+  agentId?: string
+  intro?: string
+  okText?: string
+}) {
   const queryClient = useQueryClient()
   const key = ['agents', agentId, 'identity', 'unreachable']
   const query = useQuery<UnreachableItem[]>({
@@ -536,11 +589,11 @@ export function WhatItCannotReach({ agentId }: { agentId?: string }) {
     return <p className="text-xs text-destructive" data-testid="acts-as-reach-error">Could not check what it reaches.</p>
   }
   if (items.length === 0) {
-    return <p className="text-xs text-muted-foreground" data-testid="acts-as-reach-ok">Everything its settings use is open to it as itself.</p>
+    return <p className="text-xs text-muted-foreground" data-testid="acts-as-reach-ok">{okText}</p>
   }
   return (
     <div className="space-y-2" data-testid="acts-as-unreachable">
-      <p className="text-xs font-medium">As itself it would not reach these, from the agent as last saved:</p>
+      <p className="text-xs font-medium">{intro}</p>
       <ul className="divide-y rounded-md border">
         {items.map((item) => (
           <li key={`${item.kind}-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 p-2" data-testid={`unreachable-${item.id}`}>
@@ -653,15 +706,15 @@ export function ToolModeSection({
           <p className="text-xs text-muted-foreground">Tools the model needs on almost every task, so it never has to search for them.</p>
           {pinned.length > 0 && (
             <p className="text-xs" data-testid="pin-summary">
-              Always shown: {usableTools.filter((t) => pinned.includes(t.id)).map((t) => t.name).sort().join(', ') || 'none of the tools above'}
+              Always shown: {usableTools.filter((t) => pinned.includes(t.id)).map((t) => readableToolName(t)).sort().join(', ') || 'none of the tools above'}
             </p>
           )}
           {/* By name; a long list scrolls in place. */}
           <div className="grid max-h-56 grid-cols-1 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2" data-testid="pin-list">
-            {[...usableTools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
-              <label key={t.id} className="flex items-center gap-2 text-sm">
-                <Checkbox checked={pinned.includes(t.id)} onCheckedChange={(on) => togglePin(t.id, on === true)} aria-label={`Always show ${t.name}`} />
-                <span className="truncate font-mono text-xs">{t.name}</span>
+            {[...usableTools].sort((a, b) => readableToolName(a).localeCompare(readableToolName(b))).map((t) => (
+              <label key={t.id} className="flex items-center gap-2 text-sm" title={t.name}>
+                <Checkbox checked={pinned.includes(t.id)} onCheckedChange={(on) => togglePin(t.id, on === true)} aria-label={`Always show ${readableToolName(t)}`} />
+                <span className="truncate text-xs">{readableToolName(t)}</span>
               </label>
             ))}
           </div>

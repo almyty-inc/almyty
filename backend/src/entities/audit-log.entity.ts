@@ -126,6 +126,11 @@ export enum AuditAction {
   RUNNER_ENROLLED = 'runner_enrolled',
   WORKSPACE_SUSPENDED = 'workspace_suspended',
   WORKSPACE_RESUMED = 'workspace_resumed',
+  // The pod-scoped model token: minted at pod start, revoked when the pod
+  // stops, and every model call a pod makes with it.
+  HOSTED_MODEL_TOKEN_ISSUED = 'hosted_model_token_issued',
+  HOSTED_MODEL_TOKEN_REVOKED = 'hosted_model_token_revoked',
+  HOSTED_MODEL_CALL = 'hosted_model_call',
 }
 
 export enum AuditResource {

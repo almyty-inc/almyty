@@ -7,6 +7,7 @@
 //
 //   eval "$(scripts/demo-seed/stack.sh env)"; node scripts/demo-seed/seed.mjs
 import { execSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 
 const API = process.env.DEMO_API_URL || 'http://localhost:4210'
 const FAKE = process.env.DEMO_FAKE_URL || 'http://localhost:4290'
@@ -356,6 +357,69 @@ async function runner() {
   }
 }
 
+// Hosted environments (stack.sh runs the API with HOSTED_RUNNERS_ENABLED and
+// the stub adapter, which starts nothing). The machine rows are written
+// directly: a stub machine never enrolls, so it would never read "running".
+// stack.sh turns the reconcile sweep off so these rows stay as written.
+async function hosted(orgId) {
+  const body = await fetch(`${API}/environments`, { headers: { authorization: `Bearer ${token}` } }).then((r) => r.json()).catch(() => null)
+  if (!body?.enabled) { log('hosted environments skipped (off on this API)'); return }
+  const have = list(body.data, 'environments')
+  const want = [
+    { name: 'web-app', repo: { url: 'https://github.com/northwind-ai/web-app', ref: 'main' }, image: { base: 'standard-browser' }, setupScript: 'npm ci', egress: { allowHosts: ['github.com', 'registry.npmjs.org'] }, idleTimeoutMinutes: 30 },
+    { name: 'data-jobs', repo: { url: 'https://github.com/northwind-ai/data-jobs', ref: 'main' }, image: { base: 'standard' }, setupScript: 'pip install -r requirements.txt', egress: { allowHosts: ['github.com', 'pypi.org', 'files.pythonhosted.org'] } },
+  ]
+  const ids = {}
+  for (const env of want) {
+    ids[env.name] = have.find((e) => e.name === env.name)?.id ?? (await call('POST', '/environments', env)).id
+  }
+  const userId = sql(`SELECT id FROM users WHERE email = '${USER.email}'`)
+  // readOnly: a workspace kept from a member who left, beside the receiver's own (the handover's case).
+  const machine = (envId, n, { state, status, replicas, idle, readOnly = false }) => {
+    const workspaceId = `0000000${n}-0000-4000-8000-0000000000a${n}`
+    if (sql(`SELECT count(*) FROM workspaces WHERE id = '${workspaceId}'`) !== '0') return
+    const runnerId = `0000000${n}-0000-4000-8000-00000000000${n}`
+    const hostedId = `0000000${n}-0000-4000-8000-0000000000b${n}`
+    sql(`BEGIN;
+      INSERT INTO runners (id, name, "ownerUserId", "organizationId", visibility, kind, state, labels, "hostedRunnerId")
+        VALUES ('${runnerId}', 'env-${n}-${workspaceId.slice(0, 8)}', '${userId}', '${orgId}', 'private', 'hosted', 'registered', '{}', '${hostedId}');
+      INSERT INTO workspaces (id, "runnerId", "ownerUserId", "organizationId", cwd, isolation, status, kind, "environmentId", "lastActiveAt", "createdAt", "readOnly")
+        VALUES ('${workspaceId}', '${runnerId}', '${userId}', '${orgId}', '/workspace', 'host', '${status}', 'persistent', '${envId}', now() - interval '${idle}', now() - interval '6 days', ${readOnly});
+      INSERT INTO hosted_runners (id, "organizationId", "environmentId", "environmentVersion", "workspaceId", "runnerId", "providerType", desired, state, "lastActiveAt")
+        VALUES ('${hostedId}', '${orgId}', '${envId}', 1, '${workspaceId}', '${runnerId}', 'stub', '{"replicas":${replicas},"resourceClass":"small"}', '${state}', now() - interval '${idle}');
+      COMMIT;`)
+  }
+  machine(ids['web-app'], 1, { state: 'ready', status: 'active', replicas: 1, idle: '4 minutes' })
+  machine(ids['data-jobs'], 2, { state: 'suspended', status: 'suspended', replicas: 0, idle: '3 days' })
+  machine(ids['data-jobs'], 3, { state: 'suspended', status: 'suspended', replicas: 0, idle: '4 days', readOnly: true })
+  // Minutes this month, so the usage shows: closed intervals of the two machines.
+  if (sql(`SELECT count(*) FROM runner_usage_intervals WHERE "organizationId" = '${orgId}'`) === '0') {
+    sql(`INSERT INTO runner_usage_intervals ("organizationId", "hostedRunnerId", "environmentId", "workspaceId", "resourceClass", "startedAt", "endedAt")
+      VALUES ('${orgId}', '00000001-0000-4000-8000-0000000000b1', '${ids['web-app']}', '00000001-0000-4000-8000-0000000000a1', 'small', now() - interval '3 hours', now() - interval '1 hour'),
+             ('${orgId}', '00000002-0000-4000-8000-0000000000b2', '${ids['data-jobs']}', '00000002-0000-4000-8000-0000000000a2', 'small', now() - interval '1 day 40 minutes', now() - interval '1 day')`)
+  }
+  // Runs of an agent set to run on web-app, for its Recent runs.
+  const helper = list(await call('GET', '/agents?limit=100'), 'agents').find((a) => a.name === 'Repo helper')
+  if (!helper) {
+    const prov = list(await call('GET', '/llm-providers'), 'providers').find((p) => p.name === 'OpenAI')
+    const made = await call('POST', '/agents', {
+      name: 'Repo helper',
+      description: 'Runs the web app tests and reports what broke.',
+      mode: 'autonomous',
+      instructions: 'Run the web app tests on the hosted machine and report what broke.',
+      ...(prov ? { modelConfig: { providerId: prov.id, model: 'gpt-4o-mini' } } : {}),
+      agentConfig: { environmentId: ids['web-app'] },
+    }).catch((e) => { log('repo helper skipped', e.message.slice(0, 200)); return null })
+    if (made?.id) {
+      for (const status of ['completed', 'completed', 'failed']) {
+        sql(`INSERT INTO agent_runs (id, "agentId", "organizationId", "userId", mode, status, input, "createdAt", "updatedAt")
+          VALUES (gen_random_uuid(), '${made.id}', '${orgId}', '${userId}', 'autonomous', '${status}', '{}', now() - interval '${status === 'failed' ? 5 : 30} minutes', now())`)
+      }
+    }
+  }
+  log('hosted environments')
+}
+
 async function waitForRuns(agentId) {
   for (let i = 0; i < 40; i++) {
     const rows = list(await call('GET', `/agents/${agentId}/runs`), 'runs')
@@ -390,6 +454,82 @@ async function digestHistory(digestId) {
     log('pipeline versions')
   }
 }
+
+// Code mode, for its pages: a workflow with a Code step, and a script one
+// autonomous run wrote that waits in Approvals with its change set. The
+// demo has no model that writes scripts, so the run, its script trace and
+// the approval are written directly, in the shapes the runtime writes
+// (agent-step-processor runCode, code-mode.service), and say so in the run.
+async function codeMode(orgId, supportId, toolRows) {
+  const have = list(await call('GET', '/agents?limit=100'), 'agents')
+  const name = 'Pet store keeper'
+  let keeper = have.find((a) => a.name === name)
+  if (!keeper) {
+    keeper = await call('POST', '/agents', {
+      name, mode: 'workflow', visibility: 'org',
+      description: 'Archives the pets the store has sold.',
+      pipeline: {
+        nodes: [
+          { id: 'input_1', type: 'input', label: 'Start', position: { x: 60, y: 220 }, config: {}, data: {} },
+          { id: 'code_1', type: 'code', label: 'Archive the sold pets', position: { x: 380, y: 220 }, config: {}, data: { label: 'Archive the sold pets', code: [
+            '// Archive the first three pets marked sold',
+            "const sold = await petstore.findPetsByStatus({ status: 'sold' })",
+            'const named = sold.filter((p) => p.name).slice(0, 3)',
+            'log(`Found ${sold.length} sold pets`)',
+            'const results = []',
+            'for (const pet of named) {',
+            "  const res = await petstore.updatePet({ ...pet, status: 'archived' })",
+            '  results.push({ id: pet.id, name: pet.name, status: res.status })',
+            '}',
+            'return results',
+          ].join('\n') } },
+          { id: 'output_1', type: 'output', label: 'Archived', position: { x: 700, y: 220 }, config: {}, data: { mapping: '{{nodes.code_1.output}}' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'code_1' },
+          { id: 'e2', source: 'code_1', target: 'output_1' },
+        ],
+      },
+    })
+    log('agent', name)
+  }
+  if (keeper.status !== 'active') { try { await call('POST', `/agents/${keeper.id}/activate`) } catch (e) { log('activate failed', name, e.message.slice(0, 300)) } }
+
+  if (sql(`SELECT count(*) FROM code_executions WHERE "agentId" = '${supportId}'`) !== '0') return
+  const refund = toolRows.find((t) => t.name === 'northwind_orders_create_refund')
+  if (!refund) { log('code mode run skipped (no refund tool)'); return }
+  const userId = sql(`SELECT id FROM users WHERE email = '${USER.email}'`)
+  const runId = randomUUID(), execId = randomUUID(), approvalId = randomUUID()
+  const code = [
+    '// Refund the damaged order, as the customer asked.',
+    "const refund = await orders.createRefund({ orderId: 'NW-38801', amount: 820 })",
+    "log('Refund staged for review.')",
+    'return refund',
+  ].join('\n')
+  const changeSet = [{
+    id: 1, toolId: refund.id, toolName: refund.name, codeName: 'orders.createRefund', title: 'Refund an order',
+    arguments: { orderId: 'NW-38801', amount: 820 }, paramsHash: 'demo-seed', sideEffect: 'write', reason: 'policy', rule: 'Refunds over 500',
+  }]
+  const at = new Date(Date.now() - 20 * 60000).toISOString()
+  const steps = [
+    { type: 'llm_call', role: { key: 'main', name: 'Main', purpose: 'main', kind: 'model' }, input: { messageCount: 2, toolCount: 6 }, output: { toolCalls: [{ name: 'run_code', hasResult: true }], model: 'gpt-4o' }, cost: 0.0021, tokens: { input: 1650, output: 96 }, duration: 640, timestamp: at },
+    { type: 'tool_call', input: { tool: 'run_code', parameters: { code } }, output: { codeExecutionId: execId, status: 'waiting_approval', calls: { made: 1, ran: 0, failed: 0, staged: 1, refused: 0 }, cpuMs: 7, staged: 1, approvalId }, cost: 0, duration: 35, timestamp: at },
+  ]
+  const t = (s) => `'${String(s).replace(/'/g, "''")}'`
+  const q = (v) => t(JSON.stringify(v))
+  sql(`INSERT INTO agent_runs (id, "agentId", "organizationId", "userId", mode, status, steps, "currentStep", "maxSteps", input, metadata, "totalCost", "totalTokens", "executionTime", "toolCallCount", "createdAt", "updatedAt")
+    VALUES ('${runId}', '${supportId}', '${orgId}', '${userId}', 'autonomous', 'waiting_approval', ${q(steps)}, 2, 25,
+      ${q({ message: 'Brightway wants $820 back on NW-38801, it arrived damaged. Refund it.' })}, ${q({ demoFixture: 'written by scripts/demo-seed/seed.mjs, not a model run' })},
+      0.0021, 1746, 675, 1, '${at}', '${at}')`)
+  sql(`INSERT INTO approval_requests (id, "organizationId", visibility, "runId", "agentId", "toolCallId", reason, payload, status, "expiresAt", "createdAt", "updatedAt")
+    VALUES ('${approvalId}', '${orgId}', 'org', '${runId}', '${supportId}', 'call_demo_run_code',
+      'A script wants to make 1 change. Approve to make all of them, or reject to make none.',
+      ${q({ kind: 'change_set', tool: 'run_code', codeExecutionId: execId, changeSet })}::jsonb, 'pending', now() + interval '1 day', '${at}', '${at}')`)
+  sql(`INSERT INTO code_executions (id, "organizationId", "runId", "agentId", "userId", code, logs, result, status, "changeSet", "approvalRequestId", "callCount", "cpuMs", "durationMs", "createdAt", "updatedAt")
+    VALUES ('${execId}', '${orgId}', '${runId}', '${supportId}', '${userId}', ${t(code)}, 'Refund staged for review.', ${q({ staged: true })}::jsonb,
+      'waiting_approval', ${q(changeSet)}::jsonb, '${approvalId}', 1, 7, 35, '${at}', '${at}')`)
+  log('code mode run')
+}
 export async function main() {
   const orgId = await signIn()
   log('org', orgId)
@@ -408,6 +548,8 @@ export async function main() {
   await approvalPolicy()
   await amountRule(toolRows)
   await runner()
+  await hosted(orgId)
+  await codeMode(orgId, ag.support.id, toolRows)
   if (process.env.SEED_RUNS !== '0') {
     if (gw['support-tools']?.initialApiKey) await mcpTraffic(org.slug, '/support-tools', gw['support-tools'].initialApiKey)
     if (!list(await call('GET', `/agents/${ag.support.id}/runs`), 'runs').length) {
