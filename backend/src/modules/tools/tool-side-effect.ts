@@ -55,7 +55,7 @@ export interface ClassifiableTool {
   graphqlConfig?: { query?: string | null } | null;
   llmConfig?: unknown;
   /** The generating operation, when the relation is loaded. */
-  operation?: { method?: string | null; type?: string | null } | null;
+  operation?: { method?: string | null; type?: string | null; endpoint?: string | null; operationId?: string | null } | null;
 }
 
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -74,6 +74,18 @@ function literalMethod(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const method = value.trim().toUpperCase();
   return READ_METHODS.has(method) || WRITE_METHODS.has(method) || method === 'DELETE' ? method : null;
+}
+
+/**
+ * Whether a POST operation is a search: its path ends in `/search`,
+ * `/query` or `/batch/read`, or its operation id ends in `search`,
+ * `doSearch` or `query` (`calendar.freebusy.query`).
+ */
+export function isSearchOperation(operation: { endpoint?: string | null; operationId?: string | null } | null | undefined): boolean {
+  const endpoint = String(operation?.endpoint ?? '').toLowerCase().replace(/\/+$/, '');
+  if (/\/(search|query|batch\/read)$/.test(endpoint)) return true;
+  const id = String(operation?.operationId ?? '');
+  return /(?:^|[._\-/])(?:search|dosearch|query)$/i.test(id) || /_doSearch$/.test(id);
 }
 
 function classOfMethod(method: string): SideEffect {
@@ -112,6 +124,13 @@ export function derivedToolClass(tool: ClassifiableTool): ToolClass {
   }
 
   const method = literalMethod(operation?.method) ?? literalMethod(tool.httpConfig?.method);
+  // A search or query sent as POST (HubSpot's /search, Google's
+  // freebusy.query, a "batch/read") changes nothing: its body is the
+  // question. Told apart by the operation's own path or id, never guessed
+  // from a description.
+  if (method === 'POST' && isSearchOperation(operation)) {
+    return { sideEffect: 'read', openWorld: true, sideEffectSource: 'http_method' };
+  }
   if (method) return { sideEffect: classOfMethod(method), openWorld: true, sideEffectSource: 'http_method' };
 
   return { sideEffect: 'write', openWorld: true, sideEffectSource: 'default' };

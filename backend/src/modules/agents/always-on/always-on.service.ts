@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, MoreThan, Repository } from 'typeorm';
+import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -787,11 +787,11 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         }
         return 'live';
       }
-
       // Too many wakes in the last hour: something is looping. Pause and say so.
+      // Wake now is a person, not a loop: a wake made only of those goes ahead.
       const capacity = await this.capacityFor(organizationId);
       const perHour = effectiveWakesPerHour(config.maxWakesPerHour, capacity);
-      const lastHour = await this.runsInLastHour(agentId);
+      const lastHour = queued.every((w) => w.source === 'manual') ? 0 : await this.runsInLastHour(agentId);
       if (lastHour >= perHour) {
         await this.pause(agent, {
           code: 'WAKE_LOOP',
@@ -887,9 +887,13 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Runs of the standing thread started in the last hour: the wakes it acted on, by run. */
+  /**
+   * Runs in the last hour that something other than a person woke. Wake now
+   * is a person asking; it never counts toward the loop guard.
+   */
   private async runsInLastHour(agentId: string): Promise<number> {
     const rows = await this.wakes.find({
-      where: { agentId, status: 'consumed', consumedAt: MoreThan(new Date(Date.now() - 3_600_000)) },
+      where: { agentId, status: 'consumed', consumedAt: MoreThan(new Date(Date.now() - 3_600_000)), source: Not('manual') },
       select: { id: true, runId: true } as any,
     });
     return new Set(rows.map((w) => w.runId).filter(Boolean)).size;

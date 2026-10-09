@@ -139,6 +139,30 @@ describe('Always on: turning wakes into runs', () => {
     expect(queued(w)).toHaveLength(0);
   });
 
+  it('does not count Wake now toward the loop guard', async () => {
+    // A person testing an agent with Wake now paused it after six clicks.
+    const w = world({ plan: 'free' }); // 6 an hour
+    for (let i = 0; i < 6; i++) {
+      w.wakes.seed({ agentId: AGENT, organizationId: ORG, source: 'manual', summary: 'you asked it to wake now', dedupeKey: `manual${i}`, status: 'consumed', runId: `manual-run-${i}`, consumedAt: new Date(Date.now() - 60_000), createdAt: new Date() });
+    }
+    await w.service.reconcileTimer(w.agents.row(AGENT) as any);
+    // A timer wake after six manual ones is still within the limit...
+    await w.service.wake(AGENT, ORG, 'timer', { summary: 'timer', dedupeKey: 'timer-1' });
+    expect(await w.service.process(AGENT, ORG)).not.toBe('paused');
+    expect(w.agents.row(AGENT)!.alwaysOn.enabled).toBe(true);
+  });
+
+  it('a Wake now goes ahead even after six timer wakes in the hour', async () => {
+    const w = world({ plan: 'free' });
+    for (let i = 0; i < 6; i++) {
+      w.wakes.seed({ agentId: AGENT, organizationId: ORG, source: 'timer', summary: 't', dedupeKey: `old${i}`, status: 'consumed', runId: `old-run-${i}`, consumedAt: new Date(Date.now() - 60_000), createdAt: new Date() });
+    }
+    await w.service.reconcileTimer(w.agents.row(AGENT) as any);
+    await w.service.wake(AGENT, ORG, 'manual', { summary: 'you asked it to wake now', dedupeKey: 'manual-now' });
+    expect(await w.service.process(AGENT, ORG)).not.toBe('paused');
+    expect(w.startRun).toHaveBeenCalled();
+  });
+
   it('judges the owner at wake time: one who can no longer run it pauses it, and nothing runs', async () => {
     const w = world({ agent: alwaysOnAgent({ visibility: 'team', teamId: 'team-1' }) });
     await w.service.wake(AGENT, ORG, 'timer', { summary: 'timer', dedupeKey: 't1' });
