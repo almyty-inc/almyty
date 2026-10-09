@@ -8,6 +8,7 @@ import {
   ParsedMimeAttachment,
 } from './mime.helper';
 import { verifySvixSignature } from './svix-signature.helper';
+import { markdownToEmailHtml, markdownToPlainText } from './channel-markdown';
 
 @Injectable()
 export class EmailAdapter extends BaseAdapter {
@@ -272,19 +273,15 @@ export class EmailAdapter extends BaseAdapter {
     const sent = (response.attachments ?? []).slice(0, EmailAdapter.MAX_REPLY_ATTACHMENTS);
     const text = textWithMedia(response, sent);
     const html = EmailAdapter.textToHtml(text);
+    const plain = markdownToPlainText(text);
     return sent.length
-      ? { html, text, attachments: sent.map((a) => ({ filename: a.name || 'attachment', path: a.url })) }
-      : { html, text };
+      ? { html, text: plain, attachments: sent.map((a) => ({ filename: a.name || 'attachment', path: a.url })) }
+      : { html, text: plain };
   }
 
-  /** Plain text as the HTML part of a mail: escaped, line breaks kept. */
+  /** The answer's text as the HTML part of a mail: escaped, markdown shown as formatting, line breaks kept. */
   static textToHtml(text: string): string {
-    const escaped = String(text ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-    return `<div style="white-space:pre-wrap">${escaped.replace(/\r?\n/g, '<br>')}</div>`;
+    return markdownToEmailHtml(text);
   }
 
   /** Files one reply mail attaches. */
