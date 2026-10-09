@@ -45,7 +45,7 @@ describe('compliance-pack enforceable plugins are reachable', () => {
   })();
 
   it('finds the call site, so this guard cannot pass by matching nothing', () => {
-    expect(invokedHookTypes).toEqual(['PRE_TOOL_EXECUTION']);
+    expect(invokedHookTypes.sort()).toEqual(['DATA_FILTER', 'PRE_TOOL_EXECUTION']);
   });
 
   it.each(ENFORCEABLE)('%s registers a hook at a point that is invoked', (key) => {
@@ -72,7 +72,7 @@ describe('compliance-pack enforceable plugins are reachable', () => {
     expect(missing).toEqual([]);
   });
 
-  it('an enforced PII filter actually redacts tool parameters', async () => {
+  it('an enforced PII filter actually hides personal data in what is kept', async () => {
     const redis: any = { keys: jest.fn().mockResolvedValue([]), setex: jest.fn(), lpush: jest.fn(), ltrim: jest.fn(), del: jest.fn() };
     const store: any = {
       loadPluginConfigurations: jest.fn(),
@@ -95,8 +95,10 @@ describe('compliance-pack enforceable plugins are reachable', () => {
     })();
     await manager.initialize();
 
-    const out = await manager.executeHook(PluginHookType.PRE_TOOL_EXECUTION, {
-      hookType: PluginHookType.PRE_TOOL_EXECUTION,
+    // What ToolExecutorService.hidePersonalData runs on what is kept and on
+    // answers to outside callers. Tool inputs are left alone (PRE_TOOL_EXECUTION).
+    const out = await manager.executeHook(PluginHookType.DATA_FILTER, {
+      hookType: PluginHookType.DATA_FILTER,
       organizationId: 'org-1',
       userId: 'user-1',
       requestId: 'req-1',

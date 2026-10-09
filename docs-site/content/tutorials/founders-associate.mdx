@@ -225,7 +225,6 @@ The **Memory** tab shows what it has learned about people, for example that Tom 
 | Google says **access blocked** or **app not verified** | With a personal account, add yourself under **Test users** on the consent screen (step 2). |
 | Gmail calls fail with **insufficient permission** or **403** | You picked the Calendar sign-in for Gmail. Open Gmail under **APIs**, and under **Key** sign in again with **Create one here**. |
 | A week later, every call fails | Your Google app is **External** and in **Testing**: Google ends those sign-ins after 7 days. Sign in again, or use a Workspace **Internal** app. |
-| The team or personal calendar comes back empty, or a search finds nothing, and the run shows addresses like `*****mple` | Your organization's compliance policy masks email addresses in what tools send. An admin can untick **Email addresses** under **Settings → Advanced → Compliance**. |
 | Publishing the Email channel says **The Email credential still needs: inbound address** | Open the Resend credential on **Credentials**, **Replace key**, fill in **Inbound address** under **More options**, then pick the credential again on the channel. |
 | Connecting a model you run yourself (Ollama) says **Could not reach almyty to check the key** | The model took longer than 30 seconds to load. Start it once (`ollama run <model>`) and try again. |
 | Always on says it **was paused because the agent woke more often in an hour than it may** | **Wake now** counts too. Wait an hour, or click **Turn it back on**. |
