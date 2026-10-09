@@ -7,7 +7,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Cloud, Plus } from 'lucide-react'
+import { Cloud, Info, Plus } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -88,6 +88,29 @@ export function MachineCell({ environmentId, keepDays }: { environmentId: string
             ? `Last active ${formatRelativeTime(mine.lastActiveAt)}`
             : null}
       </div>
+    </div>
+  )
+}
+
+export const HOSTED_DOCS_URL = 'https://docs.almyty.com/hosted-machines'
+
+/**
+ * The Hosted tab's one line, in the PageIntro look. The runners intro is
+ * about connecting your own machine, which says the wrong thing here.
+ * Shown only while hosted machines are on.
+ */
+export function HostedIntro() {
+  const { enabled } = useEnvironments()
+  if (!enabled) return null
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-sm" data-testid="hosted-intro" role="note">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" aria-hidden="true" />
+      <p className="min-w-0 flex-1 text-muted-foreground">
+        almyty starts a machine for your agent when it needs one and parks it when nobody uses it. Its files stay.{' '}
+        <a href={HOSTED_DOCS_URL} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap font-medium text-violet-600 hover:underline dark:text-violet-400">
+          How it works
+        </a>
+      </p>
     </div>
   )
 }

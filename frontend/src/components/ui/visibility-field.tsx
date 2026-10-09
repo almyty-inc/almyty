@@ -102,7 +102,7 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
                 <Lock className="h-4 w-4" /> Only you
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Only you can see and use {noun}. Not even org admins.
+                {descriptions?.private ?? `Only you can see and use ${noun}. Not even org admins.`}
               </p>
             </button>
           )}

@@ -17,7 +17,7 @@ Hosted machines are switched on per server. When they are not available, the **H
    - **Setup script** (optional): commands that get the machine ready, for example `npm ci`.
    - **Allowed sites**: the websites the machine may reach, one per line, such as `github.com` or `registry.npmjs.org`. Everything else is blocked. almyty itself and the repository are always allowed.
    - **Park after**: how many minutes without use before the machine stops. The page shows the range this server allows and the default.
-   - **Who can use it**: **Only you**, **One team** or **Everyone**. Sharing with a team or everyone is part of the Business plan; without it, those choices are greyed out with a link to the plans.
+   - **Who can use it**: **Only you**, **One team** or **Everyone**. With **Only you**, your organization's admins can still see the environment, and it passes to them if you leave. Sharing with a team or everyone is part of the Business plan; without it, those choices are greyed out with a link to the plans.
 4. Click **Create environment**. Nothing starts yet: your machine starts the first time an agent or tool uses the environment.
 
 ![Creating an environment on its own page](/screenshots/environment-new.png)

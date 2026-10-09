@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 
 import { render } from '@/test/setup'
-import { HostedEnvironmentsTab } from '../hosted-environments-tab'
+import { HostedEnvironmentsTab, HostedIntro } from '../hosted-environments-tab'
 
 vi.mock('@/lib/api', () => ({
   environmentsApi: { list: vi.fn(), workspaces: vi.fn() },
@@ -75,5 +75,22 @@ describe('HostedEnvironmentsTab', () => {
     workspaces.mockResolvedValue([{ id: 'w2', ownerUserId: 'me', agentId: null, status: 'suspended', lastActiveAt: '2026-10-01T12:00:00Z', createdAt: '2026-09-01T00:00:00Z', machine: { id: 'h2', state: 'suspended', lastActiveAt: null, lastError: null } }])
     render(<HostedEnvironmentsTab />)
     expect(await screen.findByText('Files kept until Oct 8, 2026')).toBeInTheDocument()
+  })
+})
+
+describe('HostedIntro', () => {
+  it('says what hosted machines do and links to their guide, not the runner one', async () => {
+    list.mockResolvedValue({ success: true, data: [], enabled: true })
+    render(<HostedIntro />)
+    expect(await screen.findByText(/almyty starts a machine for your agent when it needs one/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'How it works' })).toHaveAttribute('href', 'https://docs.almyty.com/hosted-machines')
+    expect(screen.queryByText(/A runner connects a machine you control/)).toBeNull()
+  })
+
+  it('stays out of the way when hosted machines are off', async () => {
+    list.mockResolvedValue({ success: true, data: [], enabled: false })
+    render(<><HostedIntro /><HostedEnvironmentsTab /></>)
+    expect(await screen.findByText(/Hosted machines aren't available on this server/)).toBeInTheDocument()
+    expect(screen.queryByTestId('hosted-intro')).toBeNull()
   })
 })

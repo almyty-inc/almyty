@@ -95,6 +95,11 @@ describe('EnvironmentForm', () => {
     expect(body.egress).toEqual({ allowHosts: ['github.com'], allowBinaries: ['git'] })
   })
 
+  it("says plainly that a private environment is still visible to the organization's admins", () => {
+    render(<EnvironmentForm organizationId="o1" settings={HOSTED_DEFAULT_SETTINGS} submitLabel="Create" onSubmit={vi.fn()} />)
+    expect(screen.getByRole('radio', { name: /Only you/ })).toHaveTextContent("Your organization's admins can still see it, and it passes to them if you leave.")
+    expect(screen.queryByText(/Not even org admins/)).toBeNull()
+  })
   it('locks team and organization sharing with a plan hint when the plan lacks it', () => {
     render(<EnvironmentForm organizationId="o1" settings={HOSTED_DEFAULT_SETTINGS} submitLabel="Create" onSubmit={vi.fn()} />)
     expect(screen.getByRole('radio', { name: /Only you/ })).toBeEnabled()

@@ -23,7 +23,7 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { PageIntro } from '@/components/onboarding/page-intro'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { HostedEnvironmentsTab, NEW_ENVIRONMENT_PATH, useEnvironments } from '@/components/runners/hosted-environments-tab'
+import { HostedEnvironmentsTab, HostedIntro, NEW_ENVIRONMENT_PATH, useEnvironments } from '@/components/runners/hosted-environments-tab'
 import { isPendingRunner, runnerStateLabel, runnerStateVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 import { formatRelativeTime } from '@/lib/utils'
 import {
@@ -276,7 +276,7 @@ export function RunnersPage() {
           )
         }
       />
-      <PageIntro topic="runners" />
+      {tab === 'hosted' ? <HostedIntro /> : <PageIntro topic="runners" />}
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
         <TabsList>

@@ -153,6 +153,7 @@ export function EnvironmentForm({ organizationId, settings, initial, submitLabel
           value={visibility}
           onChange={setVisibility}
           noun="this environment"
+          descriptions={{ private: "Only you can use it. Your organization's admins can still see it, and it passes to them if you leave." }}
           disabled={disabled || submitting}
           lockedOptions={locked ? ['team', 'org'] : undefined}
           lockedHint={
