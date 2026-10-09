@@ -440,9 +440,9 @@ script) can still start anything. The boundary is the pod.
 ## Not yet
 
 - The Hosted tab in the app.
-- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.3,
-  which has no `--enroll`, so the push job refuses until the pin moves to
-  the first release that has it.
+- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.4,
+  the first release with `--enroll`; the push job refuses until 1.5.4 is
+  on npm.
 - The pod-scoped model token. The images already turn `ALMYTY_MODEL_TOKEN`
   into each CLI's settings (see [Coding CLIs](#coding-clis)); the backend
   does not mint one or put it in the pod yet.
