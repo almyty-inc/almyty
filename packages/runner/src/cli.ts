@@ -3,12 +3,15 @@
  * almyty runner CLI.
  *
  *   almyty runner start [--name X] [--org ORG_ID] [--label k=v]... [--config path] [--url URL]
+ *   almyty runner start --enroll [--url URL]
  *   almyty runner status
  *   almyty runner stop
  *
  * Auth: ALMYTY_TOKEN env or ~/.almyty/credentials.json (run
  * `almyty login` first if neither is configured). The runner is
  * registered to whoever that login belongs to; the name is only a label.
+ * With --enroll (inside a hosted pod) there is no login: the pod's
+ * single-use enrollment token is traded for a runner credential (enroll.ts).
  */
 
 import { RunnerDaemon, readStatus, stopDaemon } from './daemon.js';
@@ -31,6 +34,11 @@ Options for start:
   --label key=value       Add a descriptive label; repeat for multiple
   --config <path>         Path to a JSON config file (overrides global+project)
   --url <backend-url>     Override backend URL (e.g. https://api.almyty.com)
+  --enroll                Hosted runner mode: trade the enrollment token in
+                          ALMYTY_ENROLLMENT_TOKEN (or the file named by
+                          ALMYTY_ENROLLMENT_TOKEN_FILE) for a runner credential
+                          at ALMYTY_API_URL, instead of using a login. Used by
+                          the runner-env images; takes no --name/--org/--label/--config
 
 Other:
   -h, --help              Show this help
@@ -38,7 +46,7 @@ Other:
 
 Exit codes:
   0  success
-  1  the command ran and failed (no daemon running, start refused)
+  1  the command ran and failed (no daemon running, start or enrollment refused)
   2  usage error (unknown command, bad flags)
 
 Auth:
@@ -78,14 +86,20 @@ async function main(): Promise<void> {
     case 'start': {
       const daemon = new RunnerDaemon();
       try {
-        await daemon.start({
-          name: flags.name,
-          labels: flags.labels,
-          backendUrl: flags.url,
-          organizationId: flags.org,
-          configPath: flags.configPath,
-        });
+        if (flags.enroll) {
+          await daemon.startEnrolled({ url: flags.url });
+        } else {
+          await daemon.start({
+            name: flags.name,
+            labels: flags.labels,
+            backendUrl: flags.url,
+            organizationId: flags.org,
+            configPath: flags.configPath,
+          });
+        }
       } catch (err: any) {
+        // Non-zero on a failed enrollment too: in a hosted pod that is
+        // what makes Kubernetes restart the container.
         process.stderr.write(`failed to start: ${err.message}\n`);
         process.exit(1);
       }

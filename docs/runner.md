@@ -52,7 +52,7 @@ The backend never spawns processes itself; it dispatches over the runner connect
 - **Why not WebSockets**: MCP Streamable HTTP (2025-03-26 revision) is the transport the project will need anyway for non-runner MCP clients. Building it as the foundation for the runner connection saves a separate transport.
 - **Single endpoint, two methods**: `POST /runners/stream` for client→server, `GET /runners/stream` for the server→client SSE stream. Sessions identified by the `Mcp-Session-Id` header. This channel carries worker envelopes only; it was `/mcp/streamable` while it shared the MCP transport, and that path still serves envelopes for one runner release (runners try `/runners/stream` first and fall back on a 404).
 - **Two message shapes on one wire**: JSON-RPC for MCP itself (routed to `McpService.handleJsonRpc`), worker envelopes for the runner (and any future worker-shaped protocols, emitted as `envelope` events for downstream subscribers).
-- **Reconnect via Last-Event-ID**: per-session ring buffer of recent events. Client reconnects with the last id it saw; server replays everything after. REPLAY_UNAVAILABLE error when the requested id has aged out of the buffer.
+- **Reconnect via Last-Event-ID**: per-session ring buffer of recent events. Client reconnects with the last id it saw; server replays everything after. REPLAY_UNAVAILABLE error when the requested id has aged out of the buffer. With Redis the buffer is shared, so the reconnect may land on any API pod (`WORKER_STREAM_REPLAY_MAX`, default 256 frames; `WORKER_STREAM_REPLAY_TTL_S`, default 600 seconds after the last frame).
 - **Cross-tenant refusal returns UNKNOWN_SESSION**: not 403, not "session belongs to another org" — the same code as truly-unknown so the response doesn't leak session existence.
 
 12 tests cover JSON-RPC unary and notification, worker envelope dispatch, malformed envelope rejection, session mint and reuse, cross-tenant refusal, formatted SSE frame shape, mid-stream disconnect-and-resume, and the aged-out replay error path.
@@ -228,7 +228,12 @@ runner tool".
   runner-backed call to the runner's live Streamable HTTP session and pushes a
   worker envelope over it. `coding-relay.service.ts` sits on top for the
   `coding.*` surface, relaying a coding-CLI session's input and output between
-  the agent and the runner.
+  the agent and the runner. Output reaches a viewer on any API pod: each event
+  is appended to a per-session Redis stream and published to every pod, a
+  viewer joining late gets that backlog first, and a reconnect resumes from
+  `Last-Event-ID` (backlog size and lifetime: `CODING_RELAY_BACKLOG_MAXLEN`,
+  default 2000, and `CODING_RELAY_BACKLOG_TTL_S`, default 24 hours). Without
+  Redis the relay is pod-local.
 - **Capability publication**: `runner-capability.publisher.ts` registers a
   runner's detected capabilities as catalog tools on registration. `publish()`
   stamps each with `source: runner:<runner_name>` and the capability's own

@@ -60,7 +60,9 @@ export function checkScreenshots(root = repoRoot, { strict = false } = {}) {
     if (!['current', 'needs-recapture', 'historical'].includes(entry.status)) errors.push(`${label}: invalid status`)
     if (entry.status === 'current') {
       if (typeof entry.capturedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(entry.capturedAt) || !Number.isFinite(Date.parse(entry.capturedAt))) errors.push(`${label}: invalid capture time`)
-      if (!['browser', 'published-cli'].includes(entry.source?.kind)) errors.push(`${label}: missing capture source`)
+      if (!['browser', 'published-cli', 'repo-file'].includes(entry.source?.kind)) errors.push(`${label}: missing capture source`)
+      // A rendered repository file must fingerprint that file, so editing it marks the image stale.
+      if (entry.source?.kind === 'repo-file' && !(Array.isArray(entry.sources) && entry.sources.includes(entry.source.file))) errors.push(`${label}: repo-file source must be listed in sources`)
       try {
         if (entry.sourceDigest !== sourceDigest(root, entry.sources)) errors.push(`${label}: source drift; review and recapture the changed UI`)
       } catch (error) { errors.push(`${label}: ${error.message}`) }

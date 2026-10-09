@@ -55,6 +55,8 @@ describe('runner FSM writes are guarded', () => {
       lastHeartbeatAt: new Date(),
       visibility: 'org',
       teamId: null,
+      kind: 'self',
+      hostedRunnerId: null,
       registeredAt: new Date(),
       updatedAt: new Date(),
       ...overrides,
@@ -120,17 +122,23 @@ describe('runner FSM writes are guarded', () => {
       createQueryBuilder: jest.fn(() => {
         let activeStatus: string | undefined;
         let goneStates: string[] | undefined;
+        let selfOnly = false;
         const qb: any = {
           select: () => qb,
           innerJoin: () => qb,
           where: (_c: string, p: any) => { activeStatus = p?.active; return qb; },
-          andWhere: (_c: string, p: any) => { goneStates = p?.gone; return qb; },
+          andWhere: (c: string, p: any) => {
+            if (p?.gone) goneStates = p.gone;
+            if (c === "r.kind = 'self'") selfOnly = true;
+            return qb;
+          },
           getRawMany: async () => {
             const ids = new Set<string>();
             for (const ws of workspaceRows.values()) {
               if (activeStatus && ws.status !== activeStatus) continue;
               const runner = runnerRows.get(ws.runnerId);
               if (!runner || !goneStates || !goneStates.includes(runner.state)) continue;
+              if (selfOnly && (runner.kind ?? 'self') !== 'self') continue;
               ids.add(ws.runnerId);
             }
             return [...ids].map((runnerId) => ({ runnerId }));

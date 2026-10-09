@@ -13,6 +13,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { WorkerStreamTransport } from './worker-stream.transport';
+import { RunnerCredentialClaims, RunnerCredentialGuard, runnerSessionUser } from '../runner-credential';
 
 /**
  * Where a runner daemon talks to the backend: `POST` sends envelopes,
@@ -70,5 +71,25 @@ export class WorkerStreamController {
   async legacyOpen(@Request() req, @Response() res): Promise<void> {
     const { organizationId, userId } = this.context(req);
     await this.stream.handleStream(req, res, organizationId, userId);
+  }
+
+  /**
+   * A hosted runner's stream (docs/hosted-runners.md). The pod presents its
+   * runner credential, never a login; its session is known as
+   * `runner:<id>`, which RunnerService.isOwnedBy binds to that one hosted
+   * runner and nothing else. Same transport as above.
+   */
+  @Post('runners/hosted/stream')
+  @UseGuards(RunnerCredentialGuard)
+  async hostedPost(@Request() req, @Response() res): Promise<void> {
+    const claims: RunnerCredentialClaims = req.runnerCredential;
+    await this.stream.handlePost(req, res, claims.organizationId, runnerSessionUser(claims.runnerId));
+  }
+
+  @Get('runners/hosted/stream')
+  @UseGuards(RunnerCredentialGuard)
+  async hostedOpen(@Request() req, @Response() res): Promise<void> {
+    const claims: RunnerCredentialClaims = req.runnerCredential;
+    await this.stream.handleStream(req, res, claims.organizationId, runnerSessionUser(claims.runnerId));
   }
 }

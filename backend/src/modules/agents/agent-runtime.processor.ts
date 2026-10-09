@@ -12,6 +12,8 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { runWithRequestContext } from '../../common/request-context';
 import { AgentSchedulerService } from './agent-scheduler.service';
 import {
+  ALWAYS_ON_CAPACITY_JOB,
+  ALWAYS_ON_DIGEST_JOB,
   ALWAYS_ON_TICK_JOB,
   ALWAYS_ON_WAKE_JOB,
   AlwaysOnService,
@@ -145,6 +147,23 @@ export class AgentRuntimeProcessor {
     if (!this.alwaysOn) return;
     const outcome = await this.alwaysOn.process(agentId, organizationId);
     this.logger.debug(`Always on for agent ${agentId}: ${outcome}`);
+  }
+
+  /** An always-on agent's daily summary (report: 'daily_digest'). */
+  @Process(ALWAYS_ON_DIGEST_JOB)
+  async handleAlwaysOnDigest(job: Job<{ agentId: string; organizationId: string }>) {
+    const { agentId, organizationId } = job.data;
+    if (!this.alwaysOn) return;
+    const outcome = await this.alwaysOn.digest(agentId, organizationId);
+    this.logger.debug(`Daily summary for agent ${agentId}: ${outcome}`);
+  }
+
+  /** Turn agents paused for capacity back on where the plan has room again. */
+  @Process(ALWAYS_ON_CAPACITY_JOB)
+  async handleAlwaysOnCapacity() {
+    if (!this.alwaysOn) return;
+    const resumed = await this.alwaysOn.resumeAllWithinCapacity();
+    if (resumed) this.logger.log(`Always on: ${resumed} agent(s) back on, their plans have room again`);
   }
 
   /** Everything a finished run hands on: its scheduled result, its always-on report. */

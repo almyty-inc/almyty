@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -65,6 +65,19 @@ describe('the Always on form', () => {
     const form = { ...formFromView(empty as any), brief: 'x', ownerChannelId: 'c-slack' }
     expect(inputFromForm(form, 15).error).toBe('Enter your own address on the channel you talk to it on.')
     expect(inputFromForm({ ...form, ownerAddress: ' U123 ' }, 15).input!.ownerChannel).toEqual({ channelId: 'c-slack', address: 'U123', trustEmail: false })
+  })
+
+  it('a daily summary needs a time and a zone, and only then sends them', () => {
+    const view = { ...empty, digest: { time: '09:00', timezone: 'UTC' } }
+    const form = { ...formFromView(view as any), brief: 'x' }
+    // Pre-filled from what the server says the defaults are.
+    expect(form).toMatchObject({ digestTime: '09:00', digestTimezone: 'UTC' })
+    expect(inputFromForm(form, 15).input).not.toHaveProperty('digest')
+    expect(inputFromForm({ ...form, report: 'daily_digest', digestTime: '' }, 15).error).toBe('Choose when the daily summary goes out.')
+    expect(inputFromForm({ ...form, report: 'daily_digest' }, 15).input).toMatchObject({ report: 'daily_digest', digest: { time: '09:00', timezone: 'UTC' } })
+    // The agent's own setting wins over the defaults.
+    const own = formFromView({ ...view, alwaysOn: { enabled: false, brief: 'x', wakeOn: {}, actMode: 'propose', askFirstToolIds: [], report: 'daily_digest', digest: { time: '06:00' } } } as any)
+    expect(own).toMatchObject({ report: 'daily_digest', digestTime: '06:00', digestTimezone: 'UTC' })
   })
 })
 
@@ -156,5 +169,68 @@ describe('/agents/:id/always-on', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(agentsApi.setAlwaysOn).toHaveBeenCalled())
     expect(vi.mocked(agentsApi.setAlwaysOn).mock.calls[0][1].ownerChannel).toEqual({ channelId: 'c-mail', address: 'U1', trustEmail: true })
+  })
+
+  it('offers a daily summary in the report picker; choosing it asks when, pre-filled with the defaults, and saves them', async () => {
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      digest: { time: '18:30', timezone: 'Europe/Berlin' },
+      alwaysOn: { enabled: true, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_acted' },
+    } as any)
+    vi.mocked(agentsApi.setAlwaysOn).mockResolvedValue(empty as any)
+    open()
+    await screen.findByText('Reports')
+    expect(screen.queryByTestId('always-on-digest')).toBeNull()
+    await userEvent.click(screen.getByLabelText('When'))
+    expect(await screen.findByRole('option', { name: 'Only when it did something' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'After every wake' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('option', { name: 'Once a day, a short summary of what it did' }))
+
+    const digest = await screen.findByTestId('always-on-digest')
+    expect(screen.getByLabelText('Send the summary at')).toHaveValue('18:30')
+    expect(digest).toHaveTextContent('Europe/Berlin')
+    expect(digest).toHaveTextContent('A day it did nothing sends nothing.')
+    expect(within(digest).getByRole('link', { name: 'Approvals' })).toHaveAttribute('href', '/approvals')
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+
+    await userEvent.clear(screen.getByLabelText('Send the summary at'))
+    await userEvent.type(screen.getByLabelText('Send the summary at'), '07:45')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(agentsApi.setAlwaysOn).toHaveBeenCalled())
+    expect(vi.mocked(agentsApi.setAlwaysOn).mock.calls[0][1]).toMatchObject({
+      report: 'daily_digest',
+      digest: { time: '07:45', timezone: 'Europe/Berlin' },
+    })
+  })
+
+  it('for an agent on a hosted machine, says how many always-on agents the plan includes there and how many are on', async () => {
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      capacity: { ...CAP, includedAgents: 3 },
+      hostedHome: true,
+      hostedAgentsOn: 2,
+    } as any)
+    open()
+    expect(await screen.findByTestId('always-on-included')).toHaveTextContent(
+      'Your plan includes 3 always-on agents on hosted machines; 2 are on.',
+    )
+  })
+
+  it('says nothing about a limit for an agent on your own machine or with no machine, even on a plan with one', async () => {
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      capacity: { ...CAP, includedAgents: 3 },
+      hostedHome: false,
+      hostedAgentsOn: 0,
+    } as any)
+    open()
+    await screen.findByText('Set up always on')
+    expect(screen.queryByTestId('always-on-included')).toBeNull()
+  })
+
+  it('says nothing about a count on a plan with no limit', async () => {
+    open()
+    await screen.findByText('Set up always on')
+    expect(screen.queryByTestId('always-on-included')).toBeNull()
   })
 })

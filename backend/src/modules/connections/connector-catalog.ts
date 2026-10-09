@@ -334,6 +334,39 @@ export const REGISTRY_S3_CONNECTOR: ConnectorDefinition = {
 };
 
 /**
+ * A Kubernetes cluster that runs hosted runner pods (docs/hosted-runners.md):
+ * its API server, the CA that signs it, and the token of a ServiceAccount
+ * whose role reaches only the runner-pool namespaces. The platform pool's
+ * connection is named by HOSTED_RUNNERS_CLUSTER_CONNECTION; the check is
+ * shape only (an https server and a token), because a cluster's API is
+ * often reachable only from the backend's own network.
+ */
+export const KUBERNETES_CONNECTOR: ConnectorDefinition = {
+  key: 'kubernetes',
+  kind: 'cloud',
+  displayName: 'Kubernetes cluster',
+  description: 'A cluster that runs hosted runner pods under gVisor.',
+  connect: [{
+    type: 'api_key',
+    label: 'API server and ServiceAccount token',
+    schema: {
+      type: 'object',
+      properties: {
+        server: { type: 'string', title: 'API server URL', format: 'uri', description: 'https://, as in the kubeconfig cluster entry.' },
+        caCert: { type: 'string', title: 'CA certificate (PEM)', description: 'The cluster CA; leave empty when the API server has a publicly trusted certificate.' },
+        token: { type: 'string', title: 'ServiceAccount token', 'x-secret': true },
+      },
+      required: ['server', 'token'],
+    },
+    credentialType: CredentialType.KUBERNETES,
+  }],
+  capabilities: ['hosted_runners'],
+  validation: { kind: 'format', fields: { server: '^https://' }, accountLabelFrom: 'server' },
+  keyPageUrl: null,
+  docsUrl: 'https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/',
+};
+
+/**
  * "Other service": any key the catalog has no entry for, stored under a
  * name the person gives it (the connect body's `name`). There is nobody to
  * ask whether it works, so the check is shape only: it is saved as given.
@@ -499,6 +532,7 @@ export const MEMORY_CONNECTORS: ConnectorDefinition[] = [
 
 const OTHER_CONNECTORS: ConnectorDefinition[] = [
   REGISTRY_S3_CONNECTOR,
+  KUBERNETES_CONNECTOR,
   {
     key: 'registry-huggingface',
     kind: 'registry',

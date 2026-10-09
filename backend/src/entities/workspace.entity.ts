@@ -21,15 +21,45 @@ import { Agent } from './agent.entity';
  * migration of a workspace from one runner to another in v1.0.
  *
  * Transitions:
- *   active -> released   explicit release() call
- *   active -> expired    BullMQ expiry job sees ttlAt < now
- *   active -> stranded   pinned runner went OFFLINE before release
+ *   active -> released     explicit release() call
+ *   active -> expired      BullMQ expiry job sees ttlAt < now
+ *   active -> stranded     pinned runner went OFFLINE before release (`job` workspaces only)
+ *   active <-> suspended   a `persistent` workspace's pod scaled to zero and back
+ *   suspended -> released  released by its owner while parked
+ *   suspended -> expired   untouched past the retention window
+ *
+ * `suspended` is not terminal: the pod is gone, the volume is kept, and
+ * the next wake starts a new pod on it. A `persistent` workspace never
+ * reaches `stranded`.
  */
 export enum WorkspaceStatus {
   ACTIVE = 'active',
+  SUSPENDED = 'suspended',
   RELEASED = 'released',
   EXPIRED = 'expired',
   STRANDED = 'stranded',
+}
+
+/** The states a workspace never leaves. */
+export const TERMINAL_WORKSPACE_STATUSES: readonly WorkspaceStatus[] = [
+  WorkspaceStatus.RELEASED,
+  WorkspaceStatus.EXPIRED,
+  WorkspaceStatus.STRANDED,
+];
+
+/**
+ * `job`: made for one job (an agent run and its helpers) or by
+ * `POST /workspaces`, on any runner; ends with the job or its TTL.
+ * `persistent`: a hosted environment's workspace that outlives runs; it
+ * lives on a volume and is suspended rather than stranded.
+ */
+export type WorkspaceKind = 'job' | 'persistent';
+
+/** What the adapter made for a persistent workspace's volume. Adapter-owned. */
+export interface WorkspaceVolumeRef {
+  name: string;
+  sizeGi: number;
+  provider: string;
 }
 
 @Entity('workspaces')
@@ -136,4 +166,23 @@ export class Workspace {
    */
   @Column({ type: 'uuid', nullable: true })
   runId: string | null;
+
+  @Column({ type: 'varchar', length: 12, default: 'job' })
+  kind: WorkspaceKind;
+
+  /** The environment a `persistent` workspace belongs to. */
+  @Column({ type: 'uuid', nullable: true })
+  environmentId: string | null;
+
+  /** The volume a `persistent` workspace lives on; adapter-owned. */
+  @Column({ type: 'jsonb', nullable: true })
+  volumeRef: WorkspaceVolumeRef | null;
+
+  /** Last use of a `persistent` workspace; the retention window counts from here. */
+  @Column({ type: 'timestamptz', nullable: true })
+  lastActiveAt: Date | null;
+
+  /** When the owner was told a suspended workspace is about to be deleted. */
+  @Column({ type: 'timestamptz', nullable: true })
+  expiryNoticeAt: Date | null;
 }

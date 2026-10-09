@@ -734,6 +734,83 @@ describe('ToolExecutorService', () => {
     });
   });
 
+  // An agent whose machine is a hosted environment (agentConfig.environmentId),
+  // or an environment's own tool: the call goes to the caller's persistent
+  // workspace there, and a parked one answers "starting, try again".
+  describe('runner dispatch on a hosted environment', () => {
+    const ENV_ID = 'env-1';
+    let hosted: { resolveTarget: jest.Mock; touchRunner: jest.Mock };
+
+    const runnerTool = (runnerConfig: Record<string, any>) => ({
+      id: 'tool-hosted',
+      name: 'env.app.shell.exec',
+      status: ToolStatus.ACTIVE,
+      type: ToolType.FUNCTION,
+      organizationId: 'org-1',
+      operation: null,
+      configuration: { timeout: 5000 },
+      runnerConfig,
+    } as any);
+
+    beforeEach(() => {
+      hosted = { resolveTarget: jest.fn(), touchRunner: jest.fn(async () => undefined) };
+      (service as any).hostedDispatch = hosted;
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) } as any);
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+    });
+
+    it('tells a run the machine is starting and when to try again, dispatching nothing', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
+      hosted.resolveTarget.mockResolvedValue({ kind: 'waking', workspaceId: 'ws-p', hostedRunnerId: 'hr-1', retryAfterMs: 10_000, message: 'starting' });
+
+      const result = await service.executeTool('tool-hosted', { command: 'ls' }, {
+        userId: 'user-1', organizationId: 'org-1', runId: 'run-1', agentId: 'agent-1', environmentId: ENV_ID,
+      });
+
+      expect(hosted.resolveTarget).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ organizationId: 'org-1', callerUserId: 'user-1', agentId: 'agent-1' }));
+      expect(result).toMatchObject({ success: false, metadata: { runnerErrorCode: 'workspace_waking', retryAfterMs: 10_000, retryable: true } });
+      expect((service as any).runnerCalls.dispatch).not.toHaveBeenCalled();
+      expect((service as any).runWorkspaces.acquire).not.toHaveBeenCalled();
+    });
+
+    it('dispatches into the caller\'s persistent workspace on the environment\'s runner, whichever runner published the tool', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
+      hosted.resolveTarget.mockResolvedValue({ kind: 'ready', runnerId: 'runner-hosted', workspaceId: 'ws-p', hostedRunnerId: 'hr-1' });
+
+      const result = await service.executeTool('tool-hosted', { command: 'ls' }, {
+        userId: 'user-1', organizationId: 'org-1', runId: 'run-1', agentId: 'agent-1', environmentId: ENV_ID,
+      });
+
+      expect(result.success).toBe(true);
+      expect((service as any).runWorkspaces.acquire).not.toHaveBeenCalled();
+      expect((service as any).runnerCalls.dispatch).toHaveBeenCalledWith('runner-hosted', 'shell.exec', { command: 'ls' }, 'ws-p', expect.objectContaining({ labels: undefined }));
+      expect(hosted.touchRunner).toHaveBeenCalledWith('runner-hosted');
+    });
+
+    it('routes an environment\'s own tool there without a run or a workspaceId', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ environmentId: ENV_ID, environmentName: 'app', method: 'shell.exec', requiresWorkspace: true }));
+      hosted.resolveTarget.mockResolvedValue({ kind: 'ready', runnerId: 'runner-hosted', workspaceId: 'ws-p', hostedRunnerId: 'hr-1' });
+
+      const result = await service.executeTool('tool-hosted', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1' });
+
+      expect(result.success).toBe(true);
+      expect(hosted.resolveTarget).toHaveBeenCalledWith(ENV_ID, expect.anything());
+      expect((service as any).runnerCalls.dispatch).toHaveBeenCalledWith('runner-hosted', 'shell.exec', { command: 'ls' }, 'ws-p', expect.any(Object));
+    });
+
+    it('answers a machine that cannot start with its code, and refuses plainly where hosted environments are absent', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ environmentId: ENV_ID, method: 'shell.exec', requiresWorkspace: true }));
+      hosted.resolveTarget.mockRejectedValue(Object.assign(new Error('did not start within 180 seconds'), { code: 'workspace_unavailable' }));
+      const failed = await service.executeTool('tool-hosted', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1' });
+      expect(failed).toMatchObject({ success: false, error: 'workspace_unavailable: did not start within 180 seconds', metadata: { runnerErrorCode: 'workspace_unavailable' } });
+
+      (service as any).hostedDispatch = undefined;
+      const absent = await service.executeTool('tool-hosted', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1' });
+      expect(absent).toMatchObject({ success: false, metadata: { runnerErrorCode: 'runner_not_found' } });
+      expect((service as any).runnerCalls.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('mcp dispatch', () => {
     const mcpTool = () => ({
       id: 'tool-mcp-1',

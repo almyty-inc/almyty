@@ -26,4 +26,32 @@ describe('GrantsUsePolicy (the consumer-side seam)', () => {
     grants.assertCanUse.mockRejectedValue(Object.assign(new Error('no grant'), { code: 'CONNECTION_NOT_GRANTED' }));
     await expect(policy.assertCanUse({ organizationId: 'org', credential: credential({}), principal: { id: 'u-2' } })).rejects.toMatchObject({ code: 'CONNECTION_NOT_GRANTED' });
   });
+
+  describe('a channel using the key it was set up with', () => {
+    // A Slack or email channel whose key was saved on Credentials (the
+    // channel form's "Create one here") answered every Slack event with
+    // CONNECTION_NOT_GRANTED and posted nothing: the gateway holds no role
+    // and a grant cannot name a gateway, so nothing could let it through.
+    const gateway = { kind: 'gateway', gatewayId: 'gw-1', organizationId: 'org', visibility: 'org', teamId: null, ownerUserId: 'u-1' } as any;
+    const own = { purpose: 'channel_inbound', resourceType: 'gateway', resourceId: 'gw-1' };
+
+    it('uses an organization key on the channel it is attached to', async () => {
+      const { policy, grants } = build();
+      await expect(policy.assertCanUse({ organizationId: 'org', credential: credential({ connectorKey: 'slack' }), execution: gateway, context: own })).resolves.toBeUndefined();
+      expect(grants.assertCanUse).not.toHaveBeenCalled();
+    });
+
+    it('still checks grants for anything else the gateway uses', async () => {
+      const { policy, grants } = build();
+      await policy.assertCanUse({ organizationId: 'org', credential: credential({}), execution: gateway, context: { purpose: 'api_call', resourceType: 'api', resourceId: 'api-1' } });
+      await policy.assertCanUse({ organizationId: 'org', credential: credential({}), execution: gateway, context: { ...own, resourceId: 'gw-2' } });
+      expect(grants.assertCanUse).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not open a personal key that way', async () => {
+      const { policy, grants } = build();
+      await policy.assertCanUse({ organizationId: 'org', credential: credential({ ownerUserId: 'u-2' }), execution: gateway, context: own });
+      expect(grants.assertCanUse).toHaveBeenCalledTimes(1);
+    });
+  });
 });

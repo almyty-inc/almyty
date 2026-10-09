@@ -1,0 +1,36 @@
+# Reference manifest, not deployed by anything in this repository.
+# Tested 2026-10-08 (see docs/design/hosted-runners-and-always-on.md).
+#
+# Default deny for the runner namespace, plus an allowlist that names each
+# host twice: toFQDNs (by resolved IP) and serverNames (TLS SNI, enforced by
+# Cilium's Envoy; needs enable-l7-proxy). toFQDNs alone let
+# registry.yarnpkg.com through because it shares Cloudflare IPs with
+# registry.npmjs.org; the SNI rule blocks it. The hosts here are the test's;
+# the provisioner writes one such policy per environment from its allowHosts.
+# The production policy also adds egressDeny rules for private ranges, the
+# cluster CIDRs and the metadata address, and allows the almyty API ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: runners}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata: {name: runner-egress-allowlist, namespace: runners}
+spec:
+  endpointSelector: {matchLabels: {app: runner}}
+  egress:
+  - toEndpoints:
+    - matchLabels: {k8s:io.kubernetes.pod.namespace: kube-system, k8s:k8s-app: kube-dns}
+    toPorts:
+    - ports: [{port: "53", protocol: ANY}]
+      rules: {dns: [{matchPattern: "*"}]}
+  - toFQDNs:
+    - matchName: github.com
+    - matchName: registry.npmjs.org
+    - matchName: example.com
+    toPorts:
+    - ports: [{port: "443", protocol: TCP}]
+      serverNames: [github.com, registry.npmjs.org, example.com]

@@ -77,6 +77,14 @@ describe('AlwaysOnCard', () => {
     expect(screen.getByTestId('always-on-next-wake')).toBeInTheDocument()
   })
 
+  it('says when it reports, and for a daily summary at what time and where', async () => {
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue(
+      view({ ...CONFIG, report: 'daily_digest' }, { digest: { time: '08:30', timezone: 'Europe/Berlin' } }) as any,
+    )
+    renderCard()
+    expect(await screen.findByTestId('always-on-card-report')).toHaveTextContent('Sends a short summary once a day at 8:30, Europe/Berlin')
+  })
+
   it('wakes it now', async () => {
     vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue(view(CONFIG) as any)
     vi.mocked(agentsApi.wakeNow).mockResolvedValue({} as any)

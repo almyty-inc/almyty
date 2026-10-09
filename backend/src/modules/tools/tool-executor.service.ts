@@ -22,7 +22,7 @@
  * path. Types are re-exported below so no caller needs to update
  * its import path.
  */
-import { Injectable, Logger, BadRequestException, Optional, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional, ForbiddenException, Inject } from '@nestjs/common';
 import { PluginManagerService } from '../plugins/plugin-manager.service';
 import { PluginHookType } from '../plugins/types/plugin.types';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -61,6 +61,7 @@ import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
 import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 import { isServableGatewayTool } from '../gateways/gateway-servable';
+import { HOSTED_DISPATCH, type HostedDispatch, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -127,6 +128,9 @@ export class ToolExecutorService {
     // Approval policies' amount rules, checked before any call runs.
     // Optional for the positional unit tests; Nest always provides it.
     @Optional() private readonly approvalGate?: ToolApprovalGateService,
+    // Hosted environments (HostedRunnersModule, @Global). Optional: without
+    // it an environment's tool is refused with a plain sentence.
+    @Optional() @Inject(HOSTED_DISPATCH) private readonly hostedDispatch?: HostedDispatch,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -447,6 +451,7 @@ export class ToolExecutorService {
               scopes: options.scopes ?? null,
               runnerLabels: options.runnerLabels ?? null,
               pinnedRunnerId: options.pinnedRunnerId ?? null,
+              environmentId: options.environmentId ?? null,
               agentTeamId: options.agentTeamId ?? null,
             });
             return answer(
@@ -787,7 +792,7 @@ export class ToolExecutorService {
     // chain is walked by RunWorkspaceService.
     const runId = options.runId ?? scope?.workspaceRunId ?? scope?.runId ?? null;
 
-    if (cfg.requiresWorkspace && !workspaceId && !(runId && this.runWorkspaces)) {
+    if (cfg.requiresWorkspace && !workspaceId && !(runId && this.runWorkspaces) && !(cfg.environmentId ?? options.environmentId)) {
       return {
         success: false,
         error: `Tool '${tool.name}' requires a workspaceId parameter; runner-backed methods scoped to a workspace cannot run without one.`,
@@ -808,8 +813,36 @@ export class ToolExecutorService {
       // runner published the tool, and nothing reroutes it (labels become
       // a check on that runner).
       const pinned = !!options.pinnedRunnerId;
-      let targetRunnerId = options.pinnedRunnerId ?? cfg.runnerId;
-      if (cfg.requiresWorkspace && !workspaceId && runId && this.runWorkspaces) {
+      let targetRunnerId = options.pinnedRunnerId ?? cfg.runnerId ?? '';
+      // A hosted environment: the environment's own tool, or a runner tool
+      // of an agent whose machine is an environment (agentConfig.environmentId).
+      // The call goes to the caller's persistent workspace there; a parked
+      // one is woken and the caller is told to try again shortly.
+      const environmentId = cfg.environmentId ?? options.environmentId ?? null;
+      if (environmentId) {
+        if (!this.hostedDispatch) {
+          return this.runnerFailure('runner_not_found', 'Hosted environments are not available on this server', startTime);
+        }
+        let target: Awaited<ReturnType<HostedDispatch['resolveTarget']>>;
+        try {
+          target = await this.hostedDispatch.resolveTarget(environmentId, {
+            organizationId: options.organizationId,
+            principal: options.principal,
+            callerUserId: options.userId ?? null,
+            agentId: options.agentId ?? scope?.agentId ?? null,
+          });
+        } catch (err: any) {
+          return this.runnerFailure(err?.code ?? 'workspace_unavailable', err?.message ?? String(err), startTime);
+        }
+        if (target.kind === 'waking') {
+          return {
+            ...this.runnerFailure(WORKSPACE_WAKING, target.message, startTime),
+            metadata: { runnerErrorCode: WORKSPACE_WAKING, retryAfterMs: target.retryAfterMs, retryable: true },
+          };
+        }
+        targetRunnerId = target.runnerId;
+        workspaceId = target.workspaceId;
+      } else if (cfg.requiresWorkspace && !workspaceId && runId && this.runWorkspaces) {
         const workspace = await this.runWorkspaces.acquire({
           runnerId: targetRunnerId,
           pinned,
@@ -841,11 +874,13 @@ export class ToolExecutorService {
           principal: options.principal,
           // The agent's machine requirements (gpu=yes): the call goes to an
           // online runner with those labels, this tool's own when it has them.
-          labels: options.runnerLabels,
+          labels: environmentId ? undefined : options.runnerLabels,
           pinned,
           organizationId: options.organizationId,
         },
       );
+      // A hosted workspace's idle clock restarts with every call.
+      if (environmentId) await this.hostedDispatch?.touchRunner(targetRunnerId).catch(() => undefined);
       if (!response.ok) {
         return {
           success: false,
@@ -879,6 +914,19 @@ export class ToolExecutorService {
       }
       throw err;
     }
+  }
+
+  /** A runner-backed call that could not be dispatched, in the shape every caller reads. */
+  private runnerFailure(code: string, message: string, startTime: number): ToolExecutionResult {
+    return {
+      success: false,
+      error: `${code}: ${message}`,
+      executionTime: Date.now() - startTime,
+      cached: false,
+      rateLimited: false,
+      retryCount: 0,
+      metadata: { runnerErrorCode: code },
+    };
   }
 
   /**

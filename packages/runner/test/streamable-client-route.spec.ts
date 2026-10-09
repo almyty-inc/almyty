@@ -112,3 +112,37 @@ describe('StreamableClient route', () => {
     ]);
   });
 });
+
+describe('StreamableClient on a fixed route with a renewable token (hosted runners)', () => {
+  it('posts to the given route, never falls back, and reads the token on every request', async () => {
+    const calls: Array<{ url: string; auth: string }> = [];
+    const fetchMock = async (url: string, init: any) => {
+      calls.push({ url, auth: init.headers.Authorization });
+      if (calls.length === 2) return json(404, { message: `Cannot POST ${RUNNER_STREAM_PATH}` });
+      return new Response(null, { status: 202, headers: { 'mcp-session-id': 'sh_h' } });
+    };
+    let token = 'credential-1';
+    const c = new StreamableClient({ baseUrl: 'http://x', token: () => token, streamPath: '/runners/hosted/stream', fetch: fetchMock as any });
+    await c.send(envelope('heartbeat', {}));
+    token = 'credential-2';
+    await expect(c.send(envelope('heartbeat', {}))).rejects.toThrow(/404/);
+    expect(calls).toEqual([
+      { url: 'http://x/runners/hosted/stream', auth: 'Bearer credential-1' },
+      { url: 'http://x/runners/hosted/stream', auth: 'Bearer credential-2' },
+    ]);
+  });
+
+  it('startStream resolves once the stream is open, while it is still being read', async () => {
+    let close!: () => void;
+    const body = new ReadableStream<Uint8Array>({ start(ctrl) { close = () => ctrl.close(); } });
+    const fetchMock = async (_url: string, init: any) =>
+      init.method === 'GET'
+        ? new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+        : new Response(null, { status: 202, headers: { 'mcp-session-id': 'sh_s' } });
+    const c = new StreamableClient({ baseUrl: 'http://x', token: 't', fetch: fetchMock as any, setTimeoutFn: (() => 0) as any });
+    await c.send(envelope('heartbeat', {}));
+    await c.startStream();
+    c.stop();
+    close();
+  });
+});

@@ -42,6 +42,14 @@ export interface ToolExecutionOptions {
    * other tool type.
    */
   pinnedRunnerId?: string;
+  /**
+   * The hosted environment a runner-backed tool runs on, from the agent's
+   * config (agentConfig.environmentId): the call goes to the caller's
+   * persistent workspace on it, woken if parked, whichever runner
+   * published the tool. An agent names this or runner labels / a runner,
+   * never both. Ignored by every other tool type.
+   */
+  environmentId?: string;
   timeout?: number;
   retries?: number;
   skipCache?: boolean;

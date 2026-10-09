@@ -19,6 +19,8 @@
  *   - Constrain `cwd` to `allowedCwdRoots` (realpath-canonicalized to block
  *     symlink/`..` escape).
  *   - Strip env keys a payload must never set (PATH, LD_PRELOAD, …).
+ *   - When `allowBinaries` is set, refuse a binary it does not list (the
+ *     binary of a spawn, every command a shell line starts).
  */
 import { realpathSync } from 'fs';
 import { resolve, sep } from 'path';
@@ -111,6 +113,142 @@ function assertCommandAllowed(config: RunnerConfig, command: string): void {
   }
 }
 
+// ── allowBinaries ───────────────────────────────────────────────────
+//
+// A hosted environment may name the binaries its runner starts
+// (`egress.allowBinaries`, docs/design/hosted-runners-and-always-on.md).
+// Inside the pod's sandbox this is a guard rail, not the boundary: an
+// allowed shell, interpreter or wrapper (bash, sh, python, node, env, xargs,
+// npm scripts) can still start anything, and the policy says so rather
+// than pretending otherwise.
+//
+// An entry without a slash allows that bare command name, found on PATH
+// (which a payload cannot change, BLOCKED_ENV_KEYS). An entry with a slash
+// allows exactly that absolute path. `./claude` is neither.
+
+/** Bare command names: letters, digits and . _ + - (no slash, no space). */
+const BINARY_NAME_RE = /^[A-Za-z0-9._+-]+$/;
+
+/**
+ * Shell builtins that cannot start another program themselves, so a
+ * command line like `cd app && npm test` needs only npm listed. Builtins
+ * that run their arguments (exec, eval, command, builtin, source, ., trap)
+ * are not here: they need listing like any binary.
+ */
+const SAFE_BUILTINS = new Set([
+  'cd', 'echo', 'printf', 'pwd', 'export', 'unset', 'set', 'test', '[', '[[', ']]',
+  'true', 'false', ':', 'exit', 'return', 'shift', 'read', 'wait', 'umask',
+]);
+
+/** Shell words that open or close a construct; the command follows them. */
+const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'fi', 'do', 'done', 'while', 'until', '!', 'time', '{', '}', 'esac']);
+
+/** Constructs whose first segment names variables or patterns, not a command. */
+const NON_COMMAND_SEGMENTS = new Set(['for', 'case', 'select', 'function']);
+
+/**
+ * Parse an allowBinaries list from its environment form: a JSON array of
+ * strings (what the backend writes). Anything else throws, so a runner
+ * with a list it cannot read refuses to start rather than running
+ * unrestricted.
+ */
+export function parseAllowBinaries(raw: string | undefined): string[] | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('ALMYTY_ALLOW_BINARIES must be a JSON array of binary names');
+  }
+  if (!Array.isArray(parsed) || parsed.some((v) => typeof v !== 'string')) {
+    throw new Error('ALMYTY_ALLOW_BINARIES must be a JSON array of binary names');
+  }
+  const out = [...new Set((parsed as string[]).map((v) => v.trim()))];
+  for (const entry of out) {
+    if (!(BINARY_NAME_RE.test(entry) || (entry.startsWith('/') && !/\s/.test(entry)))) {
+      throw new Error(`ALMYTY_ALLOW_BINARIES: "${entry}" is neither a command name nor an absolute path`);
+    }
+  }
+  return out.length ? out : undefined;
+}
+
+/**
+ * The config with an allowBinaries list applied. Only ever narrows: when
+ * the config already has a list, the result is the intersection, and an
+ * empty intersection throws rather than lifting the restriction.
+ */
+export function withAllowBinaries(config: RunnerConfig, allow: string[] | undefined): RunnerConfig {
+  if (!allow || allow.length === 0) return config;
+  if (!config.allowBinaries?.length) return { ...config, allowBinaries: [...allow] };
+  const current = new Set(config.allowBinaries);
+  const next = allow.filter((b) => current.has(b));
+  if (next.length === 0) throw new Error('allowBinaries: the environment and the runner config allow no binary in common');
+  return { ...config, allowBinaries: next };
+}
+
+function binaryAllowed(allow: string[], binary: string): boolean {
+  return binary.includes('/') ? binary.startsWith('/') && allow.includes(binary) : allow.includes(binary);
+}
+
+function denyBinary(binary: string): never {
+  throw new RunnerError(`binary not in allowBinaries: ${binary}`, RUNNER_ERROR_CODES.COMMAND_DENIED);
+}
+
+function assertBinaryAllowed(config: RunnerConfig, binary: string): void {
+  const allow = config.allowBinaries;
+  if (!allow || allow.length === 0) return;
+  if (!binaryAllowed(allow, binary)) denyBinary(binary);
+}
+
+/**
+ * The command names a shell command line would start: the first word of
+ * every simple command, including those inside $( ), backticks, ( ), <( )
+ * and >( ), after variable assignments, redirections and keywords. Quotes
+ * and backslashes are removed from the word (`"rm"` is rm). A word that is
+ * built at run time ($VAR, a glob) is returned as is and never matches an
+ * entry, so it is refused.
+ *
+ * Best effort by design: separators inside quotes split too, which can
+ * refuse a harmless line (`echo "a; b"` checks `b`) but never lets a
+ * command through unseen.
+ */
+export function commandHeads(cmd: string): string[] {
+  const normalized = cmd
+    .replace(/\d*[<>]&(?:\d+|-)/g, ' ') // 2>&1, >&2, <&-
+    .replace(/&>>?/g, ' >'); // &> file
+  const segments = normalized.split(/\$\(|[<>]\(|\|\||&&|;;|[;&|\n()`]/);
+  const heads: string[] = [];
+  for (const segment of segments) {
+    const words = segment.trim().split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (i < words.length) {
+      const w = words[i];
+      if (SHELL_KEYWORDS.has(w) || /^[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?\+?=/.test(w)) {
+        i += 1;
+      } else if (/^\d*(?:<<?<?|>>?|>\|)$/.test(w)) {
+        i += 2; // a redirection and its target
+      } else if (/^\d*(?:<<?<?|>>?|>\|)\S/.test(w)) {
+        i += 1; // a redirection glued to its target
+      } else {
+        break;
+      }
+    }
+    if (i >= words.length) continue;
+    if (NON_COMMAND_SEGMENTS.has(words[i])) continue;
+    heads.push(words[i].replace(/["'\\]/g, ''));
+  }
+  return heads;
+}
+
+function assertShellBinariesAllowed(config: RunnerConfig, cmd: string): void {
+  const allow = config.allowBinaries;
+  if (!allow || allow.length === 0) return;
+  for (const head of commandHeads(cmd)) {
+    if (SAFE_BUILTINS.has(head)) continue;
+    if (!binaryAllowed(allow, head)) denyBinary(head);
+  }
+}
+
 function canonical(p: string): string {
   const abs = resolve(p);
   try {
@@ -149,6 +287,7 @@ export function enforceSpawnPolicy(
 ): { env?: Record<string, string> } {
   assertIsolationSupported(config);
   assertCwdAllowed(config, opts.cwd);
+  assertBinaryAllowed(config, opts.binary);
   assertCommandAllowed(config, [opts.binary, ...opts.args].join(' '));
   return { env: sanitizeEnv(opts.env) };
 }
@@ -170,6 +309,7 @@ export function enforceShellPolicy(
   assertIsolationSupported(config);
   assertCwdAllowed(config, cwd);
   assertCommandAllowed(config, cmd);
+  assertShellBinariesAllowed(config, cmd);
   return { env: sanitizeEnv(env) };
 }
 

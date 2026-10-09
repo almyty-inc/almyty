@@ -267,6 +267,11 @@ export default defineConfig({
       },
       // Served by the credentials controller, which has no prefix of its own.
       '/access-keys': { target: apiTarget, changeOrigin: true },
+      '/environments': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
       '/external-agents': {
         target: apiTarget,
         changeOrigin: true,
