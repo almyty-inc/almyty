@@ -19,6 +19,7 @@ import * as protobuf from 'protobufjs';
 import { ApiType } from '../../entities/api.entity';
 import { stripTags } from '../../common/security/strip-tags';
 import { hasDelimited, replaceDelimited } from '../../common/security/linear-text';
+import { discoveryToOpenApi, GOOGLE_TOKEN_URL, isGoogleDiscoveryDocument } from './google-discovery';
 
 export type DetectedFormat = 'openapi3' | 'swagger2' | 'graphql-sdl' | 'graphql-introspection' | 'wsdl' | 'proto';
 
@@ -144,6 +145,11 @@ function tryYaml(text: string): unknown {
 function detectJson(doc: any, text: string, opts: DetectOptions): DetectedApi {
   if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
     if (typeof doc.openapi === 'string' && doc.openapi.startsWith('3')) return describeOpenApi3(doc, text, opts);
+    // A Google discovery document (Calendar, Gmail, Tasks, ...), read as the OpenAPI it describes.
+    if (isGoogleDiscoveryDocument(doc)) {
+      const openapi = discoveryToOpenApi(doc);
+      return describeOpenApi3(openapi, JSON.stringify(openapi), opts);
+    }
     if (String(doc.swagger ?? '') === '2.0') return describeSwagger2(doc, text, opts);
     const schema = doc.__schema ?? doc.data?.__schema;
     if (schema && typeof schema === 'object') return describeIntrospection({ __schema: schema }, opts);
@@ -259,7 +265,18 @@ function pickAuth(
       if (named.length > 0) break;
     }
   }
-  const order = [...named, ...Object.keys(schemes)];
+  // A key sent as a query parameter is the last choice when nothing names
+  // a scheme: it leaks into logs, and where a description lists one next to
+  // other ways it is usually the retired one (HubSpot's `hapikey`, listed
+  // before its OAuth sign-in and private-app tokens).
+  const declared = Object.keys(schemes);
+  const isQueryKey = (name: string) => {
+    const s = schemes[name];
+    return !!s && (s.in === 'query') && (s.type === 'apiKey');
+  };
+  const order = named.length
+    ? [...named, ...declared]
+    : [...declared.filter((n) => !isQueryKey(n)), ...declared.filter(isQueryKey)];
   // An OAuth flow almyty cannot run itself (implicit, password, OpenID
   // Connect) falls back to "paste a token". When the description offers a
   // sign-in almyty can run as an alternative (Google lists implicit first,
@@ -288,6 +305,20 @@ function apiKeyAuth(scheme: any): DetectedAuth | null {
   return null; // cookie keys are not something a tool call sends
 }
 
+/**
+ * Google signs in at accounts.google.com whatever token address an older
+ * description names (accounts.google.com/o/oauth2/token): its current one is
+ * the address Google documents and keeps working, so a Google sign-in is
+ * set up the same way however the description was written.
+ */
+function googleTokenUrl(authorizationUrl: string, tokenUrl: string): string {
+  try {
+    return new URL(authorizationUrl).hostname === 'accounts.google.com' ? GOOGLE_TOKEN_URL : tokenUrl;
+  } catch {
+    return tokenUrl;
+  }
+}
+
 function mapOpenApi3Scheme(scheme: any): DetectedAuth | null {
   switch (scheme?.type) {
     case 'apiKey':
@@ -301,7 +332,7 @@ function mapOpenApi3Scheme(scheme: any): DetectedAuth | null {
     case 'oauth2': {
       const flows = scheme.flows ?? {};
       if (flows.authorizationCode?.authorizationUrl && flows.authorizationCode?.tokenUrl) {
-        return { type: 'oauth2', oauth2: { flow: 'authorization_code', authorizationUrl: flows.authorizationCode.authorizationUrl, tokenUrl: flows.authorizationCode.tokenUrl, scopes: Object.keys(flows.authorizationCode.scopes ?? {}) } };
+        return { type: 'oauth2', oauth2: { flow: 'authorization_code', authorizationUrl: flows.authorizationCode.authorizationUrl, tokenUrl: googleTokenUrl(flows.authorizationCode.authorizationUrl, flows.authorizationCode.tokenUrl), scopes: Object.keys(flows.authorizationCode.scopes ?? {}) } };
       }
       if (flows.clientCredentials?.tokenUrl) {
         return { type: 'oauth2', oauth2: { flow: 'client_credentials', tokenUrl: flows.clientCredentials.tokenUrl, scopes: Object.keys(flows.clientCredentials.scopes ?? {}) } };

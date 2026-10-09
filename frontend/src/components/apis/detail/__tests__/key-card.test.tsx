@@ -219,6 +219,45 @@ describe('the Key card', () => {
     }
   })
 
+  it('asks only for the permissions left ticked', async () => {
+    // Google Calendar's description lists every calendar permission, from
+    // read-only to full access; an assistant that only reads keeps the
+    // read-only ones.
+    vi.mocked(apisApi.getKey).mockResolvedValue(
+      view({
+        type: 'oauth2',
+        headerName: null,
+        location: null,
+        oauth2: {
+          flow: 'authorization_code',
+          authorizationUrl: 'https://accounts.google.com/o/oauth2/auth',
+          tokenUrl: 'https://oauth2.googleapis.com/token',
+          scopes: ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/calendar.readonly'],
+        },
+      }),
+    )
+    vi.mocked(credentialsApi.oauth2Authorize).mockResolvedValue({ authorizationUrl: 'https://accounts.google.com/o/oauth2/auth?state=s', state: 's' })
+    vi.mocked(credentialsApi.oauth2CallbackUrl).mockResolvedValue({ callbackUrl: 'https://api.example.com/credentials/oauth2/callback' })
+    const original = window.location
+    Object.defineProperty(window, 'location', { value: { ...original, assign: vi.fn() }, configurable: true })
+    try {
+      const user = userEvent.setup()
+      at()
+      await user.click(await screen.findByRole('button', { name: 'Add a key' }))
+      await user.click(screen.getByRole('button', { name: 'Create one here' }))
+      expect(screen.getByTestId('api-oauth-scopes')).toHaveTextContent('What it asks for')
+      await user.click(screen.getByRole('checkbox', { name: 'https://www.googleapis.com/auth/calendar' }))
+      await user.type(screen.getByLabelText('Client ID'), 'cid')
+      await user.type(screen.getByLabelText('Client secret'), 'csecret')
+      await user.click(screen.getByRole('button', { name: 'Sign in' }))
+      await waitFor(() =>
+        expect(credentialsApi.oauth2Authorize).toHaveBeenCalledWith(expect.objectContaining({ scopes: ['https://www.googleapis.com/auth/calendar.readonly'] })),
+      )
+    } finally {
+      Object.defineProperty(window, 'location', { value: original, configurable: true })
+    }
+  })
+
   it('removes the key after asking', async () => {
     vi.mocked(apisApi.getKey).mockResolvedValue(view({ source: 'key' }))
     vi.mocked(apisApi.removeKey).mockResolvedValue(view())
