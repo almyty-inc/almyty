@@ -254,9 +254,13 @@ the CLI's own call, forwarded, not an almyty agent:
   comes back as it came, streamed when the client asked for a stream.
 - `model` is a model of the organization's catalog, by its vendor id or
   name: the first validated card for it, in catalog order, on an active
-  **organization-wide** provider that speaks the protocol. A member's
-  private provider, the owner's own included, and a team's provider are
-  never used. `GET /v1/models` lists exactly the models a pod may name.
+  provider a pod may use that speaks the protocol. A pod may use the
+  organization-wide providers, and its owner's own private providers the
+  owner granted to their hosted workspaces: the one-click grant,
+  `hostedPodAccess: true` on `PATCH /llm-providers/:id`, which only the
+  owner of a private provider can set (it is cleared when the provider
+  stops being private). A team's provider, or another member's, is never
+  used. `GET /v1/models` lists exactly the models a pod may name.
 - Before the call the organization's spend budgets are checked; a budget
   that rejects answers in the client's error shape (Anthropic 400, OpenAI
   429 `insufficient_quota`) and nothing is called.
@@ -619,11 +623,8 @@ script) can still start anything. The boundary is the pod.
   the first release that has it.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
-- Anthropic models served through Bedrock or Vertex, and Azure OpenAI, for
-  the model pass-through: it forwards to native Anthropic and OpenAI
-  providers only (and OpenAI-compatible hosts for chat completions).
-- The one-click grant that lets a pod use its owner's private model
-  provider. Until it exists, pods use organization-wide providers only.
+- The grant's switch on the provider page (the API takes `hostedPodAccess`).
+- Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).
 - A spend budget of its own per environment or workspace; model calls from
   a pod count against the organization's budgets.
 - Plan capacity and Stripe reporting (phase 3, in `ee`).

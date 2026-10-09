@@ -65,9 +65,10 @@ interface Usage {
  * machine, model and provider answered.
  *
  * Only a pod model token reaches this (the compat controllers hand a pod
- * token here and nothing else). Providers are organization-wide only: a
- * member's private provider, or a team's, is never a candidate, whatever
- * the workspace owner may use themselves.
+ * token here and nothing else). Providers are the organization-wide ones,
+ * plus the workspace owner's own private providers they granted to their
+ * hosted workspaces (the one-click grant); a team's provider, or another
+ * member's, is never a candidate.
  */
 @Injectable()
 export class ModelPassThroughService {
@@ -83,10 +84,10 @@ export class ModelPassThroughService {
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly settings?: HostedRunnerSettingsService,
   ) {}
-
+  /** The models a pod may name (org-wide providers, and its owner's granted ones), as `/v1/models` lists them. */
   /** The organization-wide providers' models a pod may name, as `/v1/models` lists them. */
-  async listModels(organizationId: string): Promise<Array<{ id: string; created: number; ownedBy: string }>> {
-    const providers = await this.orgWideProviders(organizationId);
+  async listModels(organizationId: string, ownerUserId?: string | null): Promise<Array<{ id: string; created: number; ownedBy: string }>> {
+    const providers = await this.podProviders(organizationId, ownerUserId);
     if (providers.length === 0) return [];
     const cards = await this.models.find({ where: { organizationId, providerId: In(providers.map((p) => p.id)) }, order: { createdAt: 'ASC' } });
     const byId = new Map(providers.map((p) => [p.id, p]));
@@ -102,13 +103,13 @@ export class ModelPassThroughService {
   }
 
   /**
-   * The card and organization-wide provider that answer `model` on this
-   * protocol: the first selectable card in catalog order whose vendor model
-   * id (or name) is `model`, on an active provider that speaks the protocol.
+   * The card and provider that answer `model` on this protocol: the first
+   * selectable card in catalog order whose vendor model id (or name) is
+   * `model`, on an active provider a pod may use that speaks the protocol.
    */
-  async resolve(organizationId: string, protocol: HostedModelCallProtocol, model: unknown): Promise<Resolved> {
+  async resolve(organizationId: string, protocol: HostedModelCallProtocol, model: unknown, ownerUserId?: string | null): Promise<Resolved> {
     if (typeof model !== 'string' || !model.trim()) throw new PassThroughRefused(400, 'model is required', 'invalid');
-    const providers = await this.orgWideProviders(organizationId);
+    const providers = await this.podProviders(organizationId, ownerUserId);
     const byId = new Map(providers.map((p) => [p.id, p]));
     const cards = providers.length
       ? await this.models.find({
@@ -127,7 +128,7 @@ export class ModelPassThroughService {
     }
     throw new PassThroughRefused(
       404,
-      `No organization-wide model provider serves ${model} on this API. Pods use the organization's shared providers; ask an admin to add the model, or name one GET /v1/models lists.`,
+      `No model provider a pod may use serves ${model} on this API. Pods use the organization's shared providers, and their owner's private ones the owner granted to hosted workspaces; ask an admin to add the model, or name one GET /v1/models lists.`,
       'not_found',
     );
   }
@@ -146,7 +147,7 @@ export class ModelPassThroughService {
     let resolved: Resolved;
     try {
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new PassThroughRefused(400, 'The request body must be a JSON object', 'invalid');
-      resolved = await this.resolve(apiKey.organizationId, protocol, body.model);
+      resolved = await this.resolve(apiKey.organizationId, protocol, body.model, apiKey.userId);
       // A token counter costs nothing; every other call is spend.
       if (!opts.countTokens) await this.enforceBudgets(apiKey.organizationId);
     } catch (err) {
@@ -288,8 +289,19 @@ export class ModelPassThroughService {
     }
   }
 
-  private orgWideProviders(organizationId: string): Promise<LlmProvider[]> {
-    return this.providers.find({ where: { organizationId, visibility: 'org', status: LlmProviderStatus.ACTIVE } });
+  /**
+   * The providers a pod may use: the organization's active org-wide ones,
+   * and the workspace owner's own private ones they granted to their hosted
+   * workspaces (`hostedPodAccess`, the one-click grant). Never a team's, and
+   * never another member's.
+   */
+  private podProviders(organizationId: string, ownerUserId: string | null | undefined): Promise<LlmProvider[]> {
+    return this.providers.find({
+      where: [
+        { organizationId, visibility: 'org', status: LlmProviderStatus.ACTIVE },
+        ...(ownerUserId ? [{ organizationId, visibility: 'private' as const, ownerUserId, hostedPodAccess: true, status: LlmProviderStatus.ACTIVE }] : []),
+      ],
+    });
   }
 
   /** A refusal in the client's protocol, so its SDK raises it as what it is. */

@@ -74,6 +74,8 @@ export interface UpdateLlmProviderDto extends ModelAccessInput {
   /** A new connection to point at; null clears the reference (and deletes a key the provider created). */
   credentialId?: string | null;
   usageCredentialId?: string | null;
+  /** The owner's grant of a private provider to their hosted workspaces (model pass-through). */
+  hostedPodAccess?: boolean;
   capabilities?: Partial<LlmProvider['capabilities']>;
   metadata?: Partial<LlmProvider['metadata']>;
   visibility?: ResourceVisibility;

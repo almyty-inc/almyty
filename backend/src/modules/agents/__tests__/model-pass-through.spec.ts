@@ -29,9 +29,10 @@ const FAKE_VENDOR_KEY = 'fake-vendor-key-for-tests';
 const httpCall = callLlmProviderHttp as jest.Mock;
 const httpStream = callLlmProviderHttpStream as jest.Mock;
 
-function provider(id: string, type: LlmProviderType, visibility: 'org' | 'team' | 'private' = 'org'): any {
+function provider(id: string, type: LlmProviderType, visibility: 'org' | 'team' | 'private' = 'org', extra: Record<string, unknown> = {}): any {
   return {
     id, organizationId: ORG, type, visibility, status: 'active', configuration: {}, allowNewModels: true, hiddenModels: [], allowedModels: null, name: id,
+    ownerUserId: null, hostedPodAccess: false, ...extra,
     getDecryptedApiKey: () => FAKE_VENDOR_KEY,
   };
 }
@@ -64,8 +65,10 @@ const fakeReq = (headers: Record<string, string> = {}): any => ({ headers, on: j
 function harness(opts: { providers?: any[]; cards?: Model[]; budget?: () => Promise<void> } = {}) {
   const providers = opts.providers ?? [provider('p-anthropic', LlmProviderType.ANTHROPIC), provider('p-openai', LlmProviderType.OPENAI)];
   const cards = opts.cards ?? [card('m-sonnet', 'p-anthropic', 'claude-sonnet-4-5'), card('m-gpt', 'p-openai', 'gpt-5')];
-  // Filters by exactly what the service asks for, so a query that forgot the visibility would see every provider.
-  const providerRepo = { find: jest.fn(async ({ where }: any) => providers.filter((p) => Object.entries(where).every(([k, v]) => p[k] === v))) };
+  // Filters by exactly what the service asks for (each clause of an OR), so a
+  // query that forgot the visibility or the grant would see every provider.
+  const matches = (p: any, w: any) => Object.entries(w).every(([k, v]) => p[k] === v);
+  const providerRepo = { find: jest.fn(async ({ where }: any) => providers.filter((p) => (Array.isArray(where) ? where : [where]).some((w) => matches(p, w)))) };
   const ids = (cond: any) => cond?._value ?? cond?.value ?? [];
   const modelRepo = {
     find: jest.fn(async ({ where }: any) => {
@@ -168,17 +171,36 @@ describe('the model pass-through', () => {
     expect(t.calls.insert).toHaveBeenLastCalledWith(expect.objectContaining({ protocol: 'openai_chat', inputTokens: 3, outputTokens: 4 }));
   });
 
-  it('never uses a private or team provider, even one the pod\'s owner could use', async () => {
+  it('never uses a team provider, another member\'s private one, or the owner\'s own private one they did not grant', async () => {
     const t = harness({
-      providers: [provider('p-private', LlmProviderType.ANTHROPIC, 'private'), provider('p-team', LlmProviderType.ANTHROPIC, 'team')],
-      cards: [card('m-1', 'p-private', 'claude-sonnet-4-5'), card('m-2', 'p-team', 'claude-sonnet-4-5')],
+      providers: [
+        provider('p-private', LlmProviderType.ANTHROPIC, 'private', { ownerUserId: OWNER, hostedPodAccess: false }),
+        provider('p-other', LlmProviderType.ANTHROPIC, 'private', { ownerUserId: 'someone-else', hostedPodAccess: true }),
+        provider('p-team', LlmProviderType.ANTHROPIC, 'team'),
+      ],
+      cards: [card('m-1', 'p-private', 'claude-sonnet-4-5'), card('m-2', 'p-team', 'claude-sonnet-4-5'), card('m-3', 'p-other', 'claude-sonnet-4-5')],
     });
     const res = fakeRes();
     await t.service.forward(podKey, 'anthropic_messages', claudeRequest, fakeReq(), res);
     expect(res.statusCode).toBe(404);
     expect(res.body).toMatchObject({ type: 'error', error: { type: 'not_found_error' } });
     expect(httpCall).not.toHaveBeenCalled();
-    expect(await t.service.listModels(ORG)).toEqual([]);
+    expect(await t.service.listModels(ORG, OWNER)).toEqual([]);
+  });
+
+  it('uses the owner\'s private provider once they granted it to their hosted workspaces (the one-click grant)', async () => {
+    const t = harness({
+      providers: [provider('p-mine', LlmProviderType.ANTHROPIC, 'private', { ownerUserId: OWNER, hostedPodAccess: true })],
+      cards: [card('m-mine', 'p-mine', 'claude-sonnet-4-5')],
+    });
+    httpCall.mockResolvedValue({ status: 200, data: { usage: { input_tokens: 1, output_tokens: 1 } }, headers: {} });
+    const res = fakeRes();
+    await t.service.forward(podKey, 'anthropic_messages', claudeRequest, fakeReq(), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['X-Almyty-Route-Provider']).toBe('p-mine');
+    expect((await t.service.listModels(ORG, OWNER)).map((m) => m.id)).toEqual(['claude-sonnet-4-5']);
+    // Another person's pod does not get it.
+    expect(await t.service.listModels(ORG, 'someone-else')).toEqual([]);
   });
 
   it('answers only on a provider that speaks the protocol, and lists only usable models', async () => {

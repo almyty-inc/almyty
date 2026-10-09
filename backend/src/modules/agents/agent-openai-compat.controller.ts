@@ -230,7 +230,7 @@ export class AgentOpenAICompatController {
       const podKey = await this.podTokens?.authenticate(presentedToken(auth));
       if (podKey) {
         // A pod lists the models of the organization-wide providers, not agents.
-        const models = (await this.passThrough?.listModels(podKey.organizationId)) ?? [];
+        const models = (await this.passThrough?.listModels(podKey.organizationId, podKey.userId)) ?? [];
         return res.json({ object: 'list', data: models.map((m) => ({ id: m.id, object: 'model', created: m.created, owned_by: m.ownedBy })) });
       }
       const apiKey = (await this.endpointAccess?.authenticateTarget(undefined, req)) ?? (await this.authenticateApiKey(auth));
@@ -276,7 +276,7 @@ export class AgentOpenAICompatController {
       const podKey = await this.podTokens?.authenticate(presentedToken(auth));
       if (podKey) {
         // A pod's CLI checks the model it was given: answered from the pass-through's list.
-        const found = (await this.passThrough?.listModels(podKey.organizationId))?.find((m) => m.id === model);
+        const found = (await this.passThrough?.listModels(podKey.organizationId, podKey.userId))?.find((m) => m.id === model);
         if (!found) return this.sendOpenAIError(res, 404, `The model '${model}' does not exist or you do not have access to it.`, 'invalid_request_error', 'model_not_found');
         return res.json({ id: found.id, object: 'model', created: found.created, owned_by: found.ownedBy });
       }

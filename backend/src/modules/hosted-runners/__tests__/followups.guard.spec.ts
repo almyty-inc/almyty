@@ -129,9 +129,12 @@ describe('hosted runners follow-ups: wiring', () => {
       expect(enrollment).toMatch(/@Post\('hosted\/model-token'\)[\s\S]*?this\.modelTokens\.renew\(presentedToken\(authorization\)\)/);
     });
 
-    it('the pass-through uses organization-wide providers only, and counts as spend', () => {
+    it('the pass-through uses org-wide providers and the owner\'s granted private ones only, and counts as spend', () => {
       const pass = read(SRC, 'modules', 'agents', 'model-pass-through.service.ts');
-      expect(pass).toMatch(/where: \{ organizationId, visibility: 'org', status: LlmProviderStatus\.ACTIVE \}/);
+      expect(pass).toMatch(/\{ organizationId, visibility: 'org', status: LlmProviderStatus\.ACTIVE \}/);
+      expect(pass).toMatch(/\{ organizationId, visibility: 'private' as const, ownerUserId, hostedPodAccess: true, status: LlmProviderStatus\.ACTIVE \}/);
+      // Only the provider's owner gives the grant.
+      expect(read(SRC, 'modules', 'llm-providers', 'llm-providers.service.ts')).toMatch(/provider\.visibility !== 'private' \|\| provider\.ownerUserId !== userId/);
       expect(pass).toMatch(/this\.budgets\?\.enforceForOrganization\(organizationId\)/);
       expect(pass).not.toMatch(/AgentExecutionEngine|CompatAgentInvoker|startRun\(/);
       expect(read(SRC, 'modules', 'budgets', 'spend.service.ts')).toMatch(/repo: this\.hostedCallRepo, alias: 'run', perAgent: false/);

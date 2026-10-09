@@ -875,9 +875,9 @@ minted by the reconcile loop at every pod start (sha256 only in
 itself while the pod runs, sits in the pod's Secret as
 `ALMYTY_MODEL_TOKEN`, is served to the CLIs by the runner's loopback proxy
 (the CLIs hold a placeholder), and is revoked when the pod stops or its
-owner leaves. The pass-through forwards to organization-wide providers
-only; the owner's private provider through an explicit one-click grant is
-not built yet.
+owner leaves. The pass-through forwards to organization-wide providers,
+and to the owner's private ones only through their explicit one-click grant
+(`hostedPodAccess`).
 
 **Abuse.** Hosted runners are paid-only, so every org that has one has a
 card on file. On top of that:
@@ -1412,5 +1412,5 @@ Decided after the phase 2 merge (Frane, 2026-10-08), and built:
   first two still runs an agent; the pass-through takes a pod token only.
   Vendor keys are an opt-in per environment (`allowVendorKeys`), off by
   default; Gemini CLI needs one, since no almyty endpoint speaks its API.
-  The owner's private provider through an explicit one-click grant is not
-  built yet: until it is, pods use organization-wide providers only.
+  The owner's private provider reaches pods only through their explicit
+  one-click grant (`hostedPodAccess` on the provider, owner-only).
