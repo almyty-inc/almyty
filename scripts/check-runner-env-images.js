@@ -51,8 +51,9 @@ if (!images || typeof images !== 'object' || Object.keys(images).length === 0) {
     if (!targets.has(name)) findings.push(`settings.json: "${name}" is not a target in the Dockerfile (targets: ${[...targets].join(', ')}).`);
     if (name === 'base' || name === 'runner-pkg') findings.push(`settings.json: "${name}" is an internal stage, not a flavour.`);
     const want = `almyty/runner-env:${name}-${pin}`;
-    if (ref !== want && !String(ref).startsWith(`${want}@sha256:`)) {
-      findings.push(`settings.json: "${name}" is ${ref}; expected ${want} (optionally @sha256:<digest>).`);
+    const pinned = String(ref).startsWith(`${want}@sha256:`) && /@sha256:[0-9a-f]{64}$/.test(String(ref));
+    if (ref !== want && !pinned) {
+      findings.push(`settings.json: "${name}" is ${ref}; expected ${want} (optionally @sha256:<64 hex digest>).`);
     }
   }
 }
