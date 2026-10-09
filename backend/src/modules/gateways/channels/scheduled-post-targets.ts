@@ -27,6 +27,12 @@ export interface PostTarget {
   normalize(to: string): string;
   /** The thread context sendResponse reads for this destination. */
   threadContext(delivery: ChannelDelivery): Record<string, any>;
+  /**
+   * Each post is a conversation of its own (an email starts a new thread),
+   * so each carries the AI disclosure. Elsewhere a destination is one
+   * ongoing conversation, told once.
+   */
+  eachPostIsNewConversation?: boolean;
 }
 
 const E164 = /^\+[1-9]\d{6,14}$/;
@@ -100,6 +106,7 @@ export const POST_TARGETS: Partial<Record<GatewayType, PostTarget>> = {
       return [...new Set(list.map((a) => a.toLowerCase()))].join(', ');
     },
     threadContext: (d) => ({ recipients: String(d.to).split(', ') }),
+    eachPostIsNewConversation: true,
   },
   [GatewayType.TELEGRAM]: {
     noun: 'Telegram chat',
@@ -234,6 +241,8 @@ export const POST_TARGETS: Partial<Record<GatewayType, PostTarget>> = {
     maxParts: 1,
     normalize: () => '',
     threadContext: () => ({}),
+    // A callback is no conversation: every delivery carries the line.
+    eachPostIsNewConversation: true,
   },
 };
 

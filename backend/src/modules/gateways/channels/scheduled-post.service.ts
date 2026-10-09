@@ -320,10 +320,15 @@ export class ScheduledPostService implements ScheduledResultPoster {
       return outcome;
     }
 
-    // Every scheduled post opens a conversation of its own, so every one
-    // carries the channel's AI disclosure.
-    const disclosure = ChannelGatewayService.disclosureLine(gateway!);
-    const full = disclosure ? `${disclosure}\n\n${text}` : text;
+    // EU AI Act Art. 50: people are told they are talking to an AI once per
+    // conversation, as replies are (applyAiDisclosure). A Slack channel, a
+    // chat or a number is one ongoing conversation, told on the first post
+    // there; an email is a conversation of its own, told every time.
+    const destination = String(delivery.to ?? '');
+    const line = ChannelGatewayService.disclosureLine(gateway!);
+    const disclose =
+      !!line && (target!.eachPostIsNewConversation || !(await this.channelGateway.disclosedTo(gateway!, destination)));
+    const full = disclose ? `${line}\n\n${text}` : text;
     const { parts, truncated } = splitMessage(full, target!.maxChars, target!.maxParts);
     const context = {
       ...target!.threadContext(delivery),
@@ -331,7 +336,7 @@ export class ScheduledPostService implements ScheduledResultPoster {
       subject: `${agent.name}, ${dayIn(when.timezone, new Date())}`,
     };
     try {
-      await this.channelGateway.postMessage(gateway!, parts, context);
+      await this.channelGateway.postMessage(gateway!, parts, context, { destination, disclosed: disclose });
       outcome = { ...named, status: 'delivered', parts: parts.length, ...(truncated ? { truncated: true } : {}) };
     } catch (err: any) {
       outcome = { ...named, status: 'failed', error: String(err?.message ?? err).slice(0, 500) };
