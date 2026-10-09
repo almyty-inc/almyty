@@ -11,6 +11,7 @@
 const CLAUSES: Record<string, (row: any, params: Record<string, any>) => boolean> = {
   '"runnerId" IN (:...runnerIds)': (row, p) => (p.runnerIds as string[]).includes(row.runnerId),
   'status = :active': (row, p) => row.status === p.active,
+  'kind = :job': (row, p) => (row.kind ?? 'job') === p.job,
 };
 
 /** The one raw SQL value the fan-out sets: closeReason from the row's own runnerId. */

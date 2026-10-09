@@ -66,6 +66,12 @@ export function agentRunnerId(agent: Pick<Agent, 'agentConfig'> | null | undefin
   return typeof id === 'string' && id ? id : null;
 }
 
+/** The hosted environment an agent's runner-backed tools run on, or null. */
+export function agentEnvironmentId(agent: Pick<Agent, 'agentConfig'> | null | undefined): string | null {
+  const id = agent?.agentConfig?.environmentId;
+  return typeof id === 'string' && id ? id : null;
+}
+
 const dedupe = (ids: string[]) => [...new Set(ids)];
 
 /** Tidy what a save writes: lists without repeats, the switch equal to the list. */
@@ -78,6 +84,7 @@ export function normaliseCapabilities(cfg: Partial<Config> | null | undefined): 
   if (Array.isArray(cfg.apiIds)) cfg.apiIds = dedupe(cfg.apiIds);
   // "Any of my runners" is stored as no pin at all.
   if (cfg.runnerId === null || cfg.runnerId === '') delete cfg.runnerId;
+  if (cfg.environmentId === null || cfg.environmentId === '') delete cfg.environmentId;
 }
 
 /** Everything wrong with the capability fields, one sentence each. */
@@ -92,5 +99,11 @@ export function capabilityProblems(cfg: unknown): string[] {
   if (!limit(c.maxTemporaryAgents)) problems.push(`Temporary agents per run must be a whole number from 1 to ${TEMPORARY_AGENTS_MAX}`);
   if (!limit(c.maxTemporaryAgentsAlive)) problems.push(`Temporary agents alive at once must be a whole number from 1 to ${TEMPORARY_AGENTS_MAX}`);
   if (c.runnerId !== undefined && c.runnerId !== null && !(typeof c.runnerId === 'string' && UUID_RE.test(c.runnerId))) problems.push('The runner it runs on must be a runner id');
+  if (c.environmentId !== undefined && c.environmentId !== null && !(typeof c.environmentId === 'string' && UUID_RE.test(c.environmentId))) problems.push('The environment it runs on must be an environment id');
+  const labels = c.runnerLabels;
+  const hasLabels = !!labels && (typeof labels === 'string' ? labels.trim().length > 0 : typeof labels === 'object' && Object.keys(labels as object).length > 0);
+  if (typeof c.environmentId === 'string' && c.environmentId && ((typeof c.runnerId === 'string' && c.runnerId) || hasLabels)) {
+    problems.push('An agent runs on a hosted environment or on your own machines, not both: clear the runner and machine labels, or the environment');
+  }
   return problems;
 }

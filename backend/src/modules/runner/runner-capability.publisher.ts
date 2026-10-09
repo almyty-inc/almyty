@@ -203,6 +203,77 @@ export class RunnerCapabilityPublisher {
   }
 
   /**
+   * Tool rows for a hosted environment: the same methods, named
+   * `env.<environment>.<method>`, with `runnerConfig.environmentId`
+   * instead of a runner. One set per environment however many pods it
+   * runs (a pod per workspace would flood the catalog); a call goes to
+   * the caller's own workspace on the environment, woken if parked
+   * (ToolExecutorService, HOSTED_DISPATCH). The rows carry the
+   * environment's visibility and owner. Idempotent, like publish.
+   */
+  async publishEnvironment(env: {
+    id: string;
+    name: string;
+    organizationId: string;
+    ownerUserId: string;
+    visibility: 'private' | 'team' | 'org';
+    teamId: string | null;
+  }): Promise<Tool[]> {
+    const names = RunnerCapabilityPublisher.CAPABILITIES.map((cap) => `env.${env.name}.${cap.method}`);
+    return this.tools.manager.transaction(async (mgr) => {
+      const repo = mgr.getRepository(Tool);
+      await repo
+        .createQueryBuilder()
+        .delete()
+        .from(Tool)
+        .where(`"runnerConfig"->>'environmentId' = :environmentId`, { environmentId: env.id })
+        .execute();
+      await repo
+        .createQueryBuilder()
+        .delete()
+        .from(Tool)
+        .where('"organizationId" = :organizationId AND name IN (:...names)', { organizationId: env.organizationId, names })
+        .execute();
+      await assertToolQuota(mgr, env.organizationId, RunnerCapabilityPublisher.CAPABILITIES.length);
+      const rows: Tool[] = [];
+      for (const cap of RunnerCapabilityPublisher.CAPABILITIES) {
+        const row = repo.create({
+          name: `env.${env.name}.${cap.method}`,
+          description: `${cap.description} Runs on the hosted environment ${env.name}, in your own workspace there.`,
+          type: ToolType.FUNCTION,
+          status: ToolStatus.ACTIVE,
+          version: '1.0.0',
+          organizationId: env.organizationId,
+          visibility: env.visibility ?? 'private',
+          teamId: env.visibility === 'team' ? env.teamId : null,
+          createdBy: env.ownerUserId,
+          parameters: cap.parameters,
+          runnerConfig: {
+            environmentId: env.id,
+            environmentName: env.name,
+            method: cap.method,
+            requiresWorkspace: cap.requiresWorkspace,
+          },
+          metadata: { source: `environment:${env.name}`, ownerUserId: env.ownerUserId },
+        } as Partial<Tool>);
+        rows.push(await repo.save(row));
+      }
+      return rows;
+    });
+  }
+
+  /** Drop an environment's tool rows (the environment was deleted). */
+  async unpublishEnvironment(environmentId: string): Promise<number> {
+    const result = await this.tools
+      .createQueryBuilder()
+      .delete()
+      .from(Tool)
+      .where(`"runnerConfig"->>'environmentId' = :environmentId`, { environmentId })
+      .execute();
+    return result.affected ?? 0;
+  }
+
+  /**
    * Test/inspection helper.
    */
   async listForRunner(runnerId: string): Promise<Tool[]> {

@@ -277,8 +277,15 @@ export class Tool {
    */
   @Column({ type: 'jsonb', nullable: true })
   runnerConfig: {
-    runnerId: string;
-    runnerName: string;
+    /** The runner a self-hosted runner's tool goes to. Absent on an environment's tools. */
+    runnerId?: string;
+    runnerName?: string;
+    /**
+     * A hosted environment's tool (`env.<name>.<method>`): the call goes to
+     * the caller's own workspace on that environment, woken if parked.
+     */
+    environmentId?: string;
+    environmentName?: string;
     method: string;
     requiresWorkspace: boolean;
   } | null;

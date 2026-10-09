@@ -27,6 +27,7 @@ describe('WorkspaceService', () => {
       id: 'r-1',
       name: 'r1',
       ownerUserId,
+      kind: 'self',
       organizationId,
       state: RunnerState.ONLINE,
       labels: {},

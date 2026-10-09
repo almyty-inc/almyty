@@ -16,7 +16,7 @@ import { Switch } from '@/components/ui/switch'
 import { agentsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { formatRunTime } from '@/lib/schedule'
-import { ALWAYS_ON_VS_SCHEDULE, describeActMode, describeWakes, wakeSourceLabel } from '@/lib/always-on'
+import { ALWAYS_ON_VS_SCHEDULE, describeActMode, describeReport, describeWakes, wakeSourceLabel } from '@/lib/always-on'
 import { useNotifications } from '@/store/app'
 import { pluralized } from '@/lib/utils'
 
@@ -90,6 +90,9 @@ export function AlwaysOnCard({ agentId, unsaved = false }: { agentId?: string; u
                   {enabled ? describeWakes(config, view.data?.effectiveTimerMinutes) : `Off: ${describeWakes(config, view.data?.effectiveTimerMinutes)}`}
                 </span>
                 <span className="block text-xs text-muted-foreground">{describeActMode(config)}</span>
+                <span className="block text-xs text-muted-foreground" data-testid="always-on-card-report">
+                  {describeReport(config, view.data?.digest)}
+                </span>
               </Label>
               <Switch id="always-on-toggle" checked={enabled} disabled={busy} onCheckedChange={toggle} />
             </div>

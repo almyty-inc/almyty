@@ -46,6 +46,7 @@ token resolves to community, never to allowed.
 | `audit_export` | Bulk export of the org's audit trail as CSV or JSON, lifting the in-app 200-row cap, plus streaming to a customer SIEM. |
 | `credentials_governance` | Policy over which connectors may be connected, by whom, and how their grants are used. |
 | `agent_identity` | An agent can act as itself instead of as the person who made it: it uses only the connections granted to it, and the audit log names the agent as the one who acted. Turned on per agent under Capabilities → Acts as. See [Agents that act as themselves](#agents-that-act-as-themselves). |
+| `hosted_shared_environments` | A hosted environment can be shared with a team or the whole organization. Without it an environment stays private to the person who made it. The check is on the change only: an environment shared before a downgrade stays readable by those it was shared with. See [Hosted runners](hosted-runners.md). |
 
 ## Enterprise
 

@@ -11,10 +11,11 @@
  * Key card.
  */
 import { useEffect, useState, type FormEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SecretInput } from '@/components/ui/secret-input'
@@ -117,6 +118,14 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
   })
 
   const busy = save.isPending || signIn.isPending
+  // The provider sends the browser back here only if the app there lists this address.
+  const callbackQuery = useQuery({
+    queryKey: ['oauth2-callback-url'],
+    queryFn: () => credentialsApi.oauth2CallbackUrl(),
+    enabled: !!oauth?.authorizationUrl,
+    staleTime: Infinity,
+  })
+  const callbackUrl = callbackQuery.data?.callbackUrl
 
   const startSignIn = () => {
     setError(null)
@@ -212,6 +221,14 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
                   <p className="text-sm text-muted-foreground">
                     Sign in at {new URL(oauth.authorizationUrl || oauth.tokenUrl!).hostname} with the client ID and secret of your app there.
                   </p>
+                  {oauth.authorizationUrl && callbackUrl && (
+                    <div className="space-y-1.5" data-testid="api-oauth-redirect">
+                      <p className="text-sm text-muted-foreground">
+                        In your app&apos;s settings at {new URL(oauth.authorizationUrl).hostname}, add this as an allowed redirect address, or the sign-in is refused:
+                      </p>
+                      <CopyField value={callbackUrl} label="Redirect address" />
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label htmlFor="api-oauth-client-id">Client ID</Label>

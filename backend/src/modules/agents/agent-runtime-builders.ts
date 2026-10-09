@@ -35,6 +35,17 @@ export function storeMemoryDescription(agent: Pick<Agent, 'memoryConfig'>): stri
  */
 const DEFAULT_HISTORY_MESSAGES = 100;
 
+/**
+ * The date and time a run's model is told, in UTC with the weekday, so
+ * "today", "this week" and "three days ago" resolve to real dates.
+ */
+export function describeNow(now: Date): string {
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toISOString().slice(11, 16);
+  return `It is ${weekday}, ${date}, ${time} UTC (${now.toISOString()}).`;
+}
+
 @Injectable()
 export class AgentRuntimeBuilders {
   constructor(
@@ -86,6 +97,10 @@ export class AgentRuntimeBuilders {
 
     // [INSTRUCTIONS] — what to do
     parts.push(`[INSTRUCTIONS]\n${agent.instructions || 'You are a helpful autonomous agent.'}`);
+
+    // [CURRENT TIME] -- a model does not know what day it is. "What is on
+    // my calendar today" or "follow up after three days" needs the date.
+    parts.push(`[CURRENT TIME]\n${describeNow(new Date())}`);
 
     // [CONSTRAINTS] — hard rules learned from past failures (opt-in)
     if (agent.agentConfig?.constraints?.enabled && run.organizationId) {

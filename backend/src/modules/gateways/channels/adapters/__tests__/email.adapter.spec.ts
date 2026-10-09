@@ -222,7 +222,15 @@ describe('EmailAdapter', () => {
 
   describe('formatOutbound', () => {
     it('produces both html and text fields', () => {
-      expect(adapter.formatOutbound({ text: 'reply' })).toEqual({ html: 'reply', text: 'reply' });
+      expect(adapter.formatOutbound({ text: 'reply' })).toEqual({ html: '<div style="white-space:pre-wrap">reply</div>', text: 'reply' });
+    });
+
+    it('keeps the line breaks of a multi-line answer and escapes what would read as markup', () => {
+      // A morning brief: several lines, and a "<" in the text. Sent raw as
+      // HTML it arrived as one run-on line with part of it swallowed.
+      const out = adapter.formatOutbound({ text: 'Meetings (2)\n- 10:00 Investor call\n- 14:00 Intro <Kestrel> & co' });
+      expect(out.text).toBe('Meetings (2)\n- 10:00 Investor call\n- 14:00 Intro <Kestrel> & co');
+      expect(out.html).toBe('<div style="white-space:pre-wrap">Meetings (2)<br>- 10:00 Investor call<br>- 14:00 Intro &lt;Kestrel&gt; &amp; co</div>');
     });
   });
 
@@ -241,6 +249,7 @@ describe('EmailAdapter', () => {
         to: 'alice@example.com',
         subject: 'Re: help me',
         html: 'reply',
+        text: 'reply',
       });
     });
     it('refuses rather than skipping when resend_api_key is missing', async () => {

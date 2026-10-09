@@ -230,6 +230,13 @@ describe('completion offers the subcommands each sibling CLI really has', () => 
     expect(SUBCOMMANDS.auth.subcommands ?? []).toEqual(expect.arrayContaining(dispatched));
   });
 
+  it('passes `almyty runner start --enroll` through to the runner flag the runner-env images start with', () => {
+    // The umbrella forwards argv after the command untouched, so the flag
+    // only has to exist in the runner's own parser.
+    expect(SUBCOMMANDS.runner.prefixArgs).toBeUndefined();
+    expect(sibling('runner/src/cli-args.ts')).toContain("a === '--enroll'");
+  });
+
   it('claims no subcommand that is not dispatched anywhere', () => {
     // The other direction: a completion entry for a command that does not
     // exist is a suggestion that fails when you press enter.

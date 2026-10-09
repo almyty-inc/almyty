@@ -31,6 +31,13 @@ export interface RunnerConfig {
   denyPatterns: string[];
   networkBlocked: boolean;
   installBlocked: boolean;
+  /**
+   * The binaries this runner may start, when set and non-empty. A hosted
+   * runner gets it from its environment (`egress.allowBinaries`, passed as
+   * ALMYTY_ALLOW_BINARIES); a self-hosted runner has no way to set it.
+   * Enforced in policy.ts. Unset or empty: no restriction.
+   */
+  allowBinaries?: string[];
 }
 
 /**

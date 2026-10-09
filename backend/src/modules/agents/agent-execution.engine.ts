@@ -120,7 +120,7 @@ import {
   waitingRunText,
 } from './workflow-approval';
 import { runWithRequestContext, updateRequestContext } from '../../common/request-context';
-import { agentRunnerId } from './agent-capabilities';
+import { agentEnvironmentId, agentRunnerId } from './agent-capabilities';
 import {
   classifiedError,
   classifyNodeError,
@@ -746,6 +746,7 @@ export class AgentExecutionEngine {
                     // The machine this agent's runner-backed tools run on.
                     runnerLabels: agent.agentConfig?.runnerLabels,
                     pinnedRunnerId: agentRunnerId(agent) ?? undefined,
+                    environmentId: agentEnvironmentId(agent) ?? undefined,
                     // A Code step's scope (the agent's tools) and the run its trace hangs off.
                     agent,
                     runId: execution.id,

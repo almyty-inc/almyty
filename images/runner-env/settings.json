@@ -1,0 +1,8 @@
+{
+  "images": {
+    "standard": "almyty/runner-env:standard-1.5.4",
+    "standard-browser": "almyty/runner-env:standard-browser-1.5.4",
+    "node": "almyty/runner-env:node-1.5.4",
+    "python": "almyty/runner-env:python-1.5.4"
+  }
+}

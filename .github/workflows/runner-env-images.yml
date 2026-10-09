@@ -1,0 +1,150 @@
+name: Runner env images
+
+# Builds the curated hosted-runner images (images/runner-env: standard,
+# standard-browser, node, python) whenever they or the runner change, and
+# checks each one starts the way a hosted pod starts it. Nothing is pushed
+# from a PR or from development.
+#
+#   build   every PR and push that touches images/runner-env, packages/runner
+#           or this file. The runner is installed from THIS checkout
+#           (`npm pack` into the `runner-pkg` build context), so a change to
+#           enroll mode is exercised in the image before it is published.
+#   push    master and v* tags only, like build-publish.yml and release.yml.
+#           Installs the runner version the Dockerfile pins from npm (what a
+#           published image must carry), refuses to push an image whose
+#           runner has no --enroll, and tags almyty/runner-env:<flavour>-<pin>.
+#           settings.json lists those tags; pin them by digest there once
+#           pushed.
+
+on:
+  pull_request:
+    branches: [development, staging, master]
+    paths:
+      - 'images/runner-env/**'
+      - 'packages/runner/**'
+      - '.github/workflows/runner-env-images.yml'
+  push:
+    branches: [development, master]
+    # Path filters are not evaluated for tag pushes, so every v* tag runs.
+    tags: ['v*']
+    paths:
+      - 'images/runner-env/**'
+      - 'packages/runner/**'
+      - '.github/workflows/runner-env-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runner-env-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build runner-env (${{ matrix.flavour }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        flavour: [standard, standard-browser, node, python]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 26
+        uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: packages/runner/package-lock.json
+
+      - name: Pack the runner from this checkout
+        working-directory: packages/runner
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          mkdir -p "$RUNNER_TEMP/runner-pkg"
+          npm pack --pack-destination "$RUNNER_TEMP/runner-pkg"
+          mv "$RUNNER_TEMP"/runner-pkg/almyty-runner-*.tgz "$RUNNER_TEMP/runner-pkg/almyty-runner.tgz"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./images/runner-env
+          file: ./images/runner-env/Dockerfile
+          target: ${{ matrix.flavour }}
+          build-contexts: runner-pkg=${{ runner.temp }}/runner-pkg
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: runner-env-ci:${{ matrix.flavour }}
+          cache-from: type=gha,scope=runner-env-${{ matrix.flavour }}
+          cache-to: type=gha,scope=runner-env-${{ matrix.flavour }},mode=max
+
+      # The pod's own terms: uid 1000, read-only root, no capabilities,
+      # /tmp and /workspace the only writable places. Without an API it must
+      # fail enrollment and exit non-zero, which is what makes Kubernetes
+      # restart it; the coding CLIs and the browser must start too. The same
+      # script runs locally after a `docker build`.
+      - name: Smoke test as the hosted pod runs it
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+        run: images/runner-env/smoke.sh "runner-env-ci:$FLAVOUR" "$FLAVOUR"
+
+  push:
+    name: Push runner-env (${{ matrix.flavour }})
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        flavour: [standard, standard-browser, node, python]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve the pinned runner version
+        id: pin
+        run: |
+          VERSION=$(sed -n 's/^ARG RUNNER_VERSION=//p' images/runner-env/Dockerfile)
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=almyty/runner-env:${{ matrix.flavour }}-$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # The runner comes from npm at the pinned version: no runner-pkg
+      # context here. Built and loaded first, so it can be checked before
+      # anything leaves the runner.
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./images/runner-env
+          file: ./images/runner-env/Dockerfile
+          target: ${{ matrix.flavour }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ steps.pin.outputs.tag }}
+          cache-from: type=gha,scope=runner-env-${{ matrix.flavour }}
+
+      - name: Refuse a runner that cannot enroll
+        run: |
+          docker run --rm "${{ steps.pin.outputs.tag }}" almyty-runner --help | grep -q -- '--enroll' || {
+            echo "@almyty/runner ${{ steps.pin.outputs.version }} has no --enroll; bump RUNNER_VERSION in images/runner-env/Dockerfile and settings.json"
+            exit 1
+          }
+
+      - name: Push
+        run: docker push "${{ steps.pin.outputs.tag }}"

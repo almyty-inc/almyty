@@ -337,9 +337,14 @@ export class ToolsOperationHelper {
       if (typeof apiSchema.rawSchema === 'string') {
         try {
           schemaObj = JSON.parse(apiSchema.rawSchema);
-        } catch (error) {
-          this.logger.error(`Failed to parse rawSchema: ${error.message}`);
-          return null;
+        } catch {
+          // A description given as YAML is kept as YAML; the parser read it the same way.
+          try {
+            schemaObj = require('js-yaml').load(apiSchema.rawSchema);
+          } catch (error) {
+            this.logger.error(`Failed to parse rawSchema: ${error.message}`);
+            return null;
+          }
         }
       } else {
         schemaObj = apiSchema.rawSchema;

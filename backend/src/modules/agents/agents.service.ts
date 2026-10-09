@@ -25,6 +25,7 @@ import { AgentIdentityService, runAsProblems } from './agent-identity';
 import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
 import { Api } from '../../entities/api.entity';
 import { Runner } from '../../entities/runner.entity';
+import { Environment } from '../../entities/environment.entity';
 import { CredentialType } from '../../entities/credential.entity';
 import { CredentialRefResolver, SystemActor } from '../credentials/credential-ref.resolver';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
@@ -291,6 +292,14 @@ export class AgentsService {
           where: { id: agentConfig.runnerId, organizationId },
         });
         if (!runners) problems.push('The runner it runs on is not in this organization');
+      }
+      // The same for a hosted environment: it must be this organization's
+      // and not deleted. Whether the run may use it is asked at each call.
+      if (agentConfig.environmentId) {
+        const environments = await this.agentRepository.manager.getRepository(Environment).count({
+          where: { id: agentConfig.environmentId, organizationId },
+        });
+        if (!environments) problems.push('The environment it runs on is not in this organization');
       }
     }
     if (problems.length) throw new BadRequestException(`Invalid settings: ${problems.join('; ')}`);

@@ -15,6 +15,12 @@ export interface ParsedFlags {
   /** --org: the organization to register in (X-Organization-Id). */
   org?: string;
   /**
+   * --enroll: run as a hosted runner, trading the pod's enrollment token
+   * (ALMYTY_ENROLLMENT_TOKEN) for a runner credential instead of using a
+   * login. Only for start.
+   */
+  enroll?: boolean;
+  /**
    * A usage problem worth exiting on. Parsing reports it rather than
    * exiting itself, so the surface can be tested without a process, and
    * so every usage problem leaves through one place with one exit code.
@@ -62,9 +68,27 @@ export function parseArgs(argv: string[]): ParsedFlags {
       flags.labels[value.slice(0, eq)] = value.slice(eq + 1);
       continue;
     }
+    if (a === '--enroll') {
+      if (flags.command !== 'start') return { ...flags, error: '--enroll only applies to start' };
+      flags.enroll = true;
+      continue;
+    }
     // Silently dropping an unknown flag is how `--nmae` spends an
     // afternoon looking like a runner that ignores its own name.
     return { ...flags, error: `Unknown option: ${a}\nRun \`almyty-runner --help\` to see what ${flags.command} accepts.` };
+  }
+  if (flags.enroll) {
+    // An enrolled runner's identity is the token's: the backend already
+    // made the runner row, in the organization, with the name it chose.
+    const identity = [
+      flags.name !== undefined && '--name',
+      flags.org !== undefined && '--org',
+      flags.labels !== undefined && '--label',
+      flags.configPath !== undefined && '--config',
+    ].filter(Boolean);
+    if (identity.length) {
+      return { ...flags, error: `--enroll takes its identity from the enrollment token; ${identity.join(', ')} cannot be combined with it` };
+    }
   }
   return flags;
 }

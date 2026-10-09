@@ -216,6 +216,10 @@ export class WorkspaceService {
     organizationId: string,
   ): Promise<Workspace> {
     const ws = await this.getOne(id, ownerUserId, organizationId);
+    if (ws.kind === 'persistent') {
+      // Its volume and machine go with it; the environment owns that.
+      throw new ConflictException('This is a hosted workspace; release it from its environment');
+    }
     if (ws.status !== WorkspaceStatus.ACTIVE) return ws;
 
     const claimed = await this.transitionFromActive(ws.id, WorkspaceStatus.RELEASED, {
@@ -403,6 +407,8 @@ export class WorkspaceService {
       })
       .where('"runnerId" IN (:...runnerIds)', { runnerIds })
       .andWhere('status = :active', { active: WorkspaceStatus.ACTIVE })
+      // A persistent (hosted) workspace is suspended, never stranded.
+      .andWhere('kind = :job', { job: 'job' })
       .execute();
     const stranded = result.affected ?? 0;
     if (stranded > 0) {
@@ -451,7 +457,7 @@ export class WorkspaceService {
   ): Promise<Runner> {
     if (requestedId) {
       const runner = await this.runners.findOne({
-        where: { id: requestedId, ownerUserId, organizationId },
+        where: { id: requestedId, ownerUserId, organizationId, kind: 'self' },
       });
       if (!runner) throw new NotFoundException('runner not found');
       if (!labelsMatch(runner.labels, required)) {
@@ -463,7 +469,7 @@ export class WorkspaceService {
       if (!this.runnerService) throw new ConflictException('label routing is not available here');
       return this.runnerService.resolveByLabels(required, ownerUserId, organizationId);
     }
-    const owned = await this.runners.find({ where: { ownerUserId, organizationId } });
+    const owned = await this.runners.find({ where: { ownerUserId, organizationId, kind: 'self' } });
     if (owned.length === 0) {
       throw new NotFoundException(
         'no runner registered; run `almyty runner start` on the target machine first',

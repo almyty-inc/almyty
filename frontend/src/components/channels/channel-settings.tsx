@@ -116,10 +116,16 @@ export interface ChannelSettingsProps {
   inherited: EffectiveSettings
 }
 
-/** What to do when a messaging channel has no keys yet, in plain words. */
-export function missingKeysLine(type: AgentChannel['type']): string {
-  if (type === 'slack') return 'Pick or create the Slack app credential first.'
-  return `Pick or create the ${CHANNEL_LABELS[type] ?? type} credential first.`
+/**
+ * Why publishing is refused for missing keys. With no credential picked,
+ * pick one; with one picked, the fields it still lacks (an Email channel's
+ * receiving address, say), which used to read "Pick or create the Email
+ * credential first" next to a credential that was picked.
+ */
+export function missingKeysLine(type: AgentChannel['type'], missingFields?: string | null): string {
+  const label = type === 'slack' ? 'Slack app' : CHANNEL_LABELS[type] ?? type
+  if (missingFields) return `The ${label} credential still needs: ${missingFields.replace(/_/g, ' ')}. Open it on Credentials and add it.`
+  return `Pick or create the ${label} credential first.`
 }
 
 const list = (text: string) =>
@@ -376,7 +382,11 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
 
   const usingCredential = credentialTouched ? credentialId : storedCredential
   const keysMissing = !live && (check?.refusals ?? []).some((r) => r.code === 'MISSING_CREDENTIALS')
-  const missingKeys = triedPublish && keysMissing ? missingKeysLine(type) : undefined
+  // With a credential picked, what it still lacks (the server names the fields after ': ').
+  const missingFields = usingCredential
+    ? (check?.refusals ?? []).find((r) => r.code === 'MISSING_CREDENTIALS')?.message?.split(': ').slice(1).join(': ') || null
+    : null
+  const missingKeys = triedPublish && keysMissing ? missingKeysLine(type, missingFields) : undefined
   // LoopMessage's sender name: said next to its field once someone tries to
   // publish without one, or straight away on a live channel that lost it.
   const senderNameRefusal = senderNamed
@@ -386,7 +396,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const tryPublish = () => {
     if (keysMissing || (!live && senderNameRefusal)) {
       setTriedPublish(true)
-      errorNotif('Could not publish', keysMissing ? missingKeysLine(type) : senderNameRefusal)
+      errorNotif('Could not publish', keysMissing ? missingKeysLine(type, missingFields) : senderNameRefusal)
       return
     }
     publish.mutate()

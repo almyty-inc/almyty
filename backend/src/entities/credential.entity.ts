@@ -49,6 +49,11 @@ export enum CredentialType {
    * `secretAccessKey`; both keys are encrypted at rest.
    */
   S3_COMPATIBLE = 's3_compatible',
+  /**
+   * A Kubernetes cluster's API access for hosted runners: `server`, an
+   * optional `caCert` (PEM) and a ServiceAccount `token` (secret).
+   */
+  KUBERNETES = 'kubernetes',
 }
 
 @Entity('credentials')

@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 
 import type { AgentPauseReason } from '../../../entities/agent.entity';
 import type { ChannelDelivery } from '../scheduled-result-poster';
+import { isTimeZone } from '../agent-schedule-spec';
 
 /**
  * Always on (docs/always-on.md): an autonomous agent that keeps working in
@@ -57,8 +58,39 @@ export interface AlwaysOnOwnerChannel {
  */
 export type AlwaysOnActMode = 'propose' | 'act';
 
-/** When it reports to `reportTo`: after every wake, or only when it did something. */
-export type AlwaysOnReport = 'every_wake' | 'when_acted';
+/**
+ * When it reports to `reportTo`: after every wake, only when it did
+ * something, or once a day with a short summary of the last 24 hours
+ * (always-on-digest.ts).
+ */
+export const ALWAYS_ON_REPORTS = ['every_wake', 'when_acted', 'daily_digest'] as const;
+export type AlwaysOnReport = (typeof ALWAYS_ON_REPORTS)[number];
+
+/** The daily summary's time of day ("HH:MM", 24-hour) and IANA time zone. */
+export interface AlwaysOnDigest {
+  time?: string | null;
+  timezone?: string | null;
+}
+
+/** A digest setting as a person sent it, checked. Null clears it. */
+export function checkDigest(value: unknown): AlwaysOnDigest | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'object') throw new BadRequestException('Choose a time of day and a time zone for the daily summary.');
+  const v = value as Record<string, unknown>;
+  const out: AlwaysOnDigest = {};
+  if (v.time !== undefined && v.time !== null && v.time !== '') {
+    const match = typeof v.time === 'string' ? /^(\d{1,2}):(\d{2})$/.exec(v.time.trim()) : null;
+    if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) {
+      throw new BadRequestException('The daily summary needs a time of day like 09:00.');
+    }
+    out.time = `${match[1].padStart(2, '0')}:${match[2]}`;
+  }
+  if (v.timezone !== undefined && v.timezone !== null && v.timezone !== '') {
+    if (!isTimeZone(v.timezone)) throw new BadRequestException(`Unknown time zone: ${String(v.timezone)}.`);
+    out.timezone = v.timezone;
+  }
+  return out.time || out.timezone ? out : null;
+}
 
 export interface AlwaysOnConfig {
   enabled: boolean;
@@ -74,12 +106,34 @@ export interface AlwaysOnConfig {
   report: AlwaysOnReport;
   /** Most wakes an hour before it pauses itself; never above the plan's. */
   maxWakesPerHour?: number | null;
+  /**
+   * With `report: 'daily_digest'`: when the summary goes out. Either part
+   * may be left out; it is then 09:00 in the owner's time zone, unless data
+   * fallbacks say otherwise (always-on-digest.ts).
+   */
+  digest?: AlwaysOnDigest | null;
   /** The conversation every wake continues; set on the first wake. */
   standingConversationId?: string | null;
   /** The standing thread's latest run; while it is live, wakes join it instead of starting another. */
   liveRunId?: string | null;
   /** Set when the system paused it on its own; see AgentPauseReason. */
   pausedReason?: AgentPauseReason | null;
+  /** When it was last turned on; the hosted-home agents the plan includes are the ones turned on first. */
+  enabledAt?: string | null;
+  /**
+   * Its home machine, when that is a hosted environment (hosted runners,
+   * docs/design/hosted-runners-and-always-on.md). Only agents with a hosted
+   * home count toward the plan's `includedAgents`; an agent on the owner's
+   * own machines, or with no machine, is never limited by the plan. Set by
+   * the system once hosted homes ship; nothing sets it yet.
+   */
+  home?: { environmentId: string } | null;
+}
+
+/** Whether an agent lives on a hosted machine, the only kind the plan's agent limit counts. */
+export function hasHostedHome(config: Pick<AlwaysOnConfig, 'home'> | null | undefined): boolean {
+  const id = config?.home?.environmentId;
+  return typeof id === 'string' && id.length > 0;
 }
 
 /** A new agent's always-on settings. */
@@ -138,7 +192,8 @@ export function readAlwaysOn(raw: unknown): AlwaysOnConfig | null {
     },
     actMode: r.actMode === 'act' ? 'act' : 'propose',
     askFirstToolIds: Array.isArray(r.askFirstToolIds) ? r.askFirstToolIds : [],
-    report: r.report === 'every_wake' ? 'every_wake' : 'when_acted',
+    report: (ALWAYS_ON_REPORTS as readonly string[]).includes(r.report) ? r.report : 'when_acted',
+    digest: r.digest && typeof r.digest === 'object' ? r.digest : null,
   } as AlwaysOnConfig;
 }
 
@@ -153,6 +208,7 @@ export interface AlwaysOnInput {
   reportTo?: ChannelDelivery | null;
   report?: AlwaysOnReport;
   maxWakesPerHour?: number | null;
+  digest?: AlwaysOnDigest | null;
 }
 
 export const MAX_BRIEF_CHARS = 8000;
@@ -211,11 +267,12 @@ export function mergeAlwaysOn(current: AlwaysOnConfig | null, input: AlwaysOnInp
   if (input.askFirstToolIds !== undefined) next.askFirstToolIds = uuids(input.askFirstToolIds, 'The ask-first list');
   if (input.reportTo !== undefined) next.reportTo = input.reportTo ?? null;
   if (input.report !== undefined) {
-    if (input.report !== 'every_wake' && input.report !== 'when_acted') {
-      throw new BadRequestException('Choose when it reports: after every wake, or only when it did something.');
+    if (!(ALWAYS_ON_REPORTS as readonly string[]).includes(input.report as string)) {
+      throw new BadRequestException('Choose when it reports: after every wake, only when it did something, or once a day.');
     }
     next.report = input.report;
   }
+  if (input.digest !== undefined) next.digest = checkDigest(input.digest);
   if (input.maxWakesPerHour !== undefined) {
     if (input.maxWakesPerHour === null) {
       next.maxWakesPerHour = null;
@@ -226,7 +283,11 @@ export function mergeAlwaysOn(current: AlwaysOnConfig | null, input: AlwaysOnInp
     }
   }
   // Turning it on, or changing it, is the acknowledgement of a pause.
-  if (input.enabled === true) next.pausedReason = null;
+  if (input.enabled === true) {
+    next.pausedReason = null;
+    // When it was turned on: the plan's included agents are counted in this order.
+    if (!base.enabled) next.enabledAt = new Date().toISOString();
+  }
   if (next.enabled && !next.brief) {
     throw new BadRequestException('Say what it should keep doing before turning it on.');
   }

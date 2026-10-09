@@ -15,7 +15,7 @@ import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
 import { AgentMemoryKeeper } from './agent-memory.keeper';
-import { agentApiIds, agentRunnerId, callsAgents, mayCallAgent } from './agent-capabilities';
+import { agentApiIds, agentEnvironmentId, agentRunnerId, callsAgents, mayCallAgent } from './agent-capabilities';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
@@ -61,6 +61,7 @@ import { CodeModeConfig, grantsLeftFor } from '../code-mode/code-write-policy';
 import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
+import { WORKSPACE_WAKING } from '../runner/hosted-dispatch';
 
 /** One line per namespace a script can use: `petstore (19 functions)`. */
 function namespaceSummary(tools: Tool[]): string[] {
@@ -648,6 +649,8 @@ export class AgentStepProcessor {
         const gated: GatedToolCall[] = [];
         // Scripts' change sets waiting for a person (code mode).
         const changeSets: PendingChangeSet[] = [];
+        // A hosted workspace that was starting when a call needed it.
+        let wakeRetryMs: number | null = null;
         // Execute each tool call
         for (const toolCall of responseMessage.toolCalls) {
           // The tool-call budget, spent per call rather than per step.
@@ -974,6 +977,8 @@ export class AgentStepProcessor {
               runnerLabels: agent.agentConfig?.runnerLabels,
               // The one runner they run on, when the agent is pinned to one.
               pinnedRunnerId: agentRunnerId(agent) ?? undefined,
+              // Or the hosted environment they run on (agentConfig.environmentId).
+              environmentId: agentEnvironmentId(agent) ?? undefined,
               // The run and agent a runner workspace made for this call
               // belongs to (RunWorkspaceService).
               runId: run.id,
@@ -1015,6 +1020,9 @@ export class AgentStepProcessor {
             }
 
             toolCall.result = toolResult.data;
+            if (!toolResult.success && toolResult.metadata?.runnerErrorCode === WORKSPACE_WAKING) {
+              wakeRetryMs = Math.max(wakeRetryMs ?? 0, Number(toolResult.metadata?.retryAfterMs) || 0);
+            }
             toolCall.error = toolResult.success ? undefined : toolResult.error;
             toolCall.executionTime = toolResult.executionTime;
             toolCall.cached = toolResult.cached;
@@ -1107,6 +1115,31 @@ export class AgentStepProcessor {
           run.executionTime += stepDuration;
           if (!(await this.commitStep(run, expectedStep))) return 'done';
           this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'waiting_approval' });
+          return 'waiting';
+        }
+
+        // A hosted workspace was still starting: the call told the model so,
+        // and the run sleeps until the machine should be up, then takes its
+        // next step -- the wait tool's own sleep. A machine that does not
+        // come up within the wake budget fails the next call for good
+        // (HostedRunnersService.resolveTarget), so this cannot loop.
+        if (wakeRetryMs !== null) {
+          await this.s.builtInTools.executeBuiltInTool('wait', { seconds: Math.max(1, Math.ceil(wakeRetryMs / 1000)) }, run, agent);
+          const stepDuration = Date.now() - stepStart;
+          run.steps.push({
+            type: 'llm_call',
+            role: stampOf(acting),
+            input: { messageCount: messages.length, toolCount: allToolDefs.length },
+            output: { status: 'sleeping', reason: 'the hosted workspace is starting', ...answeredBy(llmResponse, acting) },
+            cost: stepCost,
+            tokens: { input: stepInputTokens, output: stepOutputTokens },
+            duration: stepDuration,
+            timestamp: new Date().toISOString(),
+          });
+          run.currentStep++;
+          run.executionTime += stepDuration;
+          if (!(await this.commitStep(run, expectedStep))) return 'done';
+          this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'sleeping' });
           return 'waiting';
         }
 
@@ -1918,6 +1951,7 @@ export class AgentStepProcessor {
         agentTeamId: agent.teamId ?? null,
         runnerLabels: agent.agentConfig?.runnerLabels,
         pinnedRunnerId: agentRunnerId(agent) ?? undefined,
+        environmentId: agentEnvironmentId(agent) ?? undefined,
         retries: resolvedLimits.toolErrorRetries,
       },
       policy: config,
@@ -2066,6 +2100,7 @@ export class AgentStepProcessor {
               agentTeamId: agent.teamId ?? null,
               runnerLabels: agent.agentConfig?.runnerLabels,
               pinnedRunnerId: agentRunnerId(agent) ?? undefined,
+              environmentId: agentEnvironmentId(agent) ?? undefined,
             })
           : await this.codeMode.rejectChangeSet(set.codeExecutionId, run.organizationId);
       const answer = changeSetOutcomeForModel(set.forModel, decision, entries, approval.decisionReason);
@@ -2105,6 +2140,7 @@ export class AgentStepProcessor {
             retries: resolvedLimits.toolErrorRetries,
             runnerLabels: agent.agentConfig?.runnerLabels,
             pinnedRunnerId: agentRunnerId(agent) ?? undefined,
+            environmentId: agentEnvironmentId(agent) ?? undefined,
             runId: run.id,
             agentId: agent.id,
             agentTeamId: agent.teamId ?? null,
