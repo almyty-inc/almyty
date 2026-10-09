@@ -555,9 +555,10 @@ export class ToolExecutorService {
         }
       }
 
-      // Cache lookup.
-      if (!options.skipCache && tool.configuration?.cache?.enabled) {
-        const cachedResult = await this.cacheRateLimit.getCachedResult(tool, parameters);
+      // Cache lookup: within this run, unless the tool shares its answers (cacheScope).
+      const cacheScope = ToolCacheRateLimitHelper.cacheScope(tool, options.runId);
+      if (!options.skipCache && tool.configuration?.cache?.enabled && cacheScope) {
+        const cachedResult = await this.cacheRateLimit.getCachedResult(tool, parameters, cacheScope);
         if (cachedResult) {
           cached = true;
           await this.recordFiltered(tool, parameters, cachedResult, options, {
@@ -615,8 +616,8 @@ export class ToolExecutorService {
 
       if (result !== undefined) {
         // Cache successful config-based tool results.
-        if (tool.configuration?.cache?.enabled && result.success) {
-          await this.cacheRateLimit.cacheResult(tool, parameters, result);
+        if (tool.configuration?.cache?.enabled && cacheScope && result.success) {
+          await this.cacheRateLimit.cacheResult(tool, parameters, result, cacheScope);
         }
         await this.recordFiltered(tool, parameters, result, options, {
           executionTime: result.executionTime ?? Date.now() - startTime,
@@ -639,8 +640,8 @@ export class ToolExecutorService {
         try {
           const opResult = await this.executeOperation(tool, parameters, options);
 
-          if (tool.configuration?.cache?.enabled && opResult.success) {
-            await this.cacheRateLimit.cacheResult(tool, parameters, opResult);
+          if (tool.configuration?.cache?.enabled && cacheScope && opResult.success) {
+            await this.cacheRateLimit.cacheResult(tool, parameters, opResult, cacheScope);
           }
 
           await this.recordFiltered(tool, parameters, opResult, options, {
