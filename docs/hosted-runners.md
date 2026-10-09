@@ -616,11 +616,15 @@ script) can still start anything. The boundary is the pod.
 
 ## Not yet
 
-- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.4,
-  the first release with `--enroll`; the push job refuses until 1.5.4 is
-  on npm. The entrypoint points the CLIs at the model proxy only when the
-  image's runner has it (`dist/model-proxy.js`); with an older runner the
-  CLIs get the pod token directly and lose it at its first renewal.
+- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.5,
+  the first release with the local model proxy (`dist/model-proxy.js`), and
+  `settings.json` and the backend default `images` name the 1.5.5 tags
+  without digests. TODO: the 1.5.5 images exist only after 1.5.5 is on npm
+  and the release push has run; pin the pushed digests in `settings.json`
+  and the backend default `images` then. The entrypoint points the CLIs at
+  the model proxy only when the image's runner has it; with an older
+  runner the CLIs get the pod token directly and lose it at its first
+  renewal.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).
