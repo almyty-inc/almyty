@@ -417,6 +417,56 @@ describe('WorkerStreamTransport', () => {
       await podA.shutdown(); await podB.shutdown();
     });
 
+    it('answers a minting POST only once the registry holds the session, so the next POST on another pod adopts it', async () => {
+      const redis = makeRedisBus();
+      // The registry write is slow: it lands when the test releases it.
+      const realSet = redis.set;
+      let release!: () => void;
+      const landed = new Promise<void>((resolve) => { release = resolve; });
+      redis.set = async (k: string, v: string) => { await landed; return realSet(k, v); };
+      const event = (id: string) => ({ v: WORKER_PROTOCOL_VERSION, type: 'event', id, ts: 1, payload: { kind: 'coding.output' } });
+
+      const podA = makeTransport(redis);
+      const podB = makeTransport(redis);
+      const resA = mockRes();
+      let answered = false;
+      const minted = podA.handlePost(mockReq({}, event('e1')), resA, 'org', 'user').then(() => { answered = true; });
+      await new Promise((resolve) => setImmediate(resolve));
+      // Answering now hands the worker an id no other pod can find yet.
+      expect(answered).toBe(false);
+
+      release();
+      await minted;
+      const sid = resA._headers['Mcp-Session-Id'];
+      expect(sid).toBeTruthy();
+      const resB = mockRes();
+      await podB.handlePost(mockReq({ 'Mcp-Session-Id': sid }, event('e2')), resB, 'org', 'user');
+      expect(resB._statusCode).toBe(202);
+      await podA.shutdown(); await podB.shutdown();
+    });
+
+    it('does not hold a minting POST past the bound when the registry write never lands', async () => {
+      jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+      try {
+        const redis = makeRedisBus();
+        redis.set = () => new Promise(() => undefined);
+        const pod = makeTransport(redis);
+        const res = mockRes();
+        let answered = false;
+        const minted = pod.handlePost(mockReq({}, hb(1)), res, 'org', 'user').then(() => { answered = true; });
+        await jest.advanceTimersByTimeAsync(1_999);
+        expect(answered).toBe(false);
+        await jest.advanceTimersByTimeAsync(1);
+        await minted;
+        // The session still works on the pod that minted it.
+        expect(res._statusCode).toBe(202);
+        expect(pod.getSession(res._headers['Mcp-Session-Id'])).toBeDefined();
+        await pod.shutdown();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('refuses another member of the same org the session, on the adopting pod too', async () => {
       const redis = makeRedisBus();
       const podA = makeTransport(redis);
