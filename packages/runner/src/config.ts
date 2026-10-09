@@ -121,6 +121,7 @@ export function describeIsolationPosture(config: RunnerConfig): string {
       : 'cwd unrestricted',
   );
   if (config.denyPatterns.length > 0) guards.push(`${config.denyPatterns.length} deny pattern(s)`);
+  if (config.allowBinaries?.length) guards.push(`binaries limited to ${config.allowBinaries.length}`);
   return `isolation=host — commands run on this machine as you (${guards.join(', ')})`;
 }
 

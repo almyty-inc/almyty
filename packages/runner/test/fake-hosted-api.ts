@@ -24,6 +24,8 @@ export interface FakeHostedApi {
   renewStatus: number;
   /** Seconds each issued credential lives. */
   credentialTtlSeconds: number;
+  /** Send an envelope down every open stream, as the backend does. */
+  push(envelope: unknown): void;
   close(): Promise<void>;
 }
 
@@ -49,6 +51,9 @@ export async function startFakeHostedApi(): Promise<FakeHostedApi> {
     openStreams: 0,
     renewStatus: 200,
     credentialTtlSeconds: 3600,
+    push: (envelope) => {
+      for (const s of streams) s.write(`data: ${JSON.stringify(envelope)}\n\n`);
+    },
     close: async () => {
       for (const s of streams) s.end();
       await new Promise<void>((r) => server.close(() => r()));

@@ -447,6 +447,31 @@ describe('ChannelGatewayService installation resolution', () => {
 
         expect(agentRuntimeService.startRun.mock.calls[0][4].conversationId).toBeUndefined();
       });
+
+      // A browser's first message carries no thread id; the server names the
+      // thread. That name has to be on the run as it is inserted: written
+      // afterwards, it raced the run's own metadata writes and was often
+      // lost, so the visitor's second message found no thread, opened a
+      // conversation of its own and never reached a run still waiting.
+      it('names a new thread on the run it starts, so the next message finds it', async () => {
+        agentRuntimeService.startRun.mockImplementation(async (_a: string, _o: string, _u: null, _i: string, options: any) => {
+          const row = openRun({ id: `run-${runRows.length + 1}`, status: 'completed', conversationId: 'conv-first', metadata: options.metadata });
+          runRows.push(row);
+          // What the runtime hands back: a copy, so a later write to it is not the inserted row.
+          return { ...row, metadata: { ...options.metadata } };
+        });
+        const service = buildService(false);
+
+        const first = await service.handleWidgetMessage(widgetGateway(), { message: 'hello' });
+
+        expect(first.threadId).toBeTruthy();
+        expect(agentRuntimeService.startRun.mock.calls[0][4].metadata.threadId).toBe(first.threadId);
+
+        const second = await service.handleWidgetMessage(widgetGateway(), { message: 'and another thing', threadId: first.threadId });
+
+        expect(second.threadId).toBe(first.threadId);
+        expect(agentRuntimeService.startRun.mock.calls[1][4]).toMatchObject({ conversationId: 'conv-first' });
+      });
     });
   });
 

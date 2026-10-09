@@ -1,6 +1,13 @@
 import { spawn } from 'child_process';
 
-const VERSION_TIMEOUT_MS = 1500;
+// Generous on purpose: a timeout reports the binary as missing, so the
+// backend never routes to it. gemini and aider take 1.2-1.4 s for
+// `--version` on their own (a Node bundle and a Python import of litellm);
+// probed alongside two dozen others in the runner-env image, 1.5 s missed
+// gemini, and a one-CPU hosted pod under gVisor is slower still. A missing
+// binary still answers at once (ENOENT), and a timeout ends the probe of
+// that binary without trying the other flags.
+const VERSION_TIMEOUT_MS = 10_000;
 
 /**
  * Probe `binary --version` (or equivalent) with a tight timeout.

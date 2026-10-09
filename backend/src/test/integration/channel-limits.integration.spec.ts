@@ -461,6 +461,41 @@ run('channel limits and visitor rights (real Postgres)', () => {
       expect(runMayWriteSharedMemory(saved)).toBe(false);
     });
 
+    // A browser's first message has no thread id; the reply names one. The
+    // run is written by its engine while it works (its strategy, what each
+    // role cost), from the copy it loaded when it started. A thread id
+    // written onto the row after startRun returned was lost to that write
+    // about half the time, and the browser's second message then opened a
+    // conversation of its own instead of carrying on in the first.
+    it("carries a browser's second message on in the conversation its first one opened", async () => {
+      const { gateway } = await place(DistributionTarget.WIDGET, GatewayType.CHAT_WIDGET);
+      const insert = runtime.startRun.getMockImplementation()!;
+      const engineWrites: Array<Promise<unknown>> = [];
+      runtime.startRun.mockImplementation(async (...args: any[]) => {
+        const started = await (insert as any)(...args);
+        const loaded = await runs.findOneByOrFail({ id: started.id });
+        engineWrites.push(
+          new Promise((resolve) => setTimeout(resolve, 20)).then(() =>
+            runs.save({ ...loaded, status: AgentRunStatus.COMPLETED, metadata: { ...(loaded.metadata ?? {}), strategy: 'single' } }),
+          ),
+        );
+        return started;
+      });
+
+      const first = await post(gateway.id);
+      await Promise.all(engineWrites);
+      const second = await post(gateway.id, first.data.threadId);
+      await Promise.all(engineWrites);
+
+      expect(second.data.threadId).toBe(first.data.threadId);
+      const [one, two] = await Promise.all([
+        runs.findOneByOrFail({ id: first.data.runId }),
+        runs.findOneByOrFail({ id: second.data.runId }),
+      ]);
+      expect(one.metadata).toMatchObject({ threadId: first.data.threadId, gatewayId: gateway.id });
+      expect(two.conversationId).toBe(one.conversationId);
+    });
+
     it('limits each thread to its own share', async () => {
       const { gateway } = await place(DistributionTarget.WIDGET, GatewayType.CHAT_WIDGET);
       for (let i = 0; i < 3; i++) await post(gateway.id, 'thread-a');

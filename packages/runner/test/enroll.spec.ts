@@ -136,8 +136,11 @@ describe('RunnerCredential', () => {
     api.credentialTtlSeconds = 0.4;
     const c = await enrolled();
     c.start();
-    await vi.waitFor(() => expect(api.issued.length).toBeGreaterThanOrEqual(2), { timeout: 3000 });
-    expect(c.current()).toBe(api.issued[api.issued.length - 1]);
+    // The fake records a credential before the runner has read the reply.
+    await vi.waitFor(() => {
+      expect(api.issued.length).toBeGreaterThanOrEqual(2);
+      expect(c.current()).toBe(api.issued[api.issued.length - 1]);
+    }, { timeout: 3000 });
     c.stop();
   });
 
@@ -261,6 +264,58 @@ describe('enroll mode end to end (RunnerDaemon.startEnrolled against the fake AP
       outSpy.mockRestore();
       errSpy.mockRestore();
       rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('holds every command to the environment\'s ALMYTY_ALLOW_BINARIES', async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), 'almyty-enroll-state-'));
+    vi.stubEnv('ALMYTY_RUNNER_STATE_DIR', stateDir);
+    vi.resetModules();
+    const { RunnerDaemon } = await import('../src/daemon.js');
+    const out: string[] = [];
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation((s: any) => { out.push(String(s)); return true; });
+    const daemon = new RunnerDaemon();
+    try {
+      await daemon.startEnrolled({
+        env: { ALMYTY_ENROLLMENT_TOKEN: FAKE_TOKEN, ALMYTY_API_URL: api.url, ALMYTY_ALLOW_BINARIES: '["git","npm"]' },
+        prepare: vi.fn().mockResolvedValue({ ok: true }), exit: vi.fn(), installSignals: false,
+      });
+      expect(out.join('')).toContain('binaries limited to 2');
+      await vi.waitFor(() => expect(api.openStreams).toBe(1));
+      api.push({
+        v: 1, type: 'request', id: 'req-allow-1', ts: Date.now(),
+        payload: { method: 'shell.exec', params: { command: 'git status && curl https://example.com' }, workspaceId: 'ws-1', workspaceCwd: '/workspace' },
+      });
+      await vi.waitFor(() => expect(api.envelopes.some((e) => e.type === 'response' && e.id === 'req-allow-1')).toBe(true));
+      const response = api.envelopes.find((e) => e.type === 'response' && e.id === 'req-allow-1');
+      expect(response.payload.ok).toBe(false);
+      expect(response.payload.error.message).toMatch(/not in allowBinaries: curl/);
+    } finally {
+      await daemon.shutdown();
+      outSpy.mockRestore();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to start, without spending the token, on an allowlist it cannot read', async () => {
+    vi.resetModules();
+    const { RunnerDaemon } = await import('../src/daemon.js');
+    const { EnrollmentError: FreshEnrollmentError } = await import('../src/enroll.js');
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const prepare = vi.fn();
+    try {
+      const err = await new RunnerDaemon()
+        .startEnrolled({
+          env: { ALMYTY_ENROLLMENT_TOKEN: FAKE_TOKEN, ALMYTY_API_URL: api.url, ALMYTY_ALLOW_BINARIES: 'git,npm' },
+          prepare, installSignals: false,
+        })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(FreshEnrollmentError);
+      expect(err.message).toMatch(/ALMYTY_ALLOW_BINARIES/);
+      expect(api.enrollBodies).toEqual([]);
+      expect(prepare).not.toHaveBeenCalled();
+    } finally {
+      outSpy.mockRestore();
     }
   });
 });
