@@ -41,7 +41,8 @@ function looksLikeMachineName(value: string): boolean {
 
 /** The first sentence of a description, when it is short enough to be a name. */
 function shortSentence(description: string | null | undefined): string | null {
-  const text = (description ?? '').replace(/\s+/g, ' ').trim();
+  // Descriptions are often markdown (Google's: "in the `To`, `Cc` ... headers"); a name has none.
+  const text = (description ?? '').replace(/`|\*\*/g, '').replace(/\s+/g, ' ').trim();
   if (!text) return null;
   const end = text.search(/[.!?](\s|$)/);
   let sentence = end >= 0 ? text.slice(0, end) : text;

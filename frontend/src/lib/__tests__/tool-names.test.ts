@@ -42,4 +42,10 @@ describe('tools from specs without summaries', () => {
     )
     expect(readableToolName({ name: 'google_tasks_tasks_tasks_list', api: { name: 'Google Tasks' }, operation: { name: 'tasks.tasks.list' } })).toBe('Tasks tasks list')
   })
+
+  it("leaves a description's markdown out of the name", () => {
+    expect(readableToolName({ name: 'gmail_gmail_users_messages_send', description: 'Sends the specified message to the recipients in the `To`, `Cc`, and `Bcc` headers. For example usage, see Sending email.' })).toBe(
+      'Sends the specified message to the recipients in the To, Cc, and Bcc headers',
+    )
+  })
 })

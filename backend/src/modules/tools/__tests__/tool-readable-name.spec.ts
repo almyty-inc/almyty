@@ -21,7 +21,7 @@ describe('readableToolName', () => {
         api: { name: 'Gmail' },
         operation: { name: 'gmail.users.messages.send', description: 'Sends the specified message to the recipients in the `To`, `Cc`, and `Bcc` headers. For example usage, see Sending email.' },
       }),
-    ).toBe('Sends the specified message to the recipients in the `To`, `Cc`, and `Bcc` headers');
+    ).toBe('Sends the specified message to the recipients in the To, Cc, and Bcc headers');
     expect(readableToolName({ name: 'gmail_gmail_users_messages_list', description: "Lists the messages in the user's mailbox." })).toBe("Lists the messages in the user's mailbox");
   });
 

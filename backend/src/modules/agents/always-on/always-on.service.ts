@@ -1318,7 +1318,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       ...(config?.reportTo ? [config.reportTo] : []),
     ];
     if (!targets.length) return;
-    const text = `${agent.name} wants to do something and is waiting for your OK: ${row.reason ?? 'see Approvals'}. Approve or reject it in Approvals.`;
+    // The reason is a sentence of its own; its full stop goes, or the notice reads "list)..".
+    const reason = (row.reason ?? 'see Approvals').trim().replace(/\.+$/, '');
+    const text = `${agent.name} wants to do something and is waiting for your OK: ${reason}. Approve or reject it in Approvals.`;
     const seen = new Set<string>();
     for (const delivery of targets) {
       const key = `${delivery.channelId}:${delivery.to ?? ''}`;
