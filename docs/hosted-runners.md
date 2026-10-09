@@ -11,9 +11,10 @@ This page is the developer reference: what to switch on, what the cluster
 needs, and every setting. The design is
 `docs/design/hosted-runners-and-always-on.md`.
 
-Status: phase 2, behind a switch, for staging. There is no page in the app
-yet, the runner images are built in CI but not published yet, and nothing
-is billed yet (usage is recorded).
+Status: phase 2, behind a switch, for staging. The app has a Hosted tab on
+the Runners page (user guide: docs-site "Hosted machines"); the runner images
+are built in CI but not published yet, and nothing is billed yet (usage is
+recorded).
 
 ## In short
 
@@ -615,9 +616,6 @@ script) can still start anything. The boundary is the pod.
 
 ## Not yet
 
-- In the app: `allowVendorKeys` on the environment page, the
-  `runnerUsageDays` field in the Data retention card, and the two new
-  notification types in the notification list.
 - Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.4,
   the first release with `--enroll`; the push job refuses until 1.5.4 is
   on npm. The entrypoint points the CLIs at the model proxy only when the
@@ -625,7 +623,6 @@ script) can still start anything. The boundary is the pod.
   CLIs get the pod token directly and lose it at its first renewal.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
-- The grant's switch on the provider page (the API takes `hostedPodAccess`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).
 - A spend budget of its own per environment or workspace; model calls from
   a pod count against the organization's budgets.

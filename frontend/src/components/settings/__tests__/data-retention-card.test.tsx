@@ -81,6 +81,7 @@ describe('DataRetentionCard', () => {
         auditLogDays: 365,
         toolExecutionsDays: 14,
         notificationsDays: null,
+        runnerUsageDays: null,
       })
     })
     expect(successMock).toHaveBeenCalled()
@@ -128,6 +129,24 @@ describe('DataRetentionCard', () => {
         'org-1',
         expect.objectContaining({ toolExecutionsDays: 7, notificationsDays: 60 }),
       )
+    })
+  })
+
+  it('sets how long hosted machine minutes are kept, where empty means the server default, not forever', async () => {
+    mockedGetRetention.mockResolvedValue({ ...basePolicy, runnerUsageDays: 400 })
+    mockedUpdateRetention.mockResolvedValue(basePolicy)
+
+    render(<DataRetentionCard organizationId="org-1" />)
+
+    const field = await screen.findByLabelText(/hosted machine minutes \(days\)/i)
+    await waitFor(() => expect(field).toHaveValue(400))
+    expect(screen.getByText(/kept for the default period of this server, not forever/)).toBeInTheDocument()
+    fireEvent.change(field, { target: { value: '' } })
+    expect(field).toHaveAttribute('placeholder', 'Server default')
+    fireEvent.click(screen.getByRole('button', { name: /save retention policy/i }))
+
+    await waitFor(() => {
+      expect(mockedUpdateRetention).toHaveBeenCalledWith('org-1', expect.objectContaining({ runnerUsageDays: null }))
     })
   })
 

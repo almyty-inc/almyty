@@ -22,9 +22,13 @@ const DATA_CLASSES = [
   { key: 'auditLogDays', label: 'Audit log', hint: 'The audit trail itself. Consider your compliance obligations before limiting this.' },
   { key: 'toolExecutionsDays', label: 'Tool executions', hint: 'The largest class by bytes: every row keeps its parameters and result as untruncated json, and a tool may return up to 10MB.' },
   { key: 'notificationsDays', label: 'Notifications', hint: 'One row per failed scheduled or webhook run, and per approval request and decision.' },
+  { key: 'runnerUsageDays', label: 'Hosted machine minutes', hint: 'The record of how long each hosted machine ran. Left empty, it is kept for the default period of this server, not forever.' },
 ] as const
 
 type DayField = typeof DATA_CLASSES[number]['key']
+
+/** What an empty field means, where it is not "keep forever". */
+const PLACEHOLDERS: Partial<Record<DayField, string>> = { runnerUsageDays: 'Server default' }
 
 type RetentionForm = Record<DayField, number | ''> & { enabled: boolean }
 
@@ -37,6 +41,7 @@ const EMPTY_FORM: RetentionForm = {
   auditLogDays: '',
   toolExecutionsDays: '',
   notificationsDays: '',
+  runnerUsageDays: '',
 }
 
 /** The form as the saved policy fills it. */
@@ -50,6 +55,7 @@ function formFromPolicy(policy: any): RetentionForm {
     auditLogDays: policy.auditLogDays ?? '',
     toolExecutionsDays: policy.toolExecutionsDays ?? '',
     notificationsDays: policy.notificationsDays ?? '',
+    runnerUsageDays: policy.runnerUsageDays ?? '',
   }
 }
 
@@ -112,6 +118,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
       auditLogDays: form.auditLogDays === '' ? null : form.auditLogDays,
       toolExecutionsDays: form.toolExecutionsDays === '' ? null : form.toolExecutionsDays,
       notificationsDays: form.notificationsDays === '' ? null : form.notificationsDays,
+      runnerUsageDays: form.runnerUsageDays === '' ? null : form.runnerUsageDays,
     })
   }
 
@@ -151,7 +158,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
                     max={RETENTION_MAX_DAYS}
                     value={form[key]}
                     onChange={(e) => setDays(key, e.target.value)}
-                    placeholder="Keep forever"
+                    placeholder={PLACEHOLDERS[key] ?? 'Keep forever'}
                     disabled={!form.enabled}
                   />
                   <p className="text-xs text-muted-foreground">{hint}</p>

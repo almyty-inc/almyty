@@ -88,6 +88,8 @@ const RunnersPage = lazy(() => import('@/pages/runners').then(m => ({ default: m
 const ApprovalsPage = lazy(() => import('@/pages/approvals').then(m => ({ default: m.ApprovalsPage })))
 const RunnerDetailPage = lazy(() => import('@/pages/runner-detail').then(m => ({ default: m.RunnerDetailPage })))
 const RunnerNewPage = lazy(() => import('@/pages/runner-new').then(m => ({ default: m.RunnerNewPage })))
+const EnvironmentNewPage = lazy(() => import('@/pages/environment-new').then(m => ({ default: m.EnvironmentNewPage })))
+const EnvironmentDetailPage = lazy(() => import('@/pages/environment-detail').then(m => ({ default: m.EnvironmentDetailPage })))
 const WorkspaceDetailPage = lazy(() => import('@/pages/workspace-detail').then(m => ({ default: m.WorkspaceDetailPage })))
 const MemoriesPage = lazy(() => import('@/pages/memories').then(m => ({ default: m.MemoriesPage })))
 const DocsPage = lazy(() => import('@/pages/docs').then(m => ({ default: m.DocsPage })))
@@ -208,6 +210,8 @@ export function createAppRoutes() {
           <Route path="/agents/:id/edit" element={<AgentBuilderPage />} />
           <Route path="/runners" element={<RunnersPage />} />
           <Route path="/runners/new" element={<RunnerNewPage />} />
+          <Route path="/runners/hosted/new" element={<EnvironmentNewPage />} />
+          <Route path="/runners/hosted/:id" element={<EnvironmentDetailPage />} />
           <Route path="/runners/:id" element={<RunnerDetailPage />} />
           <Route path="/runners/:runnerId/workspaces/:id" element={<WorkspaceDetailPage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />

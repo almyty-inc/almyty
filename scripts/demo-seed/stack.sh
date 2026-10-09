@@ -33,7 +33,7 @@ license() {
   fi
   export ALMYTY_LICENSE_PUBLIC_KEY="$(cat "$pub")"
   export ALMYTY_LICENSE_KEY="$(node "$ROOT/backend/scripts/license/mint-license.js" --key "$key" \
-    --entitlements sso,advanced_rbac,approval_policy,compliance_pack,audit_export,connections_governance \
+    --entitlements sso,advanced_rbac,approval_policy,compliance_pack,audit_export,connections_governance,hosted_shared_environments \
     --seats 25 --issued-to 'Northwind AI (local demo)' 2>/dev/null)"
 }
 
@@ -55,6 +55,11 @@ case "${1:-}" in
     export MODEL_PRICE_FEED_DISABLED="${MODEL_PRICE_FEED_DISABLED:-false}"
     # The commercial build, as staging runs it: compliance, audit streams and the other ee/ pages have their API.
     export BACKEND_EE="${BACKEND_EE:-true}"
+    # Hosted environments with the stub adapter, which starts nothing. The
+    # reconcile sweep is off so the machine states seed.mjs writes stay put.
+    export HOSTED_RUNNERS_ENABLED=true HOSTED_RUNNERS_PROVIDER=stub
+    sweep_off='{"reconcile":{"sweepCron":"off"}}'
+    export HOSTED_RUNNERS_SETTINGS="${HOSTED_RUNNERS_SETTINGS:-$sweep_off}"
     if ! curl -sf "http://localhost:$FAKE_PORT/health" >/dev/null 2>&1; then
       FAKE_PORT="$FAKE_PORT" nohup node "$HERE/fake-upstream.mjs" >"$LOG_DIR/fake.log" 2>&1 &
       echo $! >"$LOG_DIR/fake.pid"
