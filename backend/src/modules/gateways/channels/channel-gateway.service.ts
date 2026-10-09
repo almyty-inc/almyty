@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 import { isUniqueViolation } from '../../../common/utils/unique-violation';
@@ -903,6 +904,11 @@ export class ChannelGatewayService {
     // conversation: one widget thread is one conversation.
     const thread = await this.threadOnGateway(gateway, normalized.threadId);
     let run: AgentRun | null = thread.active;
+    // A browser's first message carries no thread id, so this names the
+    // thread, in the widget script's own form. It goes on the run as it is
+    // inserted: a write after startRun raced the run's own metadata writes
+    // and was often lost, and the next message then found no thread.
+    const threadId = normalized.threadId || `w-${randomUUID()}`;
 
     // What the agent reads: the text and a line per uploaded file, with the
     // files themselves by reference (channel-attachments.service.ts).
@@ -915,7 +921,7 @@ export class ChannelGatewayService {
         gatewayId: gateway.id,
         gatewayType: gateway.type,
         source: 'chat_widget',
-        ...(normalized.threadId ? { threadId: normalized.threadId } : {}),
+        threadId,
       };
       run = await this.agentRuntimeService.startRun(
         gateway.agentId,
@@ -942,30 +948,17 @@ export class ChannelGatewayService {
           ...(thread.conversationId ? { conversationId: thread.conversationId } : {}),
         }),
       );
-
-      run.metadata = {
-        ...(run.metadata || {}),
-        ...channelMetadata,
-        threadId: normalized.threadId || run.id,
-      };
-      await this.runRepository.save(run);
     }
     // The files go with the conversation that read them.
     await this.attachmentReader?.fileUnder(gateway.organizationId, sent?.fileIds ?? [], run.conversationId, run.id);
 
     // Persist the agent's reply for the widget poll endpoint once the
     // run completes (the widget can also stream live via the run SSE).
-    this.listenForCompletionAndRespond(run.id, gateway, adapter, {
-      ...normalized,
-      threadId: (run.metadata as any)?.threadId || normalized.threadId || run.id,
-    });
+    this.listenForCompletionAndRespond(run.id, gateway, adapter, { ...normalized, threadId });
 
     await this.incrementRequestCount(gateway.id);
 
-    return {
-      runId: run.id,
-      threadId: (run.metadata as any)?.threadId || run.id,
-    };
+    return { runId: run.id, threadId };
   }
 
   /**
