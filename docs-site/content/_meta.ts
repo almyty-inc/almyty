@@ -24,6 +24,7 @@ export default {
   'run-limits': 'Run limits',
   compliance: 'Compliance',
   runner: 'Runners',
+  'hosted-machines': 'Hosted machines',
   referrals: 'Referrals',
   enterprise: 'Plans and enterprise',
   'reference-separator': { type: 'separator', title: 'Reference for developers' },

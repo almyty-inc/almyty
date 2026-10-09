@@ -59,8 +59,9 @@ export class EnvironmentInsightsService {
 
   /**
    * The caller's own machine on each of these environments, for the list:
-   * their live persistent workspace there (not an agent's own) and its
-   * hosted runner's state, or null when they have none yet.
+   * their live persistent workspace there (not an agent's own, and not a
+   * read-only one inherited from a member who left) and its hosted
+   * runner's state, or null when they have none yet.
    */
   async machines(userId: string, organizationId: string, environmentIds: string[]) {
     const out: Record<string, { workspaceId: string; status: string; lastActiveAt: Date | null; machine: { id: string; state: string; desired: { replicas: number }; lastError: string | null } | null } | null> = {};
@@ -71,7 +72,7 @@ export class EnvironmentInsightsService {
               h.id AS "machineId", h.state, h.desired, h."lastError"
          FROM workspaces w
          LEFT JOIN hosted_runners h ON h."workspaceId" = w.id AND h.state NOT IN ('torn_down', 'orphaned')
-        WHERE w."organizationId" = $1 AND w."ownerUserId" = $2 AND w."agentId" IS NULL
+        WHERE w."organizationId" = $1 AND w."ownerUserId" = $2 AND w."agentId" IS NULL AND w."readOnly" = false
           AND w.kind = 'persistent' AND w.status IN ('active', 'suspended') AND w."environmentId" = ANY($3::uuid[])`,
       [organizationId, userId, environmentIds],
     );

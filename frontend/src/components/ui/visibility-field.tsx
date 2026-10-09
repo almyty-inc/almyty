@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Globe, Lock, Users } from 'lucide-react'
 
@@ -38,6 +39,10 @@ interface Props {
   label?: string
   /** What each choice means, when the sharing wording does not fit. */
   descriptions?: Partial<Record<Visibility, string>>
+  /** Choices shown but not selectable (the plan does not include them), unless already the value. */
+  lockedOptions?: Visibility[]
+  /** Shown under the choices while any offered choice is locked, e.g. a <PlanHint/>. */
+  lockedHint?: ReactNode
 }
 
 /**
@@ -54,8 +59,11 @@ interface Props {
  * second key of its own over the same endpoint, which no mutation
  * invalidated, so a team you had just created was missing here.
  */
-export function VisibilityField({ organizationId, value, onChange, teamAdminOf, disabled, noun = 'this', options, label, descriptions }: Props) {
+export function VisibilityField({ organizationId, value, onChange, teamAdminOf, disabled, noun = 'this', options, label, descriptions, lockedOptions, lockedHint }: Props) {
   const offered = (v: Visibility) => !options || options.includes(v)
+  // A locked choice stays usable while it is the current value, so a saved
+  // setting the plan no longer covers can still be kept.
+  const isLocked = (v: Visibility) => !!lockedOptions?.includes(v) && value.visibility !== v
   const columns = ['sm:grid-cols-1', 'sm:grid-cols-1', 'sm:grid-cols-2', 'sm:grid-cols-3'][options ? options.length : 3]
   const teamsQuery = useQuery<Team[]>({
     queryKey: ['organization-teams', organizationId],
@@ -86,7 +94,7 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
               type="button"
               role="radio"
               aria-checked={value.visibility === 'private'}
-              disabled={disabled}
+              disabled={disabled || isLocked('private')}
               className={optionClass(value.visibility === 'private')}
               onClick={() => onChange({ visibility: 'private', teamId: null })}
             >
@@ -94,7 +102,7 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
                 <Lock className="h-4 w-4" /> Only you
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Only you can see and use {noun}. Not even org admins.
+                {descriptions?.private ?? `Only you can see and use ${noun}. Not even org admins.`}
               </p>
             </button>
           )}
@@ -103,7 +111,7 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
               type="button"
               role="radio"
               aria-checked={value.visibility === 'team'}
-              disabled={disabled || pickableTeams.length === 0}
+              disabled={disabled || isLocked('team') || pickableTeams.length === 0}
               className={optionClass(value.visibility === 'team')}
               onClick={() => {
                 const first = pickableTeams[0]
@@ -128,7 +136,7 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
               type="button"
               role="radio"
               aria-checked={value.visibility === 'org'}
-              disabled={disabled}
+              disabled={disabled || isLocked('org')}
               className={optionClass(value.visibility === 'org')}
               onClick={() => onChange({ visibility: 'org', teamId: null })}
             >
@@ -141,6 +149,7 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
             </button>
           )}
         </div>
+        {lockedHint && (lockedOptions ?? []).some(offered) && <div className="mt-2">{lockedHint}</div>}
       </div>
 
       {value.visibility === 'team' && (

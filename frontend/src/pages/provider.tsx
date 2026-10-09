@@ -35,6 +35,7 @@ import { providerUsageApiSupport, usageApiSupported } from '@/components/llm-pro
 import { BrandIcon } from '@/components/brand-icon'
 import { BASE_URL_PRIVATE_HOST_HINT, buildProviderUpdateBody } from '@/components/llm-providers/schema'
 import { WhoCanUse } from '@/components/connect/who-can-use'
+import { HostedPodAccess } from '@/components/llm-providers/hosted-pod-access'
 import { llmProvidersApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { modelAdaptersApi, modelDeploymentsApi, readAdapterRefusal } from '@/lib/deployments-api'
@@ -319,6 +320,7 @@ export function ProviderPage() {
           <FormSection title="Key and access">
             <ReplaceKey provider={provider} onSaved={() => check.mutate()} />
             <WhoCanUse value={visibility} onChange={(next) => update.mutate({ visibility: next.visibility, teamId: next.teamId })} disabled={update.isPending} noun="this connection and its models" />
+            <HostedPodAccess provider={provider} onChange={(hostedPodAccess) => update.mutate({ hostedPodAccess })} disabled={update.isPending} />
             <div className="max-w-md">
               <ModelPicker
                 idPrefix="provider-default"

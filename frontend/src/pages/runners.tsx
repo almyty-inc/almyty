@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/layout/page-header'
 import { pluralized } from '@/lib/utils'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Cpu, Plus } from 'lucide-react'
@@ -22,6 +22,8 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { PageIntro } from '@/components/onboarding/page-intro'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { HostedEnvironmentsTab, HostedIntro, NEW_ENVIRONMENT_PATH, useEnvironments } from '@/components/runners/hosted-environments-tab'
 import { isPendingRunner, runnerStateLabel, runnerStateVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 import { formatRelativeTime } from '@/lib/utils'
 import {
@@ -63,7 +65,14 @@ export function RunnersPage() {
   const { currentOrganization } = useOrganizationStore()
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
-
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') === 'hosted' ? 'hosted' : 'machines'
+  const setTab = (next: string) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'hosted') params.set('tab', 'hosted')
+    else params.delete('tab')
+    setSearchParams(params, { replace: true })
+  }
   useEffect(() => {
     document.title = 'Runners | almyty'
     return () => { document.title = 'almyty' }
@@ -203,90 +212,97 @@ export function RunnersPage() {
     ),
   ], [navigate, teamLookup, confirmDelete])
 
-  if (isError) {
-    return (
-      <div className="space-y-6">
-        <RunnersHeader runners={runners} onlineCount={onlineCount} onCreate={() => navigate('/runners/new')} />
-        <QueryError error={error as Error} onRetry={refetch} title="Couldn't load runners" />
-      </div>
-    )
-  }
+  const machines = isError ? (
+    <QueryError error={error as Error} onRetry={refetch} title="Couldn't load runners" />
+  ) : !isLoading && runners.length === 0 ? (
+    <EmptyState
+      variant="panel"
+      icon={Cpu}
+      title="No runners yet"
+      description="A runner connects one of your machines and publishes its capabilities as tools. Code and credentials stay local."
+      action={
+        <Button onClick={() => navigate('/runners/new')}>
+          <Plus className="mr-2 h-4 w-4" />
+          Start a runner
+        </Button>
+      }
+    />
+  ) : (
+    <Card>
+      <CardContent className="pt-6 space-y-4">
+        <div className="flex items-center justify-end">
+          <TeamFilter
+            organizationId={currentOrganization?.id}
+            value={teamFilter}
+            onChange={setTeamFilter}
+          />
+        </div>
+        <DataTable
+          columns={columns}
+          data={visibleRunners}
+          loading={isLoading}
+          searchKey="name"
+          searchPlaceholder="Search runners..."
+          onRowClick={(r) => navigate(`/runners/${r.id}`)}
+          hideSelectionCount
+          hideColumnsButton
+          emptyState={
+            <EmptyState
+              variant="inline"
+              icon={Cpu}
+              title="No runners match your filters"
+              description="Try changing the team filter or search."
+              className="py-16"
+            />
+          }
+        />
+      </CardContent>
+    </Card>
+  )
 
   return (
     <div className="space-y-6">
-      <RunnersHeader runners={runners} onlineCount={onlineCount} onCreate={() => navigate('/runners/new')} />
-      <PageIntro topic="runners" />
-
-      {!isLoading && runners.length === 0 ? (
-        <EmptyState
-          variant="panel"
-          icon={Cpu}
-          title="No runners yet"
-          description="A runner connects one of your machines and publishes its capabilities as tools. Code and credentials stay local."
-          action={
+      <PageHeader
+        title="Runners"
+        description={tab === 'hosted' ? 'Machines almyty runs for you' : `${pluralized(runners.length, 'runner')} · ${onlineCount} online`}
+        actions={
+          tab === 'hosted' ? (
+            <NewEnvironmentButton />
+          ) : (
             <Button onClick={() => navigate('/runners/new')}>
               <Plus className="mr-2 h-4 w-4" />
               Start a runner
             </Button>
-          }
-        />
-      ) : (
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex items-center justify-end">
-              <TeamFilter
-                organizationId={currentOrganization?.id}
-                value={teamFilter}
-                onChange={setTeamFilter}
-              />
-            </div>
-            <DataTable
-              columns={columns}
-              data={visibleRunners}
-              loading={isLoading}
-              searchKey="name"
-              searchPlaceholder="Search runners..."
-              onRowClick={(r) => navigate(`/runners/${r.id}`)}
-              hideSelectionCount
-              hideColumnsButton
-              emptyState={
-                <EmptyState
-                  variant="inline"
-                  icon={Cpu}
-                  title="No runners match your filters"
-                  description="Try changing the team filter or search."
-                  className="py-16"
-                />
-              }
-            />
-          </CardContent>
-        </Card>
-      )}
+          )
+        }
+      />
+      {tab === 'hosted' ? <HostedIntro /> : <PageIntro topic="runners" />}
+
+      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="machines">Your machines</TabsTrigger>
+          <TabsTrigger value="hosted">Hosted</TabsTrigger>
+        </TabsList>
+        <TabsContent value="machines">{machines}</TabsContent>
+        <TabsContent value="hosted">
+          <HostedEnvironmentsTab />
+        </TabsContent>
+      </Tabs>
 
       {confirmDialog}
     </div>
   )
 }
 
-function RunnersHeader({
-  runners,
-  onlineCount,
-  onCreate,
-}: {
-  runners: Runner[]
-  onlineCount: number
-  onCreate: () => void
-}) {
+/** Shown on the Hosted tab once the server says hosted machines are on. */
+function NewEnvironmentButton() {
+  const navigate = useNavigate()
+  const { enabled } = useEnvironments()
+  if (!enabled) return null
   return (
-    <PageHeader
-      title="Runners"
-      description={`${pluralized(runners.length, 'runner')} · ${onlineCount} online`}
-      actions={
-        <Button onClick={onCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Start a runner
-        </Button>
-      }
-    />
+    <Button onClick={() => navigate(NEW_ENVIRONMENT_PATH)}>
+      <Plus className="mr-2 h-4 w-4" />
+      New environment
+    </Button>
   )
 }

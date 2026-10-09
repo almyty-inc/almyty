@@ -111,6 +111,7 @@ export function CommandPalette() {
     { id: 'act-new-http-api', label: 'Connect an API: manual HTTP', hint: 'An address, with tools added by hand', icon: Plus, action: () => go('/apis/new/http') },
     { id: 'act-connect-provider', label: 'Connect a provider', hint: 'OpenAI, Anthropic, Gemini, your own server', icon: Plus, action: () => go('/models/providers/new') },
     { id: 'act-new-runner', label: 'Register runner', hint: 'Run agents on your own machine', icon: Plus, action: () => go('/runners/new') },
+    { id: 'act-new-environment', label: 'New hosted environment', hint: 'A machine almyty runs for you', icon: Plus, action: () => go('/runners/hosted/new') },
     { id: 'act-add-credential', label: 'Add credential', hint: 'A key, a token or a sign-in, kept in one place', icon: Plus, action: () => go('/credentials/new') },
     { id: 'act-new-credential-policy', label: 'Add a credential rule', hint: 'Govern who may use which credential', icon: Plus, action: () => go('/settings/credential-rules/new') },
     { id: 'act-new-approval-policy', label: 'Add approval policy', hint: 'Require a human to approve an action', icon: Plus, action: () => go('/settings/approvals/policies/new') },

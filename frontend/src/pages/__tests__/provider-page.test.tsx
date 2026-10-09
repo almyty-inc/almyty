@@ -19,6 +19,7 @@ vi.mock('@/lib/api', () => ({
   llmProvidersApi: { getById: vi.fn(), getAll: vi.fn(), update: vi.fn(), test: vi.fn(), delete: vi.fn(), agents: vi.fn() },
   organizationsApi: { getTeams: vi.fn() },
   budgetsApi: { list: vi.fn().mockResolvedValue([]) },
+  environmentsApi: { list: vi.fn().mockResolvedValue({ success: true, data: [], enabled: false }) },
 }))
 vi.mock('@/lib/models-api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/models-api')>('@/lib/models-api')
