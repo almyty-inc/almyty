@@ -666,15 +666,15 @@ export function ToolModeSection({
           <p className="text-xs text-muted-foreground">Tools the model needs on almost every task, so it never has to search for them.</p>
           {pinned.length > 0 && (
             <p className="text-xs" data-testid="pin-summary">
-              Always shown: {usableTools.filter((t) => pinned.includes(t.id)).map((t) => t.name).sort().join(', ') || 'none of the tools above'}
+              Always shown: {usableTools.filter((t) => pinned.includes(t.id)).map((t) => readableToolName(t)).sort().join(', ') || 'none of the tools above'}
             </p>
           )}
           {/* By name; a long list scrolls in place. */}
           <div className="grid max-h-56 grid-cols-1 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2" data-testid="pin-list">
-            {[...usableTools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
-              <label key={t.id} className="flex items-center gap-2 text-sm">
-                <Checkbox checked={pinned.includes(t.id)} onCheckedChange={(on) => togglePin(t.id, on === true)} aria-label={`Always show ${t.name}`} />
-                <span className="truncate font-mono text-xs">{t.name}</span>
+            {[...usableTools].sort((a, b) => readableToolName(a).localeCompare(readableToolName(b))).map((t) => (
+              <label key={t.id} className="flex items-center gap-2 text-sm" title={t.name}>
+                <Checkbox checked={pinned.includes(t.id)} onCheckedChange={(on) => togglePin(t.id, on === true)} aria-label={`Always show ${readableToolName(t)}`} />
+                <span className="truncate text-xs">{readableToolName(t)}</span>
               </label>
             ))}
           </div>

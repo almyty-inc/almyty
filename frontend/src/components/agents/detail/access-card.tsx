@@ -17,10 +17,10 @@ export function AccessCard({ agentId }: { agentId: string }) {
     <Card data-testid="agent-access-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <KeyRound className="h-4 w-4" aria-hidden />
+          <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden />
           Access
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-xs">
           When someone other than you writes to it on a channel, it can use only the accounts given to it here. Without access it says so instead of guessing.
         </CardDescription>
       </CardHeader>

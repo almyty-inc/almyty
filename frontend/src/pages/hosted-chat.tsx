@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, Download, MessageSquarePlus, Menu, MoreHorizontal, Trash2, X } from 'lucide-react'
-import { assistantMarkdownComponents } from '@/components/ui/assistant-markdown'
+import { assistantMarkdownComponents } from '@/components/hosted-chat/assistant-markdown'
 
 import {
   AlertDialog,
