@@ -39,11 +39,14 @@ the builder), then **Set up always on**. You choose:
   way, so with it off your emails reach the agent like anyone else's.
 - **What it may do on its own.**
   - *Looks things up, and asks you before it changes anything* (the
-    default). Every tool that may change something waits for your OK in
-    **Approvals** before it runs.
+    default). On its wakes, every tool that may change something waits for
+    your OK in **Approvals** before it runs.
   - *Does things, and asks you first only before what you pick.* Switching
     to this starts the list with every tool that may change something; take
-    off what it may do alone.
+    off what it may do alone. A tool on this list waits for your OK on
+    **every** run of the agent, not only its wakes: **Try it**, a chat on
+    any of its channels (yours or anyone's), a schedule, and a call through
+    the API or a gateway. The list holds even while Always on is off.
 
   Your approval rules (for example "ask before a refund over 500") apply
   either way.

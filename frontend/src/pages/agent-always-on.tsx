@@ -426,6 +426,9 @@ function AlwaysOnPage({
         {form.actMode === 'act' && (
           <div className="space-y-2" data-testid="always-on-ask-first">
             <p className="text-sm font-medium">Ask me first before</p>
+            <p className="text-xs text-muted-foreground">
+              These always wait for your OK, on every run: Try it, chats on any channel, schedules, calls through the API and wakes.
+            </p>
             {tools.length === 0 ? (
               <p className="text-sm text-muted-foreground">It has no tools yet.</p>
             ) : (
