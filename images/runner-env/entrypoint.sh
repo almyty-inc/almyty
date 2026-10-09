@@ -56,7 +56,10 @@ export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -n "${ALMYTY_MODEL_TOKEN:-}" ] && [ -n "${ALMYTY_API_URL:-}" ]; then
   # The proxy only when the image's runner has one: pointing the CLIs at a
   # port nothing listens on would leave them with no model at all.
-  runner_dist="$(npm root -g 2>/dev/null)/@almyty/runner/dist"
+  # (Found from the runner binary itself: `npm root -g` points under HOME
+  # once NPM_CONFIG_PREFIX is set above.)
+  runner_bin="$(command -v almyty-runner 2>/dev/null || true)"
+  runner_dist="$( [ -n "$runner_bin" ] && dirname "$(readlink -f "$runner_bin")" || echo /nonexistent)"
   if [ -n "${ALMYTY_MODEL_PROXY_PORT:-}" ] && [ -f "${ALMYTY_RUNNER_DIST:-$runner_dist}/model-proxy.js" ]; then
     api="http://127.0.0.1:${ALMYTY_MODEL_PROXY_PORT}"
     # The proxy replaces whatever key a CLI sends.
