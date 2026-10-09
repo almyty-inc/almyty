@@ -84,7 +84,6 @@ export class PiiFilterPlugin {
         hooks: [
           PluginHookType.PRE_REQUEST,
           PluginHookType.POST_RESPONSE,
-          PluginHookType.PRE_TOOL_EXECUTION,
           PluginHookType.DATA_FILTER,
         ],
         protocols: ['mcp', 'utcp', 'a2a', 'http'],
@@ -105,24 +104,12 @@ export class PiiFilterPlugin {
           timeout: 5000,
         },
         {
-          // The hook the product actually runs. `executeHook` is invoked
-          // from one place -- ToolExecutorService.execute -- and always
-          // with PRE_TOOL_EXECUTION, so a built-in with no entry here is
-          // registered into `registry.byHook` under hook types nothing
-          // calls and cannot run at all. This plugin already advertised
-          // PRE_TOOL_EXECUTION in `capabilities.hooks` above and the
-          // executor already feeds the filtered parameters back into the
-          // call ("a filter plugin's whole purpose is to rewrite what gets
-          // sent"); only the registration entry was missing. Its absence
-          // is what made the EE compliance pack's enforced `pii-filter`
-          // report `enforced: true`, score 40 posture points, and redact
-          // nothing.
-          type: PluginHookType.PRE_TOOL_EXECUTION,
-          handler: 'filterPiiFromRequest',
-          async: false,
-          timeout: 3000,
-        },
-        {
+          // No PRE_TOOL_EXECUTION entry: a tool gets the real values it is
+          // called with (a calendar id, an address to search mail for), or
+          // it works on the wrong thing. Personal data is hidden in what is
+          // kept and what goes out -- execution records, the audit log,
+          // answers to outside callers -- through DATA_FILTER, which
+          // ToolExecutorService.hidePersonalData runs.
           type: PluginHookType.DATA_FILTER,
           handler: 'filterPiiFromData',
           async: false,

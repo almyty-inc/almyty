@@ -67,7 +67,7 @@ export class ToolAuthService {
     if (connectionId && this.credentialRefs) {
       const resolved = await this.credentialRefs.resolve(options.organizationId, connectionId, {
         principal,
-        context: { purpose: 'api_call', resourceType: 'api', resourceId: api.id },
+        context: { purpose: 'api_call', resourceType: 'api', resourceId: api.id, ...(options.agentId ? { agentId: options.agentId } : {}) },
       });
       // An OAuth 2.0 sign-in renews its own token and sends it.
       if (await this.applySignIn(config, resolved.credential)) return;
@@ -168,7 +168,7 @@ export class ToolAuthService {
     if (!credentialId || !this.credentialRefs) return;
     const resolved = await this.credentialRefs.resolve(options.organizationId, credentialId, {
       principal: options.principal ?? userPrincipal(options.userId),
-      context: { purpose: 'tool_call', resourceType: 'tool', resourceId: tool.id },
+      context: { purpose: 'tool_call', resourceType: 'tool', resourceId: tool.id, ...(options.agentId ? { agentId: options.agentId } : {}) },
     });
     if (await this.applySignIn(config, resolved.credential)) return;
     const secret = connectionAuthConfig(resolved.config);

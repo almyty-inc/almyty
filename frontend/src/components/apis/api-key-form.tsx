@@ -15,6 +15,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -73,6 +74,8 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
   const [pasteToken, setPasteToken] = useState(false)
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
+  // Scopes the description lists that the person unticked.
+  const [skippedScopes, setSkippedScopes] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   // The spec says how to sign in: making the credential is a sign-in there.
@@ -97,7 +100,7 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
 
   const signIn = useMutation({
     mutationFn: async () => {
-      const base = { apiId, clientId: clientId.trim(), clientSecret: clientSecret.trim(), tokenUrl: oauth!.tokenUrl!, scopes: oauth!.scopes, credentialName: `${apiName} sign-in` }
+      const base = { apiId, clientId: clientId.trim(), clientSecret: clientSecret.trim(), tokenUrl: oauth!.tokenUrl!, scopes: oauth!.scopes.filter((s) => !skippedScopes.includes(s)), credentialName: `${apiName} sign-in` }
       if (oauth!.flow === 'client_credentials' || !oauth!.authorizationUrl) {
         await credentialsApi.oauth2ClientCredentials(base)
         return { redirect: null as string | null }
@@ -131,6 +134,10 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
     setError(null)
     if (!clientId.trim() || !clientSecret.trim()) {
       setError('Enter the client ID and secret from your app at the provider.')
+      return
+    }
+    if (oauth && oauth.scopes.length > 0 && oauth.scopes.every((s) => skippedScopes.includes(s))) {
+      setError('Tick at least one permission to ask for.')
       return
     }
     signIn.mutate()
@@ -239,6 +246,27 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
                       <SecretInput id="api-oauth-client-secret" className="mt-1" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} disabled={busy} />
                     </div>
                   </div>
+                  {oauth.scopes.length > 0 && (
+                    <fieldset className="space-y-1.5" data-testid="api-oauth-scopes">
+                      <legend className="text-sm font-medium">What it asks for</legend>
+                      <p className="text-xs text-muted-foreground">
+                        The permissions this API&apos;s description lists. The sign-in asks for the ticked ones; untick what its tools will not need (for an assistant that only reads, keep the read-only ones).
+                      </p>
+                      <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+                        {oauth.scopes.map((scope) => (
+                          <label key={scope} className="flex items-start gap-2 text-xs">
+                            <Checkbox
+                              checked={!skippedScopes.includes(scope)}
+                              onCheckedChange={(on) => setSkippedScopes((s) => (on === true ? s.filter((x) => x !== scope) : [...s, scope]))}
+                              disabled={busy}
+                              aria-label={scope}
+                            />
+                            <span className="break-all font-mono">{scope}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
                     <Button type="button" onClick={startSignIn} disabled={busy}>
                       {signIn.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}

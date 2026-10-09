@@ -66,8 +66,8 @@ curl -X POST https://api.almyty.com/apis/import \
 | `visibility` | string | Who can use it |
 | `teamId` | string | Team the API belongs to, when the visibility is a team |
 
-Supported formats: OpenAPI 3 (JSON or YAML), Swagger 2, GraphQL (SDL or an
-endpoint URL), WSDL (SOAP), and `.proto` (gRPC).
+Supported formats: OpenAPI 3 (JSON or YAML), Swagger 2, Google discovery
+documents, GraphQL (SDL or an endpoint URL), WSDL (SOAP), and `.proto` (gRPC).
 
 almyty reads from the description:
 
@@ -80,7 +80,15 @@ almyty reads from the description:
 - **Sign-in** from OpenAPI `securitySchemes` or Swagger 2
   `securityDefinitions`: API key in a header or query parameter (with its
   name), bearer token, basic, or OAuth 2.0 authorization code or client
-  credentials.
+  credentials. When the description names no sign-in on its operations, a
+  key in the query string is picked last (HubSpot lists its retired
+  `hapikey` first).
+
+A Google discovery document (`https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest`,
+`https://gmail.googleapis.com/$discovery/rest?version=v1`) is read as an
+OpenAPI description: one operation per method, Google's transport parameters
+left out, and Google's sign-in with the scopes each method needs. See
+[Connect Google](/credentials/connect-google).
 
 ### Response
 

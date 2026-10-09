@@ -1,4 +1,4 @@
-import { derivedToolClass, graphqlKind, toolClass } from '../tool-side-effect';
+import { derivedToolClass, graphqlKind, isSearchOperation, toolClass } from '../tool-side-effect';
 
 /**
  * The side-effect class table of docs/design/code-mode.md, part A: every
@@ -102,5 +102,20 @@ describe('tool side-effect class', () => {
     it('does not change what the definition says (derivedToolClass)', () => {
       expect(derivedToolClass({ ...generated('DELETE'), sideEffect: 'read', sideEffectSource: 'override' })).toMatchObject({ sideEffect: 'destructive' });
     });
+  });
+
+  it('reads a search sent as POST, by its path or operation id', () => {
+    // HubSpot searches are POST /crm/v3/objects/companies/search; Always on's
+    // "asks before it changes anything" held every CRM lookup for approval.
+    const op = (endpoint: string, operationId: string | null = null) =>
+      derivedToolClass({ metadata: { sourceOperation: { method: 'POST', endpoint, operationId } } }).sideEffect;
+    expect(op('/crm/v3/objects/companies/search', 'post-/crm/v3/objects/companies/search_doSearch')).toBe('read');
+    expect(op('/crm/v3/objects/0-3/batch/read')).toBe('read');
+    expect(op('/freeBusy', 'calendar.freebusy.query')).toBe('read');
+    expect(isSearchOperation({ endpoint: '/v1/query/' })).toBe(true);
+    // Everything else sent as POST still changes something.
+    expect(op('/crm/v3/objects/companies', 'post-/crm/v3/objects/companies_create')).toBe('write');
+    expect(op('/gmail/v1/users/{userId}/messages/send', 'gmail.users.messages.send')).toBe('write');
+    expect(op('/research-notes')).toBe('write');
   });
 });

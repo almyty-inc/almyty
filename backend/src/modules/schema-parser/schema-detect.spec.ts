@@ -104,7 +104,8 @@ describe('detectApiSchema', () => {
       oauth2: {
         flow: 'authorization_code',
         authorizationUrl: 'https://accounts.google.com/o/oauth2/auth',
-        tokenUrl: 'https://accounts.google.com/o/oauth2/token',
+        // Google's current token address, whatever older one the description names.
+        tokenUrl: 'https://oauth2.googleapis.com/token',
         scopes: ['cal'],
       },
     });
@@ -116,6 +117,29 @@ describe('detectApiSchema', () => {
     const onlyImplicit = JSON.parse(googleStyle({ key: { type: 'apiKey', in: 'query', name: 'key' } }, [{ Oauth2: ['cal'] }]));
     delete onlyImplicit.components.securitySchemes.Oauth2c;
     expect(detectApiSchema(JSON.stringify(onlyImplicit)).auth).toEqual({ type: 'bearer' });
+  });
+
+  it("does not pick HubSpot's retired hapikey: its sign-in comes first, with pasting a private-app token beside it", () => {
+    // HubSpot's published CRM descriptions list `developer_hapikey` (a key in
+    // the query string, retired) before OAuth and private-app tokens, and name
+    // none of them on the operations.
+    const doc = {
+      openapi: '3.0.1',
+      info: { title: 'Companies', version: 'v3' },
+      servers: [{ url: 'https://api.hubapi.com' }],
+      paths: { '/crm/v3/objects/companies/search': { post: { operationId: 'post-/crm/v3/objects/companies/search_doSearch', security: [], responses: { 200: { description: 'ok' } } } } },
+      components: {
+        securitySchemes: {
+          developer_hapikey: { type: 'apiKey', name: 'hapikey', in: 'query' },
+          oauth2: { type: 'oauth2', flows: { authorizationCode: { authorizationUrl: 'https://app.hubspot.com/oauth/authorize', tokenUrl: 'https://api.hubapi.com/oauth/v1/token', scopes: { 'crm.objects.companies.read': '' } } } },
+          private_apps: { type: 'apiKey', name: 'private-app', in: 'header' },
+        },
+      },
+    };
+    expect(detectApiSchema(JSON.stringify(doc)).auth).toEqual({
+      type: 'oauth2',
+      oauth2: { flow: 'authorization_code', authorizationUrl: 'https://app.hubspot.com/oauth/authorize', tokenUrl: 'https://api.hubapi.com/oauth/v1/token', scopes: ['crm.objects.companies.read'] },
+    });
   });
 
   it('leaves the address empty for a relative server when there is no link to resolve it against', () => {

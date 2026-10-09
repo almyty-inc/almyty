@@ -1043,6 +1043,7 @@ describe('ToolExecutorService', () => {
           cache: {
             enabled: true,
             ttl: 3600,
+            shared: true,
           },
         },
       } as any;
@@ -1640,7 +1641,8 @@ describe('ToolExecutorService', () => {
           endpoint: '/users/{id}',
         },
         configuration: {
-          cache: { enabled: true, ttl: 300 },
+          // Shared across callers: a tool that opts in (answers are otherwise kept per run).
+          cache: { enabled: true, ttl: 300, shared: true },
         },
       } as any;
 

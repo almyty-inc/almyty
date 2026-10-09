@@ -70,7 +70,8 @@ export interface AlwaysOnView {
   hostedHome: boolean
   /** The organization's always-on agents with a hosted home that are on now. */
   hostedAgentsOn: number
-  tools: Array<{ id: string; name: string; readOnly: boolean }>
+  /** Its tools; `title` is the name people read ("Sends the specified message"), `name` the machine name. */
+  tools: Array<{ id: string; name: string; title?: string; readOnly: boolean }>
 }
 
 export interface AgentWakeRow {

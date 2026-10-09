@@ -58,7 +58,13 @@ export class GrantsUsePolicy implements ConnectionUsePolicy {
       // could post nothing, and no grant could fix it: a grant cannot name
       // a gateway.
       if (!credential.ownerUserId && context?.resourceType === 'gateway' && context.resourceId === execution.gatewayId) return;
-      return this.grants.assertCanUse(GrantsUsePolicy.gatewayGrantPrincipal(execution), credential, useContext);
+      // Otherwise the gateway holds what was granted to the run's agent: a
+      // channel message from someone other than the owner acts for nobody,
+      // and the agent's own grants decide what it may reach.
+      return this.grants.assertCanUse(GrantsUsePolicy.gatewayGrantPrincipal(execution), credential, {
+        ...useContext,
+        ...(context?.agentId ? { agentId: context.agentId } : {}),
+      });
     }
     // An agent acting as itself: the grants made to that agent, and only
     // those. The agent named by the call's context cannot stand in for it,

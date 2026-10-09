@@ -86,9 +86,24 @@ describe('ask first, for always-on runs', () => {
     expect((await call(listed, 'tool-refund', { amount: 20 })).approvalRequired?.kind).toBe('tool_call');
   });
 
-  it('does not hold the agent\'s other runs (a visitor\'s chat, a schedule)', async () => {
+  it('propose: holds only the always-on runs (it is about what the agent does on its own)', async () => {
     const h = harness({ actMode: 'propose' }, 'scheduled');
     expect((await call(h, 'tool-refund', { amount: 20 })).success).toBe(true);
+  });
+
+  it.each(['scheduled', 'try_it', 'channel', 'api', undefined])(
+    'a tool on the ask-first list waits on every kind of run (%s)',
+    async (triggerType) => {
+      const h = harness({ actMode: 'act', askFirstToolIds: ['tool-refund'] }, triggerType as any);
+      const result = await call(h, 'tool-refund', { amount: 20 });
+      expect(result.approvalRequired).toMatchObject({ kind: 'tool_call', toolId: 'tool-refund' });
+      expect(mockedAxios).not.toHaveBeenCalled();
+    },
+  );
+
+  it('the ask-first list holds even while Always on is switched off', async () => {
+    const h = harness({ enabled: false, actMode: 'act', askFirstToolIds: ['tool-refund'] }, 'try_it');
+    expect((await call(h, 'tool-refund', { amount: 20 })).approvalRequired?.kind).toBe('tool_call');
   });
 
   it('amount rules still apply in both modes, and say why in their own words', async () => {

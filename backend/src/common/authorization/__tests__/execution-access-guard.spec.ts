@@ -107,7 +107,11 @@ describe('every execution path goes through the shared scope check', () => {
 
   describe('each executor asks ExecutionAccessService before it does any work', () => {
     it('ToolExecutorService.executeTool: before the tool\'s status, gateway row, parameters or dispatch', () => {
-      const body = methodBody(read(join(SRC, 'modules/tools/tool-executor.service.ts')), /async executeTool\(/);
+      // executeTool is a thin wrapper (it hides personal data in answers to
+      // outside callers); the work, and the gate, are in executeToolUnfiltered.
+      const source = read(join(SRC, 'modules/tools/tool-executor.service.ts'));
+      expect(methodBody(source, /async executeTool\(/)).toMatch(/^[^]*?this\.executeToolUnfiltered\(/);
+      const body = methodBody(source, /private async executeToolUnfiltered\(/);
       const gate = body.indexOf('this.executionAccess.assertCanExecute(');
       expect(gate).toBeGreaterThan(-1);
       for (const later of [

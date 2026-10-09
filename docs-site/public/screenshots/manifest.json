@@ -6,7 +6,7 @@
       "id": "agent-builder-autonomous",
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
-      "capturedAt": "2026-10-09T11:04:37.426Z",
+      "capturedAt": "2026-10-09T12:13:56.164Z",
       "status": "current",
       "sha256": "a076d677bdcdee97ff184f24db451db9fb3a01c881adb5c1314d573c65911df5",
       "source": {
@@ -21,14 +21,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
-      "capturedAt": "2026-10-09T11:04:45.817Z",
+      "capturedAt": "2026-10-09T12:14:04.482Z",
       "status": "current",
       "sha256": "b21fd2f1e59dc4a10e4854c7db7d7fb66a4626ffd0ac63707538b3192faa9d47",
       "source": {
@@ -43,14 +43,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
-      "capturedAt": "2026-10-09T11:04:43.091Z",
+      "capturedAt": "2026-10-09T12:14:01.838Z",
       "status": "current",
       "sha256": "5e960408371dfd85cf7cce3e48718d0f5b1d7a6feb5115021fb1327500c90f64",
       "source": {
@@ -65,16 +65,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
-      "capturedAt": "2026-10-09T11:05:00.973Z",
+      "capturedAt": "2026-10-09T12:14:19.988Z",
       "status": "current",
-      "sha256": "e2bbb86c060c011649ee813f5aab9cdfff5960b7015370d044cc78f0d6deea01",
+      "sha256": "302a9d6ca49efad685805aa7bc1364cacdf1918f3a31b6ca02dab51ccdac92c5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -88,16 +88,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f622492b820a69bb630e64e96e2fb6356d9c5eb5f495da3b633ebfe5428a8424",
+      "sourceDigest": "37eaccf0c95694e8e005d10ea854d3177faab2174fbc0d2e667329b5a42ce553",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
-      "capturedAt": "2026-10-09T11:04:26.406Z",
+      "capturedAt": "2026-10-09T12:13:45.100Z",
       "status": "current",
-      "sha256": "014f25ba10fee0cff28facdcb367bb9b7e9d92eb1b339e63c57bc6fbebc4b748",
+      "sha256": "06ec09f00366c2dbc57dfe09adcf32d9b09da41d23aa2f3aaed51148656e8ec2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -110,16 +110,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
-      "capturedAt": "2026-10-09T11:04:21.077Z",
+      "capturedAt": "2026-10-09T12:13:39.866Z",
       "status": "current",
-      "sha256": "f5fa4b18043bc3af17e3aea09c8344c4c65070bbbda252a0a21604954ad22c0b",
+      "sha256": "38d920ae002a16443a28d0138af8d5ca4a5095110b9002691d73f435e2eacd3e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -132,16 +132,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
-      "capturedAt": "2026-10-09T11:04:34.307Z",
+      "capturedAt": "2026-10-09T12:13:52.966Z",
       "status": "current",
-      "sha256": "4cd4e0a7b7de3628e1f092ba5f95352a8ff34ecca9c307cb199ea2b0745d2707",
+      "sha256": "954be1802fe9704af39f0cc728cc78538045398061952d045256dae16a8c9997",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -154,36 +154,36 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-tool-mode",
       "title": "How the model sees its tools",
       "path": "screenshots/agent-tool-mode.png",
-      "capturedAt": "2026-10-06T13:15:25.037Z",
-      "status": "needs-recapture",
-      "sha256": "4ebdd4e5e01fb52590ebe446e0eab2b2262c99a20826a5f92c3dc20139ae40f4",
+      "capturedAt": "2026-10-09T12:16:38.624Z",
+      "status": "current",
+      "sha256": "06d656bf29508c82ace10ec3f070938af1b0f9c652f83f7918c737a857913481",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/af8f0421-c7f8-4e1e-bf42-869491143e7f/edit"
+        "route": "/agents/:id/edit"
       },
       "sources": [
         "frontend/src/components/agents/builder/capabilities-section.tsx",
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/ui",
+        "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "fa66cc4905d3260d50a035846b8caac150e880bb90f62e031c7eca0ca5c68f1e",
-      "notes": "Captured by coordinated Claude on the isolated local demo. Gateway code-mode switch is disabled in this server environment. No pending changes were approved.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "d1b686ee37e11544c8ff405f1ddd192fb7e0e81cdd37b0cbb4dda99509671039",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
-      "capturedAt": "2026-10-09T11:04:40.548Z",
+      "capturedAt": "2026-10-09T12:13:59.263Z",
       "status": "current",
       "sha256": "6d713b2830928e7a62a56dad45ba11a358df7d5d89fb921f8920afdfbe8398ad",
       "source": {
@@ -198,16 +198,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
-      "capturedAt": "2026-10-09T11:04:17.766Z",
+      "capturedAt": "2026-10-09T12:13:37.206Z",
       "status": "current",
-      "sha256": "e6ac7c8fd5658eb46f9a6de591f1ca28d4fffe812ac243c18a592128864eb867",
+      "sha256": "7b9a1727a0107b9089c5550befbbff77d1183ede7e080a8dbd5a57084bb7abd8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -220,16 +220,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3bee071147a3facf7b885f5e9cca5801900f4b8afec8bb726108b16a4bce0f3b",
+      "sourceDigest": "620f3938f86fd705a4cd5a1ad8d7d1269daf041c97c86b45ad2335005287c2c3",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-agents",
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
-      "capturedAt": "2026-10-09T11:06:39.527Z",
+      "capturedAt": "2026-10-09T12:15:57.662Z",
       "status": "current",
-      "sha256": "97fe65077385c84642c930d822c1aea414deacf1ea5192acd8c43b967f740438",
+      "sha256": "a3464812c5f76662c07ee6d7d9b328ab19ab3c747d36292ba9a02fd3ee4e29cb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -249,9 +249,9 @@
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
-      "capturedAt": "2026-10-09T11:06:47.112Z",
+      "capturedAt": "2026-10-09T12:16:05.475Z",
       "status": "current",
-      "sha256": "9cb427054f520b93bf5532519e712f237ef1bb303a101c5e289b5a63c3b3fd0b",
+      "sha256": "7ceebadfe4e61ae84a71c6775c689a87acad80dbdf8916505a7610ca523f5f74",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -271,7 +271,7 @@
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
-      "capturedAt": "2026-10-09T11:06:49.611Z",
+      "capturedAt": "2026-10-09T12:16:08.077Z",
       "status": "current",
       "sha256": "8c644f2b84cb35036bc42fe919b39e8cac9dfdaaa694a2e1c1af32630fa57f19",
       "source": {
@@ -293,7 +293,7 @@
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
-      "capturedAt": "2026-10-09T11:06:44.588Z",
+      "capturedAt": "2026-10-09T12:16:02.874Z",
       "status": "current",
       "sha256": "d332c34bcd30190cae708d8b1990acd031c5d12381db6569bc154bcbdd6d8def",
       "source": {
@@ -315,9 +315,9 @@
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
-      "capturedAt": "2026-10-09T11:06:36.903Z",
+      "capturedAt": "2026-10-09T12:15:55.026Z",
       "status": "current",
-      "sha256": "a82f283ad72da346b5f6f806d0905221476ea68ca56772ee25781c2ca668d7a1",
+      "sha256": "f7d2ed96653afb7a99f51378e9ab81c3b0bd5363d8c5d5560a1e50f4f6e72777",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -337,9 +337,9 @@
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
-      "capturedAt": "2026-10-09T11:06:42.108Z",
+      "capturedAt": "2026-10-09T12:16:00.284Z",
       "status": "current",
-      "sha256": "19c17859ac664ac843f3c79dc8d2106e553996b1d03b74ce39cd7a9611321183",
+      "sha256": "0434211cecccdff6de31a430938a59af7ae43b7e4a7c323ce483cc4b123e72a6",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -359,9 +359,9 @@
       "id": "apis-list",
       "title": "APIs list",
       "path": "screenshots/apis-list.png",
-      "capturedAt": "2026-10-09T11:05:34.033Z",
+      "capturedAt": "2026-10-09T12:14:52.122Z",
       "status": "current",
-      "sha256": "594ff32f853fcf933f4248a04c2dee3600ac4169019d9174141cb5942e740412",
+      "sha256": "eb0a8afcff3a910c24563d5bd182fe7debae276f3671a8129c6d0535e7c289ab",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -374,16 +374,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a458b8a22df313f2bad6a61a0c643a069f2308fb0c675109de0218c442e89edf",
+      "sourceDigest": "3760da38adb934b5789db112c7513c44da4e174427d0de1fd8ea85d30025470f",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approval-refund-820",
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
-      "capturedAt": "2026-10-09T11:06:21.186Z",
+      "capturedAt": "2026-10-09T12:15:39.303Z",
       "status": "current",
-      "sha256": "c15ca77dbccba79efd9dee3e71eaee114a38fdb3b110c1d2ff2790190e37e29b",
+      "sha256": "018dad0470b821c24ac6c6d958b279841f9470e9168cf54a15b4b80d38cb1de3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -403,9 +403,9 @@
       "id": "approvals-change-set",
       "title": "A script's changes in Approvals",
       "path": "screenshots/approvals-change-set.png",
-      "capturedAt": "2026-10-07T13:18:53.006Z",
-      "status": "needs-recapture",
-      "sha256": "651db136e46e0f3890fc658bb28760a7a9aa2ed364465e956b88f27d0108a427",
+      "capturedAt": "2026-10-09T12:16:50.389Z",
+      "status": "current",
+      "sha256": "5f8721538b135545b18de531ced5be80936c98f8cce06719866612dbc514206b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -415,19 +415,19 @@
         "frontend/src/pages/approvals.tsx",
         "frontend/src/components/approvals",
         "frontend/src/components/ui",
+        "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ce760fd03b4ff475a06e45e96228795689b1c0274e81d83dc15af541f749963e",
-      "notes": "Browser capture of the isolated local demo. Script trace and change set use explicitly seeded screenshot fixtures, not a claim of a real model run.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "4c55d35aedd5e7f71a5f03c60526ba27dc86af7ede43f8ae0291171559371144",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
-      "capturedAt": "2026-10-09T11:06:18.062Z",
+      "capturedAt": "2026-10-09T12:15:36.110Z",
       "status": "current",
-      "sha256": "c15ca77dbccba79efd9dee3e71eaee114a38fdb3b110c1d2ff2790190e37e29b",
+      "sha256": "018dad0470b821c24ac6c6d958b279841f9470e9168cf54a15b4b80d38cb1de3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -456,7 +456,7 @@
       "id": "auth-register",
       "title": "Create account",
       "path": "screenshots/auth-register.png",
-      "capturedAt": "2026-10-09T11:07:19.845Z",
+      "capturedAt": "2026-10-09T12:17:01.365Z",
       "status": "current",
       "sha256": "0fd0ae6cb048a83098acac5ce38ccac627a4dd850110428e20666f1a23b3b4f6",
       "source": {
@@ -477,9 +477,9 @@
       "id": "builder-code-step",
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
-      "capturedAt": "2026-10-08T13:20:39.476Z",
-      "status": "needs-recapture",
-      "sha256": "9aa62b5778a464de5d85cf74519004b3d9de4123956a9018e3fa62131b804725",
+      "capturedAt": "2026-10-09T12:16:42.165Z",
+      "status": "current",
+      "sha256": "a73331a85dce6c4b9830d7d462cd56b63075b757aab98616c7e88d57f71e2856",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -489,17 +489,17 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents",
         "frontend/src/components/ui",
+        "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7514672188c7fc88f1efad3a1b8340b9be31c4a6430a630518f900a42779cd12",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed); the Pet store keeper workflow recreated with an Input and a Code step; code mode is not enabled in this demo.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-branding-rules",
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
-      "capturedAt": "2026-10-09T11:05:03.643Z",
+      "capturedAt": "2026-10-09T12:14:22.647Z",
       "status": "current",
       "sha256": "4b2e98eb10ffe5d460f64a8eece25fd32e7376dd3bce38fc04dadf9af0264752",
       "source": {
@@ -521,9 +521,9 @@
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
-      "capturedAt": "2026-10-09T11:05:08.996Z",
+      "capturedAt": "2026-10-09T12:14:28.222Z",
       "status": "current",
-      "sha256": "dabd8f20511e6c0866c56b6a7e3b8b9618e1e9ef0ca77927062e135b88c2249f",
+      "sha256": "06272ada506a47ba102389a9e1ae59bf497090d34b12f2bf025c549436ea5395",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -543,9 +543,9 @@
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
-      "capturedAt": "2026-10-09T11:05:12.066Z",
+      "capturedAt": "2026-10-09T12:14:31.377Z",
       "status": "current",
-      "sha256": "844c7a14d676aaa04e6d914a5f07507b19e3399f45fd28de060911ad24bbe7b8",
+      "sha256": "87cdb72237624f4dd07b007c4564ed40167215c96c688e3b1cb068ae45112a04",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -565,7 +565,7 @@
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
-      "capturedAt": "2026-10-09T11:05:14.850Z",
+      "capturedAt": "2026-10-09T12:14:34.134Z",
       "status": "current",
       "sha256": "cd399860d2b9e6581cdb0aea2122b6f6b2b13f9b921a40dab89bcce689a4e4a5",
       "source": {
@@ -587,7 +587,7 @@
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
-      "capturedAt": "2026-10-09T11:05:06.302Z",
+      "capturedAt": "2026-10-09T12:14:25.410Z",
       "status": "current",
       "sha256": "1cdadb2fc705e5c4a7b143ca83ca02a41eda9d810c88dc4eb41fecd125bb4b59",
       "source": {
@@ -723,7 +723,7 @@
       "id": "credentials-connect-provider",
       "title": "Connect a provider",
       "path": "screenshots/credentials-connect-provider.png",
-      "capturedAt": "2026-10-09T11:06:07.694Z",
+      "capturedAt": "2026-10-09T12:15:25.767Z",
       "status": "current",
       "sha256": "a31653370fb3ef72949f89305d1e05be4e54b7bb78ff8078f49f7a1a1bd146e8",
       "source": {
@@ -745,9 +745,9 @@
       "id": "credentials-vault",
       "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
-      "capturedAt": "2026-10-09T11:06:05.216Z",
+      "capturedAt": "2026-10-09T12:15:23.288Z",
       "status": "current",
-      "sha256": "5a47dd221c6ad70fe2968e7df10966703897359ad56a58c6ebd2d9aae6e83eb6",
+      "sha256": "b81891a73fb8e360dc939294b78c6f4d76a57ab4341c915c18aa09c4f7c2a520",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -768,9 +768,9 @@
       "id": "environment-detail",
       "title": "Hosted environment",
       "path": "screenshots/environment-detail.png",
-      "capturedAt": "2026-10-09T11:08:33.873Z",
+      "capturedAt": "2026-10-09T12:15:52.469Z",
       "status": "current",
-      "sha256": "ebe5672f13c440245ecfe31ee33267a9ba7f0d217a5cb127808b2bc7ec44599d",
+      "sha256": "e6d1fedaaeeb13b99f3ec28bc4faf2df63158f9abb1070b57b780df170f3d42c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -791,7 +791,7 @@
       "id": "environment-new",
       "title": "New environment",
       "path": "screenshots/environment-new.png",
-      "capturedAt": "2026-10-09T11:08:36.576Z",
+      "capturedAt": "2026-10-09T12:15:49.831Z",
       "status": "current",
       "sha256": "079b41b9a7c1aff6144781cc70b880c2356dff35b9ede93af56d37e387e0c33c",
       "source": {
@@ -814,7 +814,7 @@
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
-      "capturedAt": "2026-10-09T11:05:48.203Z",
+      "capturedAt": "2026-10-09T12:15:06.337Z",
       "status": "current",
       "sha256": "c7741d07171557aa21582e93f801bb95da21801920d57361aa3ff7f2168a2495",
       "source": {
@@ -836,9 +836,9 @@
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
-      "capturedAt": "2026-10-09T11:05:45.187Z",
+      "capturedAt": "2026-10-09T12:15:03.375Z",
       "status": "current",
-      "sha256": "6457c6c206ad70fd2e3fe9a9feea98e40586304a1c0757576abcd7d46a872a82",
+      "sha256": "54441efa9cb0ff9c3b6a2d70dbb20d2d4ae3b7a3345727b83ad63a9a2f7cef2e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -858,32 +858,32 @@
       "id": "gateway-exposure",
       "title": "How apps see a gateway's tools",
       "path": "screenshots/gateway-exposure.png",
-      "capturedAt": "2026-10-07T15:42:22.628Z",
-      "status": "needs-recapture",
-      "sha256": "8d74fd766d2c8a71b749ba5355f69984c1e377988ba38ad5d963b07a8333ec64",
+      "capturedAt": "2026-10-09T12:16:53.418Z",
+      "status": "current",
+      "sha256": "69b0ce4f742db32e151d8797d0f2dd08b02e05ddf090264391b477d498a4505c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/gateways/590784da-be62-4bb0-8c8a-e2ffe416bad8"
+        "route": "/gateways/:id"
       },
       "sources": [
         "frontend/src/pages/gateway-detail.tsx",
         "frontend/src/components/gateways",
         "frontend/src/components/agents/builder/capabilities-section.tsx",
         "frontend/src/components/ui",
+        "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c272b66f442801e643e68fa3297477ac459523c7ff0f9014c177e581de98eb87",
-      "notes": "Recaptured the existing local seeded demo gateway after repairs; no external changes approved. Code mode remains disabled in this demo.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "afce5612fc576aa99796c88bf29bcfe950580ff08146f5f9100da603ef448646",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
-      "capturedAt": "2026-10-09T11:05:50.816Z",
+      "capturedAt": "2026-10-09T12:15:08.963Z",
       "status": "current",
-      "sha256": "deb6a9fda1f9a5af0a728387a3524f56c6462c672c27c2aec2165f7c1eac9d33",
+      "sha256": "71cc1ec20a9ac60d6e34f2e4a0612fbcfb328fa69f4994e34be468834b1da612",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -903,9 +903,9 @@
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
-      "capturedAt": "2026-10-09T11:05:56.463Z",
+      "capturedAt": "2026-10-09T12:15:14.584Z",
       "status": "current",
-      "sha256": "68cf2d6df6c29e62e2e26857656b4d78f2300bc9fffd5fe08b82bbdc5e33288f",
+      "sha256": "54c9cd69dc638b97071fa5ac722e4339b362334594c5dd6d028aaa57031d6a59",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -925,9 +925,9 @@
       "id": "guides-dev-1-gateway",
       "title": "Serve the order tools to coding assistants",
       "path": "screenshots/guides/dev-1-gateway.png",
-      "capturedAt": "2026-10-09T11:14:22.742Z",
+      "capturedAt": "2026-10-09T12:23:02.502Z",
       "status": "current",
-      "sha256": "576e2d1320515cde295fc1e32a481c247e91c0a34c364e80353d76fdcaeae542",
+      "sha256": "a2b24f829a5f9e81cf182fa73df7320f929cb05c78225259808a28f4a602185b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -947,9 +947,9 @@
       "id": "guides-dev-2-gateway-setup",
       "title": "The address, the key and a ready-made setup",
       "path": "screenshots/guides/dev-2-gateway-setup.png",
-      "capturedAt": "2026-10-09T11:14:25.105Z",
+      "capturedAt": "2026-10-09T12:23:04.862Z",
       "status": "current",
-      "sha256": "3804a6d2f26bd0ac2caf2a2e28e1d88916aeaf1d57f9fb5e6ae9d555ecf03482",
+      "sha256": "b1b9e1e5477ee2c72c4b060e4e5ddc38b9368fd6f812173b5e1829918ea5f3fd",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -969,7 +969,7 @@
       "id": "guides-dev-3-runner",
       "title": "Start a runner on your own machine",
       "path": "screenshots/guides/dev-3-runner.png",
-      "capturedAt": "2026-10-09T11:14:27.360Z",
+      "capturedAt": "2026-10-09T12:23:07.119Z",
       "status": "current",
       "sha256": "c94519ab8e75cd5ffcfbc50df866fc4fda7c07d6d774ef8d31bdb4fc94c973a5",
       "source": {
@@ -991,7 +991,7 @@
       "id": "guides-dev-4-runner-command",
       "title": "The commands to run on the machine",
       "path": "screenshots/guides/dev-4-runner-command.png",
-      "capturedAt": "2026-10-09T11:14:28.980Z",
+      "capturedAt": "2026-10-09T12:23:08.734Z",
       "status": "current",
       "sha256": "c94519ab8e75cd5ffcfbc50df866fc4fda7c07d6d774ef8d31bdb4fc94c973a5",
       "source": {
@@ -1013,7 +1013,7 @@
       "id": "guides-helpdesk-1-connect-intranet",
       "title": "Connect your intranet",
       "path": "screenshots/guides/helpdesk-1-connect-intranet.png",
-      "capturedAt": "2026-10-09T11:13:51.502Z",
+      "capturedAt": "2026-10-09T12:22:31.089Z",
       "status": "current",
       "sha256": "fb602e27f0e259b34bd52627b3979041418b9179ada0fdda6faab0869ccb7e46",
       "source": {
@@ -1028,14 +1028,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02ef4472916559b6c617086048ef4370f030c2ac0bb9c7c4ebd2f44676d37d76",
+      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-2-office-guide",
       "title": "The office guide, added as a document",
       "path": "screenshots/guides/helpdesk-2-office-guide.png",
-      "capturedAt": "2026-10-09T11:13:54.819Z",
+      "capturedAt": "2026-10-09T12:22:34.405Z",
       "status": "current",
       "sha256": "2ef8e17292b263c01f07222fe1b56e1979f722a89fb90c073155dc10fba1fd17",
       "source": {
@@ -1057,7 +1057,7 @@
       "id": "guides-helpdesk-3-agent",
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
-      "capturedAt": "2026-10-09T11:14:01.510Z",
+      "capturedAt": "2026-10-09T12:22:41.319Z",
       "status": "current",
       "sha256": "64d2947d50c007233f8e8683444789f7632159d823529215b1b62d51e4c937df",
       "source": {
@@ -1072,16 +1072,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-4-leave",
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
-      "capturedAt": "2026-10-09T11:14:10.468Z",
+      "capturedAt": "2026-10-09T12:22:50.280Z",
       "status": "current",
-      "sha256": "aef95cb86ea85ee6b7b34fc3a97ac2dde777540a6fc2015fce87f1e7972f8715",
+      "sha256": "9b3f560a8db538d224c4d763056833248c9c3424f3a23d93ef975d8f2611f8c5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1094,16 +1094,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
-      "capturedAt": "2026-10-09T11:14:12.547Z",
+      "capturedAt": "2026-10-09T12:22:52.360Z",
       "status": "current",
-      "sha256": "0099f804bef1747281fd0e51a2bcfcd797ab78796d10ffdb6355727d9bc8fdf7",
+      "sha256": "21e2e4e46746a0245a05a288084677fbe1e75b28db5504a42d4c84f17a4f2a7f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1116,14 +1116,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-6-teams",
       "title": "Add Microsoft Teams",
       "path": "screenshots/guides/helpdesk-6-teams.png",
-      "capturedAt": "2026-10-09T11:14:18.284Z",
+      "capturedAt": "2026-10-09T12:22:58.075Z",
       "status": "current",
       "sha256": "cd1e67f6fa08b47cb5edd94b8914e4da973e52c5b8d2128050460e162f547289",
       "source": {
@@ -1146,9 +1146,9 @@
       "id": "guides-marketing-1-connect-docs",
       "title": "Connect your help center",
       "path": "screenshots/guides/marketing-1-connect-docs.png",
-      "capturedAt": "2026-10-09T11:12:30.921Z",
+      "capturedAt": "2026-10-09T12:21:12.089Z",
       "status": "current",
-      "sha256": "85b9ca69d23e54f16baa1273a31da3e1a0b8171ba6ff92268693d32a78b75bb0",
+      "sha256": "f066c9633267f16d6ed9044304cf90a5df905a503263352a15bf4080604afd2f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1161,16 +1161,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02ef4472916559b6c617086048ef4370f030c2ac0bb9c7c4ebd2f44676d37d76",
+      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-2-agent",
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
-      "capturedAt": "2026-10-09T11:12:33.901Z",
+      "capturedAt": "2026-10-09T12:21:15.085Z",
       "status": "current",
-      "sha256": "a815df766694c462af392bab6749274d72083c6e8be136342d44e58e2c0b11f4",
+      "sha256": "5263e3344cc7f71a1b3bc3523f2c2123bd2eebe32a440743a1973c1309c830f3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1183,16 +1183,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-3-try",
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
-      "capturedAt": "2026-10-09T11:12:42.886Z",
+      "capturedAt": "2026-10-09T12:21:24.058Z",
       "status": "current",
-      "sha256": "b62a384e1baebcd8df07e96a94f885c5c75267c377c8ae48dc9aedb5b663d8e3",
+      "sha256": "8cca45bcbcf9725c9593679a4c0653b79d5004dde52ac3da8549ee216230ce58",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1205,14 +1205,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-4-limits",
       "title": "A daily spending cap for visitors",
       "path": "screenshots/guides/marketing-4-limits.png",
-      "capturedAt": "2026-10-09T11:12:45.767Z",
+      "capturedAt": "2026-10-09T12:21:26.955Z",
       "status": "current",
       "sha256": "371ee23774c324e105faf0356eb2a331c8129bd330c476b538b704fcaeb222de",
       "source": {
@@ -1234,9 +1234,9 @@
       "id": "guides-marketing-5-widget",
       "title": "The chat bubble, only on your own site",
       "path": "screenshots/guides/marketing-5-widget.png",
-      "capturedAt": "2026-10-09T11:12:58.047Z",
+      "capturedAt": "2026-10-09T12:21:39.333Z",
       "status": "current",
-      "sha256": "cd4003feafbbd2c0fade13cb3cb4c6b4d20c636b7b71f3420e1cae1cc7e4dd2c",
+      "sha256": "8f94becbfbebb2c58086aaaeaaaa932e21263f81a022b6b55c3599d0ad0e8d5e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1257,7 +1257,7 @@
       "id": "guides-marketing-6-visitor",
       "title": "A visitor asks a product question",
       "path": "screenshots/guides/marketing-6-visitor.png",
-      "capturedAt": "2026-10-09T11:13:06.088Z",
+      "capturedAt": "2026-10-09T12:21:47.430Z",
       "status": "current",
       "sha256": "6585c66632f7b3595004a9bde79d4019845423ebded43942ddfd6154779723fc",
       "source": {
@@ -1272,16 +1272,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "977a6bac3975e22a82c1ce05fd85f4efa4449e7ec1c60173f7d0b9bca5e20fbc",
+      "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-1-connect-status",
       "title": "Connect the system you check",
       "path": "screenshots/guides/ops-1-connect-status.png",
-      "capturedAt": "2026-10-09T11:13:12.856Z",
+      "capturedAt": "2026-10-09T12:21:52.464Z",
       "status": "current",
-      "sha256": "acad270786c99f1d5d29e66bf86ea0d967ae292d6671c7cce430e99d92a95d29",
+      "sha256": "a5bb04622f81592fc0f63d7c188f14c9b05f00dfbff8a8946c5510d93687da0b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1294,16 +1294,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02ef4472916559b6c617086048ef4370f030c2ac0bb9c7c4ebd2f44676d37d76",
+      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-2-agent",
       "title": "The nightly check and its status tools",
       "path": "screenshots/guides/ops-2-agent.png",
-      "capturedAt": "2026-10-09T11:13:15.843Z",
+      "capturedAt": "2026-10-09T12:21:55.437Z",
       "status": "current",
-      "sha256": "ad2b0fb6f4401e601f6f0d2ae5de3e277d8079547bf06f139063c2a3cae22017",
+      "sha256": "abd7b4a188d87cff9a0d1cdedf74541af4004b5f3287e14c43c70e0a4184a27b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1316,16 +1316,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-3-try",
       "title": "A test run writes the report",
       "path": "screenshots/guides/ops-3-try.png",
-      "capturedAt": "2026-10-09T11:13:24.806Z",
+      "capturedAt": "2026-10-09T12:22:04.396Z",
       "status": "current",
-      "sha256": "1865fa24af6615f3a6337056b16e0db4e1f5a1ac821aa0981f9c193c7aab493d",
+      "sha256": "1cd58cfb429b6780c0258a05312984e8528ca2ed6180c823f546d9e7e6bd2fab",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1338,16 +1338,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-4-slack",
       "title": "Slack, published for the report",
       "path": "screenshots/guides/ops-4-slack.png",
-      "capturedAt": "2026-10-09T11:13:36.387Z",
+      "capturedAt": "2026-10-09T12:22:15.959Z",
       "status": "current",
-      "sha256": "41f4bdd45e0c78173b1571f204fcfdc1719c9121a3983e02f4d10605f082309b",
+      "sha256": "501e140333bb61e4074bbcb498860e10d42c239468249260568ddcb51831d861",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1368,7 +1368,7 @@
       "id": "guides-ops-5-schedule",
       "title": "Every day at 6:00, to the Slack channel",
       "path": "screenshots/guides/ops-5-schedule.png",
-      "capturedAt": "2026-10-09T11:13:40.851Z",
+      "capturedAt": "2026-10-09T12:22:20.407Z",
       "status": "current",
       "sha256": "56ea31526a21d0fd256e7e3bb340f6ccf296f805c5f9103d4503e0966bd30920",
       "source": {
@@ -1391,9 +1391,9 @@
       "id": "guides-ops-6-schedule-card",
       "title": "The schedule on the agent",
       "path": "screenshots/guides/ops-6-schedule-card.png",
-      "capturedAt": "2026-10-09T11:13:42.820Z",
+      "capturedAt": "2026-10-09T12:22:22.361Z",
       "status": "current",
-      "sha256": "4e8f4fefa52a921194a9b43f2155724ec60ad4f31008366c8413cda5e3af84b5",
+      "sha256": "2a7bdac586dff15cbc0b79cbc0fe6dc6a901b36c4825b0825a56fc79030462f7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1413,9 +1413,9 @@
       "id": "guides-ops-7-report-run",
       "title": "A report run, step by step",
       "path": "screenshots/guides/ops-7-report-run.png",
-      "capturedAt": "2026-10-09T11:13:46.756Z",
+      "capturedAt": "2026-10-09T12:22:26.298Z",
       "status": "current",
-      "sha256": "8a56ab0138235066ec154f24b6fe7b293972ea0f020d7092c741181fc5593224",
+      "sha256": "f16b56213bfcbd2888412fcb152079c1bbf72275b0d85af13a4a6cc9bd090ddb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1428,14 +1428,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-1-connect-crm",
       "title": "Connect your CRM",
       "path": "screenshots/guides/sales-1-connect-crm.png",
-      "capturedAt": "2026-10-09T11:12:02.324Z",
+      "capturedAt": "2026-10-09T12:20:43.742Z",
       "status": "current",
       "sha256": "56c1978ab7757af86adbf675f3806439b3335d23018bc2eee239baca1226561a",
       "source": {
@@ -1450,16 +1450,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02ef4472916559b6c617086048ef4370f030c2ac0bb9c7c4ebd2f44676d37d76",
+      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-2-agent",
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
-      "capturedAt": "2026-10-09T11:12:05.280Z",
+      "capturedAt": "2026-10-09T12:20:46.708Z",
       "status": "current",
-      "sha256": "797e1dbdca28044deca883bb2304c2aba3117aa414ae0d3f3fbd563b38689ee0",
+      "sha256": "2e3296fda6b8181a56817e61888b110b9582451a2635ecc56a80af13216d582e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1472,16 +1472,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-3-brief",
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
-      "capturedAt": "2026-10-09T11:12:14.247Z",
+      "capturedAt": "2026-10-09T12:20:55.694Z",
       "status": "current",
-      "sha256": "936bb424cc2d5de8c34a4cfea3768fc6580c073f44542b59441a98da293a6685",
+      "sha256": "1ea9280a6bd1908ff6d7f09a6c52c748a6315da5310e48fd68e73e02e47c7b46",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1494,16 +1494,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
-      "capturedAt": "2026-10-09T11:12:16.332Z",
+      "capturedAt": "2026-10-09T12:20:57.778Z",
       "status": "current",
-      "sha256": "c57c8d2177574a7017be636971138ff1b3ec72e976c4bbf7c032ed023b4e3469",
+      "sha256": "5f6b218b4fde9031ce0c9c5301cb3389d6deb230d85d9f9534a73a472ea55253",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1516,14 +1516,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-5-slack-keys",
       "title": "Add Slack with your Slack app",
       "path": "screenshots/guides/sales-5-slack-keys.png",
-      "capturedAt": "2026-10-09T11:12:22.023Z",
+      "capturedAt": "2026-10-09T12:21:03.457Z",
       "status": "current",
       "sha256": "146a27ae3b9f601ff478851ceac8526a9ba91e809d43f75f50c8f49ae8bdea4c",
       "source": {
@@ -1546,9 +1546,9 @@
       "id": "guides-sales-6-slack-live",
       "title": "Published: the install link and redirect URL",
       "path": "screenshots/guides/sales-6-slack-live.png",
-      "capturedAt": "2026-10-09T11:12:25.859Z",
+      "capturedAt": "2026-10-09T12:21:07.261Z",
       "status": "current",
-      "sha256": "e52400fdb4c69d104d5e2876a93c278c7ef2fde48b83b1d71936a5e64afee5e2",
+      "sha256": "3654ab0fee7b8de81d6224fe94bedf1fb16952ecf9d7637329e74b65cd875ac2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1568,9 +1568,9 @@
       "id": "guides-support-1-connect-model",
       "title": "Connect an AI model",
       "path": "screenshots/guides/support-1-connect-model.png",
-      "capturedAt": "2026-10-09T11:10:26.863Z",
+      "capturedAt": "2026-10-09T12:19:08.863Z",
       "status": "current",
-      "sha256": "cd4d05cc23c9eb5a5f2e309c808352ff9d98505fe32f2e387e008baa6a320b33",
+      "sha256": "8ce7b8742200a441d47ba58aca859b8fafa59af7a1844b833a9a43243142f9ba",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1591,9 +1591,9 @@
       "id": "guides-support-10-approve",
       "title": "Approve the refund",
       "path": "screenshots/guides/support-10-approve.png",
-      "capturedAt": "2026-10-09T11:11:00.754Z",
+      "capturedAt": "2026-10-09T12:19:42.252Z",
       "status": "current",
-      "sha256": "304a42fe4471bed9702ce899fab9221b65f05fa94cba3c80707f8fb0e4be6a84",
+      "sha256": "08c0d825f5d7de73352aa4f490c7c4b9b6138b05281b3e3cdee6aee00c176292",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1612,7 +1612,7 @@
       "id": "guides-support-11-add-channel",
       "title": "Pick where customers reach it",
       "path": "screenshots/guides/support-11-add-channel.png",
-      "capturedAt": "2026-10-09T11:11:03.893Z",
+      "capturedAt": "2026-10-09T12:19:45.392Z",
       "status": "current",
       "sha256": "19d10cff7da7b3ac8fe490bcba41b4507b1a0a47957173baf8517b969586ce5d",
       "source": {
@@ -1634,7 +1634,7 @@
       "id": "guides-support-12-web-chat",
       "title": "Publish the web chat",
       "path": "screenshots/guides/support-12-web-chat.png",
-      "capturedAt": "2026-10-09T11:11:04.654Z",
+      "capturedAt": "2026-10-09T12:19:46.167Z",
       "status": "current",
       "sha256": "1872135ffa6233d9f506778b62d0f39e57288e24b3b180dda784ab0be870b803",
       "source": {
@@ -1656,9 +1656,9 @@
       "id": "guides-support-13-widget",
       "title": "Put the chat bubble on your website",
       "path": "screenshots/guides/support-13-widget.png",
-      "capturedAt": "2026-10-09T11:11:08.554Z",
+      "capturedAt": "2026-10-09T12:19:50.033Z",
       "status": "current",
-      "sha256": "09c7cf76338f20218fdc1b55ec237105f129f63b19377c79f98d71ce04157c2d",
+      "sha256": "001a133217732fa93b4e50fc1da704b2c777e289740b234e3de71b7852f0af37",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1679,9 +1679,9 @@
       "id": "guides-support-14-whatsapp",
       "title": "Add WhatsApp with your Twilio keys",
       "path": "screenshots/guides/support-14-whatsapp.png",
-      "capturedAt": "2026-10-09T11:11:39.319Z",
+      "capturedAt": "2026-10-09T12:20:21.012Z",
       "status": "current",
-      "sha256": "65e40703cee0635c10157269cfeb16800719e1880516fa4d04cdbd46075888de",
+      "sha256": "27bf716b0620acb926ae2ba2328534a03b1d5c5c567ddb28c06e06fe66c544cd",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1702,7 +1702,7 @@
       "id": "guides-support-15-email",
       "title": "Add email with your Resend key",
       "path": "screenshots/guides/support-15-email.png",
-      "capturedAt": "2026-10-09T11:11:44.997Z",
+      "capturedAt": "2026-10-09T12:20:26.717Z",
       "status": "current",
       "sha256": "7c4d69bd8241d345a6b0c8f49a226b2914eebe66b6d55e37418f7d5018b9f910",
       "source": {
@@ -1725,7 +1725,7 @@
       "id": "guides-support-16-branding",
       "title": "Name, greeting and limits",
       "path": "screenshots/guides/support-16-branding.png",
-      "capturedAt": "2026-10-09T11:11:49.243Z",
+      "capturedAt": "2026-10-09T12:20:30.936Z",
       "status": "current",
       "sha256": "e828cd9ef55a64e7e35b796624c0c5befa7a22a02fc079e135d2a44e3aee67b0",
       "source": {
@@ -1747,7 +1747,7 @@
       "id": "guides-support-17-customer-view",
       "title": "What a customer sees",
       "path": "screenshots/guides/support-17-customer-view.png",
-      "capturedAt": "2026-10-09T11:11:57.314Z",
+      "capturedAt": "2026-10-09T12:20:38.800Z",
       "status": "current",
       "sha256": "d997fe307a9d7c91571ac219770208dd6dd7787b6d7e68a00b3248a0e60af6ed",
       "source": {
@@ -1762,14 +1762,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "977a6bac3975e22a82c1ce05fd85f4efa4449e7ec1c60173f7d0b9bca5e20fbc",
+      "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-2-connect-orders",
       "title": "Connect your order system",
       "path": "screenshots/guides/support-2-connect-orders.png",
-      "capturedAt": "2026-10-09T11:10:31.478Z",
+      "capturedAt": "2026-10-09T12:19:13.280Z",
       "status": "current",
       "sha256": "83b82a15e409fcc3a0934be6ed4d7ab95895caa5546d45f42c49b0f953ca31ba",
       "source": {
@@ -1785,14 +1785,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "17cacabb7f1511d35514f6b0e7838ccd6eecfdc0f2df3cba03de72120bb6b94a",
+      "sourceDigest": "e6cf5b7327372bfebdb3033e77312717506e4f8a69f77fdec1db6db58463169a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-3-orders-tools",
       "title": "The order system, with what it can do",
       "path": "screenshots/guides/support-3-orders-tools.png",
-      "capturedAt": "2026-10-09T11:10:32.762Z",
+      "capturedAt": "2026-10-09T12:19:14.545Z",
       "status": "current",
       "sha256": "6117334c3cb24cce0ab4e33de2668974ae0ddd3fdf6cd33778aa500d9dee903f",
       "source": {
@@ -1807,14 +1807,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02ef4472916559b6c617086048ef4370f030c2ac0bb9c7c4ebd2f44676d37d76",
+      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-4-new-agent",
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
-      "capturedAt": "2026-10-09T11:10:37.069Z",
+      "capturedAt": "2026-10-09T12:19:18.813Z",
       "status": "current",
       "sha256": "94dccf8ddb074418b152a3e6b2512c33f110aee6fc464ec9d92a1161465f1d38",
       "source": {
@@ -1829,16 +1829,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
-      "capturedAt": "2026-10-09T11:10:37.658Z",
+      "capturedAt": "2026-10-09T12:19:19.397Z",
       "status": "current",
-      "sha256": "6719bbb297a9b6be6165fe3d230db1bee4de49b993717a318aa4b28a20a57201",
+      "sha256": "af153190477e9cfa63513998800a0a3fc142477ead3ec756c5c6c59794caa752",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1851,16 +1851,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9a9499ab1d5b931a6afea0cd9af22fe25e267e5bb05c5e177fc1d52978947c04",
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-6-activate",
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
-      "capturedAt": "2026-10-09T11:10:41.093Z",
+      "capturedAt": "2026-10-09T12:19:22.736Z",
       "status": "current",
-      "sha256": "2c79d62fa86e9d8a698de2b7adc4b66f3efb39ae79c9b1c3db171caa7c64bdbc",
+      "sha256": "7db80e296f4f410598d5df4733531736201032410243a7776e94acd1c30e42ce",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1873,16 +1873,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
-      "capturedAt": "2026-10-09T11:10:43.197Z",
+      "capturedAt": "2026-10-09T12:19:24.821Z",
       "status": "current",
-      "sha256": "e149cda32621186f8e1b25c1bfd9c95204857415a826cd73ec442483c5a22868",
+      "sha256": "3b5d35633305bb2e8dee4065cb37597c3029b4028ca617d139b3d9c97f8eec51",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1895,14 +1895,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-8-amount-rule",
       "title": "Ask before refunds over 500",
       "path": "screenshots/guides/support-8-amount-rule.png",
-      "capturedAt": "2026-10-09T11:10:47.385Z",
+      "capturedAt": "2026-10-09T12:19:28.950Z",
       "status": "current",
       "sha256": "54a4dd1438ddb2ff101a87a843b5d02e21257b22a8282d6e61602af6d0368b17",
       "source": {
@@ -1925,9 +1925,9 @@
       "id": "guides-support-9-refund-waits",
       "title": "A big refund waits for approval",
       "path": "screenshots/guides/support-9-refund-waits.png",
-      "capturedAt": "2026-10-09T11:10:59.900Z",
+      "capturedAt": "2026-10-09T12:19:41.413Z",
       "status": "current",
-      "sha256": "fa6b7f1a954b0edff61ea978150fea91d400a04ca60c594feb8c27639ab3e63d",
+      "sha256": "68189fec28b221f4d5bf28ff5272c0d06fbadcc46e40d47357d5674da6cbe1f4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1946,7 +1946,7 @@
       "id": "hosted-chat-privacy",
       "title": "Hosted chat: visitor data",
       "path": "screenshots/hosted-chat-privacy.png",
-      "capturedAt": "2026-10-09T11:05:31.326Z",
+      "capturedAt": "2026-10-09T12:14:49.642Z",
       "status": "current",
       "sha256": "11208187d15885d3bb4a0b0785cc47b8ca759b24348c76cd76071e5742eba010",
       "source": {
@@ -1961,14 +1961,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "977a6bac3975e22a82c1ce05fd85f4efa4449e7ec1c60173f7d0b9bca5e20fbc",
+      "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "hosted-chat",
       "title": "Hosted web chat",
       "path": "screenshots/hosted-chat.png",
-      "capturedAt": "2026-10-09T11:05:27.237Z",
+      "capturedAt": "2026-10-09T12:14:45.675Z",
       "status": "current",
       "sha256": "8f2479f7c99e114f697b5ff8aa02d2ec29ca5c03a9d8a8f2b53cc76799c8ad24",
       "source": {
@@ -1983,14 +1983,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "977a6bac3975e22a82c1ce05fd85f4efa4449e7ec1c60173f7d0b9bca5e20fbc",
+      "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-config",
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
-      "capturedAt": "2026-10-09T11:05:17.403Z",
+      "capturedAt": "2026-10-09T12:14:36.515Z",
       "status": "current",
       "sha256": "622611c851e35415979951249992408f2a539653340404c57996a55b8112d2ac",
       "source": {
@@ -2012,9 +2012,9 @@
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
-      "capturedAt": "2026-10-09T11:05:20.154Z",
+      "capturedAt": "2026-10-09T12:14:39.223Z",
       "status": "current",
-      "sha256": "58911c8361820436b0ea36860e3e613a33121662480aadb2f7b43e3bb86f54e8",
+      "sha256": "4752a6916b06210d811d697861957430b10581eb0dc29e84ffd32fd08aaeddad",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2034,7 +2034,7 @@
       "id": "memory-write",
       "title": "Add memory",
       "path": "screenshots/memory-write.png",
-      "capturedAt": "2026-10-09T11:06:15.452Z",
+      "capturedAt": "2026-10-09T12:15:33.493Z",
       "status": "current",
       "sha256": "ffedbf76ddec1079e8045283e2f0f3fc0bce4e059150f1323e86b375cccc6c99",
       "source": {
@@ -2056,9 +2056,9 @@
       "id": "memory",
       "title": "Memory",
       "path": "screenshots/memory.png",
-      "capturedAt": "2026-10-09T11:06:13.002Z",
+      "capturedAt": "2026-10-09T12:15:30.987Z",
       "status": "current",
-      "sha256": "0ab9fa88285fabf333669c2b6babb6b2c38092b0064cdab6ba4e8860725c3113",
+      "sha256": "0221f23d41f9aa7971496c2a64fbc17ef6036a0b87a1bcffeba5041578439c3e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2078,7 +2078,7 @@
       "id": "models",
       "title": "Model catalog",
       "path": "screenshots/models.png",
-      "capturedAt": "2026-10-09T11:06:10.400Z",
+      "capturedAt": "2026-10-09T12:15:28.361Z",
       "status": "current",
       "sha256": "66b5272f2996d48c6154f402f7a8d30ec18df34f7a83da63b2f457138047bf60",
       "source": {
@@ -2100,7 +2100,7 @@
       "id": "quickstart-api-imported",
       "title": "Imported API",
       "path": "screenshots/quickstart-api-imported.png",
-      "capturedAt": "2026-10-09T11:05:36.626Z",
+      "capturedAt": "2026-10-09T12:14:54.795Z",
       "status": "current",
       "sha256": "3ceefb2cb85f5a2f2bcbf0f7d0e2fc8ee81f41285fe40237a139afeda4d4dff5",
       "source": {
@@ -2115,16 +2115,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02ef4472916559b6c617086048ef4370f030c2ac0bb9c7c4ebd2f44676d37d76",
+      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-claude-config",
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
-      "capturedAt": "2026-10-09T11:06:02.641Z",
+      "capturedAt": "2026-10-09T12:15:20.690Z",
       "status": "current",
-      "sha256": "0dc8481b1d5ad6fffd3359a614ea1f6acdd85553199e0d056e80b269ab6c53a8",
+      "sha256": "75edfd9a06d2b40fa11aa67496296884fe9157e4644533ba45d7e9d75400307f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2144,9 +2144,9 @@
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
-      "capturedAt": "2026-10-09T11:05:53.456Z",
+      "capturedAt": "2026-10-09T12:15:11.596Z",
       "status": "current",
-      "sha256": "bdc7ba3c26748295d395447dfc1c075efdb11d918e4f382657e3aa2108a11df8",
+      "sha256": "412be9bcfa69b9beef588c571f38c5581ca01a7ff67972b1ba7745c3fcbd8718",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2166,9 +2166,9 @@
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
-      "capturedAt": "2026-10-09T11:05:59.570Z",
+      "capturedAt": "2026-10-09T12:15:17.701Z",
       "status": "current",
-      "sha256": "739e1b43d5778c4378b7326698f039bdc06031193c81f4d2e76b293ef11ed1a3",
+      "sha256": "06b4dbc17c2f4db549dfa6ebf494213a55d59dd2d1d7d8257b47ad4c032fb071",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2188,30 +2188,30 @@
       "id": "run-script-step",
       "title": "A script step in a run",
       "path": "screenshots/run-script-step.png",
-      "capturedAt": "2026-10-07T13:18:55.854Z",
-      "status": "needs-recapture",
-      "sha256": "1b75a5f1d75330dbeccdba4a444adfb0457883e55293b44ab5ebfc23e92db450",
+      "capturedAt": "2026-10-09T12:16:47.350Z",
+      "status": "current",
+      "sha256": "ad6a43dab1ebe4eeefe994874bc81a031713893f4a01b5aee36e7e3ac0945104",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/44eff113-5595-4130-a1b0-5ea145836691"
+        "route": "/agents/:id?tab=runs"
       },
       "sources": [
         "frontend/src/components/agents/detail/code-step.tsx",
         "frontend/src/components/agents/detail/runs-tab.tsx",
         "frontend/src/components/approvals",
         "frontend/src/components/ui",
+        "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "aa66db5bdeb80e2ae2bbbeef64406f7d944866fc7e5a646e8364b336cf80b8fa",
-      "notes": "Browser capture of the isolated local demo. Script trace and change set use explicitly seeded screenshot fixtures, not a claim of a real model run.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "37560ef4d3fa75871f061392fb724d3c8079af95b3e8138ddcabc14ad3e90f0b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "runner-detail",
       "title": "Runner detail",
       "path": "screenshots/runner-detail.png",
-      "capturedAt": "2026-10-09T11:06:26.392Z",
+      "capturedAt": "2026-10-09T12:15:44.555Z",
       "status": "current",
       "sha256": "afe0f6c474736437e2b736616ef3ef4d34dd3d6ff47e0a27a3b326e62ba6cae5",
       "source": {
@@ -2234,9 +2234,9 @@
       "id": "runners-hosted",
       "title": "Hosted environments",
       "path": "screenshots/runners-hosted.png",
-      "capturedAt": "2026-10-09T11:08:31.237Z",
+      "capturedAt": "2026-10-09T12:15:47.130Z",
       "status": "current",
-      "sha256": "fc1dba3c37bd5a9e7a1b1fd43e4ad368ad3693653ced5d889e6ece64118a0b3b",
+      "sha256": "63b33089fd53a08258564c34956bbc4c0b48e33202fb5b15c13e7c1d77d76de4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2257,7 +2257,7 @@
       "id": "runners-list",
       "title": "Runners",
       "path": "screenshots/runners-list.png",
-      "capturedAt": "2026-10-09T11:06:23.772Z",
+      "capturedAt": "2026-10-09T12:15:41.918Z",
       "status": "current",
       "sha256": "e94b5b92c1dc13d7d5d6131f40ff12e3ee71369d613b1fd633f5877e6fb20db0",
       "source": {
@@ -2280,9 +2280,9 @@
       "id": "schedule-config",
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
-      "capturedAt": "2026-10-09T11:04:48.896Z",
+      "capturedAt": "2026-10-09T12:14:07.649Z",
       "status": "current",
-      "sha256": "a97095045ce80aee76d4e433a495d37f2b76cb8ce3dc4a58ac9079eb7b7a2dd8",
+      "sha256": "b8c1aad0cddaae5c4c2c5ad8184e3cffe486f45bb229722cb8826a07508266d3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2295,7 +2295,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2320,7 +2320,7 @@
       "id": "settings-approval-policies-enabled",
       "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
-      "capturedAt": "2026-10-09T11:07:06.979Z",
+      "capturedAt": "2026-10-09T12:16:25.167Z",
       "status": "current",
       "sha256": "9af08fbb33a5b43e586cee5452c827b9df1131e848a71beeb7226e2dc249ea6d",
       "source": {
@@ -2336,14 +2336,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "19d0be9b6269cc02c3a504543a655b27535fcc3439005f3f13be553267bc3e8f",
+      "sourceDigest": "3c2842d07a966f93bd637209c303e3acfe5afc416a5960520af6d7eab33eb502",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
-      "capturedAt": "2026-10-09T11:07:09.601Z",
+      "capturedAt": "2026-10-09T12:16:27.767Z",
       "status": "current",
       "sha256": "ae4d058f80195ef310210f30279001aabc93fdc4897cd1996a2e301b409f181a",
       "source": {
@@ -2358,14 +2358,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "51797e7535e4503bb1b69b22e9f6bdbd49a465a3c297f993b747e26de3704c1a",
+      "sourceDigest": "bac4ec8b3dcc8a939265d486cb5cb45aa0a48675ce7636745e2173487b187ab7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
-      "capturedAt": "2026-10-09T11:07:14.949Z",
+      "capturedAt": "2026-10-09T12:16:32.975Z",
       "status": "current",
       "sha256": "df9587104ebf8287eba4a195d37d5b53548df666e31bb420f48d2168c0ce5103",
       "source": {
@@ -2380,16 +2380,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7538432a24c4de93d2bb2f2e2526b68c3ce391f18b8e7a2a264497b150e9f4cf",
+      "sourceDigest": "cafac50c12fd65681be43b741dc1fe2507591e3d253a44317c7a86b907b0cedb",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
-      "capturedAt": "2026-10-09T11:07:12.288Z",
+      "capturedAt": "2026-10-09T12:16:30.368Z",
       "status": "current",
-      "sha256": "0222c5f35f69bf599d8f29efe82d0f82a27b765d42ef88c541390301ebfb8890",
+      "sha256": "6cf7300d9a82ac5818ebcd2fdc8cff2ec682b0258acb0bd3daa9dce6a04468a4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2402,14 +2402,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7538432a24c4de93d2bb2f2e2526b68c3ce391f18b8e7a2a264497b150e9f4cf",
+      "sourceDigest": "cafac50c12fd65681be43b741dc1fe2507591e3d253a44317c7a86b907b0cedb",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-encryption-locked",
       "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
-      "capturedAt": "2026-10-09T11:07:17.549Z",
+      "capturedAt": "2026-10-09T12:16:35.501Z",
       "status": "current",
       "sha256": "a9f9a77948364d2815ac9ad9a0f68ed8d3a0676a069e04c89f8af585acc65e80",
       "source": {
@@ -2424,14 +2424,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7538432a24c4de93d2bb2f2e2526b68c3ce391f18b8e7a2a264497b150e9f4cf",
+      "sourceDigest": "cafac50c12fd65681be43b741dc1fe2507591e3d253a44317c7a86b907b0cedb",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-enabled",
       "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
-      "capturedAt": "2026-10-09T11:06:54.799Z",
+      "capturedAt": "2026-10-09T12:16:13.386Z",
       "status": "current",
       "sha256": "bb8923f0ee445c1cb488aa55638d1968eb7e8a5956dec873533210e5ef25c17a",
       "source": {
@@ -2446,14 +2446,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7538432a24c4de93d2bb2f2e2526b68c3ce391f18b8e7a2a264497b150e9f4cf",
+      "sourceDigest": "cafac50c12fd65681be43b741dc1fe2507591e3d253a44317c7a86b907b0cedb",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-policy",
       "title": "New access policy",
       "path": "screenshots/settings-rbac-new-policy.png",
-      "capturedAt": "2026-10-09T11:07:01.331Z",
+      "capturedAt": "2026-10-09T12:16:19.986Z",
       "status": "current",
       "sha256": "6ba82e7f63b62cab2dda82bff776156bfbfe80c2d17e242f928826dd5d5d7b99",
       "source": {
@@ -2468,14 +2468,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7538432a24c4de93d2bb2f2e2526b68c3ce391f18b8e7a2a264497b150e9f4cf",
+      "sourceDigest": "cafac50c12fd65681be43b741dc1fe2507591e3d253a44317c7a86b907b0cedb",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
-      "capturedAt": "2026-10-09T11:06:58.033Z",
+      "capturedAt": "2026-10-09T12:16:16.660Z",
       "status": "current",
       "sha256": "aadcb9544d1798c892ec94ae3f49b0aa09f0e8e19a6262e78b8c30d09b129337",
       "source": {
@@ -2490,14 +2490,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7538432a24c4de93d2bb2f2e2526b68c3ce391f18b8e7a2a264497b150e9f4cf",
+      "sourceDigest": "cafac50c12fd65681be43b741dc1fe2507591e3d253a44317c7a86b907b0cedb",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
-      "capturedAt": "2026-10-09T11:07:04.411Z",
+      "capturedAt": "2026-10-09T12:16:22.597Z",
       "status": "current",
       "sha256": "195f6e8a6f2c328d3804a0584a920274cbbfc1f0b19960a6d89685af1fd14c37",
       "source": {
@@ -2512,14 +2512,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7538432a24c4de93d2bb2f2e2526b68c3ce391f18b8e7a2a264497b150e9f4cf",
+      "sourceDigest": "cafac50c12fd65681be43b741dc1fe2507591e3d253a44317c7a86b907b0cedb",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-teams",
       "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
-      "capturedAt": "2026-10-09T11:06:52.164Z",
+      "capturedAt": "2026-10-09T12:16:10.719Z",
       "status": "current",
       "sha256": "80e116d37d929a0cefe0822baa8b18565f79d7f0a0a29df08fa7b3e0942f3f8d",
       "source": {
@@ -2535,16 +2535,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ebe7144421e3f4241be3b51f1cfc7f51fe51220ca18e46299b7d003e8ae8a799",
+      "sourceDigest": "6345950337a946e9ccac33671b3753ed94c8ee85bdb85345a244e70a0ed05a22",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
-      "capturedAt": "2026-10-09T11:04:29.019Z",
+      "capturedAt": "2026-10-09T12:13:47.712Z",
       "status": "current",
-      "sha256": "014f25ba10fee0cff28facdcb367bb9b7e9d92eb1b339e63c57bc6fbebc4b748",
+      "sha256": "06ec09f00366c2dbc57dfe09adcf32d9b09da41d23aa2f3aaed51148656e8ec2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2557,16 +2557,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
-      "capturedAt": "2026-10-09T11:04:23.800Z",
+      "capturedAt": "2026-10-09T12:13:42.498Z",
       "status": "current",
-      "sha256": "f5fa4b18043bc3af17e3aea09c8344c4c65070bbbda252a0a21604954ad22c0b",
+      "sha256": "38d920ae002a16443a28d0138af8d5ca4a5095110b9002691d73f435e2eacd3e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2579,16 +2579,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
-      "capturedAt": "2026-10-09T11:04:31.687Z",
+      "capturedAt": "2026-10-09T12:13:50.383Z",
       "status": "current",
-      "sha256": "271cf6e9a827a24087f2471e482b05914441db6fc1cd4b3984fa4213db82d5c4",
+      "sha256": "0bd1f79fd3adb24f6c94634a62391475855a05373f51ae25f25935619d17f2f5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2601,14 +2601,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tool-detail",
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
-      "capturedAt": "2026-10-09T11:05:42.551Z",
+      "capturedAt": "2026-10-09T12:15:00.746Z",
       "status": "current",
       "sha256": "313e3b0d95d7b2f9350dc6268766a78a31014c17a4b385c6db65f8399eda73e1",
       "source": {
@@ -2630,13 +2630,13 @@
       "id": "tool-side-effect",
       "title": "What a tool does to your data",
       "path": "screenshots/tool-side-effect.png",
-      "capturedAt": "2026-10-07T16:05:18.544Z",
-      "status": "needs-recapture",
-      "sha256": "044240a7226f0c7dbe9d020d0215bd8092e1d9fa8be17548f809e87ffd62f132",
+      "capturedAt": "2026-10-09T12:16:56.361Z",
+      "status": "current",
+      "sha256": "49708a0dccbf17a4aa7df3b92c28c73d71eb0b2b2a32fc23519083b44fc3a8d0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/tools/f89f096d-f586-4eb4-8cb8-836c70a3a799?tab=details"
+        "route": "/tools/:id?tab=details"
       },
       "sources": [
         "frontend/src/pages/tool-detail.tsx",
@@ -2645,17 +2645,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "da6feb3c04d98488be39d826bb2ee868ce405c85161f4aa5011befa20f0944a8",
-      "notes": "Recaptured the existing local seeded demo gateway after repairs; no external changes approved. Code mode remains disabled in this demo.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "306cfc88d84be5899e083a61761f1cf83622a3a65609f96c113069fc158acad1",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
-      "capturedAt": "2026-10-09T11:05:39.268Z",
+      "capturedAt": "2026-10-09T12:14:57.394Z",
       "status": "current",
-      "sha256": "d6d2ef0552427c349b9bbf54319f24310dcc4d46e222780dc2da7ad9b97a47a7",
+      "sha256": "227ec7e9a201b76f6227f1bf526e534208178bfa296da17535e13af31a2fc1d8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2675,9 +2674,9 @@
       "id": "tutorials-bizdev-00-approve-email",
       "title": "Approving an outreach email",
       "path": "screenshots/tutorials/bizdev/00-approve-email.png",
-      "capturedAt": "2026-10-08T13:59:36.933Z",
-      "status": "needs-recapture",
-      "sha256": "c2fdf3a6cb38715847c27bf86940dcf8964e0cf1bbf0fcf2d95741b4d022a684",
+      "capturedAt": "2026-10-09T11:55:17.385Z",
+      "status": "current",
+      "sha256": "4065e8701456e68593f50faff24112c728c55af3887a9a54f56b6c93abdecdc1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2690,17 +2689,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6a4ee32b5e8b3f19613103effc6412630c40592300976ca9b39db7a3860b6e3a",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-01-hubspot-link",
       "title": "HubSpot Companies description link",
       "path": "screenshots/tutorials/bizdev/01-hubspot-link.png",
-      "capturedAt": "2026-10-08T13:52:46.211Z",
-      "status": "needs-recapture",
-      "sha256": "8983fcdf5304c25c702a754b350fea68ba41d312ef2c9d59779a6d39438d86c6",
+      "capturedAt": "2026-10-09T11:54:11.391Z",
+      "status": "current",
+      "sha256": "811f3767ffd4b7561ecc1a16d78c9fc544a10e01dfa9395e8113d21d9d7d006c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2712,21 +2710,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5e1ea7165927264410a27fe6b42e59abfba78932edb3f071cd2713a7845084f4",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-02-hubspot-default-key",
-      "title": "HubSpot: the key as the description says",
+      "title": "HubSpot: a sign-in needed",
       "path": "screenshots/tutorials/bizdev/02-hubspot-default-key.png",
-      "capturedAt": "2026-10-08T13:52:47.954Z",
-      "status": "needs-recapture",
-      "sha256": "b01f0659039f46549ec3f46a147329d1497ab1aad72bf714e0142de18ab30465",
+      "capturedAt": "2026-10-09T11:54:15.959Z",
+      "status": "current",
+      "sha256": "ebb026933e8c4b03799e90553647bd75d440d8f9877713f53a41fcb3c24c2a84",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/apis/:id/setup"
+        "route": "/apis/:id/setup?job=29&key=1"
       },
       "sources": [
         "frontend/src/pages/api-setup.tsx",
@@ -2735,21 +2732,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-03-hubspot-bearer",
-      "title": "HubSpot: send the key as a bearer token",
+      "title": "HubSpot sign-in form, with pasting a token instead",
       "path": "screenshots/tutorials/bizdev/03-hubspot-bearer.png",
-      "capturedAt": "2026-10-08T13:52:49.071Z",
-      "status": "needs-recapture",
-      "sha256": "e1548044f1fafef8868ec6e5ec6c0a531b6743f4f4457e026ec688505893c6e4",
+      "capturedAt": "2026-10-09T11:54:17.732Z",
+      "status": "current",
+      "sha256": "63b5a0949fb1aabb33515915a63e8f8e9c5d8add59be4b7f4ec7bf61ac06f679",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/apis/:id/setup"
+        "route": "/apis/:id/setup?job=29&key=1"
       },
       "sources": [
         "frontend/src/pages/api-setup.tsx",
@@ -2758,21 +2754,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-04-hubspot-token",
       "title": "HubSpot private app token",
       "path": "screenshots/tutorials/bizdev/04-hubspot-token.png",
-      "capturedAt": "2026-10-08T13:52:50.997Z",
-      "status": "needs-recapture",
-      "sha256": "7a7490a98ac4e7c291aca8916596fef09a3ca4478167ba75fb40f5eaba1dcb60",
+      "capturedAt": "2026-10-09T11:54:18.829Z",
+      "status": "current",
+      "sha256": "4b4c5ebb8c9ba3633148bad65188341a59194f434d60ea96bd2edfcec5419f0b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/apis/:id/setup"
+        "route": "/apis/:id/setup?job=29&key=1"
       },
       "sources": [
         "frontend/src/pages/api-setup.tsx",
@@ -2781,17 +2776,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-05-apis",
       "title": "HubSpot and Google APIs",
       "path": "screenshots/tutorials/bizdev/05-apis.png",
-      "capturedAt": "2026-10-08T13:52:59.106Z",
-      "status": "needs-recapture",
-      "sha256": "cfa8dfe09c503fedc7eaf43b4bdab7505d1c13b1ae7acd0e7f74052a2ef7cd5a",
+      "capturedAt": "2026-10-09T11:54:27.257Z",
+      "status": "current",
+      "sha256": "4053b9a0ae320103d6df3ce21a03cb23d68958adecce113a58ae91c8190b241f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2803,17 +2797,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "1c418c76e8c0e59528744ce9d35892a7a375ba6937084bd601e1b721a47abd93",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "3e6f5b03efd74cc0cf2be2ef74ffb1cc420f7eae8369c928a495bc5957520f55",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-06-agent-instructions",
       "title": "Biz-dev assistant: model, instructions, memory",
       "path": "screenshots/tutorials/bizdev/06-agent-instructions.png",
-      "capturedAt": "2026-10-08T13:53:08.253Z",
-      "status": "needs-recapture",
-      "sha256": "ca1a4e9537757549a02ea2043abcbe3d27c8fe96dab9d2a2a9a6e4e2624d2f4e",
+      "capturedAt": "2026-10-09T11:54:29.913Z",
+      "status": "current",
+      "sha256": "2034cd457a72e7b973c0967fc0275a3af99efcbe0107719c8727bcd16d863009",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2826,17 +2819,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-07-agent-tools",
       "title": "Biz-dev assistant: tools",
       "path": "screenshots/tutorials/bizdev/07-agent-tools.png",
-      "capturedAt": "2026-10-08T13:53:11.422Z",
-      "status": "needs-recapture",
-      "sha256": "376e36a9b3ce029c9dbad580e9049cd30979e441f572bcfd8c5124ce1772a909",
+      "capturedAt": "2026-10-09T11:54:33.918Z",
+      "status": "current",
+      "sha256": "e4a7c18abae58803e47fd69e8c02b02caf82a5bc15a305ae9605f4ad36fa27ae",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2849,21 +2841,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-08-slack-channel",
       "title": "Slack channel",
       "path": "screenshots/tutorials/bizdev/08-slack-channel.png",
-      "capturedAt": "2026-10-08T13:53:39.718Z",
-      "status": "needs-recapture",
-      "sha256": "c2b47bafef75ac92988a8ebedb04d0f9160459250f1eab21b1af83cd03e6c4e8",
+      "capturedAt": "2026-10-09T11:54:41.751Z",
+      "status": "current",
+      "sha256": "79ac2306b51b3f64d7d9f67e106a424377b9c499b4e683c8960912b131f2902a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/:id/channels/:channelId"
+        "route": "/agents/:id/channels/:id"
       },
       "sources": [
         "frontend/src/pages/agent-channel.tsx",
@@ -2872,21 +2863,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-09-slack-token",
       "title": "Slack bot token",
       "path": "screenshots/tutorials/bizdev/09-slack-token.png",
-      "capturedAt": "2026-10-08T13:53:40.971Z",
-      "status": "needs-recapture",
-      "sha256": "8e0182bb5f3abbd0c17eeedfd6e5d6f6ab6e974c6ebe60e18c223caac83c509a",
+      "capturedAt": "2026-10-09T11:54:43.096Z",
+      "status": "current",
+      "sha256": "9eb8708ce10a4464ecd3fcd582267335c5930a6358242728b79462b1aae1d4bf",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/:id/channels/:channelId"
+        "route": "/agents/:id/channels/:id"
       },
       "sources": [
         "frontend/src/pages/agent-channel.tsx",
@@ -2895,21 +2885,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-10-slack-live",
       "title": "Slack channel, live",
       "path": "screenshots/tutorials/bizdev/10-slack-live.png",
-      "capturedAt": "2026-10-08T13:53:52.167Z",
-      "status": "needs-recapture",
-      "sha256": "19ec21b60e25c0905f7a44811ae32ac7000c7a3cb7982ec806608420fa97555d",
+      "capturedAt": "2026-10-09T11:54:54.237Z",
+      "status": "current",
+      "sha256": "418ec8694bf67b014086f8420569701b048a21d29d0b5a57095a53172298c2e9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/:id/channels/:channelId"
+        "route": "/agents/:id/channels/:id"
       },
       "sources": [
         "frontend/src/pages/agent-channel.tsx",
@@ -2918,17 +2907,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-11-always-on",
       "title": "Always on: standing instructions and timer",
       "path": "screenshots/tutorials/bizdev/11-always-on.png",
-      "capturedAt": "2026-10-08T13:53:58.872Z",
-      "status": "needs-recapture",
-      "sha256": "c8943ca2c6db78b1322e2d59a7eb7f6b55ad714a91e5e7def0d285029fadd9cb",
+      "capturedAt": "2026-10-09T11:55:00.656Z",
+      "status": "current",
+      "sha256": "e4c9892ec772d3afb45bed6957f2ef1bb2fb1e8bf9cc092f74b5b6874e30f8f4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2940,17 +2928,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b4e0da6ee0e7f8cfcca8614770b09ddc29a3caf82db819c8b9ab5c0a87a7acc8",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-12-ask-first",
       "title": "Always on: ask before sending email",
       "path": "screenshots/tutorials/bizdev/12-ask-first.png",
-      "capturedAt": "2026-10-08T13:53:59.920Z",
-      "status": "needs-recapture",
-      "sha256": "423d371226c30ac2700b80d7d48e212467d85bc2daac91230d357799dddf3334",
+      "capturedAt": "2026-10-09T11:55:01.715Z",
+      "status": "current",
+      "sha256": "9cfd39a363abf534675d4640ebc96a61c6b53cf7580b21231ffdcf9f1a8ec90b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2962,17 +2949,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b4e0da6ee0e7f8cfcca8614770b09ddc29a3caf82db819c8b9ab5c0a87a7acc8",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-13-always-on-card",
       "title": "Always on, on the agent page",
       "path": "screenshots/tutorials/bizdev/13-always-on-card.png",
-      "capturedAt": "2026-10-08T13:54:02.545Z",
-      "status": "needs-recapture",
-      "sha256": "c67b96658563d94139648e080f136ef5cd5b351e7cb93865cd2df447de4ed4c0",
+      "capturedAt": "2026-10-09T11:55:06.985Z",
+      "status": "current",
+      "sha256": "740ead064f4f4b036ff38afd84cf7f64ab5c9c1a87abdfd44098e7fc1ee74f89",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2985,17 +2971,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-14-approve-note",
       "title": "Approve with a note",
       "path": "screenshots/tutorials/bizdev/14-approve-note.png",
-      "capturedAt": "2026-10-08T13:59:57.065Z",
-      "status": "needs-recapture",
-      "sha256": "201df608449339e581c5660919ebcc60cf27b0389cb874431259c5f86d3f7bf9",
+      "capturedAt": "2026-10-09T11:55:19.162Z",
+      "status": "current",
+      "sha256": "953b908ade157838720ee253a8c1a973c9ad7baa139e8785421b08ae112c9197",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3008,17 +2993,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6a4ee32b5e8b3f19613103effc6412630c40592300976ca9b39db7a3860b6e3a",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-15-followup-approval",
       "title": "The follow-up waiting for approval",
       "path": "screenshots/tutorials/bizdev/15-followup-approval.png",
-      "capturedAt": "2026-10-08T14:01:00.431Z",
-      "status": "needs-recapture",
-      "sha256": "447514b10c5cb07fc01808d0362f734247c4f3c9802d83877273e76567d62ee2",
+      "capturedAt": "2026-10-09T11:55:50.012Z",
+      "status": "current",
+      "sha256": "c9bb605f56e8190b443289c4ffa0326e6e12c68a3a77d4d36ece57cdd356cc78",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3031,17 +3015,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6a4ee32b5e8b3f19613103effc6412630c40592300976ca9b39db7a3860b6e3a",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-16-slack-reports",
       "title": "Biz-dev reports as posted to Slack",
       "path": "screenshots/tutorials/bizdev/16-slack-reports.png",
-      "capturedAt": "2026-10-08T14:01:19.402Z",
-      "status": "needs-recapture",
-      "sha256": "720348447e6bf2e1413a73225c2a1ff3bf3e61d05eb84708acf2159c0709b92e",
+      "capturedAt": "2026-10-09T11:56:07.228Z",
+      "status": "current",
+      "sha256": "838dd3afe385299bd0fa4026619b4be680c04e9e5221d78fe739f90861955245",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3050,21 +3033,21 @@
       "sources": [
         "frontend/src/pages/agent-always-on.tsx",
         "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "07e5fb07b27f479a511a25ae64db53178a444df038c6625ad67ea4d323687f59",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the email or Slack provider; that provider was not used.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "9d8333608cadff0301eb066efb5aece3520781f8c30d4055ba14a4ed900ba862",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
       "id": "tutorials-bizdev-17-what-woke-it",
       "title": "What woke it lately",
       "path": "screenshots/tutorials/bizdev/17-what-woke-it.png",
-      "capturedAt": "2026-10-08T14:01:22.377Z",
-      "status": "needs-recapture",
-      "sha256": "6bc09e2592ba5aa3cbb2e9afb588c6a1e9bcff47968096b67a24f0b9c5670683",
+      "capturedAt": "2026-10-09T11:56:05.336Z",
+      "status": "current",
+      "sha256": "d841d6bf1b558b50add1aa4a61877ed0c2ca95c9adbe382aeb3e697dd5c90326",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3076,17 +3059,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b4e0da6ee0e7f8cfcca8614770b09ddc29a3caf82db819c8b9ab5c0a87a7acc8",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-00-morning-brief",
       "title": "Founder's associate: the morning brief email",
       "path": "screenshots/tutorials/founder/00-morning-brief.png",
-      "capturedAt": "2026-10-08T13:52:21.777Z",
-      "status": "needs-recapture",
-      "sha256": "8ed8b317c66dfa909165d8cc961d23c7c51268fb57dbcce37fec148f12640ac3",
+      "capturedAt": "2026-10-09T11:54:09.753Z",
+      "status": "current",
+      "sha256": "b938976e3cdd0a5b1225f6ab760b5e651034846cb6a19f00ae39572b85f99b5b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3095,25 +3077,25 @@
       "sources": [
         "frontend/src/pages/agent-schedule.tsx",
         "backend/src/modules/gateways/channels/adapters/email.adapter.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "59952adf6dbe4cfddc615330b69edb3fd6f5a3a3daa431c574d12f0bb26852e2",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the email or Slack provider; that provider was not used.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "46309c94159d1fdc8c21802a7d0ae1b9ccce853ae4ee069de896d024002719a1",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
       "id": "tutorials-founder-01-connect-openai",
       "title": "Connect a provider: OpenAI",
       "path": "screenshots/tutorials/founder/01-connect-openai.png",
-      "capturedAt": "2026-10-08T13:36:52.146Z",
-      "status": "needs-recapture",
-      "sha256": "1cc32415bcfe044ccef7171f380b7474162ea4be634f6bb8b907418fb1ddab76",
+      "capturedAt": "2026-10-09T11:51:38.742Z",
+      "status": "current",
+      "sha256": "922e924816c3d9165bac7ba3d397bc419560cff877ef061716e41bbae4a01321",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/models/providers/new"
+        "route": "/models/providers/new?type=openai"
       },
       "sources": [
         "frontend/src/pages/models-connect.tsx",
@@ -3122,17 +3104,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "037cd56e2aa83687b627dd05ffb1852bd496f6338d0de50ce3ef29e530b37f52",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "5058173c7cfb0395b5df33f004e6925feb609b9beb91de1717211fa1d39bd87d",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-02-openai-connected",
       "title": "OpenAI connected, its models",
       "path": "screenshots/tutorials/founder/02-openai-connected.png",
-      "capturedAt": "2026-10-08T13:36:53.434Z",
-      "status": "needs-recapture",
-      "sha256": "6e5223c4771b7a9008b262e8e561911e1ae6f84cb12fe7a60d9151b0902edd4c",
+      "capturedAt": "2026-10-09T11:51:41.460Z",
+      "status": "current",
+      "sha256": "d599d37f785ef2e6c08e2d59824bdd6a26b9805116ecdfa354f9d3c98fc80626",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3144,17 +3125,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f24edb4d354fab47e766c1aa342f8315ff187150712630a6c76c910717bdfa2e",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "d14d9b75efaebdd2e5732e3e61d58f0faf63c40505a7e7db3087269e98cd3c38",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-03-connect-an-api",
       "title": "Connect an API",
       "path": "screenshots/tutorials/founder/03-connect-an-api.png",
-      "capturedAt": "2026-10-08T13:36:54.850Z",
-      "status": "needs-recapture",
-      "sha256": "8075647292e9e267a36f1699796cf84955aee15f07bc62bb43f9df61fa39aa0c",
+      "capturedAt": "2026-10-09T11:51:43.802Z",
+      "status": "current",
+      "sha256": "959ddaa34f88ceaa0716f88f2bf2ac31037eeae380835743b508e436cfb75509",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3166,17 +3146,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5e1ea7165927264410a27fe6b42e59abfba78932edb3f071cd2713a7845084f4",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-04-calendar-link",
       "title": "Google Calendar description link",
       "path": "screenshots/tutorials/founder/04-calendar-link.png",
-      "capturedAt": "2026-10-08T13:36:55.995Z",
-      "status": "needs-recapture",
-      "sha256": "ccbafe5910d4b8ac82d714efcf2beba0d8677f048e302948d912f7e8b6e2d817",
+      "capturedAt": "2026-10-09T11:51:44.935Z",
+      "status": "current",
+      "sha256": "c925b241fa852795b477b4b4686f8fd85d3fafce9f77d77130b4e9a52ea2c938",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3188,21 +3167,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5e1ea7165927264410a27fe6b42e59abfba78932edb3f071cd2713a7845084f4",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-05-finish-connecting",
       "title": "Finish connecting Google Calendar",
       "path": "screenshots/tutorials/founder/05-finish-connecting.png",
-      "capturedAt": "2026-10-08T13:36:59.927Z",
-      "status": "needs-recapture",
-      "sha256": "2c0e96248ba7b848be9f3e2acc03f7de61f456850a5839c692be187f7c6a5251",
+      "capturedAt": "2026-10-09T11:51:49.352Z",
+      "status": "current",
+      "sha256": "c21c8694666af88af427032abf1f637242aa43064660d76233cd2afd5733200c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/apis/:id/setup"
+        "route": "/apis/:id/setup?job=26&key=1"
       },
       "sources": [
         "frontend/src/pages/api-setup.tsx",
@@ -3211,21 +3189,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-06-google-sign-in",
-      "title": "Google sign-in: client ID, secret and redirect address",
+      "title": "Google sign-in: redirect address, client ID, secret and permissions",
       "path": "screenshots/tutorials/founder/06-google-sign-in.png",
-      "capturedAt": "2026-10-08T13:37:00.997Z",
-      "status": "needs-recapture",
-      "sha256": "4d3876daf7caa73b2f5221cd7ed7d4479e869f89d22778603e009c01b1c76e2f",
+      "capturedAt": "2026-10-09T11:51:51.869Z",
+      "status": "current",
+      "sha256": "6e9c3fa22d6d8efca035589fc5eefee6a8c09290572530ed7be5f61fe470b7d0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/apis/:id/setup"
+        "route": "/apis/:id/setup?job=26&key=1"
       },
       "sources": [
         "frontend/src/pages/api-setup.tsx",
@@ -3234,21 +3211,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-07-calendar-signed-in",
       "title": "Google Calendar signed in",
       "path": "screenshots/tutorials/founder/07-calendar-signed-in.png",
-      "capturedAt": "2026-10-08T13:37:02.318Z",
-      "status": "needs-recapture",
-      "sha256": "d55968efb054d87827efc30cd2f5e2f2b12b2db43e4458280cea58c72acc6a02",
+      "capturedAt": "2026-10-09T11:51:53.280Z",
+      "status": "current",
+      "sha256": "a0050b8e3de9c64ff5979e328a89969e5963e78ceec2fd5268d53e8024ad8f7f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/apis/:id/setup"
+        "route": "/apis/:id/setup?job=26&key=1"
       },
       "sources": [
         "frontend/src/pages/api-setup.tsx",
@@ -3257,17 +3233,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-08-apis",
       "title": "The three Google APIs",
       "path": "screenshots/tutorials/founder/08-apis.png",
-      "capturedAt": "2026-10-08T13:37:25.847Z",
-      "status": "needs-recapture",
-      "sha256": "ee2de3556e599991589cb44521da11c146bc0e37e79ad9e03d55ce4efbb63591",
+      "capturedAt": "2026-10-09T11:52:00.843Z",
+      "status": "current",
+      "sha256": "1e8e7c372b94f457a8b18d75f5f9c86df74bad7befa89e842bf13c4279165cd1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3279,17 +3254,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "1c418c76e8c0e59528744ce9d35892a7a375ba6937084bd601e1b721a47abd93",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "3e6f5b03efd74cc0cf2be2ef74ffb1cc420f7eae8369c928a495bc5957520f55",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-09-tools-search",
       "title": "Searching the tools",
       "path": "screenshots/tutorials/founder/09-tools-search.png",
-      "capturedAt": "2026-10-08T13:40:19.365Z",
-      "status": "needs-recapture",
-      "sha256": "05f885a3c4e7bb543195ae81b046a714225f2097ea23fa17d7ea70b706f0b16d",
+      "capturedAt": "2026-10-09T11:52:04.734Z",
+      "status": "current",
+      "sha256": "9e7635e9a8118a4846252039dbbb7befd9dbfd99af7d4f7be712144e9461c878",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3301,21 +3275,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6883efceddfa4c63125a9e9eb3177b75ccdbcbc8d572b5a6016c28587907d709",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "98f06eae4e38ba92d5fb471dc3cf32940072762b05e2f04266f8c75cd0fa4dc1",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-10-test-tool",
       "title": "Testing a calendar tool",
       "path": "screenshots/tutorials/founder/10-test-tool.png",
-      "capturedAt": "2026-10-08T13:40:22.492Z",
-      "status": "needs-recapture",
-      "sha256": "44fa476ff8904dfdc70679babb2f381e3f490b2aaf1edea1c08b0a2883310527",
+      "capturedAt": "2026-10-09T11:52:07.852Z",
+      "status": "current",
+      "sha256": "d7ab32ef075286e9be6bf95f3adb09317b5eaad371cfe084e98ba062633739f9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/tools/:id"
+        "route": "/tools/:id?tab=test"
       },
       "sources": [
         "frontend/src/pages/tool-detail.tsx",
@@ -3323,17 +3296,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6f92895bf88bcc210ed8cecc277c38c5f3838fdfb1bb9a43f7ca14346c0e9a73",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "e9de55dd8f5a58f4ccad0352ce8d40d253b4a2277c3f6f04b60cdc80fc816ef8",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-11-agent-instructions",
       "title": "Founder's associate: model and instructions",
       "path": "screenshots/tutorials/founder/11-agent-instructions.png",
-      "capturedAt": "2026-10-08T13:40:24.558Z",
-      "status": "needs-recapture",
-      "sha256": "19d2a912221d35c89092f49d83a4e63d7b34859c30eb81f1e7ddc0a8b74de752",
+      "capturedAt": "2026-10-09T11:52:09.654Z",
+      "status": "current",
+      "sha256": "d5c733bf14699433f5ad71ac044cf62237f78faeba11892f6ec9844b179f1628",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3346,17 +3318,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-12-agent-memory",
       "title": "Founder's associate: memory",
       "path": "screenshots/tutorials/founder/12-agent-memory.png",
-      "capturedAt": "2026-10-08T13:40:26.674Z",
-      "status": "needs-recapture",
-      "sha256": "ce7d886ba0afb7ce29dd3223be4e719db8acc81ef6b72bbe4f3dc20d1df062a2",
+      "capturedAt": "2026-10-09T11:52:11.835Z",
+      "status": "current",
+      "sha256": "1e2b92c2fd34ff4e0732bf092810adb583ee40d5e5ff4da769f6c769533ae6f4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3369,17 +3340,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-13-agent-tools",
       "title": "Founder's associate: tools",
       "path": "screenshots/tutorials/founder/13-agent-tools.png",
-      "capturedAt": "2026-10-08T13:40:29.928Z",
-      "status": "needs-recapture",
-      "sha256": "6c4d0eb591ea1b3b33a1c04632f17b0338d37cd1f1315a9f9b9a0f5a60635d09",
+      "capturedAt": "2026-10-09T11:52:15.134Z",
+      "status": "current",
+      "sha256": "c08c88caf3e7d9403bcc4217621b96c41dac2ed85a7f5fb580dfdc5522d3daad",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3392,17 +3362,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-14-first-run",
       "title": "Founder's associate: first test run",
       "path": "screenshots/tutorials/founder/14-first-run.png",
-      "capturedAt": "2026-10-08T13:41:00.459Z",
-      "status": "needs-recapture",
-      "sha256": "9cc039ad6114b89ff6adb3ad1df786d400ad0038265faedb8cf4d3cf2ccdd89d",
+      "capturedAt": "2026-10-09T11:52:24.380Z",
+      "status": "current",
+      "sha256": "8a7c3fc90aac6bcdfff2ad4fb3d34ba03c98381e55070d9c8d30be1111709bf2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3415,17 +3384,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-15-run-steps",
       "title": "A run, step by step",
       "path": "screenshots/tutorials/founder/15-run-steps.png",
-      "capturedAt": "2026-10-08T13:41:25.225Z",
-      "status": "needs-recapture",
-      "sha256": "f9f383c53b26fb1b643e433195e53c8c45d9241721fd91100d82a779253a83ae",
+      "capturedAt": "2026-10-09T11:52:30.222Z",
+      "status": "current",
+      "sha256": "a27684e9daea2e39c24a2cf772f2732d055610698111a9ea2216a95de17d151e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3438,17 +3406,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-16-add-channel",
       "title": "Add channel",
       "path": "screenshots/tutorials/founder/16-add-channel.png",
-      "capturedAt": "2026-10-08T13:41:29.080Z",
-      "status": "needs-recapture",
-      "sha256": "7dafbc2b4e4ca671cd0cbc1b403ff7680d0cee54148385e7813e6471501db926",
+      "capturedAt": "2026-10-09T11:52:35.138Z",
+      "status": "current",
+      "sha256": "157599f07c5c396c4851aa112a210e803f6cb84c8eb9582f5a21ede8e4ba3dba",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3460,21 +3427,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "618b0071e673cf9bfd71ff40ad37ae26afee0b136747dcbe533a581dd333d284",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "7ffeea47c39b09547336d2714850f9ef7f64cdd305b18478fd8b8e7e3902f465",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-17-email-key",
       "title": "Email channel: the Resend key",
       "path": "screenshots/tutorials/founder/17-email-key.png",
-      "capturedAt": "2026-10-08T13:47:41.328Z",
-      "status": "needs-recapture",
-      "sha256": "202a48a8751f9286f9fa3a5771d114fb8536242fdc1cffce679cfe8d063e4610",
+      "capturedAt": "2026-10-09T11:52:38.372Z",
+      "status": "current",
+      "sha256": "f28dd74c0e306b760f7de2bf5d3dfd671e901c176e490d0d2a8cae9e739c5b6b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/:id/channels/:channelId"
+        "route": "/agents/:id/channels/:id"
       },
       "sources": [
         "frontend/src/pages/agent-channel.tsx",
@@ -3483,21 +3449,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-18-email-live",
       "title": "Email channel, live",
       "path": "screenshots/tutorials/founder/18-email-live.png",
-      "capturedAt": "2026-10-08T13:49:07.403Z",
-      "status": "needs-recapture",
-      "sha256": "55b3cea353409b3e577b2ae54a48c62483a37eda1a893726a89b706acf8dfc0f",
+      "capturedAt": "2026-10-09T11:52:48.084Z",
+      "status": "current",
+      "sha256": "6ee9eb15731d0b9393cdd8f38f0dc9d3f4c0d06e2648f9b0c29ca0c3d72562c8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/:id/channels/:channelId"
+        "route": "/agents/:id/channels/:id"
       },
       "sources": [
         "frontend/src/pages/agent-channel.tsx",
@@ -3506,17 +3471,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-19-schedule",
       "title": "Set up a schedule",
       "path": "screenshots/tutorials/founder/19-schedule.png",
-      "capturedAt": "2026-10-08T13:49:11.692Z",
-      "status": "needs-recapture",
-      "sha256": "1f531c3822b0175e8add4f0177cc9c055af5ebdd9c8456ae9cbd0b2a497febf3",
+      "capturedAt": "2026-10-09T11:52:52.021Z",
+      "status": "current",
+      "sha256": "92bbbf0805d13eefeee76280a909d9702331eeedeae8376bc4b880db797b715c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3528,17 +3492,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b29da2f74172ed90c51045bd477f40ed82bbdcabac339256db04fa6f3e532efd",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "061cc98a659b727970b1679472b4a05cbd7d01f1071bb1ac9f7a901f886fe241",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-20-schedule-card",
       "title": "The schedule on the agent page",
       "path": "screenshots/tutorials/founder/20-schedule-card.png",
-      "capturedAt": "2026-10-08T13:49:14.759Z",
-      "status": "needs-recapture",
-      "sha256": "f6f4ab65ed23df98c939a86d9fe996cfdf3ed5856260b1dbc6ab86307163ab60",
+      "capturedAt": "2026-10-09T11:52:55.122Z",
+      "status": "current",
+      "sha256": "119727b57c21a0e8df52689bb5885d296f230102c242077a635cdb6846c7c6ee",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3551,17 +3514,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-founder-21-memory",
       "title": "What the associate remembers",
       "path": "screenshots/tutorials/founder/21-memory.png",
-      "capturedAt": "2026-10-08T13:41:26.295Z",
-      "status": "needs-recapture",
-      "sha256": "ef9335264e35f988f0e54f2454facdaef0325dd1149a12be7e328fb5e088af56",
+      "capturedAt": "2026-10-09T11:52:32.779Z",
+      "status": "current",
+      "sha256": "2c1c506a9ad7b6916e962c7e0881b8ab97c165173028372a451e79a01c9e15d2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3574,17 +3536,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
-      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
-      "capturedAt": "2026-10-09T11:04:58.307Z",
+      "capturedAt": "2026-10-09T12:14:17.259Z",
       "status": "current",
-      "sha256": "87f6e020fc37f26b2f3e0170cc080c1a0314f4172089e4533a589f798a084080",
+      "sha256": "af43f3f8d052d95733b9887b6a68174abe5736d7a9bf0481548dfffabbf99bb6",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3597,16 +3558,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
-      "capturedAt": "2026-10-09T11:04:55.223Z",
+      "capturedAt": "2026-10-09T12:14:13.851Z",
       "status": "current",
-      "sha256": "abfe2d0354bf078c7a9ca5b2a18ec72f3d48e45d64d8c8956ce2b8ea98b335fe",
+      "sha256": "c81348821b8fd250022630a35f9aa4af142e9ebec4220c974be2a33d360fb3d0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3619,20 +3580,20 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "visitor-data-request",
       "title": "Visitor data request",
       "path": "screenshots/visitor-data-request.png",
-      "capturedAt": "2026-10-07T16:05:21.552Z",
-      "status": "needs-recapture",
-      "sha256": "e54289f140ea415582312e3f27655c3bd11cbb05d119ca818b9065101c9e5818",
+      "capturedAt": "2026-10-09T12:16:59.035Z",
+      "status": "current",
+      "sha256": "808523f5cab9b67cbd13c989f3dd49004fb4c08d415c503c9012a873936471fb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/44eff113-5595-4130-a1b0-5ea145836691/channels/visitor-data"
+        "route": "/agents/:id/channels/visitor-data"
       },
       "sources": [
         "frontend/src/pages/agent-visitor-data.tsx",
@@ -3641,17 +3602,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "79639d9f77312e82212ea6a74610f2090b6a2d6fac3e1ccc9e76db1fa94421f2",
-      "notes": "Recaptured the existing local seeded demo gateway after repairs; no external changes approved. Code mode remains disabled in this demo.",
-      "reason": "frontend/src/components/ui changed: VisibilityField can show plan-locked choices (used only on the hosted environment form), and the agent Capabilities card offers hosted environments under Runs on. Captured with fixtures or stand-ins the demo seed does not make; recapture and re-register."
+      "sourceDigest": "186893297dfbe46dae11ed769208a4310616c9c59bbcc32acf9608bb39943d3f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
-      "capturedAt": "2026-10-09T11:04:52.022Z",
+      "capturedAt": "2026-10-09T12:14:10.758Z",
       "status": "current",
-      "sha256": "a97095045ce80aee76d4e433a495d37f2b76cb8ce3dc4a58ac9079eb7b7a2dd8",
+      "sha256": "b8c1aad0cddaae5c4c2c5ad8184e3cffe486f45bb229722cb8826a07508266d3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3664,14 +3624,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bad771d4241601787c15cb4dbeb0be5be74160080ef2c6aa769da8aa4945e457",
+      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "widget-builder",
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
-      "capturedAt": "2026-10-09T11:05:23.196Z",
+      "capturedAt": "2026-10-09T12:14:42.286Z",
       "status": "current",
       "sha256": "9eb9357eeb243ceb74ef21e546bd87c5ab133717f141d290f70156ba3040c64c",
       "source": {

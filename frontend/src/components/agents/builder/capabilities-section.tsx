@@ -35,6 +35,7 @@ import { connectionsApi } from '@/lib/connections-api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Button } from '@/components/ui/button'
 import { pluralized } from '@/lib/utils'
+import { readableToolName } from '@/lib/tool-names'
 import { useOrganizationStore } from '@/store/organization'
 import { useEntitlement } from '@/hooks/use-entitlement'
 import { PlanHint } from '@/components/plan-indicator'
@@ -159,7 +160,10 @@ function ToolsAndApis({
   const toggleTool = (id: string, on: boolean) => onToolIdsChange(on ? [...toolIds, id] : toolIds.filter((t) => t !== id))
   const toggleApi = (id: string, on: boolean) => onApiIdsChange(on ? [...apiIds, id] : apiIds.filter((a) => a !== id))
   const apiName = (id: string) => apis.find((a) => a.id === id)?.name ?? id
-  const toolName = (id: string) => tools.find((t) => t.id === id)?.name ?? id
+  const toolName = (id: string) => {
+    const tool = tools.find((t) => t.id === id)
+    return tool ? readableToolName(tool) : id
+  }
 
   return (
     <section className="space-y-3" data-testid="capability-tools">
@@ -200,7 +204,7 @@ function ToolsAndApis({
           </div>
           <div className="max-h-[400px] overflow-y-auto space-y-1">
             {groups.map((g) => {
-              const shown = g.tools.filter(matches)
+              const shown = g.tools.filter(matches).sort((a, b) => readableToolName(a).localeCompare(readableToolName(b)))
               if (q && shown.length === 0 && !g.name.toLowerCase().includes(q)) return null
               const whole = !!g.id && apiIds.includes(g.id)
               const expanded = open.has(g.id) || !!q
@@ -247,8 +251,9 @@ function ToolsAndApis({
                             aria-label={t.name}
                           />
                           <div className="min-w-0">
-                            <p className="text-sm truncate">{t.name}</p>
-                            {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
+                            {/* People read what it does; the machine name is what the model and the approvals log call it. */}
+                            <p className="text-sm truncate">{readableToolName(t)}</p>
+                            <p className="font-mono text-[11px] text-muted-foreground truncate">{t.name}</p>
                           </div>
                         </label>
                       ))}
@@ -550,7 +555,15 @@ const SCOPE_WORDS: Record<UnreachableItem['scope'], string> = {
  * Each connection a grant can open has its own button; nothing is given
  * without that click.
  */
-export function WhatItCannotReach({ agentId }: { agentId?: string }) {
+export function WhatItCannotReach({
+  agentId,
+  intro = 'As itself it would not reach these, from the agent as last saved:',
+  okText = 'Everything its settings use is open to it as itself.',
+}: {
+  agentId?: string
+  intro?: string
+  okText?: string
+}) {
   const queryClient = useQueryClient()
   const key = ['agents', agentId, 'identity', 'unreachable']
   const query = useQuery<UnreachableItem[]>({
@@ -576,11 +589,11 @@ export function WhatItCannotReach({ agentId }: { agentId?: string }) {
     return <p className="text-xs text-destructive" data-testid="acts-as-reach-error">Could not check what it reaches.</p>
   }
   if (items.length === 0) {
-    return <p className="text-xs text-muted-foreground" data-testid="acts-as-reach-ok">Everything its settings use is open to it as itself.</p>
+    return <p className="text-xs text-muted-foreground" data-testid="acts-as-reach-ok">{okText}</p>
   }
   return (
     <div className="space-y-2" data-testid="acts-as-unreachable">
-      <p className="text-xs font-medium">As itself it would not reach these, from the agent as last saved:</p>
+      <p className="text-xs font-medium">{intro}</p>
       <ul className="divide-y rounded-md border">
         {items.map((item) => (
           <li key={`${item.kind}-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 p-2" data-testid={`unreachable-${item.id}`}>
@@ -693,15 +706,15 @@ export function ToolModeSection({
           <p className="text-xs text-muted-foreground">Tools the model needs on almost every task, so it never has to search for them.</p>
           {pinned.length > 0 && (
             <p className="text-xs" data-testid="pin-summary">
-              Always shown: {usableTools.filter((t) => pinned.includes(t.id)).map((t) => t.name).sort().join(', ') || 'none of the tools above'}
+              Always shown: {usableTools.filter((t) => pinned.includes(t.id)).map((t) => readableToolName(t)).sort().join(', ') || 'none of the tools above'}
             </p>
           )}
           {/* By name; a long list scrolls in place. */}
           <div className="grid max-h-56 grid-cols-1 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2" data-testid="pin-list">
-            {[...usableTools].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
-              <label key={t.id} className="flex items-center gap-2 text-sm">
-                <Checkbox checked={pinned.includes(t.id)} onCheckedChange={(on) => togglePin(t.id, on === true)} aria-label={`Always show ${t.name}`} />
-                <span className="truncate font-mono text-xs">{t.name}</span>
+            {[...usableTools].sort((a, b) => readableToolName(a).localeCompare(readableToolName(b))).map((t) => (
+              <label key={t.id} className="flex items-center gap-2 text-sm" title={t.name}>
+                <Checkbox checked={pinned.includes(t.id)} onCheckedChange={(on) => togglePin(t.id, on === true)} aria-label={`Always show ${readableToolName(t)}`} />
+                <span className="truncate text-xs">{readableToolName(t)}</span>
               </label>
             ))}
           </div>

@@ -142,6 +142,8 @@ describe('/agents/:id/always-on', () => {
     expect(list).toBeInTheDocument()
     expect(screen.getByLabelText('issue_refund')).toBeChecked()
     expect(screen.getByLabelText(/list_refunds/)).not.toBeChecked()
+    // The list holds every run of the agent, not only its wakes; the page says so.
+    expect(list).toHaveTextContent('These always wait for your OK, on every run')
   })
 
   it('offers "treat email from my address as me" only for an email channel, off, with why', async () => {

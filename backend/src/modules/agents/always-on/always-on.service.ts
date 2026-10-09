@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, MoreThan, Repository } from 'typeorm';
+import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -40,6 +40,7 @@ import {
   ScheduledResultPoster,
 } from '../scheduled-result-poster';
 import { ConnectionGrant } from '../../../entities/connection-grant.entity';
+import { readableToolName } from '../../tools/tool-readable-name';
 import { ConnectionEvent, onConnectionEvent } from '../../connections/connection-events';
 import { AlwaysOnCapacity, alwaysOnCapacity, effectiveTimerMinutes, effectiveWakesPerHour } from './always-on-capacity';
 import { DIGEST_WINDOW_MS, DigestTiming, digestCron, digestText, digestTiming, localDay } from './always-on-digest';
@@ -470,7 +471,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException('A webhook has no person behind it. Choose a channel you write on, like Slack or email.');
       }
     }
-    const toolIds = new Set(agent.toolIds ?? []);
+    // Its own tools: picked one by one, or through a whole API.
+    const own = await this.suggestedAskFirst(agentId, organizationId);
+    const toolIds = new Set(own.map((t) => t.id));
     const strayTools = next.askFirstToolIds.filter((id) => !toolIds.has(id));
     if (strayTools.length) throw new BadRequestException('The ask-first list can only name tools this agent has.');
     if (next.reportTo) {
@@ -497,12 +500,22 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
    * The tools Always on would put on the ask-first list: every tool of the
    * agent that is not read-only. The page pre-fills the list with these.
    */
-  async suggestedAskFirst(agentId: string, organizationId: string): Promise<Array<{ id: string; name: string; readOnly: boolean }>> {
+  async suggestedAskFirst(agentId: string, organizationId: string): Promise<Array<{ id: string; name: string; title: string; readOnly: boolean }>> {
     const agent = await this.loadAgent(agentId, organizationId);
     const ids = agent.toolIds ?? [];
-    if (!ids.length) return [];
-    const tools = await this.tools.find({ where: { id: In(ids), organizationId } as any });
-    return tools.map((t) => ({ id: t.id, name: t.name, readOnly: isReadOnlyTool(t as any) }));
+    // Tools it has through a whole API ("All tools of Gmail") count too, or
+    // their send could not be put on the list.
+    const apiIds = (agent.agentConfig as any)?.apiIds ?? [];
+    if (!ids.length && !apiIds.length) return [];
+    const where: any[] = [];
+    if (ids.length) where.push({ id: In(ids), organizationId });
+    if (apiIds.length) where.push({ apiId: In(apiIds), organizationId });
+    const tools = await this.tools.find({ where } as any);
+    const seen = new Set<string>();
+    return tools
+      .filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
+      .map((t) => ({ id: t.id, name: t.name, title: readableToolName(t as any), readOnly: isReadOnlyTool(t as any) }))
+      .sort((a, b) => a.title.localeCompare(b.title));
   }
 
   // ---------------------------------------------------------------------
@@ -787,11 +800,11 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         }
         return 'live';
       }
-
       // Too many wakes in the last hour: something is looping. Pause and say so.
+      // Wake now is a person, not a loop: a wake made only of those goes ahead.
       const capacity = await this.capacityFor(organizationId);
       const perHour = effectiveWakesPerHour(config.maxWakesPerHour, capacity);
-      const lastHour = await this.runsInLastHour(agentId);
+      const lastHour = queued.every((w) => w.source === 'manual') ? 0 : await this.runsInLastHour(agentId);
       if (lastHour >= perHour) {
         await this.pause(agent, {
           code: 'WAKE_LOOP',
@@ -887,9 +900,13 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Runs of the standing thread started in the last hour: the wakes it acted on, by run. */
+  /**
+   * Runs in the last hour that something other than a person woke. Wake now
+   * is a person asking; it never counts toward the loop guard.
+   */
   private async runsInLastHour(agentId: string): Promise<number> {
     const rows = await this.wakes.find({
-      where: { agentId, status: 'consumed', consumedAt: MoreThan(new Date(Date.now() - 3_600_000)) },
+      where: { agentId, status: 'consumed', consumedAt: MoreThan(new Date(Date.now() - 3_600_000)), source: Not('manual') },
       select: { id: true, runId: true } as any,
     });
     return new Set(rows.map((w) => w.runId).filter(Boolean)).size;
@@ -1301,7 +1318,10 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       ...(config?.reportTo ? [config.reportTo] : []),
     ];
     if (!targets.length) return;
-    const text = `${agent.name} wants to do something and is waiting for your OK: ${row.reason ?? 'see Approvals'}. Approve or reject it in Approvals.`;
+    // The reason is a sentence of its own; its full stop goes, or the notice reads "list)..".
+    let reason = (row.reason ?? 'see Approvals').trim();
+    while (reason.endsWith('.')) reason = reason.slice(0, -1);
+    const text = `${agent.name} wants to do something and is waiting for your OK: ${reason}. Approve or reject it in Approvals.`;
     const seen = new Set<string>();
     for (const delivery of targets) {
       const key = `${delivery.channelId}:${delivery.to ?? ''}`;

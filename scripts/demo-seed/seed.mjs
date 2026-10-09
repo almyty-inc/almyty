@@ -7,6 +7,7 @@
 //
 //   eval "$(scripts/demo-seed/stack.sh env)"; node scripts/demo-seed/seed.mjs
 import { execSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 
 const API = process.env.DEMO_API_URL || 'http://localhost:4210'
 const FAKE = process.env.DEMO_FAKE_URL || 'http://localhost:4290'
@@ -453,6 +454,82 @@ async function digestHistory(digestId) {
     log('pipeline versions')
   }
 }
+
+// Code mode, for its pages: a workflow with a Code step, and a script one
+// autonomous run wrote that waits in Approvals with its change set. The
+// demo has no model that writes scripts, so the run, its script trace and
+// the approval are written directly, in the shapes the runtime writes
+// (agent-step-processor runCode, code-mode.service), and say so in the run.
+async function codeMode(orgId, supportId, toolRows) {
+  const have = list(await call('GET', '/agents?limit=100'), 'agents')
+  const name = 'Pet store keeper'
+  let keeper = have.find((a) => a.name === name)
+  if (!keeper) {
+    keeper = await call('POST', '/agents', {
+      name, mode: 'workflow', visibility: 'org',
+      description: 'Archives the pets the store has sold.',
+      pipeline: {
+        nodes: [
+          { id: 'input_1', type: 'input', label: 'Start', position: { x: 60, y: 220 }, config: {}, data: {} },
+          { id: 'code_1', type: 'code', label: 'Archive the sold pets', position: { x: 380, y: 220 }, config: {}, data: { label: 'Archive the sold pets', code: [
+            '// Archive the first three pets marked sold',
+            "const sold = await petstore.findPetsByStatus({ status: 'sold' })",
+            'const named = sold.filter((p) => p.name).slice(0, 3)',
+            'log(`Found ${sold.length} sold pets`)',
+            'const results = []',
+            'for (const pet of named) {',
+            "  const res = await petstore.updatePet({ ...pet, status: 'archived' })",
+            '  results.push({ id: pet.id, name: pet.name, status: res.status })',
+            '}',
+            'return results',
+          ].join('\n') } },
+          { id: 'output_1', type: 'output', label: 'Archived', position: { x: 700, y: 220 }, config: {}, data: { mapping: '{{nodes.code_1.output}}' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'code_1' },
+          { id: 'e2', source: 'code_1', target: 'output_1' },
+        ],
+      },
+    })
+    log('agent', name)
+  }
+  if (keeper.status !== 'active') { try { await call('POST', `/agents/${keeper.id}/activate`) } catch (e) { log('activate failed', name, e.message.slice(0, 300)) } }
+
+  if (sql(`SELECT count(*) FROM code_executions WHERE "agentId" = '${supportId}'`) !== '0') return
+  const refund = toolRows.find((t) => t.name === 'northwind_orders_create_refund')
+  if (!refund) { log('code mode run skipped (no refund tool)'); return }
+  const userId = sql(`SELECT id FROM users WHERE email = '${USER.email}'`)
+  const runId = randomUUID(), execId = randomUUID(), approvalId = randomUUID()
+  const code = [
+    '// Refund the damaged order, as the customer asked.',
+    "const refund = await orders.createRefund({ orderId: 'NW-38801', amount: 820 })",
+    "log('Refund staged for review.')",
+    'return refund',
+  ].join('\n')
+  const changeSet = [{
+    id: 1, toolId: refund.id, toolName: refund.name, codeName: 'orders.createRefund', title: 'Refund an order',
+    arguments: { orderId: 'NW-38801', amount: 820 }, paramsHash: 'demo-seed', sideEffect: 'write', reason: 'policy', rule: 'Refunds over 500',
+  }]
+  const at = new Date(Date.now() - 20 * 60000).toISOString()
+  const steps = [
+    { type: 'llm_call', role: { key: 'main', name: 'Main', purpose: 'main', kind: 'model' }, input: { messageCount: 2, toolCount: 6 }, output: { toolCalls: [{ name: 'run_code', hasResult: true }], model: 'gpt-4o' }, cost: 0.0021, tokens: { input: 1650, output: 96 }, duration: 640, timestamp: at },
+    { type: 'tool_call', input: { tool: 'run_code', parameters: { code } }, output: { codeExecutionId: execId, status: 'waiting_approval', calls: { made: 1, ran: 0, failed: 0, staged: 1, refused: 0 }, cpuMs: 7, staged: 1, approvalId }, cost: 0, duration: 35, timestamp: at },
+  ]
+  const t = (s) => `'${String(s).replace(/'/g, "''")}'`
+  const q = (v) => t(JSON.stringify(v))
+  sql(`INSERT INTO agent_runs (id, "agentId", "organizationId", "userId", mode, status, steps, "currentStep", "maxSteps", input, metadata, "totalCost", "totalTokens", "executionTime", "toolCallCount", "createdAt", "updatedAt")
+    VALUES ('${runId}', '${supportId}', '${orgId}', '${userId}', 'autonomous', 'waiting_approval', ${q(steps)}, 2, 25,
+      ${q({ message: 'Brightway wants $820 back on NW-38801, it arrived damaged. Refund it.' })}, ${q({ demoFixture: 'written by scripts/demo-seed/seed.mjs, not a model run' })},
+      0.0021, 1746, 675, 1, '${at}', '${at}')`)
+  sql(`INSERT INTO approval_requests (id, "organizationId", visibility, "runId", "agentId", "toolCallId", reason, payload, status, "expiresAt", "createdAt", "updatedAt")
+    VALUES ('${approvalId}', '${orgId}', 'org', '${runId}', '${supportId}', 'call_demo_run_code',
+      'A script wants to make 1 change. Approve to make all of them, or reject to make none.',
+      ${q({ kind: 'change_set', tool: 'run_code', codeExecutionId: execId, changeSet })}::jsonb, 'pending', now() + interval '1 day', '${at}', '${at}')`)
+  sql(`INSERT INTO code_executions (id, "organizationId", "runId", "agentId", "userId", code, logs, result, status, "changeSet", "approvalRequestId", "callCount", "cpuMs", "durationMs", "createdAt", "updatedAt")
+    VALUES ('${execId}', '${orgId}', '${runId}', '${supportId}', '${userId}', ${t(code)}, 'Refund staged for review.', ${q({ staged: true })}::jsonb,
+      'waiting_approval', ${q(changeSet)}::jsonb, '${approvalId}', 1, 7, 35, '${at}', '${at}')`)
+  log('code mode run')
+}
 export async function main() {
   const orgId = await signIn()
   log('org', orgId)
@@ -472,6 +549,7 @@ export async function main() {
   await amountRule(toolRows)
   await runner()
   await hosted(orgId)
+  await codeMode(orgId, ag.support.id, toolRows)
   if (process.env.SEED_RUNS !== '0') {
     if (gw['support-tools']?.initialApiKey) await mcpTraffic(org.slug, '/support-tools', gw['support-tools'].initialApiKey)
     if (!list(await call('GET', `/agents/${ag.support.id}/runs`), 'runs').length) {

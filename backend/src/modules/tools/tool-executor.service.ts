@@ -1,3 +1,4 @@
+import { isNoAccessError, noAccessMessage } from './tool-no-access';
 /**
  * Orchestrator for tool execution. Slim dispatcher — the heavy
  * per-type lifting lives in ./executors/*. This used to be a
@@ -71,6 +72,7 @@ export {
   SOAPRequest,
 };
 
+export { isNoAccessError, noAccessMessage } from './tool-no-access';
 /** Back off for `ms`, or less if `signal` aborts first. */
 function sleepUnlessAborted(ms: number, signal?: AbortSignal): Promise<void> {
   if (!signal) return sleep(ms);
@@ -136,6 +138,64 @@ export class ToolExecutorService {
   // ─── Public entry point ────────────────────────────────────────
 
   async executeTool(
+    toolId: string,
+    parameters: Record<string, any>,
+    options: ToolExecutionOptions,
+  ): Promise<ToolExecutionResult> {
+    const result = await this.executeToolUnfiltered(toolId, parameters, options);
+    // An answer that leaves almyty for an outside caller -- a gateway client
+    // calling the tool itself, with no agent run of the organization's own
+    // behind it -- has personal data hidden when the organization asks for
+    // it (the PII filter). An agent's own run gets the real answer: it is
+    // the tool's input to the next step, and inputs are never rewritten.
+    if (!options.gatewayId || options.runId || result?.data === undefined) return result;
+    return { ...result, data: await this.hidePersonalData(result.data, options, toolId) };
+  }
+
+  /**
+   * Personal data hidden by the organization's PII filter (enabled, or
+   * enforced by its compliance policy), for what is kept or handed out:
+   * execution records, the audit log and answers to outside callers. Never
+   * for what a tool receives. Unchanged when no filter applies.
+   */
+  async hidePersonalData<T>(data: T, options: Pick<ToolExecutionOptions, 'organizationId' | 'userId'>, toolId?: string): Promise<T> {
+    if (!this.pluginManager || data === undefined || data === null) return data;
+    try {
+      const filtered = await this.pluginManager.executeHook(PluginHookType.DATA_FILTER, {
+        hookType: PluginHookType.DATA_FILTER,
+        organizationId: options.organizationId,
+        userId: options.userId,
+        requestId: `filter-${toolId ?? 'data'}-${Date.now()}`,
+        data,
+        metadata: {
+          timestamp: new Date().toISOString(),
+          plugin: { id: '', name: '', version: '' },
+          execution: { attempt: 1, timeout: 0, startTime: Date.now() },
+        },
+      });
+      return (filtered.data === undefined ? data : filtered.data) as T;
+    } catch (error: any) {
+      this.logger.warn(`PII filter on stored data failed: ${error?.message ?? error}`);
+      return data;
+    }
+  }
+
+  /** The execution record, with personal data hidden in what is stored. */
+  private async recordFiltered(
+    tool: Tool,
+    parameters: Record<string, any>,
+    result: ToolExecutionResult,
+    options: ToolExecutionOptions,
+    metadata: { cached: boolean; executionTime: number; retryCount: number },
+  ): Promise<void> {
+    const [storedParams, storedData] = await Promise.all([
+      this.hidePersonalData(parameters, options, tool.id),
+      this.hidePersonalData(result?.data, options, tool.id),
+    ]);
+    await this.stats.recordExecution(tool, storedParams, { ...result, data: storedData }, options, metadata);
+  }
+
+  private async executeToolUnfiltered(
     toolId: string,
     parameters: Record<string, any>,
     options: ToolExecutionOptions,
@@ -495,12 +555,13 @@ export class ToolExecutorService {
         }
       }
 
-      // Cache lookup.
-      if (!options.skipCache && tool.configuration?.cache?.enabled) {
-        const cachedResult = await this.cacheRateLimit.getCachedResult(tool, parameters);
+      // Cache lookup: within this run, unless the tool shares its answers (cacheScope).
+      const cacheScope = ToolCacheRateLimitHelper.cacheScope(tool, options.runId);
+      if (!options.skipCache && tool.configuration?.cache?.enabled && cacheScope) {
+        const cachedResult = await this.cacheRateLimit.getCachedResult(tool, parameters, cacheScope);
         if (cachedResult) {
           cached = true;
-          await this.stats.recordExecution(tool, parameters, cachedResult, options, {
+          await this.recordFiltered(tool, parameters, cachedResult, options, {
             cached: true,
             executionTime: Date.now() - startTime,
             retryCount: 0,
@@ -555,10 +616,10 @@ export class ToolExecutorService {
 
       if (result !== undefined) {
         // Cache successful config-based tool results.
-        if (tool.configuration?.cache?.enabled && result.success) {
-          await this.cacheRateLimit.cacheResult(tool, parameters, result);
+        if (tool.configuration?.cache?.enabled && cacheScope && result.success) {
+          await this.cacheRateLimit.cacheResult(tool, parameters, result, cacheScope);
         }
-        await this.stats.recordExecution(tool, parameters, result, options, {
+        await this.recordFiltered(tool, parameters, result, options, {
           executionTime: result.executionTime ?? Date.now() - startTime,
           cached,
           retryCount: 0,
@@ -579,11 +640,11 @@ export class ToolExecutorService {
         try {
           const opResult = await this.executeOperation(tool, parameters, options);
 
-          if (tool.configuration?.cache?.enabled && opResult.success) {
-            await this.cacheRateLimit.cacheResult(tool, parameters, opResult);
+          if (tool.configuration?.cache?.enabled && cacheScope && opResult.success) {
+            await this.cacheRateLimit.cacheResult(tool, parameters, opResult, cacheScope);
           }
 
-          await this.stats.recordExecution(tool, parameters, opResult, options, {
+          await this.recordFiltered(tool, parameters, opResult, options, {
             cached: false,
             executionTime: Date.now() - startTime,
             retryCount,
@@ -606,6 +667,10 @@ export class ToolExecutorService {
           // against a signal that was already aborted, holding the cancelled
           // run's layer open for up to fourteen seconds.
           if (options.signal?.aborted) break;
+          // No access to the account the tool signs in with: trying again
+          // changes nothing, and the answer has to say so plainly instead
+          // of looking like an empty result.
+          if (isNoAccessError(error)) break;
 
           if (retryCount <= maxRetries) {
             const delay = Math.pow(2, retryCount) * 1000;
@@ -618,16 +683,19 @@ export class ToolExecutorService {
         }
       }
 
+      const noAccess = isNoAccessError(lastError);
       const failureResult: ToolExecutionResult = {
         success: false,
-        error: `Execution failed after ${retryCount} attempts: ${lastError?.message ?? 'unknown'}`,
+        error: noAccess
+          ? noAccessMessage(tool.api?.name ?? tool.operation?.api?.name ?? tool.name)
+          : `Execution failed after ${retryCount} attempts: ${lastError?.message ?? 'unknown'}`,
+        ...(noAccess ? { noAccess: true } : {}),
         executionTime: Date.now() - startTime,
         cached,
         rateLimited,
         retryCount,
       };
-
-      await this.stats.recordExecution(tool, parameters, failureResult, options, {
+      await this.recordFiltered(tool, parameters, failureResult, options, {
         cached: false,
         executionTime: Date.now() - startTime,
         retryCount,
@@ -659,7 +727,7 @@ export class ToolExecutorService {
             where: { id: toolId, organizationId: options.organizationId },
           });
           if (tool) {
-            await this.stats.recordExecution(tool, parameters, errorResult, options, {
+            await this.recordFiltered(tool, parameters, errorResult, options, {
               cached: false,
               executionTime: Date.now() - startTime,
               retryCount,

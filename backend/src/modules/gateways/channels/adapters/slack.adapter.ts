@@ -9,6 +9,7 @@ import {
 } from './base.adapter';
 import { isImage, textWithMedia } from '../reply-media';
 import * as crypto from 'crypto';
+import { toSlackMrkdwn } from './channel-markdown';
 
 @Injectable()
 export class SlackAdapter extends BaseAdapter {
@@ -150,7 +151,8 @@ export class SlackAdapter extends BaseAdapter {
    */
   formatOutbound(response: AdapterResponse): any {
     const images = (response.attachments ?? []).filter(isImage).slice(0, SlackAdapter.MAX_IMAGES);
-    const text = textWithMedia(response, images);
+    // The agent writes markdown; Slack shows its own mrkdwn (**b** would arrive as text).
+    const text = toSlackMrkdwn(textWithMedia(response, images));
     if (!images.length) return { text };
     const sections: any[] = [];
     for (let i = 0; i < text.length; i += SlackAdapter.SECTION_CHARS) {
