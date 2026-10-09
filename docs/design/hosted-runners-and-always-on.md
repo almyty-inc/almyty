@@ -403,7 +403,7 @@ the gVisor test ([results](#gvisor-on-digitalocean-test-results)):
 The reference manifests are in [hosted-runners/](hosted-runners/).
 
 Each organization gets a namespace `almyty-rt-<org short id>`, labelled
-`almyty.io/runner-pool=true`, with:
+`almyty.com/runner-pool=true`, with:
 
 - A **ResourceQuota and LimitRange** sized from the org's plan capacity
   (concurrent hosted runners times resource class). A runaway org exhausts
@@ -450,7 +450,7 @@ it is a guard rail, not the boundary.
 
 **The provisioner's own access.** The API talks to the runner cluster as a
 ServiceAccount whose RBAC covers only namespaces labelled
-`almyty.io/runner-pool=true` and only the kinds above. Its kubeconfig is a
+`almyty.com/runner-pool=true` and only the kinds above. Its kubeconfig is a
 connection in `credentials` (connector `kubernetes`), never an env var on the
 API pod, so the Enterprise case (the org's own cluster) is the same code with
 a different connection. The API's own policy
@@ -956,6 +956,11 @@ DaemonSet installs it. The tested manifests are kept as references in
   gvisor`. It is the tested shape, not the production pod spec (that adds
   the security context, volume and limits from
   [Kubernetes objects and sandboxing](#kubernetes-objects-and-sandboxing)).
+- [`image-prepull.yaml`](hosted-runners/image-prepull.yaml): not part of
+  the test. A DaemonSet that pulls the standard runner image onto every
+  ready gVisor node (it runs the image once under gVisor, then holds a
+  pause container), so a wake on a new node skips the download. Applied by
+  hand if wanted; the backend never writes it.
 
 **The checks.**
 
@@ -1006,8 +1011,9 @@ DaemonSet installs it. The tested manifests are kept as references in
 
 **Before production.** Bake the gVisor binaries into the installer image
 (install time from about 2 minutes to seconds); run two or more gVisor nodes
-or the autoscaler with headroom; add a PodDisruptionBudget to runner
-Deployments (untested here; drains respect it up to a timeout); bump the
+or the autoscaler with headroom; the backend writes a PodDisruptionBudget
+with every runner Deployment (`cluster.disruptionBudget`; untested on a
+cluster here; drains respect it up to a timeout); bump the
 pinned release and checksum on purpose, with the staging smoke.
 
 ## Failure modes

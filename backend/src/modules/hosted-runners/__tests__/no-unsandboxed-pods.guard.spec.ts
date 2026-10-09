@@ -75,6 +75,23 @@ describe('no customer pod runs outside gVisor', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it('a runner Deployment is only ever built alongside its PodDisruptionBudget and private-range deny', () => {
+    // Outside the builder file nothing calls buildDeployment; inside it, only
+    // buildHostedRunnerObjects does, and that checks the set before returning.
+    const callers = files
+      .filter((f) => relative(SRC, f) !== BUILDER && /\bbuildDeployment\s*\(/.test(readFileSync(f, 'utf8')))
+      .map((f) => relative(SRC, f).split(sep).join('/'));
+    expect(callers).toEqual([]);
+    const source = readFileSync(join(SRC, BUILDER), 'utf8');
+    const objects = source.slice(source.indexOf('export function buildHostedRunnerObjects('), source.indexOf('function sameLabels('));
+    // The definition, and the one call inside buildHostedRunnerObjects.
+    expect(source.match(/\bbuildDeployment\s*\(/g)).toHaveLength(2);
+    expect(objects.match(/\bbuildDeployment\s*\(/g)).toHaveLength(1);
+    expect(objects).toMatch(/assertRunnerGuarded\(objects\);\s*return objects;/);
+    const adapter = readFileSync(join(SRC, 'modules', 'hosted-runners', 'adapters', 'kubernetes.adapter.ts'), 'utf8');
+    expect(adapter).toMatch(/for \(const obj of buildHostedRunnerObjects\(req, layout\)\) await client\.apply\(obj\);/);
+  });
+
   it('every adapter declares gvisor as its runtime class (the registry refuses one that does not)', () => {
     const { HostedAdapterRegistry } = require('../adapters/adapter.registry');
     const registry = new HostedAdapterRegistry();

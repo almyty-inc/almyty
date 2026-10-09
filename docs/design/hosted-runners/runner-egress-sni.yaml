@@ -7,8 +7,11 @@
 # registry.yarnpkg.com through because it shares Cloudflare IPs with
 # registry.npmjs.org; the SNI rule blocks it. The hosts here are the test's;
 # the provisioner writes one such policy per environment from its allowHosts.
-# The production policy also adds egressDeny rules for private ranges, the
-# cluster CIDRs and the metadata address, and allows the almyty API ingress.
+# The production policy (buildEgressPolicy in
+# backend/src/modules/hosted-runners/adapters/kubernetes/manifests.ts) also
+# carries egressDeny rules for the private, CGNAT, link-local and loopback
+# ranges, the metadata address and the configured cluster CIDRs, and lists
+# the almyty API host among the allowed names.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: {name: default-deny, namespace: runners}

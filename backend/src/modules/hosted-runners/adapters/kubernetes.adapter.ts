@@ -21,6 +21,7 @@ interface KubeRef extends HostedRef {
   volume: string;
   secret: string;
   egressPolicy: string;
+  disruptionBudget: string;
   hostedRunnerId: string;
   organizationId: string;
   workspaceId: string;
@@ -107,6 +108,7 @@ export class KubernetesHostedAdapter implements HostedRunnerAdapter {
     const client = this.client(creds);
     await client.delete('Deployment', r.deployment, r.namespace);
     await client.delete('Secret', r.secret, r.namespace);
+    await client.delete('PodDisruptionBudget', r.disruptionBudget, r.namespace);
     await client.delete('CiliumNetworkPolicy', r.egressPolicy, r.namespace);
     if (!opts.keepVolume) await client.delete('PersistentVolumeClaim', r.volume, r.namespace);
   }

@@ -23,14 +23,15 @@ describe('KubernetesHostedAdapter', () => {
 
   it('provisions with server-side apply, in order, authenticated by the connection token', async () => {
     const ref = await adapter.provision(req, creds);
-    expect(api.kinds('PATCH')).toEqual(['Namespace', 'ResourceQuota', 'LimitRange', 'NetworkPolicy', 'CiliumNetworkPolicy', 'PersistentVolumeClaim', 'Deployment']);
+    expect(api.kinds('PATCH')).toEqual(['Namespace', 'ResourceQuota', 'LimitRange', 'NetworkPolicy', 'CiliumNetworkPolicy', 'PodDisruptionBudget', 'PersistentVolumeClaim', 'Deployment']);
     for (const r of api.requests) {
       expect(r.contentType).toBe('application/apply-patch+yaml');
       expect(r.path).toContain('fieldManager=almyty&force=true');
       expect(r.authorization).toBe('Bearer sa-token-xyz');
     }
     expect(api.requests.find((r) => r.body.kind === 'Deployment')!.path).toBe(`/apis/apps/v1/namespaces/${ns}/deployments/hr-${req.workspaceId}?fieldManager=almyty&force=true`);
-    expect(ref).toMatchObject({ namespace: ns, deployment: `hr-${req.workspaceId}`, volume: `ws-${req.workspaceId}`, secret: `hr-${req.workspaceId}-env` });
+    expect(ref).toMatchObject({ namespace: ns, deployment: `hr-${req.workspaceId}`, volume: `ws-${req.workspaceId}`, secret: `hr-${req.workspaceId}-env`, disruptionBudget: `hr-${req.workspaceId}` });
+    expect(api.requests.find((r) => r.body.kind === 'PodDisruptionBudget')!.path).toBe(`/apis/policy/v1/namespaces/${ns}/poddisruptionbudgets/hr-${req.workspaceId}?fieldManager=almyty&force=true`);
   });
 
   it('sends the enrollment token and bound values in the Secret and in no other request', async () => {
@@ -57,10 +58,15 @@ describe('KubernetesHostedAdapter', () => {
     await adapter.rotateEnrollment(ref, req.secretEnv, creds);
     await adapter.clearSecrets(ref, creds);
     expect(api.objects.has(`/api/v1/namespaces/${ns}/secrets/hr-${req.workspaceId}-env`)).toBe(false);
+    expect(api.objects.has(`/apis/policy/v1/namespaces/${ns}/poddisruptionbudgets/hr-${req.workspaceId}`)).toBe(true);
 
     await adapter.teardown(ref, { keepVolume: true }, creds);
     expect(api.objects.has(`/api/v1/namespaces/${ns}/persistentvolumeclaims/ws-${req.workspaceId}`)).toBe(true);
     expect(api.objects.has(`/apis/apps/v1/namespaces/${ns}/deployments/hr-${req.workspaceId}`)).toBe(false);
+    // The runner's disruption budget and egress policy go with it.
+    expect(api.objects.has(`/apis/policy/v1/namespaces/${ns}/poddisruptionbudgets/hr-${req.workspaceId}`)).toBe(false);
+    expect(api.objects.has(`/apis/cilium.io/v2/namespaces/${ns}/ciliumnetworkpolicies/hr-${req.workspaceId}-egress`)).toBe(false);
+    expect(api.requests.filter((r) => r.method === 'DELETE').map((r) => r.path)).toContain(`/apis/policy/v1/namespaces/${ns}/poddisruptionbudgets/hr-${req.workspaceId}`);
     await adapter.teardown(ref, { keepVolume: false }, creds);
     expect(api.objects.has(`/api/v1/namespaces/${ns}/persistentvolumeclaims/ws-${req.workspaceId}`)).toBe(false);
     // The namespace's own policy stays for the organization's other runners.

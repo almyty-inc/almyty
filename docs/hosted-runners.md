@@ -107,6 +107,8 @@ All numbers live here. Defaults in brackets.
 | `cluster.runAsUser` / `.runAsGroup` | The non-root user the runner runs as. [1000, 1000] |
 | `cluster.dnsNamespace` / `.dnsPodLabels` | Where cluster DNS runs, for the one egress rule that is not by name. [kube-system, `k8s-app: kube-dns`] |
 | `cluster.tlsPorts` | Ports the egress allowlist opens. [443] |
+| `cluster.clusterCidrs` | The cluster's pod and service CIDRs, closed to every runner on top of the private ranges that are always closed. Only needed when they lie outside 10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 (DOKS's defaults are inside 10.0.0.0/8). [none] |
+| `cluster.disruptionBudget.minAvailable` / `.maxUnavailable` | Each runner's PodDisruptionBudget: set exactly one, the other `null`, as a number of pods or a percentage. `maxUnavailable: 0` makes a node drain wait until the runner is idle and scaled to zero. [null, 0] |
 | `apiUrl` | The API the pods connect to; empty uses `PUBLIC_API_URL`. |
 | `usageRetention.months` | How long a usage interval is kept after it closed, unless the organization's retention policy sets `runnerUsageDays`. [13] |
 | `workspaceQueue.waitSeconds` / `.pollSeconds` / `.leaseMinutes` / `.retryAfterSeconds` | One folder, one job at a time: how long a call waits for another job to finish with the workspace, how often it looks, how long a job keeps the workspace after its last call, and when a run that was told "busy" tries again. [30, 2, 30, 15] |
@@ -140,7 +142,21 @@ Per hosted runner (one per workspace):
   is not enough: hosts behind one CDN share addresses, and in the gVisor
   test `registry.yarnpkg.com` was reachable through an allowlist that named
   only `registry.npmjs.org` until the rule matched on SNI. Allowlist entries
-  are exact host names: no wildcards, addresses or internal names;
+  are exact host names: no wildcards, addresses or internal names. The same
+  policy carries `egressDeny` rules, which win over every allow, for the
+  private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), carrier-grade
+  NAT (100.64.0.0/10), link-local with the metadata address
+  (169.254.0.0/16), loopback (127.0.0.0/8, ::1/128), IPv6 unique-local and
+  link-local (fc00::/7, fe80::/10) and `cluster.clusterCidrs`: an allowed
+  name that resolves to a private address is still dropped. The almyty API
+  is reached by its public name, like any allowlisted host, so it must
+  resolve to a public address (it does from a separate runner cluster);
+- a **PodDisruptionBudget** `hr-<workspace id>` on the runner's pod
+  (`cluster.disruptionBudget`, default `maxUnavailable: 0`), so a node
+  drain for an upgrade or a replacement waits for the runner to go idle
+  instead of killing it mid-job. A pod that is not ready may always be
+  evicted (`unhealthyPodEvictionPolicy: AlwaysAllow`), so a broken runner
+  never holds a node;
 - a **PersistentVolumeClaim** `ws-<workspace id>` (ReadWriteOnce);
 - a **Secret** `hr-<workspace id>-env` with the enrollment token and the
   connection values, written before each start and deleted while the pod is
@@ -194,13 +210,21 @@ This is what passed on DigitalOcean (DOKS 1.35 and 1.36, containerd 1.7 and
 5. **A ServiceAccount for almyty** whose role covers only namespaces
    labelled `almyty.com/runner-pool=true` and only these kinds: Namespace,
    ResourceQuota, LimitRange, NetworkPolicy, CiliumNetworkPolicy,
-   PersistentVolumeClaim, Secret, Deployment (and its `scale`), and reading
-   Pods. Put its token, the API server URL and the cluster CA into a
+   PodDisruptionBudget (`policy/poddisruptionbudgets`: create, patch, get,
+   delete), PersistentVolumeClaim, Secret, Deployment (and its `scale`), and
+   reading Pods. Without the PodDisruptionBudget rule every provision fails
+   with HTTP 403. Put its token, the API server URL and the cluster CA into a
    `kubernetes` connection and point `HOSTED_RUNNERS_CLUSTER_CONNECTION` at
    it.
+6. **Optional: pre-pull the standard image** with the DaemonSet in
+   [`docs/design/hosted-runners/image-prepull.yaml`](design/hosted-runners/image-prepull.yaml),
+   so the first wake on a new sandbox node does not wait for the image to
+   download. almyty does not apply it; set its image to the reference in
+   `images.standard` and update both together.
 
 The cloud metadata address (169.254.169.254) was already unreachable from
-pods on DOKS; the default-deny policy keeps it so elsewhere.
+pods on DOKS; the runner policy's `egressDeny` on 169.254.0.0/16 keeps it so
+elsewhere.
 
 ## Models from inside a pod
 
