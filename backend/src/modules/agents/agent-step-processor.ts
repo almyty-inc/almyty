@@ -1483,7 +1483,7 @@ export class AgentStepProcessor {
         if (run.steps.length !== stepsBefore) {
           await this.s.runRepository.update(
             { id: run.id },
-            { steps: run.steps, totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata } as any,
+            { steps: await this.stepsForPersist(run), totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata } as any,
           );
         }
         return 'done';
@@ -1573,6 +1573,16 @@ export class AgentStepProcessor {
    * the event loop. Step objects are append-only once pushed, so each one is
    * capped once and the result is memoized against the step object itself.
    */
+  /**
+   * The steps as the run row stores them: capped, and with personal data
+   * hidden under the organization's PII filter. `update()` passes no entity
+   * to subscribers, so the trace privacy pass is asked here.
+   */
+  private async stepsForPersist(run: AgentRun): Promise<AgentRun['steps']> {
+    const bounded = this.boundStepsForPersist(run.steps);
+    return this.s.tracePrivacy ? this.s.tracePrivacy.hideSteps(bounded, run.organizationId, run.userId) : bounded;
+  }
+
   private boundStepsForPersist(steps: AgentRun['steps']): AgentRun['steps'] {
     if (!Array.isArray(steps)) return steps;
 
@@ -2224,7 +2234,7 @@ export class AgentStepProcessor {
         // on the next step, and a per-step counter is no run budget.
         toolCallCount: run.toolCallCount ?? 0,
         executionTime: run.executionTime,
-        steps: this.boundStepsForPersist(run.steps),
+        steps: await this.stepsForPersist(run),
         output: run.output,
         error: run.error,
         workingMemory: run.workingMemory,
