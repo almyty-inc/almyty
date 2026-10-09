@@ -121,6 +121,7 @@ export function describeIsolationPosture(config: RunnerConfig): string {
       : 'cwd unrestricted',
   );
   if (config.denyPatterns.length > 0) guards.push(`${config.denyPatterns.length} deny pattern(s)`);
+  if (config.allowBinaries?.length) guards.push(`binaries limited to ${config.allowBinaries.length}`);
   return `isolation=host — commands run on this machine as you (${guards.join(', ')})`;
 }
 
@@ -239,26 +240,32 @@ export function loadConfig(inputs: LoadConfigInputs = {}): ResolvedConfig {
     throw new Error('runner name is required (set via --name, ALMYTY_RUNNER_NAME, or config.name)');
   }
 
-  // The runner's command channel (RCE-capable) and its bearer token ride
-  // this URL — refuse plaintext http:// to a remote host. http is allowed
-  // only for loopback (local dev).
+  assertSecureBackendUrl(resolved.backendUrl);
+
+  return resolved;
+}
+
+/**
+ * The runner's command channel (RCE-capable) and its bearer token ride
+ * the backend URL, so plaintext http:// to a remote host is refused. http
+ * is allowed only for loopback (local dev). Throws with a sentence.
+ */
+export function assertSecureBackendUrl(backendUrl: string): void {
   try {
-    const u = new URL(resolved.backendUrl);
+    const u = new URL(backendUrl);
     const host = u.hostname;
     const loopback =
-      host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.localhost');
+      host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]' || host.endsWith('.localhost');
     if (u.protocol !== 'https:' && !loopback) {
       throw new Error(
-        `Refusing an insecure ${u.protocol}// backend URL for a remote host: ${resolved.backendUrl}. ` +
+        `Refusing an insecure ${u.protocol}// backend URL for a remote host: ${backendUrl}. ` +
           'Use https:// (http is only allowed for localhost).',
       );
     }
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('Refusing')) throw e;
-    throw new Error(`Invalid backend URL: ${resolved.backendUrl}`);
+    throw new Error(`Invalid backend URL: ${backendUrl}`);
   }
-
-  return resolved;
 }
 
 // ── helpers ─────────────────────────────────────────────────────────

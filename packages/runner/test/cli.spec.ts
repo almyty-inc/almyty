@@ -60,4 +60,21 @@ describe('almyty-runner argument parsing', () => {
     // never accepted, so a team runner's start command failed on paste.
     expect(parseArgs(argv('start', '--name', 'box', '--team-id', 't')).error).toMatch(/Unknown option: --team-id/);
   });
+
+  it('reads --enroll, the hosted runner mode the runner-env images start in', () => {
+    expect(parseArgs(argv('start', '--enroll'))).toEqual({ command: 'start', enroll: true });
+    expect(parseArgs(argv('start', '--enroll', '--url', 'https://api.example'))).toEqual({
+      command: 'start', enroll: true, url: 'https://api.example',
+    });
+  });
+
+  it('refuses identity flags next to --enroll: the token decides who the runner is', () => {
+    expect(parseArgs(argv('start', '--enroll', '--name', 'box')).error).toMatch(/--enroll takes its identity.*--name/);
+    expect(parseArgs(argv('start', '--org', 'o', '--enroll')).error).toMatch(/--org/);
+    expect(parseArgs(argv('start', '--enroll', '--label', 'a=b', '--config', '/c.json')).error).toMatch(/--label, --config/);
+  });
+
+  it('only accepts --enroll on start', () => {
+    expect(parseArgs(argv('status', '--enroll')).error).toMatch(/--enroll only applies to start/);
+  });
 });
