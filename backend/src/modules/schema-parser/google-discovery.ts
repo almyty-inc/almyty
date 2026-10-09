@@ -56,9 +56,18 @@ function collectMethods(node: any, out: any[], depth = 0): void {
   for (const resource of Object.values(node.resources ?? {})) collectMethods(resource, out, depth + 1);
 }
 
+/** `value` without its trailing slashes, and its leading ones too when `both`; no regex to backtrack. */
+function trimSlashes(value: string, both: boolean): string {
+  let start = 0;
+  let end = value.length;
+  if (both) while (start < end && value[start] === '/') start++;
+  while (end > start && value[end - 1] === '/') end--;
+  return value.slice(start, end);
+}
+
 export function discoveryToOpenApi(doc: any): any {
-  const rootUrl = String(doc.rootUrl ?? '').replace(/\/+$/, '');
-  const servicePath = String(doc.servicePath ?? '').replace(/^\/+|\/+$/g, '');
+  const rootUrl = trimSlashes(String(doc.rootUrl ?? ''), false);
+  const servicePath = trimSlashes(String(doc.servicePath ?? ''), true);
   const scopes: Record<string, string> = {};
   for (const [scope, info] of Object.entries<any>(doc.auth?.oauth2?.scopes ?? {})) scopes[scope] = String(info?.description ?? '');
 

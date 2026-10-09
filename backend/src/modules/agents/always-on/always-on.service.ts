@@ -1319,7 +1319,8 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     ];
     if (!targets.length) return;
     // The reason is a sentence of its own; its full stop goes, or the notice reads "list)..".
-    const reason = (row.reason ?? 'see Approvals').trim().replace(/\.+$/, '');
+    let reason = (row.reason ?? 'see Approvals').trim();
+    while (reason.endsWith('.')) reason = reason.slice(0, -1);
     const text = `${agent.name} wants to do something and is waiting for your OK: ${reason}. Approve or reject it in Approvals.`;
     const seen = new Set<string>();
     for (const delivery of targets) {

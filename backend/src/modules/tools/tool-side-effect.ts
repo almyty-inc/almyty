@@ -82,7 +82,8 @@ function literalMethod(value: unknown): string | null {
  * `doSearch` or `query` (`calendar.freebusy.query`).
  */
 export function isSearchOperation(operation: { endpoint?: string | null; operationId?: string | null } | null | undefined): boolean {
-  const endpoint = String(operation?.endpoint ?? '').toLowerCase().replace(/\/+$/, '');
+  let endpoint = String(operation?.endpoint ?? '').toLowerCase();
+  while (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
   if (/\/(search|query|batch\/read)$/.test(endpoint)) return true;
   const id = String(operation?.operationId ?? '');
   return /(?:^|[._\-/])(?:search|dosearch|query)$/i.test(id) || /_doSearch$/.test(id);
