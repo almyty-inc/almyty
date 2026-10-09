@@ -412,7 +412,7 @@ Each organization gets a namespace `almyty-rt-<org short id>`, labelled
   DNS to kube-dns, the almyty API's public ingress (the runner connects out,
   exactly as a self-hosted one does), and the environment's allowlist
   (below). Nothing else: explicitly not `169.254.169.254`, the cluster
-  CIDRs, the Kubernetes API or other namespaces. No ingress at all.
+  CIDRs, the nodes, the Kubernetes API or other namespaces. No ingress at all.
 
 Per workspace: a **PVC** `ws-<workspaceId>` (RWO, sized from the
 environment's cache and class); a **Secret** with the enrollment token and
@@ -443,7 +443,9 @@ provisioner writes it from `egress.allowHosts` at provision and on every
 environment version. Port 443 only: plain HTTP is not allowed out. An allowed
 name that resolves to a private address would pass an FQDN rule, so the
 policy also carries `egressDeny` rules for private ranges, the cluster CIDRs
-and the metadata address, which win over any allow (the L1 rule). The
+and the metadata address, plus the Cilium entities `host`, `remote-node` and
+`kube-apiserver` (node addresses are identities in Cilium, not CIDRs), which
+win over any allow (the L1 rule). The
 binary allowlist (`allowBinaries`) is enforced in the runner's policy
 (`packages/runner/src/policy.ts`, next to `denyPatterns`); inside a sandbox
 it is a guard rail, not the boundary.
@@ -862,7 +864,13 @@ port 443 only. FQDN rules alone allow by resolved IP, and on shared CDN IPs
 that opens hosts nobody listed (tested: `registry.yarnpkg.com` was reachable
 with only `registry.npmjs.org` allowed, until SNI rules were added). Plain
 HTTP, raw IPs, other namespaces, the Kubernetes API and cloud metadata are
-unreachable (metadata already is on DigitalOcean nodes, policy or not).
+unreachable (metadata already is on DigitalOcean nodes, policy or not). The
+nodes need a deny of their own: Cilium knows node addresses as the `host`
+and `remote-node` identities rather than as CIDRs, so the private-range deny
+did not stop a gVisor pod reaching node kubelets (`10.114.0.x:10250`
+answered on DOKS), and the policy therefore also denies the entities
+`host`, `remote-node` and `kube-apiserver` (tested: every node address
+blocked, DNS and the allowlisted hosts still working).
 
 **Credentials.** The enrollment token is single-use and lives 10 minutes; the
 runner credential is scoped to one runner and the runner surface; user
