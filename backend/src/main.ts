@@ -38,7 +38,14 @@ if (sentryOptions) {
   }
 }
 
-async function bootstrap() {
+/** The routes whose JSON bodies may be as large as a coding CLI's model call (the model pass-through). */
+export const MODEL_PASSTHROUGH_ROUTES = ['/v1/messages', '/v1/chat/completions', '/v1/responses'];
+
+/**
+ * The application, configured exactly as it serves (middleware, parsers,
+ * CORS, pipes, filters, interceptors), not yet listening.
+ */
+export async function createApp() {
   const logger = new Logger('Bootstrap');
   
   const app = await NestFactory.create(AppModule, {
@@ -67,7 +74,16 @@ async function bootstrap() {
   // on every model call, routinely past the default 100kb JSON limit. The
   // model routes parse their own JSON with a larger one (Nest's parser then
   // sees the body already read); every other route keeps the default.
-  app.use(['/v1/messages', '/v1/chat/completions', '/v1/responses'], json({ limit: process.env.MODEL_PASSTHROUGH_BODY_LIMIT || '32mb' }));
+  //
+  // Wrapped, not passed as is: Nest skips installing its own JSON parser
+  // when the app already has a middleware whose function is named
+  // `jsonParser`, which is what express's json() returns. Registered bare,
+  // this one parser became the only one, and every other route got an
+  // empty body (sign-up answered "email should not be empty").
+  const modelRouteParser = json({ limit: process.env.MODEL_PASSTHROUGH_BODY_LIMIT || '32mb' });
+  app.use(MODEL_PASSTHROUGH_ROUTES, function modelRouteJsonParser(req: any, res: any, next: (err?: unknown) => void) {
+    return modelRouteParser(req, res, next);
+  });
 
   // Security middleware
   app.use(helmet({
@@ -219,9 +235,18 @@ async function bootstrap() {
   // Graceful shutdown hooks for k8s SIGTERM
   app.enableShutdownHooks();
 
+  return { app, port, logger };
+}
+
+async function bootstrap() {
+  const { app, port, logger } = await createApp();
   await app.listen(port);
 
   logger.log(`Application is running on: http://localhost:${port}`);
 }
 
-bootstrap();
+// `node dist/main` starts the server; a spec imports createApp and boots
+// the very same configuration on a port of its own.
+if (require.main === module) {
+  void bootstrap();
+}
