@@ -79,7 +79,7 @@ export class HostedModelTokenService implements HostedModelTokens {
       revokedReason: null,
       lastUsedAt: null,
     });
-    this.audit(hr.organizationId, ownerUserId, AuditAction.HOSTED_MODEL_TOKEN_ISSUED, hr.id, {
+    await this.audit(hr.organizationId, ownerUserId, AuditAction.HOSTED_MODEL_TOKEN_ISSUED, hr.id, {
       tokenId: inserted.identifiers?.[0]?.id ?? null,
       environmentId: hr.environmentId,
       workspaceId: hr.workspaceId,
@@ -114,7 +114,7 @@ export class HostedModelTokenService implements HostedModelTokens {
     const count = result.affected ?? 0;
     if (count > 0 && reason !== 'replaced' && reason !== 'renewed') {
       const hr = await this.hostedRunners.findOne({ where: { id: hostedRunnerId }, select: { id: true, organizationId: true, environmentId: true, workspaceId: true } });
-      if (hr) this.audit(hr.organizationId, null, AuditAction.HOSTED_MODEL_TOKEN_REVOKED, hr.id, { reason, count, environmentId: hr.environmentId, workspaceId: hr.workspaceId });
+      if (hr) await this.audit(hr.organizationId, null, AuditAction.HOSTED_MODEL_TOKEN_REVOKED, hr.id, { reason, count, environmentId: hr.environmentId, workspaceId: hr.workspaceId });
     }
     return count;
   }
@@ -170,16 +170,23 @@ export class HostedModelTokenService implements HostedModelTokens {
     await this.tokens.update({ id: row.id }, { lastUsedAt: now }).catch((err: any) => this.logger.warn(`Could not record pod token use: ${err?.message ?? err}`));
   }
 
-  private audit(organizationId: string, userId: string | null, action: AuditAction, hostedRunnerId: string, details: Record<string, any>): void {
-    void this.auditLog
-      ?.log({
+  /**
+   * One audit row, written before the caller goes on: issuing and revoking
+   * a pod's model access is on the record by the time either returns. A
+   * failed write is logged, never thrown (revocation must not fail on it).
+   */
+  private async audit(organizationId: string, userId: string | null, action: AuditAction, hostedRunnerId: string, details: Record<string, any>): Promise<void> {
+    try {
+      await this.auditLog?.log({
         organizationId,
         userId: userId ?? undefined,
         action,
         resourceType: AuditResource.HOSTED_RUNNER,
         resourceId: hostedRunnerId,
         details,
-      })
-      .catch(() => undefined);
+      });
+    } catch (err: any) {
+      this.logger.warn(`Could not audit ${action} for hosted runner ${hostedRunnerId}: ${err?.message ?? err}`);
+    }
   }
 }

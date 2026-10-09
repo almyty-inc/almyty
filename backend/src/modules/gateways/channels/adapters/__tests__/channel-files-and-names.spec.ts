@@ -446,7 +446,8 @@ describe('Email', () => {
     route = () => json({ id: 're_1' });
     await adapter.sendResponse({ resend_api_key: 're_key' }, formatted, { from: 'anna@example.com', subject: 'Label' });
     expect(bodyOf(calls[0]).attachments).toEqual(formatted.attachments);
-    expect(bodyOf(calls[0]).html).toBe('Here is the label.\n\nAnd the invoice.');
+    expect(bodyOf(calls[0]).text).toBe('Here is the label.\n\nAnd the invoice.');
+    expect(bodyOf(calls[0]).html).toBe('<div style="white-space:pre-wrap">Here is the label.<br><br>And the invoice.</div>');
   });
 
   it('names the files a JSON-posting provider only lists', () => {

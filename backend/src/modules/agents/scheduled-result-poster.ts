@@ -3,10 +3,13 @@ import type { Agent } from '../../entities/agent.entity';
 /**
  * A finished scheduled run, whichever engine ran it: a workflow execution
  * (agent_executions) or an autonomous run (agent_runs). The outcome of
- * posting it is written back onto that row.
+ * posting it is written back onto that row. An always-on agent's daily
+ * summary (`digest`, always-on/always-on-digest.ts) is no run: its outcome
+ * is not recorded anywhere but the log and, on failure, the owner's
+ * notifications.
  */
 export interface ScheduledResult {
-  kind: 'execution' | 'run';
+  kind: 'execution' | 'run' | 'digest';
   id: string;
   status: string;
   output: unknown;

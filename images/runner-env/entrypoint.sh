@@ -54,7 +54,10 @@ export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 #                store (GEMINI_API_KEY) is the pod's to inject, on an
 #                environment that allows vendor keys.
 if [ -n "${ALMYTY_MODEL_TOKEN:-}" ] && [ -n "${ALMYTY_API_URL:-}" ]; then
-  if [ -n "${ALMYTY_MODEL_PROXY_PORT:-}" ]; then
+  # The proxy only when the image's runner has one: pointing the CLIs at a
+  # port nothing listens on would leave them with no model at all.
+  runner_dist="$(npm root -g 2>/dev/null)/@almyty/runner/dist"
+  if [ -n "${ALMYTY_MODEL_PROXY_PORT:-}" ] && [ -f "${ALMYTY_RUNNER_DIST:-$runner_dist}/model-proxy.js" ]; then
     api="http://127.0.0.1:${ALMYTY_MODEL_PROXY_PORT}"
     # The proxy replaces whatever key a CLI sends.
     cli_key="almyty-pod-local"

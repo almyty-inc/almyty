@@ -24,6 +24,7 @@ import { AgentWake, WakeSource } from '../../../entities/agent-wake.entity';
 import { AgentChannel, ChannelType } from '../../../entities/agent-channel.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { Tool } from '../../../entities/tool.entity';
+import { User } from '../../../entities/user.entity';
 import { Message } from '../../../entities/message.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
@@ -41,10 +42,12 @@ import {
 import { ConnectionGrant } from '../../../entities/connection-grant.entity';
 import { ConnectionEvent, onConnectionEvent } from '../../connections/connection-events';
 import { AlwaysOnCapacity, alwaysOnCapacity, effectiveTimerMinutes, effectiveWakesPerHour } from './always-on-capacity';
+import { DIGEST_WINDOW_MS, DigestTiming, digestCron, digestText, digestTiming, localDay } from './always-on-digest';
 import {
   AlwaysOnConfig,
   AlwaysOnInput,
   ConnectionWakeEvent,
+  hasHostedHome,
   isReadOnlyTool,
   mergeAlwaysOn,
   readAlwaysOn,
@@ -55,6 +58,50 @@ export const ALWAYS_ON_TICK_JOB = 'always-on-tick';
 export const ALWAYS_ON_WAKE_JOB = 'always-on-wake';
 /** The job name heartbeats were enqueued under before Always on; removed at boot. */
 export const LEGACY_HEARTBEAT_JOB = 'heartbeat';
+/** The daily summary of an agent with `report: 'daily_digest'` (always-on-digest.ts). */
+export const ALWAYS_ON_DIGEST_JOB = 'always-on-digest';
+/** The check that turns agents paused for capacity back on once the plan has room. */
+export const ALWAYS_ON_CAPACITY_JOB = 'always-on-capacity';
+
+/** How often the capacity check runs, in minutes: ALWAYS_ON_CAPACITY_CHECK_MINUTES, else 15. */
+export function capacityCheckMinutes(env: Record<string, string | undefined> = process.env): number {
+  const n = Number(env.ALWAYS_ON_CAPACITY_CHECK_MINUTES);
+  return Number.isInteger(n) && n > 0 ? n : 15;
+}
+
+/** Why its waiting wakes were not acted on, in the words the wake list shows. */
+const PAUSE_WORDS: Record<AgentPauseReason['code'], string> = {
+  MODEL_NOT_FOUND: 'its model is gone',
+  OWNER_CANNOT_RUN: 'its owner can no longer run it',
+  OWNER_NOT_MEMBER: 'its owner is no longer a member',
+  RESTORE_FAILED: 'its timer could not be restored',
+  WAKE_LOOP: 'it woke too often',
+  CAPACITY_EXHAUSTED: 'the plan has no room for it',
+  IDENTITY_LAPSED: 'the plan no longer lets it act as itself',
+};
+const agentsWord = (n: number) => `${n} always-on ${n === 1 ? 'agent' : 'agents'} on hosted machines`;
+
+/** The pause of an agent beyond what the plan includes, in words the owner can act on. */
+export function capacityPause(included: number, on: number, at = new Date()): AgentPauseReason {
+  return {
+    code: 'CAPACITY_EXHAUSTED',
+    message:
+      `Your plan includes ${agentsWord(included)}, and ${on} were on. This one was turned on last, so it was paused. ` +
+      'It turns back on by itself when there is room: turn Always on off for another agent on a hosted machine, move this one to your own machine, or move to a plan that includes more.',
+    detectedAt: at.toISOString(),
+  };
+}
+
+/** Why turning one more on is refused, naming the ones that are on. */
+export function capacityRefusal(included: number, onNames: string[]): string {
+  const shown = onNames.slice(0, 5).map((n) => `"${n}"`);
+  const rest = onNames.length - shown.length;
+  const names = rest > 0 ? `${shown.join(', ')} and ${rest} more` : shown.join(', ');
+  return (
+    `Your plan includes ${agentsWord(included)}, and ${onNames.length === 1 ? 'one is' : `${onNames.length} are`} on already: ${names}. ` +
+    'Turn Always on off for one of them first, run this one on your own machine, or move to a plan that includes more.'
+  );
+}
 
 /** The most wakes that wait in an agent's inbox; older ones are folded away. */
 export const MAX_QUEUED_WAKES = 100;
@@ -95,6 +142,15 @@ export interface AlwaysOnView {
   lastWake: { at: string; source: WakeSource; summary: string; runId: string | null } | null;
   queued: number;
   liveRunId: string | null;
+  /** When the daily summary goes out: the agent's own setting, else 09:00 in the owner's time zone. */
+  digest: DigestTiming;
+  /**
+   * Whether this agent lives on a hosted machine. Only those count toward
+   * capacity.includedAgents; the page names the limit only for them.
+   */
+  hostedHome: boolean;
+  /** The organization's always-on agents with a hosted home that are on now. */
+  hostedAgentsOn: number;
 }
 
 function bounded(text: string, max: number): string {
@@ -259,6 +315,8 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly audit?: AuditLogService,
     // Who an unattended run acts as (agent-identity.ts).
     @Optional() private readonly identity?: AgentIdentityService,
+    // The owner's time zone, for a daily summary that names none.
+    @Optional() @InjectRepository(User) private readonly users?: Repository<User>,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -351,6 +409,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         : null,
       queued,
       liveRunId: live?.id ?? null,
+      digest: await this.digestTimingFor(agent, config),
+      hostedHome: hasHostedHome(config),
+      hostedAgentsOn: (await this.hostedAgentsOn(organizationId)).length,
     };
   }
 
@@ -387,6 +448,16 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     if (next.maxWakesPerHour && next.maxWakesPerHour > capacity.maxWakesPerHour) {
       throw new BadRequestException(`On your plan it can wake up to ${capacity.maxWakesPerHour} times an hour.`);
     }
+    // Turning one more hosted-home agent on than the plan includes is
+    // refused here, with the ones that are on named; one beyond it after the
+    // plan changed pauses at its next wake instead (process). An agent on
+    // the owner's own machines, or with no machine, is never limited.
+    if (next.enabled && !before?.enabled && hasHostedHome(next) && capacity.includedAgents !== null) {
+      const others = (await this.hostedAgentsOn(organizationId)).filter((a) => a.id !== agentId);
+      if (others.length >= capacity.includedAgents) {
+        throw new BadRequestException(capacityRefusal(capacity.includedAgents, others.map((a) => a.name)));
+      }
+    }
 
     const ownChannels = await this.channels.find({ where: { agentId, organizationId } });
     const ownIds = new Set(ownChannels.map((c) => c.id));
@@ -416,6 +487,8 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     else if (before?.enabled && !next.enabled) {
       await this.recordAudit(agent, AuditAction.ALWAYS_ON_DISABLE, actorUserId, {});
       await this.dropQueued(agent.id, 'Always on was turned off');
+      // Its place on the plan is free: an agent waiting for room may take it.
+      await this.resumeWithinCapacity(organizationId);
     }
     return this.view(agentId, organizationId);
   }
@@ -440,19 +513,48 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     return `always-on-${agentId}`;
   }
 
-  /** Make the repeatable timer job agree with the agent's settings. */
+  /** Make the repeatable jobs (the timer, the daily summary) agree with the agent's settings. */
   async reconcileTimer(agent: Agent, capacity?: AlwaysOnCapacity): Promise<void> {
     await this.removeTimer(agent.id);
     const config = readAlwaysOn(agent.alwaysOn);
-    const minutes = config?.wakeOn.timer?.everyMinutes;
-    if (!config?.enabled || !minutes || agent.status !== AgentStatus.ACTIVE || agent.mode !== 'autonomous') return;
+    if (!config?.enabled || agent.status !== AgentStatus.ACTIVE || agent.mode !== 'autonomous') return;
     const cap = capacity ?? (await this.capacityFor(agent.organizationId));
-    const every = effectiveTimerMinutes(minutes, cap);
-    await this.queue.add(
-      ALWAYS_ON_TICK_JOB,
-      { agentId: agent.id, organizationId: agent.organizationId },
-      { repeat: { every: every * 60_000 }, jobId: this.timerJobId(agent.id), removeOnComplete: 50, removeOnFail: 20 },
-    );
+    await this.scheduleJobs(agent, config, cap);
+  }
+
+  /** Add an agent's repeatable jobs: its timer, and its daily summary. Returns how many. */
+  private async scheduleJobs(agent: Agent, config: AlwaysOnConfig, capacity: AlwaysOnCapacity): Promise<number> {
+    let added = 0;
+    const minutes = config.wakeOn.timer?.everyMinutes;
+    if (minutes) {
+      await this.queue.add(
+        ALWAYS_ON_TICK_JOB,
+        { agentId: agent.id, organizationId: agent.organizationId },
+        {
+          repeat: { every: effectiveTimerMinutes(minutes, capacity) * 60_000 },
+          jobId: this.timerJobId(agent.id),
+          removeOnComplete: 50,
+          removeOnFail: 20,
+        },
+      );
+      added++;
+    }
+    if (config.report === 'daily_digest') {
+      // Every day at its time of day in its zone, the way a schedule's time of day runs.
+      const timing = await this.digestTimingFor(agent, config);
+      await this.queue.add(
+        ALWAYS_ON_DIGEST_JOB,
+        { agentId: agent.id, organizationId: agent.organizationId },
+        {
+          repeat: { cron: digestCron(timing.time), tz: timing.timezone },
+          jobId: this.digestJobId(agent.id),
+          removeOnComplete: 20,
+          removeOnFail: 20,
+        },
+      );
+      added++;
+    }
+    return added;
   }
 
   async removeTimer(agentId: string): Promise<void> {
@@ -461,7 +563,8 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       for (const job of jobs) {
         const ours = job.name === ALWAYS_ON_TICK_JOB && job.id === this.timerJobId(agentId);
         const legacy = job.name === LEGACY_HEARTBEAT_JOB && job.id === `heartbeat-${agentId}`;
-        if (ours || legacy) await this.queue.removeRepeatableByKey(job.key);
+        const digest = job.name === ALWAYS_ON_DIGEST_JOB && job.id === this.digestJobId(agentId);
+        if (ours || legacy || digest) await this.queue.removeRepeatableByKey(job.key);
       }
     } catch (err: any) {
       this.logger.warn(`Could not remove the always-on timer of agent ${agentId}: ${err?.message ?? err}`);
@@ -469,10 +572,11 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Put every timer back at boot. The repeatable jobs live in Redis, and a
-   * Redis that lost them (a flush, a failover) used to leave heartbeats
-   * switched on in the UI and never firing. One failure does not stop the
-   * rest; an agent whose timer cannot be restored is paused and says why.
+   * Put every timer and daily summary back at boot. The repeatable jobs
+   * live in Redis, and a Redis that lost them (a flush, a failover) used to
+   * leave heartbeats switched on in the UI and never firing. One failure
+   * does not stop the rest; an agent whose timer cannot be restored is
+   * paused and says why. The capacity check is put back too.
    */
   async restoreTimers(): Promise<{ restored: number; failed: number }> {
     let restored = 0;
@@ -480,7 +584,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     try {
       const existing = await this.queue.getRepeatableJobs();
       for (const job of existing) {
-        if (job.name === ALWAYS_ON_TICK_JOB || job.name === LEGACY_HEARTBEAT_JOB) {
+        if ([ALWAYS_ON_TICK_JOB, LEGACY_HEARTBEAT_JOB, ALWAYS_ON_DIGEST_JOB, ALWAYS_ON_CAPACITY_JOB].includes(job.name)) {
           await this.queue.removeRepeatableByKey(job.key);
         }
       }
@@ -488,25 +592,14 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       const capacities = new Map<string, AlwaysOnCapacity>();
       for (const agent of agents) {
         const config = readAlwaysOn(agent.alwaysOn);
-        const minutes = config?.wakeOn.timer?.everyMinutes;
-        if (!config?.enabled || !minutes) continue;
+        if (!config?.enabled) continue;
         try {
           let cap = capacities.get(agent.organizationId);
           if (!cap) {
             cap = await this.capacityFor(agent.organizationId);
             capacities.set(agent.organizationId, cap);
           }
-          await this.queue.add(
-            ALWAYS_ON_TICK_JOB,
-            { agentId: agent.id, organizationId: agent.organizationId },
-            {
-              repeat: { every: effectiveTimerMinutes(minutes, cap) * 60_000 },
-              jobId: this.timerJobId(agent.id),
-              removeOnComplete: 50,
-              removeOnFail: 20,
-            },
-          );
-          restored++;
+          if (await this.scheduleJobs(agent, config, cap)) restored++;
         } catch (err: any) {
           failed++;
           this.logger.error(`[ALWAYS_ON] Could not restore the timer of agent ${agent.id}: ${err?.message ?? err}`);
@@ -518,6 +611,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         }
       }
       if (restored) this.logger.log(`[ALWAYS_ON] Restored ${restored} timer(s)`);
+      await this.scheduleCapacityCheck();
     } catch (err: any) {
       this.logger.error(`[ALWAYS_ON] Could not restore timers: ${err?.message ?? err}`);
     }
@@ -665,6 +759,14 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       if (!agent || !config?.enabled || agent.status !== AgentStatus.ACTIVE) {
         await this.dropQueued(agentId, 'Always on is off');
         return 'off';
+      }
+      // The plan has room for fewer hosted-home agents than are on (it changed,
+      // or lapsed): the last turned on pause, and turn back on when there is
+      // room. An agent without a hosted home is never beyond it.
+      const beyond = await this.beyondIncluded(agent);
+      if (beyond) {
+        await this.pause(agent, capacityPause(beyond.included, beyond.on));
+        return 'paused';
       }
       const queued = await this.wakes.find({
         where: { agentId, status: 'queued' },
@@ -860,10 +962,244 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     agent.alwaysOn = config as any;
     await this.agents.save(agent);
     await this.removeTimer(agent.id);
-    await this.dropQueued(agent.id, `paused: ${reason.code}`);
+    await this.dropQueued(agent.id, `paused: ${PAUSE_WORDS[reason.code] ?? reason.code}`);
     await this.recordAudit(agent, AuditAction.ALWAYS_ON_PAUSE, null, { reason });
-    await this.notifyOwner(agent, 'agent.paused', `${agent.name} was paused`, reason.message);
+    await this.notifyOwner(agent, 'agent.paused', `${agent.name} was paused`, reason.message, undefined, {
+      resumesItself: reason.code === 'CAPACITY_EXHAUSTED',
+    });
     this.logger.warn(`[ALWAYS_ON] Paused agent ${agent.id}: ${reason.code}`);
+    // Its place on the plan is free now: an agent waiting for room may take it.
+    if (reason.code !== 'CAPACITY_EXHAUSTED') await this.resumeWithinCapacity(agent.organizationId).catch(() => 0);
+  }
+
+  // ---------------------------------------------------------------------
+  // Plan capacity: how many always-on agents with a hosted home may be on
+  // at once. Agents on the owner's own machines, or with no machine, are
+  // never counted and never limited, on any plan.
+  // ---------------------------------------------------------------------
+
+  /**
+   * The organization's always-on agents with a hosted home that are on, in
+   * the order the plan counts them: the first turned on first. An agent
+   * turned on before `enabledAt` was recorded counts from when it was made.
+   */
+  async hostedAgentsOn(organizationId: string): Promise<Agent[]> {
+    const rows = await this.agents.find({ where: { organizationId, status: AgentStatus.ACTIVE, mode: 'autonomous' as any } });
+    const since = (a: Agent) => readAlwaysOn(a.alwaysOn)?.enabledAt ?? (a.createdAt ? new Date(a.createdAt).toISOString() : '');
+    return rows
+      .filter((a) => {
+        const c = readAlwaysOn(a.alwaysOn);
+        return !!c?.enabled && hasHostedHome(c);
+      })
+      .sort((a, b) => since(a).localeCompare(since(b)) || a.id.localeCompare(b.id));
+  }
+
+  /**
+   * Whether this agent is beyond the hosted-home agents the plan includes:
+   * null when it is within them, the plan has no limit, or the agent has no
+   * hosted home (then it is never limited), else the numbers the pause names.
+   */
+  async beyondIncluded(agent: Agent, capacity?: AlwaysOnCapacity): Promise<{ included: number; on: number } | null> {
+    if (!hasHostedHome(readAlwaysOn(agent.alwaysOn))) return null;
+    const cap = capacity ?? (await this.capacityFor(agent.organizationId));
+    if (cap.includedAgents === null) return null;
+    const on = await this.hostedAgentsOn(agent.organizationId);
+    const rank = on.findIndex((a) => a.id === agent.id);
+    return rank >= cap.includedAgents ? { included: cap.includedAgents, on: on.length } : null;
+  }
+
+  /**
+   * Turn back on the agents paused because the plan had no room, oldest
+   * pause first, as far as the plan has room for hosted-home agents now. One
+   * without a hosted home takes no room, so it always comes back. Called
+   * when an agent is turned off or paused for another reason, and by the
+   * capacity check (ALWAYS_ON_CAPACITY_JOB), which notices a plan that changed.
+   */
+  async resumeWithinCapacity(organizationId: string): Promise<number> {
+    const all = await this.agents.find({ where: { organizationId, status: AgentStatus.ACTIVE, mode: 'autonomous' as any } });
+    const waiting = all
+      .filter((a) => {
+        const c = readAlwaysOn(a.alwaysOn);
+        return !!c && !c.enabled && c.pausedReason?.code === 'CAPACITY_EXHAUSTED';
+      })
+      .sort((a, b) =>
+        String(readAlwaysOn(a.alwaysOn)?.pausedReason?.detectedAt ?? '').localeCompare(String(readAlwaysOn(b.alwaysOn)?.pausedReason?.detectedAt ?? '')),
+      );
+    if (!waiting.length) return 0;
+    const capacity = await this.capacityFor(organizationId);
+    const on = all.filter((a) => {
+      const c = readAlwaysOn(a.alwaysOn);
+      return !!c?.enabled && hasHostedHome(c);
+    }).length;
+    let room = capacity.includedAgents === null ? Infinity : Math.max(0, capacity.includedAgents - on);
+    const back: Agent[] = [];
+    for (const agent of waiting) {
+      if (!hasHostedHome(readAlwaysOn(agent.alwaysOn))) back.push(agent);
+      else if (room > 0) {
+        back.push(agent);
+        room--;
+      }
+    }
+    let resumed = 0;
+    for (const agent of back) {
+      const config = readAlwaysOn(agent.alwaysOn)!;
+      config.enabled = true;
+      config.pausedReason = null;
+      config.enabledAt = new Date().toISOString();
+      agent.alwaysOn = config as any;
+      await this.agents.save(agent);
+      await this.reconcileTimer(agent, capacity);
+      await this.recordAudit(agent, AuditAction.ALWAYS_ON_ENABLE, null, { resumed: 'capacity' });
+      await this.notifyOwner(
+        agent,
+        'agent.report',
+        `${agent.name} is back on`,
+        'Your plan has room for it again, so Always on was turned back on. It picks up where it left off.',
+      );
+      this.logger.log(`[ALWAYS_ON] Resumed agent ${agent.id}: the plan has room again`);
+      resumed++;
+    }
+    return resumed;
+  }
+
+  /** The capacity check: every organization with an agent waiting for room. */
+  async resumeAllWithinCapacity(): Promise<number> {
+    const agents = await this.agents.find({ where: { status: AgentStatus.ACTIVE, mode: 'autonomous' as any } });
+    const orgs = new Set(
+      agents.filter((a) => readAlwaysOn(a.alwaysOn)?.pausedReason?.code === 'CAPACITY_EXHAUSTED').map((a) => a.organizationId),
+    );
+    let resumed = 0;
+    for (const org of orgs) {
+      resumed += await this.resumeWithinCapacity(org).catch((err: any) => {
+        this.logger.warn(`[ALWAYS_ON] Could not resume agents of organization ${org}: ${err?.message ?? err}`);
+        return 0;
+      });
+    }
+    return resumed;
+  }
+
+  /** The repeatable capacity check, replaced at boot. */
+  private async scheduleCapacityCheck(): Promise<void> {
+    await this.queue.add(
+      ALWAYS_ON_CAPACITY_JOB,
+      {},
+      { repeat: { every: capacityCheckMinutes() * 60_000 }, jobId: 'always-on-capacity', removeOnComplete: 10, removeOnFail: 10 },
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // The daily summary
+  // ---------------------------------------------------------------------
+
+  private digestJobId(agentId: string): string {
+    return `always-on-digest-${agentId}`;
+  }
+
+  /** When this agent's summary goes out (always-on-digest.ts). */
+  async digestTimingFor(agent: Agent, config: AlwaysOnConfig | null): Promise<DigestTiming> {
+    const org = await this.organizations
+      .findOne({ where: { id: agent.organizationId }, select: { id: true, settings: true } as any })
+      .catch(() => null);
+    const ownerId = agentOwnerUserId(agent);
+    const owner = ownerId && this.users
+      ? await this.users.findOne({ where: { id: ownerId }, select: { id: true, timezone: true } as any }).catch(() => null)
+      : null;
+    return digestTiming(config, org, owner?.timezone ?? null);
+  }
+
+  /**
+   * The daily summary (`report: 'daily_digest'`): one message about the
+   * last 24 hours, where the reports go and to the owner's notifications.
+   * Nothing on a day with nothing in it, and once a day however often the
+   * queue fires.
+   */
+  async digest(agentId: string, organizationId: string, firedAt = new Date()): Promise<'posted' | 'quiet' | 'off' | 'already'> {
+    const agent = await this.agents.findOne({ where: { id: agentId, organizationId } });
+    const config = readAlwaysOn(agent?.alwaysOn);
+    if (!agent || !config?.enabled || config.report !== 'daily_digest') {
+      await this.removeDigest(agentId);
+      return 'off';
+    }
+    const timing = await this.digestTimingFor(agent, config);
+    const once = await this.redis.set(`always-on:digest:${agentId}:${localDay(firedAt, timing.timezone)}`, firedAt.toISOString(), 'PX', 2 * DIGEST_WINDOW_MS, 'NX');
+    if (once !== 'OK') return 'already';
+
+    const since = new Date(firedAt.getTime() - DIGEST_WINDOW_MS);
+    const wakes = await this.wakes.find({ where: { agentId, createdAt: MoreThan(since) } });
+    const runs = (await this.runs.find({ where: { agentId, organizationId, createdAt: MoreThan(since) } })).filter(
+      (r) => r.metadata?.triggerType === 'always_on',
+    );
+    const live = await this.liveRun(agent);
+    const waiting = live?.status === AgentRunStatus.WAITING_APPROVAL ? await this.waitingFor(live) : [];
+    let base = process.env.FRONTEND_URL || 'https://app.almyty.com';
+    while (base.endsWith('/')) base = base.slice(0, -1);
+    const text = digestText({
+      agentName: agent.name,
+      wakes: wakes.map((w) => ({ source: w.source, status: w.status })),
+      runs: runs.map((r) => ({ status: r.status })),
+      acted: await this.actedOn(runs),
+      waiting,
+      approvalsUrl: `${base}/approvals`,
+      agentUrl: `${base}/agents/${agent.id}/always-on`,
+    });
+    if (!text) return 'quiet';
+
+    const poster = this.poster();
+    if (poster && config.reportTo) {
+      await poster.post(
+        agent,
+        { kind: 'digest', id: agent.id, status: 'completed', output: text, userId: agentOwnerUserId(agent), metadata: { triggerType: 'always_on' } },
+        config.reportTo,
+        { timezone: timing.timezone },
+      );
+    }
+    await this.notifyOwner(agent, 'agent.report', `${agent.name}: daily summary`, text, `/agents/${agent.id}/always-on`, { digest: true });
+    return 'posted';
+  }
+
+  /** Tools that change something, and how often the runs used each. */
+  private async actedOn(runs: AgentRun[]): Promise<Array<{ name: string; times: number }>> {
+    const counts = new Map<string, number>();
+    for (const run of runs) {
+      for (const s of (run.steps ?? []) as any[]) {
+        if (s?.type !== 'tool_call' || s.error || s.output?.status === 'waiting_approval') continue;
+        const id = s.input?.toolId;
+        if (typeof id === 'string') counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    }
+    if (!counts.size) return [];
+    const tools = await this.tools.find({ where: { id: In([...counts.keys()]) } as any });
+    return tools
+      .filter((t) => !isReadOnlyTool(t as any))
+      .map((t) => ({ name: t.name, times: counts.get(t.id) ?? 0 }))
+      .sort((a, b) => b.times - a.times || a.name.localeCompare(b.name));
+  }
+
+  /** What a run waiting for approval waits on: the tools it asked about, by name. */
+  private async waitingFor(run: AgentRun): Promise<string[]> {
+    const ids = [
+      ...new Set(
+        ((run.steps ?? []) as any[])
+          .filter((s) => s?.type === 'tool_call' && s.output?.status === 'waiting_approval')
+          .map((s) => s.input?.toolId)
+          .filter((id): id is string => typeof id === 'string'),
+      ),
+    ];
+    if (!ids.length) return ['something it wants to do'];
+    const tools = await this.tools.find({ where: { id: In(ids) } as any });
+    const names = tools.map((t) => t.name);
+    return names.length ? names : ['something it wants to do'];
+  }
+
+  async removeDigest(agentId: string): Promise<void> {
+    try {
+      const jobs = await this.queue.getRepeatableJobs();
+      for (const job of jobs) {
+        if (job.name === ALWAYS_ON_DIGEST_JOB && job.id === this.digestJobId(agentId)) await this.queue.removeRepeatableByKey(job.key);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not remove the daily summary of agent ${agentId}: ${err?.message ?? err}`);
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -927,12 +1263,14 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       if (poster) {
         for (const delivery of replies) await poster.post(agent, result, delivery);
       }
-      const wantsReport = config?.reportTo && (config.report === 'every_wake' || (await this.acted(run)));
+      // A daily summary reports once a day (digest), not after each run.
+      const perRun = config?.report !== 'daily_digest';
+      const wantsReport = perRun && config?.reportTo && (config.report === 'every_wake' || (await this.acted(run)));
       const alreadyThere = replies.some((r) => r.channelId === config?.reportTo?.channelId && r.to === config?.reportTo?.to);
       if (wantsReport && poster && config?.reportTo && !alreadyThere) {
         await poster.post(agent, result, config.reportTo);
       }
-      if (run.status === AgentRunStatus.COMPLETED && (config?.report === 'every_wake' || (await this.acted(run)))) {
+      if (run.status === AgentRunStatus.COMPLETED && perRun && (config?.report === 'every_wake' || (await this.acted(run)))) {
         const text = typeof run.output === 'string' ? run.output : (run.output as any)?.text ?? '';
         await this.notifyOwner(agent, 'agent.report', `${agent.name} reported`, bounded(String(text || 'It finished a wake.'), 280), `/agents/${agent.id}/runs/${run.id}`);
       } else if (run.status !== AgentRunStatus.COMPLETED) {
@@ -979,7 +1317,15 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async notifyOwner(agent: Agent, type: 'agent.report' | 'agent.paused' | 'run.failed', title: string, body: string, link?: string): Promise<void> {
+  private async notifyOwner(
+    agent: Agent,
+    type: 'agent.report' | 'agent.paused' | 'run.failed',
+    title: string,
+    body: string,
+    link?: string,
+    // What the email says besides: a daily summary (digest), a pause that ends on its own (resumesItself).
+    emailExtra?: { digest?: boolean; resumesItself?: boolean },
+  ): Promise<void> {
     const owner = agentOwnerUserId(agent);
     if (!owner || !this.notifications) return;
     const path = link ?? `/agents/${agent.id}`;
@@ -994,7 +1340,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         body,
         link: path,
         // The email, for whoever has it on: the agent, what happened, and a link.
-        email: { template: type, params: { agentName: agent.name, message: body, error: body, agentUrl: `${base}${path}`, triggerType: 'always_on' } },
+        email: { template: type, params: { agentName: agent.name, message: body, error: body, agentUrl: `${base}${path}`, triggerType: 'always_on', ...(emailExtra ?? {}) } },
       } as any)
       .catch(() => undefined);
   }

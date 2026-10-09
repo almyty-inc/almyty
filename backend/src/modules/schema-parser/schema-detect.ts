@@ -260,11 +260,24 @@ function pickAuth(
     }
   }
   const order = [...named, ...Object.keys(schemes)];
+  // An OAuth flow almyty cannot run itself (implicit, password, OpenID
+  // Connect) falls back to "paste a token". When the description offers a
+  // sign-in almyty can run as an alternative (Google lists implicit first,
+  // then authorization code), that one wins.
+  let tokenFallback: DetectedAuth | null = null;
   for (const name of order) {
-    const mapped = schemes[name] ? map(schemes[name]) : null;
-    if (mapped) return mapped;
+    const scheme = schemes[name];
+    const mapped = scheme ? map(scheme) : null;
+    if (!mapped) continue;
+    const signInFallback = mapped.type === 'bearer' && (scheme.type === 'oauth2' || scheme.type === 'openIdConnect');
+    // Only another OAuth sign-in replaces the fallback; a key declared next to it does not.
+    if (!signInFallback) {
+      if (tokenFallback && mapped.type !== 'oauth2') return tokenFallback;
+      return mapped;
+    }
+    tokenFallback ??= mapped;
   }
-  return { type: 'none' };
+  return tokenFallback ?? { type: 'none' };
 }
 
 function apiKeyAuth(scheme: any): DetectedAuth | null {

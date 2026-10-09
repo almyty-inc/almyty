@@ -24,7 +24,7 @@ vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
 vi.mock('@/lib/api', () => ({
   apisApi: { getKey: vi.fn(), setKey: vi.fn(), removeKey: vi.fn() },
-  credentialsApi: { oauth2Authorize: vi.fn(), oauth2ClientCredentials: vi.fn() },
+  credentialsApi: { oauth2Authorize: vi.fn(), oauth2ClientCredentials: vi.fn(), oauth2CallbackUrl: vi.fn().mockResolvedValue({ callbackUrl: 'https://api.example.com/credentials/oauth2/callback' }) },
   organizationsApi: { getById: vi.fn().mockResolvedValue({ id: 'org-1', plan: 'free', settings: {} }) },
 }))
 vi.mock('@/lib/connections-api', async () => {
@@ -180,6 +180,7 @@ describe('the Key card', () => {
       }),
     )
     vi.mocked(credentialsApi.oauth2Authorize).mockResolvedValue({ authorizationUrl: 'https://auth.cal.example.com/authorize?state=s', state: 's' })
+    vi.mocked(credentialsApi.oauth2CallbackUrl).mockResolvedValue({ callbackUrl: 'https://api.example.com/credentials/oauth2/callback' })
     const assign = vi.fn()
     const original = window.location
     Object.defineProperty(window, 'location', { value: { ...original, assign }, configurable: true })
@@ -191,6 +192,9 @@ describe('the Key card', () => {
       expect(screen.getByRole('combobox', { name: 'Sign-in' })).toBeInTheDocument()
       expect(screen.queryByLabelText('Client ID')).not.toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: 'Create one here' }))
+      // The app there has to list where the sign-in comes back, or the provider refuses it.
+      expect(await screen.findByText('https://api.example.com/credentials/oauth2/callback')).toBeInTheDocument()
+      expect(screen.getByText(/add this as an allowed redirect address/)).toBeInTheDocument()
       expect(screen.getByText(/Sign in at auth.cal.example.com/)).toBeInTheDocument()
       await user.type(screen.getByLabelText('Client ID'), 'cid')
       await user.type(screen.getByLabelText('Client secret'), 'csecret')

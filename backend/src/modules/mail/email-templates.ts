@@ -280,29 +280,43 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     ),
   }),
 
+  // An always-on agent's report: after a wake, or (digest) its daily summary, one line a paragraph.
   'agent.report': (p) => ({
-    subject: sanitizeSubject(`${p.agentName || 'Your agent'} reported`),
+    subject: sanitizeSubject(p.digest ? `${p.agentName || 'Your agent'}: daily summary` : `${p.agentName || 'Your agent'} reported`),
     html: renderBaseLayout({
-      heading: `${p.agentName || 'Your always-on agent'} finished a wake`,
-      bodyHtml: para(esc(String(p.message || 'It finished a wake.').slice(0, 1000))),
-      button: p.agentUrl ? { label: 'See what it did', url: p.agentUrl } : undefined,
+      heading: p.digest ? `${p.agentName || 'Your always-on agent'}: the last 24 hours` : `${p.agentName || 'Your always-on agent'} finished a wake`,
+      bodyHtml: p.digest
+        ? String(p.message || '')
+            .slice(0, 3000)
+            .split('\n')
+            .filter((line) => line.trim())
+            .map((line) => para(esc(line)))
+            .join('')
+        : para(esc(String(p.message || 'It finished a wake.').slice(0, 1000))),
+      button: p.agentUrl ? { label: p.digest ? 'Open its page' : 'See what it did', url: p.agentUrl } : undefined,
       footerNote: 'You are receiving this because agent report emails are enabled in your notification preferences.',
       orgName: p.organizationName,
     }),
-    text: flattenText(`${p.agentName || 'Your agent'} reported: ${p.message || 'it finished a wake'}.${p.agentUrl ? ` See: ${p.agentUrl}` : ''}`),
+    // The summary keeps its lines; a wake's report is one line.
+    text: p.digest
+      ? String(p.message || '').replace(/\r/g, '').slice(0, 3000).trim()
+      : flattenText(`${p.agentName || 'Your agent'} reported: ${p.message || 'it finished a wake'}.${p.agentUrl ? ` See: ${p.agentUrl}` : ''}`),
   }),
 
+  // An always-on agent paused itself. A pause for plan room (resumesItself) ends on its own.
   'agent.paused': (p) => ({
     subject: sanitizeSubject(`${p.agentName || 'Your agent'} was paused`),
     html: renderBaseLayout({
-      heading: `${p.agentName || 'Your always-on agent'} stopped itself`,
+      heading: p.resumesItself ? `${p.agentName || 'Your always-on agent'} was paused` : `${p.agentName || 'Your always-on agent'} stopped itself`,
       bodyHtml:
         para(esc(String(p.message || 'Always on was paused.').slice(0, 1000))) +
-        para('Nothing runs until you look at it and turn Always on back on.'),
+        para(p.resumesItself ? 'It turns back on by itself when your plan has room again.' : 'Nothing runs until you look at it and turn Always on back on.'),
       button: p.agentUrl ? { label: 'Open the agent', url: p.agentUrl } : undefined,
       orgName: p.organizationName,
     }),
-    text: flattenText(`${p.agentName || 'Your agent'} was paused: ${p.message || ''} Nothing runs until you turn Always on back on.${p.agentUrl ? ` Open: ${p.agentUrl}` : ''}`),
+    text: flattenText(
+      `${p.agentName || 'Your agent'} was paused: ${p.message || ''} ${p.resumesItself ? 'It turns back on by itself when your plan has room again.' : 'Nothing runs until you turn Always on back on.'}${p.agentUrl ? ` Open: ${p.agentUrl}` : ''}`,
+    ),
   }),
 
   'budget.alert': (p) => {

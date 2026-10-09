@@ -618,9 +618,11 @@ script) can still start anything. The boundary is the pod.
 - In the app: `allowVendorKeys` on the environment page, the
   `runnerUsageDays` field in the Data retention card, and the two new
   notification types in the notification list.
-- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.3,
-  which has no `--enroll`, so the push job refuses until the pin moves to
-  the first release that has it.
+- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.4,
+  the first release with `--enroll`; the push job refuses until 1.5.4 is
+  on npm. The entrypoint points the CLIs at the model proxy only when the
+  image's runner has it (`dist/model-proxy.js`); with an older runner the
+  CLIs get the pod token directly and lose it at its first renewal.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - The grant's switch on the provider page (the API takes `hostedPodAccess`).

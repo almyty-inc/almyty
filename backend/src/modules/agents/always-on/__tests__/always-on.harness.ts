@@ -27,14 +27,16 @@ export const TOOL_READ = '88888888-8888-4888-8888-888888888888';
 export const TOOL_WRITE = '99999999-9999-4999-8999-999999999999';
 
 export function fakeQueue() {
-  const repeatable: Array<{ key: string; name: string; id: string; every: number; next: number }> = [];
+  const repeatable: Array<{ key: string; name: string; id: string; every?: number; cron?: string; tz?: string; next: number; data?: any }> = [];
   const added: Array<{ name: string; data: any; opts: any }> = [];
   return {
     repeatable,
     added,
     add: jest.fn(async (name: string, data: any, opts: any = {}) => {
       if (opts.repeat) {
-        repeatable.push({ key: `${name}:${opts.jobId}:${opts.repeat.every}`, name, id: opts.jobId, every: opts.repeat.every, next: Date.now() + opts.repeat.every });
+        // Bull keys a repeatable job by its name, id and repeat (an interval or a cron and zone).
+        const { every, cron, tz } = opts.repeat;
+        repeatable.push({ key: `${name}:${opts.jobId}:${every ?? `${cron}:${tz}`}`, name, id: opts.jobId, every, cron, tz, next: Date.now() + (every ?? 60_000), data });
       } else {
         added.push({ name, data, opts });
       }
@@ -73,6 +75,7 @@ export interface World {
   tools: FakeRepository<any>;
   messages: FakeRepository<any>;
   grants: FakeRepository<any>;
+  users: FakeRepository<any>;
   queue: ReturnType<typeof fakeQueue>;
   redis: ReturnType<typeof fakeRedis>;
   startRun: jest.Mock;
@@ -111,7 +114,14 @@ export function alwaysOnAgent(overrides: Record<string, any> = {}, alwaysOn: Rec
 }
 
 export function world(
-  options: { plan?: string; agent?: Record<string, any> | null; ownerIsMember?: boolean; identityLicensed?: boolean } = {},
+  options: {
+    plan?: string;
+    agent?: Record<string, any> | null;
+    ownerIsMember?: boolean;
+    identityLicensed?: boolean;
+    /** The owner's profile time zone. */
+    ownerZone?: string | null;
+  } = {},
 ): World {
   const agents = fakeRepository<any>(options.agent === null ? [] : [options.agent ?? alwaysOnAgent()]);
   const wakes = fakeRepository<any>({ make: () => new AgentWake(), idPrefix: 'wake' });
@@ -127,6 +137,7 @@ export function world(
   ]);
   const messages = fakeRepository<any>({ idPrefix: 'msg' });
   const grants = fakeRepository<any>([]);
+  const users = fakeRepository<any>([{ id: OWNER, timezone: options.ownerZone ?? null }]);
   const queue = fakeQueue();
   const redis = fakeRedis();
   const membership = membershipFixture();
@@ -187,8 +198,9 @@ export function world(
     audit as any,
     // The real resolution, with the plan's agent_identity as the world says.
     new AgentIdentityService({ hasForOrg: async () => options.identityLicensed === true } as any),
+    users as any,
   );
-  return { service, agents, wakes, runs, channels, organizations, tools, messages, grants, queue, redis, startRun, sendInput, approvals, posted, notified, audited, membership };
+  return { service, agents, wakes, runs, channels, organizations, tools, messages, grants, users, queue, redis, startRun, sendInput, approvals, posted, notified, audited, membership };
 }
 
 /** Finish a run the way the step processor leaves one. */

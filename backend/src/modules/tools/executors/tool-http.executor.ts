@@ -329,7 +329,12 @@ export class ToolHttpExecutor {
         return this.blockedResult(api.baseUrl, operation.method, baseUrlCheck.error!, Date.now());
       }
 
-      let url = `${api.baseUrl}${operation.endpoint}`;
+      // One slash between the two, as the httpConfig path above does. Google
+      // publishes servers ending in "/" (https://gmail.googleapis.com/) and
+      // paths starting with one, which made "//gmail/v1/..." on every call.
+      let url = operation.endpoint
+        ? `${api.baseUrl.replace(/(?<!\/)\/+$/, '')}/${operation.endpoint.replace(/^\/+/, '')}`
+        : api.baseUrl;
       let pathParams: Record<string, any> = {};
       let queryParams: Record<string, any> = {};
       let headerParams: Record<string, any> = {};

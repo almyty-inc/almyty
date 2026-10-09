@@ -47,13 +47,37 @@ the builder), then **Set up always on**. You choose:
 
   Your approval rules (for example "ask before a refund over 500") apply
   either way.
-- **Reports.** A channel to post reports to, and whether it reports after
-  every wake or only when it did something. Reports also show on the
-  agent's page and in your notifications. When it is waiting for your OK,
-  it says so there too.
+- **Reports.** A channel to post reports to, and when it reports: after
+  every wake, only when it did something, or **once a day, a short summary
+  of what it did** (see [The daily summary](#the-daily-summary)). Reports
+  also show on the agent's page and in your notifications. When it is
+  waiting for your OK, it says so there too.
 
-The card then shows what wakes it, what it may do, when it last woke and
-why, and when the timer fires next. **Wake now** wakes it straight away.
+The card then shows what wakes it, what it may do, when it reports, when it
+last woke and why, and when the timer fires next. **Wake now** wakes it
+straight away.
+
+## The daily summary
+
+With **Once a day, a short summary of what it did**, it no longer reports
+after each wake. Once a day, at the time you pick, it sends one short
+message about the last 24 hours instead:
+
+- how often it was woken, and by what: its timer, a webhook, a message, you;
+- how its work ended: finished, stopped before finishing, or still going;
+- what it changed (the tools it used that change something), or that it
+  only looked things up;
+- what is waiting for your OK, with a link to **Approvals**.
+
+A day it did nothing sends nothing.
+
+The summary goes to the channel you picked and to your notifications. To
+get it by email, turn on email for agent reports in your notification
+settings. Two things still come straight away: its answers to your own
+messages, and a note when it is waiting for your OK.
+
+You pick the time and the time zone next to the choice, for each agent.
+Until you change them, it goes out at 9:00 in your own time zone.
 
 ## What happens at a wake
 
@@ -84,6 +108,14 @@ The agent page says why, and you get a notification:
   lapses it pauses instead of running as you. Switch it back to acting as
   you, or upgrade, then turn it back on.
 - **Its timer could not be restored after a restart.** Turn it back on.
+- **Your plan has room for fewer always-on agents on almyty-hosted
+  machines than were on.** This only concerns agents that live on an
+  almyty-hosted machine; one on your own machine, or with no machine, is
+  never paused for it. It happens when a plan changes or lapses. The ones
+  turned on last pause first, at their next wake, and the message says how
+  many your plan includes. They turn back on by themselves as soon as there
+  is room: when you turn Always on off for another of them, or your plan
+  includes more. Once there is room you can also turn one back on yourself.
 
 ## Limits
 
@@ -96,5 +128,6 @@ The agent page says why, and you get a notification:
 These are settings, not fixed numbers: an install changes them for any plan
 (`ALWAYS_ON_PLAN_CAPACITY`), and an organization can set tighter ones for
 itself. On machines you run yourself or with no machine at all, the number
-of always-on agents is not limited on any plan; the included count is for
-almyty-hosted machines when they arrive.
+of always-on agents is not limited on any plan, and changing plans never
+pauses one. The included count is for almyty-hosted machines when they
+arrive.

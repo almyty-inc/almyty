@@ -146,8 +146,8 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   // runner version they carry; scripts/check-runner-env-images.js keeps
   // these equal to images/runner-env/settings.json.
   images: {
-    standard: 'almyty/runner-env:standard-1.5.3',
-    'standard-browser': 'almyty/runner-env:standard-browser-1.5.3',
+    standard: 'almyty/runner-env:standard-1.5.4',
+    'standard-browser': 'almyty/runner-env:standard-browser-1.5.4',
   },
   capacity: { maxConcurrentRunners: 2, maxWorkspaces: 10, resourceClasses: null },
   cluster: {

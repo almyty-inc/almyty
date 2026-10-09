@@ -6,9 +6,9 @@
       "id": "agent-builder-autonomous",
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
-      "capturedAt": "2026-10-07T17:20:50.942Z",
+      "capturedAt": "2026-10-08T13:12:52.182Z",
       "status": "current",
-      "sha256": "70e94fe45285b340864c3955b8db8e86458e1af852247c1665eaa2767848f096",
+      "sha256": "a076d677bdcdee97ff184f24db451db9fb3a01c881adb5c1314d573c65911df5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -21,16 +21,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
-      "capturedAt": "2026-10-07T17:20:53.647Z",
+      "capturedAt": "2026-10-08T13:13:00.602Z",
       "status": "current",
-      "sha256": "90ce90323b6eb35a7e84c6bd4c0f2f7e7dc1d6d751180e341f3e18885f1c7dfe",
+      "sha256": "b21fd2f1e59dc4a10e4854c7db7d7fb66a4626ffd0ac63707538b3192faa9d47",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -43,16 +43,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
-      "capturedAt": "2026-10-07T17:20:56.267Z",
+      "capturedAt": "2026-10-08T13:12:57.974Z",
       "status": "current",
-      "sha256": "4213557076754aedaa257bdf9f27f29db5ff31f1b3dd502afbb53e05ed202e83",
+      "sha256": "5e960408371dfd85cf7cce3e48718d0f5b1d7a6feb5115021fb1327500c90f64",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -65,16 +65,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
-      "capturedAt": "2026-10-07T17:20:58.949Z",
-      "status": "current",
-      "sha256": "e5646322127e059bd2b42be008641aba3edfc90f206b2680ec474386fb47d672",
+      "capturedAt": "2026-10-08T13:13:15.552Z",
+      "status": "needs-recapture",
+      "sha256": "1d1f125730f2b927a5c5a886d0414ea766e957c95499becf852233086eee7dd8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -88,16 +88,17 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0a6e3c00ee4a114d5fcf04c778b715bb5a36ecc694fe9f7da56769ff8762d885",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "sourceDigest": "b87ffc8ed972547d96dd85fec2c31eedd4ebc1a0621553f4baa7002b35bed9cd",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
-      "capturedAt": "2026-10-07T17:21:01.648Z",
+      "capturedAt": "2026-10-08T13:12:40.925Z",
       "status": "current",
-      "sha256": "d83348102ea5ab0a32daca6e6c0ce8834a09c6ea2d1772bc16af5b30067dabf4",
+      "sha256": "5c6256703fcef842d15b798f7a8d89dc00275ded2e0727653104d2c726a27a3c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -110,16 +111,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
-      "capturedAt": "2026-10-07T17:21:04.302Z",
+      "capturedAt": "2026-10-08T13:12:35.576Z",
       "status": "current",
-      "sha256": "f1fb2921f62e183d9c4335b216aced25238528a9ed6a442eabd8f5cef3275989",
+      "sha256": "3bd23c5547e84075f2a8a9774f89835218cbd9fe8714ea507852dd53dc21fac6",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -132,16 +133,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
-      "capturedAt": "2026-10-07T17:21:06.886Z",
+      "capturedAt": "2026-10-08T13:12:49.054Z",
       "status": "current",
-      "sha256": "c6bf1377edb58027a51c18856bb42ea76a3e149f6dc83edb820bb31dfdf2762b",
+      "sha256": "c9409603bde3c8105775457a672932639741c5589f9559809442a64cbdab7990",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -154,7 +155,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -182,9 +183,9 @@
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
-      "capturedAt": "2026-10-07T17:21:10.019Z",
+      "capturedAt": "2026-10-08T13:12:55.389Z",
       "status": "current",
-      "sha256": "86e523e4c2a5d908f8c015550d89e4bf2ab746982baa075a8e25e00af507e065",
+      "sha256": "6d713b2830928e7a62a56dad45ba11a358df7d5d89fb921f8920afdfbe8398ad",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -197,16 +198,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
-      "capturedAt": "2026-10-07T17:21:12.707Z",
+      "capturedAt": "2026-10-08T13:12:32.262Z",
       "status": "current",
-      "sha256": "b1f345ae2c9912877e47ae4b5b2a808b790a1be88019671a31f8e49514b87aea",
+      "sha256": "1f8152e172eb40e49a74c1d2f5beb3cf5c6c2ef9997ef318353ad10137ea712f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -219,7 +220,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "663b5bdbcb508a39cf3f3deecf87c1b5081cf4be71500d22bcdf6386f5e101a3",
+      "sourceDigest": "d69f90e8bf2b1070627c708792faf286ac95bb6503c217fe54e3105dfe6f1185",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -359,7 +360,7 @@
       "title": "APIs list",
       "path": "screenshots/apis-list.png",
       "capturedAt": "2026-10-07T15:44:45.285Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4eebd1c73a52d2c37575347488b8a451a3d9a8b9e1d367ff4dbc9e693183e8f8",
       "source": {
         "kind": "browser",
@@ -374,14 +375,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6217f23d569bf8e627e96ba2d0bb1cf4636ef659299e73281a6dea6311c6f9bc",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: the OAuth sign-in form shows the redirect address to register (no change for keys). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "approval-refund-820",
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
       "capturedAt": "2026-10-07T15:46:29.589Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3850600118741a55a8d5cec32424c918cfc08925c2daa943fc045066ca10ea8e",
       "source": {
         "kind": "browser",
@@ -396,14 +398,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c27de57b83d3fa5d94a0b3d770eaed6c8f32df48960544e3087f1c4565b706fd",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: Approvals shows a readable preview above the action details when a held call sends an email (no change for other requests). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "approvals-change-set",
       "title": "A script's changes in Approvals",
       "path": "screenshots/approvals-change-set.png",
       "capturedAt": "2026-10-07T13:18:53.006Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "651db136e46e0f3890fc658bb28760a7a9aa2ed364465e956b88f27d0108a427",
       "source": {
         "kind": "browser",
@@ -417,14 +420,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "ce760fd03b4ff475a06e45e96228795689b1c0274e81d83dc15af541f749963e",
-      "notes": "Browser capture of the isolated local demo. Script trace and change set use explicitly seeded screenshot fixtures, not a claim of a real model run."
+      "notes": "Browser capture of the isolated local demo. Script trace and change set use explicitly seeded screenshot fixtures, not a claim of a real model run.",
+      "reason": "A source changed: Approvals shows a readable preview above the action details when a held call sends an email (no change for other requests). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
       "capturedAt": "2026-10-07T15:45:56.411Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3850600118741a55a8d5cec32424c918cfc08925c2daa943fc045066ca10ea8e",
       "source": {
         "kind": "browser",
@@ -439,7 +443,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c27de57b83d3fa5d94a0b3d770eaed6c8f32df48960544e3087f1c4565b706fd",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: Approvals shows a readable preview above the action details when a held call sends an email (no change for other requests). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -475,13 +480,13 @@
       "id": "builder-code-step",
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
-      "capturedAt": "2026-10-07T17:23:00.292Z",
+      "capturedAt": "2026-10-08T13:20:39.476Z",
       "status": "current",
-      "sha256": "198ce857bdf7c08ebff7161d3795b767a475d9421c513ab7f02a678bd34688b4",
+      "sha256": "9aa62b5778a464de5d85cf74519004b3d9de4123956a9018e3fa62131b804725",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/a84e059f-7afc-4b3a-875e-91df1d9eb6a7/edit"
+        "route": "/agents/:id/edit"
       },
       "sources": [
         "frontend/src/pages/agent-builder.tsx",
@@ -489,15 +494,15 @@
         "frontend/src/components/ui",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6d34980842619c7b021005c0395ed1177660517b88dae4006424e24e284f93ec",
-      "notes": "Recaptured the existing local seeded demo gateway after repairs; no external changes approved. Code mode remains disabled in this demo."
+      "sourceDigest": "7514672188c7fc88f1efad3a1b8340b9be31c4a6430a630518f900a42779cd12",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed); the Pet store keeper workflow recreated with an Input and a Code step; code mode is not enabled in this demo."
     },
     {
       "id": "channel-branding-rules",
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
       "capturedAt": "2026-10-07T15:43:16.355Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b4a8adbd8c40a1edb080b8c48415e4c16d9dcb854c13cb1253b4e402aaf7cdd7",
       "source": {
         "kind": "browser",
@@ -512,14 +517,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "835aec6a3f72693df4683a8095b716ec7d6d348d0da990eec9b7c97244ec597d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
       "capturedAt": "2026-10-07T15:43:22.501Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c5cf5724ab59c845cb7d6624f3344d6021bb9f65213d493f9fb2915ae28042a5",
       "source": {
         "kind": "browser",
@@ -534,14 +540,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3600ed0dee084a4b6a6f7701890abb022a78535865dcc453e740cc59dd22c533",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
       "capturedAt": "2026-10-07T15:43:25.840Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4ec3b1bfb8c21dff7b06d93d33aaeacfbca46e1a39a62e9dad3f2a830ad1278f",
       "source": {
         "kind": "browser",
@@ -556,14 +563,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3600ed0dee084a4b6a6f7701890abb022a78535865dcc453e740cc59dd22c533",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
       "capturedAt": "2026-10-07T15:43:28.686Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d0b46781cf78ad8fef67c5704896b155ddd09499a84e492d7fa328438dac14e1",
       "source": {
         "kind": "browser",
@@ -578,14 +586,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3600ed0dee084a4b6a6f7701890abb022a78535865dcc453e740cc59dd22c533",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
       "capturedAt": "2026-10-07T15:43:19.691Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "af8b0f4c29deafeb4252949345530c376e0027c121adebf3d5de4f9a78bba02d",
       "source": {
         "kind": "browser",
@@ -600,14 +609,16 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3600ed0dee084a4b6a6f7701890abb022a78535865dcc453e740cc59dd22c533",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "cli-agents-help",
       "title": "Agents CLI 1.5.3 help",
       "path": "screenshots/cli/agents-help.png",
       "capturedAt": "2026-10-08T09:55:22.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.3; recapture from published 1.5.4",
       "sha256": "4d6c4ece5abc3d51f555037a4bcae4d96409d7007457052ac503020305bc37b7",
       "source": {
         "kind": "published-cli",
@@ -626,7 +637,8 @@
       "title": "almyty CLI 1.5.3 help",
       "path": "screenshots/cli/almyty-help.png",
       "capturedAt": "2026-10-08T09:55:22.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.3; recapture from published 1.5.4",
       "sha256": "db9dfbfedbce51fe80009360edaca3984067f9a5752985d0aa3d1f67ab20c76b",
       "source": {
         "kind": "published-cli",
@@ -645,7 +657,8 @@
       "title": "Auth CLI 1.5.3 help",
       "path": "screenshots/cli/auth-help.png",
       "capturedAt": "2026-10-08T09:55:22.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.3; recapture from published 1.5.4",
       "sha256": "b25222a1a669338dfb9185018f837fd0b07a8773c720d47a2cad0b4729b8f616",
       "source": {
         "kind": "published-cli",
@@ -664,7 +677,8 @@
       "title": "Chat CLI 1.5.3 help",
       "path": "screenshots/cli/chat-help.png",
       "capturedAt": "2026-10-08T09:55:22.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.3; recapture from published 1.5.4",
       "sha256": "fcd79a5397fb035862bf2c445fc08921cfca557bd7eecfc5847c41cab8d700dd",
       "source": {
         "kind": "published-cli",
@@ -683,7 +697,8 @@
       "title": "MCP server CLI 1.5.3 help",
       "path": "screenshots/cli/mcp-server-help.png",
       "capturedAt": "2026-10-08T09:55:22.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.3; recapture from published 1.5.4",
       "sha256": "34ce2355cb8e9621e3ad2feffc285256fbc0df92a43b1af352f3e08aec210205",
       "source": {
         "kind": "published-cli",
@@ -702,7 +717,8 @@
       "title": "Skills CLI 1.5.3 help",
       "path": "screenshots/cli/skills-help.png",
       "capturedAt": "2026-10-08T09:55:22.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.3; recapture from published 1.5.4",
       "sha256": "6c18746c1b8d9f7bb455c52c95d652fda2ca5d0dd8f087552a96347274c1aba3",
       "source": {
         "kind": "published-cli",
@@ -964,7 +980,7 @@
       "title": "Connect your intranet",
       "path": "screenshots/guides/helpdesk-1-connect-intranet.png",
       "capturedAt": "2026-10-07T16:08:08.572Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "73669d2f6a54ce4fd078ad0befc3837c5d061721ec9b26469abf6a926e1158d6",
       "source": {
         "kind": "browser",
@@ -979,7 +995,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bda2ca068fcdc032a797fe7f7e82c2968d8107f44c63d46717b747e099232bb9",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: the OAuth sign-in form shows the redirect address to register (no change for keys). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-helpdesk-2-office-guide",
@@ -1007,9 +1024,9 @@
       "id": "guides-helpdesk-3-agent",
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
-      "capturedAt": "2026-10-07T17:23:37.864Z",
+      "capturedAt": "2026-10-08T12:30:05.500Z",
       "status": "current",
-      "sha256": "b9edd40dc3b9abf55a687e7bfc2d1c4e3940f6ee01f2b35aa3226c6158988b73",
+      "sha256": "64d2947d50c007233f8e8683444789f7632159d823529215b1b62d51e4c937df",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1022,16 +1039,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-4-leave",
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
-      "capturedAt": "2026-10-07T17:23:46.832Z",
+      "capturedAt": "2026-10-08T12:30:14.467Z",
       "status": "current",
-      "sha256": "9dca4db6fb76e6d039fb026eaa3e28a464d375f8ce93ec8129aba5c8e0d83007",
+      "sha256": "aef95cb86ea85ee6b7b34fc3a97ac2dde777540a6fc2015fce87f1e7972f8715",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1044,16 +1061,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
-      "capturedAt": "2026-10-07T17:23:48.911Z",
+      "capturedAt": "2026-10-08T12:30:16.552Z",
       "status": "current",
-      "sha256": "8b455f8cf9fb187695a94de5cb93a31565b55eee301368263171f23a884a3f97",
+      "sha256": "0099f804bef1747281fd0e51a2bcfcd797ab78796d10ffdb6355727d9bc8fdf7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1066,7 +1083,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1074,7 +1091,7 @@
       "title": "Add Microsoft Teams",
       "path": "screenshots/guides/helpdesk-6-teams.png",
       "capturedAt": "2026-10-07T17:23:54.626Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1aa584e185c70c0683086c75bec7b6f4a85b272748890b14cd8e9d9103721bb9",
       "source": {
         "kind": "browser",
@@ -1090,14 +1107,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bbe015e35424ce7f79946eea190bf136f4632784880f2a7fb546353904bc7bc0",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-marketing-1-connect-docs",
       "title": "Connect your help center",
       "path": "screenshots/guides/marketing-1-connect-docs.png",
       "capturedAt": "2026-10-07T16:06:47.938Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "48265cbf4a00c471879924b7c13d11befc24732fa81c4adb3342065d64e35259",
       "source": {
         "kind": "browser",
@@ -1112,15 +1130,16 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bda2ca068fcdc032a797fe7f7e82c2968d8107f44c63d46717b747e099232bb9",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: the OAuth sign-in form shows the redirect address to register (no change for keys). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-marketing-2-agent",
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
-      "capturedAt": "2026-10-07T17:21:20.247Z",
+      "capturedAt": "2026-10-08T12:28:34.172Z",
       "status": "current",
-      "sha256": "a40c7684fa1fc74d7cdebcc38520555635d2acfb60f3940eff9a9fecd33e729f",
+      "sha256": "a815df766694c462af392bab6749274d72083c6e8be136342d44e58e2c0b11f4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1133,16 +1152,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-3-try",
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
-      "capturedAt": "2026-10-07T17:21:29.255Z",
+      "capturedAt": "2026-10-08T12:28:43.182Z",
       "status": "current",
-      "sha256": "186c36779e25b29c73d5876b8f9427d0e3100cdeba9e4f755c8f3c49c519a1a9",
+      "sha256": "b62a384e1baebcd8df07e96a94f885c5c75267c377c8ae48dc9aedb5b663d8e3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1155,7 +1174,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1163,7 +1182,7 @@
       "title": "A daily spending cap for visitors",
       "path": "screenshots/guides/marketing-4-limits.png",
       "capturedAt": "2026-10-07T17:21:32.117Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4f25706057235abeaa8e5409037c7690b75a94ee4c6febc4f4b618a8e3f0b657",
       "source": {
         "kind": "browser",
@@ -1178,14 +1197,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "835aec6a3f72693df4683a8095b716ec7d6d348d0da990eec9b7c97244ec597d",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-marketing-5-widget",
       "title": "The chat bubble, only on your own site",
       "path": "screenshots/guides/marketing-5-widget.png",
       "capturedAt": "2026-10-07T17:21:48.942Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1e1a5bb427038fe3f2298ab2744f680e861cbd2f32e532e2e725065181fd00cf",
       "source": {
         "kind": "browser",
@@ -1201,7 +1221,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcacfddcdc936571657343d60a19cfbaa2ad942a3ee9e7336719813e362d535c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-marketing-6-visitor",
@@ -1230,7 +1251,7 @@
       "title": "Connect the system you check",
       "path": "screenshots/guides/ops-1-connect-status.png",
       "capturedAt": "2026-10-07T16:07:29.092Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c7390096fbc210942c75f2c953f6d6542c9befd1203a0e13f7e0642ebc563403",
       "source": {
         "kind": "browser",
@@ -1245,15 +1266,16 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bda2ca068fcdc032a797fe7f7e82c2968d8107f44c63d46717b747e099232bb9",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: the OAuth sign-in form shows the redirect address to register (no change for keys). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-ops-2-agent",
       "title": "The nightly check and its status tools",
       "path": "screenshots/guides/ops-2-agent.png",
-      "capturedAt": "2026-10-07T17:21:19.011Z",
+      "capturedAt": "2026-10-08T12:29:19.363Z",
       "status": "current",
-      "sha256": "54fa6be319a2b2759c5bd48e0f7834455780057084b2b14100510d61c0d2b689",
+      "sha256": "ad2b0fb6f4401e601f6f0d2ae5de3e277d8079547bf06f139063c2a3cae22017",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1266,16 +1288,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-3-try",
       "title": "A test run writes the report",
       "path": "screenshots/guides/ops-3-try.png",
-      "capturedAt": "2026-10-07T17:21:28.048Z",
+      "capturedAt": "2026-10-08T12:29:28.366Z",
       "status": "current",
-      "sha256": "1cf0344de41136d0ecfccb7ebd69afb9e0a1d157d7c612a84a0f6eab702ce9ed",
+      "sha256": "1865fa24af6615f3a6337056b16e0db4e1f5a1ac821aa0981f9c193c7aab493d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1288,7 +1310,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1296,7 +1318,7 @@
       "title": "Slack, published for the report",
       "path": "screenshots/guides/ops-4-slack.png",
       "capturedAt": "2026-10-07T17:21:39.561Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f1f452fdf91abefb2d388c0523d154c4e2ce54b1396c42ab3e01b6bb242a11da",
       "source": {
         "kind": "browser",
@@ -1312,7 +1334,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bbe015e35424ce7f79946eea190bf136f4632784880f2a7fb546353904bc7bc0",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-ops-5-schedule",
@@ -1363,9 +1386,9 @@
       "id": "guides-ops-7-report-run",
       "title": "A report run, step by step",
       "path": "screenshots/guides/ops-7-report-run.png",
-      "capturedAt": "2026-10-07T17:21:49.857Z",
+      "capturedAt": "2026-10-08T12:29:50.248Z",
       "status": "current",
-      "sha256": "d0d5abd7748ac8f276983d360ab11f641855d23c0534543d2394d1340e4519b6",
+      "sha256": "62d905b5f0278956deb547e39ce4ed66f19424401aaa136766146fdc31ff248d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1378,7 +1401,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1386,7 +1409,7 @@
       "title": "Connect your CRM",
       "path": "screenshots/guides/sales-1-connect-crm.png",
       "capturedAt": "2026-10-07T16:06:18.765Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "15599a82fe80cd3abb4d1bb64bb33115a5cc774c4143c3c254f1873cbce266d6",
       "source": {
         "kind": "browser",
@@ -1401,15 +1424,16 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bda2ca068fcdc032a797fe7f7e82c2968d8107f44c63d46717b747e099232bb9",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: the OAuth sign-in form shows the redirect address to register (no change for keys). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-sales-2-agent",
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
-      "capturedAt": "2026-10-07T17:21:20.234Z",
+      "capturedAt": "2026-10-08T12:28:05.062Z",
       "status": "current",
-      "sha256": "e25a19a85df45d5672f1d9e3a9678dfd085e8cbf40cda000eea25b38d4c802f3",
+      "sha256": "797e1dbdca28044deca883bb2304c2aba3117aa414ae0d3f3fbd563b38689ee0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1422,16 +1446,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-3-brief",
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
-      "capturedAt": "2026-10-07T17:21:29.284Z",
+      "capturedAt": "2026-10-08T12:28:14.042Z",
       "status": "current",
-      "sha256": "39453a1699e3e427da851410c86cb7ed8aba65184ee0ac24e11ab58402ed56b8",
+      "sha256": "936bb424cc2d5de8c34a4cfea3768fc6580c073f44542b59441a98da293a6685",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1444,16 +1468,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
-      "capturedAt": "2026-10-07T17:21:31.393Z",
+      "capturedAt": "2026-10-08T12:28:16.151Z",
       "status": "current",
-      "sha256": "6d3339248d66bc320ee99b175542a4fc35338e2e4e0b588f733d264e20fbd799",
+      "sha256": "c57c8d2177574a7017be636971138ff1b3ec72e976c4bbf7c032ed023b4e3469",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1466,7 +1490,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1474,7 +1498,7 @@
       "title": "Add Slack with your Slack app",
       "path": "screenshots/guides/sales-5-slack-keys.png",
       "capturedAt": "2026-10-07T17:21:37.072Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cc0490ed5d7921baa463f9632a892c8ba397dd12e0a849a52359cf52bdd82898",
       "source": {
         "kind": "browser",
@@ -1490,14 +1514,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bbe015e35424ce7f79946eea190bf136f4632784880f2a7fb546353904bc7bc0",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-sales-6-slack-live",
       "title": "Published: the install link and redirect URL",
       "path": "screenshots/guides/sales-6-slack-live.png",
       "capturedAt": "2026-10-07T17:21:40.856Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "628c0a7e25469423213b669afca8ec4ed3a789fef2157957e8190d582ac56b0d",
       "source": {
         "kind": "browser",
@@ -1512,7 +1537,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3600ed0dee084a4b6a6f7701890abb022a78535865dcc453e740cc59dd22c533",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-1-connect-model",
@@ -1542,7 +1568,7 @@
       "title": "Approve the refund",
       "path": "screenshots/guides/support-10-approve.png",
       "capturedAt": "2026-10-07T17:21:43.157Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c54ad3455f6f452679407099ea86c4be52c919feae424c6711a58698fe366278",
       "source": {
         "kind": "browser",
@@ -1556,14 +1582,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b5ce85f79437e82695d5a0581e64485a6f7f72ed0a6a6a84b08cdff58a40e5f8",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: Approvals shows a readable preview above the action details when a held call sends an email (no change for other requests). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-11-add-channel",
       "title": "Pick where customers reach it",
       "path": "screenshots/guides/support-11-add-channel.png",
       "capturedAt": "2026-10-07T17:21:46.329Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0b8d6a2c9f9e797abdc33a93506077ac07c5ae9251063d4bfa0bd521203089b5",
       "source": {
         "kind": "browser",
@@ -1578,14 +1605,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "cea47ad0bdfbed6be65be4ca73d059f4ec54fd231c503b726dff91843d1e22b7",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-12-web-chat",
       "title": "Publish the web chat",
       "path": "screenshots/guides/support-12-web-chat.png",
       "capturedAt": "2026-10-07T17:21:47.070Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "176bf1fd0c66cc552a421cfa08ce748a487b336220722aa5b34555d86b7ac0f2",
       "source": {
         "kind": "browser",
@@ -1600,14 +1628,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3600ed0dee084a4b6a6f7701890abb022a78535865dcc453e740cc59dd22c533",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-13-widget",
       "title": "Put the chat bubble on your website",
       "path": "screenshots/guides/support-13-widget.png",
       "capturedAt": "2026-10-07T17:21:50.837Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "131baca0cce74c02bb71c5dc7c4f58e5972c1aabc872ad9f9020fe42e1f78682",
       "source": {
         "kind": "browser",
@@ -1623,14 +1652,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcacfddcdc936571657343d60a19cfbaa2ad942a3ee9e7336719813e362d535c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-14-whatsapp",
       "title": "Add WhatsApp with your Twilio keys",
       "path": "screenshots/guides/support-14-whatsapp.png",
       "capturedAt": "2026-10-07T17:22:21.537Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "639f5c6e20185bffdb42027dd9e94ee9ce5813911627e35dec3acbdf9b19781e",
       "source": {
         "kind": "browser",
@@ -1646,14 +1676,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bbe015e35424ce7f79946eea190bf136f4632784880f2a7fb546353904bc7bc0",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-15-email",
       "title": "Add email with your Resend key",
       "path": "screenshots/guides/support-15-email.png",
       "capturedAt": "2026-10-07T17:22:27.222Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a8598c073562f6366b8b3ca6f3aeacd05e68ac19e9d2b49c67088701f7825c86",
       "source": {
         "kind": "browser",
@@ -1669,14 +1700,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bbe015e35424ce7f79946eea190bf136f4632784880f2a7fb546353904bc7bc0",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-16-branding",
       "title": "Name, greeting and limits",
       "path": "screenshots/guides/support-16-branding.png",
       "capturedAt": "2026-10-07T17:22:31.486Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "42889d867762cf848391b925f4a8b9b8e0cbca5de9ce89a1e536144a36b56d73",
       "source": {
         "kind": "browser",
@@ -1691,7 +1723,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "835aec6a3f72693df4683a8095b716ec7d6d348d0da990eec9b7c97244ec597d",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-17-customer-view",
@@ -1720,7 +1753,7 @@
       "title": "Connect your order system",
       "path": "screenshots/guides/support-2-connect-orders.png",
       "capturedAt": "2026-10-07T16:04:47.116Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ab37a0a8b40c3d76fbf28645ef3bdad07680786b098da481b2e37fd62e7e828e",
       "source": {
         "kind": "browser",
@@ -1736,14 +1769,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "be2f36c5ac66815384d1d7a7805ac55423243f592fb69a3667dda9a2812eedd4",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: the OAuth sign-in form shows the redirect address to register (no change for keys). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-3-orders-tools",
       "title": "The order system, with what it can do",
       "path": "screenshots/guides/support-3-orders-tools.png",
       "capturedAt": "2026-10-07T16:04:48.422Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "001e17f043f4f2b83f87c3ff7e9dde6bfdd9fe65c63a4c4be42f47e0dc24e1c6",
       "source": {
         "kind": "browser",
@@ -1758,15 +1792,16 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bda2ca068fcdc032a797fe7f7e82c2968d8107f44c63d46717b747e099232bb9",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: the OAuth sign-in form shows the redirect address to register (no change for keys). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "guides-support-4-new-agent",
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
-      "capturedAt": "2026-10-07T17:21:19.517Z",
+      "capturedAt": "2026-10-08T13:14:44.158Z",
       "status": "current",
-      "sha256": "d06871a83c9399afaf1886637482f5cb2841a376c9decbb836042d8ad57ca9e9",
+      "sha256": "94dccf8ddb074418b152a3e6b2512c33f110aee6fc464ec9d92a1161465f1d38",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1779,16 +1814,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
-      "capturedAt": "2026-10-07T17:21:20.120Z",
+      "capturedAt": "2026-10-08T13:14:44.757Z",
       "status": "current",
-      "sha256": "5eee5e25bae586f399eee24d8b819c2f994af643ceaff08b8c360f6f20cef101",
+      "sha256": "6719bbb297a9b6be6165fe3d230db1bee4de49b993717a318aa4b28a20a57201",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1801,16 +1836,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d25750cc5e4fd63d7ba7df7c1d75d065f8f3e893e1daf252eb3ce6376aeb08f5",
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-6-activate",
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
-      "capturedAt": "2026-10-07T17:21:23.537Z",
+      "capturedAt": "2026-10-08T13:14:48.090Z",
       "status": "current",
-      "sha256": "5ec0a60cde773d25a3c715ba36b0c42cc7f621dda11d250ddf3e2c42bdfacb83",
+      "sha256": "3486adefe50bdad574853917af9b0507713a6714b7dc8fa12459b1c16430b2d9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1823,16 +1858,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
-      "capturedAt": "2026-10-07T17:21:25.626Z",
+      "capturedAt": "2026-10-08T13:14:50.179Z",
       "status": "current",
-      "sha256": "4bbf825b265166283516fe8802c89574e6a99d797ec390195d927498ae5fd40a",
+      "sha256": "bdaf7f7851c7253d0dfe5481bcecc3843a084b200686eded80988d32683facf7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1845,7 +1880,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1876,7 +1911,7 @@
       "title": "A big refund waits for approval",
       "path": "screenshots/guides/support-9-refund-waits.png",
       "capturedAt": "2026-10-07T17:21:42.302Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cb6e2acfab6e4c23c634e01d547660c508b6d9b74a1ac0a41e1cbbe2d969ec01",
       "source": {
         "kind": "browser",
@@ -1890,7 +1925,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b5ce85f79437e82695d5a0581e64485a6f7f72ed0a6a6a84b08cdff58a40e5f8",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "A source changed: Approvals shows a readable preview above the action details when a held call sends an email (no change for other requests). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "hosted-chat-privacy",
@@ -1941,7 +1977,7 @@
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
       "capturedAt": "2026-10-07T15:43:31.323Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cf33a4890ed85d781c8a72683a6a509ce7fe0b47cb30f907af47d910eeecc07c",
       "source": {
         "kind": "browser",
@@ -1956,14 +1992,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "cea47ad0bdfbed6be65be4ca73d059f4ec54fd231c503b726dff91843d1e22b7",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": "2026-10-07T15:43:34.065Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a15ae8fdf74641e541f7f0edd881bf6845c00c0444e48dafc62b9e357fa09ca1",
       "source": {
         "kind": "browser",
@@ -1978,7 +2015,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3600ed0dee084a4b6a6f7701890abb022a78535865dcc453e740cc59dd22c533",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "memory-write",
@@ -2051,7 +2089,7 @@
       "title": "Imported API",
       "path": "screenshots/quickstart-api-imported.png",
       "capturedAt": "2026-10-07T15:44:48.578Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1f80778840cb52e39e27bb6b0a6b8d15abac114e729ed794f9664b7b6d87ecd2",
       "source": {
         "kind": "browser",
@@ -2066,7 +2104,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bda2ca068fcdc032a797fe7f7e82c2968d8107f44c63d46717b747e099232bb9",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: the OAuth sign-in form shows the redirect address to register (no change for keys). The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
       "id": "quickstart-claude-config",
@@ -2206,9 +2245,9 @@
       "id": "schedule-config",
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
-      "capturedAt": "2026-10-07T17:21:17.773Z",
+      "capturedAt": "2026-10-08T13:13:03.676Z",
       "status": "current",
-      "sha256": "2aacd0550d1957c1b7bfdeb407352fde80b3ae815add5db63c571b45449b6c06",
+      "sha256": "f6b6a6a9350c14053d53ffb39f050a744d9a5b92c19c273344a6189b15b6ce2c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2221,7 +2260,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2468,9 +2507,9 @@
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
-      "capturedAt": "2026-10-07T17:21:20.857Z",
+      "capturedAt": "2026-10-08T13:12:43.781Z",
       "status": "current",
-      "sha256": "d83348102ea5ab0a32daca6e6c0ce8834a09c6ea2d1772bc16af5b30067dabf4",
+      "sha256": "5c6256703fcef842d15b798f7a8d89dc00275ded2e0727653104d2c726a27a3c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2483,16 +2522,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
-      "capturedAt": "2026-10-07T17:21:23.904Z",
+      "capturedAt": "2026-10-08T13:12:38.308Z",
       "status": "current",
-      "sha256": "f1fb2921f62e183d9c4335b216aced25238528a9ed6a442eabd8f5cef3275989",
+      "sha256": "3bd23c5547e84075f2a8a9774f89835218cbd9fe8714ea507852dd53dc21fac6",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2505,16 +2544,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
-      "capturedAt": "2026-10-07T17:21:26.620Z",
+      "capturedAt": "2026-10-08T13:12:46.470Z",
       "status": "current",
-      "sha256": "39d5e8d881c22e7a848127a07aa3fd60f0dca775c9fb57bf5f8e85a0f04e8bc7",
+      "sha256": "bcf387a29fe196adce380a1d7eab36235ecaa5587f8ff986b28a101f77551efb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2527,7 +2566,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2579,7 +2618,7 @@
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
       "capturedAt": "2026-10-07T15:44:51.296Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "beb6ca857079cf2597f903255b231838508f423c2a772d5f10a5f915aa8878fb",
       "source": {
         "kind": "browser",
@@ -2594,15 +2633,298 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f96043d0ded0f804008d713f71d2324efe4dfc9df90dd78fa9bad8f10f0374f3",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: the Tools page search box now says \"Search tools...\" and searches every page. The view captured here is otherwise unchanged; recapture and re-register."
     },
     {
-      "id": "versioning-history",
-      "title": "Change history",
-      "path": "screenshots/versioning-history.png",
-      "capturedAt": "2026-10-07T17:21:29.643Z",
+      "id": "tutorials-bizdev-00-approve-email",
+      "title": "Approving an outreach email",
+      "path": "screenshots/tutorials/bizdev/00-approve-email.png",
+      "capturedAt": "2026-10-08T13:59:36.933Z",
       "status": "current",
-      "sha256": "3f76cc2f58660bc8006b8ce93b532a0900094211b6ed55322353fe5bda64ae2c",
+      "sha256": "c2fdf3a6cb38715847c27bf86940dcf8964e0cf1bbf0fcf2d95741b4d022a684",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6a4ee32b5e8b3f19613103effc6412630c40592300976ca9b39db7a3860b6e3a",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-01-hubspot-link",
+      "title": "HubSpot Companies description link",
+      "path": "screenshots/tutorials/bizdev/01-hubspot-link.png",
+      "capturedAt": "2026-10-08T13:52:46.211Z",
+      "status": "current",
+      "sha256": "8983fcdf5304c25c702a754b350fea68ba41d312ef2c9d59779a6d39438d86c6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5e1ea7165927264410a27fe6b42e59abfba78932edb3f071cd2713a7845084f4",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-02-hubspot-default-key",
+      "title": "HubSpot: the key as the description says",
+      "path": "screenshots/tutorials/bizdev/02-hubspot-default-key.png",
+      "capturedAt": "2026-10-08T13:52:47.954Z",
+      "status": "current",
+      "sha256": "b01f0659039f46549ec3f46a147329d1497ab1aad72bf714e0142de18ab30465",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-03-hubspot-bearer",
+      "title": "HubSpot: send the key as a bearer token",
+      "path": "screenshots/tutorials/bizdev/03-hubspot-bearer.png",
+      "capturedAt": "2026-10-08T13:52:49.071Z",
+      "status": "current",
+      "sha256": "e1548044f1fafef8868ec6e5ec6c0a531b6743f4f4457e026ec688505893c6e4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-04-hubspot-token",
+      "title": "HubSpot private app token",
+      "path": "screenshots/tutorials/bizdev/04-hubspot-token.png",
+      "capturedAt": "2026-10-08T13:52:50.997Z",
+      "status": "current",
+      "sha256": "7a7490a98ac4e7c291aca8916596fef09a3ca4478167ba75fb40f5eaba1dcb60",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-05-apis",
+      "title": "HubSpot and Google APIs",
+      "path": "screenshots/tutorials/bizdev/05-apis.png",
+      "capturedAt": "2026-10-08T13:52:59.106Z",
+      "status": "current",
+      "sha256": "cfa8dfe09c503fedc7eaf43b4bdab7505d1c13b1ae7acd0e7f74052a2ef7cd5a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "1c418c76e8c0e59528744ce9d35892a7a375ba6937084bd601e1b721a47abd93",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-06-agent-instructions",
+      "title": "Biz-dev assistant: model, instructions, memory",
+      "path": "screenshots/tutorials/bizdev/06-agent-instructions.png",
+      "capturedAt": "2026-10-08T13:53:08.253Z",
+      "status": "current",
+      "sha256": "ca1a4e9537757549a02ea2043abcbe3d27c8fe96dab9d2a2a9a6e4e2624d2f4e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-07-agent-tools",
+      "title": "Biz-dev assistant: tools",
+      "path": "screenshots/tutorials/bizdev/07-agent-tools.png",
+      "capturedAt": "2026-10-08T13:53:11.422Z",
+      "status": "current",
+      "sha256": "376e36a9b3ce029c9dbad580e9049cd30979e441f572bcfd8c5124ce1772a909",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-08-slack-channel",
+      "title": "Slack channel",
+      "path": "screenshots/tutorials/bizdev/08-slack-channel.png",
+      "capturedAt": "2026-10-08T13:53:39.718Z",
+      "status": "current",
+      "sha256": "c2b47bafef75ac92988a8ebedb04d0f9160459250f1eab21b1af83cd03e6c4e8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:channelId"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-09-slack-token",
+      "title": "Slack bot token",
+      "path": "screenshots/tutorials/bizdev/09-slack-token.png",
+      "capturedAt": "2026-10-08T13:53:40.971Z",
+      "status": "current",
+      "sha256": "8e0182bb5f3abbd0c17eeedfd6e5d6f6ab6e974c6ebe60e18c223caac83c509a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:channelId"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-10-slack-live",
+      "title": "Slack channel, live",
+      "path": "screenshots/tutorials/bizdev/10-slack-live.png",
+      "capturedAt": "2026-10-08T13:53:52.167Z",
+      "status": "current",
+      "sha256": "19ec21b60e25c0905f7a44811ae32ac7000c7a3cb7982ec806608420fa97555d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:channelId"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-11-always-on",
+      "title": "Always on: standing instructions and timer",
+      "path": "screenshots/tutorials/bizdev/11-always-on.png",
+      "capturedAt": "2026-10-08T13:53:58.872Z",
+      "status": "current",
+      "sha256": "c8943ca2c6db78b1322e2d59a7eb7f6b55ad714a91e5e7def0d285029fadd9cb",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b4e0da6ee0e7f8cfcca8614770b09ddc29a3caf82db819c8b9ab5c0a87a7acc8",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-12-ask-first",
+      "title": "Always on: ask before sending email",
+      "path": "screenshots/tutorials/bizdev/12-ask-first.png",
+      "capturedAt": "2026-10-08T13:53:59.920Z",
+      "status": "current",
+      "sha256": "423d371226c30ac2700b80d7d48e212467d85bc2daac91230d357799dddf3334",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b4e0da6ee0e7f8cfcca8614770b09ddc29a3caf82db819c8b9ab5c0a87a7acc8",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-13-always-on-card",
+      "title": "Always on, on the agent page",
+      "path": "screenshots/tutorials/bizdev/13-always-on-card.png",
+      "capturedAt": "2026-10-08T13:54:02.545Z",
+      "status": "current",
+      "sha256": "c67b96658563d94139648e080f136ef5cd5b351e7cb93865cd2df447de4ed4c0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2615,16 +2937,601 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-14-approve-note",
+      "title": "Approve with a note",
+      "path": "screenshots/tutorials/bizdev/14-approve-note.png",
+      "capturedAt": "2026-10-08T13:59:57.065Z",
+      "status": "current",
+      "sha256": "201df608449339e581c5660919ebcc60cf27b0389cb874431259c5f86d3f7bf9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6a4ee32b5e8b3f19613103effc6412630c40592300976ca9b39db7a3860b6e3a",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-15-followup-approval",
+      "title": "The follow-up waiting for approval",
+      "path": "screenshots/tutorials/bizdev/15-followup-approval.png",
+      "capturedAt": "2026-10-08T14:01:00.431Z",
+      "status": "current",
+      "sha256": "447514b10c5cb07fc01808d0362f734247c4f3c9802d83877273e76567d62ee2",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6a4ee32b5e8b3f19613103effc6412630c40592300976ca9b39db7a3860b6e3a",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-bizdev-16-slack-reports",
+      "title": "Biz-dev reports as posted to Slack",
+      "path": "screenshots/tutorials/bizdev/16-slack-reports.png",
+      "capturedAt": "2026-10-08T14:01:19.402Z",
+      "status": "current",
+      "sha256": "720348447e6bf2e1413a73225c2a1ff3bf3e61d05eb84708acf2159c0709b92e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "07e5fb07b27f479a511a25ae64db53178a444df038c6625ad67ea4d323687f59",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the email or Slack provider; that provider was not used."
+    },
+    {
+      "id": "tutorials-bizdev-17-what-woke-it",
+      "title": "What woke it lately",
+      "path": "screenshots/tutorials/bizdev/17-what-woke-it.png",
+      "capturedAt": "2026-10-08T14:01:22.377Z",
+      "status": "current",
+      "sha256": "6bc09e2592ba5aa3cbb2e9afb588c6a1e9bcff47968096b67a24f0b9c5670683",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b4e0da6ee0e7f8cfcca8614770b09ddc29a3caf82db819c8b9ab5c0a87a7acc8",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-00-morning-brief",
+      "title": "Founder's associate: the morning brief email",
+      "path": "screenshots/tutorials/founder/00-morning-brief.png",
+      "capturedAt": "2026-10-08T13:52:21.777Z",
+      "status": "current",
+      "sha256": "8ed8b317c66dfa909165d8cc961d23c7c51268fb57dbcce37fec148f12640ac3",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/schedule"
+      },
+      "sources": [
+        "frontend/src/pages/agent-schedule.tsx",
+        "backend/src/modules/gateways/channels/adapters/email.adapter.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "59952adf6dbe4cfddc615330b69edb3fd6f5a3a3daa431c574d12f0bb26852e2",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the email or Slack provider; that provider was not used."
+    },
+    {
+      "id": "tutorials-founder-01-connect-openai",
+      "title": "Connect a provider: OpenAI",
+      "path": "screenshots/tutorials/founder/01-connect-openai.png",
+      "capturedAt": "2026-10-08T13:36:52.146Z",
+      "status": "current",
+      "sha256": "1cc32415bcfe044ccef7171f380b7474162ea4be634f6bb8b907418fb1ddab76",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/models/providers/new"
+      },
+      "sources": [
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/llm-providers",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "037cd56e2aa83687b627dd05ffb1852bd496f6338d0de50ce3ef29e530b37f52",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-02-openai-connected",
+      "title": "OpenAI connected, its models",
+      "path": "screenshots/tutorials/founder/02-openai-connected.png",
+      "capturedAt": "2026-10-08T13:36:53.434Z",
+      "status": "current",
+      "sha256": "6e5223c4771b7a9008b262e8e561911e1ae6f84cb12fe7a60d9151b0902edd4c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/models/providers/:id"
+      },
+      "sources": [
+        "frontend/src/components/llm-providers",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "f24edb4d354fab47e766c1aa342f8315ff187150712630a6c76c910717bdfa2e",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-03-connect-an-api",
+      "title": "Connect an API",
+      "path": "screenshots/tutorials/founder/03-connect-an-api.png",
+      "capturedAt": "2026-10-08T13:36:54.850Z",
+      "status": "current",
+      "sha256": "8075647292e9e267a36f1699796cf84955aee15f07bc62bb43f9df61fa39aa0c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5e1ea7165927264410a27fe6b42e59abfba78932edb3f071cd2713a7845084f4",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-04-calendar-link",
+      "title": "Google Calendar description link",
+      "path": "screenshots/tutorials/founder/04-calendar-link.png",
+      "capturedAt": "2026-10-08T13:36:55.995Z",
+      "status": "current",
+      "sha256": "ccbafe5910d4b8ac82d714efcf2beba0d8677f048e302948d912f7e8b6e2d817",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5e1ea7165927264410a27fe6b42e59abfba78932edb3f071cd2713a7845084f4",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-05-finish-connecting",
+      "title": "Finish connecting Google Calendar",
+      "path": "screenshots/tutorials/founder/05-finish-connecting.png",
+      "capturedAt": "2026-10-08T13:36:59.927Z",
+      "status": "current",
+      "sha256": "2c0e96248ba7b848be9f3e2acc03f7de61f456850a5839c692be187f7c6a5251",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-06-google-sign-in",
+      "title": "Google sign-in: client ID, secret and redirect address",
+      "path": "screenshots/tutorials/founder/06-google-sign-in.png",
+      "capturedAt": "2026-10-08T13:37:00.997Z",
+      "status": "current",
+      "sha256": "4d3876daf7caa73b2f5221cd7ed7d4479e869f89d22778603e009c01b1c76e2f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-07-calendar-signed-in",
+      "title": "Google Calendar signed in",
+      "path": "screenshots/tutorials/founder/07-calendar-signed-in.png",
+      "capturedAt": "2026-10-08T13:37:02.318Z",
+      "status": "current",
+      "sha256": "d55968efb054d87827efc30cd2f5e2f2b12b2db43e4458280cea58c72acc6a02",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "02b68cf79fe9386398602f4ce5b001869b996d64a90cf58c2a01d138c1473e85",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-08-apis",
+      "title": "The three Google APIs",
+      "path": "screenshots/tutorials/founder/08-apis.png",
+      "capturedAt": "2026-10-08T13:37:25.847Z",
+      "status": "current",
+      "sha256": "ee2de3556e599991589cb44521da11c146bc0e37e79ad9e03d55ce4efbb63591",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "1c418c76e8c0e59528744ce9d35892a7a375ba6937084bd601e1b721a47abd93",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-09-tools-search",
+      "title": "Searching the tools",
+      "path": "screenshots/tutorials/founder/09-tools-search.png",
+      "capturedAt": "2026-10-08T13:40:19.365Z",
+      "status": "current",
+      "sha256": "05f885a3c4e7bb543195ae81b046a714225f2097ea23fa17d7ea70b706f0b16d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/tools"
+      },
+      "sources": [
+        "frontend/src/pages/tools.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6883efceddfa4c63125a9e9eb3177b75ccdbcbc8d572b5a6016c28587907d709",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-10-test-tool",
+      "title": "Testing a calendar tool",
+      "path": "screenshots/tutorials/founder/10-test-tool.png",
+      "capturedAt": "2026-10-08T13:40:22.492Z",
+      "status": "current",
+      "sha256": "44fa476ff8904dfdc70679babb2f381e3f490b2aaf1edea1c08b0a2883310527",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/tools/:id"
+      },
+      "sources": [
+        "frontend/src/pages/tool-detail.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6f92895bf88bcc210ed8cecc277c38c5f3838fdfb1bb9a43f7ca14346c0e9a73",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-11-agent-instructions",
+      "title": "Founder's associate: model and instructions",
+      "path": "screenshots/tutorials/founder/11-agent-instructions.png",
+      "capturedAt": "2026-10-08T13:40:24.558Z",
+      "status": "current",
+      "sha256": "19d2a912221d35c89092f49d83a4e63d7b34859c30eb81f1e7ddc0a8b74de752",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-12-agent-memory",
+      "title": "Founder's associate: memory",
+      "path": "screenshots/tutorials/founder/12-agent-memory.png",
+      "capturedAt": "2026-10-08T13:40:26.674Z",
+      "status": "current",
+      "sha256": "ce7d886ba0afb7ce29dd3223be4e719db8acc81ef6b72bbe4f3dc20d1df062a2",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-13-agent-tools",
+      "title": "Founder's associate: tools",
+      "path": "screenshots/tutorials/founder/13-agent-tools.png",
+      "capturedAt": "2026-10-08T13:40:29.928Z",
+      "status": "current",
+      "sha256": "6c4d0eb591ea1b3b33a1c04632f17b0338d37cd1f1315a9f9b9a0f5a60635d09",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "029c23ee95c64ba05a3f206b8c25df384a299eafb720c3bca61897a041e0daea",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-14-first-run",
+      "title": "Founder's associate: first test run",
+      "path": "screenshots/tutorials/founder/14-first-run.png",
+      "capturedAt": "2026-10-08T13:41:00.459Z",
+      "status": "current",
+      "sha256": "9cc039ad6114b89ff6adb3ad1df786d400ad0038265faedb8cf4d3cf2ccdd89d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-15-run-steps",
+      "title": "A run, step by step",
+      "path": "screenshots/tutorials/founder/15-run-steps.png",
+      "capturedAt": "2026-10-08T13:41:25.225Z",
+      "status": "current",
+      "sha256": "f9f383c53b26fb1b643e433195e53c8c45d9241721fd91100d82a779253a83ae",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-16-add-channel",
+      "title": "Add channel",
+      "path": "screenshots/tutorials/founder/16-add-channel.png",
+      "capturedAt": "2026-10-08T13:41:29.080Z",
+      "status": "current",
+      "sha256": "7dafbc2b4e4ca671cd0cbc1b403ff7680d0cee54148385e7813e6471501db926",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel-new.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "618b0071e673cf9bfd71ff40ad37ae26afee0b136747dcbe533a581dd333d284",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-17-email-key",
+      "title": "Email channel: the Resend key",
+      "path": "screenshots/tutorials/founder/17-email-key.png",
+      "capturedAt": "2026-10-08T13:47:41.328Z",
+      "status": "current",
+      "sha256": "202a48a8751f9286f9fa3a5771d114fb8536242fdc1cffce679cfe8d063e4610",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:channelId"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-18-email-live",
+      "title": "Email channel, live",
+      "path": "screenshots/tutorials/founder/18-email-live.png",
+      "capturedAt": "2026-10-08T13:49:07.403Z",
+      "status": "current",
+      "sha256": "55b3cea353409b3e577b2ae54a48c62483a37eda1a893726a89b706acf8dfc0f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:channelId"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5402dfd1becead261e99eeb104df42a70456ca896f4914bc92a05fe0e2f85a6a",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-19-schedule",
+      "title": "Set up a schedule",
+      "path": "screenshots/tutorials/founder/19-schedule.png",
+      "capturedAt": "2026-10-08T13:49:11.692Z",
+      "status": "current",
+      "sha256": "1f531c3822b0175e8add4f0177cc9c055af5ebdd9c8456ae9cbd0b2a497febf3",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/schedule"
+      },
+      "sources": [
+        "frontend/src/pages/agent-schedule.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b29da2f74172ed90c51045bd477f40ed82bbdcabac339256db04fa6f3e532efd",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-20-schedule-card",
+      "title": "The schedule on the agent page",
+      "path": "screenshots/tutorials/founder/20-schedule-card.png",
+      "capturedAt": "2026-10-08T13:49:14.759Z",
+      "status": "current",
+      "sha256": "f6f4ab65ed23df98c939a86d9fe996cfdf3ed5856260b1dbc6ab86307163ab60",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-founder-21-memory",
+      "title": "What the associate remembers",
+      "path": "screenshots/tutorials/founder/21-memory.png",
+      "capturedAt": "2026-10-08T13:41:26.295Z",
+      "status": "current",
+      "sha256": "ef9335264e35f988f0e54f2454facdaef0325dd1149a12be7e328fb5e088af56",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
+      "notes": "Local use-case test stack (scripts/demo-seed/stack.sh): real public API descriptions (Google via api.apis.guru, HubSpot), their addresses pointed at a local stand-in for Google and HubSpot, and a scripted stand-in model behind the OpenAI form; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "versioning-history",
+      "title": "Change history",
+      "path": "screenshots/versioning-history.png",
+      "capturedAt": "2026-10-08T13:13:12.945Z",
+      "status": "current",
+      "sha256": "352918a60fc668e8e0edc17a760317c69ad07ff85cd724443069c8c57f386360",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
-      "capturedAt": "2026-10-07T17:21:32.897Z",
+      "capturedAt": "2026-10-08T13:13:09.945Z",
       "status": "current",
-      "sha256": "53e5db602951454d67b122fe28da438c0429115ec732b15458deca1e322e3fea",
+      "sha256": "7bb27563569dc2d41a978b5e818e8f8c19c2063e006971a0d050df0ef68697dc",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2637,7 +3544,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2666,9 +3573,9 @@
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
-      "capturedAt": "2026-10-07T17:21:36.141Z",
+      "capturedAt": "2026-10-08T13:13:06.828Z",
       "status": "current",
-      "sha256": "2aacd0550d1957c1b7bfdeb407352fde80b3ae815add5db63c571b45449b6c06",
+      "sha256": "f6b6a6a9350c14053d53ffb39f050a744d9a5b92c19c273344a6189b15b6ce2c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2681,7 +3588,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30ff42930f43ba2b11a8db22be05994cbbc740a8abca29d47c130d4ecbf2eefa",
+      "sourceDigest": "40520d8bd1cb8e82831eac60de4a27ee54d48725d772422ae1c8b13c7cf58d0b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2689,7 +3596,7 @@
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
       "capturedAt": "2026-10-07T15:43:37.328Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b2a986202c71f25f0534c0e7e8ef611136dca69b99ff965a6e030efbaef0b2d8",
       "source": {
         "kind": "browser",
@@ -2705,7 +3612,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcacfddcdc936571657343d60a19cfbaa2ad942a3ee9e7336719813e362d535c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "A source changed: a channel whose picked credential lacks a field names that field when publishing is refused (no change otherwise). The view captured here is otherwise unchanged; recapture and re-register."
     }
   ]
 }

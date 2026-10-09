@@ -262,13 +262,29 @@ export class EmailAdapter extends BaseAdapter {
   /**
    * Files the reply links to go as attachments of the mail, by link
    * (Resend fetches them), with the links taken out of the text.
+   *
+   * The reply is plain text. It goes as `text`, and as `html` only after
+   * escaping and turning its line breaks into <br>: sent raw as HTML, a
+   * multi-line answer arrived as one run-on line, and any "<" in it was
+   * read as markup.
    */
   formatOutbound(response: AdapterResponse): any {
     const sent = (response.attachments ?? []).slice(0, EmailAdapter.MAX_REPLY_ATTACHMENTS);
     const text = textWithMedia(response, sent);
+    const html = EmailAdapter.textToHtml(text);
     return sent.length
-      ? { html: text, text, attachments: sent.map((a) => ({ filename: a.name || 'attachment', path: a.url })) }
-      : { html: text, text };
+      ? { html, text, attachments: sent.map((a) => ({ filename: a.name || 'attachment', path: a.url })) }
+      : { html, text };
+  }
+
+  /** Plain text as the HTML part of a mail: escaped, line breaks kept. */
+  static textToHtml(text: string): string {
+    const escaped = String(text ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    return `<div style="white-space:pre-wrap">${escaped.replace(/\r?\n/g, '<br>')}</div>`;
   }
 
   /** Files one reply mail attaches. */
@@ -346,6 +362,7 @@ export class EmailAdapter extends BaseAdapter {
       to,
       subject,
       html: formattedResponse.html,
+      ...(typeof formattedResponse.text === 'string' ? { text: formattedResponse.text } : {}),
       // Files the reply carries, by link: Resend fetches each one.
       ...(Array.isArray(formattedResponse.attachments) && formattedResponse.attachments.length
         ? { attachments: formattedResponse.attachments }
