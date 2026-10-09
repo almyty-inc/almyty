@@ -436,11 +436,13 @@ function AlwaysOnPage({
                 <div key={t.id} className="flex items-center gap-3">
                   <Checkbox
                     id={`always-on-tool-${t.id}`}
+                    aria-label={t.name}
                     checked={form.askFirstToolIds.includes(t.id)}
                     onCheckedChange={(v) => set({ askFirstToolIds: toggleIn(form.askFirstToolIds, t.id, v === true) })}
                   />
                   <Label htmlFor={`always-on-tool-${t.id}`} className="font-normal text-sm">
-                    {t.name}
+                    {t.title ?? t.name}
+                    {t.title && t.title !== t.name && <span className="ml-2 font-mono text-[11px] text-muted-foreground">{t.name}</span>}
                     {t.readOnly && <span className="ml-2 text-xs text-muted-foreground">only reads</span>}
                   </Label>
                 </div>

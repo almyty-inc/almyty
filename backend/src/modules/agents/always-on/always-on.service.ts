@@ -40,6 +40,7 @@ import {
   ScheduledResultPoster,
 } from '../scheduled-result-poster';
 import { ConnectionGrant } from '../../../entities/connection-grant.entity';
+import { readableToolName } from '../../tools/tool-readable-name';
 import { ConnectionEvent, onConnectionEvent } from '../../connections/connection-events';
 import { AlwaysOnCapacity, alwaysOnCapacity, effectiveTimerMinutes, effectiveWakesPerHour } from './always-on-capacity';
 import { DIGEST_WINDOW_MS, DigestTiming, digestCron, digestText, digestTiming, localDay } from './always-on-digest';
@@ -470,7 +471,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException('A webhook has no person behind it. Choose a channel you write on, like Slack or email.');
       }
     }
-    const toolIds = new Set(agent.toolIds ?? []);
+    // Its own tools: picked one by one, or through a whole API.
+    const own = await this.suggestedAskFirst(agentId, organizationId);
+    const toolIds = new Set(own.map((t) => t.id));
     const strayTools = next.askFirstToolIds.filter((id) => !toolIds.has(id));
     if (strayTools.length) throw new BadRequestException('The ask-first list can only name tools this agent has.');
     if (next.reportTo) {
@@ -497,12 +500,22 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
    * The tools Always on would put on the ask-first list: every tool of the
    * agent that is not read-only. The page pre-fills the list with these.
    */
-  async suggestedAskFirst(agentId: string, organizationId: string): Promise<Array<{ id: string; name: string; readOnly: boolean }>> {
+  async suggestedAskFirst(agentId: string, organizationId: string): Promise<Array<{ id: string; name: string; title: string; readOnly: boolean }>> {
     const agent = await this.loadAgent(agentId, organizationId);
     const ids = agent.toolIds ?? [];
-    if (!ids.length) return [];
-    const tools = await this.tools.find({ where: { id: In(ids), organizationId } as any });
-    return tools.map((t) => ({ id: t.id, name: t.name, readOnly: isReadOnlyTool(t as any) }));
+    // Tools it has through a whole API ("All tools of Gmail") count too, or
+    // their send could not be put on the list.
+    const apiIds = (agent.agentConfig as any)?.apiIds ?? [];
+    if (!ids.length && !apiIds.length) return [];
+    const where: any[] = [];
+    if (ids.length) where.push({ id: In(ids), organizationId });
+    if (apiIds.length) where.push({ apiId: In(apiIds), organizationId });
+    const tools = await this.tools.find({ where } as any);
+    const seen = new Set<string>();
+    return tools
+      .filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
+      .map((t) => ({ id: t.id, name: t.name, title: readableToolName(t as any), readOnly: isReadOnlyTool(t as any) }))
+      .sort((a, b) => a.title.localeCompare(b.title));
   }
 
   // ---------------------------------------------------------------------

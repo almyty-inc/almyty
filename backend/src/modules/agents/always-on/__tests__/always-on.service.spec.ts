@@ -373,6 +373,17 @@ describe('Always on: settings', () => {
     const tools = await w.service.suggestedAskFirst(AGENT, ORG);
     expect(tools.filter((t) => !t.readOnly).map((t) => t.id)).toEqual([TOOL_WRITE]);
   });
+
+  it('offers the tools it has through a whole API too, by the names people read, and accepts them on the list', async () => {
+    // "All tools of Gmail": Gmail's send was missing from the list, and saving
+    // it there was refused as "a tool this agent does not have".
+    const w = world({ agent: alwaysOnAgent({ agentConfig: { apiIds: ['api-gmail'] } }) });
+    w.tools.seed({ id: '7d2c9a1e-4b3f-4e5a-9c6d-1a2b3c4d5e6f', organizationId: ORG, apiId: 'api-gmail', name: 'gmail_gmail_users_messages_send', description: 'Sends the specified message to the recipients.', httpConfig: { method: 'POST' } });
+
+    const tools = await w.service.suggestedAskFirst(AGENT, ORG);
+    expect(tools.find((t) => t.id === '7d2c9a1e-4b3f-4e5a-9c6d-1a2b3c4d5e6f')).toMatchObject({ title: 'Sends the specified message to the recipients', readOnly: false });
+    await expect(w.service.configure(AGENT, ORG, { actMode: 'act', askFirstToolIds: ['7d2c9a1e-4b3f-4e5a-9c6d-1a2b3c4d5e6f'] }, OWNER)).resolves.toBeDefined();
+  });
 });
 
 describe('Always on: connection events', () => {

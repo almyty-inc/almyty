@@ -8,8 +8,9 @@
 
 export interface NamedTool {
   name: string
+  description?: string | null
   api?: { name?: string | null } | null
-  operation?: { name?: string | null; api?: { name?: string | null } | null } | null
+  operation?: { name?: string | null; description?: string | null; api?: { name?: string | null } | null } | null
 }
 
 /** The API name the way tool generation prefixes it: lowercase, words joined by underscores. */
@@ -30,9 +31,18 @@ export function humanizeIdentifier(value: string): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : value
 }
 
-/** A name with no spaces and an underscore, a dash or a case change in it reads as a machine name. */
+/** A name with no spaces and an underscore, a dash, a case change or dots (gmail.users.messages.send) in it reads as a machine name. */
 function looksLikeMachineName(value: string): boolean {
-  return !/\s/.test(value) && /[_-]|[a-z][A-Z]/.test(value)
+  return !/\s/.test(value) && (/[_-]|[a-z][A-Z]/.test(value) || /^[\w$]+(?:\.[\w$]+)+$/.test(value))
+}
+
+/** The first sentence of a description, when it is short enough to be a name. */
+function shortSentence(description: string | null | undefined): string | null {
+  const text = (description ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return null
+  const end = text.search(/[.!?](\s|$)/)
+  const sentence = (end >= 0 ? text.slice(0, end) : text).trim()
+  return sentence && sentence.length <= 90 ? sentence : null
 }
 
 export function readableToolName(tool: NamedTool): string {
@@ -42,6 +52,10 @@ export function readableToolName(tool: NamedTool): string {
   // operationId, or the "GET /pets/{id}" a spec without either gets, is no
   // better than the tool's own name.
   if (summary && !looksLikeMachineName(summary) && !/^[A-Z]+ \//.test(summary)) return summary
+  // A spec without summaries (Google's, HubSpot's) still describes each
+  // operation: "Lists the messages in the user's mailbox."
+  const described = shortSentence(tool.operation?.description) ?? shortSentence(tool.description)
+  if (described) return described
   const apiName = tool.api?.name ?? tool.operation?.api?.name ?? ''
   const prefix = apiName ? machinePrefix(apiName) : ''
   let rest = tool.name

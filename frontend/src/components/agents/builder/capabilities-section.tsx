@@ -34,6 +34,7 @@ import { connectionsApi } from '@/lib/connections-api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Button } from '@/components/ui/button'
 import { pluralized } from '@/lib/utils'
+import { readableToolName } from '@/lib/tool-names'
 import { useOrganizationStore } from '@/store/organization'
 import { useEntitlement } from '@/hooks/use-entitlement'
 import type { Agent, CodeWriteAction } from '@/types'
@@ -157,7 +158,10 @@ function ToolsAndApis({
   const toggleTool = (id: string, on: boolean) => onToolIdsChange(on ? [...toolIds, id] : toolIds.filter((t) => t !== id))
   const toggleApi = (id: string, on: boolean) => onApiIdsChange(on ? [...apiIds, id] : apiIds.filter((a) => a !== id))
   const apiName = (id: string) => apis.find((a) => a.id === id)?.name ?? id
-  const toolName = (id: string) => tools.find((t) => t.id === id)?.name ?? id
+  const toolName = (id: string) => {
+    const tool = tools.find((t) => t.id === id)
+    return tool ? readableToolName(tool) : id
+  }
 
   return (
     <section className="space-y-3" data-testid="capability-tools">
@@ -198,7 +202,7 @@ function ToolsAndApis({
           </div>
           <div className="max-h-[400px] overflow-y-auto space-y-1">
             {groups.map((g) => {
-              const shown = g.tools.filter(matches)
+              const shown = g.tools.filter(matches).sort((a, b) => readableToolName(a).localeCompare(readableToolName(b)))
               if (q && shown.length === 0 && !g.name.toLowerCase().includes(q)) return null
               const whole = !!g.id && apiIds.includes(g.id)
               const expanded = open.has(g.id) || !!q
@@ -245,8 +249,9 @@ function ToolsAndApis({
                             aria-label={t.name}
                           />
                           <div className="min-w-0">
-                            <p className="text-sm truncate">{t.name}</p>
-                            {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
+                            {/* People read what it does; the machine name is what the model and the approvals log call it. */}
+                            <p className="text-sm truncate">{readableToolName(t)}</p>
+                            <p className="font-mono text-[11px] text-muted-foreground truncate">{t.name}</p>
                           </div>
                         </label>
                       ))}
