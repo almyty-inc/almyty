@@ -31,6 +31,13 @@ export class OAuth2Controller {
     return { success: true, data };
   }
 
+  /** The redirect address to register at the provider, shown next to the client ID and secret. */
+  @Get('callback-url')
+  @UseGuards(JwtAuthGuard)
+  getCallbackUrl() {
+    return { success: true, data: { callbackUrl: this.oauth2Service.callbackUrl() } };
+  }
+
   @Post('authorize')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('member', 'admin', 'owner')
