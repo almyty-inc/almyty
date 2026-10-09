@@ -23,7 +23,7 @@ export const SHARED_ENVIRONMENTS_NOT_INCLUDED =
   'Sharing an environment with a team or the whole organization is part of the Business plan. Keep it private, or upgrade.';
 
 /** Fields whose change makes a new environment version (a pod started after it runs the new one). */
-const VERSIONED_FIELDS = ['repo', 'image', 'setupScript', 'envBindings', 'cache', 'egress', 'resourceClass'] as const;
+const VERSIONED_FIELDS = ['repo', 'image', 'setupScript', 'envBindings', 'cache', 'egress', 'resourceClass', 'allowVendorKeys'] as const;
 
 /**
  * Environments: create, read, change and delete, with the access policy
@@ -231,6 +231,22 @@ export class EnvironmentsService {
       if (dup.length) throw new BadRequestException({ code: 'ENV_VAR_DUPLICATE', message: `Each variable may be set once: ${[...new Set(dup)].join(', ')}` });
       for (const b of bindings) await this.assertUsableConnection(b.connectionId, userId, organizationId);
       out.envBindings = bindings.map((b) => ({ connectionId: b.connectionId, field: b.field, envVar: b.envVar }));
+    }
+
+    // A model provider's own key goes into pods only where the environment
+    // allows it (Decision 6 (b)); off unless someone turns it on.
+    if (dto.allowVendorKeys !== undefined || !current) out.allowVendorKeys = dto.allowVendorKeys ?? false;
+    if (dto.envBindings !== undefined || dto.allowVendorKeys !== undefined) {
+      try {
+        await this.hosted.assertNoVendorKeys({
+          organizationId,
+          allowVendorKeys: out.allowVendorKeys ?? current?.allowVendorKeys ?? false,
+          envBindings: out.envBindings ?? current?.envBindings ?? [],
+        });
+      } catch (err: any) {
+        if (err?.code !== 'VENDOR_KEY_NOT_ALLOWED') throw err;
+        throw new BadRequestException({ code: 'VENDOR_KEY_NOT_ALLOWED', message: err.message, connectionIds: err.connectionIds });
+      }
     }
 
     if (dto.setupScript !== undefined) out.setupScript = dto.setupScript ?? null;

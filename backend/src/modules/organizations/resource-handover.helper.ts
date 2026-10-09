@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, forwardRef } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Optional, forwardRef } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 
 import { AuditAction, AuditLog, AuditResource } from '../../entities/audit-log.entity';
@@ -8,6 +8,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { RunnerService } from '../runner/runner.service';
 import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
 import { memberConnectionSql, WipedConnection } from '../connections/member-connection-offboarding';
+import { EnvironmentHandoverService } from '../hosted-runners/environment-handover.service';
 
 /**
  * Why a person's resources are being handed over: removed by someone,
@@ -49,6 +50,20 @@ export const TEAM_SCOPED_TABLES: ReadonlyArray<{ table: string; resourceType: Au
   { table: 'runners', resourceType: AuditResource.RUNNER },
 ];
 
+/**
+ * Run what a handover left for after its transaction committed, each on
+ * its own: one that fails (a queue or mail hiccup) must not stop the rest
+ * or undo the removal.
+ */
+export async function runAfterCommit(steps: Array<() => Promise<void>>): Promise<void> {
+  for (const step of steps) {
+    try {
+      await step();
+    } catch {
+      // Best-effort: the change itself is committed and audited.
+    }
+  }
+}
 type ReturnedRow = { id: string; name: string | null };
 
 /** manager.query on an UPDATE ... RETURNING yields [rows, rowCount]. */
@@ -74,6 +89,9 @@ export class ResourceHandoverHelper {
     private readonly runners: RunnerService,
     @Inject(forwardRef(() => ConnectionOffboardingService))
     private readonly offboarding: ConnectionOffboardingService,
+    // Hosted environments (global module). Optional only for the
+    // positional spec harnesses; Nest always injects it.
+    @Optional() private readonly environments?: EnvironmentHandoverService,
   ) {}
 
   /**
@@ -119,9 +137,11 @@ export class ResourceHandoverHelper {
        * ConnectionOffboardingService.revokeAtProviders after commit.
        */
       wipedConnections?: WipedConnection[];
+      /** Receives what to run once the removal committed (stopping pods, telling the new owner). */
+      afterCommit?: Array<() => Promise<void>>;
     },
   ): Promise<AuditLog[]> {
-    const { organizationId, fromUserId, toUserId, actorUserId, reason, wipedConnections } = args;
+    const { organizationId, fromUserId, toUserId, actorUserId, reason, wipedConnections, afterCommit } = args;
     const audit: AuditLog[] = [];
 
     // Runners first: a runner publishes its methods as tools with the
@@ -129,7 +149,9 @@ export class ResourceHandoverHelper {
     // private tools of the departed member. They go with the runner
     // rather than being handed over below.
     const runners = await manager.getRepository(Runner).find({
-      where: { organizationId, ownerUserId: fromUserId },
+      // Self-hosted runners only: a hosted runner is the organization's
+      // machine, and its workspace is handled with the environments below.
+      where: { organizationId, ownerUserId: fromUserId, kind: 'self' },
     });
     for (const runner of runners) {
       const { id, name, visibility, teamId } = runner;
@@ -193,6 +215,16 @@ export class ResourceHandoverHelper {
         WHERE "organizationId" = $2 AND visibility = 'private' AND "ownerUserId" = $3`,
       [toUserId, organizationId, fromUserId],
     );
+
+    // Hosted environments they own go to one organization admin, chosen the
+    // same way every time; their own hosted workspaces stop now and keep
+    // their files (EnvironmentHandoverService). Last, so the environments'
+    // tools end up with the environments' new owner.
+    if (this.environments) {
+      const environments = await this.environments.onMemberLeaving(manager, { organizationId, fromUserId, actorUserId, reason });
+      audit.push(...environments.audit);
+      afterCommit?.push(environments.afterCommit);
+    }
 
     return audit;
   }
@@ -282,9 +314,16 @@ export class ResourceHandoverHelper {
    */
   async demoteTeamResources(
     manager: EntityManager,
-    args: { organizationId: string; teamId: string; teamName?: string | null; actorUserId?: string | null },
+    args: {
+      organizationId: string;
+      teamId: string;
+      teamName?: string | null;
+      actorUserId?: string | null;
+      /** Receives what to run once the deletion committed (telling owners). */
+      afterCommit?: Array<() => Promise<void>>;
+    },
   ): Promise<AuditLog[]> {
-    const { organizationId, teamId, teamName, actorUserId } = args;
+    const { organizationId, teamId, teamName, actorUserId, afterCommit } = args;
     const audit: AuditLog[] = [];
 
     for (const { table, resourceType } of TEAM_SCOPED_TABLES) {
@@ -313,6 +352,15 @@ export class ResourceHandoverHelper {
           }),
         );
       }
+    }
+
+    // Hosted environments shared with the team keep their owner and become
+    // private (Frane, 2026-10-08), after the loop above made their tools
+    // org-wide; the owner is told once this commits.
+    if (this.environments) {
+      const environments = await this.environments.onTeamDeleted(manager, { organizationId, teamId, teamName, actorUserId });
+      audit.push(...environments.audit);
+      afterCommit?.push(environments.afterCommit);
     }
 
     return audit;

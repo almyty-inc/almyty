@@ -6,6 +6,7 @@ import { SpendAlert } from '../../entities/spend-alert.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
+import { HostedModelCall } from '../../entities/hosted-model-call.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
 import { UserTeam } from '../../entities/user-team.entity';
 import { User } from '../../entities/user.entity';
@@ -21,7 +22,7 @@ import { BudgetsController } from './budgets.controller';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SpendBudget, SpendAlert, Agent, AgentRun, AgentExecution, UserOrganization, UserTeam, User]),
+    TypeOrmModule.forFeature([SpendBudget, SpendAlert, Agent, AgentRun, AgentExecution, HostedModelCall, UserOrganization, UserTeam, User]),
   ],
   providers: [BudgetsService, SpendService],
   controllers: [BudgetsController],

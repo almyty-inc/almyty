@@ -97,12 +97,14 @@ export class EnrollmentService {
     // The pod is the sandbox, so the runner runs its work on the host
     // inside it, in the workspace volume only.
     const effectiveConfig: RunnerConfig = {
-      maxConcurrent: 1,
       denyPatterns: [],
       installBlocked: false,
       networkBlocked: false,
       ...(input.config ?? {}),
       defaultIsolation: RunnerIsolationTier.HOST,
+      // One workspace per pod, one job at a time in it: the pod cannot ask
+      // for more (the API also serialises jobs, WorkspaceLeaseService).
+      maxConcurrent: 1,
       allowedCwdRoots: [mount],
     };
     await this.runners.update(

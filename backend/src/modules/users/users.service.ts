@@ -18,7 +18,7 @@ import { effectiveMemberships, isEffectiveMembership } from '../../common/author
 import { ORGANIZATION_ROLE_RANK } from '../organizations/organization-role-rank';
 import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
 import { WipedConnection } from '../connections/member-connection-offboarding';
-import { ResourceHandoverHelper } from '../organizations/resource-handover.helper';
+import { ResourceHandoverHelper, runAfterCommit } from '../organizations/resource-handover.helper';
 import { AuditLog } from '../../entities/audit-log.entity';
 
 export interface PaginatedUsers {
@@ -401,6 +401,7 @@ export class UsersService {
     const handover = this.requireHandover();
     const actor = actorUserId && actorUserId !== id ? actorUserId : null;
     const wiped: WipedConnection[] = [];
+    const afterCommit: Array<() => Promise<void>> = [];
     const memberships = await this.userOrganizationRepository.find({ where: { userId: id } });
     const audit = await this.userRepository.manager.transaction(async (manager) => {
       const entries: AuditLog[] = [];
@@ -418,11 +419,13 @@ export class UsersService {
           actorUserId: actor ?? toUserId,
           reason: 'user_deleted',
           wipedConnections: wiped,
+          afterCommit,
         })));
       }
       return entries;
     });
     handover.publishCommitted(audit);
+    await runAfterCommit(afterCommit);
     await handover.revokeWipedConnectionsAtProviders(wiped, { userId: id, actorUserId: actor ?? id, reason: 'user_deleted' });
 
     // Connections in an organization they hold no membership row in any

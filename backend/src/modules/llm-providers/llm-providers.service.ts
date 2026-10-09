@@ -577,6 +577,20 @@ export class LlmProvidersService {
           throw new ForbiddenException('Only the provider\'s owner can make it private');
         }
       }
+      // The owner's one-click grant of a private provider to their hosted
+      // workspaces (the model pass-through). Only a private provider has
+      // one, and only its owner gives or takes it; a provider that stops
+      // being private loses it.
+      if (updateDto.hostedPodAccess !== undefined) {
+        if (provider.visibility !== 'private' || provider.ownerUserId !== userId) {
+          throw new BadRequestException(
+            'Only the owner of a private provider can let their hosted workspaces use it. Organization-wide providers are available to hosted workspaces already.',
+          );
+        }
+        provider.hostedPodAccess = updateDto.hostedPodAccess;
+      } else if (provider.visibility !== 'private') {
+        provider.hostedPodAccess = false;
+      }
 
       // Move the keys: paste -> managed row, credentialId -> shared row,
       // an inline key still on the row (shim) -> managed row. The org's

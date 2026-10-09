@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -19,8 +20,12 @@ import { RunnerConfigDto, RunnerRuntimeInfoDto } from '../../runner/dto/register
 export const ENVIRONMENT_NAME_RE = /^[a-z][a-z0-9-]{0,63}$/;
 const NAME_MESSAGE = 'name must be lowercase letters, digits and dashes, starting with a letter, at most 64 characters';
 
-/** An environment variable a binding may set: upper-case, not one almyty sets itself. */
-export const ENV_VAR_RE = /^(?!ALMYTY_)(?!HOME$)(?!PATH$)[A-Z_][A-Z0-9_]{0,127}$/;
+/**
+ * An environment variable a binding may set: upper-case, not one almyty
+ * sets itself (ALMYTY_*, and the base URLs that point coding CLIs at
+ * almyty's model endpoints).
+ */
+export const ENV_VAR_RE = /^(?!ALMYTY_)(?!HOME$)(?!PATH$)(?!ANTHROPIC_BASE_URL$)(?!OPENAI_BASE_URL$)[A-Z_][A-Z0-9_]{0,127}$/;
 
 export class EnvironmentRepoDto {
   @IsString()
@@ -55,7 +60,7 @@ export class EnvironmentEnvBindingDto {
   field!: string;
 
   @IsString()
-  @Matches(ENV_VAR_RE, { message: 'envVar must be upper-case letters, digits and underscores, and not ALMYTY_*, HOME or PATH' })
+  @Matches(ENV_VAR_RE, { message: 'envVar must be upper-case letters, digits and underscores, and not ALMYTY_*, HOME, PATH, ANTHROPIC_BASE_URL or OPENAI_BASE_URL' })
   envVar!: string;
 }
 
@@ -135,6 +140,15 @@ class EnvironmentFieldsDto {
   @IsOptional()
   @IsUUID()
   teamId?: string | null;
+
+  /**
+   * Let envBindings put a model provider's own key into the pods, for a CLI
+   * that cannot change its base URL. Off by default: CLIs reach models
+   * through almyty with the pod-scoped token.
+   */
+  @IsOptional()
+  @IsBoolean()
+  allowVendorKeys?: boolean;
 }
 
 export class CreateEnvironmentDto extends EnvironmentFieldsDto {
