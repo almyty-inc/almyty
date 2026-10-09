@@ -287,6 +287,45 @@ describe('ScheduledPostService', () => {
     expect(parseSentJson(sendCall()[0]).text).toMatch(/^This message was written by an AI\.\n\nSales were up/);
   });
 
+  describe('the AI disclosure, once per conversation', () => {
+    // Every report to the sales channel started with "You are chatting with
+    // an AI assistant." A Slack channel is one ongoing conversation: told once.
+    const disclosing = (type: string) => seedChannel(type, { gateway: { configuration: { ...CONFIG[type], aiDisclosure: true } } });
+    const texts = () => sendCall().map((c) => parseSentJson(c).text as string);
+
+    it('tells a channel on the first post there, not on every report after it', async () => {
+      disclosing('slack');
+      await service.post(agent, execution('Report one.'), { kind: 'channel', channelId: 'ch-slack', to: 'C0SALES1' });
+      await service.post(agent, execution('Report two.'), { kind: 'channel', channelId: 'ch-slack', to: 'C0SALES1' });
+      await service.post(agent, execution('Report three.'), { kind: 'channel', channelId: 'ch-slack', to: 'C0OTHER1' });
+      expect(texts()).toEqual([
+        'You are chatting with an AI assistant.\n\nReport one.',
+        'Report two.',
+        // Another channel is another conversation.
+        'You are chatting with an AI assistant.\n\nReport three.',
+      ]);
+    });
+
+    it('tells it again when the first post did not get through', async () => {
+      disclosing('slack');
+      fetchMock.setNextResponse({ ok: true, status: 200, json: { ok: false, error: 'not_in_channel' } });
+      await service.post(agent, execution('Report one.'), { kind: 'channel', channelId: 'ch-slack', to: 'C0SALES1' });
+      fetchMock.setNextResponse({ ok: true, status: 200, json: { ok: true } });
+      await service.post(agent, execution('Report two.'), { kind: 'channel', channelId: 'ch-slack', to: 'C0SALES1' });
+      expect(texts()[1]).toBe('You are chatting with an AI assistant.\n\nReport two.');
+    });
+
+    it('tells every email, since each one starts a conversation of its own', async () => {
+      disclosing('email');
+      const to = { kind: 'channel' as const, channelId: 'ch-email', to: 'maya@lumen.example' };
+      await service.post(agent, execution('Brief one.'), to);
+      await service.post(agent, execution('Brief two.'), to);
+      const bodies = sendCall().map((c) => parseSentJson(c).text as string);
+      expect(bodies).toHaveLength(2);
+      for (const body of bodies) expect(body.startsWith('You are chatting with an AI assistant.')).toBe(true);
+    });
+  });
+
   it('splits a long result into platform-sized messages, in order', async () => {
     seedChannel('discord');
     const paragraphs = Array.from({ length: 6 }, (_v, i) => `Paragraph ${i + 1}. ${'word '.repeat(120)}`.trim());

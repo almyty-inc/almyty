@@ -228,8 +228,8 @@ function CompliancePolicyForm() {
                 <EyeOff className="h-4 w-4 text-muted-foreground" /> Enforce PII filter
               </Label>
               <p className="text-xs text-muted-foreground">
-                Hide personal data in execution records, the audit log and
-                answers to outside callers, org-wide. Tools still get the
+                Hide personal data in tool call records, run steps, the audit
+                log and answers to outside callers, org-wide. Tools still get the
                 real values they are called with.
               </p>
             </div>

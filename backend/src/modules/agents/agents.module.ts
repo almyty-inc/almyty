@@ -1,4 +1,5 @@
 import { GatewaysModule } from '../gateways/gateways.module';
+import { RunTracePrivacyService } from './run-trace-privacy.service';
 import { Model } from '../../entities/model.entity';
 import { HostedModelCall } from '../../entities/hosted-model-call.entity';
 import { ModelPassThroughService } from './model-pass-through.service';
@@ -143,6 +144,8 @@ import { BudgetsModule } from '../budgets/budgets.module';
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
     // Carries a workflow run on once the change sets its Code steps wait on are decided.
     WorkflowApprovalResumeService,
+    // Personal data hidden in the traces runs store.
+    RunTracePrivacyService,
     // Hosted pods' coding CLIs: their own calls, forwarded to an organization-wide provider.
     ModelPassThroughService],
   controllers: [AgentApiAccessController, AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
