@@ -61,7 +61,7 @@ import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
 import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 import { isServableGatewayTool } from '../gateways/gateway-servable';
-import { HOSTED_DISPATCH, type HostedDispatch, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
+import { HOSTED_DISPATCH, type HostedDispatch, WORKSPACE_BUSY, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -808,6 +808,7 @@ export class ToolExecutorService {
     // runner-side handler sees an unexpected field.
     const { workspaceId: _ws, ...callParams } = parameters;
 
+    let heldLease: { workspaceId: string; holder: string } | null = null;
     try {
       // The agent's "Runs on": a pinned runner takes the call whichever
       // runner published the tool, and nothing reroutes it (labels become
@@ -830,16 +831,25 @@ export class ToolExecutorService {
             principal: options.principal,
             callerUserId: options.userId ?? null,
             agentId: options.agentId ?? scope?.agentId ?? null,
+            // The job this call belongs to holds the person's workspace
+            // while it works there; another job's calls wait their turn.
+            runId,
+            // A workspace the call names: one of the caller's inherited,
+            // read-only workspaces there (anything else is ignored).
+            workspaceId: workspaceId ?? null,
+            signal: options.signal,
           });
         } catch (err: any) {
           return this.runnerFailure(err?.code ?? 'workspace_unavailable', err?.message ?? String(err), startTime);
         }
-        if (target.kind === 'waking') {
+        if (target.kind === 'waking' || target.kind === 'busy') {
+          const code = target.kind === 'waking' ? WORKSPACE_WAKING : WORKSPACE_BUSY;
           return {
-            ...this.runnerFailure(WORKSPACE_WAKING, target.message, startTime),
-            metadata: { runnerErrorCode: WORKSPACE_WAKING, retryAfterMs: target.retryAfterMs, retryable: true },
+            ...this.runnerFailure(code, target.message, startTime),
+            metadata: { runnerErrorCode: code, retryAfterMs: target.retryAfterMs, retryable: true },
           };
         }
+        if (target.lease?.releaseAfterCall) heldLease = { workspaceId: target.workspaceId, holder: target.lease.holder };
         targetRunnerId = target.runnerId;
         workspaceId = target.workspaceId;
       } else if (cfg.requiresWorkspace && !workspaceId && runId && this.runWorkspaces) {
@@ -913,6 +923,9 @@ export class ToolExecutorService {
         };
       }
       throw err;
+    } finally {
+      // A lone call gives the workspace back; a job keeps it until it ends.
+      if (heldLease) await this.hostedDispatch?.releaseLease(heldLease.workspaceId, heldLease.holder).catch(() => undefined);
     }
   }
 

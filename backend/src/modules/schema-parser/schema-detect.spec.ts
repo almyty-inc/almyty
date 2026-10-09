@@ -77,6 +77,47 @@ describe('detectApiSchema', () => {
     });
   });
 
+  // Google's published descriptions name an implicit flow first and the
+  // authorization-code flow second, on every operation. Picking the first
+  // one turned the Google sign-in into "paste a bearer token".
+  const googleStyle = (extraSchemes: Record<string, any> = {}, security: any[] = [{ Oauth2: ['cal'] }, { Oauth2c: ['cal'] }]) =>
+    JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Calendar API', version: 'v3' },
+      servers: [{ url: 'https://www.googleapis.com/calendar/v3' }],
+      paths: { '/users/me/calendarList': { get: { operationId: 'calendar.calendarList.list', security, responses: { 200: { description: 'ok' } } } } },
+      components: {
+        securitySchemes: {
+          Oauth2: { type: 'oauth2', flows: { implicit: { authorizationUrl: 'https://accounts.google.com/o/oauth2/auth', scopes: { cal: 'See your calendars' } } } },
+          Oauth2c: {
+            type: 'oauth2',
+            flows: { authorizationCode: { authorizationUrl: 'https://accounts.google.com/o/oauth2/auth', tokenUrl: 'https://accounts.google.com/o/oauth2/token', scopes: { cal: 'See your calendars' } } },
+          },
+          ...extraSchemes,
+        },
+      },
+    });
+
+  it('prefers a sign-in almyty can run over an implicit flow listed before it', () => {
+    expect(detectApiSchema(googleStyle()).auth).toEqual({
+      type: 'oauth2',
+      oauth2: {
+        flow: 'authorization_code',
+        authorizationUrl: 'https://accounts.google.com/o/oauth2/auth',
+        tokenUrl: 'https://accounts.google.com/o/oauth2/token',
+        scopes: ['cal'],
+      },
+    });
+  });
+
+  it('keeps the token fallback over a key the description declares but the operations do not ask for', () => {
+    const found = detectApiSchema(googleStyle({ key: { type: 'apiKey', in: 'query', name: 'key' } }, [{ Oauth2: ['cal'] }]));
+    expect(found.auth.type).toBe('oauth2');
+    const onlyImplicit = JSON.parse(googleStyle({ key: { type: 'apiKey', in: 'query', name: 'key' } }, [{ Oauth2: ['cal'] }]));
+    delete onlyImplicit.components.securitySchemes.Oauth2c;
+    expect(detectApiSchema(JSON.stringify(onlyImplicit)).auth).toEqual({ type: 'bearer' });
+  });
+
   it('leaves the address empty for a relative server when there is no link to resolve it against', () => {
     expect(detectApiSchema(fixture('openapi3-calendar-oauth.yaml')).baseUrl).toBeNull();
   });

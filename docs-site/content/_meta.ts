@@ -2,6 +2,7 @@
 // alphabetically: start, see what it can do, build, run it, then reference.
 export default {
   index: 'Get started',
+  tutorials: 'Tutorials',
   examples: 'What you can do',
   'build-separator': { type: 'separator', title: 'Build' },
   tools: 'Tools',

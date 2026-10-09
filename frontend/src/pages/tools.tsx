@@ -101,6 +101,7 @@ export function ToolsPage() {
   const navigate = useNavigate()
 
   const [searchQuery, setSearchQuery] = useState('')
+  const searchTerm = searchQuery.trim()
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [apiFilter, setApiFilter] = useState('all')
@@ -113,8 +114,8 @@ export function ToolsPage() {
   useNewParamRedirect('/tools/new')
 
   const { data: toolsData, isLoading, isError, error: toolsError, refetch: refetchTools } = useQuery({
-    queryKey: ['tools', currentOrganization?.id, page],
-    queryFn: () => toolsApi.getAll(currentOrganization?.id, { limit: PAGE_SIZE, page }),
+    queryKey: ['tools', currentOrganization?.id, page, searchTerm],
+    queryFn: () => toolsApi.getAll(currentOrganization?.id, { limit: PAGE_SIZE, page, ...(searchTerm ? { search: searchTerm } : {}) }),
     enabled: !!currentOrganization,
     placeholderData: (prev) => prev, // keep previous data while loading next page
   })
@@ -191,8 +192,8 @@ export function ToolsPage() {
   const toolsTotal = toolsData?.total ?? tools.length
   const totalPages = Math.max(1, Math.ceil(toolsTotal / PAGE_SIZE))
 
-  // Client-side filters applied to the current page of results
-  // Note: for full search across all tools, backend search support is needed
+  // The search runs on the server, across every page; the other filters
+  // narrow the page that came back.
   const filteredTools = filterByTeamVisibility(tools as any[], teamFilter).filter((tool: Tool) => {
     const matchesSearch =
       !searchQuery ||
@@ -549,10 +550,13 @@ export function ToolsPage() {
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search current page..."
+                        placeholder="Search tools..."
                         className="pl-10"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value)
+                          setPage(1)
+                        }}
                       />
                     </div>
                   </div>

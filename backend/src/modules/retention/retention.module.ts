@@ -12,6 +12,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Notification } from '../../entities/notification.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
 import { ChannelEvent } from '../../entities/channel-event.entity';
+import { RunnerUsageInterval } from '../../entities/runner-usage-interval.entity';
 
 import { FilesModule } from '../files/files.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
@@ -40,6 +41,8 @@ import { RetentionController } from './retention.controller';
       // Stored widget replies and channel deliveries: visitor words that
       // an app's retention period must reach as well as its conversations.
       ChannelEvent,
+      // Hosted usage records, kept for the install's window or the policy's.
+      RunnerUsageInterval,
     ]),
     AuditLogModule,
     // Files people sent in a swept conversation go with it (FilesService).

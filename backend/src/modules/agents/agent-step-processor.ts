@@ -61,7 +61,7 @@ import { CodeModeConfig, grantsLeftFor } from '../code-mode/code-write-policy';
 import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
-import { WORKSPACE_WAKING } from '../runner/hosted-dispatch';
+import { WORKSPACE_BUSY, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
 
 /** One line per namespace a script can use: `petstore (19 functions)`. */
 function namespaceSummary(tools: Tool[]): string[] {
@@ -1020,7 +1020,8 @@ export class AgentStepProcessor {
             }
 
             toolCall.result = toolResult.data;
-            if (!toolResult.success && toolResult.metadata?.runnerErrorCode === WORKSPACE_WAKING) {
+            // A waking machine, or another job in the person's workspace: sleep and try again.
+            if (!toolResult.success && (toolResult.metadata?.runnerErrorCode === WORKSPACE_WAKING || toolResult.metadata?.runnerErrorCode === WORKSPACE_BUSY)) {
               wakeRetryMs = Math.max(wakeRetryMs ?? 0, Number(toolResult.metadata?.retryAfterMs) || 0);
             }
             toolCall.error = toolResult.success ? undefined : toolResult.error;

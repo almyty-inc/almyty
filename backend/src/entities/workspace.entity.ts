@@ -185,4 +185,35 @@ export class Workspace {
   /** When the owner was told a suspended workspace is about to be deleted. */
   @Column({ type: 'timestamptz', nullable: true })
   expiryNoticeAt: Date | null;
+
+  /**
+   * Who is working in a persistent workspace now, so the jobs on one
+   * person's folder run one after another (docs/hosted-runners.md, "One
+   * folder, one job at a time"). `leaseJob` says the holder is a job (the
+   * top-level run): it keeps the workspace while it runs and has used it
+   * within the lease. Otherwise the holder is a single call, released when
+   * the call returns. Null when nobody holds it.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  leaseHolder: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  leaseJob: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  leaseUntil: Date | null;
+
+  /**
+   * A departed member's workspace kept for an admin who already had one on
+   * the environment (Frane, 2026-10-08): the admin keeps both, this one
+   * read-only. Its pod mounts the volume read-only, nothing dispatches
+   * into it unless a call names it, and it expires like any suspended
+   * workspace.
+   */
+  @Column({ type: 'boolean', default: false })
+  readOnly: boolean;
+
+  /** Whose it was before it was handed over. */
+  @Column({ type: 'uuid', nullable: true })
+  inheritedFromUserId: string | null;
 }

@@ -80,6 +80,13 @@ export async function prepareHostedWorkspace(inputs: PrepareInputs = {}): Promis
   const repoUrl = (env.ALMYTY_REPO_URL ?? '').trim();
   const repoDir = join(root, REPO_DIR_NAME);
 
+
+  // An inherited workspace is kept read-only for its new owner to copy
+  // from (the volume is mounted read-only): nothing is set up in it.
+  if ((env.ALMYTY_WORKSPACE_READ_ONLY ?? '').trim() === 'true') {
+    log('workspace: read-only (inherited); nothing is set up');
+    return { upToDate: true, cloned: false, setupRan: false, ok: true, repoDir: repoUrl && existsSync(repoDir) ? repoDir : null };
+  }
   const recorded = existsSync(versionFile) ? readFileSync(versionFile, 'utf-8').trim() : null;
   if (recorded === version) {
     log(`workspace: environment version ${version} already set up`);

@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
+import { HostedModelCall } from '../../entities/hosted-model-call.entity';
 import { SpendGranularity, normalizeGranularity } from './spend-period.util';
 import { notOthersPrivateAgent } from '../monitoring/private-rows';
 
@@ -80,6 +81,12 @@ export class SpendService {
     private readonly runRepo: Repository<AgentRun>,
     @InjectRepository(AgentExecution)
     private readonly executionRepo: Repository<AgentExecution>,
+    // Hosted pods' model calls through the pass-through: spend no agent
+    // made, counted in the organization's totals and budgets. Optional so
+    // the positional spec harnesses keep working.
+    @Optional()
+    @InjectRepository(HostedModelCall)
+    private readonly hostedCallRepo?: Repository<HostedModelCall>,
   ) {}
 
   private toCents(dollars: string | number | null | undefined): number {
@@ -87,17 +94,20 @@ export class SpendService {
   }
 
   /**
-   * Both spend tables have the same four columns this service needs
+   * The spend tables share the four columns this service needs
    * (organizationId, agentId, totalCost, createdAt), so each aggregation
-   * runs the same query twice under a shared alias and merges. Missing
+   * runs the same query per table under a shared alias and merges. Missing
    * repo = the autonomous half only, which keeps a caller that predates
-   * the workflow half working rather than throwing.
+   * the workflow half working rather than throwing. `perAgent` is false
+   * for a table whose rows name no agent (a pod's model calls), which the
+   * per-agent breakdown leaves out.
    */
-  private spendSources(): Array<{ repo: Repository<any>; alias: string }> {
-    const sources: Array<{ repo: Repository<any>; alias: string }> = [
-      { repo: this.runRepo, alias: 'run' },
+  private spendSources(): Array<{ repo: Repository<any>; alias: string; perAgent: boolean }> {
+    const sources: Array<{ repo: Repository<any>; alias: string; perAgent: boolean }> = [
+      { repo: this.runRepo, alias: 'run', perAgent: true },
     ];
-    if (this.executionRepo) sources.push({ repo: this.executionRepo, alias: 'run' });
+    if (this.executionRepo) sources.push({ repo: this.executionRepo, alias: 'run', perAgent: true });
+    if (this.hostedCallRepo) sources.push({ repo: this.hostedCallRepo, alias: 'run', perAgent: false });
     return sources;
   }
 
@@ -208,7 +218,7 @@ export class SpendService {
     hiddenAgentIds: string[],
   ): Promise<SpendByAgent[]> {
     const perSource = await Promise.all(
-      this.spendSources().map(async ({ repo, alias }) => {
+      this.spendSources().filter((s) => s.perAgent).map(async ({ repo, alias }) => {
         const qb = repo
           .createQueryBuilder(alias)
           .select(`${alias}.agentId`, 'agentId')

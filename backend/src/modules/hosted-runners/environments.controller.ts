@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Request,
   UseGuards,
   UsePipes,
@@ -20,6 +21,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { EnvironmentsService } from './environments.service';
 import { HostedRunnersService } from './hosted-runners.service';
+import { EnvironmentInsightsService } from './environment-insights.service';
 import { CreateEnvironmentDto, UpdateEnvironmentDto } from './dto/environment.dto';
 
 const VALIDATE = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
@@ -36,6 +38,7 @@ export class EnvironmentsController {
   constructor(
     private readonly environments: EnvironmentsService,
     private readonly hosted: HostedRunnersService,
+    private readonly insights: EnvironmentInsightsService,
   ) {}
 
   private context(req: any): { userId: string; organizationId: string } {
@@ -48,7 +51,34 @@ export class EnvironmentsController {
   @Roles('viewer', 'member', 'admin', 'owner')
   async list(@Request() req: any) {
     const { userId, organizationId } = this.context(req);
-    return { success: true, data: await this.environments.list(userId, organizationId), enabled: this.hosted.enabled() };
+    const environments = await this.environments.list(userId, organizationId);
+    // Each row carries the caller's own machine there (`mine`, null when
+    // they have none yet), so the list needs no request per row.
+    const mine = await this.insights.machines(userId, organizationId, environments.map((e) => e.id));
+    return {
+      success: true,
+      data: environments.map((e) => ({ ...e, mine: mine[e.id] ?? null })),
+      enabled: this.hosted.enabled(),
+      // The form's choices, from the install's settings and the plan.
+      settings: await this.insights.options(organizationId),
+    };
+  }
+
+  /** What an environment form may offer: images, sizes, idle-timeout bounds and default, how long files are kept. */
+  @Get('settings')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  async settings(@Request() req: any) {
+    const { organizationId } = this.context(req);
+    return { success: true, data: await this.insights.options(organizationId) };
+  }
+
+  /** Runner minutes this month (or ?from=&to=), per environment you can see, and for the organization (owners and admins). */
+  @Get('usage')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  async usage(@Request() req: any, @Query('from') from?: string, @Query('to') to?: string) {
+    const { userId, organizationId } = this.context(req);
+    const period = this.insights.period(from, to);
+    return { success: true, data: await this.insights.usage(userId, organizationId, period.from, period.to) };
   }
 
   @Post()
@@ -80,6 +110,14 @@ export class EnvironmentsController {
     const { userId, organizationId } = this.context(req);
     await this.environments.remove(id, userId, organizationId);
     return { success: true };
+  }
+
+  /** Runs of agents whose machine is this environment, newest first: yours, or all of them for an owner or admin. */
+  @Get(':id/runs')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  async runs(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Query('limit') limit?: string) {
+    const { userId, organizationId } = this.context(req);
+    return { success: true, data: await this.insights.runs(id, userId, organizationId, limit ? Number(limit) : undefined) };
   }
 
   /** The environment's persistent workspaces: the caller's own, or all of them for an org admin. */

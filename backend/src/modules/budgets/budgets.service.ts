@@ -296,8 +296,12 @@ export class BudgetsService {
    * No matching budget → no-op (unchanged behavior). Never throws for
    * anything other than a deliberate reject — alert/email failures are
    * swallowed so governance can't take down the run path.
+   *
+   * `agentId` null is a call no agent made (a hosted pod's model call
+   * through the pass-through): organization-wide budgets apply, agent
+   * budgets do not.
    */
-  async enforceForRun(organizationId: string, agentId: string): Promise<void> {
+  async enforceForRun(organizationId: string, agentId: string | null): Promise<void> {
     const budgets = await this.budgetRepo.find({
       where: { organizationId, active: true },
     });
@@ -351,6 +355,11 @@ export class BudgetsService {
         await this.recordAlert(budget, 'soft', periodStart, spentCents);
       }
     }
+  }
+
+  /** The organization's budgets for a call no agent made (a hosted pod's model pass-through). */
+  enforceForOrganization(organizationId: string): Promise<void> {
+    return this.enforceForRun(organizationId, null);
   }
 
   /**

@@ -1654,6 +1654,28 @@ describe('ToolsService', () => {
       expect(result).toBeNull();
     });
 
+    it('resolves a $ref in a description that was given as YAML', async () => {
+      // Google's published descriptions are YAML; a request body behind a
+      // $ref (Calendar freeBusy, Gmail send) lost every field.
+      const rawSchema = [
+        'openapi: 3.0.0',
+        'components:',
+        '  schemas:',
+        '    FreeBusyRequest:',
+        '      type: object',
+        '      properties:',
+        '        timeMin:',
+        '          type: string',
+        '        timeMax:',
+        '          type: string',
+      ].join('\n');
+      apiSchemaRepo.findOne.mockResolvedValue({ ...mockApiSchema, rawSchema });
+
+      const result = await service['resolveSchemaRef']('#/components/schemas/FreeBusyRequest', 'api-1');
+
+      expect(Object.keys(result.properties)).toEqual(['timeMin', 'timeMax']);
+    });
+
     it('should handle deeply nested $ref paths', async () => {
       const schema = {
         id: 'schema-1',

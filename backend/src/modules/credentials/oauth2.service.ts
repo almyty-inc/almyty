@@ -264,6 +264,19 @@ export class OAuth2Service {
   ) {}
 
   /**
+   * Where a provider sends the browser back after a sign-in. The app
+   * registered at the provider (a Google Cloud OAuth client, a HubSpot
+   * app) has to list this exact address, or the provider refuses the
+   * sign-in with a redirect mismatch; the sign-in form shows it.
+   */
+  callbackUrl(): string {
+    return (
+      process.env.OAUTH2_CALLBACK_URL ||
+      `${process.env.API_BASE_URL || 'https://api.staging.almyty.com'}/credentials/oauth2/callback`
+    );
+  }
+
+  /**
    * Returns the list of OAuth2 provider presets.
    */
   getPresets(): Record<string, OAuth2Preset> {
@@ -337,10 +350,7 @@ export class OAuth2Service {
     const state = randomBytes(32).toString('hex');
 
     // Resolve redirect URI
-    const callbackUri =
-      redirectUri ||
-      process.env.OAUTH2_CALLBACK_URL ||
-      `${process.env.API_BASE_URL || 'https://api.staging.almyty.com'}/credentials/oauth2/callback`;
+    const callbackUri = redirectUri || this.callbackUrl();
 
     // Store state in Redis
     const statePayload = {
@@ -379,6 +389,14 @@ export class OAuth2Service {
     if (usePKCE) {
       url.searchParams.set('code_challenge', codeChallenge);
       url.searchParams.set('code_challenge_method', 'S256');
+    }
+
+    // Google hands out a refresh token only when asked for offline access,
+    // and only on a consent screen it shows again. Without both the sign-in
+    // works for an hour and then every call fails, with nothing to renew it.
+    if (url.hostname === 'accounts.google.com') {
+      if (!url.searchParams.has('access_type')) url.searchParams.set('access_type', 'offline');
+      if (!url.searchParams.has('prompt')) url.searchParams.set('prompt', 'consent');
     }
 
     this.logger.log(

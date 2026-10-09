@@ -18,6 +18,7 @@ import { approvalsApi } from '@/lib/api'
 import { formatRelativeTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { emailPreviewOf } from '@/lib/email-preview'
 import { ChangeSetView } from '@/components/approvals/change-set-view'
 import type { ChangeSetEntry } from '@/types'
 
@@ -207,6 +208,28 @@ export function ApprovalsPage() {
                     <> · expires {formatRelativeTime(row.expiresAt)}</>
                   )}
                 </div>
+                {(() => {
+                  const email = emailPreviewOf(row.payload)
+                  if (!email) return null
+                  return (
+                    <div className="mt-2 rounded-lg border bg-background p-3 text-sm text-foreground" data-testid="approval-email-preview">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">The email it will send</p>
+                      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                        <dt className="text-muted-foreground">To</dt>
+                        <dd className="break-all">{email.to || '(nobody)'}</dd>
+                        {email.cc && (
+                          <>
+                            <dt className="text-muted-foreground">Cc</dt>
+                            <dd className="break-all">{email.cc}</dd>
+                          </>
+                        )}
+                        <dt className="text-muted-foreground">Subject</dt>
+                        <dd>{email.subject || '(no subject)'}</dd>
+                      </dl>
+                      <p className="mt-3 whitespace-pre-wrap">{email.body}</p>
+                    </div>
+                  )
+                })()}
                 {row.payload && Object.keys(row.payload).length > 0 && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-foreground/80">Action details</summary>

@@ -58,7 +58,10 @@ describeOrSkip('app owns branding migration (real Postgres)', () => {
   });
 
   beforeEach(async () => {
-    await db.query('DROP TABLE IF EXISTS agent_app_distributions, agent_apps, gateways');
+    // Schema-qualified: with search_path falling back to public, a bare name
+    // reached public.gateways whenever an earlier spec had migrated public,
+    // and the drop failed on its foreign keys.
+    await db.query(`DROP TABLE IF EXISTS ${schema}.agent_app_distributions, ${schema}.agent_apps, ${schema}.gateways`);
     await db.query(`
       CREATE TABLE gateways (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer } from 'node:http';
+import { AddressInfo } from 'node:net';
 
 import {
   enroll,
@@ -263,6 +265,41 @@ describe('enroll mode end to end (RunnerDaemon.startEnrolled against the fake AP
       await daemon.shutdown();
       outSpy.mockRestore();
       errSpy.mockRestore();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('serves the pod model token to the coding CLIs through the loopback proxy, and keeps it out of their environment', async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), 'almyty-enroll-state-'));
+    vi.stubEnv('ALMYTY_RUNNER_STATE_DIR', stateDir);
+    vi.resetModules();
+    const { RunnerDaemon } = await import('../src/daemon.js');
+    const out: string[] = [];
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation((s: any) => { out.push(String(s)); return true; });
+    const port = await new Promise<number>((resolve) => {
+      const probe = createServer().listen(0, '127.0.0.1', () => {
+        const p = (probe.address() as AddressInfo).port;
+        probe.close(() => resolve(p));
+      });
+    });
+    const podToken = 'almyty_pod_fake-token-for-tests';
+    const env: Record<string, string | undefined> = {
+      ALMYTY_ENROLLMENT_TOKEN: FAKE_TOKEN, ALMYTY_API_URL: api.url,
+      ALMYTY_MODEL_TOKEN: podToken, ALMYTY_MODEL_TOKEN_EXPIRES_AT: new Date(Date.now() + 3_600_000).toISOString(),
+      ALMYTY_MODEL_PROXY_PORT: String(port), ALMYTY_MODEL_RENEW_PATH: '/runners/hosted/model-token',
+    };
+    const daemon = new RunnerDaemon();
+    try {
+      await daemon.startEnrolled({ env, prepare: vi.fn().mockResolvedValue({ ok: true }), exit: vi.fn(), installSignals: false });
+      expect(env).not.toHaveProperty('ALMYTY_MODEL_TOKEN');
+      expect(out.join('')).toContain(`model proxy listening on 127.0.0.1:${port}`);
+      await fetch(`http://127.0.0.1:${port}/v1/messages`, { method: 'POST', headers: { 'x-api-key': 'almyty-pod-local' }, body: '{}' }).then((r) => r.text());
+      const call = api.requests.find((r) => r.path === '/v1/messages');
+      expect(call?.authorization).toBe(`Bearer ${podToken}`);
+      expect(out.join('')).not.toContain(podToken);
+    } finally {
+      await daemon.shutdown();
+      outSpy.mockRestore();
       rmSync(stateDir, { recursive: true, force: true });
     }
   });
