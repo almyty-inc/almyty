@@ -31,15 +31,15 @@ almyty checks the key with OpenAI and lists the models you can use. **Key works*
 
 ![OpenAI connected: Key works, and its models with their prices](/screenshots/tutorials/founder/02-openai-connected.png)
 
-## 2. Register almyty with Google (once)
+## 2. Register your own Google app (once)
 
-This step happens in Google's own console, not in almyty, so there are no almyty screenshots for it. You do it once; all three Google services use it.
+Google lets an app read someone's calendar or mail only when that app is registered with Google. You register your own, in your own Google Cloud project; almyty then signs in through it. This step happens in Google's console, not in almyty, so there are no almyty screenshots for it. You do it once; all three Google services use it. [Connect Google](/credentials/connect-google) has every step in detail, with what to do when Google refuses a sign-in.
 
 1. Open **console.cloud.google.com** and sign in with the Google account the assistant should read. Create a project, for example "almyty assistant".
 2. Under **APIs & Services → Library**, turn on three APIs: **Google Calendar API**, **Gmail API** and **Google Tasks API**.
 3. Set up the **OAuth consent screen** (Google also calls it the **Google Auth Platform**): an app name such as "Lumen assistant" and your email.
    - With **Google Workspace**, choose **Internal**. Only people in your company can use it, and Google does not need to review it.
-   - With a personal Google account, choose **External**, leave it in **Testing**, and add your own address under **Test users**. Google ends such sign-ins after 7 days, so you sign in again once a week. Publishing the app for good needs Google's review, because reading mail is something Google checks closely.
+   - With a personal Google account, choose **External**. The app starts in **Testing**: add your own address under **Audience → Test users**, or Google will not let you sign in. Google ends sign-ins of an app in Testing after 7 days, so you sign in again once a week. Publishing the app for good needs Google's review, because reading mail is something Google checks closely.
 4. Under **Clients** (or **Credentials → Create credentials → OAuth client ID**), create a client of type **Web application**. Leave **Authorized redirect URIs** open for now: you copy the address in from almyty in the next step.
 5. Keep the **Client ID** and **Client secret** that Google shows you.
 
@@ -49,44 +49,45 @@ This step happens in Google's own console, not in almyty, so there are no almyty
 
 ![Connect an API: pick what kind of API it is](/screenshots/tutorials/founder/03-connect-an-api.png)
 
-2. Pick **OpenAPI / Swagger**. Under **Link to the description**, paste:
+2. Pick **OpenAPI / Swagger**. Under **Link to the description**, paste Google's own description of Google Calendar:
 
 ```
-https://api.apis.guru/v2/specs/googleapis.com/calendar/v3/openapi.yaml
+https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest
 ```
 
 ![The link to Google Calendar's description, pasted](/screenshots/tutorials/founder/04-calendar-link.png)
 
-   This is a description of Google Calendar's API in the format almyty reads. (Google's own description, the "discovery document", is in a different format that almyty does not read yet.) Optionally open **Advanced** and set **Name** to `Google Calendar`.
+   Open **Advanced** and set **Name** to `Google Calendar`, so the tool names match the ones in this tutorial.
 
-3. Click **Connect API**. almyty reads the description and makes a tool for everything Google Calendar can do: 37 of them.
+3. Click **Connect API**. almyty reads the description and makes a tool for everything Google Calendar can do: 38 of them.
 
-![Finish connecting Google Calendar: 37 tools made, and a Google sign-in needed](/screenshots/tutorials/founder/05-finish-connecting.png)
+![Finish connecting Google Calendar: 38 tools made, and a Google sign-in needed](/screenshots/tutorials/founder/05-finish-connecting.png)
 
 4. Under **Sign-in**, click **Create one here**. The form shows a **redirect address**. Copy it with the button next to it, go back to your Google client from step 2, add it under **Authorized redirect URIs** and save there.
-5. Back in almyty, paste the **Client ID** and **Client secret** from Google and click **Sign in**.
+5. Back in almyty, paste the **Client ID** and **Client secret** from Google.
+6. Under **What it asks for**, the form lists every permission Google Calendar's description names, all ticked. The assistant only reads, so untick everything except the two that end in `calendar.readonly` and `calendar.events.readonly`. Then click **Sign in**.
 
-![The Google sign-in form: the redirect address to copy, the client ID and the client secret](/screenshots/tutorials/founder/06-google-sign-in.png)
+![The Google sign-in form: the redirect address to copy, the client ID, the client secret and the permissions it asks for](/screenshots/tutorials/founder/06-google-sign-in.png)
 
-6. Google opens its consent screen. It names your app and lists what almyty asks for. For Google Calendar that is broad: it lists seeing and editing your calendars, because almyty asks for everything the description offers. Your assistant only gets the reading tools you tick in step 6. Click **Continue** (or **Allow**).
-7. You come back to almyty: **Saved. Tools send it with every call.** The sign-in is kept under **Credentials** and renews itself.
+7. Google opens its consent screen. It names your app and lists the permissions you left ticked. With an app in **Testing**, Google first warns that it has not verified the app: it is your own app, so click **Continue**. Then click **Continue** (or **Allow**) again.
+8. You come back to almyty: **Saved. Tools send it with every call.** The sign-in is kept under **Credentials** and renews itself.
 
 ![Google Calendar signed in](/screenshots/tutorials/founder/07-calendar-signed-in.png)
 
 ## 4. Connect Gmail and Google Tasks
 
-Do step 3 twice more, with these links:
+Do step 3 twice more, with these links and names:
 
-| Service | Link to paste |
-|---|---|
-| Gmail | `https://api.apis.guru/v2/specs/googleapis.com/gmail/v1/openapi.yaml` |
-| Google Tasks | `https://api.apis.guru/v2/specs/googleapis.com/tasks/v1/openapi.yaml` |
+| Service | Link to paste | Name |
+|---|---|---|
+| Gmail | `https://gmail.googleapis.com/$discovery/rest?version=v1` | `Gmail` |
+| Google Tasks | `https://tasks.googleapis.com/$discovery/rest?version=v1` | `Google Tasks` |
 
-For each, click **Create one here** and **Sign in** again with the same client ID and secret. Each Google service needs its own sign-in: the list offers your Calendar sign-in too, but it only covers the calendar, so Gmail would refuse it. You do not need to add a new redirect address; it is the same one.
+For each, click **Create one here** and **Sign in** again with the same client ID and secret. Under **What it asks for**, keep only `gmail.readonly` for Gmail and `tasks.readonly` for Google Tasks. Each Google service needs its own sign-in: the list offers your Calendar sign-in too, but it only covers the calendar, so Gmail would refuse it. You do not need to add a new redirect address; it is the same one.
 
 **APIs** now lists all three.
 
-![The three Google APIs: Gmail with 79 tools, Google Calendar with 37, Google Tasks with 14](/screenshots/tutorials/founder/08-apis.png)
+![The three Google APIs: Gmail with 79 tools, Google Calendar with 38, Google Tasks with 14](/screenshots/tutorials/founder/08-apis.png)
 
 ## 5. Check that the tools work
 
@@ -134,7 +135,7 @@ Only read calendars, emails and tasks. Never send email, answer invitations or c
 
 ![Memory: its own, saving the facts it learns](/screenshots/tutorials/founder/12-agent-memory.png)
 
-6. **Capabilities → Tools and APIs:** search for and tick these six tools. They only read:
+6. **Capabilities → Tools and APIs:** search for and tick these six tools. Each shows what it does, with the name below it. They only read:
 
 | Tool | What it does |
 |---|---|
@@ -155,7 +156,7 @@ On the assistant's **Overview** tab, under **Try it**, type `Write my morning br
 
 ![The first brief in Try it: two clashes found across the work, team and personal calendars](/screenshots/tutorials/founder/14-first-run.png)
 
-It found both clashes, even though the dentist appointment is on the personal calendar and the hiring sync on the team calendar. Try it shows the text as written, so headings appear between `**` marks.
+It found both clashes, even though the dentist appointment is on the personal calendar and the hiring sync on the team calendar.
 
 To see how it got there, open the **Runs** tab and click the run. Each step shows which tool it called, with what, and what came back.
 
@@ -220,14 +221,13 @@ The **Memory** tab shows what it has learned about people, for example that Tom 
 
 | What you see | What to do |
 |---|---|
-| **This link doesn't return an API description.** | You pasted Google's own discovery document. Use the links in this tutorial. |
+| **Request had insufficient authentication scopes** | The sign-in does not cover what the tool needs: you unticked that permission, or picked another service's sign-in. Sign in again on the API's page, under **Key**. |
 | Google says **Error 400: redirect_uri_mismatch** | The redirect address from step 3 is not on your Google client. Copy it again from the sign-in form and add it under **Authorized redirect URIs**. |
 | Google says **access blocked** or **app not verified** | With a personal account, add yourself under **Test users** on the consent screen (step 2). |
-| Gmail calls fail with **insufficient permission** or **403** | You picked the Calendar sign-in for Gmail. Open Gmail under **APIs**, and under **Key** sign in again with **Create one here**. |
 | A week later, every call fails | Your Google app is **External** and in **Testing**: Google ends those sign-ins after 7 days. Sign in again, or use a Workspace **Internal** app. |
 | Publishing the Email channel says **The Email credential still needs: inbound address** | Open the Resend credential on **Credentials**, **Replace key**, fill in **Inbound address** under **More options**, then pick the credential again on the channel. |
 | Connecting a model you run yourself (Ollama) says **Could not reach almyty to check the key** | The model took longer than 30 seconds to load. Start it once (`ollama run <model>`) and try again. |
-| Always on says it **was paused because the agent woke more often in an hour than it may** | **Wake now** counts too. Wait an hour, or click **Turn it back on**. |
+| Always on says it **was paused because the agent woke more often in an hour than it may** | It woke itself in a loop (its own timer or channel messages; **Wake now** does not count). Check **What woke it lately** on its Always on page, then click **Turn it back on**. |
 
 ## Related
 
