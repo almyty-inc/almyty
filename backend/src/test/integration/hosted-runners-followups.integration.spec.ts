@@ -411,6 +411,27 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       expect(row.machine).toMatchObject({ desired: { replicas: 1 } });
     });
 
+    it('tells the list the caller\'s own machine, never a read-only one inherited from a member who left', async () => {
+      const organizationId = await org('mine-inherited');
+      const boss = await member(organizationId, 'boss', OrganizationRole.OWNER, new Date('2023-01-01'));
+      const gone = await member(organizationId, 'gone', OrganizationRole.MEMBER, new Date('2024-01-01'));
+      const shared = await environment(organizationId, boss, { visibility: 'org' });
+      const own = await hosted.resolveTarget(shared.id, { organizationId, callerUserId: boss });
+      const theirs = await hosted.resolveTarget(shared.id, { organizationId, callerUserId: gone });
+
+      await orgs.removeMember(organizationId, gone, boss);
+      expect(await repo(Workspace).findOneByOrFail({ id: theirs.workspaceId })).toMatchObject({ ownerUserId: boss, readOnly: true });
+      // The kept one was touched last, so a query that does not exclude it hands it back.
+      await repo(Workspace).update({ id: theirs.workspaceId }, { lastActiveAt: new Date() });
+
+      const mine = await insights.machines(boss, organizationId, [shared.id]);
+      expect(mine[shared.id]).toMatchObject({ workspaceId: own.workspaceId, machine: { id: own.hostedRunnerId } });
+
+      // With their own one gone, the inherited one is still not theirs to show.
+      await repo(Workspace).update({ id: own.workspaceId }, { status: WorkspaceStatus.RELEASED });
+      expect((await insights.machines(boss, organizationId, [shared.id]))[shared.id]).toBeNull();
+    });
+
     it('offers the install\'s images, sizes, idle-timeout bounds and file keep days', async () => {
       const organizationId = await org('options');
       const options = await insights.options(organizationId);
