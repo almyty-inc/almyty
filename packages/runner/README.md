@@ -60,7 +60,10 @@ from `ALMYTY_ENROLLMENT_TOKEN` (or the file named by
 `ALMYTY_ENROLLMENT_TOKEN_FILE`), trades it at `ALMYTY_API_URL` for a runner
 credential that works only on that runner's own stream, keeps the credential in
 memory and renews it before it expires. A refused enrollment or renewal exits
-non-zero, so Kubernetes restarts the container. See
+non-zero, so Kubernetes restarts the container. When the pod carries a model
+token, the runner serves it to the coding CLIs through a loopback model proxy
+(`127.0.0.1:$ALMYTY_MODEL_PROXY_PORT`) and renews it while the pod runs; the
+CLIs only ever see a placeholder key. See
 [docs/hosted-runners.md](../../docs/hosted-runners.md).
 ## What that command lets almyty do to your machine
 

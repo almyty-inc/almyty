@@ -271,7 +271,11 @@ export function buildDeployment(req: HostedProvisionRequest, layout: ClusterLayo
   const names = namesFor(req, layout);
   const labels = runnerLabels(req);
   const mount = layout.workspaceMountPath;
-  const env = Object.entries({ ...req.env, ALMYTY_WORKSPACE_ROOT: mount, HOME: `${mount}/.home` })
+  // An inherited workspace is mounted read-only (its owner keeps it to copy
+  // from); HOME then lives in /tmp, the one other writable place.
+  const readOnly = req.readOnlyWorkspace === true;
+  const home = readOnly ? '/tmp/.home' : `${mount}/.home`;
+  const env = Object.entries({ ...req.env, ALMYTY_WORKSPACE_ROOT: mount, HOME: home, ...(readOnly ? { ALMYTY_WORKSPACE_READ_ONLY: 'true' } : {}) })
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, value]) => ({ name, value: String(value) }));
   return {
@@ -316,7 +320,7 @@ export function buildDeployment(req: HostedProvisionRequest, layout: ClusterLayo
                 seccompProfile: { type: 'RuntimeDefault' },
               },
               volumeMounts: [
-                { name: 'workspace', mountPath: mount },
+                { name: 'workspace', mountPath: mount, ...(readOnly ? { readOnly: true } : {}) },
                 { name: 'tmp', mountPath: '/tmp' },
               ],
             },

@@ -30,7 +30,7 @@ import { CreateTeamDto } from './dto/create-team.dto';
 import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
-import { ResourceHandoverHelper } from './resource-handover.helper';
+import { ResourceHandoverHelper, runAfterCommit } from './resource-handover.helper';
 import type { WipedConnection } from '../connections/member-connection-offboarding';
 
 import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
@@ -471,6 +471,7 @@ export class OrganizationsService {
     // the membership removal, so neither happens alone.
     const reason = userId === actorUserId ? 'member_left' : 'member_removed';
     const wipedConnections: WipedConnection[] = [];
+    const afterCommit: Array<() => Promise<void>> = [];
     const audit = await this.userOrganizationRepository.manager.transaction(async (manager) => {
       const toUserId =
         reason === 'member_removed'
@@ -483,11 +484,14 @@ export class OrganizationsService {
         actorUserId,
         reason,
         wipedConnections,
+        afterCommit,
       });
       await manager.getRepository(UserOrganization).remove(membership);
       return entries;
     });
     this.auditLogService?.publishCommitted(audit);
+    // Stopped hosted pods are reconciled and new environment owners told.
+    await runAfterCommit(afterCommit);
     // Their connections are already useless here; now end the grants at
     // the providers too. After commit, best-effort: a provider that is
     // down or refuses cannot undo the removal.
@@ -821,17 +825,22 @@ export class OrganizationsService {
     // teamId) refuses that. The deleter is an org owner/admin who could
     // already see them all. The BEFORE DELETE trigger on teams does the
     // same for any other path; this one is audited.
+    // Environments shared with the team become private to their owner, who
+    // is told once the deletion committed.
+    const afterCommit: Array<() => Promise<void>> = [];
     const audit = await this.teamRepository.manager.transaction(async (manager) => {
       const entries = await this.requireHandover().demoteTeamResources(manager, {
         organizationId,
         teamId: team.id,
         teamName: team.name,
         actorUserId: actingUserId ?? null,
+        afterCommit,
       });
       await manager.getRepository(Team).remove(team);
       return entries;
     });
     this.auditLogService?.publishCommitted(audit);
+    await runAfterCommit(afterCommit);
   }
 
   async getTeamMembers(

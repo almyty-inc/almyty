@@ -32,3 +32,20 @@ describe('humanizeIdentifier', () => {
     expect(humanizeIdentifier('getPetById')).toBe('Get pet by id')
   })
 })
+
+describe('tools from specs without summaries', () => {
+  it('reads the description, and treats a dotted method id as a machine name', () => {
+    // The tool picker, the ask-first list and approvals showed
+    // "hubspot_deals_post_crm_v3_objects_0_3_search_do_search" and "gmail.users.messages.send".
+    expect(readableToolName({ name: 'gmail_gmail_users_messages_list', description: "Lists the messages in the user's mailbox." })).toBe(
+      "Lists the messages in the user's mailbox",
+    )
+    expect(readableToolName({ name: 'google_tasks_tasks_tasks_list', api: { name: 'Google Tasks' }, operation: { name: 'tasks.tasks.list' } })).toBe('Tasks tasks list')
+  })
+
+  it("leaves a description's markdown out of the name", () => {
+    expect(readableToolName({ name: 'gmail_gmail_users_messages_send', description: 'Sends the specified message to the recipients in the `To`, `Cc`, and `Bcc` headers. For example usage, see Sending email.' })).toBe(
+      'Sends the specified message to the recipients in the To, Cc, and Bcc headers',
+    )
+  })
+})

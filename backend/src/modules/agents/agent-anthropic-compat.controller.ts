@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Headers,
+  Inject,
   HttpCode,
   Logger,
   NotFoundException,
@@ -35,6 +36,8 @@ import { CompatRateLimiter } from './compat-rate-limit.helper';
 import { renderConversation, unsupportedAnthropicField, withSamplingOverrides } from './compat-conversation.helper';
 import { authenticateCompatKey, resolveCompatAgent, touchCompatKeyLastUsed } from './compat-auth.helper';
 import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
+import { HOSTED_MODEL_TOKENS, type HostedModelTokens, presentedToken } from '../hosted-runners/hosted-model-token.contract';
+import { ModelPassThroughService } from './model-pass-through.service';
 import {
   CompatAgentInvoker,
   CompatFailure,
@@ -92,6 +95,11 @@ export class AgentAnthropicCompatController {
     // positional spec harnesses' order; a request refuses to run without it.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
     @Optional() private readonly endpointAccess?: AgentApiAccessService,
+    // Hosted pods' model tokens (hosted-runners). Optional: without hosted
+    // runners a pod token is just an unknown key.
+    @Optional() @Inject(HOSTED_MODEL_TOKENS) private readonly podTokens?: HostedModelTokens,
+    // Where a pod token's calls go: the model pass-through, never an agent.
+    @Optional() private readonly passThrough?: ModelPassThroughService,
   ) {
     this.rateLimiter = new CompatRateLimiter('anthropic_rl', this.logger, this.redis);
   }
@@ -115,9 +123,17 @@ export class AgentAnthropicCompatController {
     @Res() res: Response,
   ) {
     try {
+      // A hosted pod's model token is tried first and, when it is one,
+      // only: the call is the CLI's own, forwarded to an organization-wide
+      // provider (the model pass-through), never an agent run.
+      const podKey = await this.podTokens?.authenticate(presentedToken(auth, xApiKey));
+      if (podKey) {
+        if (!this.passThrough) throw new Error('The model pass-through is not configured');
+        return await this.passThrough.forward(podKey, 'anthropic_messages', body, req, res);
+      }
       // Anthropic clients send x-api-key; accepting Bearer as well means a
       // caller that already has an almyty key does not need a second shape.
-      const apiKey = await this.endpointAccess?.authenticateTarget(body?.model, req) ?? await this.authenticate(auth, xApiKey);
+      const apiKey = (await this.endpointAccess?.authenticateTarget(body?.model, req)) ?? (await this.authenticate(auth, xApiKey));
 
       // Per-key rate limit, at parity with /v1/chat/completions: headers on
       // every response, Retry-After on a refusal, the Anthropic error shape.

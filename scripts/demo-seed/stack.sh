@@ -8,6 +8,12 @@
 #   scripts/demo-seed/stack.sh down    stop all of it and remove the containers
 #   scripts/demo-seed/stack.sh env     print the variables seed.mjs/capture read
 #
+# USECASES=1 also starts usecases/upstream.mjs, the stand-in for Google,
+# HubSpot, Slack, Resend and a scripted model that the tutorials'
+# screenshots are captured against (usecases/tutorials.mjs), and loads
+# usecases/redirect-fetch.mjs into the API so its email and Slack traffic
+# goes there instead of the real services.
+#
 # Ports default to ones the usual stacks leave alone; override any of them.
 set -euo pipefail
 
@@ -21,6 +27,7 @@ export REDIS_PORT="${REDIS_PORT:-56510}"
 export API_PORT="${API_PORT:-4210}"
 export WEB_PORT="${WEB_PORT:-3210}"
 export FAKE_PORT="${FAKE_PORT:-4290}"
+export USECASE_PORT="${USECASE_PORT:-4291}"
 mkdir -p "$LOG_DIR"
 
 # Business entitlements, install-wide. Chargeback and customer-managed keys
@@ -33,7 +40,7 @@ license() {
   fi
   export ALMYTY_LICENSE_PUBLIC_KEY="$(cat "$pub")"
   export ALMYTY_LICENSE_KEY="$(node "$ROOT/backend/scripts/license/mint-license.js" --key "$key" \
-    --entitlements sso,advanced_rbac,approval_policy,compliance_pack,audit_export,connections_governance \
+    --entitlements sso,advanced_rbac,approval_policy,compliance_pack,audit_export,connections_governance,hosted_shared_environments \
     --seats 25 --issued-to 'Northwind AI (local demo)' 2>/dev/null)"
 }
 
@@ -43,6 +50,7 @@ DEMO_WEB_URL=http://localhost:$WEB_PORT
 DEMO_API_URL=http://localhost:$API_PORT
 DEMO_FAKE_URL=http://localhost:$FAKE_PORT
 DEMO_PSQL="docker exec -i $PG_NAME psql -U postgres -d almyty_qa"
+DEMO_USECASE_URL=http://localhost:$USECASE_PORT
 EOF
 }
 
@@ -55,15 +63,30 @@ case "${1:-}" in
     export MODEL_PRICE_FEED_DISABLED="${MODEL_PRICE_FEED_DISABLED:-false}"
     # The commercial build, as staging runs it: compliance, audit streams and the other ee/ pages have their API.
     export BACKEND_EE="${BACKEND_EE:-true}"
+    # Hosted environments with the stub adapter, which starts nothing. The
+    # reconcile sweep is off so the machine states seed.mjs writes stay put.
+    export HOSTED_RUNNERS_ENABLED=true HOSTED_RUNNERS_PROVIDER=stub
+    sweep_off='{"reconcile":{"sweepCron":"off"}}'
+    export HOSTED_RUNNERS_SETTINGS="${HOSTED_RUNNERS_SETTINGS:-$sweep_off}"
     if ! curl -sf "http://localhost:$FAKE_PORT/health" >/dev/null 2>&1; then
       FAKE_PORT="$FAKE_PORT" nohup node "$HERE/fake-upstream.mjs" >"$LOG_DIR/fake.log" 2>&1 &
       echo $! >"$LOG_DIR/fake.pid"
+    fi
+    if [ "${USECASES:-}" = "1" ]; then
+      if ! curl -sf "http://localhost:$USECASE_PORT/health" >/dev/null 2>&1; then
+        USECASE_PORT="$USECASE_PORT" USECASE_LOG="$LOG_DIR/usecase-requests.log" USECASE_MODEL_LOG="$LOG_DIR/usecase-model.log" \
+          nohup node "$HERE/usecases/upstream.mjs" >"$LOG_DIR/usecase.log" 2>&1 &
+        echo $! >"$LOG_DIR/usecase.pid"
+      fi
+      export USECASE_UPSTREAM_URL="http://localhost:$USECASE_PORT"
+      export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import $HERE/usecases/redirect-fetch.mjs"
     fi
     "$ROOT/scripts/dev-stack.sh" up
     print_env
     ;;
   down)
     if [ -f "$LOG_DIR/fake.pid" ]; then kill "$(cat "$LOG_DIR/fake.pid")" 2>/dev/null || true; rm -f "$LOG_DIR/fake.pid"; fi
+    if [ -f "$LOG_DIR/usecase.pid" ]; then kill "$(cat "$LOG_DIR/usecase.pid")" 2>/dev/null || true; rm -f "$LOG_DIR/usecase.pid"; fi
     "$ROOT/scripts/dev-stack.sh" down
     ;;
   env) print_env ;;

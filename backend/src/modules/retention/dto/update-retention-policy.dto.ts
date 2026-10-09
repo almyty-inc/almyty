@@ -63,4 +63,11 @@ export class UpdateRetentionPolicyDto {
   @Min(RETENTION_MIN_DAYS)
   @Max(RETENTION_MAX_DAYS)
   notificationsDays?: number | null;
+
+  /** Hosted usage records; null is the install default (13 months as shipped), not forever. */
+  @IsOptional()
+  @IsInt()
+  @Min(RETENTION_MIN_DAYS)
+  @Max(RETENTION_MAX_DAYS)
+  runnerUsageDays?: number | null;
 }

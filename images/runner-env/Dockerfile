@@ -19,7 +19,7 @@
 # entrypoint.
 #
 # Build one flavour (from the repo root):
-#   docker build --target standard -t almyty/runner-env:standard-1.5.4 images/runner-env
+#   docker build --target standard -t almyty/runner-env:standard-1.5.5 images/runner-env
 #
 # Build with the runner from this checkout instead of the registry (what CI
 # does, so a change to packages/runner is exercised in the image before it is
@@ -35,7 +35,7 @@
 FROM scratch AS runner-pkg
 
 FROM node:26-bookworm-slim AS base
-ARG RUNNER_VERSION=1.5.4
+ARG RUNNER_VERSION=1.5.5
 
 LABEL org.opencontainers.image.source="https://github.com/almyty-inc/almyty" \
       org.opencontainers.image.description="almyty hosted runner environment" \

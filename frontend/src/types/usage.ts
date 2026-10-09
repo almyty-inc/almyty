@@ -285,6 +285,8 @@ export interface Agent {
     runnerLabels?: Record<string, string> | string
     /** Pin runner-backed work to one machine. */
     runnerId?: string | null
+    /** Run runner-backed work on a hosted environment instead; never together with runnerId or runnerLabels. */
+    environmentId?: string | null
     /**
      * Who unattended runs act as: its owner (default), or the agent itself
      * with its own connection grants and audit identity. 'agent' needs the

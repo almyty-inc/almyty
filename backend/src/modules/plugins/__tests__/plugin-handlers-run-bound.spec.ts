@@ -68,18 +68,20 @@ describe('built-in plugin handlers execute bound to their instance', () => {
     }
   }
 
-  it('the PII filter an org enforces actually redacts the tool parameters', async () => {
+  it('the PII filter an org enforces hides personal data in what is kept, and leaves tool inputs alone', async () => {
     const manager = makeManager({ 'pii-filter': {} });
     await manager.initialize();
     only(manager, ['PII Filter']);
 
-    const out = await manager.executeHook(
-      PluginHookType.PRE_TOOL_EXECUTION,
-      ctx({ note: 'reach me at alice@example.com' }),
-    );
+    // DATA_FILTER is what ToolExecutorService.hidePersonalData runs on
+    // execution records and answers to outside callers.
+    const kept = await manager.executeHook(PluginHookType.DATA_FILTER, ctx({ note: 'reach me at alice@example.com' }));
+    expect(JSON.stringify(kept.data)).not.toContain('alice@example.com');
+    expect(kept.metadata.halted).toBeUndefined();
 
-    expect(JSON.stringify(out.data)).not.toContain('alice@example.com');
-    expect(out.metadata.halted).toBeUndefined();
+    // A tool gets the address it was called with.
+    const input = await manager.executeHook(PluginHookType.PRE_TOOL_EXECUTION, ctx({ calendarId: 'alice@example.com' }));
+    expect(JSON.stringify(input.data)).toContain('alice@example.com');
   });
 
   it('the security scanner an org enforces actually halts the chain', async () => {

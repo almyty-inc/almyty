@@ -139,6 +139,30 @@ describe('Always on: turning wakes into runs', () => {
     expect(queued(w)).toHaveLength(0);
   });
 
+  it('does not count Wake now toward the loop guard', async () => {
+    // A person testing an agent with Wake now paused it after six clicks.
+    const w = world({ plan: 'free' }); // 6 an hour
+    for (let i = 0; i < 6; i++) {
+      w.wakes.seed({ agentId: AGENT, organizationId: ORG, source: 'manual', summary: 'you asked it to wake now', dedupeKey: `manual${i}`, status: 'consumed', runId: `manual-run-${i}`, consumedAt: new Date(Date.now() - 60_000), createdAt: new Date() });
+    }
+    await w.service.reconcileTimer(w.agents.row(AGENT) as any);
+    // A timer wake after six manual ones is still within the limit...
+    await w.service.wake(AGENT, ORG, 'timer', { summary: 'timer', dedupeKey: 'timer-1' });
+    expect(await w.service.process(AGENT, ORG)).not.toBe('paused');
+    expect(w.agents.row(AGENT)!.alwaysOn.enabled).toBe(true);
+  });
+
+  it('a Wake now goes ahead even after six timer wakes in the hour', async () => {
+    const w = world({ plan: 'free' });
+    for (let i = 0; i < 6; i++) {
+      w.wakes.seed({ agentId: AGENT, organizationId: ORG, source: 'timer', summary: 't', dedupeKey: `old${i}`, status: 'consumed', runId: `old-run-${i}`, consumedAt: new Date(Date.now() - 60_000), createdAt: new Date() });
+    }
+    await w.service.reconcileTimer(w.agents.row(AGENT) as any);
+    await w.service.wake(AGENT, ORG, 'manual', { summary: 'you asked it to wake now', dedupeKey: 'manual-now' });
+    expect(await w.service.process(AGENT, ORG)).not.toBe('paused');
+    expect(w.startRun).toHaveBeenCalled();
+  });
+
   it('judges the owner at wake time: one who can no longer run it pauses it, and nothing runs', async () => {
     const w = world({ agent: alwaysOnAgent({ visibility: 'team', teamId: 'team-1' }) });
     await w.service.wake(AGENT, ORG, 'timer', { summary: 'timer', dedupeKey: 't1' });
@@ -281,10 +305,12 @@ describe('Always on: reporting', () => {
     await w.service.onModuleInit();
     await w.service.wake(AGENT, ORG, 'timer', { summary: 'timer', dedupeKey: 't1' });
     await w.service.process(AGENT, ORG);
-    w.approvals.emit('approval.requested', { id: 'ap-1', runId: 'run-1', reason: 'Ask before “issue_refund”', organizationId: ORG });
+    w.approvals.emit('approval.requested', { id: 'ap-1', runId: 'run-1', reason: 'Ask before “Issue refund” (it is on the ask-first list).', organizationId: ORG });
     await new Promise((r) => setTimeout(r, 10));
     expect(w.posted).toHaveLength(1);
     expect(w.posted[0].text).toContain('waiting for your OK');
+    // One full stop, not the reason's and the notice's both.
+    expect(w.posted[0].text).toContain('(it is on the ask-first list). Approve or reject it in Approvals.');
     // The notice is recorded on the run the way a post is, and the run keeps what it carries.
     expect(w.runs.row('run-1')!.metadata).toMatchObject({ triggerType: 'always_on', channelDelivery: { status: 'delivered' } });
     w.service.onModuleDestroy();
@@ -348,6 +374,17 @@ describe('Always on: settings', () => {
     const w = world();
     const tools = await w.service.suggestedAskFirst(AGENT, ORG);
     expect(tools.filter((t) => !t.readOnly).map((t) => t.id)).toEqual([TOOL_WRITE]);
+  });
+
+  it('offers the tools it has through a whole API too, by the names people read, and accepts them on the list', async () => {
+    // "All tools of Gmail": Gmail's send was missing from the list, and saving
+    // it there was refused as "a tool this agent does not have".
+    const w = world({ agent: alwaysOnAgent({ agentConfig: { apiIds: ['api-gmail'] } }) });
+    w.tools.seed({ id: '7d2c9a1e-4b3f-4e5a-9c6d-1a2b3c4d5e6f', organizationId: ORG, apiId: 'api-gmail', name: 'gmail_gmail_users_messages_send', description: 'Sends the specified message to the recipients.', httpConfig: { method: 'POST' } });
+
+    const tools = await w.service.suggestedAskFirst(AGENT, ORG);
+    expect(tools.find((t) => t.id === '7d2c9a1e-4b3f-4e5a-9c6d-1a2b3c4d5e6f')).toMatchObject({ title: 'Sends the specified message to the recipients', readOnly: false });
+    await expect(w.service.configure(AGENT, ORG, { actMode: 'act', askFirstToolIds: ['7d2c9a1e-4b3f-4e5a-9c6d-1a2b3c4d5e6f'] }, OWNER)).resolves.toBeDefined();
   });
 });
 

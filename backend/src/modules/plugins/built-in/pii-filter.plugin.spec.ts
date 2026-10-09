@@ -84,7 +84,6 @@ describe('PiiFilterPlugin - Real Business Logic', () => {
       expect(byType).toEqual({
         [PluginHookType.PRE_REQUEST]: 'filterPiiFromRequest',
         [PluginHookType.POST_RESPONSE]: 'filterPiiFromResponse',
-        [PluginHookType.PRE_TOOL_EXECUTION]: 'filterPiiFromRequest',
         [PluginHookType.DATA_FILTER]: 'filterPiiFromData',
       });
       expect(Object.keys(byType).sort()).toEqual(

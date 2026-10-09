@@ -21,9 +21,10 @@ export class ToolCacheRateLimitHelper {
   async getCachedResult(
     tool: Tool,
     parameters: Record<string, any>,
+    scope = 'shared',
   ): Promise<ToolExecutionResult | null> {
     try {
-      const cacheKey = this.generateCacheKey(tool.id, parameters);
+      const cacheKey = this.generateCacheKey(tool.id, parameters, scope);
       const cached = await this.redis.get(cacheKey);
       return cached ? JSON.parse(cached) : null;
     } catch (error: any) {
@@ -36,11 +37,12 @@ export class ToolCacheRateLimitHelper {
     tool: Tool,
     parameters: Record<string, any>,
     result: ToolExecutionResult,
+    scope = 'shared',
   ): Promise<void> {
     try {
       const cacheConfig = tool.configuration?.cache;
       if (!cacheConfig?.enabled) return;
-      const cacheKey = this.generateCacheKey(tool.id, parameters);
+      const cacheKey = this.generateCacheKey(tool.id, parameters, scope);
       const ttl = cacheConfig.ttl || 300;
       await this.redis.setex(cacheKey, ttl, JSON.stringify(result));
     } catch (error: any) {
@@ -48,8 +50,20 @@ export class ToolCacheRateLimitHelper {
     }
   }
 
-  generateCacheKey(toolId: string, parameters: Record<string, any>): string {
-    return `tool_cache:${toolId}:${hashCacheObject(parameters)}`;
+  /**
+   * Whose cached answers a call may share. A tool's answers are kept for one
+   * run only, unless the tool says they may be shared (`cache.shared`): an
+   * always-on agent checking an inbox every few minutes got the answer of
+   * its previous wake and missed the reply that had just arrived. Null when
+   * the call may not use the cache at all (no run, and not shared).
+   */
+  static cacheScope(tool: Tool, runId: string | null | undefined): string | null {
+    if (tool.configuration?.cache?.shared === true) return 'shared';
+    return runId ? `run:${runId}` : null;
+  }
+
+  generateCacheKey(toolId: string, parameters: Record<string, any>, scope = 'shared'): string {
+    return scope === 'shared' ? `tool_cache:${toolId}:${hashCacheObject(parameters)}` : `tool_cache:${toolId}:${scope}:${hashCacheObject(parameters)}`;
   }
 
   async checkRateLimit(

@@ -90,6 +90,35 @@ export interface HostedRunnerSettings {
     /** TCP ports the SNI allowlist opens (TLS only). */
     tlsPorts: number[];
   };
+  /**
+   * How long a usage interval (the minutes a pod ran) is kept after it
+   * closed, in calendar months. An organization's retention policy may
+   * set its own `runnerUsageDays` (docs/retention.md); an open interval is
+   * never deleted.
+   */
+  usageRetention: { months: number };
+  /**
+   * One person's workspace on an environment is one folder, and the jobs
+   * that use it run one after another. A job holds the workspace from its
+   * first call until it ends (or has not used it for `leaseMinutes`); a
+   * call of another job waits up to `waitSeconds`, looking every
+   * `pollSeconds`, and is then told to try again in `retryAfterSeconds`.
+   */
+  workspaceQueue: { waitSeconds: number; pollSeconds: number; leaseMinutes: number; retryAfterSeconds: number };
+  /**
+   * The pod model token coding CLIs use, through the runner's local model
+   * proxy, on almyty's model pass-through:
+   * - `tokenTtlMinutes`: its lifetime. The runner renews it while the pod
+   *   runs (POST /runners/hosted/model-token with the current token); it
+   *   also dies the moment the pod stops.
+   * - `touchEverySeconds`: how often its last use is recorded.
+   * - `localProxyPort`: the loopback port the runner's model proxy listens
+   *   on inside the pod; the CLIs' base URLs point there.
+   * - `upstreamTimeoutSeconds`: how long one forwarded call may take.
+   */
+  modelAccess: { tokenTtlMinutes: number; touchEverySeconds: number; localProxyPort: number; upstreamTimeoutSeconds: number };
+  /** How many runs an environment's run list returns: by default, and at most. */
+  runsList: { defaultLimit: number; maxLimit: number };
   /** The almyty API a pod connects to; empty falls back to PUBLIC_API_URL. */
   apiUrl: string;
 }
@@ -114,11 +143,12 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   },
   defaultResourceClass: 'small',
   // The images CI builds and pushes (images/runner-env), tagged with the
-  // runner version they carry; scripts/check-runner-env-images.js keeps
-  // these equal to images/runner-env/settings.json.
+  // runner version they carry; pin each by the pushed digest once the
+  // release push has run (docs/hosted-runners.md, Not yet).
+  // scripts/check-runner-env-images.js keeps these equal to images/runner-env/settings.json.
   images: {
-    standard: 'almyty/runner-env:standard-1.5.4',
-    'standard-browser': 'almyty/runner-env:standard-browser-1.5.4',
+    standard: 'almyty/runner-env:standard-1.5.5',
+    'standard-browser': 'almyty/runner-env:standard-browser-1.5.5',
   },
   capacity: { maxConcurrentRunners: 2, maxWorkspaces: 10, resourceClasses: null },
   cluster: {
@@ -131,6 +161,10 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
     dnsPodLabels: { 'k8s-app': 'kube-dns' },
     tlsPorts: [443],
   },
+  usageRetention: { months: 13 },
+  workspaceQueue: { waitSeconds: 30, pollSeconds: 2, leaseMinutes: 30, retryAfterSeconds: 15 },
+  modelAccess: { tokenTtlMinutes: 60, touchEverySeconds: 60, localProxyPort: 4319, upstreamTimeoutSeconds: 600 },
+  runsList: { defaultLimit: 50, maxLimit: 200 },
   apiUrl: '',
 };
 
@@ -186,6 +220,18 @@ export function settingsProblems(s: HostedRunnerSettings): string[] {
   if (!k?.workspaceMountPath?.startsWith('/')) problems.push('cluster.workspaceMountPath must be an absolute path');
   if (!POSITIVE(k?.runAsUser) || !POSITIVE(k?.runAsGroup)) problems.push('cluster.runAsUser and cluster.runAsGroup must be positive (the runner never runs as root)');
   if (!Array.isArray(k?.tlsPorts) || k.tlsPorts.length === 0 || !k.tlsPorts.every(POSITIVE)) problems.push('cluster.tlsPorts must list at least one port');
+  if (!POSITIVE(s.usageRetention?.months)) problems.push('usageRetention.months must be a positive number');
+  const q = s.workspaceQueue as unknown as Record<string, unknown> | undefined;
+  if (!q || !['waitSeconds', 'pollSeconds', 'leaseMinutes', 'retryAfterSeconds'].every((key) => POSITIVE(q[key]))) {
+    problems.push('workspaceQueue.waitSeconds, pollSeconds, leaseMinutes and retryAfterSeconds must be positive numbers');
+  }
+  const m = s.modelAccess as unknown as Record<string, unknown> | undefined;
+  if (!m || !['tokenTtlMinutes', 'touchEverySeconds', 'localProxyPort', 'upstreamTimeoutSeconds'].every((key) => POSITIVE(m[key]))) {
+    problems.push('modelAccess.tokenTtlMinutes, touchEverySeconds, localProxyPort and upstreamTimeoutSeconds must be positive numbers');
+  }
+  if (!POSITIVE(s.runsList?.defaultLimit) || !POSITIVE(s.runsList?.maxLimit) || s.runsList.defaultLimit > s.runsList.maxLimit) {
+    problems.push('runsList.defaultLimit and runsList.maxLimit must be positive, the default no more than the maximum');
+  }
   return problems;
 }
 

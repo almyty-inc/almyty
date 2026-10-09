@@ -228,6 +228,17 @@ First-ness is tracked per conversation on the run
 (`run.metadata.aiDisclosureSent`); follow-up replies in the same conversation
 are not re-prefixed, and each new conversation discloses again.
 
+Messages the agent starts (scheduled results, always-on reports and notices,
+`ScheduledPostService.post`) follow the same rule per destination: a Slack
+channel, chat, room or number is one ongoing conversation, disclosed on the
+first delivered post there. The delivered post's outbound event row carries
+`payload.post = { destination, disclosed }`, and
+`ChannelGatewayService.disclosedTo` looks for one among the channel's last 500
+posts; none found (never told, the post failed, or retention swept the row)
+means the next post discloses again. An email starts a new thread each time
+and a webhook delivery is no conversation (`eachPostIsNewConversation`), so
+both carry the line on every post.
+
 ## Connectivity probe
 
 `ChannelGatewayService.testConnection(gateway)` performs a **live, no-message**

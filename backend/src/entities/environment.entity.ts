@@ -134,6 +134,15 @@ export class Environment {
   @Column({ type: 'uuid', nullable: true })
   clusterConnectionId: string | null;
 
+  /**
+   * Whether this environment may put a model provider's own key into its
+   * pods (an `envBindings` entry naming a model provider's connection), for
+   * a CLI that cannot change its base URL. Off unless turned on: CLIs
+   * reach models through almyty with the pod-scoped token (Decision 6).
+   */
+  @Column({ type: 'boolean', default: false })
+  allowVendorKeys: boolean;
+
   /** Bumped on every saved change; a hosted runner records the version its pod started from. */
   @Column({ type: 'int', default: 1 })
   version: number;

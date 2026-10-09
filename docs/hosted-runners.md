@@ -9,12 +9,12 @@ stay on a volume, so the next time it starts, the work is where it was left.
 
 This page is the developer reference: what to switch on, what the cluster
 needs, and every setting. The design is
-`docs/design/hosted-runners-and-always-on.md` (on the branch
-`design/hosted-runners-always-on` until it is merged).
+`docs/design/hosted-runners-and-always-on.md`.
 
-Status: phase 2, behind a switch, for staging. There is no page in the app
-yet, the runner images are built in CI but not published yet, and nothing
-is billed yet (usage is recorded).
+Status: phase 2, behind a switch, for staging. The app has a Hosted tab on
+the Runners page (user guide: docs-site "Hosted machines"); the runner images
+are built in CI but not published yet, and nothing is billed yet (usage is
+recorded).
 
 ## In short
 
@@ -26,6 +26,16 @@ is billed yet (usage is recorded).
   while suspended, with a notice on day 23, then deleted.
 - A pod never holds anybody's login. It starts with a single-use enrollment
   token and trades it for a credential that only works for its own runner.
+- Coding CLIs in a pod reach models through almyty's model pass-through
+  (their own requests, tools and all, to an organization-wide provider)
+  via the runner's loopback proxy, which holds an hour-long pod model token
+  and renews it while the pod runs. Vendor keys go into a pod only where an
+  environment allows it.
+- One folder per person per environment; the jobs that use it run one after
+  another.
+- When an environment's owner leaves, it goes to an organization owner or
+  admin, files kept; when the team it was shared with is deleted, it becomes
+  private to its owner.
 - Every number above is a setting, not code.
 
 ## How it works
@@ -40,12 +50,14 @@ is billed yet (usage is recorded).
    `wake.retryAfterSeconds`; past `wake.budgetSeconds` the call fails
    `workspace_unavailable`.
 3. The reconcile loop (one job per change, plus a sweep every minute)
-   creates the pod's objects, writes a fresh enrollment token and the
-   environment's connection values into the pod's Secret, and scales it up.
+   creates the pod's objects, writes a fresh enrollment token, a fresh pod
+   model token and the environment's connection values into the pod's
+   Secret, and scales it up.
 4. The runner in the pod calls `POST /runners/enroll` with the token, gets a
    runner credential, and holds `/runners/hosted/stream` with it, like any
    runner holds its stream. When it heartbeats, the machine is ready and the
-   call goes through.
+   call goes through, once no other job of the same person is working in the
+   workspace (see One folder, one job at a time).
 5. Each call restarts the idle clock. Past the environment's idle timeout
    the pod is scaled to zero, the Secret deleted, and the workspace marked
    `suspended`. The volume stays.
@@ -96,6 +108,10 @@ All numbers live here. Defaults in brackets.
 | `cluster.dnsNamespace` / `.dnsPodLabels` | Where cluster DNS runs, for the one egress rule that is not by name. [kube-system, `k8s-app: kube-dns`] |
 | `cluster.tlsPorts` | Ports the egress allowlist opens. [443] |
 | `apiUrl` | The API the pods connect to; empty uses `PUBLIC_API_URL`. |
+| `usageRetention.months` | How long a usage interval is kept after it closed, unless the organization's retention policy sets `runnerUsageDays`. [13] |
+| `workspaceQueue.waitSeconds` / `.pollSeconds` / `.leaseMinutes` / `.retryAfterSeconds` | One folder, one job at a time: how long a call waits for another job to finish with the workspace, how often it looks, how long a job keeps the workspace after its last call, and when a run that was told "busy" tries again. [30, 2, 30, 15] |
+| `modelAccess.tokenTtlMinutes` / `.touchEverySeconds` / `.localProxyPort` / `.upstreamTimeoutSeconds` | The pod model token's lifetime (the runner renews it while the pod runs; it also dies when the pod stops), how often its last use is recorded, the loopback port of the runner's model proxy, and how long one pass-through call may take. [60, 60, 4319, 600] |
+| `runsList.defaultLimit` / `.maxLimit` | How many runs `GET /environments/:id/runs` returns by default, and at most. [50, 200] |
 
 Example: a longer idle timeout and an extra size.
 
@@ -185,6 +201,140 @@ This is what passed on DigitalOcean (DOKS 1.35 and 1.36, containerd 1.7 and
 
 The cloud metadata address (169.254.169.254) was already unreachable from
 pods on DOKS; the default-deny policy keeps it so elsewhere.
+
+## Models from inside a pod
+
+A coding CLI in a hosted pod (Claude Code, Codex, aider, any client of the
+Anthropic or OpenAI API) reaches models through almyty, never with a vendor
+key or anybody's login (Decision 6).
+
+**The pod model token.**
+
+- At every pod start the reconcile loop mints one (`almyty_pod_...`),
+  stores only its sha256 in `hosted_model_tokens`, and writes it into the
+  pod's Secret as `ALMYTY_MODEL_TOKEN`, with its expiry in
+  `ALMYTY_MODEL_TOKEN_EXPIRES_AT`. The pod's plain environment names the
+  runner's model proxy (`ALMYTY_MODEL_PROXY_PORT`, from
+  `modelAccess.localProxyPort`) and where to renew
+  (`ALMYTY_MODEL_RENEW_PATH`).
+- It is short: `modelAccess.tokenTtlMinutes` (60). The runner renews it
+  while the pod runs, at three quarters of its life, at
+  `POST /runners/hosted/model-token` with the current token as its bearer.
+  Only the current token of a running pod is accepted there, before it
+  expires; the answer is a new token and its expiry, and the old one stops
+  working at once.
+- It dies with its pod: it is revoked the moment the loop stops the pod
+  (idle, suspended by hand, torn down, failed), when the next start mints
+  a new one, and when its owner leaves the organization. A token whose pod
+  is not running, whose workspace is not active, or whose owner is no
+  longer an active member is refused even before then.
+- It names one hosted runner, so one workspace, environment and
+  organization, and acts as the workspace's owner. It is accepted by the
+  model pass-through and its own renewal only; every other route treats it
+  as an unknown key.
+
+**The runner's model proxy.** The CLIs never hold the token. The runner
+takes `ALMYTY_MODEL_TOKEN` out of its environment as it starts (nothing it
+starts inherits it), listens on `127.0.0.1:<ALMYTY_MODEL_PROXY_PORT>`, and
+forwards each `/v1/...` call to the almyty API with the current token in
+place of whatever key the CLI sent, streaming both ways. The image's
+entrypoint points every CLI at the proxy with a placeholder key (see
+[Coding CLIs](#coding-clis)), so a renewed token is used from the next call
+on without restarting anything. A renewal the API refuses (the pod is
+being stopped) leaves the CLIs with 401s until the next start; it does not
+stop the runner. The code is `packages/runner/src/model-proxy.ts`.
+
+**The model pass-through.** What a pod token gets on the model endpoints is
+the CLI's own call, forwarded, not an almyty agent:
+
+- `POST /v1/messages` (and `/v1/messages/count_tokens`) goes to a provider
+  speaking Anthropic's Messages API, `POST /v1/chat/completions` to one
+  speaking OpenAI's chat completions, `POST /v1/responses` (the only API
+  Codex speaks) to an OpenAI provider. The request goes unchanged (its
+  tools, tool choice, thinking settings and stream), and the vendor's answer
+  comes back as it came, streamed when the client asked for a stream.
+- `model` is a model of the organization's catalog, by its vendor id or
+  name: the first validated card for it, in catalog order, on an active
+  provider a pod may use that speaks the protocol. A pod may use the
+  organization-wide providers, and its owner's own private providers the
+  owner granted to their hosted workspaces: the one-click grant,
+  `hostedPodAccess: true` on `PATCH /llm-providers/:id`, which only the
+  owner of a private provider can set (it is cleared when the provider
+  stops being private). A team's provider, or another member's, is never
+  used. `GET /v1/models` lists exactly the models a pod may name.
+- Before the call the organization's spend budgets are checked; a budget
+  that rejects answers in the client's error shape (Anthropic 400, OpenAI
+  429 `insufficient_quota`) and nothing is called.
+- After it, the call is a row in `hosted_model_calls` (tokens read from the
+  answer or the stream's events, cost from the card's price), which the
+  organization's spend and budgets count; the route is audited
+  (`model_routed`, with cost) and so is the pod's call (`hosted_model_call`).
+  The response carries `X-Almyty-Hosted-Runner`, `X-Almyty-Environment`,
+  `X-Almyty-Workspace`, `X-Almyty-Route-Model` and `X-Almyty-Route-Provider`.
+- Only a pod token reaches it. An API key on `/v1/messages` and
+  `/v1/chat/completions` still runs an agent, as before; `/v1/responses`
+  and `/v1/messages/count_tokens` take a pod token and nothing else.
+- The model routes accept a request body up to `MODEL_PASSTHROUGH_BODY_LIMIT`
+  (32mb), because a CLI resends its whole conversation on every call.
+
+**Vendor keys**, for a CLI that cannot use almyty's endpoints (Gemini CLI
+today), are off unless an environment turns on `allowVendorKeys`. With it
+off, an `envBindings` entry naming a model provider's connection (one a
+model provider of the organization uses, or one made from a model vendor's
+connector) is refused when the environment is saved and again at every pod
+start. With it on, binding `GEMINI_API_KEY` (or `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`) gives that CLI the key, and the entrypoint leaves that
+family alone. Turning it on or off is a new environment version and is
+audited.
+
+## One folder, one job at a time
+
+A person's workspace on an environment is one folder, the volume at
+`cluster.workspaceMountPath`, shared by every job of theirs there. Jobs
+run one after another in it:
+
+- A job (an agent run with its helpers and sub-agents) takes the workspace
+  with its first call and keeps it while any run of the job is going and
+  it has used the workspace within `workspaceQueue.leaseMinutes`.
+- A call of another job waits for it, looking every
+  `workspaceQueue.pollSeconds`, for up to `workspaceQueue.waitSeconds`, and
+  then answers `workspace_busy`; an agent run sleeps
+  `workspaceQueue.retryAfterSeconds` and tries again, as it does for a
+  waking machine.
+- A call that belongs to no run (a person calling a tool by hand) holds the
+  workspace for that call only.
+- A job that ended is noticed by the next one that wants the workspace; a
+  holder that crashed loses the workspace when its lease runs out.
+
+The lease is three columns on the workspace (`leaseHolder`, `leaseJob`,
+`leaseUntil`), taken by conditional updates, so it holds across API pods.
+The pod itself also runs one thing at a time: enrollment sets
+`maxConcurrent: 1` whatever the runner asks for.
+
+## When the owner or the team goes
+
+- **The owner leaves the organization** (removed, left, or deleted their
+  account): every environment they own, whatever its visibility, is
+  handed to the organization's longest-standing owner, or, with no other
+  owner, its longest-standing admin. Visibility, workspaces and files stay.
+  Their own workspaces have their pod stopped at once and their pod model
+  token revoked, because the pod's Secret was built from their connections;
+  the files stay, and each workspace moves to the same person. Where that
+  person already has a workspace on the environment, they keep both: the
+  departed member's is kept **read-only** (`readOnly`, with
+  `inheritedFromUserId`), to copy from or delete. Its pod mounts the volume
+  read-only (with `HOME` in `/tmp`) and sets nothing up; only a call that
+  names it (`workspaceId`) works there, and only for its new owner. It
+  follows the usual suspended retention: the notice on day 23 goes to the
+  new owner, and it is deleted after 30 days unused. Every move is an audit
+  row (`ownership_transfer`, with `readOnly` where it applies); the new
+  owner is told (`environments.handed_over`, which says when a workspace
+  was kept read-only).
+- **A team is deleted**: an environment shared with it keeps its owner and
+  becomes private, with its tools; the owner can share it again. Audited
+  (`visibility_change`, reason `team_deleted`); the owner is told
+  (`environments.unshared`). A team deleted by any other path gets the same
+  from a database trigger, without the notice.
 
 ## Images and enroll mode
 
@@ -282,23 +432,28 @@ image; their config, sessions and caches go under `HOME` on the volume.
 Self-updates, first-run questions and analytics are switched off.
 
 They call models through almyty, not a vendor, so keys stay in the store
+They call models through almyty, not a vendor, so keys stay in the store
 and every call is routed, budgeted and attributed. When the pod has
-`ALMYTY_MODEL_TOKEN` and `ALMYTY_API_URL`, the entrypoint sets:
+`ALMYTY_MODEL_TOKEN` and `ALMYTY_API_URL`, the entrypoint sets the
+settings below. With `ALMYTY_MODEL_PROXY_PORT` too (the backend always
+sends it), the base URL is the runner's loopback model proxy,
+`http://127.0.0.1:<port>`, and the key is a placeholder
+(`almyty-pod-local`): the runner forwards each call to almyty with the
+current pod token and renews that token while the pod runs, so the CLIs
+never hold it (see [Models from inside a pod](#models-from-inside-a-pod)).
+Without the port the CLIs get the API URL and the token directly.
 
 | CLI | Settings | Calls |
 |---|---|---|
-| Claude Code | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` (a bearer; `ANTHROPIC_API_KEY` would make it ask which to use) | `POST /v1/messages` |
+| Claude Code | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` (a bearer; `ANTHROPIC_API_KEY` would make it ask which to use) | `POST /v1/messages` (and `/v1/messages/count_tokens`) |
 | aider | `AIDER_OPENAI_API_BASE`, `AIDER_OPENAI_API_KEY`, `AIDER_ANTHROPIC_API_KEY` | `/v1/chat/completions`, `/v1/messages` |
 | Codex | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, and an `almyty` provider in `~/.codex/config.toml` (Codex ignores `OPENAI_BASE_URL`) | `POST /v1/responses` |
-| Gemini CLI | nothing: no almyty endpoint speaks its API | a vendor key (`GEMINI_API_KEY`) the pod injects |
+| Gemini CLI | nothing: no almyty endpoint speaks its API | a vendor key (`GEMINI_API_KEY`) bound on an environment that allows vendor keys |
 
 A family the pod configured itself (its own base URL or key) is left
 alone. The Codex file is rewritten on every start while its first line is
 the entrypoint's marker; replace the file to manage it yourself. A session
-the runner starts with its own `CODEX_HOME` does not see it. Checked
-against a fake API in the image: Claude Code and aider reach
-`/v1/messages` and `/v1/chat/completions` with the token; Codex reaches
-`/v1/responses`, which almyty does not serve yet.
+the runner starts with its own `CODEX_HOME` does not see it.
 
 ### The browser
 
@@ -365,11 +520,20 @@ the token decides which runner this is.
 5. It holds `/runners/hosted/stream` with the credential (re-read on every
    request, so a renewed one is used at once), says `runner.hello` and
    heartbeats like any runner.
+6. When the pod carries a model token (`ALMYTY_MODEL_TOKEN` and
+   `ALMYTY_MODEL_PROXY_PORT`), it takes the token out of its environment
+   at the start (with the enrollment token), listens on
+   `127.0.0.1:<port>` and forwards the coding CLIs' `/v1/...` calls to the
+   API with the current token, which it renews at three quarters of its
+   life (see [Models from inside a pod](#models-from-inside-a-pod)). On a
+   read-only (inherited) workspace (`ALMYTY_WORKSPACE_READ_ONLY`) step 4
+   sets nothing up.
 
 The code is `packages/runner/src/enroll.ts` (token, enrollment, renewal),
-`hosted-setup.ts` (first start) and `RunnerDaemon.startEnrolled`. The
-tests run it against a fake API with the backend's rules
-(`test/fake-hosted-api.ts`, `test/enroll.spec.ts`).
+`hosted-setup.ts` (first start), `model-proxy.ts` (the model token and
+proxy) and `RunnerDaemon.startEnrolled`. The tests run it against a fake
+API with the backend's rules (`test/fake-hosted-api.ts`,
+`test/enroll.spec.ts`, `test/model-proxy.spec.ts`).
 
 ### Binary allowlist
 
@@ -401,13 +565,15 @@ script) can still start anything. The boundary is the pod.
 
 | Table | What it holds |
 |---|---|
-| `environments` | One per environment; soft-deleted. `version` goes up on every change a pod would run differently with. |
+| `environments` | One per environment; soft-deleted. `version` goes up on every change a pod would run differently with. `allowVendorKeys` (off by default) lets its bindings carry a model provider's key. |
 | `hosted_runners` | Desired and observed state per pod. Only the reconcile loop writes `state`, `actual`, `externalRef`, `lastError`. |
 | `runner_enrollment_tokens` | The sha256 of each single-use token, its expiry and when it was used. |
-| `runner_usage_intervals` | When each pod ran, from the loop's own observations; one open interval per pod. Reported to Stripe in phase 3. |
+| `hosted_model_tokens` | The sha256 of each pod model token, the pod, workspace, environment and owner it is bound to, its expiry, and when and why it was revoked. |
+| `hosted_model_calls` | Every call a pod's coding CLI made through the model pass-through: pod, workspace, environment, owner, provider, model, protocol, status, tokens and cost. A spend source beside agent runs, so the organization's budgets see it. Kept like the usage intervals. |
+| `runner_usage_intervals` | When each pod ran, from the loop's own observations; one open interval per pod. Kept for `usageRetention.months` (13) after it closed, or the organization's `runnerUsageDays` (see [retention.md](retention.md)); an open one is never deleted. Reported to Stripe in phase 3. |
 | `runners.kind` | `self` (a machine someone runs) or `hosted`. The one-runner-per-account rule is `self` only. Hosted runners are not listed on the runners page. |
-| `workspaces.kind` | `job` or `persistent`. Only a persistent workspace can be `suspended`, and it is never stranded or released by a run ending. |
-
+| `workspaces.kind` | `job` or `persistent`. Only a persistent workspace can be `suspended`, and it is never stranded or released by a run ending. `leaseHolder`, `leaseJob` and `leaseUntil` say which job is working in it. |
+| `workspaces.kind` | `job` or `persistent`. Only a persistent workspace can be `suspended`, and it is never stranded or released by a run ending. `leaseHolder`, `leaseJob` and `leaseUntil` say which job is working in it; `readOnly` and `inheritedFromUserId` mark a departed member's workspace kept for an admin. |
 ## Who may do what
 
 - Creating, changing or deleting an environment needs member or above.
@@ -421,32 +587,48 @@ script) can still start anything. The boundary is the pod.
   admin may too.
 - The runner credential is accepted on `/runners/hosted/stream` and
   `POST /runners/hosted/credential` only. Everywhere else it is a 401.
+- The pod model token is accepted by the model pass-through
+  (`/v1/messages`, `/v1/chat/completions`, `/v1/responses`,
+  `/v1/messages/count_tokens`, `/v1/models`) and by its own renewal
+  (`POST /runners/hosted/model-token`) only. Everywhere else it is a 401.
 
 ## API
 
 | Route | What it does |
 |---|---|
-| `GET /environments` | The environments you may see, and whether hosted runners are on. |
+| `GET /environments` | The environments you may see, each with `mine` (your own machine there: workspace, status, machine state and `desired.replicas`; null before you used it), whether hosted runners are on, and `settings` (as below). |
+| `GET /environments/settings` | What an environment form may offer, from the settings and the plan: curated image names, the sizes this organization may use, the default size, the idle-timeout default and bounds, how long a suspended workspace's files are kept and when its owner is told, the usage retention, and the capacity. |
+| `GET /environments/usage` | Runner minutes this month (UTC; or `?from=&to=`), per environment you may see and by size, and for the whole organization when you are an owner or admin (`null` otherwise). |
 | `POST /environments` | Create one. |
 | `GET /environments/:id` | One environment. |
 | `PATCH /environments/:id` | Change it. |
 | `DELETE /environments/:id` | Delete it; its machines and volumes go too. |
-| `GET /environments/:id/workspaces` | Its workspaces (yours; all of them for an admin) with their machine's state. |
+| `GET /environments/:id/workspaces` | Its workspaces (yours; all of them for an admin) with their machine's state and `desired.replicas` (whether anything asked for the pod). |
+| `GET /environments/:id/runs` | Runs of agents whose machine is this environment (`agentConfig.environmentId`), newest first: autonomous runs (top-level) and workflow executions. Yours; all of them for an owner or admin. `?limit=` up to `runsList.maxLimit`. |
 | `POST /environments/:id/workspaces/:workspaceId/suspend` | Park a workspace now. |
 | `POST /environments/:id/workspaces/:workspaceId/release` | Let it go, with its files. |
 | `POST /runners/enroll` | A pod trades its token for a runner credential. |
 | `POST /runners/hosted/credential` | A runner renews its credential. |
+| `POST /runners/hosted/model-token` | A running pod trades its current model token (`Authorization: Bearer`) for a fresh one; the old one stops at once. |
+| `POST /v1/messages`, `POST /v1/chat/completions` | With a pod model token: the model pass-through (the CLI's own request, to an organization-wide provider). With an API key: an almyty agent, as before. |
+| `POST /v1/responses`, `POST /v1/messages/count_tokens` | The model pass-through only: a pod model token and nothing else. |
+| `GET /v1/models`, `GET /v1/models/:model` | With a pod model token: the organization-wide providers' models a pod may name. |
 
 ## Not yet
 
-- The Hosted tab in the app.
-- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.4,
-  the first release with `--enroll`; the push job refuses until 1.5.4 is
-  on npm.
-- The pod-scoped model token. The images already turn `ALMYTY_MODEL_TOKEN`
-  into each CLI's settings (see [Coding CLIs](#coding-clis)); the backend
-  does not mint one or put it in the pod yet.
-- `POST /v1/responses`. Codex speaks only the Responses API, so until almyty
-  serves it, Codex in a hosted pod has no model to call.
+- Published `runner-env` images: the Dockerfile pins @almyty/runner 1.5.5,
+  the first release with the local model proxy (`dist/model-proxy.js`), and
+  `settings.json` and the backend default `images` name the 1.5.5 tags
+  without digests. TODO: the 1.5.5 images exist only after 1.5.5 is on npm
+  and the release push has run; pin the pushed digests in `settings.json`
+  and the backend default `images` then. The entrypoint points the CLIs at
+  the model proxy only when the image's runner has it; with an older
+  runner the CLIs get the pod token directly and lose it at its first
+  renewal.
+- Gemini CLI through almyty: no almyty endpoint speaks its API, so it
+  keeps a vendor key from the store (`allowVendorKeys`).
+- Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).
+- A spend budget of its own per environment or workspace; model calls from
+  a pod count against the organization's budgets.
 - Plan capacity and Stripe reporting (phase 3, in `ee`).
 - An organization's own cluster (phase 4).

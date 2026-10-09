@@ -205,6 +205,8 @@ export class Tool {
     cache?: {
       enabled: boolean;
       ttl?: number;
+      /** Answers may be reused across runs and callers; otherwise only within one run. */
+      shared?: boolean;
     };
     /**
      * MCP-backed tool: set when this tool was materialized from an

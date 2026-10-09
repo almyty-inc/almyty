@@ -7,8 +7,9 @@
  */
 export interface NamedTool {
   name: string;
+  description?: string | null;
   api?: { name?: string | null } | null;
-  operation?: { name?: string | null; api?: { name?: string | null } | null } | null;
+  operation?: { name?: string | null; description?: string | null; api?: { name?: string | null } | null } | null;
 }
 
 /** `value` without any leading or trailing `ch`, with no regex to backtrack. */
@@ -34,7 +35,19 @@ function humanize(value: string): string {
 }
 
 function looksLikeMachineName(value: string): boolean {
-  return !/\s/.test(value) && /[_-]|[a-z][A-Z]/.test(value);
+  // gmail.users.messages.send (a Google method id) is one too.
+  return !/\s/.test(value) && (/[_-]|[a-z][A-Z]/.test(value) || /^[\w$]+(?:\.[\w$]+)+$/.test(value));
+}
+
+/** The first sentence of a description, when it is short enough to be a name. */
+function shortSentence(description: string | null | undefined): string | null {
+  // Descriptions are often markdown (Google's: "in the `To`, `Cc` ... headers"); a name has none.
+  const text = (description ?? '').replace(/`|\*\*/g, '').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const end = text.search(/[.!?](\s|$)/);
+  let sentence = end >= 0 ? text.slice(0, end) : text;
+  sentence = sentence.trim();
+  return sentence && sentence.length <= 90 ? sentence : null;
 }
 
 export function readableToolName(tool: NamedTool): string {
@@ -42,6 +55,10 @@ export function readableToolName(tool: NamedTool): string {
   let summary = tool.operation?.name?.trim();
   while (summary && summary.endsWith('.')) summary = summary.slice(0, -1);
   if (summary && !looksLikeMachineName(summary) && !/^[A-Z]+ \//.test(summary)) return summary;
+  // A spec without summaries (Google's, HubSpot's) still describes each
+  // operation: "Lists the messages in the user's mailbox."
+  const described = shortSentence(tool.operation?.description) ?? shortSentence(tool.description);
+  if (described) return described;
   const apiName = tool.api?.name ?? tool.operation?.api?.name ?? '';
   const prefix = apiName ? machinePrefix(apiName) : '';
   let rest = tool.name;

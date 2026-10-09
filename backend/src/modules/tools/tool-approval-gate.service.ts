@@ -376,35 +376,42 @@ export class ToolApprovalGateService implements OnModuleInit {
   }
 
   /**
-   * The ask-first rule of an always-on run: the run's agent is always on,
-   * this run is one of its standing thread's, and the tool is one it asks
-   * about first (asksFirst). Other runs of the same agent (a visitor's chat,
-   * a scheduled run) are not held by it.
+   * The calling agent's ask-first rule. A tool on its ask-first list waits
+   * for a person on every run of the agent: Try it, a schedule, a message on
+   * any of its channels (its owner's or anyone's), an API or gateway call,
+   * and an always-on wake. In `propose` mode ("asks before anything that
+   * changes something") the implicit list -- every tool that is not
+   * read-only -- holds its always-on runs only: that mode is about what it
+   * does on its own, not about what a person in the chat asked for.
    */
   private async askFirstHit(
     tool: NamedTool & { id: string; sideEffect?: string | null },
     params: unknown,
     context: GateContext,
   ): Promise<ApprovalGateHit | null> {
-    if (!context.runId || !context.agentId || !this.runs || !this.agents) return null;
-    const run = await this.runs
-      .findOne({ where: { id: context.runId, organizationId: context.organizationId }, select: { id: true, agentId: true, metadata: true } as any })
-      .catch(() => null);
-    if (!run || run.metadata?.triggerType !== 'always_on' || run.agentId !== context.agentId) return null;
+    if (!context.agentId || !this.agents) return null;
     const agent = await this.agents
       .findOne({ where: { id: context.agentId, organizationId: context.organizationId }, select: { id: true, name: true, alwaysOn: true } as any })
       .catch(() => null);
     const config = (agent as any)?.alwaysOn ?? null;
-    if (!asksFirst(config, tool)) return null;
+    if (!config) return null;
+    const listed = Array.isArray(config.askFirstToolIds) && config.askFirstToolIds.includes(tool.id);
+    if (!listed) {
+      if (config.actMode === 'act' || !context.runId || !this.runs) return null;
+      const run = await this.runs
+        .findOne({ where: { id: context.runId, organizationId: context.organizationId }, select: { id: true, agentId: true, metadata: true } as any })
+        .catch(() => null);
+      if (!run || run.metadata?.triggerType !== 'always_on' || run.agentId !== context.agentId) return null;
+      if (!asksFirst(config, tool)) return null;
+    }
     const name = readableToolName(tool);
     return {
       kind: 'tool_call',
       policyId: `always-on:${context.agentId}`,
       policyName: 'Ask first',
-      summary:
-        config?.actMode === 'act'
-          ? `Ask before “${name}” (it is on the ask-first list)`
-          : `Ask before “${name}” (it changes something, and this agent asks before it changes anything)`,
+      summary: listed
+        ? `Ask before “${name}” (it is on the ask-first list)`
+        : `Ask before “${name}” (it changes something, and this agent asks before it changes anything)`,
       toolId: tool.id,
       toolName: tool.name,
       argument: '',

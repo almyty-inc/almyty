@@ -75,6 +75,12 @@ describe('SlackAdapter', () => {
       const result = adapter.formatOutbound({ text: 'hello world' });
       expect(result).toEqual({ text: 'hello world' });
     });
+
+    it("turns the agent's markdown into Slack's own: bold, headings, bullets and links", () => {
+      // Reports arrived as "**Outreach, 2026-10-08**" with the asterisks showing.
+      const result = adapter.formatOutbound({ text: '## Outreach\n**Sent** to Jonas\n- one\nSee [the deal](https://crm.example.com/d/1)' });
+      expect(result.text).toBe('*Outreach*\n*Sent* to Jonas\n• one\nSee <https://crm.example.com/d/1|the deal>');
+    });
   });
 
   describe('verifyWebhook', () => {

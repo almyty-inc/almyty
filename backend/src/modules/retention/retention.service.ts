@@ -20,6 +20,7 @@ const DAY_FIELDS = [
   'auditLogDays',
   'toolExecutionsDays',
   'notificationsDays',
+  'runnerUsageDays',
 ] as const;
 
 @Injectable()

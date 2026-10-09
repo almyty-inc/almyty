@@ -137,7 +137,8 @@ describe('gateway tool transformations reach execution', () => {
 
   it('maps a cache hit too, so a cached answer and a fresh one agree', async () => {
     const service = buildExecutor(gatewayToolWith({ outputMapping: { legacy_id: 'id' } }), {
-      toolConfiguration: { cache: { enabled: true } },
+      // A call outside a run uses the cache only when the tool shares its answers (tool-cache-rate-limit.helper cacheScope).
+      toolConfiguration: { cache: { enabled: true, shared: true } },
       cache: {
         getCachedResult: jest
           .fn()

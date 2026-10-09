@@ -61,7 +61,7 @@ import { CodeModeConfig, grantsLeftFor } from '../code-mode/code-write-policy';
 import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
-import { WORKSPACE_WAKING } from '../runner/hosted-dispatch';
+import { WORKSPACE_BUSY, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
 
 /** One line per namespace a script can use: `petstore (19 functions)`. */
 function namespaceSummary(tools: Tool[]): string[] {
@@ -1020,7 +1020,8 @@ export class AgentStepProcessor {
             }
 
             toolCall.result = toolResult.data;
-            if (!toolResult.success && toolResult.metadata?.runnerErrorCode === WORKSPACE_WAKING) {
+            // A waking machine, or another job in the person's workspace: sleep and try again.
+            if (!toolResult.success && (toolResult.metadata?.runnerErrorCode === WORKSPACE_WAKING || toolResult.metadata?.runnerErrorCode === WORKSPACE_BUSY)) {
               wakeRetryMs = Math.max(wakeRetryMs ?? 0, Number(toolResult.metadata?.retryAfterMs) || 0);
             }
             toolCall.error = toolResult.success ? undefined : toolResult.error;
@@ -1482,7 +1483,7 @@ export class AgentStepProcessor {
         if (run.steps.length !== stepsBefore) {
           await this.s.runRepository.update(
             { id: run.id },
-            { steps: run.steps, totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata } as any,
+            { steps: await this.stepsForPersist(run), totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata } as any,
           );
         }
         return 'done';
@@ -1572,6 +1573,16 @@ export class AgentStepProcessor {
    * the event loop. Step objects are append-only once pushed, so each one is
    * capped once and the result is memoized against the step object itself.
    */
+  /**
+   * The steps as the run row stores them: capped, and with personal data
+   * hidden under the organization's PII filter. `update()` passes no entity
+   * to subscribers, so the trace privacy pass is asked here.
+   */
+  private async stepsForPersist(run: AgentRun): Promise<AgentRun['steps']> {
+    const bounded = this.boundStepsForPersist(run.steps);
+    return this.s.tracePrivacy ? this.s.tracePrivacy.hideSteps(bounded, run.organizationId, run.userId) : bounded;
+  }
+
   private boundStepsForPersist(steps: AgentRun['steps']): AgentRun['steps'] {
     if (!Array.isArray(steps)) return steps;
 
@@ -2223,7 +2234,7 @@ export class AgentStepProcessor {
         // on the next step, and a per-step counter is no run budget.
         toolCallCount: run.toolCallCount ?? 0,
         executionTime: run.executionTime,
-        steps: this.boundStepsForPersist(run.steps),
+        steps: await this.stepsForPersist(run),
         output: run.output,
         error: run.error,
         workingMemory: run.workingMemory,

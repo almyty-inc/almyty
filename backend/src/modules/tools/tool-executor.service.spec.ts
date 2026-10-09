@@ -809,6 +809,35 @@ describe('ToolExecutorService', () => {
       expect(absent).toMatchObject({ success: false, metadata: { runnerErrorCode: 'runner_not_found' } });
       expect((service as any).runnerCalls.dispatch).not.toHaveBeenCalled();
     });
+
+    // One folder per person per environment, one job at a time in it.
+    it('tells a run another job is in the workspace and when to try again, dispatching nothing', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
+      hosted.resolveTarget.mockResolvedValue({ kind: 'busy', workspaceId: 'ws-p', hostedRunnerId: 'hr-1', retryAfterMs: 15_000, message: 'another job' });
+
+      const result = await service.executeTool('tool-hosted', { command: 'ls' }, {
+        userId: 'user-1', organizationId: 'org-1', runId: 'run-1', agentId: 'agent-1', environmentId: ENV_ID,
+      });
+
+      // The run is named, so its job can hold the workspace.
+      expect(hosted.resolveTarget).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ runId: 'run-1' }));
+      expect(result).toMatchObject({ success: false, metadata: { runnerErrorCode: 'workspace_busy', retryAfterMs: 15_000, retryable: true } });
+      expect((service as any).runnerCalls.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('gives a lone call\'s lease back once the call returns, even when it failed, and keeps a job\'s', async () => {
+      (hosted as any).releaseLease = jest.fn(async () => undefined);
+      toolRepository.findOne.mockResolvedValue(runnerTool({ environmentId: ENV_ID, method: 'shell.exec', requiresWorkspace: true }));
+      hosted.resolveTarget.mockResolvedValue({ kind: 'ready', runnerId: 'runner-hosted', workspaceId: 'ws-p', hostedRunnerId: 'hr-1', lease: { holder: 'call-1', releaseAfterCall: true } });
+      (service as any).runnerCalls.dispatch.mockRejectedValueOnce(new Error('boom'));
+      await expect(service.executeTool('tool-hosted', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1' })).resolves.toBeDefined();
+      expect((hosted as any).releaseLease).toHaveBeenCalledWith('ws-p', 'call-1');
+
+      (hosted as any).releaseLease.mockClear();
+      hosted.resolveTarget.mockResolvedValue({ kind: 'ready', runnerId: 'runner-hosted', workspaceId: 'ws-p', hostedRunnerId: 'hr-1', lease: { holder: 'job-1', releaseAfterCall: false } });
+      await service.executeTool('tool-hosted', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1', runId: 'run-1' });
+      expect((hosted as any).releaseLease).not.toHaveBeenCalled();
+    });
   });
 
   describe('mcp dispatch', () => {
@@ -1014,6 +1043,7 @@ describe('ToolExecutorService', () => {
           cache: {
             enabled: true,
             ttl: 3600,
+            shared: true,
           },
         },
       } as any;
@@ -1611,7 +1641,8 @@ describe('ToolExecutorService', () => {
           endpoint: '/users/{id}',
         },
         configuration: {
-          cache: { enabled: true, ttl: 300 },
+          // Shared across callers: a tool that opts in (answers are otherwise kept per run).
+          cache: { enabled: true, ttl: 300, shared: true },
         },
       } as any;
 

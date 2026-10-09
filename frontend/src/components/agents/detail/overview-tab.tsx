@@ -58,6 +58,8 @@ import { ExecutionRouting } from './routing-attribution'
 import { DeliveryNote, ScheduleCard } from './schedule-card'
 import { WaitingApprovalNote, runStatusLabel } from './waiting-approval'
 import { AlwaysOnCard } from './always-on-card'
+import { AccessCard } from './access-card'
+import { AssistantMarkdown } from '@/components/hosted-chat/assistant-markdown'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
 import type { Agent, AgentExecution, AgentRun, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
@@ -242,8 +244,8 @@ export function OverviewTab({
                 </div>
               )}
               {testOutput && (
-                <div role="status" aria-live="polite" className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
-                  {testOutput}
+                <div role="status" aria-live="polite" className="bg-muted rounded-lg p-3 text-sm max-h-[320px] overflow-auto">
+                  <AssistantMarkdown>{testOutput}</AssistantMarkdown>
                 </div>
               )}
               {!testOutput && !testError && (
@@ -310,6 +312,9 @@ export function OverviewTab({
 
         {/* Always on: autonomous agents only */}
         {agent.mode === 'autonomous' && <AlwaysOnCard agentId={agent.id} />}
+
+        {/* What it may use when someone other than its owner writes to it */}
+        <AccessCard agentId={agent.id} />
       </div>
 
       {/* Recent Runs */}
