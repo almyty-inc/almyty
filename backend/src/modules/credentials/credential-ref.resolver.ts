@@ -62,6 +62,12 @@ export interface ConnectionUseContext {
   purpose: string;
   resourceType?: string;
   resourceId?: string;
+  /**
+   * The agent whose run this use is part of. A run that acts for nobody in
+   * particular (a channel message from someone other than the agent's
+   * owner) uses what was granted to its agent.
+   */
+  agentId?: string;
 }
 
 export interface ConnectionUseInput {

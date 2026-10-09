@@ -58,6 +58,7 @@ import { ExecutionRouting } from './routing-attribution'
 import { DeliveryNote, ScheduleCard } from './schedule-card'
 import { WaitingApprovalNote, runStatusLabel } from './waiting-approval'
 import { AlwaysOnCard } from './always-on-card'
+import { AccessCard } from './access-card'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
 import type { Agent, AgentExecution, AgentRun, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
@@ -310,6 +311,9 @@ export function OverviewTab({
 
         {/* Always on: autonomous agents only */}
         {agent.mode === 'autonomous' && <AlwaysOnCard agentId={agent.id} />}
+
+        {/* What it may use when someone other than its owner writes to it */}
+        <AccessCard agentId={agent.id} />
       </div>
 
       {/* Recent Runs */}

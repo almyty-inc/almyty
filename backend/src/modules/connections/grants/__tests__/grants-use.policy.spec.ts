@@ -27,6 +27,18 @@ describe('GrantsUsePolicy (the consumer-side seam)', () => {
     await expect(policy.assertCanUse({ organizationId: 'org', credential: credential({}), principal: { id: 'u-2' } })).rejects.toMatchObject({ code: 'CONNECTION_NOT_GRANTED' });
   });
 
+  it("a channel run from someone other than the owner is judged with its agent's grants", async () => {
+    // The gateway names no user; the run's agent is what a grant can name.
+    const { policy, grants } = build();
+    const gateway = { kind: 'gateway', gatewayId: 'gw-1', organizationId: 'org', visibility: 'org', teamId: null, ownerUserId: 'u-1' } as any;
+    await policy.assertCanUse({ organizationId: 'org', credential: credential({ connectorKey: 'hubspot' }), execution: gateway, context: { purpose: 'api_call', resourceType: 'api', resourceId: 'api-1', agentId: 'agent-7' } });
+    expect(grants.assertCanUse).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'gateway:gw-1' }),
+      expect.objectContaining({ id: 'c-1' }),
+      expect.objectContaining({ agentId: 'agent-7', purpose: 'api_call' }),
+    );
+  });
+
   describe('a channel using the key it was set up with', () => {
     // A Slack or email channel whose key was saved on Credentials (the
     // channel form's "Create one here") answered every Slack event with

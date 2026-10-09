@@ -172,6 +172,8 @@ export interface ToolExecutionResult {
    * being able to tell them apart.
    */
   notFound?: boolean;
+  /** The run may not use the account the tool signs in with; `error` says so in plain words. */
+  noAccess?: boolean;
   /**
    * Set when an approval policy's amount rule held the call: it did not
    * run. The autonomous runtime asks a person and calls again with

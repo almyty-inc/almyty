@@ -12,6 +12,7 @@ import { runWithRequestContext } from '../../../common/request-context';
 import { AgentStatus } from '../../../entities/agent.entity';
 import { ConnectionGrant } from '../../../entities/connection-grant.entity';
 import { Credential } from '../../../entities/credential.entity';
+import { Api } from '../../../entities/api.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { GrantsService } from '../../connections/grants/grants.service';
@@ -314,6 +315,7 @@ describe('what an agent would not reach acting as itself', () => {
   const API = randomUUID();
   const API_CONN = randomUUID();
   const PLAIN_ORG = randomUUID();
+  const PICKED = randomUUID();
 
   function build() {
     const providers = fakeRepository<any>([
@@ -327,13 +329,17 @@ describe('what an agent would not reach acting as itself', () => {
       { id: MEMORY_PRIVATE, organizationId: ORG, name: 'My mem0', connectorKey: 'mem0', visibility: 'private', ownerUserId: OWNER, metadata: null },
       { id: API_CONN, organizationId: ORG, name: 'Payments token', connectorKey: 'http', visibility: 'org', ownerUserId: OWNER, apiId: API, metadata: null },
       { id: PLAIN_ORG, organizationId: ORG, name: 'Plain key', connectorKey: null, visibility: 'org', ownerUserId: null, apiId: API, metadata: null },
+      { id: PICKED, organizationId: ORG, name: 'Google account', connectorKey: 'oauth2', visibility: 'org', ownerUserId: null, metadata: null },
+    ]);
+    const apis = fakeRepository<any>([
+      { id: API, organizationId: ORG, name: 'Payments', authentication: { type: 'oauth2', config: { connectionId: PICKED } } },
     ]);
     const grants = fakeRepository<any>([
       { id: randomUUID(), connectionId: KEY_GRANTED, principalType: 'agent', principalId: AGENT, expiresAt: null },
     ]);
     const tools = fakeRepository<any>([{ id: 't-1', organizationId: ORG, apiId: API }]);
     const manager = {
-      getRepository: (entity: any) => (entity === Credential ? credentials : entity === ConnectionGrant ? grants : null),
+      getRepository: (entity: any) => (entity === Credential ? credentials : entity === ConnectionGrant ? grants : entity === Api ? apis : null),
     };
     const reach = new AgentIdentityReachService({ manager } as any, providers as any, tools as any);
     return { reach };
@@ -360,5 +366,7 @@ describe('what an agent would not reach acting as itself', () => {
     // Already granted, and a plain organization credential that needs no grant.
     expect(byId[KEY_GRANTED]).toBeUndefined();
     expect(byId[PLAIN_ORG]).toBeUndefined();
+    // The connection the API's Key card points at (a Google sign-in picked there).
+    expect(byId[PICKED]).toMatchObject({ kind: 'connection', scope: 'organization', canGrant: true, neededFor: 'The key for Payments' });
   });
 });

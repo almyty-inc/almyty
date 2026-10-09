@@ -510,7 +510,15 @@ const SCOPE_WORDS: Record<UnreachableItem['scope'], string> = {
  * Each connection a grant can open has its own button; nothing is given
  * without that click.
  */
-export function WhatItCannotReach({ agentId }: { agentId?: string }) {
+export function WhatItCannotReach({
+  agentId,
+  intro = 'As itself it would not reach these, from the agent as last saved:',
+  okText = 'Everything its settings use is open to it as itself.',
+}: {
+  agentId?: string
+  intro?: string
+  okText?: string
+}) {
   const queryClient = useQueryClient()
   const key = ['agents', agentId, 'identity', 'unreachable']
   const query = useQuery<UnreachableItem[]>({
@@ -536,11 +544,11 @@ export function WhatItCannotReach({ agentId }: { agentId?: string }) {
     return <p className="text-xs text-destructive" data-testid="acts-as-reach-error">Could not check what it reaches.</p>
   }
   if (items.length === 0) {
-    return <p className="text-xs text-muted-foreground" data-testid="acts-as-reach-ok">Everything its settings use is open to it as itself.</p>
+    return <p className="text-xs text-muted-foreground" data-testid="acts-as-reach-ok">{okText}</p>
   }
   return (
     <div className="space-y-2" data-testid="acts-as-unreachable">
-      <p className="text-xs font-medium">As itself it would not reach these, from the agent as last saved:</p>
+      <p className="text-xs font-medium">{intro}</p>
       <ul className="divide-y rounded-md border">
         {items.map((item) => (
           <li key={`${item.kind}-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 p-2" data-testid={`unreachable-${item.id}`}>

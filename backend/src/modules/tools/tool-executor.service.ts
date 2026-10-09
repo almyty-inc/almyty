@@ -1,3 +1,4 @@
+import { isNoAccessError, noAccessMessage } from './tool-no-access';
 /**
  * Orchestrator for tool execution. Slim dispatcher — the heavy
  * per-type lifting lives in ./executors/*. This used to be a
@@ -71,6 +72,7 @@ export {
   SOAPRequest,
 };
 
+export { isNoAccessError, noAccessMessage } from './tool-no-access';
 /** Back off for `ms`, or less if `signal` aborts first. */
 function sleepUnlessAborted(ms: number, signal?: AbortSignal): Promise<void> {
   if (!signal) return sleep(ms);
@@ -664,6 +666,10 @@ export class ToolExecutorService {
           // against a signal that was already aborted, holding the cancelled
           // run's layer open for up to fourteen seconds.
           if (options.signal?.aborted) break;
+          // No access to the account the tool signs in with: trying again
+          // changes nothing, and the answer has to say so plainly instead
+          // of looking like an empty result.
+          if (isNoAccessError(error)) break;
 
           if (retryCount <= maxRetries) {
             const delay = Math.pow(2, retryCount) * 1000;
@@ -676,15 +682,18 @@ export class ToolExecutorService {
         }
       }
 
+      const noAccess = isNoAccessError(lastError);
       const failureResult: ToolExecutionResult = {
         success: false,
-        error: `Execution failed after ${retryCount} attempts: ${lastError?.message ?? 'unknown'}`,
+        error: noAccess
+          ? noAccessMessage(tool.api?.name ?? tool.operation?.api?.name ?? tool.name)
+          : `Execution failed after ${retryCount} attempts: ${lastError?.message ?? 'unknown'}`,
+        ...(noAccess ? { noAccess: true } : {}),
         executionTime: Date.now() - startTime,
         cached,
         rateLimited,
         retryCount,
       };
-
       await this.recordFiltered(tool, parameters, failureResult, options, {
         cached: false,
         executionTime: Date.now() - startTime,

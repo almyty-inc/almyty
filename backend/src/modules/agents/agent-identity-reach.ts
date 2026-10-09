@@ -5,6 +5,7 @@ import { In, Repository } from 'typeorm';
 
 import { PrivateAgentByAgentIdGuard } from '../../common/authorization/private-resource.guard';
 import { Agent } from '../../entities/agent.entity';
+import { Api } from '../../entities/api.entity';
 import { ConnectionGrant } from '../../entities/connection-grant.entity';
 import { Credential } from '../../entities/credential.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
@@ -111,6 +112,17 @@ export class AgentIdentityReachService {
           .filter((id): id is string => !!id)
       : [];
     const apiIds = [...new Set([...(agent.agentConfig?.apiIds ?? []), ...toolApiIds])];
+    // An API's key can also be a connection it points at (picked on its Key
+    // card, rather than bound to the API): that one is needed as much.
+    if (apiIds.length) {
+      const apis = await this.agents.manager
+        .getRepository(Api)
+        .find({ where: { id: In(apiIds), organizationId }, select: { id: true, name: true, authentication: true } as any });
+      for (const api of apis) {
+        const connectionId = (api.authentication as any)?.config?.connectionId;
+        if (typeof connectionId === 'string' && connectionId && !needed.has(connectionId)) needed.set(connectionId, `The key for ${api.name}`);
+      }
+    }
 
     const credentials = this.agents.manager.getRepository(Credential);
     const rows: Credential[] = [];

@@ -1,3 +1,4 @@
+import { isNoAccessError, noAccessMessage } from '../tool-no-access';
 /**
  * HTTP-family tool execution: structured `httpConfig` tools,
  * legacy spec-imported `operation` tools (REST), and the shared
@@ -277,6 +278,11 @@ export class ToolHttpExecutor {
       };
     } catch (error: any) {
       const executionTime = Date.now() - startTime;
+      // No access to the account it signs in with: said plainly, so the
+      // agent does not read it as an empty answer.
+      if (isNoAccessError(error)) {
+        return { success: false, data: null, error: noAccessMessage(api?.name ?? tool.name), noAccess: true, executionTime, cached: false, rateLimited: false, retryCount: 0 };
+      }
       if (axios.isAxiosError(error) || error.isAxiosError) {
         const status = error.response?.status ?? 0;
         const errorData = error.response?.data;
