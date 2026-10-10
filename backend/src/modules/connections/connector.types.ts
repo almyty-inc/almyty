@@ -95,6 +95,13 @@ export interface JsonSchemaProperty {
   'x-secret'?: boolean;
   /** Shown under Advanced on the connect form even when secret (an optional client secret). */
   'x-advanced'?: boolean;
+  /** Shown on the connect form as a textarea whose newlines are kept. */
+  'x-multiline'?: boolean;
+  /**
+   * 'uri' is checked as a URL. 'pem' is certificate text: the connect form
+   * shows it multi-line, and on save it is normalised to canonical PEM
+   * (normalizePemCertificates) or refused.
+   */
   format?: string;
   default?: unknown;
   enum?: unknown[];

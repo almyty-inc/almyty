@@ -94,6 +94,6 @@ describe('KubernetesHostedAdapter', () => {
   it('needs an https server and a token from the connection', () => {
     expect(() => kubeConnectionFrom({ server: 'http://kube.example.com', token: 't' })).toThrow(/https/);
     expect(() => kubeConnectionFrom({ server: 'https://kube.example.com/', token: '' })).toThrow(/token/);
-    expect(kubeConnectionFrom({ server: 'https://kube.example.com//', token: 't', caCert: ' PEM ' })).toEqual({ server: 'https://kube.example.com', token: 't', caCert: 'PEM' });
+    expect(kubeConnectionFrom({ server: 'https://kube.example.com//', token: 't', caCert: ' ' })).toEqual({ server: 'https://kube.example.com', token: 't', caCert: undefined });
   });
 });

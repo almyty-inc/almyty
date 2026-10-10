@@ -2,6 +2,7 @@ import * as https from 'https';
 import * as http from 'http';
 
 import { KubeObject, MANAGER, assertSandboxed } from './manifests';
+import { normalizePemCertificates } from '../../../../common/security/pem-certificate';
 
 /**
  * A small client for the Kubernetes REST API: server-side apply, get,
@@ -70,7 +71,8 @@ export function kubeConnectionFrom(creds: Record<string, string | undefined>): K
   const token = (creds.token ?? '').trim();
   if (!/^https:\/\//i.test(server)) throw Object.assign(new Error('the kubernetes connection needs an https server URL'), { code: 'CREDENTIAL_INVALID' });
   if (!token) throw Object.assign(new Error('the kubernetes connection needs a ServiceAccount token'), { code: 'CREDENTIAL_INVALID' });
-  return { server, token, caCert: creds.caCert?.trim() || undefined };
+  const caCert = creds.caCert?.trim() ? normalizePemCertificates(creds.caCert, 'the cluster CA certificate') : undefined;
+  return { server, token, caCert };
 }
 
 export class KubeApiClient {
