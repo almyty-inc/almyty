@@ -48,6 +48,7 @@ const RESOURCES: Record<string, { group: string; plural: string; namespaced: boo
   NetworkPolicy: { group: 'apis/networking.k8s.io/v1', plural: 'networkpolicies', namespaced: true },
   CiliumNetworkPolicy: { group: 'apis/cilium.io/v2', plural: 'ciliumnetworkpolicies', namespaced: true },
   Deployment: { group: 'apis/apps/v1', plural: 'deployments', namespaced: true },
+  PodDisruptionBudget: { group: 'apis/policy/v1', plural: 'poddisruptionbudgets', namespaced: true },
   RuntimeClass: { group: 'apis/node.k8s.io/v1', plural: 'runtimeclasses', namespaced: false },
 };
 

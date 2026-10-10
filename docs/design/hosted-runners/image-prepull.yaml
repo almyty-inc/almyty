@@ -1,0 +1,59 @@
+# Reference manifest, not applied by the backend or anything in this
+# repository, and not part of the 2026-10-08 test. Apply it by hand on the
+# runner cluster if wanted (docs/hosted-runners.md, "Cluster setup").
+#
+# Pulls the standard runner image onto every sandbox node, so the first wake
+# on a new or replaced node does not wait for the download. It runs the
+# image once under gVisor (`true`, nothing else) and then sits on a pause
+# container, which keeps the image referenced so the kubelet's image garbage
+# collection leaves it alone.
+#
+# runtimeClassName: gvisor puts it only on nodes the installer has marked
+# almyty.com/gvisor=ready and tolerates the sandbox taint (the RuntimeClass
+# scheduling), exactly like a runner pod. Keep the image equal to
+# `images.standard` in the hosted runner settings and change both together;
+# pin it by digest once the runner-env digests are pinned.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: almyty-prepull
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: runner-env-prepull, namespace: almyty-prepull}
+spec:
+  selector: {matchLabels: {app: runner-env-prepull}}
+  updateStrategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 1}}
+  template:
+    metadata: {labels: {app: runner-env-prepull}}
+    spec:
+      runtimeClassName: gvisor
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+      - name: pull-standard
+        image: almyty/runner-env:standard-1.5.5
+        imagePullPolicy: IfNotPresent
+        command: ["sh", "-c", "true"]
+        resources:
+          requests: {cpu: 10m, memory: 16Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+        securityContext: &locked
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.10
+        resources:
+          requests: {cpu: 1m, memory: 8Mi}
+          limits: {cpu: 10m, memory: 16Mi}
+        securityContext: *locked

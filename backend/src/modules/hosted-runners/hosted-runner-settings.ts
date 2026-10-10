@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs';
+import { isIP } from 'net';
 
 /**
  * Every number hosted runners use, as data.
@@ -89,6 +90,19 @@ export interface HostedRunnerSettings {
     dnsPodLabels: Record<string, string>;
     /** TCP ports the SNI allowlist opens (TLS only). */
     tlsPorts: number[];
+    /**
+     * The cluster's pod and service CIDRs, denied to every runner on top of
+     * the fixed private ranges (manifests.ts, PRIVATE_EGRESS_DENY). Only
+     * needed when they lie outside those ranges; DOKS's defaults
+     * (10.244.0.0/16, 10.245.0.0/16) are inside 10.0.0.0/8.
+     */
+    clusterCidrs: string[];
+    /**
+     * The PodDisruptionBudget of each runner: exactly one of the two set,
+     * the other null. `maxUnavailable: 0` makes a drain wait until the
+     * runner is idle and scaled to zero.
+     */
+    disruptionBudget: { minAvailable: number | string | null; maxUnavailable: number | string | null };
   };
   /**
    * How long a usage interval (the minutes a pod ran) is kept after it
@@ -143,12 +157,11 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   },
   defaultResourceClass: 'small',
   // The images CI builds and pushes (images/runner-env), tagged with the
-  // runner version they carry; pin each by the pushed digest once the
-  // release push has run (docs/hosted-runners.md, Not yet).
+  // runner version they carry and pinned by the pushed digest;
   // scripts/check-runner-env-images.js keeps these equal to images/runner-env/settings.json.
   images: {
-    standard: 'almyty/runner-env:standard-1.5.5',
-    'standard-browser': 'almyty/runner-env:standard-browser-1.5.5',
+    standard: 'almyty/runner-env:standard-1.5.5@sha256:ae1e82a2f0f73127a4ab781757dc33bdc5c24ead42618b2ef00fc1339924b7cb',
+    'standard-browser': 'almyty/runner-env:standard-browser-1.5.5@sha256:baa8a2f374b56e1ee200af4b04bee2903e9926c3ecc84e54dfe6e46c60f54631',
   },
   capacity: { maxConcurrentRunners: 2, maxWorkspaces: 10, resourceClasses: null },
   cluster: {
@@ -160,6 +173,8 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
     dnsNamespace: 'kube-system',
     dnsPodLabels: { 'k8s-app': 'kube-dns' },
     tlsPorts: [443],
+    clusterCidrs: [],
+    disruptionBudget: { minAvailable: null, maxUnavailable: 0 },
   },
   usageRetention: { months: 13 },
   workspaceQueue: { waitSeconds: 30, pollSeconds: 2, leaseMinutes: 30, retryAfterSeconds: 15 },
@@ -189,6 +204,21 @@ export function deepMerge<T>(base: T, override: unknown): T {
 }
 
 const POSITIVE = (n: unknown): boolean => typeof n === 'number' && Number.isFinite(n) && n > 0;
+
+/** An IPv4 or IPv6 CIDR: an address and a prefix length that fits it. */
+function isCidr(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const [address, prefix, ...rest] = value.split('/');
+  if (rest.length || !/^\d+$/.test(prefix ?? '')) return false;
+  const family = isIP(address);
+  const bits = family === 4 ? 32 : family === 6 ? 128 : -1;
+  return Number(prefix) <= bits;
+}
+
+/** A PodDisruptionBudget amount: a whole number of pods or a percentage. */
+function isBudgetValue(value: unknown): boolean {
+  return (typeof value === 'number' && Number.isInteger(value) && value >= 0) || (typeof value === 'string' && /^\d+%$/.test(value));
+}
 
 /** Problems with a settings object, in words; empty when it is usable. */
 export function settingsProblems(s: HostedRunnerSettings): string[] {
@@ -220,6 +250,12 @@ export function settingsProblems(s: HostedRunnerSettings): string[] {
   if (!k?.workspaceMountPath?.startsWith('/')) problems.push('cluster.workspaceMountPath must be an absolute path');
   if (!POSITIVE(k?.runAsUser) || !POSITIVE(k?.runAsGroup)) problems.push('cluster.runAsUser and cluster.runAsGroup must be positive (the runner never runs as root)');
   if (!Array.isArray(k?.tlsPorts) || k.tlsPorts.length === 0 || !k.tlsPorts.every(POSITIVE)) problems.push('cluster.tlsPorts must list at least one port');
+  if (!Array.isArray(k?.clusterCidrs) || !k.clusterCidrs.every(isCidr)) problems.push('cluster.clusterCidrs must be a list of CIDRs, such as 10.244.0.0/16');
+  const pdb = k?.disruptionBudget;
+  const budgetValues = [pdb?.minAvailable ?? null, pdb?.maxUnavailable ?? null].filter((v) => v !== null);
+  if (budgetValues.length !== 1 || !budgetValues.every(isBudgetValue)) {
+    problems.push('cluster.disruptionBudget must set exactly one of minAvailable and maxUnavailable (a whole number or a percentage), the other null');
+  }
   if (!POSITIVE(s.usageRetention?.months)) problems.push('usageRetention.months must be a positive number');
   const q = s.workspaceQueue as unknown as Record<string, unknown> | undefined;
   if (!q || !['waitSeconds', 'pollSeconds', 'leaseMinutes', 'retryAfterSeconds'].every((key) => POSITIVE(q[key]))) {

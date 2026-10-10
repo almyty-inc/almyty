@@ -17,9 +17,11 @@ import { HostedProvisionRequest, HostedResourceSpec, SANDBOX_RUNTIME_CLASS } fro
  * default-deny NetworkPolicy. Per hosted runner: a CiliumNetworkPolicy
  * that lets its pod resolve names and reach exactly its allowlisted hosts
  * over TLS, matched by SNI (`serverNames`), not by IP, because hosts
- * behind one CDN share addresses (docs/hosted-runners.md); a volume; a
- * Secret; and a Deployment with replicas 0 or 1 and `Recreate`, because
- * a ReadWriteOnce volume mounts once.
+ * behind one CDN share addresses (docs/hosted-runners.md), and denies
+ * every private, link-local and cluster range whatever a name resolves
+ * to; a PodDisruptionBudget; a volume; a Secret; and a Deployment with
+ * replicas 0 or 1 and `Recreate`, because a ReadWriteOnce volume mounts
+ * once.
  */
 
 export type KubeObject = Record<string, any> & {
@@ -38,6 +40,10 @@ export interface ClusterLayout {
   dnsNamespace: string;
   dnsPodLabels: Record<string, string>;
   tlsPorts: number[];
+  /** The cluster's pod and service CIDRs, denied to the runner on top of PRIVATE_EGRESS_DENY. */
+  clusterCidrs: string[];
+  /** The runner's PodDisruptionBudget: exactly one of the two is set, the other null. */
+  disruptionBudget: { minAvailable: number | string | null; maxUnavailable: number | string | null };
 }
 
 export const LABEL = {
@@ -60,6 +66,7 @@ export interface HostedNames {
   volume: string;
   secret: string;
   egressPolicy: string;
+  disruptionBudget: string;
 }
 
 /** One namespace per organization, named by its full id so two organizations never share one. */
@@ -75,6 +82,7 @@ export function namesFor(req: Pick<HostedProvisionRequest, 'organizationId' | 'w
     volume: `ws-${ws}`,
     secret: `hr-${ws}-env`,
     egressPolicy: `hr-${ws}-egress`,
+    disruptionBudget: `hr-${ws}`,
   };
 }
 
@@ -189,12 +197,59 @@ export function isAllowlistHost(host: string): boolean {
 }
 
 /**
+ * Address ranges a runner may never reach, whatever its allowlist says:
+ * the private, carrier-grade NAT, link-local and loopback ranges of IPv4
+ * and IPv6, and the cloud metadata address (inside link-local, named on
+ * its own so nobody has to work that out). An allowlisted name that
+ * resolves to one of these (a DNS record pointed at a VPC address, a
+ * rebinding trick) passes the FQDN rule; the deny below wins over it.
+ */
+export const PRIVATE_EGRESS_DENY: readonly string[] = [
+  '10.0.0.0/8',
+  '172.16.0.0/12',
+  '192.168.0.0/16',
+  '100.64.0.0/10',
+  '169.254.0.0/16',
+  '169.254.169.254/32',
+  '127.0.0.0/8',
+  'fc00::/7',
+  'fe80::/10',
+  '::1/128',
+];
+
+/**
+ * Cluster identities a runner may never reach: its own node, every other
+ * node, and the Kubernetes API server. Cilium gives node addresses these
+ * identities rather than treating them as CIDRs, so the CIDR deny above
+ * does not cover them (a gVisor pod on DOKS reached node kubelets at
+ * 10.114.0.x:10250 with only that deny in place); an entity deny does.
+ */
+export const NODE_EGRESS_DENY_ENTITIES: readonly string[] = ['host', 'remote-node', 'kube-apiserver'];
+
+/** Every CIDR the runner's policy denies: the fixed private ranges plus the cluster's own. */
+export function egressDenyCidrs(layout: Pick<ClusterLayout, 'clusterCidrs'>): string[] {
+  return [...new Set([...PRIVATE_EGRESS_DENY, ...(layout.clusterCidrs ?? [])])];
+}
+
+/**
  * The one runner's way out: DNS to the cluster resolver (which Cilium's
  * DNS proxy watches, so the FQDN rules below can learn addresses), and
  * TLS to the allowlisted hosts, admitted only when the TLS SNI is one of
  * them. Addresses alone would admit every host behind a shared CDN
  * address (registry.yarnpkg.com behind registry.npmjs.org's addresses,
  * in the gVisor-on-DOKS test). No ingress at all.
+ *
+ * `egressDeny` takes precedence over every allow in Cilium, so an
+ * allowlisted name resolving to a private, link-local, loopback or
+ * cluster address is dropped. Cilium's CIDR selectors match only
+ * addresses outside the cluster's own endpoints, so the deny does not cut
+ * the DNS rule to kube-dns (a pod, selected by labels). For the same
+ * reason the CIDR deny misses the nodes and the API server, which Cilium
+ * knows as identities; the second deny names those entities, and the DNS
+ * allow still works under it, since kube-dns is a pod, not the host. The
+ * almyty API is reached by its public name, which is on the allowlist
+ * like any other host (the processor adds it); it must therefore resolve
+ * to a public address, which the separate runner cluster gives it.
  */
 export function buildEgressPolicy(req: HostedProvisionRequest, layout: ClusterLayout): KubeObject {
   const hosts = [...new Set(req.egressHosts)].filter(isAllowlistHost).sort();
@@ -222,6 +277,35 @@ export function buildEgressPolicy(req: HostedProvisionRequest, layout: ClusterLa
     spec: {
       endpointSelector: { matchLabels: podSelector(req.hostedRunnerId) },
       egress,
+      egressDeny: [{ toCIDRSet: egressDenyCidrs(layout).map((cidr) => ({ cidr })) }, { toEntities: [...NODE_EGRESS_DENY_ENTITIES] }],
+    },
+  };
+}
+
+/**
+ * The runner's PodDisruptionBudget, so a node drain (a pool upgrade, a
+ * node replacement, the autoscaler) does not evict a running runner
+ * without warning. With the default (`maxUnavailable: 0`) the drain waits
+ * until the runner goes idle and is scaled to zero; an install that
+ * prefers drains to win sets its own budget. A pod that is not ready
+ * (starting, crashing) may always be evicted, so a broken runner never
+ * holds a node.
+ */
+export function buildDisruptionBudget(req: HostedProvisionRequest, layout: ClusterLayout): KubeObject {
+  const names = namesFor(req, layout);
+  const minAvailable = layout.disruptionBudget?.minAvailable ?? null;
+  const maxUnavailable = layout.disruptionBudget?.maxUnavailable ?? null;
+  if ((minAvailable === null) === (maxUnavailable === null)) {
+    throw new Error('cluster.disruptionBudget needs exactly one of minAvailable and maxUnavailable');
+  }
+  return {
+    apiVersion: 'policy/v1',
+    kind: 'PodDisruptionBudget',
+    metadata: { name: names.disruptionBudget, namespace: names.namespace, labels: runnerLabels(req) },
+    spec: {
+      selector: { matchLabels: podSelector(req.hostedRunnerId) },
+      ...(minAvailable !== null ? { minAvailable } : { maxUnavailable }),
+      unhealthyPodEvictionPolicy: 'AlwaysAllow',
     },
   };
 }
@@ -355,15 +439,49 @@ export function buildRuntimeClass(): KubeObject {
 
 /** Every object for one hosted runner, in the order they are applied. The Secret is written separately (rotate). */
 export function buildHostedRunnerObjects(req: HostedProvisionRequest, layout: ClusterLayout): KubeObject[] {
-  return [
+  const objects = [
     buildNamespace(req.organizationId, layout),
     buildResourceQuota(req, layout),
     buildLimitRange(req, layout),
     buildDefaultDeny(req.organizationId, layout),
     buildEgressPolicy(req, layout),
+    buildDisruptionBudget(req, layout),
     buildVolumeClaim(req, layout),
     buildDeployment(req, layout, 0),
   ];
+  assertRunnerGuarded(objects);
+  return objects;
+}
+
+function sameLabels(a: Record<string, string> | undefined, b: Record<string, string> | undefined): boolean {
+  const flat = (m: Record<string, string> | undefined) => JSON.stringify(Object.entries(m ?? {}).sort(([x], [y]) => x.localeCompare(y)));
+  return !!a && !!b && Object.keys(a).length > 0 && flat(a) === flat(b);
+}
+
+/**
+ * Refuse a set of objects in which a runner Deployment comes without,
+ * before it, the egress policy that selects its pod and denies every
+ * private range and every node identity, and the PodDisruptionBudget that
+ * selects its pod. The Deployment is the last thing applied, so a refusal
+ * here means nothing that runs code is sent.
+ */
+export function assertRunnerGuarded(objects: KubeObject[]): void {
+  objects.forEach((obj, i) => {
+    if (obj.kind !== 'Deployment') return;
+    const selector = obj.spec?.selector?.matchLabels;
+    const before = objects.slice(0, i);
+    const where = `Deployment ${obj.metadata?.namespace ?? ''}/${obj.metadata?.name ?? ''}`;
+    const policy = before.find((o) => o.kind === 'CiliumNetworkPolicy' && sameLabels(o.spec?.endpointSelector?.matchLabels, selector));
+    const rules: any[] = policy?.spec?.egressDeny ?? [];
+    const denied = new Set<string>(rules.flatMap((rule: any) => (rule.toCIDRSet ?? []).map((c: any) => c.cidr)));
+    const deniedEntities = new Set<string>(rules.flatMap((rule: any) => rule.toEntities ?? []));
+    if (!policy || !PRIVATE_EGRESS_DENY.every((cidr) => denied.has(cidr)) || !NODE_EGRESS_DENY_ENTITIES.every((e) => deniedEntities.has(e))) {
+      throw new Error(`${where} comes without an egress policy that denies the private ranges and the node identities to its pod`);
+    }
+    if (!before.some((o) => o.kind === 'PodDisruptionBudget' && sameLabels(o.spec?.selector?.matchLabels, selector))) {
+      throw new Error(`${where} comes without a PodDisruptionBudget for its pod`);
+    }
+  });
 }
 
 /** The pod spec of a workload object, wherever its kind keeps it. */
