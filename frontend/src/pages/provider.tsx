@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
+import { ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
 import { Disclosure } from '@/components/ui/disclosure'
 
 import { Button } from '@/components/ui/button'
@@ -18,8 +18,9 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
+import { DetailBackLink, DetailHeader } from '@/components/layout/detail-header'
 import { FormSection } from '@/components/layout/form-page'
-import { ServiceIcon } from '@/components/connect/service-tiles'
+import { DANGER_BUTTON_CLASSES, DangerZone } from '@/components/ui/danger-zone'
 import { AllowedModelsEditor } from '@/components/llm-providers/allowed-models-editor'
 import { accessSummary, modelAccessOf } from '@/lib/model-access'
 import { CredentialPicker } from '@/components/credentials/credential-picker'
@@ -150,12 +151,7 @@ export function ProviderPage() {
     onError: (error) => notifications.error('Could not remove the connection', getApiErrorMessage(error, 'It was not removed.')),
   })
 
-  const back = (
-    <Link to="/credentials" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeft className="h-4 w-4" aria-hidden />
-      Credentials
-    </Link>
-  )
+  const back = <DetailBackLink to="/credentials" label="Credentials" />
 
   if (providerQuery.isError) {
     return (
@@ -207,29 +203,24 @@ export function ProviderPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      {back}
-
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <ServiceIcon size="lg"><BrandIcon brand={provider.type} name={provider.name} /></ServiceIcon>
-          <div className="min-w-0 space-y-1">
-            <EditableName name={provider.name} saving={update.isPending} onSave={(name) => update.mutate({ name })} />
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              <span>{providerTileLabel(provider.type)}</span>
-              <ProviderStatus check={status} />
-              <span data-testid="connection-model-summary">{summary}</span>
-            </div>
-          </div>
-        </div>
-        {!inactive && (
-          <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+      <DetailHeader
+        back={{ to: '/credentials', label: 'Credentials' }}
+        icon={<BrandIcon brand={provider.type} name={provider.name} />}
+        title={<EditableName name={provider.name} saving={update.isPending} onSave={(name) => update.mutate({ name })} />}
+        meta={[
+          <span key="type">{providerTileLabel(provider.type)}</span>,
+          <ProviderStatus key="status" check={status} />,
+          <span key="summary" data-testid="connection-model-summary">{summary}</span>,
+        ]}
+        actions={
+          !inactive && (
             <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
               <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
               {check.isPending ? 'Checking...' : 'Check again'}
             </Button>
-          </div>
-        )}
-      </header>
+          )
+        }
+      />
 
       {inactive && (
         <section
@@ -336,15 +327,15 @@ export function ProviderPage() {
 
           <Advanced provider={provider} models={models} onSaved={refresh} />
 
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 p-4">
-            <div>
-              <h2 className="text-sm font-semibold">Remove this connection</h2>
-              <p className="text-sm text-muted-foreground">Its key goes too. Agents that use its models stop working until you pick another model.</p>
-            </div>
-            <Button variant="outline" className="text-destructive hover:text-destructive" disabled={remove.isPending} onClick={askRemove}>
-              Remove connection
-            </Button>
-          </section>
+          <DangerZone
+            title="Remove this connection"
+            description="Its key goes too. Agents that use its models stop working until you pick another model."
+            action={
+              <Button variant="outline" className={DANGER_BUTTON_CLASSES} disabled={remove.isPending} onClick={askRemove}>
+                Remove connection
+              </Button>
+            }
+          />
         </TabsContent>
 
         {hostingAdapter && orgId && (

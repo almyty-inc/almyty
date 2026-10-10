@@ -64,9 +64,14 @@ export interface ConnectMethod {
   scopes?: string[]
 }
 
-/** How the backend proves a credential works; only the kind matters to the UI. */
+/**
+ * How the backend proves a credential works. The UI reads one thing from it:
+ * `format` (shape only, nothing to ask) or a kind that asks the service.
+ */
 export interface ConnectorValidation {
-  kind: 'http' | 'format' | 'aws_caller_identity' | 'aws_assume_role' | 'gcp_service_account' | 'oauth2_client_credentials' | 's3_bucket' | 'mcp_initialize'
+  kind: 'http' | 'format' | 'aws_caller_identity' | 'aws_assume_role' | 'gcp_service_account' | 'oauth2_client_credentials' | 's3_bucket' | 'mcp_initialize' | 'kubernetes'
+  /** Config field the account label comes from; its schema title names the detail row. */
+  accountLabelFrom?: string
   [key: string]: unknown
 }
 
@@ -132,6 +137,8 @@ export interface ConnectionHealth {
   status: ConnectionHealthStatus
   checkedAt?: string | null
   error?: string | null
+  /** What the last passing check learned besides yes, e.g. "Kubernetes v1.31.2". */
+  detail?: string | null
 }
 
 export interface ConnectionUsedBy {

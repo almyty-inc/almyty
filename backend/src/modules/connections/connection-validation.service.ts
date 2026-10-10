@@ -7,11 +7,15 @@ import type { Dispatcher } from 'undici';
 import { validateUrl, validateUrlAllowingPrivate } from '../../common/security/url-validator';
 import { ssrfSafeDispatcher } from '../../common/security/safe-fetch';
 import { dispatcherExempting } from '../../common/security/exempt-dispatcher';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
+import { agentsExempting, ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { signAwsRequest } from '../model-deployments/aws-request';
 import { interpolate, readPath } from './connector-schema';
 import { ConnectorDefinition, HttpProbe, ValidationResult, ValidationSpec } from './connector.types';
 import { McpClientError, McpClientService } from '../mcp-sources/mcp-client.service';
+import { KubeApiClient, KubeApiError, KubeClientOptions, KubeConnection, kubeConnectionFrom } from '../hosted-runners/adapters/kubernetes/kube-api.client';
+import { DeniedAccess, deniedHostedRunnerAccess } from '../hosted-runners/adapters/kubernetes/access';
+import { namespaceFor } from '../hosted-runners/adapters/kubernetes/manifests';
+import { DEFAULT_HOSTED_RUNNER_SETTINGS, loadHostedRunnerSettings } from '../hosted-runners/hosted-runner-settings';
 
 /** The outbound HTTP call used by every probe; specs bind a fixture here. */
 export type ConnectionsHttp = (url: string, init: RequestInit) => Promise<Response>;
@@ -26,6 +30,42 @@ export type S3ProbeClientFactory = (cfg: { endpoint?: string; region: string; ac
 export const CONNECTIONS_S3_FACTORY = Symbol('CONNECTIONS_S3_FACTORY');
 
 const PROBE_TIMEOUT_MS = 10_000;
+
+/** Builds the Kubernetes client for the kubernetes check; specs bind a fake here. */
+export type KubeProbeClientFactory = (conn: KubeConnection, options: KubeClientOptions) => Pick<KubeApiClient, 'version' | 'canI'>;
+export const CONNECTIONS_KUBE_FACTORY = Symbol('CONNECTIONS_KUBE_FACTORY');
+
+/** Lets the kubernetes check reach an API server on a private address (an in-cluster URL). Off by default. */
+export const KUBERNETES_PRIVATE_URLS_ENV = 'KUBERNETES_ALLOW_PRIVATE_URLS';
+
+const TLS_ERROR_CODES = /^(SELF_SIGNED_CERT_IN_CHAIN|DEPTH_ZERO_SELF_SIGNED_CERT|UNABLE_TO_VERIFY_LEAF_SIGNATURE|UNABLE_TO_GET_ISSUER_CERT(_LOCALLY)?|CERT_HAS_EXPIRED|CERT_NOT_YET_VALID|CERT_UNTRUSTED|ERR_TLS_CERT_ALTNAME_INVALID|ERR_OSSL_.*)$/;
+
+/** A failed kubernetes check in the words the credential page shows. */
+export function kubeErrorMessage(e: any, host: string): string {
+  const code = String(e?.code ?? '');
+  const message = String(e?.message ?? e);
+  if (e instanceof KubeApiError) {
+    if (e.status === 401) return `the cluster rejected the token (401)`;
+    if (e.status === 403) return `the token may not ask the cluster what it is allowed (403)`;
+    return `the cluster answered ${message}`;
+  }
+  if (code === 'ERR_SSRF_BLOCKED') return `server URL refused: ${message}`;
+  if (TLS_ERROR_CODES.test(code) || /certificate|PEM|asn1|tls/i.test(message)) {
+    return `TLS: the cluster's certificate is not trusted (${code || message}); check the CA certificate`;
+  }
+  return `could not reach ${host}: ${code && !message.includes(code) ? `${code} ` : ''}${message}`;
+}
+
+/** What the token may not do, as one line: "cannot create namespaces; cannot create deployments in almyty-rt-*". */
+export function deniedMessage(denied: DeniedAccess[], prefix: string): string {
+  const words = (list: DeniedAccess[]) => list.map((d) => `${d.verb} ${d.resource}`).join(', ');
+  const cluster = denied.filter((d) => !d.namespaced);
+  const namespaced = denied.filter((d) => d.namespaced);
+  return [
+    cluster.length ? `cannot ${words(cluster)}` : '',
+    namespaced.length ? `cannot ${words(namespaced)} in ${prefix}*` : '',
+  ].filter(Boolean).join('; ');
+}
 
 /**
  * Every probe goes out pinned and never follows a redirect.
@@ -100,6 +140,8 @@ export class ConnectionValidationService {
   private readonly s3Factory: S3ProbeClientFactory;
   /** The MCP client mcp-sources use, so the check speaks to a server the way a source will. */
   private readonly mcpClient: McpClientService;
+  /** The hosted runner adapter's own client, so the check speaks to a cluster the way provisioning will. */
+  private readonly kubeFactory: KubeProbeClientFactory;
 
   constructor(
     private readonly configService: ConfigService,
@@ -108,10 +150,12 @@ export class ConnectionValidationService {
     // Stateless; the connections module does not import mcp-sources, so
     // without an injected one the check makes its own.
     @Optional() mcpClient?: McpClientService,
+    @Optional() @Inject(CONNECTIONS_KUBE_FACTORY) kubeFactory?: KubeProbeClientFactory,
   ) {
     this.http = http ?? defaultConnectionsHttp();
     this.s3Factory = s3Factory ?? defaultS3ProbeClientFactory();
     this.mcpClient = mcpClient ?? new McpClientService();
+    this.kubeFactory = kubeFactory ?? ((conn, options) => new KubeApiClient(conn, options));
   }
 
   /** The guarded outbound call, shared with the OAuth token exchange. */
@@ -151,6 +195,7 @@ export class ConnectionValidationService {
       case 'oauth2_client_credentials': return this.clientCredentials(spec, config);
       case 's3_bucket': return this.s3Bucket(config);
       case 'mcp_initialize': return this.mcpInitialize(config);
+      case 'kubernetes': return this.kubernetes(config, context.organizationId);
       default: return fail(`unknown validation kind ${(spec as any).kind}`);
     }
   }
@@ -434,6 +479,47 @@ export class ConnectionValidationService {
         return fail(e.message);
       }
       return fail(String(e?.message ?? e));
+    }
+  }
+
+  /**
+   * A Kubernetes cluster, asked the way the hosted runner adapter will use
+   * it (adapters/kubernetes): GET /version on the API server with the saved
+   * CA (system roots when none) and token, then one access review per thing
+   * the adapter does, in the namespace it would provision for this
+   * organization. Valid only when every review is allowed; the label stays
+   * the server, the detail is the cluster's version.
+   */
+  private async kubernetes(config: Record<string, any>, organizationId: string): Promise<ValidationResult> {
+    let conn: KubeConnection;
+    try {
+      conn = kubeConnectionFrom(config);
+    } catch (e: any) {
+      return fail(String(e?.message ?? e));
+    }
+    const refused = this.guardUrl(conn.server, KUBERNETES_PRIVATE_URLS_ENV);
+    if (refused) return fail(`server URL refused: ${refused}`);
+    const host = new URL(conn.server).host;
+    // The URL string passed; the agent checks what the name resolves to.
+    const agent = this.hatchOpen(KUBERNETES_PRIVATE_URLS_ENV) ? agentsExempting(new URL(conn.server).hostname).httpsAgent : ssrfSafeHttpsAgent;
+    const client = this.kubeFactory(conn, { timeoutMs: PROBE_TIMEOUT_MS, agent });
+    const prefix = this.kubeNamespacePrefix();
+    try {
+      const { gitVersion } = await client.version();
+      const denied = await deniedHostedRunnerAccess(client, namespaceFor(organizationId, { namespacePrefix: prefix }));
+      if (denied.length) return fail(deniedMessage(denied, prefix));
+      return { ok: true, status: 'valid', accountLabel: conn.server, detail: gitVersion ? `Kubernetes ${gitVersion}` : undefined };
+    } catch (e: any) {
+      return fail(kubeErrorMessage(e, host));
+    }
+  }
+
+  /** The namespace prefix hosted runners provision under; the shipped default when the settings cannot be read. */
+  private kubeNamespacePrefix(): string {
+    try {
+      return loadHostedRunnerSettings().cluster.namespacePrefix;
+    } catch {
+      return DEFAULT_HOSTED_RUNNER_SETTINGS.cluster.namespacePrefix;
     }
   }
 

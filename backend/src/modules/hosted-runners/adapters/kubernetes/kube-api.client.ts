@@ -52,6 +52,31 @@ const RESOURCES: Record<string, { group: string; plural: string; namespaced: boo
   RuntimeClass: { group: 'apis/node.k8s.io/v1', plural: 'runtimeclasses', namespaced: false },
 };
 
+/** What a SelfSubjectAccessReview asks about: one verb on one resource. */
+export interface KubeResourceAttributes {
+  verb: string;
+  /** API group, '' for the core group. */
+  group: string;
+  resource: string;
+  subresource?: string;
+  namespace?: string;
+}
+
+/** The access-review attributes for a verb on a kind (and subresource), in the namespace when the kind has one. */
+export function resourceAttributes(kind: string, verb: string, namespace?: string, subresource?: string): KubeResourceAttributes {
+  const r = RESOURCES[kind];
+  if (!r) throw new Error(`no resource path for kind ${kind}`);
+  // 'api/v1' is the core group (''); 'apis/<group>/<version>' names its group.
+  const group = r.group.startsWith('apis/') ? r.group.split('/')[1] : '';
+  return {
+    verb,
+    group,
+    resource: r.plural,
+    ...(subresource ? { subresource } : {}),
+    ...(r.namespaced && namespace ? { namespace } : {}),
+  };
+}
+
 export function resourcePath(kind: string, name: string, namespace?: string): string {
   const r = RESOURCES[kind];
   if (!r) throw new Error(`no resource path for kind ${kind}`);
@@ -73,8 +98,16 @@ export function kubeConnectionFrom(creds: Record<string, string | undefined>): K
   return { server, token, caCert: creds.caCert?.trim() || undefined };
 }
 
+/** How a client dials: a spec or the connection check sets these; the reconcile loop uses the defaults. */
+export interface KubeClientOptions {
+  /** Abort a request that takes longer than this; absent waits as long as the socket does. */
+  timeoutMs?: number;
+  /** The https agent to dial with (the connection check passes a DNS-pinned one). */
+  agent?: https.Agent;
+}
+
 export class KubeApiClient {
-  constructor(private readonly conn: KubeConnection) {}
+  constructor(private readonly conn: KubeConnection, private readonly options: KubeClientOptions = {}) {}
 
   private request(method: string, path: string, body?: unknown, contentType = 'application/json'): Promise<KubeResponse> {
     const url = new URL(path, `${this.conn.server}/`);
@@ -87,6 +120,7 @@ export class KubeApiClient {
         ...(payload ? { 'Content-Type': contentType, 'Content-Length': String(payload.length) } : {}),
       },
       ...(this.conn.caCert ? { ca: this.conn.caCert } : {}),
+      ...(this.options.agent && url.protocol === 'https:' ? { agent: this.options.agent } : {}),
     };
     return new Promise((resolve, reject) => {
       const onResponse = (res: http.IncomingMessage) => {
@@ -102,11 +136,23 @@ export class KubeApiClient {
           }
           resolve({ status: res.statusCode ?? 0, body: parsed });
         });
+        res.on('error', reject);
       };
-      // Plain http only for a spec's loopback fake; kubeConnectionFrom
-      // refuses anything but https for a real connection.
-      const req = url.protocol === 'http:' ? http.request(url, options, onResponse) : https.request(url, options, onResponse);
+      let req: http.ClientRequest;
+      try {
+        // Plain http only for a spec's loopback fake; kubeConnectionFrom
+        // refuses anything but https for a real connection.
+        req = url.protocol === 'http:' ? http.request(url, options, onResponse) : https.request(url, options, onResponse);
+      } catch (err) {
+        // A CA that is not PEM throws while the TLS context is built.
+        reject(err);
+        return;
+      }
       req.on('error', reject);
+      if (this.options.timeoutMs) {
+        const ms = this.options.timeoutMs;
+        req.setTimeout(ms, () => req.destroy(Object.assign(new Error(`no answer within ${ms / 1000}s`), { code: 'ETIMEDOUT' })));
+      }
       if (payload) req.write(payload);
       req.end();
     });
@@ -154,5 +200,23 @@ export class KubeApiClient {
     if (res.status === 404) return [];
     if (res.status >= 300) this.fail(`list pods in ${namespace}`, res);
     return Array.isArray(res.body?.items) ? res.body.items : [];
+  }
+
+  /** GET /version: the API server's build (`gitVersion`, e.g. v1.31.2). */
+  async version(): Promise<{ gitVersion: string }> {
+    const res = await this.request('GET', '/version');
+    if (res.status >= 300) this.fail('get version', res);
+    return { gitVersion: String(res.body?.gitVersion ?? '') };
+  }
+
+  /** Whether this token may do one thing: a SelfSubjectAccessReview, which changes nothing. */
+  async canI(attributes: KubeResourceAttributes): Promise<boolean> {
+    const res = await this.request('POST', '/apis/authorization.k8s.io/v1/selfsubjectaccessreviews', {
+      apiVersion: 'authorization.k8s.io/v1',
+      kind: 'SelfSubjectAccessReview',
+      spec: { resourceAttributes: attributes },
+    });
+    if (res.status >= 300) this.fail('review access', res);
+    return res.body?.status?.allowed === true;
   }
 }

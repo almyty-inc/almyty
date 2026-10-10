@@ -246,22 +246,88 @@ describe('/credentials/:id', () => {
     expect(screen.queryByRole('link', { name: 'Advanced' })).not.toBeInTheDocument()
   })
 
-  it('checks again and says the answer', async () => {
-    vi.mocked(connectionsApi.validate).mockResolvedValue(connection({ health: { status: 'valid' } }))
+  it('checks again: the answer is the status label, with what the check learned, and no banner', async () => {
+    const checked = connection({ health: { status: 'valid', detail: 'GitHub Enterprise 3.14' } })
+    vi.mocked(connectionsApi.validate).mockResolvedValue(checked)
+    // The list read again after the check carries the same answer.
+    vi.mocked(connectionsApi.list).mockResolvedValueOnce([connection({ health: { status: 'unknown' } })]).mockResolvedValue([checked])
     at()
-    fireEvent.click(await screen.findByRole('button', { name: 'Check again' }))
+    expect(await screen.findByTestId('credential-status')).toHaveTextContent('Not checked yet')
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
     await waitFor(() => expect(connectionsApi.validate).toHaveBeenCalledWith('conn-1'))
-    expect(await screen.findByTestId('credential-check-result')).toHaveTextContent('Works.')
+    await waitFor(() => expect(screen.getByTestId('credential-status')).toHaveTextContent('Works'))
+    expect(screen.getByTestId('credential-check-detail')).toHaveTextContent('GitHub Enterprise 3.14')
+    expect(screen.queryByTestId('credential-check-result')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('credential-last-error')).not.toBeInTheDocument()
   })
 
-  it('replaces the key in place', async () => {
+  it('shows a failed check as one line under the name', async () => {
+    const failed = connection({ health: { status: 'failed', error: 'cannot create pods in almyty-rt-*' } })
+    vi.mocked(connectionsApi.validate).mockResolvedValue(failed)
+    // The list read again after the check carries the same answer.
+    vi.mocked(connectionsApi.list).mockResolvedValueOnce([connection()]).mockResolvedValue([failed])
+    at()
+    fireEvent.click(await screen.findByRole('button', { name: 'Check again' }))
+    expect(await screen.findByTestId('credential-last-error')).toHaveTextContent('cannot create pods in almyty-rt-*')
+    expect(screen.getByTestId('credential-status')).toHaveTextContent('Needs attention')
+    expect(screen.queryByTestId('credential-check-detail')).not.toBeInTheDocument()
+  })
+
+  it('replaces the key in place, the new answer in the status label', async () => {
     vi.mocked(connectionsApi.rotate).mockResolvedValue({ pending: false, connection: connection() })
+    vi.mocked(connectionsApi.list).mockResolvedValueOnce([connection({ health: { status: 'failed', error: 'token expired' } })])
     at()
     fireEvent.click(await screen.findByRole('button', { name: 'Replace key' }))
     fireEvent.change(await screen.findByLabelText('Token'), { target: { value: 'ghp_new' } })
     fireEvent.click(screen.getByRole('button', { name: 'Replace key' }))
     await waitFor(() => expect(connectionsApi.rotate).toHaveBeenCalledWith('conn-1', { input: { apiKey: 'ghp_new' } }))
-    expect(await screen.findByTestId('credential-check-result')).toHaveTextContent('New key saved. Works.')
+    await waitFor(() => expect(screen.getByTestId('credential-status')).toHaveTextContent('Works'))
+    expect(screen.queryByTestId('credential-last-error')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('credential-check-result')).not.toBeInTheDocument()
+  })
+
+  it('offers no check for a key nobody can check, and says "Not checked" rather than "Saved"', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([connection({ id: 'conn-o', name: 'Weather key', connectorKey: 'other', connectorDisplayName: 'Other service', accountLabel: null })])
+    at('conn-o')
+    expect(await screen.findByRole('heading', { name: 'Weather key' })).toBeInTheDocument()
+    expect(screen.getByTestId('credential-status')).toHaveTextContent('Not checked')
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument()
+  })
+
+  it('renders any service from its data: its logo, its name, its own word for the account, the address once', async () => {
+    const cluster: Connector = {
+      key: 'kubernetes',
+      kind: 'cloud',
+      displayName: 'Kubernetes cluster',
+      validation: { kind: 'kubernetes', accountLabelFrom: 'server' },
+      connect: [{ type: 'api_key', schema: { type: 'object', properties: { server: { type: 'string', title: 'API server URL' }, token: { type: 'string', title: 'ServiceAccount token', 'x-secret': true } }, required: ['server', 'token'] } }],
+    }
+    vi.mocked(connectorsApi.list).mockResolvedValue([cluster])
+    vi.mocked(connectionsApi.list).mockResolvedValue([
+      connection({ id: 'conn-k', name: 'Staging cluster', connectorKey: 'kubernetes', connectorDisplayName: 'Kubernetes cluster', kind: 'cloud', accountLabel: 'https://k8s.example.com', health: { status: 'valid', detail: 'Kubernetes v1.31.2' } }),
+    ])
+    at('conn-k')
+    const header = (await screen.findByRole('heading', { name: 'Staging cluster' })).closest('header')!
+    expect(within(header).getByText('Kubernetes cluster')).toBeInTheDocument()
+    expect(within(header).queryByText(/k8s\.example\.com/)).not.toBeInTheDocument()
+    expect(screen.getAllByText('https://k8s.example.com')).toHaveLength(1)
+    expect(within(screen.getByTestId('credential-account')).getByText('API server URL')).toBeInTheDocument()
+    expect(within(header).getByTestId('credential-status')).toHaveTextContent('Works')
+    expect(within(header).getByTestId('credential-check-detail')).toHaveTextContent('Kubernetes v1.31.2')
+    expect(header.querySelector('[data-brand="kubernetes"]')).not.toBeNull()
+    expect(header.querySelector('[data-brand-fallback]')).toBeNull()
+    expect(within(header).getByRole('button', { name: 'Check again' })).toBeInTheDocument()
+  })
+
+  it('keeps delete at the bottom of the details section', async () => {
+    at()
+    const details = await screen.findByTestId('credential-details')
+    const danger = screen.getByTestId('danger-zone')
+    expect(danger.parentElement).toContainElement(details)
+    expect(danger.parentElement!.lastElementChild).toBe(danger)
+    expect(within(danger).getByRole('button', { name: 'Delete credential' })).toBeInTheDocument()
   })
 
   it('deletes after a one-line confirm and returns to the list', async () => {
