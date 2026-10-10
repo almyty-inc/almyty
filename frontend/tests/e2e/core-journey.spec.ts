@@ -126,6 +126,8 @@ test('core journey: sign up, credentials, API, gateway, agent, channel', async (
       await page.locator('#password').fill(user.password)
       await page.locator('#confirmPassword').fill(user.password)
       await page.locator('#terms').click()
+      // A build with a captcha key refuses to submit until the widget has a token.
+      await AuthHelper.waitForCaptcha(page)
       await page.getByRole('button', { name: 'Create account' }).click()
       await page.waitForURL(/\/dashboard/)
 

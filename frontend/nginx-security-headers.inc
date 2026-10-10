@@ -15,4 +15,11 @@ add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 # without these two sources production silently fell back to system fonts.
 # Sentry: error reports go to its regional ingest host; without it every
 # report was refused and production crashes never reached Sentry.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://*.almyty.com https://*.ingest.de.sentry.io https://*.ingest.sentry.io; frame-ancestors 'self'; object-src 'none'; base-uri 'self';" always;
+# Captcha: the sign-up form loads Cloudflare Turnstile (or hCaptcha) from
+# src/components/auth/captcha-widget.tsx. Without its script and iframe origin
+# the widget never rendered and every sign-up failed "Verification required".
+# Sources are exactly what each provider documents: Turnstile needs
+# script-src + frame-src on challenges.cloudflare.com; hCaptcha needs
+# script/frame/style/connect-src on hcaptcha.com and *.hcaptcha.com.
+# frame-src keeps 'self', the default-src fallback it had before.
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://hcaptcha.com https://*.hcaptcha.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://*.almyty.com https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://hcaptcha.com https://*.hcaptcha.com; frame-src 'self' https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self';" always;
