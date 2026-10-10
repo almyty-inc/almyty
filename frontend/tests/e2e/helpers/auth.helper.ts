@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test'
+import { Page, expect } from '@playwright/test'
 import { APIHelper } from './api.helper'
 
 export interface TestUser {
@@ -136,6 +136,33 @@ export class AuthHelper {
       const token = localStorage.getItem('token')
       return !!token
     })
+  }
+
+  /**
+   * On a build with a captcha site key, wait until the provider's iframe has
+   * loaded and handed the form a token; the form refuses to submit before
+   * then. Returns false, at once, on a build without one.
+   *
+   * Turnstile mounts its iframe in a closed shadow root, so this looks for
+   * the frame and the hidden response field rather than inside the widget.
+   */
+  static async waitForCaptcha(page: Page, timeout = 20_000): Promise<boolean> {
+    if (!(await page.getByTestId('captcha-widget').count())) return false
+    await expect
+      .poll(() => page.frames().some((f) => /challenges\.cloudflare\.com|hcaptcha\.com/.test(f.url())), { timeout })
+      .toBe(true)
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (document.querySelector('[name="cf-turnstile-response"], [name="h-captcha-response"]') as HTMLInputElement | null)
+                ?.value ?? '',
+          ),
+        { timeout },
+      )
+      .not.toBe('')
+    return true
   }
 
   /**
