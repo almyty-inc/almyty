@@ -284,7 +284,10 @@ Admins can add connectors the catalog does not have: any
 OpenAI-compatible endpoint, any MCP server, any memory service, any
 bucket. `POST /credentials/services` takes the same shape as a built-in entry: a
 key, a kind, the form fields (secret ones marked `x-secret`) and how to
-validate.
+validate. A field marked `"x-multiline": true` is a textarea on the form;
+`"format": "pem"` is certificate text: also a textarea, and stored as
+clean PEM even when it was pasted on one line or as base64 (the kubeconfig
+`certificate-authority-data` form). Text that is no certificate is refused.
 
 ## Where secrets live
 
