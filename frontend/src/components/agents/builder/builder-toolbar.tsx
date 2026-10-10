@@ -135,7 +135,7 @@ export function BuilderToolbar({
         <button
           type="button"
           aria-pressed={agentMode === 'workflow'}
-          className={cn('flex-1 sm:flex-none px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'workflow' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
+          className={cn('flex-1 sm:flex-none px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'workflow' ? 'bg-background dark:bg-input shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
           onClick={() => onAgentModeChange('workflow')}
         >
           Workflow
@@ -143,7 +143,7 @@ export function BuilderToolbar({
         <button
           type="button"
           aria-pressed={agentMode === 'autonomous'}
-          className={cn('flex-1 sm:flex-none px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'autonomous' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
+          className={cn('flex-1 sm:flex-none px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'autonomous' ? 'bg-background dark:bg-input shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
           onClick={() => onAgentModeChange('autonomous')}
         >
           Autonomous

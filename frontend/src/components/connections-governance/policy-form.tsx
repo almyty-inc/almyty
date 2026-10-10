@@ -47,7 +47,7 @@ import {
 import { ConnectorMultiSelect } from './connector-multi-select'
 
 const SELECT_CLASS =
-  'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50'
+  'flex h-9 w-full rounded-lg border border-input bg-field px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50'
 
 const ENVIRONMENT_SUGGESTIONS = ['production', 'staging', 'development']
 
@@ -313,7 +313,7 @@ export function EnvironmentChips({ value, onChange, disabled }: { value: string[
 
   return (
     <div className="space-y-2" data-testid="environment-chips">
-      <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background px-2 py-1.5">
+      <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-field px-2 py-1.5">
         {value.map((name) => (
           <span key={name} className="inline-flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/5 px-2 py-0.5 text-xs" data-testid={`environment-chip-${name}`}>
             {name}

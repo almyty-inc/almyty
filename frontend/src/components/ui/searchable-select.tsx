@@ -118,7 +118,7 @@ export function SearchableSelect({ id, value, onChange, options, placeholder = '
           window.setTimeout(() => searchRef.current?.focus(), 0)
         }}
         className={cn(
-          'flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left text-sm shadow-sm',
+          'flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-field px-3 text-left text-sm shadow-sm',
           'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60',
           invalid && 'border-destructive',
         )}

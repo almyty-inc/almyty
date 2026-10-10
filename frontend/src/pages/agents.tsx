@@ -318,7 +318,7 @@ export function AgentsPage() {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm w-32"
+                    className="h-9 rounded-md border border-input bg-field px-3 text-sm w-32"
                   >
                     <option value="all">All status</option>
                     <option value="draft">Draft</option>

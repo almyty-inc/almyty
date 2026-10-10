@@ -447,7 +447,7 @@ export function ToolDetailPage() {
                     <p className="text-sm text-muted-foreground">Loading workspaces…</p>
                   ) : workspacesQuery.data && workspacesQuery.data.length > 0 ? (
                     <select
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      className="w-full rounded-md border border-input bg-field px-3 py-2 text-sm"
                       value={selectedWorkspaceId}
                       onChange={(e) => setSelectedWorkspaceId(e.target.value)}
                     >

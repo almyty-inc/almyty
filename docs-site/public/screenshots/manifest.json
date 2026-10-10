@@ -7,7 +7,7 @@
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": "2026-10-09T13:16:28.437Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a3c151c3676d564c1b612a2da169df1d3170e4a6572c517e2b38fab275bf0934",
       "source": {
         "kind": "browser",
@@ -22,14 +22,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
       "capturedAt": "2026-10-09T13:16:36.814Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "88f33c94d57413b214dbff7e3c11a0c7670104c0dfbde58506b500a78c9d0a8e",
       "source": {
         "kind": "browser",
@@ -44,14 +45,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
       "capturedAt": "2026-10-09T13:16:34.159Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f094cb1dbf73ceb4e16bed0723bfd7f293743d8ec02331ecf12f036d96f77bde",
       "source": {
         "kind": "browser",
@@ -66,14 +68,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
       "capturedAt": "2026-10-09T13:16:52.071Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c7c5fe4311d64aa57cbfcb88b7882d83fd82c6faafca5e9750f504b590c31ac2",
       "source": {
         "kind": "browser",
@@ -89,14 +92,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "37eaccf0c95694e8e005d10ea854d3177faab2174fbc0d2e667329b5a42ce553",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
       "capturedAt": "2026-10-09T13:16:17.127Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3fce5550f40d7a2fd1e5f9c5137e9b27688fdaca29739c2bd25f61675caf863f",
       "source": {
         "kind": "browser",
@@ -111,14 +115,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-10-09T13:16:11.817Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "21965842722199647c06fc16a22a82a5481853e07d26f39a9c6c668b223b9813",
       "source": {
         "kind": "browser",
@@ -133,14 +138,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
       "capturedAt": "2026-10-09T13:16:25.208Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "736f365b2c38cf97a37b61f89679fc16044dd0c90d56fea1115af76d51980429",
       "source": {
         "kind": "browser",
@@ -155,14 +161,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agent-tool-mode",
       "title": "How the model sees its tools",
       "path": "screenshots/agent-tool-mode.png",
       "capturedAt": "2026-10-09T13:19:42.013Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6d62857303a7c2af9db8e78d180459e6f87115b8295b5c478faf9547d118d07e",
       "source": {
         "kind": "browser",
@@ -177,14 +184,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d1b686ee37e11544c8ff405f1ddd192fb7e0e81cdd37b0cbb4dda99509671039",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
       "capturedAt": "2026-10-09T13:16:31.535Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b3cd8b0d58339c94ee771c883e1f08b2f50f27033f15ba7d803766d287f1e08b",
       "source": {
         "kind": "browser",
@@ -199,14 +207,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
       "capturedAt": "2026-10-09T13:16:08.606Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "46bc390762a5014709b86aa4d4fe7ca75bc548c5cd3a2821d704f0ffeedb9fd7",
       "source": {
         "kind": "browser",
@@ -221,14 +230,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "620f3938f86fd705a4cd5a1ad8d7d1269daf041c97c86b45ad2335005287c2c3",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "analytics-agents",
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
       "capturedAt": "2026-10-09T13:19:00.504Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f196d769dbbe1b69034e982a36e977796d490c6271558283bea8321e413f09ec",
       "source": {
         "kind": "browser",
@@ -243,14 +253,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
       "capturedAt": "2026-10-09T13:19:08.278Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6cb64b864f831ade33335a2fcf2e0afa31c2816f56601d7b59939373fb46698b",
       "source": {
         "kind": "browser",
@@ -265,14 +276,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
       "capturedAt": "2026-10-09T13:19:10.870Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "99008caee62c02f87bbb063156d939b10b305df649aeebc1276edcc151a4696c",
       "source": {
         "kind": "browser",
@@ -287,14 +299,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
       "capturedAt": "2026-10-09T13:19:05.672Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "bf1de6b60ce3bde769ad8a3500ca9e4a3884cfba5728fb6fa8143ec6296ab260",
       "source": {
         "kind": "browser",
@@ -309,14 +322,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
       "capturedAt": "2026-10-09T13:18:57.795Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5c3152bc6a3b2be8d211687e6e4b5f67c5ec31af2c14dfe9140b18fa08b2b68f",
       "source": {
         "kind": "browser",
@@ -331,14 +345,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
       "capturedAt": "2026-10-09T13:19:03.130Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "50e8332eed872dcc5974a02f8c67f84ff45c61755bf2bcddf8ce4da4c037cfa9",
       "source": {
         "kind": "browser",
@@ -353,14 +368,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "apis-list",
       "title": "APIs list",
       "path": "screenshots/apis-list.png",
       "capturedAt": "2026-10-09T13:17:24.740Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5c41e8fd813c9d778e42d45f28b3e4ec48c7d724a3de4e03e6e1f1d4ab21fa70",
       "source": {
         "kind": "browser",
@@ -375,14 +391,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3760da38adb934b5789db112c7513c44da4e174427d0de1fd8ea85d30025470f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "approval-refund-820",
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
       "capturedAt": "2026-10-09T13:18:42.101Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "52c8c5994d0ce023587b42d8575726ab1e8bfe43307ce3d4bb228a88041fb3d7",
       "source": {
         "kind": "browser",
@@ -397,14 +414,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a6037fa3a9a6e123036c16830e89290202b56aa160d5fffb8ad9f6ca3ce6976d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "approvals-change-set",
       "title": "A script's changes in Approvals",
       "path": "screenshots/approvals-change-set.png",
       "capturedAt": "2026-10-09T13:19:53.647Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "da975cae043519775fa8fb272281b369302b079a6fc64604f9cc8d4a0b8aa955",
       "source": {
         "kind": "browser",
@@ -419,14 +437,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4c55d35aedd5e7f71a5f03c60526ba27dc86af7ede43f8ae0291171559371144",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
       "capturedAt": "2026-10-09T13:18:08.930Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "52c8c5994d0ce023587b42d8575726ab1e8bfe43307ce3d4bb228a88041fb3d7",
       "source": {
         "kind": "browser",
@@ -441,7 +460,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a6037fa3a9a6e123036c16830e89290202b56aa160d5fffb8ad9f6ca3ce6976d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -457,7 +477,7 @@
       "title": "Create account",
       "path": "screenshots/auth-register.png",
       "capturedAt": "2026-10-09T13:20:04.415Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0fd0ae6cb048a83098acac5ce38ccac627a4dd850110428e20666f1a23b3b4f6",
       "source": {
         "kind": "browser",
@@ -471,14 +491,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30c8aed99dca1d06c1867b57e0f2e74de552587574af21f42a1b5fe157538b3b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "builder-code-step",
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
       "capturedAt": "2026-10-09T13:19:45.509Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0c2bf113fd3ffc219110450a9f129b1261c8d6598783fd2172b6136636abea76",
       "source": {
         "kind": "browser",
@@ -493,14 +514,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "channel-branding-rules",
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
       "capturedAt": "2026-10-09T13:16:54.839Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a16695e982dceca492c954a13be59683984e6023daad42a6d1353d9eea9b252e",
       "source": {
         "kind": "browser",
@@ -515,14 +537,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36fa2e4a8458d6419a6303e0823f9adba5b7534460055d5c8167fb33c0915d04",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
       "capturedAt": "2026-10-09T13:17:00.321Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "752b402fdf550c29c36e762fc6e13eb860fc7730c046611fd8d2b89560cf27a9",
       "source": {
         "kind": "browser",
@@ -537,14 +560,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
       "capturedAt": "2026-10-09T13:17:03.398Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "eb294b3209a19a9453ae15c87f4191decd5cd029caacb2785ba8b0f35833f752",
       "source": {
         "kind": "browser",
@@ -559,14 +583,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
       "capturedAt": "2026-10-09T13:17:06.212Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d90e13a2e94505f4d756dee17aff4566a8410be8de148f4cbef5afd8430a030a",
       "source": {
         "kind": "browser",
@@ -581,14 +606,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
       "capturedAt": "2026-10-09T13:16:57.600Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ed2274e1b0c1e13cdbd0cf170881b379a51a91e51af9093b478ce22fbf392876",
       "source": {
         "kind": "browser",
@@ -603,7 +629,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "cli-agents-help",
@@ -724,7 +751,7 @@
       "title": "Connect a provider",
       "path": "screenshots/credentials-connect-provider.png",
       "capturedAt": "2026-10-09T13:17:58.563Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ebff7db636f4232ba2aeaf4d26ff914d191f02a4b09489f25a12d0f1fc09cf3e",
       "source": {
         "kind": "browser",
@@ -739,14 +766,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d1a4ae57d90fa61d96cc1c8b4f02ab3520097c5ed8db487d4e5e09287ef2fd2c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "credentials-vault",
       "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
       "capturedAt": "2026-10-09T13:17:56.093Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "eefce035d1be0f766b30a24863e889f52002926e71e7563012b91233d851efd1",
       "source": {
         "kind": "browser",
@@ -762,14 +790,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "471b002961b7bd0d976b9a3d3f630aedc0ebb39453e4940740778027768fe090",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "environment-detail",
       "title": "Hosted environment",
       "path": "screenshots/environment-detail.png",
       "capturedAt": "2026-10-09T13:18:55.211Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b2b9488515c2b8a3e7f6da36f0124dc8ce9055cfb19497f37e0d3d5280361a77",
       "source": {
         "kind": "browser",
@@ -785,14 +814,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f2dc7e9e94532b3a1456e9ec7942d89797bd572136508dd46ff0e57379359aac",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "environment-new",
       "title": "New environment",
       "path": "screenshots/environment-new.png",
       "capturedAt": "2026-10-09T13:18:52.618Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e965fb753ec5c006a861eb1ca4add6fd68030c07af5c59b9a2cb332942072b41",
       "source": {
         "kind": "browser",
@@ -808,14 +838,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7503c4645c50197aa533b9f55ac13c4fa2d58b8c6121c37d27840860332fa1eb",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
       "capturedAt": "2026-10-09T13:17:39.132Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d8d9350c86224a36796e9ae17b1515db17e5259392c32f022862e36c7bf88a42",
       "source": {
         "kind": "browser",
@@ -830,14 +861,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
       "capturedAt": "2026-10-09T13:17:36.130Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c41429fdbd16cf713485bb25ea64e067a40c2922742c3ef0b063305fcc0ab273",
       "source": {
         "kind": "browser",
@@ -852,14 +884,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "gateway-exposure",
       "title": "How apps see a gateway's tools",
       "path": "screenshots/gateway-exposure.png",
       "capturedAt": "2026-10-09T13:19:56.700Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2669553b1933d5dc2fe33243edaf6df471e8ec9a39e7636d77b7523a36f7b1a8",
       "source": {
         "kind": "browser",
@@ -875,14 +908,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "35eea2c0df14782183d9e2fbabe8588813c9eb5a61b46620171e4a4a8281645d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
       "capturedAt": "2026-10-09T13:17:41.839Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3476188e096593fe62b799fddb55a5f887ef99584905ba522c839034f3002b59",
       "source": {
         "kind": "browser",
@@ -897,14 +931,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
       "capturedAt": "2026-10-09T13:17:47.474Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6b18a5df0b8cffa07d73dfead0c4e0e35f9a83bc754f2c95a988c792cbaf9747",
       "source": {
         "kind": "browser",
@@ -919,14 +954,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-dev-1-gateway",
       "title": "Serve the order tools to coding assistants",
       "path": "screenshots/guides/dev-1-gateway.png",
       "capturedAt": "2026-10-09T12:23:02.502Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a2b24f829a5f9e81cf182fa73df7320f929cb05c78225259808a28f4a602185b",
       "source": {
         "kind": "browser",
@@ -941,14 +977,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b95eae7298c95386d92871599083d16c3e7ca1a9a70c71c1a134bc07349b0916",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-dev-2-gateway-setup",
       "title": "The address, the key and a ready-made setup",
       "path": "screenshots/guides/dev-2-gateway-setup.png",
       "capturedAt": "2026-10-09T12:23:04.862Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b1b9e1e5477ee2c72c4b060e4e5ddc38b9368fd6f812173b5e1829918ea5f3fd",
       "source": {
         "kind": "browser",
@@ -963,14 +1000,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-dev-3-runner",
       "title": "Start a runner on your own machine",
       "path": "screenshots/guides/dev-3-runner.png",
       "capturedAt": "2026-10-09T12:23:07.119Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c94519ab8e75cd5ffcfbc50df866fc4fda7c07d6d774ef8d31bdb4fc94c973a5",
       "source": {
         "kind": "browser",
@@ -985,14 +1023,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "02573eb5dd793faebab6cd976c93039b33ffc8fdd15b670f6b07c64242654412",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-dev-4-runner-command",
       "title": "The commands to run on the machine",
       "path": "screenshots/guides/dev-4-runner-command.png",
       "capturedAt": "2026-10-09T12:23:08.734Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c94519ab8e75cd5ffcfbc50df866fc4fda7c07d6d774ef8d31bdb4fc94c973a5",
       "source": {
         "kind": "browser",
@@ -1007,14 +1046,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "02573eb5dd793faebab6cd976c93039b33ffc8fdd15b670f6b07c64242654412",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-helpdesk-1-connect-intranet",
       "title": "Connect your intranet",
       "path": "screenshots/guides/helpdesk-1-connect-intranet.png",
       "capturedAt": "2026-10-09T12:22:31.089Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fb602e27f0e259b34bd52627b3979041418b9179ada0fdda6faab0869ccb7e46",
       "source": {
         "kind": "browser",
@@ -1029,14 +1069,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-helpdesk-2-office-guide",
       "title": "The office guide, added as a document",
       "path": "screenshots/guides/helpdesk-2-office-guide.png",
       "capturedAt": "2026-10-09T12:22:34.405Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2ef8e17292b263c01f07222fe1b56e1979f722a89fb90c073155dc10fba1fd17",
       "source": {
         "kind": "browser",
@@ -1051,14 +1092,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f55291c5a17e246c1fd03e4fb54a6557554e121602451d08c0ddd505c8a48f54",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-helpdesk-3-agent",
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
       "capturedAt": "2026-10-09T12:22:41.319Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "64d2947d50c007233f8e8683444789f7632159d823529215b1b62d51e4c937df",
       "source": {
         "kind": "browser",
@@ -1073,14 +1115,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-helpdesk-4-leave",
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
       "capturedAt": "2026-10-09T12:22:50.280Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9b3f560a8db538d224c4d763056833248c9c3424f3a23d93ef975d8f2611f8c5",
       "source": {
         "kind": "browser",
@@ -1095,14 +1138,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
       "capturedAt": "2026-10-09T12:22:52.360Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "21e2e4e46746a0245a05a288084677fbe1e75b28db5504a42d4c84f17a4f2a7f",
       "source": {
         "kind": "browser",
@@ -1117,14 +1161,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-helpdesk-6-teams",
       "title": "Add Microsoft Teams",
       "path": "screenshots/guides/helpdesk-6-teams.png",
       "capturedAt": "2026-10-09T12:22:58.075Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cd1e67f6fa08b47cb5edd94b8914e4da973e52c5b8d2128050460e162f547289",
       "source": {
         "kind": "browser",
@@ -1140,14 +1185,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-marketing-1-connect-docs",
       "title": "Connect your help center",
       "path": "screenshots/guides/marketing-1-connect-docs.png",
       "capturedAt": "2026-10-09T12:21:12.089Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f066c9633267f16d6ed9044304cf90a5df905a503263352a15bf4080604afd2f",
       "source": {
         "kind": "browser",
@@ -1162,14 +1208,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-marketing-2-agent",
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
       "capturedAt": "2026-10-09T12:21:15.085Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5263e3344cc7f71a1b3bc3523f2c2123bd2eebe32a440743a1973c1309c830f3",
       "source": {
         "kind": "browser",
@@ -1184,14 +1231,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-marketing-3-try",
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
       "capturedAt": "2026-10-09T12:21:24.058Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8cca45bcbcf9725c9593679a4c0653b79d5004dde52ac3da8549ee216230ce58",
       "source": {
         "kind": "browser",
@@ -1206,14 +1254,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-marketing-4-limits",
       "title": "A daily spending cap for visitors",
       "path": "screenshots/guides/marketing-4-limits.png",
       "capturedAt": "2026-10-09T12:21:26.955Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "371ee23774c324e105faf0356eb2a331c8129bd330c476b538b704fcaeb222de",
       "source": {
         "kind": "browser",
@@ -1228,14 +1277,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36fa2e4a8458d6419a6303e0823f9adba5b7534460055d5c8167fb33c0915d04",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-marketing-5-widget",
       "title": "The chat bubble, only on your own site",
       "path": "screenshots/guides/marketing-5-widget.png",
       "capturedAt": "2026-10-09T12:21:39.333Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8f94becbfbebb2c58086aaaeaaaa932e21263f81a022b6b55c3599d0ad0e8d5e",
       "source": {
         "kind": "browser",
@@ -1251,14 +1301,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7b1801f16a6392c82ec0f72f06e879c3e28c700207bafe4b1cfae236dfefc298",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-marketing-6-visitor",
       "title": "A visitor asks a product question",
       "path": "screenshots/guides/marketing-6-visitor.png",
       "capturedAt": "2026-10-09T12:21:47.430Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6585c66632f7b3595004a9bde79d4019845423ebded43942ddfd6154779723fc",
       "source": {
         "kind": "browser",
@@ -1273,14 +1324,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-ops-1-connect-status",
       "title": "Connect the system you check",
       "path": "screenshots/guides/ops-1-connect-status.png",
       "capturedAt": "2026-10-09T12:21:52.464Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a5bb04622f81592fc0f63d7c188f14c9b05f00dfbff8a8946c5510d93687da0b",
       "source": {
         "kind": "browser",
@@ -1295,14 +1347,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-ops-2-agent",
       "title": "The nightly check and its status tools",
       "path": "screenshots/guides/ops-2-agent.png",
       "capturedAt": "2026-10-09T12:21:55.437Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "abd7b4a188d87cff9a0d1cdedf74541af4004b5f3287e14c43c70e0a4184a27b",
       "source": {
         "kind": "browser",
@@ -1317,14 +1370,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-ops-3-try",
       "title": "A test run writes the report",
       "path": "screenshots/guides/ops-3-try.png",
       "capturedAt": "2026-10-09T12:22:04.396Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1cd58cfb429b6780c0258a05312984e8528ca2ed6180c823f546d9e7e6bd2fab",
       "source": {
         "kind": "browser",
@@ -1339,14 +1393,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-ops-4-slack",
       "title": "Slack, published for the report",
       "path": "screenshots/guides/ops-4-slack.png",
       "capturedAt": "2026-10-09T12:22:15.959Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "501e140333bb61e4074bbcb498860e10d42c239468249260568ddcb51831d861",
       "source": {
         "kind": "browser",
@@ -1362,14 +1417,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-ops-5-schedule",
       "title": "Every day at 6:00, to the Slack channel",
       "path": "screenshots/guides/ops-5-schedule.png",
       "capturedAt": "2026-10-09T12:22:20.407Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "56ea31526a21d0fd256e7e3bb340f6ccf296f805c5f9103d4503e0966bd30920",
       "source": {
         "kind": "browser",
@@ -1385,14 +1441,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6a65ae41deaf626317e6048f4e4fe4a6b6a6887f922afabd96588181dfcf9bf1",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-ops-6-schedule-card",
       "title": "The schedule on the agent",
       "path": "screenshots/guides/ops-6-schedule-card.png",
       "capturedAt": "2026-10-09T12:22:22.361Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2a7bdac586dff15cbc0b79cbc0fe6dc6a901b36c4825b0825a56fc79030462f7",
       "source": {
         "kind": "browser",
@@ -1407,14 +1464,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d9af2690a8b166eb90162644d1ed5edac717842330c8e09e0b4143f0e771a542",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-ops-7-report-run",
       "title": "A report run, step by step",
       "path": "screenshots/guides/ops-7-report-run.png",
       "capturedAt": "2026-10-09T12:22:26.298Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f16b56213bfcbd2888412fcb152079c1bbf72275b0d85af13a4a6cc9bd090ddb",
       "source": {
         "kind": "browser",
@@ -1429,14 +1487,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-sales-1-connect-crm",
       "title": "Connect your CRM",
       "path": "screenshots/guides/sales-1-connect-crm.png",
       "capturedAt": "2026-10-09T12:20:43.742Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "56c1978ab7757af86adbf675f3806439b3335d23018bc2eee239baca1226561a",
       "source": {
         "kind": "browser",
@@ -1451,14 +1510,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-sales-2-agent",
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
       "capturedAt": "2026-10-09T12:20:46.708Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2e3296fda6b8181a56817e61888b110b9582451a2635ecc56a80af13216d582e",
       "source": {
         "kind": "browser",
@@ -1473,14 +1533,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-sales-3-brief",
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
       "capturedAt": "2026-10-09T12:20:55.694Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1ea9280a6bd1908ff6d7f09a6c52c748a6315da5310e48fd68e73e02e47c7b46",
       "source": {
         "kind": "browser",
@@ -1495,14 +1556,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
       "capturedAt": "2026-10-09T12:20:57.778Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5f6b218b4fde9031ce0c9c5301cb3389d6deb230d85d9f9534a73a472ea55253",
       "source": {
         "kind": "browser",
@@ -1517,14 +1579,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-sales-5-slack-keys",
       "title": "Add Slack with your Slack app",
       "path": "screenshots/guides/sales-5-slack-keys.png",
       "capturedAt": "2026-10-09T12:21:03.457Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "146a27ae3b9f601ff478851ceac8526a9ba91e809d43f75f50c8f49ae8bdea4c",
       "source": {
         "kind": "browser",
@@ -1540,14 +1603,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-sales-6-slack-live",
       "title": "Published: the install link and redirect URL",
       "path": "screenshots/guides/sales-6-slack-live.png",
       "capturedAt": "2026-10-09T12:21:07.261Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3654ab0fee7b8de81d6224fe94bedf1fb16952ecf9d7637329e74b65cd875ac2",
       "source": {
         "kind": "browser",
@@ -1562,14 +1626,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-1-connect-model",
       "title": "Connect an AI model",
       "path": "screenshots/guides/support-1-connect-model.png",
       "capturedAt": "2026-10-09T12:19:08.863Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8ce7b8742200a441d47ba58aca859b8fafa59af7a1844b833a9a43243142f9ba",
       "source": {
         "kind": "browser",
@@ -1585,14 +1650,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e1073f7b56eaf7800d39c571c440cebbcc0252c511499fe5ccdc955390c4a580",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-10-approve",
       "title": "Approve the refund",
       "path": "screenshots/guides/support-10-approve.png",
       "capturedAt": "2026-10-09T12:19:42.252Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "08c0d825f5d7de73352aa4f490c7c4b9b6138b05281b3e3cdee6aee00c176292",
       "source": {
         "kind": "browser",
@@ -1606,14 +1672,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f6a90ad3dc815275e708f6e9b5de0830879fcf9ae6f028e91fa587a0d901a5fa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-11-add-channel",
       "title": "Pick where customers reach it",
       "path": "screenshots/guides/support-11-add-channel.png",
       "capturedAt": "2026-10-09T12:19:45.392Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "19d10cff7da7b3ac8fe490bcba41b4507b1a0a47957173baf8517b969586ce5d",
       "source": {
         "kind": "browser",
@@ -1628,14 +1695,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "03a97d95276a28b27080c10d0c1d7ce6951b6fc7f2a670e362e26d46ef9fbff7",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-12-web-chat",
       "title": "Publish the web chat",
       "path": "screenshots/guides/support-12-web-chat.png",
       "capturedAt": "2026-10-09T12:19:46.167Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1872135ffa6233d9f506778b62d0f39e57288e24b3b180dda784ab0be870b803",
       "source": {
         "kind": "browser",
@@ -1650,14 +1718,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-13-widget",
       "title": "Put the chat bubble on your website",
       "path": "screenshots/guides/support-13-widget.png",
       "capturedAt": "2026-10-09T12:19:50.033Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "001a133217732fa93b4e50fc1da704b2c777e289740b234e3de71b7852f0af37",
       "source": {
         "kind": "browser",
@@ -1673,14 +1742,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7b1801f16a6392c82ec0f72f06e879c3e28c700207bafe4b1cfae236dfefc298",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-14-whatsapp",
       "title": "Add WhatsApp with your Twilio keys",
       "path": "screenshots/guides/support-14-whatsapp.png",
       "capturedAt": "2026-10-09T12:20:21.012Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "27bf716b0620acb926ae2ba2328534a03b1d5c5c567ddb28c06e06fe66c544cd",
       "source": {
         "kind": "browser",
@@ -1696,14 +1766,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-15-email",
       "title": "Add email with your Resend key",
       "path": "screenshots/guides/support-15-email.png",
       "capturedAt": "2026-10-09T12:20:26.717Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7c4d69bd8241d345a6b0c8f49a226b2914eebe66b6d55e37418f7d5018b9f910",
       "source": {
         "kind": "browser",
@@ -1719,14 +1790,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-16-branding",
       "title": "Name, greeting and limits",
       "path": "screenshots/guides/support-16-branding.png",
       "capturedAt": "2026-10-09T12:20:30.936Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e828cd9ef55a64e7e35b796624c0c5befa7a22a02fc079e135d2a44e3aee67b0",
       "source": {
         "kind": "browser",
@@ -1741,14 +1813,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36fa2e4a8458d6419a6303e0823f9adba5b7534460055d5c8167fb33c0915d04",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-17-customer-view",
       "title": "What a customer sees",
       "path": "screenshots/guides/support-17-customer-view.png",
       "capturedAt": "2026-10-09T12:20:38.800Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d997fe307a9d7c91571ac219770208dd6dd7787b6d7e68a00b3248a0e60af6ed",
       "source": {
         "kind": "browser",
@@ -1763,14 +1836,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-2-connect-orders",
       "title": "Connect your order system",
       "path": "screenshots/guides/support-2-connect-orders.png",
       "capturedAt": "2026-10-09T12:19:13.280Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "83b82a15e409fcc3a0934be6ed4d7ab95895caa5546d45f42c49b0f953ca31ba",
       "source": {
         "kind": "browser",
@@ -1786,14 +1860,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e6cf5b7327372bfebdb3033e77312717506e4f8a69f77fdec1db6db58463169a",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-3-orders-tools",
       "title": "The order system, with what it can do",
       "path": "screenshots/guides/support-3-orders-tools.png",
       "capturedAt": "2026-10-09T12:19:14.545Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6117334c3cb24cce0ab4e33de2668974ae0ddd3fdf6cd33778aa500d9dee903f",
       "source": {
         "kind": "browser",
@@ -1808,14 +1883,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-4-new-agent",
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
       "capturedAt": "2026-10-09T12:19:18.813Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "94dccf8ddb074418b152a3e6b2512c33f110aee6fc464ec9d92a1161465f1d38",
       "source": {
         "kind": "browser",
@@ -1830,14 +1906,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
       "capturedAt": "2026-10-09T12:19:19.397Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "af153190477e9cfa63513998800a0a3fc142477ead3ec756c5c6c59794caa752",
       "source": {
         "kind": "browser",
@@ -1852,14 +1929,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-6-activate",
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
       "capturedAt": "2026-10-09T12:19:22.736Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7db80e296f4f410598d5df4733531736201032410243a7776e94acd1c30e42ce",
       "source": {
         "kind": "browser",
@@ -1874,14 +1952,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
       "capturedAt": "2026-10-09T12:19:24.821Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3b5d35633305bb2e8dee4065cb37597c3029b4028ca617d139b3d9c97f8eec51",
       "source": {
         "kind": "browser",
@@ -1896,14 +1975,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-8-amount-rule",
       "title": "Ask before refunds over 500",
       "path": "screenshots/guides/support-8-amount-rule.png",
       "capturedAt": "2026-10-09T12:19:28.950Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "54a4dd1438ddb2ff101a87a843b5d02e21257b22a8282d6e61602af6d0368b17",
       "source": {
         "kind": "browser",
@@ -1919,14 +1999,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "df4154615e8b29ee698c0157953c54b1d7ac98628f6292b91aed12ecaf956a0b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "guides-support-9-refund-waits",
       "title": "A big refund waits for approval",
       "path": "screenshots/guides/support-9-refund-waits.png",
       "capturedAt": "2026-10-09T12:19:41.413Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "68189fec28b221f4d5bf28ff5272c0d06fbadcc46e40d47357d5674da6cbe1f4",
       "source": {
         "kind": "browser",
@@ -1940,14 +2021,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f6a90ad3dc815275e708f6e9b5de0830879fcf9ae6f028e91fa587a0d901a5fa",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "hosted-chat-privacy",
       "title": "Hosted chat: visitor data",
       "path": "screenshots/hosted-chat-privacy.png",
       "capturedAt": "2026-10-09T13:17:22.041Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "11208187d15885d3bb4a0b0785cc47b8ca759b24348c76cd76071e5742eba010",
       "source": {
         "kind": "browser",
@@ -1962,14 +2044,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "hosted-chat",
       "title": "Hosted web chat",
       "path": "screenshots/hosted-chat.png",
       "capturedAt": "2026-10-09T13:17:18.047Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ff6bdf1ca9c2a35895c01d404e18c30e8518c3c8ac807c1489bb77f1da09b4e2",
       "source": {
         "kind": "browser",
@@ -1984,14 +2067,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "interfaces-channel-config",
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
       "capturedAt": "2026-10-09T13:17:08.862Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "82f153a106b052ef751b8708de22157b6e963acd065975606274e751e74d992e",
       "source": {
         "kind": "browser",
@@ -2006,14 +2090,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "03a97d95276a28b27080c10d0c1d7ce6951b6fc7f2a670e362e26d46ef9fbff7",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": "2026-10-09T13:17:11.614Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "57b8a26cec5b411cdb029517d5cd02792bad9fbcca32444f8faadd3dcca675da",
       "source": {
         "kind": "browser",
@@ -2028,14 +2113,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "memory-write",
       "title": "Add memory",
       "path": "screenshots/memory-write.png",
       "capturedAt": "2026-10-09T13:18:06.359Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1205143a523db6ec9b1d8a4b47c1b50024d63ecc8ca9095899815c70c39bf655",
       "source": {
         "kind": "browser",
@@ -2050,14 +2136,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f55291c5a17e246c1fd03e4fb54a6557554e121602451d08c0ddd505c8a48f54",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "memory",
       "title": "Memory",
       "path": "screenshots/memory.png",
       "capturedAt": "2026-10-09T13:18:03.872Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3205d440c9274ed3030dafba0efe0f9699fe01961afd95daebebc65896ed76d3",
       "source": {
         "kind": "browser",
@@ -2072,14 +2159,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "1393e00393b73d5e09c2016054d69971b88770b625be4fe3b1321577e074215a",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "models",
       "title": "Model catalog",
       "path": "screenshots/models.png",
       "capturedAt": "2026-10-09T13:18:01.162Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b3f8e12b133e384ff56782bee757ef70cf0eaeaecfde2f938a3f622181ecdf6a",
       "source": {
         "kind": "browser",
@@ -2094,14 +2182,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "74121abf1cc2185773e3b2db1167cc247a4de859b0195a63f7906a59d3daee3e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "quickstart-api-imported",
       "title": "Imported API",
       "path": "screenshots/quickstart-api-imported.png",
       "capturedAt": "2026-10-09T13:17:27.348Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cf18679debbb59ded9c232d79d46f41ecfa50613c56ee2f5e062eb3fe9275dca",
       "source": {
         "kind": "browser",
@@ -2116,14 +2205,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "quickstart-claude-config",
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
       "capturedAt": "2026-10-09T13:17:53.546Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ac2ffd5db2e969f07f4c64972c3ed1615a1cdd7daae4f0d0ff4c6205ad5bd463",
       "source": {
         "kind": "browser",
@@ -2138,14 +2228,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
       "capturedAt": "2026-10-09T13:17:44.476Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e76914414e168755ee2e02b51992dd58fc4c7c14260f93856ce4d03de47ec551",
       "source": {
         "kind": "browser",
@@ -2160,14 +2251,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
       "capturedAt": "2026-10-09T13:17:50.577Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9fa7f0da0a2d6aedb10635d1d819c9cb687ba2806037691f3438d25c09c9eb70",
       "source": {
         "kind": "browser",
@@ -2182,14 +2274,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "run-script-step",
       "title": "A script step in a run",
       "path": "screenshots/run-script-step.png",
       "capturedAt": "2026-10-09T13:19:50.651Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fb3a5aa83aa656aced15cd16a4a607f419746f0c57520c717bcc0616cd6825a8",
       "source": {
         "kind": "browser",
@@ -2205,14 +2298,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "37560ef4d3fa75871f061392fb724d3c8079af95b3e8138ddcabc14ad3e90f0b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "runner-detail",
       "title": "Runner detail",
       "path": "screenshots/runner-detail.png",
       "capturedAt": "2026-10-09T13:18:47.295Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2ca8cc3a6760b91c63d111f281110d8eb84050aeb43b3c0a74c74c8d7cf6e823",
       "source": {
         "kind": "browser",
@@ -2228,14 +2322,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d04746b471be28b5d2a4e0c50f3d2d6b08dac965e547d96bbbaed35a8185277c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "runners-hosted",
       "title": "Hosted environments",
       "path": "screenshots/runners-hosted.png",
       "capturedAt": "2026-10-09T13:18:49.938Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6f71bae032058f3d6ad6769ece422c0154f1668e65d3b13cfc7c05a3a5934f6c",
       "source": {
         "kind": "browser",
@@ -2251,14 +2346,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7d5332f4d8fd50329e17ede4780c597e51a9f947d7053113bd6c7a7e2d432642",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "runners-list",
       "title": "Runners",
       "path": "screenshots/runners-list.png",
       "capturedAt": "2026-10-09T13:18:44.619Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b48c21064d6bf9989e8543fd4e5a02d11f40b70e2732ee671c0d7ad718afe226",
       "source": {
         "kind": "browser",
@@ -2274,14 +2370,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7d5332f4d8fd50329e17ede4780c597e51a9f947d7053113bd6c7a7e2d432642",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "schedule-config",
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
       "capturedAt": "2026-10-09T13:16:40.002Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a6f0d067a1ad54507992d43a3b6c11c31ddd05cceff00905a4b11d65b0ef7a45",
       "source": {
         "kind": "browser",
@@ -2296,7 +2393,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "self-hosting-compose",
@@ -2321,7 +2419,7 @@
       "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
       "capturedAt": "2026-10-09T13:19:28.187Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5eea7646df3c3d490f6ddc3b1f40b67be4e9fa165edfa5e257c4337d9e464a79",
       "source": {
         "kind": "browser",
@@ -2337,14 +2435,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "28834e8f787dc535884cc482db040d465a46569dff8fc478850cd37ebf896e05",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
       "capturedAt": "2026-10-09T13:19:30.881Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4b02478de045ed8c33c26226689e4c99e35c1d44d87e92b4ea1e42c83af62494",
       "source": {
         "kind": "browser",
@@ -2359,14 +2458,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "32954b16464319c115a5b5906786077524b6d9cbe1cee94241d4c5127805bd2c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
       "capturedAt": "2026-10-09T13:19:36.228Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6ad8ab83bfac0518a04f606d998f9d678ce7286afb666a0c17da67b71b421705",
       "source": {
         "kind": "browser",
@@ -2381,14 +2481,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
       "capturedAt": "2026-10-09T13:19:33.592Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "be124fbeeaaa8bd9cf6838fa8c01c1ce395d0f7a5a38aa3a0e12b11b48cf90fa",
       "source": {
         "kind": "browser",
@@ -2403,14 +2504,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-encryption-locked",
       "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
       "capturedAt": "2026-10-09T13:19:38.824Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "43816a5fff75697acc704a502416982da7e9a22f27c6e05477b84fb4c2173cee",
       "source": {
         "kind": "browser",
@@ -2425,14 +2527,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-rbac-enabled",
       "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
       "capturedAt": "2026-10-09T13:19:16.163Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a83445b0ed4f54bee61e2963fe0f171f56673922cc94dcd514df4fad9f1a6df2",
       "source": {
         "kind": "browser",
@@ -2447,14 +2550,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-rbac-new-policy",
       "title": "New access policy",
       "path": "screenshots/settings-rbac-new-policy.png",
       "capturedAt": "2026-10-09T13:19:22.817Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "189dbf050cb8909f5d7d4ac5d8c3ed096c545a48e0a3f87fa41e106c7b1ac459",
       "source": {
         "kind": "browser",
@@ -2469,14 +2573,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
       "capturedAt": "2026-10-09T13:19:19.477Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1a476860c0c3d45b1947664e815cd0af6a36ac1d522c7daf35021c519db485c4",
       "source": {
         "kind": "browser",
@@ -2491,14 +2596,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
       "capturedAt": "2026-10-09T13:19:25.502Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f1eb1bf22099d40d65455ebdbeae52c3dc316fd614d88f160efe7b93dd43564c",
       "source": {
         "kind": "browser",
@@ -2513,14 +2619,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "settings-teams",
       "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
       "capturedAt": "2026-10-09T13:19:13.520Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e91100796f6cf402d9e8694f5353f6dfb46233b3a19a128cec7285796a7c9da7",
       "source": {
         "kind": "browser",
@@ -2536,14 +2643,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4106f4d44b8ca89b84772607d917b02468ea56b2cb2db3a5dad46cc25dc7095f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
       "capturedAt": "2026-10-09T13:16:19.802Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3fce5550f40d7a2fd1e5f9c5137e9b27688fdaca29739c2bd25f61675caf863f",
       "source": {
         "kind": "browser",
@@ -2558,14 +2666,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
       "capturedAt": "2026-10-09T13:16:14.471Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "21965842722199647c06fc16a22a82a5481853e07d26f39a9c6c668b223b9813",
       "source": {
         "kind": "browser",
@@ -2580,14 +2689,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
       "capturedAt": "2026-10-09T13:16:22.537Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "19776e6e4be282ddbfdce1999923ed78fc6cf3359b63a3a261285afd5ed2f912",
       "source": {
         "kind": "browser",
@@ -2602,14 +2712,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tool-detail",
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
       "capturedAt": "2026-10-09T13:17:33.437Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7fe56a05678f24e492a3ce41cb10ae077dfea9f6a80c44a171b03870e261c951",
       "source": {
         "kind": "browser",
@@ -2624,14 +2735,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "306cfc88d84be5899e083a61761f1cf83622a3a65609f96c113069fc158acad1",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tool-side-effect",
       "title": "What a tool does to your data",
       "path": "screenshots/tool-side-effect.png",
       "capturedAt": "2026-10-09T13:19:59.605Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9cf296f30bb12be69e9b7de55d3d167e9b241c15e2ea9222a4e39ed576f9c9d8",
       "source": {
         "kind": "browser",
@@ -2646,14 +2758,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "306cfc88d84be5899e083a61761f1cf83622a3a65609f96c113069fc158acad1",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
       "capturedAt": "2026-10-09T13:17:30.014Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4a64d75f556598216ced9888bf641b0786919356dec9e86bd66743bd46468ffa",
       "source": {
         "kind": "browser",
@@ -2668,14 +2781,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "742e8606339396a4a90c10f80513edb75cadb569f2d2ea0c84ec98ff016f5bc2",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-00-approve-email",
       "title": "Approving an outreach email",
       "path": "screenshots/tutorials/bizdev/00-approve-email.png",
       "capturedAt": "2026-10-09T13:24:19.073Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fdc8f274ac18a875bdd54543c7175e04db40f0b6d1ca39abdba8f325ee6ce2f9",
       "source": {
         "kind": "browser",
@@ -2690,14 +2804,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-01-hubspot-link",
       "title": "HubSpot Companies description link",
       "path": "screenshots/tutorials/bizdev/01-hubspot-link.png",
       "capturedAt": "2026-10-09T13:23:12.003Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "811f3767ffd4b7561ecc1a16d78c9fc544a10e01dfa9395e8113d21d9d7d006c",
       "source": {
         "kind": "browser",
@@ -2711,14 +2826,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-02-hubspot-default-key",
       "title": "HubSpot: a sign-in needed",
       "path": "screenshots/tutorials/bizdev/02-hubspot-default-key.png",
       "capturedAt": "2026-10-09T13:23:14.527Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ebb026933e8c4b03799e90553647bd75d440d8f9877713f53a41fcb3c24c2a84",
       "source": {
         "kind": "browser",
@@ -2733,14 +2849,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-03-hubspot-bearer",
       "title": "HubSpot sign-in form, with pasting a token instead",
       "path": "screenshots/tutorials/bizdev/03-hubspot-bearer.png",
       "capturedAt": "2026-10-09T13:23:16.320Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "63b5a0949fb1aabb33515915a63e8f8e9c5d8add59be4b7f4ec7bf61ac06f679",
       "source": {
         "kind": "browser",
@@ -2755,14 +2872,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-04-hubspot-token",
       "title": "HubSpot private app token",
       "path": "screenshots/tutorials/bizdev/04-hubspot-token.png",
       "capturedAt": "2026-10-09T13:23:17.426Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4b4c5ebb8c9ba3633148bad65188341a59194f434d60ea96bd2edfcec5419f0b",
       "source": {
         "kind": "browser",
@@ -2777,14 +2895,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-05-apis",
       "title": "HubSpot and Google APIs",
       "path": "screenshots/tutorials/bizdev/05-apis.png",
       "capturedAt": "2026-10-09T13:23:28.183Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4053b9a0ae320103d6df3ce21a03cb23d68958adecce113a58ae91c8190b241f",
       "source": {
         "kind": "browser",
@@ -2798,14 +2917,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3e6f5b03efd74cc0cf2be2ef74ffb1cc420f7eae8369c928a495bc5957520f55",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-06-agent-instructions",
       "title": "Biz-dev assistant: model, instructions, memory",
       "path": "screenshots/tutorials/bizdev/06-agent-instructions.png",
       "capturedAt": "2026-10-09T13:23:30.977Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e4ffa5b77383acca392fe98873f2a656e2315d55c66f794868d301898d85fc8f",
       "source": {
         "kind": "browser",
@@ -2820,14 +2940,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-07-agent-tools",
       "title": "Biz-dev assistant: tools",
       "path": "screenshots/tutorials/bizdev/07-agent-tools.png",
       "capturedAt": "2026-10-09T13:23:35.011Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5bdec3a405e899e2693b89a129fa358395ce652be855f4c0cd525487eacd8c99",
       "source": {
         "kind": "browser",
@@ -2842,14 +2963,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-08-slack-channel",
       "title": "Slack channel",
       "path": "screenshots/tutorials/bizdev/08-slack-channel.png",
       "capturedAt": "2026-10-09T13:23:42.905Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "613b2c1d5f8aaaaef807ea69238c12f0ea57a529229f23e58e8ad74fdfbe86db",
       "source": {
         "kind": "browser",
@@ -2864,14 +2986,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-09-slack-token",
       "title": "Slack bot token",
       "path": "screenshots/tutorials/bizdev/09-slack-token.png",
       "capturedAt": "2026-10-09T13:23:44.186Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9eb8708ce10a4464ecd3fcd582267335c5930a6358242728b79462b1aae1d4bf",
       "source": {
         "kind": "browser",
@@ -2886,14 +3009,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-10-slack-live",
       "title": "Slack channel, live",
       "path": "screenshots/tutorials/bizdev/10-slack-live.png",
       "capturedAt": "2026-10-09T13:23:55.346Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "418ec8694bf67b014086f8420569701b048a21d29d0b5a57095a53172298c2e9",
       "source": {
         "kind": "browser",
@@ -2908,14 +3032,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-11-always-on",
       "title": "Always on: standing instructions and timer",
       "path": "screenshots/tutorials/bizdev/11-always-on.png",
       "capturedAt": "2026-10-09T13:24:02.117Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e4c9892ec772d3afb45bed6957f2ef1bb2fb1e8bf9cc092f74b5b6874e30f8f4",
       "source": {
         "kind": "browser",
@@ -2929,14 +3054,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-12-ask-first",
       "title": "Always on: ask before sending email",
       "path": "screenshots/tutorials/bizdev/12-ask-first.png",
       "capturedAt": "2026-10-09T13:24:03.202Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9cfd39a363abf534675d4640ebc96a61c6b53cf7580b21231ffdcf9f1a8ec90b",
       "source": {
         "kind": "browser",
@@ -2950,14 +3076,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-13-always-on-card",
       "title": "Always on, on the agent page",
       "path": "screenshots/tutorials/bizdev/13-always-on-card.png",
       "capturedAt": "2026-10-09T13:24:08.549Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "bdf56430804e27e2025035f198371fc08f078f4749b61b403554c900d03403ec",
       "source": {
         "kind": "browser",
@@ -2972,14 +3099,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-14-approve-note",
       "title": "Approve with a note",
       "path": "screenshots/tutorials/bizdev/14-approve-note.png",
       "capturedAt": "2026-10-09T13:24:20.870Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "38cbae4fbfa7f2fbd767ab793c6741bf1629610972409695f2a9dc29a77522de",
       "source": {
         "kind": "browser",
@@ -2994,14 +3122,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-15-followup-approval",
       "title": "The follow-up waiting for approval",
       "path": "screenshots/tutorials/bizdev/15-followup-approval.png",
       "capturedAt": "2026-10-09T13:24:52.513Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3243813a6c89b5956a5893bcd5ba620e8a8084dd85cdb55faaa42aebf4cb40b7",
       "source": {
         "kind": "browser",
@@ -3016,14 +3145,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-16-slack-reports",
       "title": "Biz-dev reports as posted to Slack",
       "path": "screenshots/tutorials/bizdev/16-slack-reports.png",
       "capturedAt": "2026-10-09T13:25:09.764Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0710869f5c4fe38d7b0caa51ccf5a707b0b9b1c6336eeb5b2de946903816c73c",
       "source": {
         "kind": "browser",
@@ -3039,14 +3169,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9d8333608cadff0301eb066efb5aece3520781f8c30d4055ba14a4ed900ba862",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-bizdev-17-what-woke-it",
       "title": "What woke it lately",
       "path": "screenshots/tutorials/bizdev/17-what-woke-it.png",
       "capturedAt": "2026-10-09T13:25:07.871Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d4d8968ee50085f3b30ebed8a2da40bb9347ad9c4743de52d0984fac533aaa2c",
       "source": {
         "kind": "browser",
@@ -3060,14 +3191,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-00-morning-brief",
       "title": "Founder's associate: the morning brief email",
       "path": "screenshots/tutorials/founder/00-morning-brief.png",
       "capturedAt": "2026-10-09T13:23:10.308Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b938976e3cdd0a5b1225f6ab760b5e651034846cb6a19f00ae39572b85f99b5b",
       "source": {
         "kind": "browser",
@@ -3083,14 +3215,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "46309c94159d1fdc8c21802a7d0ae1b9ccce853ae4ee069de896d024002719a1",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-01-connect-openai",
       "title": "Connect a provider: OpenAI",
       "path": "screenshots/tutorials/founder/01-connect-openai.png",
       "capturedAt": "2026-10-09T13:20:09.494Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "922e924816c3d9165bac7ba3d397bc419560cff877ef061716e41bbae4a01321",
       "source": {
         "kind": "browser",
@@ -3105,14 +3238,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "5058173c7cfb0395b5df33f004e6925feb609b9beb91de1717211fa1d39bd87d",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-02-openai-connected",
       "title": "OpenAI connected, its models",
       "path": "screenshots/tutorials/founder/02-openai-connected.png",
       "capturedAt": "2026-10-09T13:20:12.267Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d599d37f785ef2e6c08e2d59824bdd6a26b9805116ecdfa354f9d3c98fc80626",
       "source": {
         "kind": "browser",
@@ -3126,14 +3260,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d14d9b75efaebdd2e5732e3e61d58f0faf63c40505a7e7db3087269e98cd3c38",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-03-connect-an-api",
       "title": "Connect an API",
       "path": "screenshots/tutorials/founder/03-connect-an-api.png",
       "capturedAt": "2026-10-09T13:20:14.623Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "959ddaa34f88ceaa0716f88f2bf2ac31037eeae380835743b508e436cfb75509",
       "source": {
         "kind": "browser",
@@ -3147,14 +3282,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-04-calendar-link",
       "title": "Google Calendar description link",
       "path": "screenshots/tutorials/founder/04-calendar-link.png",
       "capturedAt": "2026-10-09T13:20:15.777Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c925b241fa852795b477b4b4686f8fd85d3fafce9f77d77130b4e9a52ea2c938",
       "source": {
         "kind": "browser",
@@ -3168,14 +3304,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-05-finish-connecting",
       "title": "Finish connecting Google Calendar",
       "path": "screenshots/tutorials/founder/05-finish-connecting.png",
       "capturedAt": "2026-10-09T13:20:20.739Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c21c8694666af88af427032abf1f637242aa43064660d76233cd2afd5733200c",
       "source": {
         "kind": "browser",
@@ -3190,14 +3327,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-06-google-sign-in",
       "title": "Google sign-in: redirect address, client ID, secret and permissions",
       "path": "screenshots/tutorials/founder/06-google-sign-in.png",
       "capturedAt": "2026-10-09T13:20:22.530Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "43859531401671f97b20b225931348b10d80cbf78488cf653ec5c1b09f665fc6",
       "source": {
         "kind": "browser",
@@ -3212,14 +3350,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-07-calendar-signed-in",
       "title": "Google Calendar signed in",
       "path": "screenshots/tutorials/founder/07-calendar-signed-in.png",
       "capturedAt": "2026-10-09T13:20:23.705Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a0050b8e3de9c64ff5979e328a89969e5963e78ceec2fd5268d53e8024ad8f7f",
       "source": {
         "kind": "browser",
@@ -3234,14 +3373,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-08-apis",
       "title": "The three Google APIs",
       "path": "screenshots/tutorials/founder/08-apis.png",
       "capturedAt": "2026-10-09T13:20:34.135Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1e8e7c372b94f457a8b18d75f5f9c86df74bad7befa89e842bf13c4279165cd1",
       "source": {
         "kind": "browser",
@@ -3255,14 +3395,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3e6f5b03efd74cc0cf2be2ef74ffb1cc420f7eae8369c928a495bc5957520f55",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-09-tools-search",
       "title": "Searching the tools",
       "path": "screenshots/tutorials/founder/09-tools-search.png",
       "capturedAt": "2026-10-09T13:20:38.025Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9e7635e9a8118a4846252039dbbb7befd9dbfd99af7d4f7be712144e9461c878",
       "source": {
         "kind": "browser",
@@ -3276,14 +3417,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "98f06eae4e38ba92d5fb471dc3cf32940072762b05e2f04266f8c75cd0fa4dc1",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-10-test-tool",
       "title": "Testing a calendar tool",
       "path": "screenshots/tutorials/founder/10-test-tool.png",
       "capturedAt": "2026-10-09T13:20:41.060Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cefe285dc4837552ba17a4c0b73e0a693b66e13066471200cf91ac42497bf5af",
       "source": {
         "kind": "browser",
@@ -3297,14 +3439,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e9de55dd8f5a58f4ccad0352ce8d40d253b4a2277c3f6f04b60cdc80fc816ef8",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-11-agent-instructions",
       "title": "Founder's associate: model and instructions",
       "path": "screenshots/tutorials/founder/11-agent-instructions.png",
       "capturedAt": "2026-10-09T13:20:42.849Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d5c733bf14699433f5ad71ac044cf62237f78faeba11892f6ec9844b179f1628",
       "source": {
         "kind": "browser",
@@ -3319,14 +3462,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-12-agent-memory",
       "title": "Founder's associate: memory",
       "path": "screenshots/tutorials/founder/12-agent-memory.png",
       "capturedAt": "2026-10-09T13:20:44.929Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1e2b92c2fd34ff4e0732bf092810adb583ee40d5e5ff4da769f6c769533ae6f4",
       "source": {
         "kind": "browser",
@@ -3341,14 +3485,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-13-agent-tools",
       "title": "Founder's associate: tools",
       "path": "screenshots/tutorials/founder/13-agent-tools.png",
       "capturedAt": "2026-10-09T13:20:48.215Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c08c88caf3e7d9403bcc4217621b96c41dac2ed85a7f5fb580dfdc5522d3daad",
       "source": {
         "kind": "browser",
@@ -3363,14 +3508,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-14-first-run",
       "title": "Founder's associate: first test run",
       "path": "screenshots/tutorials/founder/14-first-run.png",
       "capturedAt": "2026-10-09T13:20:57.477Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0076355a6ff9f9c9dc579faccc9cb3ef98204da34d3277487e413f3e800452bd",
       "source": {
         "kind": "browser",
@@ -3385,14 +3531,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-15-run-steps",
       "title": "A run, step by step",
       "path": "screenshots/tutorials/founder/15-run-steps.png",
       "capturedAt": "2026-10-09T13:21:03.297Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2af57fa07726ddafd2f108c1596660375a91bddefc572026815908e0492b79d3",
       "source": {
         "kind": "browser",
@@ -3407,14 +3554,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-16-add-channel",
       "title": "Add channel",
       "path": "screenshots/tutorials/founder/16-add-channel.png",
       "capturedAt": "2026-10-09T13:21:08.315Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "157599f07c5c396c4851aa112a210e803f6cb84c8eb9582f5a21ede8e4ba3dba",
       "source": {
         "kind": "browser",
@@ -3428,14 +3576,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7ffeea47c39b09547336d2714850f9ef7f64cdd305b18478fd8b8e7e3902f465",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-17-email-key",
       "title": "Email channel: the Resend key",
       "path": "screenshots/tutorials/founder/17-email-key.png",
       "capturedAt": "2026-10-09T13:21:11.537Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f28dd74c0e306b760f7de2bf5d3dfd671e901c176e490d0d2a8cae9e739c5b6b",
       "source": {
         "kind": "browser",
@@ -3450,14 +3599,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-18-email-live",
       "title": "Email channel, live",
       "path": "screenshots/tutorials/founder/18-email-live.png",
       "capturedAt": "2026-10-09T13:21:21.229Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6ee9eb15731d0b9393cdd8f38f0dc9d3f4c0d06e2648f9b0c29ca0c3d72562c8",
       "source": {
         "kind": "browser",
@@ -3472,14 +3622,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-19-schedule",
       "title": "Set up a schedule",
       "path": "screenshots/tutorials/founder/19-schedule.png",
       "capturedAt": "2026-10-09T13:21:25.196Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "92bbbf0805d13eefeee76280a909d9702331eeedeae8376bc4b880db797b715c",
       "source": {
         "kind": "browser",
@@ -3493,14 +3644,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "061cc98a659b727970b1679472b4a05cbd7d01f1071bb1ac9f7a901f886fe241",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-20-schedule-card",
       "title": "The schedule on the agent page",
       "path": "screenshots/tutorials/founder/20-schedule-card.png",
       "capturedAt": "2026-10-09T13:21:28.287Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "119727b57c21a0e8df52689bb5885d296f230102c242077a635cdb6846c7c6ee",
       "source": {
         "kind": "browser",
@@ -3515,14 +3667,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "tutorials-founder-21-memory",
       "title": "What the associate remembers",
       "path": "screenshots/tutorials/founder/21-memory.png",
       "capturedAt": "2026-10-09T13:21:05.855Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "44ecbca1161595208bbdfbcdb48f49932356d64cbda3390a96896d3840974c4c",
       "source": {
         "kind": "browser",
@@ -3537,14 +3690,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
       "capturedAt": "2026-10-09T13:16:49.397Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d8883c07f2aa40350f42601e617c3a1754ab819b9d293157b9e78a4eec6b7e69",
       "source": {
         "kind": "browser",
@@ -3559,14 +3713,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
       "capturedAt": "2026-10-09T13:16:46.277Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8c8b1ed3fa8ad56e4120d66fa98462ba83a64025b23d68139f0462b31ef7b2c0",
       "source": {
         "kind": "browser",
@@ -3581,14 +3736,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "visitor-data-request",
       "title": "Visitor data request",
       "path": "screenshots/visitor-data-request.png",
       "capturedAt": "2026-10-09T13:20:02.229Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "20b502960cbd251c790d8047d3a82c943dd0b0b74f5219a59784577bdcebd683",
       "source": {
         "kind": "browser",
@@ -3603,14 +3759,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "186893297dfbe46dae11ed769208a4310616c9c59bbcc32acf9608bb39943d3f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
       "capturedAt": "2026-10-09T13:16:43.086Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a6f0d067a1ad54507992d43a3b6c11c31ddd05cceff00905a4b11d65b0ef7a45",
       "source": {
         "kind": "browser",
@@ -3625,14 +3782,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     },
     {
       "id": "widget-builder",
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
       "capturedAt": "2026-10-09T13:17:14.636Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d9f7fbdc627e50d4a6c824c14e1debf1f18284ec1012b96aab9d0dd6e83bf1a7",
       "source": {
         "kind": "browser",
@@ -3648,7 +3806,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7b1801f16a6392c82ec0f72f06e879c3e28c700207bafe4b1cfae236dfefc298",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Dark mode surfaces changed (page background, inputs, outline buttons, tabs); the dark capture no longer matches the UI."
     }
   ]
 }

@@ -267,7 +267,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                 onClick={() => setInterval('month')}
                 className={cn(
                   'rounded-md px-3 py-1.5 font-medium transition-colors',
-                  !annual ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
+                  !annual ? 'bg-background dark:bg-input text-foreground shadow-sm' : 'text-muted-foreground',
                 )}
               >
                 Monthly
@@ -278,7 +278,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                 onClick={() => setInterval('year')}
                 className={cn(
                   'rounded-md px-3 py-1.5 font-medium transition-colors',
-                  annual ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
+                  annual ? 'bg-background dark:bg-input text-foreground shadow-sm' : 'text-muted-foreground',
                 )}
               >
                 Annual

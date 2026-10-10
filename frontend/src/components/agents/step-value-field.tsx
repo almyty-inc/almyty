@@ -171,7 +171,7 @@ export function StepValueSelect({ id, label, value, onChange, placeholder = 'Pic
         aria-expanded={open}
         aria-haspopup="listbox"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-field px-3 text-left text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
       >
         <span className={cn('min-w-0 truncate', !path && 'text-muted-foreground')} data-testid={`${id}-value`}>
           {path ? refLabel(path, steps, nodes) : placeholder}
@@ -392,7 +392,7 @@ export function StepValueField({ id, label, value, onChange, placeholder, multil
           insertText(e.clipboardData.getData('text/plain'))
         }}
         className={cn(
-          'mt-1 w-full whitespace-pre-wrap break-words rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm',
+          'mt-1 w-full whitespace-pre-wrap break-words rounded-md border border-input bg-field px-3 py-2 text-sm shadow-sm',
           'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30',
           'empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
           multiline ? 'min-h-[4.5rem]' : 'min-h-9',
