@@ -20,7 +20,17 @@ interface SecurityThreat {
   description: string;
   location: string;
   pattern: string;
+  /** The top-level tool inputs the pattern matched in, when the data is a tool's inputs. */
+  inputs?: string[];
 }
+
+/** How a refusal names each check. */
+const THREAT_LABEL: Record<Exclude<SecurityThreat['type'], 'suspicious_pattern'>, string> = {
+  sql_injection: 'SQL injection',
+  xss: 'XSS',
+  command_injection: 'command injection',
+  path_traversal: 'path traversal',
+};
 
 /** Numeric rank for severities — lets us compare against a threshold. */
 const SEVERITY_RANK: Record<ThreatSeverity, number> = {
@@ -35,10 +45,23 @@ const CUSTOM_PATTERN_BUDGET_MS = 50;
 
 export class SecurityScannerPlugin {
   private readonly securityPatterns = {
+    // Each check needs SQL structure, not one keyword or one character.
+    // The previous three flagged any text with a word like "update",
+    // "select" or "delete" before a space, and any `'` followed by a
+    // space -- `printf 'one line' > NOTES.md`, "the users' files".
     sqlInjection: [
-      /(\s|^)(union|select|insert|update|delete|drop|exec|execute)\s+/i,
+      /\bunion(\s+all)?\s+select\b/i,
+      /\bselect\s+(\*|[\w.]+(\s*,\s*[\w.]+)+)\s+from\b/i,
+      /\binsert\s+into\s+[\w.`"[\]]+\s*(\(|values\b|select\b)/i,
+      /\bupdate\s+[\w.`"[\]]+\s+set\s+[\w.`"]+\s*=/i,
+      /\bdelete\s+from\s+[\w.`"[\]]+\s*(where\b|;|--|$)/im,
+      /\bdrop\s+(table|database|schema|view|index|user|procedure|function)\b/i,
+      /\b(truncate\s+table|exec(ute)?\s+(xp_|sp_)\w|waitfor\s+delay\s+')/i,
+      // Tautologies: `OR 1=1`, `' OR 'a'='a`, `' AND sleep(5)`.
       /(\s|^)(or|and)\s+['"]?\d+['"]?\s*=\s*['"]?\d+/i,
-      /'(\s|;|--|#|\*|\/\*)/i,
+      /'\s*(\)\s*)?(or|and)\s+(['"]?\w+['"]?\s*(=|<>|!=|\blike\b)|(sleep|benchmark|pg_sleep|extractvalue|updatexml)\s*\()/i,
+      // A quote closing the string, then a terminator or comment: `admin'--`, `'; DROP`.
+      /'\s*(;|--|#|\/\*)/,
     ],
     // The tag, event-handler and `$(` checks are linear matchers: as
     // regexes they rescanned the body from every `<script`, `on` or `$(`
@@ -50,7 +73,8 @@ export class SecurityScannerPlugin {
       tagBlockMatcher('iframe'),
     ],
     commandInjection: [
-      /[;&|`](\s)*(rm|cat|ls|pwd|whoami|id|ps|kill|nc|netcat)/i,
+      // \b after the name: without it "; identity" read as `id` and "| list" as `ls`.
+      /[;&|`](\s)*(rm|cat|ls|pwd|whoami|id|ps|kill|nc|netcat)\b/i,
       commandSubstitutionMatcher,
       /`.*`/g,
     ],
@@ -207,30 +231,58 @@ export class SecurityScannerPlugin {
       const allWhitelisted = (matches: string[]) =>
         whitelistRegexes.length > 0 && matches.every(isWhitelisted);
 
+      // Top-level tool inputs, so a threat can say which input it was in.
+      const inputs = scanType === 'tool_parameters' && this.isPlainObject(context.data)
+        ? (context.data as Record<string, unknown>)
+        : null;
+
+      // The inputs that are the command a shell tool runs
+      // (tools/tool-executable-inputs.ts). Command and SQL injection checks
+      // skip them: chaining with `&&`, piping into `wc` and quoting strings
+      // is what such a command is for, and the runner's sandbox, policies
+      // and approvals are what guard it. Every other input, and every other
+      // check on these, is scanned as before.
+      const executable = new Set<string>(
+        inputs ? (context.metadata?.tool?.executableInputs ?? []).filter((key) => key in inputs) : [],
+      );
+      const injectionText = executable.size > 0
+        ? this.safeStringify(Object.fromEntries(Object.entries(inputs!).filter(([key]) => !executable.has(key))))
+        : dataToScan;
+
+      const matchesIn = (pattern: RegExp | LinearMatcher, text: string) =>
+        pattern instanceof RegExp ? text.match(pattern) : pattern.match(text);
+
       // Helper so every category can share the same match-push shape.
       const scan = (
         patterns: Array<RegExp | LinearMatcher>,
         type: SecurityThreat['type'],
         severity: ThreatSeverity,
         description: string,
+        text: string = dataToScan,
       ) => {
         for (const pattern of patterns) {
-          const matches = pattern instanceof RegExp ? dataToScan.match(pattern) : pattern.match(dataToScan);
+          const matches = matchesIn(pattern, text);
           if (!matches) continue;
           if (allWhitelisted(matches)) continue;
+          const matchedInputs = inputs
+            ? Object.keys(inputs).filter(
+              (key) => (text === dataToScan || !executable.has(key)) && matchesIn(pattern, this.safeStringify({ [key]: inputs[key] })),
+            )
+            : [];
           threats.push({
             type,
             severity,
             description,
             location: scanType,
             pattern: pattern instanceof RegExp ? pattern.toString() : pattern.pattern,
+            ...(matchedInputs.length > 0 ? { inputs: matchedInputs } : {}),
           });
         }
       };
 
-      scan(this.securityPatterns.sqlInjection,    'sql_injection',     'high',     'Potential SQL injection detected');
+      scan(this.securityPatterns.sqlInjection,    'sql_injection',     'high',     'Potential SQL injection detected', injectionText);
       scan(this.securityPatterns.xss,             'xss',               'high',     'Potential XSS attack detected');
-      scan(this.securityPatterns.commandInjection, 'command_injection', 'critical', 'Potential command injection detected');
+      scan(this.securityPatterns.commandInjection, 'command_injection', 'critical', 'Potential command injection detected', injectionText);
       scan(this.securityPatterns.pathTraversal,   'path_traversal',    'medium',   'Potential path traversal detected');
 
       // Custom patterns, routed through the shared regex-safety helper.
@@ -307,7 +359,7 @@ export class SecurityScannerPlugin {
           data: context.data,
           error: {
             code: 'SECURITY_THREAT_DETECTED',
-            message: `Security threat detected: ${threats.map(t => t.description).join(', ')}`,
+            message: this.blockMessage(blockingThreats, scanType === 'tool_parameters' ? context.metadata?.tool?.name : undefined),
             details: {
               threats,
               scanType,
@@ -353,6 +405,29 @@ export class SecurityScannerPlugin {
         },
       };
     }
+  }
+
+  /**
+   * The refusal a person reads: which check fired, and in which tool input.
+   * "Security check blocked tool "x": SQL injection in input "query"".
+   */
+  private blockMessage(threats: SecurityThreat[], toolName?: string): string {
+    const parts: string[] = [];
+    for (const threat of threats) {
+      const check = threat.type === 'suspicious_pattern' ? threat.description : THREAT_LABEL[threat.type];
+      const where = threat.inputs?.length
+        ? ` in input${threat.inputs.length > 1 ? 's' : ''} ${threat.inputs.map((key) => `"${key}"`).join(', ')}`
+        : '';
+      const part = `${check}${where}`;
+      if (!parts.includes(part)) parts.push(part);
+    }
+    return toolName
+      ? `Security check blocked tool "${toolName}": ${parts.join('; ')}`
+      : `Security threat detected: ${parts.join('; ')}`;
+  }
+
+  private isPlainObject(value: unknown): boolean {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
   }
 
   /**
