@@ -83,7 +83,13 @@ export class APIHelper {
     organizationName: string
   }) {
     // Registration answers with the session cookie and no token.
-    const response = await this.client.post('/auth/register', data)
+    //
+    // A stack with a captcha secret refuses a sign-up without a token. The
+    // providers' always-pass test secrets (TURNSTILE_SECRET=1x...AA) accept
+    // this dummy one, the token their test site keys hand out; without a
+    // secret the API ignores the field. A real secret rejects it, which is
+    // why sign-up specs skip against staging and production.
+    const response = await this.client.post('/auth/register', { captchaToken: 'XXXX.DUMMY.TOKEN.XXXX', ...data })
     return response.data?.data ?? response.data
   }
 

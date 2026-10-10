@@ -1,10 +1,36 @@
+import type { Page } from '@playwright/test'
 import { test, expect } from './setup/test-hooks'
 import { AuthHelper } from './helpers/auth.helper'
+
+/**
+ * Fill the sign-up form and submit it, once the captcha (if the build has
+ * one) has handed the form its token: before then the form refuses to submit
+ * and only says so in a toast.
+ */
+async function submitSignUp(
+  page: Page,
+  user: { firstName: string; lastName: string; email: string; password: string; organizationName: string },
+) {
+  await page.getByLabel('First name').fill(user.firstName)
+  await page.getByLabel('Last name').fill(user.lastName)
+  await page.getByLabel(/Email/i).fill(user.email)
+  await page.getByLabel('Password', { exact: true }).fill(user.password)
+  await page.getByLabel('Confirm password').fill(user.password)
+  await page.getByLabel('Organization name').fill(user.organizationName)
+  await page.getByLabel(/terms.*service|agree/i).check()
+  await AuthHelper.waitForCaptcha(page)
+  await page.getByRole('button', { name: /create account|register|sign up/i }).click()
+}
 
 test.describe('Authentication - Registration', () => {
   // The tests that submit the form need a captcha token. Against a real site
   // key (staging, production) a headless browser never gets one, so those
   // skip (AuthHelper.skipUnlessCaptchaAutoPasses); the rest run anywhere.
+  //
+  // They wait on what the page does (the URL, a heading, a message), never on
+  // 'networkidle': the captcha's frame keeps talking to its provider for as
+  // long as the page is open, so the network never goes idle on a build that
+  // has one.
   test.beforeEach(async ({ page }) => {
     await page.goto('/auth/register')
   })
@@ -13,38 +39,20 @@ test.describe('Authentication - Registration', () => {
     await expect(page.getByRole('heading', { name: /register|sign up/i })).toBeVisible()
     await expect(page.getByLabel('First name')).toBeVisible()
     await expect(page.getByLabel('Last name')).toBeVisible()
-    await expect(page.getByLabel(/Email/i)).toBeVisible() // Fixed: "Email address" not "Email"
+    await expect(page.getByLabel(/Email/i)).toBeVisible()
     await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Confirm password')).toBeVisible()
     await expect(page.getByLabel('Organization name')).toBeVisible()
-    await expect(page.getByRole('button', { name: /create account|register|sign up/i })).toBeVisible() // Fixed: button says "Create account"
+    await expect(page.getByRole('button', { name: /create account|register|sign up/i })).toBeVisible()
   })
 
   test('should successfully register a new user', async ({ page, authHelper, assertHelper }) => {
     await AuthHelper.skipUnlessCaptchaAutoPasses(page)
-    const testUser = AuthHelper.generateTestUser()
+    await submitSignUp(page, AuthHelper.generateTestUser())
 
-    // Fill registration form
-    await page.getByLabel('First name').fill(testUser.firstName)
-    await page.getByLabel('Last name').fill(testUser.lastName)
-    await page.getByLabel(/Email/i).fill(testUser.email)
-    await page.getByLabel('Password', { exact: true }).fill(testUser.password)
-    await page.getByLabel('Confirm password').fill(testUser.password)
-    await page.getByLabel('Organization name').fill(testUser.organizationName)
-
-    // Check terms checkbox (REQUIRED!)
-    await page.getByLabel(/terms.*service|agree/i).check()
-
-    // Submit form
-    await page.getByRole('button', { name: /create account|register|sign up/i }).click()
-
-    // Should redirect to dashboard
-    await assertHelper.waitForLoadingComplete()
+    await page.waitForURL(/\/dashboard/)
     await assertHelper.assertOnDashboard()
-
-    // Should be authenticated
-    const isAuthenticated = await authHelper.isAuthenticated()
-    expect(isAuthenticated).toBe(true)
+    expect(await authHelper.isAuthenticated()).toBe(true)
   })
 
   test('should validate required fields', async ({ page }) => {
@@ -91,49 +99,30 @@ test.describe('Authentication - Registration', () => {
     const existingUser = AuthHelper.generateTestUser('existing')
     await apiHelper.register(existingUser)
 
-    // Try to register with same email
-    await page.getByLabel('First name').fill('New')
-    await page.getByLabel('Last name').fill('User')
-    await page.getByLabel(/Email/i).fill(existingUser.email)
-    await page.getByLabel('Password', { exact: true }).fill('NewPassword@123')
-    await page.getByLabel('Confirm password').fill('NewPassword@123')
-    await page.getByLabel('Organization name').fill('New Org')
+    await submitSignUp(page, {
+      firstName: 'New',
+      lastName: 'User',
+      email: existingUser.email,
+      password: 'NewPassword@123',
+      organizationName: `New Org ${Date.now()}`,
+    })
 
-    // Check terms checkbox (REQUIRED!)
-    await page.getByLabel(/terms.*service|agree/i).check()
-
-    await page.getByRole('button', { name: /create account|register|sign up/i }).click()
-
-    // Should show duplicate email error
-    // Use .first() to handle multiple matching elements (toast + inline error)
-    await expect(page.getByText(/email.*already.*exist|email.*taken/i).first()).toBeVisible()
+    // The inline alert and the toast both carry the message.
+    await expect(page.getByRole('alert').filter({ hasText: /email.*already.*exist|email.*taken/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/auth\/register/)
   })
 
   test('should handle special characters in password [BUG FIX TEST]', async ({ page, assertHelper }) => {
     await AuthHelper.skipUnlessCaptchaAutoPasses(page)
-    // Test for CLAUDE.md mentioned issue: "special character parsing issues"
-    const testUser = AuthHelper.generateTestUser()
-    const specialPassword = 'T3st!@#$%^&*()_+-=[]{}|;:,.<>?'
+    // A password full of characters that need escaping in JSON, a form body
+    // or a shell must arrive intact.
+    await submitSignUp(page, { ...AuthHelper.generateTestUser(), password: 'T3st!@#$%^&*()_+-=[]{}|;:,.<>?' })
 
-    await page.getByLabel('First name').fill(testUser.firstName)
-    await page.getByLabel('Last name').fill(testUser.lastName)
-    await page.getByLabel(/Email/i).fill(testUser.email)
-    await page.getByLabel('Password', { exact: true }).fill(specialPassword)
-    await page.getByLabel('Confirm password').fill(specialPassword)
-    await page.getByLabel('Organization name').fill(testUser.organizationName)
-
-    // Check terms checkbox (REQUIRED!)
-    await page.getByLabel(/terms.*service|agree/i).check()
-
-    await page.getByRole('button', { name: /create account|register|sign up/i }).click()
-
-    // Should successfully register and redirect to dashboard
-    await assertHelper.waitForLoadingComplete()
+    await page.waitForURL(/\/dashboard/)
     await assertHelper.assertOnDashboard()
   })
 
   test('should allow user-controlled organization name', async ({ page }) => {
-    const testUser = AuthHelper.generateTestUser()
     const customOrgName = 'My Custom Organization 2025'
 
     await page.getByLabel('Organization name').fill(customOrgName)
@@ -170,29 +159,19 @@ test.describe('Authentication - Registration', () => {
 
   test('should handle network errors gracefully', async ({ page }) => {
     await AuthHelper.skipUnlessCaptchaAutoPasses(page)
-    const testUser = AuthHelper.generateTestUser()
 
-    // Intercept and fail the registration request
-    await page.route('**/auth/register', route => {
-      route.abort('failed')
+    // Fail the registration request itself; the page is already loaded.
+    let attempted = false
+    await page.route('**/auth/register', (route) => {
+      if (route.request().method() !== 'POST') return route.continue()
+      attempted = true
+      return route.abort('failed')
     })
 
-    await page.getByLabel(/Email/i).fill(testUser.email)
-    await page.getByLabel('Password', { exact: true }).fill(testUser.password)
-    await page.getByLabel('Confirm password').fill(testUser.password)
-    await page.getByLabel('Organization name').fill(testUser.organizationName)
-    await page.getByLabel('First name').fill(testUser.firstName)
-    await page.getByLabel('Last name').fill(testUser.lastName)
+    await submitSignUp(page, AuthHelper.generateTestUser())
 
-    // Check terms checkbox (REQUIRED!)
-    await page.getByLabel(/terms.*service|agree/i).check()
-
-    await page.getByRole('button', { name: /create account|register|sign up/i }).click()
-
-    // Should show error message — toast notification with "Registration failed" or inline error
-    // The toast renders as an li[role="status"] and the error text uses theme-aware classes
-    const toastError = page.locator('li[role="status"]').filter({ hasText: /failed|error/i })
-    const inlineError = page.getByText(/failed|error|try again/i).first()
-    await expect(toastError.or(inlineError)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('alert').filter({ hasText: /failed|error|try again|check your information/i })).toBeVisible()
+    expect(attempted).toBe(true)
+    await expect(page).toHaveURL(/\/auth\/register/)
   })
 })

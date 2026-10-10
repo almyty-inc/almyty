@@ -16,6 +16,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
+import type { UserConfig } from 'vite'
 import base from './vite.config'
 
 const here = (file: string) => fileURLToPath(new URL(file, import.meta.url))
@@ -44,7 +45,7 @@ export function cspFor(apiBaseUrl: string): string {
   }
 }
 
-export default {
+const config: UserConfig = {
   ...base,
   preview: {
     ...base.preview,
@@ -52,3 +53,5 @@ export default {
     headers: { 'Content-Security-Policy': cspFor(process.env.ALMYTY_API_BASE_URL || '') },
   },
 }
+
+export default config

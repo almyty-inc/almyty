@@ -1,8 +1,9 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import type { IncomingMessage } from 'http'
 
-const bypassHtmlGetRequests = (req) => {
+const bypassHtmlGetRequests = (req: IncomingMessage) => {
   // Serve SPA for HTML GET requests, proxy API calls
   const acceptsHtml = req.headers.accept?.includes('text/html')
   if (req.method === 'GET' && acceptsHtml) {
@@ -217,7 +218,6 @@ export default defineConfig({
       '/chargeback': { target: apiTarget, changeOrigin: true },
       '/billing': { target: apiTarget, changeOrigin: true },
       '/byo-kms': { target: apiTarget, changeOrigin: true },
-      '/kms': { target: apiTarget, changeOrigin: true },
       '/scim': { target: apiTarget, changeOrigin: true },
       '/sso': { target: apiTarget, changeOrigin: true },
       '/mcp': {
@@ -370,20 +370,22 @@ export default defineConfig({
     host: '0.0.0.0',
     port: parseInt(process.env.PORT || '3000'),
   },
-  esbuild: {
-    // Tree-shake debug-level console calls out of production bundles.
-    // Marking them "pure" tells esbuild their return values are
-    // side-effect-free and can be dropped when unused (which they
-    // always are — console.log/debug/info return void).
-    //
-    // We deliberately keep console.warn and console.error alive so
-    // the browser dev tools still surface real problems in prod.
-    pure: ['console.log', 'console.debug', 'console.info', 'console.trace'],
-  },
   build: {
     outDir: 'dist',
     sourcemap: false,
-    rollupOptions: {
+    rolldownOptions: {
+      treeshake: {
+        // Tree-shake debug-level console calls out of production bundles.
+        // Marking them pure tells the bundler their return values are
+        // side-effect-free and can be dropped when unused (which they
+        // always are: console.log/debug/info return void). This used to
+        // be `esbuild.pure`, which Vite 8 no longer passes to anything,
+        // so every console.log shipped.
+        //
+        // We deliberately keep console.warn and console.error alive so
+        // the browser dev tools still surface real problems in prod.
+        manualPureFunctions: ['console.log', 'console.debug', 'console.info', 'console.trace'],
+      },
       output: {
         // Ensure content hashes in filenames for cache busting
         entryFileNames: 'assets/[name]-[hash].js',
