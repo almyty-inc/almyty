@@ -10,9 +10,9 @@
 #
 # Scope:
 #
-#   - backend + frontend + docs-site: npm ecosystem, monthly cadence
-#     (a critical advisory still lands within a few weeks, and one
-#     grouped PR a month keeps the review queue quiet)
+#   - backend + frontend + docs-site: npm ecosystem, monthly cadence,
+#     one entry for all three folders (a critical advisory still
+#     arrives right away as its own security PR)
 #
 #   - .github/workflows: GitHub Actions versions. actions/checkout and
 #     actions/setup-node majors are IGNORED — they're intentionally
@@ -25,15 +25,23 @@
 #     runs Trivy against a deploy months later.
 #
 # Opens max 5 PRs per ecosystem at a time so a lock-file regen burst
-# doesn't overwhelm review. Each npm ecosystem groups ALL version bumps
-# (major + minor + patch) into a single monthly PR, so a whole month of
-# updates lands as one green branch instead of a dozen separate PRs.
-# Security advisories still open as their own PRs regardless of grouping.
+# doesn't overwhelm review. The three npm folders share one entry, and
+# all their version bumps (major + minor + patch) arrive as a single
+# monthly PR. Security fixes come one PR per package, covering every
+# folder that uses it (see the "npm security fixes" entry).
 version: 2
 updates:
-  # ── Backend (NestJS API) ────────────────────────────────────
+  # ── npm: backend (NestJS API), frontend (React/Vite), docs site (Nextra)
+  #
+  # One entry for all three folders, so a package used in more than one
+  # of them arrives as one PR instead of one PR per folder. The ignore
+  # list is shared across the folders; each rule names the folder that
+  # needs it.
   - package-ecosystem: "npm"
-    directory: "/backend"
+    directories:
+      - "/backend"
+      - "/frontend"
+      - "/docs-site"
     target-branch: "development"
     schedule:
       interval: "monthly"
@@ -41,18 +49,18 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
-      - "backend"
     ignore:
-      # Backend uses the TypeScript compiler API (SDK introspector).
+      # backend: uses the TypeScript compiler API (SDK introspector).
       # TS 7 restructures the package so `import * as ts from 'typescript'`
       # no longer exports Symbol/TypeChecker. Needs a dedicated port.
+      # docs-site: Next.js 16 still needs the TypeScript 6 compiler API.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      # v9 is ESM-only and Jest cannot load it.
+      # backend: v9 is ESM-only and Jest cannot load it.
       - dependency-name: "oauth2-mock-server"
         update-types: ["version-update:semver-major"]
-      # Nest 12 ships ESM-only packages: `"type": "module"` with an
-      # exports map that no longer resolves `@nestjs/common/interfaces`
+      # backend: Nest 12 ships ESM-only packages: `"type": "module"` with
+      # an exports map that no longer resolves `@nestjs/common/interfaces`
       # under this project's `module: commonjs` tsconfig, so every
       # third-party Nest module's `Pick<ModuleMetadata, 'imports'>`
       # silently degrades to a required `any`. Terminus 12 additionally
@@ -61,89 +69,61 @@ updates:
       # @nestjs-modules/ioredis) still cap their peer range at ^11.
       # Moving to 12 is an ESM migration of the whole backend, not a
       # version bump — it needs its own PR, not a monthly group. This
-      # arrived inside the group below in #674 and broke development.
+      # arrived inside the monthly group in #674 and broke development.
       - dependency-name: "@nestjs/*"
         update-types: ["version-update:semver-major"]
-      # v13 depends on an ESM-only @apidevtools/json-schema-ref-parser, so
-      # CommonJS Jest fails with "Must use import to load ES Module" and
+      # backend: v13 depends on an ESM-only @apidevtools/json-schema-ref-parser,
+      # so CommonJS Jest fails with "Must use import to load ES Module" and
       # the whole backend suite stops loading. Pinned to 12 in #682; this
       # ignore was missing, so dependabot re-proposed 13 as #691 within
       # the hour. Moves with the same ESM migration as Nest 12.
       - dependency-name: "@apidevtools/swagger-parser"
         update-types: ["version-update:semver-major"]
-      # The schedule page's next-run times must come from the cron-parser
-      # Bull fires repeatable jobs with, and bull 4 depends on ^4.9.0.
-      # v5 disagrees with v4 across DST changes: it throws "loop limit
-      # exceeded" for a daily 03:00 in Australia/Lord_Howe and picks
-      # different 03:00 runs in Pacific/Chatham. Moves only together with
-      # the queue's own parser.
-      - dependency-name: "cron-parser"
-        update-types: ["version-update:semver-major"]
-    groups:
-      backend-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - "major"
-          - "minor"
-          - "patch"
-
-  # ── Frontend (React/Vite) ───────────────────────────────────
-  - package-ecosystem: "npm"
-    directory: "/frontend"
-    target-branch: "development"
-    schedule:
-      interval: "monthly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "frontend"
-    ignore:
-      # Table v9 is a breaking API (getCoreRowModel is not a function).
+      # frontend: Table v9 is a breaking API (getCoreRowModel is not a function).
       - dependency-name: "@tanstack/react-table"
         update-types: ["version-update:semver-major"]
-      # jsdom is pinned exactly in package.json, not caret-ranged: 30.1.0
-      # leaks state across tests in the same file for Radix modal layers
-      # (a dropdown opened in one test stops opening in the next), which
-      # failed 19 tests across 9 files in #673. It is a MINOR bump, so a
-      # major-only ignore would not hold it. Unpin only together with a
-      # diagnosis of the 30.1 change; the app itself never runs on jsdom.
+      # frontend: jsdom is pinned exactly in package.json, not caret-ranged:
+      # 30.1.0 leaks state across tests in the same file for Radix modal
+      # layers (a dropdown opened in one test stops opening in the next),
+      # which failed 19 tests across 9 files in #673. It is a MINOR bump,
+      # so a major-only ignore would not hold it. Unpin only together with
+      # a diagnosis of the 30.1 change; the app itself never runs on jsdom.
       - dependency-name: "jsdom"
-      # typescript-eslint (through 8.71) caps its typescript peer at <6.1,
-      # so TS 7 makes `npm ci` fail with ERESOLVE (#911). Moves when
-      # typescript-eslint supports the TS 7 compiler.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
     groups:
-      frontend-minor-and-patch:
+      # The monthly version bumps for all three folders, as one PR.
+      npm-monthly:
         applies-to: version-updates
         update-types:
           - "major"
           - "minor"
           - "patch"
 
-  # ── Docs site (Nextra) ──────────────────────────────────────
+  # ── npm security fixes ──────────────────────────────────────
+  #
+  # Security PRs do not use the settings of an entry that has a
+  # target-branch (they always open against the default branch), so the
+  # entry above cannot group them. This entry has no target-branch and
+  # a limit of 0, which turns off its version updates and leaves only
+  # the security fixes: one PR per package, covering every folder that
+  # uses it. They land on master and come down to development with a
+  # reconcile PR, like before.
   - package-ecosystem: "npm"
-    directory: "/docs-site"
-    target-branch: "development"
+    directories:
+      - "/backend"
+      - "/frontend"
+      - "/docs-site"
     schedule:
       interval: "monthly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
-      - "docs"
-    ignore:
-      # Next.js 16 still needs the TypeScript 6 compiler API.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
     groups:
-      docs-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - "major"
-          - "minor"
-          - "patch"
+      npm-security:
+        applies-to: security-updates
+        group-by: dependency-name
+        patterns:
+          - "*"
 
   # ── GitHub Actions workflow pins ────────────────────────────
   - package-ecosystem: "github-actions"
