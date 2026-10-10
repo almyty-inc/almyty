@@ -8,7 +8,7 @@ import {
   widgetPlacementSchema,
   widgetPlacementFrom,
   widgetLookFromApp,
-  buildPreviewSrcDoc,
+  buildPreviewUrl,
   WIDGET_PLACEMENT_DEFAULTS,
 } from '../widget-builder'
 
@@ -74,28 +74,21 @@ describe('widgetLookFromApp', () => {
   })
 })
 
-describe('buildPreviewSrcDoc', () => {
+describe('buildPreviewUrl', () => {
   const cfg = { ...WIDGET_PLACEMENT_DEFAULTS, ...widgetLookFromApp({ name: 'Acme', branding: null }) }
 
-  it('loads the real widget.js and ships the config as inert escaped JSON', () => {
-    const doc = buildPreviewSrcDoc('https://api.test/gateways/gw-1/widget.js', cfg)
-    expect(doc).toContain('<script src="https://api.test/gateways/gw-1/widget.js">')
-    expect(doc).toContain('almyty-preview-config')
-    expect(doc).toContain('/widget-config')
-    expect(doc).toContain('"primaryColor":"#8b5cf6"')
+  it("is the API's preview page, with the config in the fragment the server never sees", () => {
+    const url = new URL(buildPreviewUrl('https://api.test', 'gw-1', cfg))
+    expect(`${url.origin}${url.pathname}`).toBe('https://api.test/gateways/gw-1/widget-preview')
+    expect(url.search).toBe('')
+    expect(JSON.parse(decodeURIComponent(url.hash.slice(1)))).toEqual(cfg)
   })
 
-  it('cannot be broken out of via config strings (script-tag injection)', () => {
-    const doc = buildPreviewSrcDoc('https://api.test/gateways/gw-1/widget.js', {
-      ...cfg,
-      title: 'x</script><script>alert(1)</script>',
-      greeting: '<img src=x onerror=alert(1)>',
-    })
-    expect(doc).not.toContain('</script><script>alert(1)')
-    expect(doc).not.toContain('<img src=x')
-    // The payload arrives with `<` escaped instead.
-    expect(doc).toContain('\\u003c/script>')
-    expect(doc).toContain('\\u003cimg src=x')
+  it('keeps every config string inside the fragment', () => {
+    const hostile = { ...cfg, title: 'x</script><script>alert(1)</script>#?/', greeting: '<img src=x onerror=alert(1)>' }
+    const url = new URL(buildPreviewUrl('https://api.test', 'gw-1', hostile))
+    expect(url.pathname).toBe('/gateways/gw-1/widget-preview')
+    expect(JSON.parse(decodeURIComponent(url.hash.slice(1)))).toEqual(hostile)
   })
 })
 
@@ -116,12 +109,19 @@ describe('WidgetBuilder', () => {
     expect(screen.getByText(`<script src="https://api.test/gateways/${baseGateway.id}/widget.js" async></script>`)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy embed snippet' })).toBeInTheDocument()
 
-    const iframe = container.querySelector('iframe[title="Chat widget live preview"]')
-    const srcdoc = iframe!.getAttribute('srcdoc') || ''
-    expect(srcdoc).toContain(`https://api.test/gateways/${baseGateway.id}/widget.js`)
-    expect(srcdoc).toContain('"title":"Northwind Support"')
-    expect(srcdoc).toContain('"position":"bottom-left"')
-    expect(srcdoc).toContain('You are chatting with an AI assistant.')
+    // The preview is a real page on the API, never an srcdoc document: one of
+    // those inherits the dashboard's CSP, which runs neither its inline shim
+    // nor widget.js from the API host.
+    const iframe = container.querySelector('iframe[title="Chat widget live preview"]')!
+    expect(iframe.hasAttribute('srcdoc')).toBe(false)
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts')
+    const src = new URL(iframe.getAttribute('src') || '')
+    expect(`${src.origin}${src.pathname}`).toBe(`https://api.test/gateways/${baseGateway.id}/widget-preview`)
+    expect(JSON.parse(decodeURIComponent(src.hash.slice(1)))).toMatchObject({
+      title: 'Northwind Support',
+      position: 'bottom-left',
+      aiDisclosure: 'You are chatting with an AI assistant.',
+    })
   })
 
   it('hands where it sits to the page, which saves it; it has no save button of its own', async () => {

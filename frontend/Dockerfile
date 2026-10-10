@@ -68,7 +68,14 @@ COPY nginx-security-headers.inc /etc/nginx/conf.d/security-headers.inc
 # Copy built assets from base stage
 COPY --from=base /app/dist /usr/share/nginx/html
 
-# Runtime-config entrypoint (emits /tmp/runtime-config.js from env)
+# The API URL the bundle above was built against. The entrypoint derives
+# the CSP's API origin from it (nginx-security-headers.inc), so an image
+# built for any API domain admits that API, and only it.
+ARG ALMYTY_API_BASE_URL=http://localhost:3000
+ENV ALMYTY_API_BASE_URL=$ALMYTY_API_BASE_URL
+
+# Runtime-config entrypoint (emits /tmp/runtime-config.js and
+# /tmp/almyty-csp.conf from env)
 COPY docker-entrypoint.sh /docker-entrypoint.d/40-almyty-runtime-config.sh
 RUN chmod +x /docker-entrypoint.d/40-almyty-runtime-config.sh
 

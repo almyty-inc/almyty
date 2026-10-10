@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test'
+import { Page, expect, test } from '@playwright/test'
 import { APIHelper } from './api.helper'
 
 export interface TestUser {
@@ -163,6 +163,59 @@ export class AuthHelper {
       )
       .not.toBe('')
     return true
+  }
+
+  /**
+   * Skips the running test when the target's captcha only passes people.
+   *
+   * Sign-up needs a captcha token. Cloudflare's and hCaptcha's published test
+   * site keys hand one to anyone, a headless browser included; a real key
+   * (staging, production) challenges it, so a spec that signs up there fails
+   * for a reason that is not a bug. A build without a captcha is not skipped,
+   * and neither is one whose captcha frame never loaded: that is the failure
+   * signup-captcha.spec.ts exists to catch.
+   */
+  static async skipUnlessCaptchaAutoPasses(page: Page, timeout = 20_000): Promise<void> {
+    // The form renders after the bundle loads; the widget is part of it.
+    await page.getByRole('button', { name: 'Create account' }).waitFor()
+    if (!(await page.getByTestId('captcha-widget').count())) return
+    let siteKey: string | null = null
+    await expect
+      .poll(() => (siteKey = AuthHelper.captchaSiteKey(page)), { timeout })
+      .not.toBeNull()
+      .catch(() => undefined)
+    test.skip(
+      siteKey !== null && !AuthHelper.isAutoPassCaptchaKey(siteKey),
+      `the target's captcha uses a real site key (${String(siteKey).slice(0, 8)}...), which a headless browser cannot pass; ` +
+        'run sign-up specs against a build with a test key (ALMYTY_TURNSTILE_SITE_KEY=1x00000000000000000000AA)',
+    )
+  }
+
+  /**
+   * The site key in the captcha provider's frame URL, once it has loaded:
+   * a path segment of Turnstile's (.../turnstile/f/av0/rch/<id>/<key>/auto/...),
+   * the sitekey parameter of hCaptcha's.
+   */
+  static captchaSiteKey(page: Page): string | null {
+    for (const frame of page.frames()) {
+      // A frame that has not navigated yet has an empty URL, which URL.parse refuses.
+      const url = URL.parse(frame.url())
+      if (!url) continue
+      if (url.hostname === 'challenges.cloudflare.com') {
+        const key = url.pathname.split('/').find((s) => /^[0-3]x[0-9A-Za-z_-]{20,}$/.test(s))
+        if (key) return key
+      }
+      if (/(^|\.)hcaptcha\.com$/.test(url.hostname)) {
+        const key = new URLSearchParams(url.hash.slice(1)).get('sitekey') ?? url.searchParams.get('sitekey')
+        if (key) return key
+      }
+    }
+    return null
+  }
+
+  /** The providers' test site keys that pass every visitor: Turnstile 1x..., hCaptcha's 10000000-... key. */
+  static isAutoPassCaptchaKey(siteKey: string): boolean {
+    return /^1x0{20}[A-Z]{2}$/.test(siteKey) || siteKey === '10000000-ffff-ffff-ffff-000000000001'
   }
 
   /**

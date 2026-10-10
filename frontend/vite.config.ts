@@ -130,6 +130,13 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      // The widget preview is an HTML page the API serves (the channel page
+      // frames it), so its GET must reach the API, unlike the SPA's /gateways
+      // routes below. A regex key, and before '/gateways', which would win.
+      '^/gateways/[^/]+/widget-preview': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       '/gateways': {
         target: apiTarget,
         changeOrigin: true,
