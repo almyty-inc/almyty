@@ -148,7 +148,11 @@ Per hosted runner (one per workspace):
   NAT (100.64.0.0/10), link-local with the metadata address
   (169.254.0.0/16), loopback (127.0.0.0/8, ::1/128), IPv6 unique-local and
   link-local (fc00::/7, fe80::/10) and `cluster.clusterCidrs`: an allowed
-  name that resolves to a private address is still dropped. The almyty API
+  name that resolves to a private address is still dropped. A second deny
+  names the Cilium entities `host`, `remote-node` and `kube-apiserver`,
+  because Cilium knows node addresses as those identities rather than as
+  CIDRs, so the range deny alone left node kubelets reachable from a runner.
+  DNS to kube-dns is a pod-to-pod rule and is not affected. The almyty API
   is reached by its public name, like any allowlisted host, so it must
   resolve to a public address (it does from a separate runner cluster);
 - a **PodDisruptionBudget** `hr-<workspace id>` on the runner's pod

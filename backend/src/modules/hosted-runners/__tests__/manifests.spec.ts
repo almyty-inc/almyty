@@ -1,4 +1,5 @@
 import {
+  NODE_EGRESS_DENY_ENTITIES,
   PRIVATE_EGRESS_DENY,
   assertRunnerGuarded,
   assertSandboxed,
@@ -187,6 +188,22 @@ describe('hosted runner Kubernetes objects', () => {
       expect(denied).toContain('198.19.0.0/16');
       expect(denied.filter((c) => c === '10.0.0.0/8')).toHaveLength(1);
     });
+
+    // On Cilium the nodes are identities (host, remote-node), not CIDRs, so the
+    // private-range deny alone left node kubelets reachable (10.114.0.x:10250
+    // answered from a gVisor pod on DOKS). The entity deny is what closes them.
+    const deniedEntities = (p: typeof policy): string[] => (p.spec.egressDeny ?? []).flatMap((rule: any) => rule.toEntities ?? []);
+
+    it('denies the node, remote-node and API server identities, which no CIDR deny covers', () => {
+      expect([...NODE_EGRESS_DENY_ENTITIES].sort()).toEqual(['host', 'kube-apiserver', 'remote-node']);
+      expect(deniedEntities(policy).sort()).toEqual(['host', 'kube-apiserver', 'remote-node']);
+      expect(deniedEntities(buildEgressPolicy(provisionRequest({ egressHosts: [] }), LAYOUT)).sort()).toEqual(['host', 'kube-apiserver', 'remote-node']);
+      // Kept alongside the CIDR deny, not in place of it.
+      expect(deniedBy(policy)).toEqual(egressDenyCidrs(LAYOUT));
+      // The DNS allow stays a label selector on kube-dns; no allow opens an entity.
+      expect(policy.spec.egress[0].toEndpoints).toBeDefined();
+      expect(policy.spec.egress.some((rule: any) => rule.toEntities)).toBe(false);
+    });
   });
 
   describe('per organization', () => {
@@ -263,6 +280,20 @@ describe('hosted runner Kubernetes objects', () => {
       const partial = objects();
       partial.find((o) => o.kind === 'CiliumNetworkPolicy')!.spec.egressDeny[0].toCIDRSet.pop();
       expect(() => assertRunnerGuarded(partial)).toThrow(/private ranges/);
+    });
+
+    it('refuses a Deployment whose egress policy does not deny the node identities', () => {
+      const policyOf = (objs: ReturnType<typeof objects>) => objs.find((o) => o.kind === 'CiliumNetworkPolicy')!;
+      const cidrsOnly = objects();
+      policyOf(cidrsOnly).spec.egressDeny = policyOf(cidrsOnly).spec.egressDeny.filter((rule: any) => !rule.toEntities);
+      expect(() => assertRunnerGuarded(cidrsOnly)).toThrow(/node identities/);
+      for (const entity of NODE_EGRESS_DENY_ENTITIES) {
+        const missing = objects();
+        for (const rule of policyOf(missing).spec.egressDeny) {
+          if (rule.toEntities) rule.toEntities = rule.toEntities.filter((e: string) => e !== entity);
+        }
+        expect(() => assertRunnerGuarded(missing)).toThrow(/node identities/);
+      }
     });
 
     it('refuses guards that only come after the Deployment', () => {

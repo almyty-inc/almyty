@@ -75,7 +75,7 @@ describe('no customer pod runs outside gVisor', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('a runner Deployment is only ever built alongside its PodDisruptionBudget and private-range deny', () => {
+  it('a runner Deployment is only ever built alongside its PodDisruptionBudget, private-range deny and node-identity deny', () => {
     // Outside the builder file nothing calls buildDeployment; inside it, only
     // buildHostedRunnerObjects does, and that checks the set before returning.
     const callers = files
@@ -88,6 +88,12 @@ describe('no customer pod runs outside gVisor', () => {
     expect(source.match(/\bbuildDeployment\s*\(/g)).toHaveLength(2);
     expect(objects.match(/\bbuildDeployment\s*\(/g)).toHaveLength(1);
     expect(objects).toMatch(/assertRunnerGuarded\(objects\);\s*return objects;/);
+    // The node deny is an entity rule (on Cilium nodes are identities, not CIDRs),
+    // written by the policy builder and demanded by the guard.
+    const guard = source.slice(source.indexOf('export function assertRunnerGuarded('), source.indexOf('export function podSpecOf('));
+    expect(guard).toMatch(/NODE_EGRESS_DENY_ENTITIES\.every\(/);
+    const policy = source.slice(source.indexOf('export function buildEgressPolicy('), source.indexOf('export function buildDisruptionBudget('));
+    expect(policy).toMatch(/\{ toEntities: \[\.\.\.NODE_EGRESS_DENY_ENTITIES\] \}/);
     const adapter = readFileSync(join(SRC, 'modules', 'hosted-runners', 'adapters', 'kubernetes.adapter.ts'), 'utf8');
     expect(adapter).toMatch(/for \(const obj of buildHostedRunnerObjects\(req, layout\)\) await client\.apply\(obj\);/);
   });

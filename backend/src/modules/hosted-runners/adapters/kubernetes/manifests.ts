@@ -217,6 +217,15 @@ export const PRIVATE_EGRESS_DENY: readonly string[] = [
   '::1/128',
 ];
 
+/**
+ * Cluster identities a runner may never reach: its own node, every other
+ * node, and the Kubernetes API server. Cilium gives node addresses these
+ * identities rather than treating them as CIDRs, so the CIDR deny above
+ * does not cover them (a gVisor pod on DOKS reached node kubelets at
+ * 10.114.0.x:10250 with only that deny in place); an entity deny does.
+ */
+export const NODE_EGRESS_DENY_ENTITIES: readonly string[] = ['host', 'remote-node', 'kube-apiserver'];
+
 /** Every CIDR the runner's policy denies: the fixed private ranges plus the cluster's own. */
 export function egressDenyCidrs(layout: Pick<ClusterLayout, 'clusterCidrs'>): string[] {
   return [...new Set([...PRIVATE_EGRESS_DENY, ...(layout.clusterCidrs ?? [])])];
@@ -234,10 +243,13 @@ export function egressDenyCidrs(layout: Pick<ClusterLayout, 'clusterCidrs'>): st
  * allowlisted name resolving to a private, link-local, loopback or
  * cluster address is dropped. Cilium's CIDR selectors match only
  * addresses outside the cluster's own endpoints, so the deny does not cut
- * the DNS rule to kube-dns (a pod, selected by labels). The almyty API is
- * reached by its public name, which is on the allowlist like any other
- * host (the processor adds it); it must therefore resolve to a public
- * address, which the separate runner cluster gives it.
+ * the DNS rule to kube-dns (a pod, selected by labels). For the same
+ * reason the CIDR deny misses the nodes and the API server, which Cilium
+ * knows as identities; the second deny names those entities, and the DNS
+ * allow still works under it, since kube-dns is a pod, not the host. The
+ * almyty API is reached by its public name, which is on the allowlist
+ * like any other host (the processor adds it); it must therefore resolve
+ * to a public address, which the separate runner cluster gives it.
  */
 export function buildEgressPolicy(req: HostedProvisionRequest, layout: ClusterLayout): KubeObject {
   const hosts = [...new Set(req.egressHosts)].filter(isAllowlistHost).sort();
@@ -265,7 +277,7 @@ export function buildEgressPolicy(req: HostedProvisionRequest, layout: ClusterLa
     spec: {
       endpointSelector: { matchLabels: podSelector(req.hostedRunnerId) },
       egress,
-      egressDeny: [{ toCIDRSet: egressDenyCidrs(layout).map((cidr) => ({ cidr })) }],
+      egressDeny: [{ toCIDRSet: egressDenyCidrs(layout).map((cidr) => ({ cidr })) }, { toEntities: [...NODE_EGRESS_DENY_ENTITIES] }],
     },
   };
 }
@@ -449,9 +461,9 @@ function sameLabels(a: Record<string, string> | undefined, b: Record<string, str
 /**
  * Refuse a set of objects in which a runner Deployment comes without,
  * before it, the egress policy that selects its pod and denies every
- * private range, and the PodDisruptionBudget that selects its pod. The
- * Deployment is the last thing applied, so a refusal here means nothing
- * that runs code is sent.
+ * private range and every node identity, and the PodDisruptionBudget that
+ * selects its pod. The Deployment is the last thing applied, so a refusal
+ * here means nothing that runs code is sent.
  */
 export function assertRunnerGuarded(objects: KubeObject[]): void {
   objects.forEach((obj, i) => {
@@ -460,9 +472,11 @@ export function assertRunnerGuarded(objects: KubeObject[]): void {
     const before = objects.slice(0, i);
     const where = `Deployment ${obj.metadata?.namespace ?? ''}/${obj.metadata?.name ?? ''}`;
     const policy = before.find((o) => o.kind === 'CiliumNetworkPolicy' && sameLabels(o.spec?.endpointSelector?.matchLabels, selector));
-    const denied = new Set<string>((policy?.spec?.egressDeny ?? []).flatMap((rule: any) => (rule.toCIDRSet ?? []).map((c: any) => c.cidr)));
-    if (!policy || !PRIVATE_EGRESS_DENY.every((cidr) => denied.has(cidr))) {
-      throw new Error(`${where} comes without an egress policy that denies the private ranges to its pod`);
+    const rules: any[] = policy?.spec?.egressDeny ?? [];
+    const denied = new Set<string>(rules.flatMap((rule: any) => (rule.toCIDRSet ?? []).map((c: any) => c.cidr)));
+    const deniedEntities = new Set<string>(rules.flatMap((rule: any) => rule.toEntities ?? []));
+    if (!policy || !PRIVATE_EGRESS_DENY.every((cidr) => denied.has(cidr)) || !NODE_EGRESS_DENY_ENTITIES.every((e) => deniedEntities.has(e))) {
+      throw new Error(`${where} comes without an egress policy that denies the private ranges and the node identities to its pod`);
     }
     if (!before.some((o) => o.kind === 'PodDisruptionBudget' && sameLabels(o.spec?.selector?.matchLabels, selector))) {
       throw new Error(`${where} comes without a PodDisruptionBudget for its pod`);
