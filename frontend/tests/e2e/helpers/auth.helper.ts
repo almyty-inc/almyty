@@ -129,13 +129,13 @@ export class AuthHelper {
   }
 
   /**
-   * Check if user is authenticated
+   * Whether the browser holds a session: the httpOnly cookie, which the page
+   * cannot read, so ask the API with the context's cookies. (This used to
+   * look for a token in localStorage, where the app never keeps one.)
    */
   async isAuthenticated(): Promise<boolean> {
-    return await this.page.evaluate(() => {
-      const token = localStorage.getItem('token')
-      return !!token
-    })
+    const response = await this.page.request.get('/auth/profile')
+    return response.ok()
   }
 
   /**
