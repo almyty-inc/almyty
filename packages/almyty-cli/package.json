@@ -31,15 +31,15 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/acp-server": "^1.5.4",
-    "@almyty/agents": "^1.5.4",
-    "@almyty/auth": "^1.5.4",
-    "@almyty/chat": "^1.5.4",
-    "@almyty/credentials": "^1.5.4",
-    "@almyty/mcp-server": "^1.5.4",
-    "@almyty/models": "^1.5.4",
-    "@almyty/runner": "^1.5.4",
-    "@almyty/skills": "^1.5.4"
+    "@almyty/acp-server": "^1.5.5",
+    "@almyty/agents": "^1.5.5",
+    "@almyty/auth": "^1.5.5",
+    "@almyty/chat": "^1.5.5",
+    "@almyty/credentials": "^1.5.5",
+    "@almyty/mcp-server": "^1.5.5",
+    "@almyty/models": "^1.5.5",
+    "@almyty/runner": "^1.5.5",
+    "@almyty/skills": "^1.5.5"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",

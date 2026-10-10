@@ -403,7 +403,7 @@ the gVisor test ([results](#gvisor-on-digitalocean-test-results)):
 The reference manifests are in [hosted-runners/](hosted-runners/).
 
 Each organization gets a namespace `almyty-rt-<org short id>`, labelled
-`almyty.io/runner-pool=true`, with:
+`almyty.com/runner-pool=true`, with:
 
 - A **ResourceQuota and LimitRange** sized from the org's plan capacity
   (concurrent hosted runners times resource class). A runaway org exhausts
@@ -412,7 +412,7 @@ Each organization gets a namespace `almyty-rt-<org short id>`, labelled
   DNS to kube-dns, the almyty API's public ingress (the runner connects out,
   exactly as a self-hosted one does), and the environment's allowlist
   (below). Nothing else: explicitly not `169.254.169.254`, the cluster
-  CIDRs, the Kubernetes API or other namespaces. No ingress at all.
+  CIDRs, the nodes, the Kubernetes API or other namespaces. No ingress at all.
 
 Per workspace: a **PVC** `ws-<workspaceId>` (RWO, sized from the
 environment's cache and class); a **Secret** with the enrollment token and
@@ -443,14 +443,16 @@ provisioner writes it from `egress.allowHosts` at provision and on every
 environment version. Port 443 only: plain HTTP is not allowed out. An allowed
 name that resolves to a private address would pass an FQDN rule, so the
 policy also carries `egressDeny` rules for private ranges, the cluster CIDRs
-and the metadata address, which win over any allow (the L1 rule). The
+and the metadata address, plus the Cilium entities `host`, `remote-node` and
+`kube-apiserver` (node addresses are identities in Cilium, not CIDRs), which
+win over any allow (the L1 rule). The
 binary allowlist (`allowBinaries`) is enforced in the runner's policy
 (`packages/runner/src/policy.ts`, next to `denyPatterns`); inside a sandbox
 it is a guard rail, not the boundary.
 
 **The provisioner's own access.** The API talks to the runner cluster as a
 ServiceAccount whose RBAC covers only namespaces labelled
-`almyty.io/runner-pool=true` and only the kinds above. Its kubeconfig is a
+`almyty.com/runner-pool=true` and only the kinds above. Its kubeconfig is a
 connection in `credentials` (connector `kubernetes`), never an env var on the
 API pod, so the Enterprise case (the org's own cluster) is the same code with
 a different connection. The API's own policy
@@ -862,7 +864,13 @@ port 443 only. FQDN rules alone allow by resolved IP, and on shared CDN IPs
 that opens hosts nobody listed (tested: `registry.yarnpkg.com` was reachable
 with only `registry.npmjs.org` allowed, until SNI rules were added). Plain
 HTTP, raw IPs, other namespaces, the Kubernetes API and cloud metadata are
-unreachable (metadata already is on DigitalOcean nodes, policy or not).
+unreachable (metadata already is on DigitalOcean nodes, policy or not). The
+nodes need a deny of their own: Cilium knows node addresses as the `host`
+and `remote-node` identities rather than as CIDRs, so the private-range deny
+did not stop a gVisor pod reaching node kubelets (`10.114.0.x:10250`
+answered on DOKS), and the policy therefore also denies the entities
+`host`, `remote-node` and `kube-apiserver` (tested: every node address
+blocked, DNS and the allowlisted hosts still working).
 
 **Credentials.** The enrollment token is single-use and lives 10 minutes; the
 runner credential is scoped to one runner and the runner surface; user
@@ -956,6 +964,11 @@ DaemonSet installs it. The tested manifests are kept as references in
   gvisor`. It is the tested shape, not the production pod spec (that adds
   the security context, volume and limits from
   [Kubernetes objects and sandboxing](#kubernetes-objects-and-sandboxing)).
+- [`image-prepull.yaml`](hosted-runners/image-prepull.yaml): not part of
+  the test. A DaemonSet that pulls the standard runner image onto every
+  ready gVisor node (it runs the image once under gVisor, then holds a
+  pause container), so a wake on a new node skips the download. Applied by
+  hand if wanted; the backend never writes it.
 
 **The checks.**
 
@@ -1006,8 +1019,9 @@ DaemonSet installs it. The tested manifests are kept as references in
 
 **Before production.** Bake the gVisor binaries into the installer image
 (install time from about 2 minutes to seconds); run two or more gVisor nodes
-or the autoscaler with headroom; add a PodDisruptionBudget to runner
-Deployments (untested here; drains respect it up to a timeout); bump the
+or the autoscaler with headroom; the backend writes a PodDisruptionBudget
+with every runner Deployment (`cluster.disruptionBudget`; untested on a
+cluster here; drains respect it up to a timeout); bump the
 pinned release and checksum on purpose, with the staging smoke.
 
 ## Failure modes

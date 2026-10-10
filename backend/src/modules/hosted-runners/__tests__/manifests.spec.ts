@@ -1,7 +1,11 @@
 import {
+  NODE_EGRESS_DENY_ENTITIES,
+  PRIVATE_EGRESS_DENY,
+  assertRunnerGuarded,
   assertSandboxed,
   buildDefaultDeny,
   buildDeployment,
+  buildDisruptionBudget,
   buildEgressPolicy,
   buildHostedRunnerObjects,
   buildLimitRange,
@@ -10,6 +14,7 @@ import {
   buildRuntimeClass,
   buildSecret,
   buildVolumeClaim,
+  egressDenyCidrs,
   isAllowlistHost,
   multiplyQuantity,
   namespaceFor,
@@ -140,9 +145,9 @@ describe('hosted runner Kubernetes objects', () => {
       const hosts = [...req.egressHosts].sort();
       expect(tls.toFQDNs).toEqual(hosts.map((matchName) => ({ matchName })));
       expect(tls.toPorts).toEqual([{ ports: [{ port: '443', protocol: 'TCP' }], serverNames: hosts }]);
-      // Nothing opens an address range or an entity like "world".
-      const text = JSON.stringify(policy);
-      expect(text).not.toMatch(/toCIDR|toEntities|0\.0\.0\.0/);
+      // No allow rule opens an address range or an entity like "world".
+      const allows = JSON.stringify(policy.spec.egress);
+      expect(allows).not.toMatch(/toCIDR|toEntities|0\.0\.0\.0/);
     });
 
     it('with no hosts allows DNS and nothing else', () => {
@@ -160,6 +165,44 @@ describe('hosted runner Kubernetes objects', () => {
 
     it('denies everything else in the namespace, both ways', () => {
       expect(buildDefaultDeny(req.organizationId, LAYOUT).spec).toEqual({ podSelector: {}, policyTypes: ['Ingress', 'Egress'] });
+    });
+
+    const deniedBy = (p: typeof policy): string[] => (p.spec.egressDeny ?? []).flatMap((rule: any) => (rule.toCIDRSet ?? []).map((c: any) => c.cidr));
+
+    it('denies the private, CGNAT, link-local, loopback and metadata ranges, whatever an allowed name resolves to', () => {
+      const denied = deniedBy(policy);
+      for (const cidr of ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', '169.254.0.0/16', '169.254.169.254/32', '127.0.0.0/8', 'fc00::/7', 'fe80::/10', '::1/128']) {
+        expect(denied).toContain(cidr);
+      }
+      expect(denied).toEqual(egressDenyCidrs(LAYOUT));
+      expect([...PRIVATE_EGRESS_DENY].every((cidr) => denied.includes(cidr))).toBe(true);
+      // The deny is on the same pod the allow rules open, and holds with no hosts too.
+      expect(policy.spec.endpointSelector).toEqual({ matchLabels: { 'almyty.com/hosted-runner': req.hostedRunnerId } });
+      expect(deniedBy(buildEgressPolicy(provisionRequest({ egressHosts: [] }), LAYOUT))).toEqual(denied);
+    });
+
+    it('also denies the cluster CIDRs the settings name', () => {
+      const layout = { ...LAYOUT, clusterCidrs: ['198.18.0.0/16', '198.19.0.0/16', '10.0.0.0/8'] };
+      const denied = deniedBy(buildEgressPolicy(req, layout));
+      expect(denied).toContain('198.18.0.0/16');
+      expect(denied).toContain('198.19.0.0/16');
+      expect(denied.filter((c) => c === '10.0.0.0/8')).toHaveLength(1);
+    });
+
+    // On Cilium the nodes are identities (host, remote-node), not CIDRs, so the
+    // private-range deny alone left node kubelets reachable (10.114.0.x:10250
+    // answered from a gVisor pod on DOKS). The entity deny is what closes them.
+    const deniedEntities = (p: typeof policy): string[] => (p.spec.egressDeny ?? []).flatMap((rule: any) => rule.toEntities ?? []);
+
+    it('denies the node, remote-node and API server identities, which no CIDR deny covers', () => {
+      expect([...NODE_EGRESS_DENY_ENTITIES].sort()).toEqual(['host', 'kube-apiserver', 'remote-node']);
+      expect(deniedEntities(policy).sort()).toEqual(['host', 'kube-apiserver', 'remote-node']);
+      expect(deniedEntities(buildEgressPolicy(provisionRequest({ egressHosts: [] }), LAYOUT)).sort()).toEqual(['host', 'kube-apiserver', 'remote-node']);
+      // Kept alongside the CIDR deny, not in place of it.
+      expect(deniedBy(policy)).toEqual(egressDenyCidrs(LAYOUT));
+      // The DNS allow stays a label selector on kube-dns; no allow opens an entity.
+      expect(policy.spec.egress[0].toEndpoints).toBeDefined();
+      expect(policy.spec.egress.some((rule: any) => rule.toEntities)).toBe(false);
     });
   });
 
@@ -190,12 +233,82 @@ describe('hosted runner Kubernetes objects', () => {
     });
   });
 
+  describe('disruption budget', () => {
+    it('gives every runner a PodDisruptionBudget on its own pod, from the settings', () => {
+      const pdb = buildDisruptionBudget(req, LAYOUT);
+      expect(pdb).toMatchObject({ apiVersion: 'policy/v1', kind: 'PodDisruptionBudget', metadata: { name: `hr-${req.workspaceId}`, namespace: namespaceFor(req.organizationId, LAYOUT) } });
+      expect(pdb.spec).toEqual({
+        selector: { matchLabels: buildDeployment(req, LAYOUT).spec.selector.matchLabels },
+        maxUnavailable: LAYOUT.disruptionBudget.maxUnavailable,
+        unhealthyPodEvictionPolicy: 'AlwaysAllow',
+      });
+      expect(LAYOUT.disruptionBudget).toEqual({ minAvailable: null, maxUnavailable: 0 });
+      const min = buildDisruptionBudget(req, { ...LAYOUT, disruptionBudget: { minAvailable: 1, maxUnavailable: null } }).spec;
+      expect(min.minAvailable).toBe(1);
+      expect(min).not.toHaveProperty('maxUnavailable');
+    });
+
+    it('refuses a budget with both or neither amount set', () => {
+      expect(() => buildDisruptionBudget(req, { ...LAYOUT, disruptionBudget: { minAvailable: 1, maxUnavailable: 0 } })).toThrow(/exactly one/);
+      expect(() => buildDisruptionBudget(req, { ...LAYOUT, disruptionBudget: { minAvailable: null, maxUnavailable: null } })).toThrow(/exactly one/);
+    });
+  });
+
+  describe('no runner Deployment without its guards', () => {
+    const objects = () => buildHostedRunnerObjects(req, LAYOUT);
+    const without = (kind: string) => objects().filter((o) => o.kind !== kind);
+
+    it('applies the egress policy and the disruption budget before the Deployment', () => {
+      const kinds = objects().map((o) => o.kind);
+      expect(kinds.indexOf('CiliumNetworkPolicy')).toBeLessThan(kinds.indexOf('Deployment'));
+      expect(kinds.indexOf('PodDisruptionBudget')).toBeLessThan(kinds.indexOf('Deployment'));
+      expect(() => assertRunnerGuarded(objects())).not.toThrow();
+    });
+
+    it('refuses a Deployment with no PodDisruptionBudget for its pod', () => {
+      expect(() => assertRunnerGuarded(without('PodDisruptionBudget'))).toThrow(/PodDisruptionBudget/);
+      const other = objects();
+      other.find((o) => o.kind === 'PodDisruptionBudget')!.spec.selector.matchLabels = { 'almyty.com/hosted-runner': 'someone-else' };
+      expect(() => assertRunnerGuarded(other)).toThrow(/PodDisruptionBudget/);
+    });
+
+    it('refuses a Deployment with no egress policy, or one that does not deny the private ranges', () => {
+      expect(() => assertRunnerGuarded(without('CiliumNetworkPolicy'))).toThrow(/private ranges/);
+      const open = objects();
+      delete open.find((o) => o.kind === 'CiliumNetworkPolicy')!.spec.egressDeny;
+      expect(() => assertRunnerGuarded(open)).toThrow(/private ranges/);
+      const partial = objects();
+      partial.find((o) => o.kind === 'CiliumNetworkPolicy')!.spec.egressDeny[0].toCIDRSet.pop();
+      expect(() => assertRunnerGuarded(partial)).toThrow(/private ranges/);
+    });
+
+    it('refuses a Deployment whose egress policy does not deny the node identities', () => {
+      const policyOf = (objs: ReturnType<typeof objects>) => objs.find((o) => o.kind === 'CiliumNetworkPolicy')!;
+      const cidrsOnly = objects();
+      policyOf(cidrsOnly).spec.egressDeny = policyOf(cidrsOnly).spec.egressDeny.filter((rule: any) => !rule.toEntities);
+      expect(() => assertRunnerGuarded(cidrsOnly)).toThrow(/node identities/);
+      for (const entity of NODE_EGRESS_DENY_ENTITIES) {
+        const missing = objects();
+        for (const rule of policyOf(missing).spec.egressDeny) {
+          if (rule.toEntities) rule.toEntities = rule.toEntities.filter((e: string) => e !== entity);
+        }
+        expect(() => assertRunnerGuarded(missing)).toThrow(/node identities/);
+      }
+    });
+
+    it('refuses guards that only come after the Deployment', () => {
+      const late = objects();
+      const deployment = late.splice(late.findIndex((o) => o.kind === 'Deployment'), 1)[0];
+      expect(() => assertRunnerGuarded([late[0], deployment, ...late.slice(1)])).toThrow();
+    });
+  });
+
   it('keeps the token and bound values in the Secret, and only there', () => {
     const secret = buildSecret(req, req.secretEnv, LAYOUT);
     expect(secret.stringData).toEqual(req.secretEnv);
     const others = buildHostedRunnerObjects(req, LAYOUT);
     expect(others.map((o) => o.kind)).toEqual([
-      'Namespace', 'ResourceQuota', 'LimitRange', 'NetworkPolicy', 'CiliumNetworkPolicy', 'PersistentVolumeClaim', 'Deployment',
+      'Namespace', 'ResourceQuota', 'LimitRange', 'NetworkPolicy', 'CiliumNetworkPolicy', 'PodDisruptionBudget', 'PersistentVolumeClaim', 'Deployment',
     ]);
     const text = JSON.stringify(others);
     expect(text).not.toContain(ENROLLMENT_TOKEN);

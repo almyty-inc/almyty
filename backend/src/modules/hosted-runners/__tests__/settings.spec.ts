@@ -41,6 +41,17 @@ describe('hosted runner settings', () => {
     expect(s.apiUrl).toBe('https://api.example.com');
   });
 
+  it('takes the cluster CIDRs and the disruption budget from settings, and refuses ones that cannot work', () => {
+    expect(DEFAULT_HOSTED_RUNNER_SETTINGS.cluster.clusterCidrs).toEqual([]);
+    expect(DEFAULT_HOSTED_RUNNER_SETTINGS.cluster.disruptionBudget).toEqual({ minAvailable: null, maxUnavailable: 0 });
+    const load = (cluster: unknown) => loadHostedRunnerSettings({ HOSTED_RUNNERS_SETTINGS: JSON.stringify({ cluster }) });
+    expect(load({ clusterCidrs: ['198.18.0.0/16', 'fd00:10::/64'] }).cluster.clusterCidrs).toEqual(['198.18.0.0/16', 'fd00:10::/64']);
+    expect(load({ disruptionBudget: { minAvailable: 1, maxUnavailable: null } }).cluster.disruptionBudget).toEqual({ minAvailable: 1, maxUnavailable: null });
+    expect(load({ disruptionBudget: { maxUnavailable: '50%' } }).cluster.disruptionBudget.maxUnavailable).toBe('50%');
+    for (const bad of [['10.0.0.0'], ['10.0.0.0/33'], ['fd00::/129'], ['cluster']]) expect(() => load({ clusterCidrs: bad })).toThrow(/clusterCidrs/);
+    for (const bad of [{ minAvailable: 1 }, { maxUnavailable: null }, { maxUnavailable: -1 }, { maxUnavailable: 'half' }]) expect(() => load({ disruptionBudget: bad })).toThrow(/disruptionBudget/);
+  });
+
   it('refuses settings that cannot work, at load', () => {
     expect(() => loadHostedRunnerSettings({ HOSTED_RUNNERS_SETTINGS: '{not json' })).toThrow(/not valid JSON/);
     expect(() => loadHostedRunnerSettings({ HOSTED_RUNNERS_SETTINGS: JSON.stringify({ idleTimeoutMinutes: { default: 200 } }) })).toThrow(/min <= default <= max/);
