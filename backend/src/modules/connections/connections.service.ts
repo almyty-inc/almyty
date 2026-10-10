@@ -309,6 +309,7 @@ export class ConnectionsService {
     row.healthStatus = result.status;
     row.healthCheckedAt = new Date();
     row.healthError = result.ok ? null : result.error ?? 'validation failed';
+    row.metadata = { ...(row.metadata ?? {}), healthDetail: result.ok ? result.detail ?? null : null };
     if (result.accountLabel) row.accountLabel = result.accountLabel;
     if (result.scopesGranted) row.scopesGranted = result.scopesGranted;
     const saved = await this.credentials.save(row);
@@ -601,7 +602,7 @@ export class ConnectionsService {
       teamId: row.visibility === 'team' ? row.teamId ?? null : null,
       method: (row.metadata?.connectMethod as ConnectMethodType | undefined) ?? null,
       accountLabel: row.accountLabel ?? null,
-      health: { status: row.healthStatus ?? 'unknown', checkedAt: row.healthCheckedAt ?? null, error: row.healthError ?? null },
+      health: { status: row.healthStatus ?? 'unknown', checkedAt: row.healthCheckedAt ?? null, error: row.healthError ?? null, detail: typeof row.metadata?.healthDetail === 'string' ? row.metadata.healthDetail : null },
       scopesGranted: row.scopesGranted ?? [],
       expiresAt: row.expiresAt ?? null,
       createdAt: row.createdAt,
@@ -1006,7 +1007,7 @@ export class ConnectionsService {
     row.healthError = result.ok ? null : result.error ?? 'validation failed';
     row.scopesGranted = result.scopesGranted ?? args.scopesGranted ?? row.scopesGranted ?? [];
     if (args.expiresAt !== undefined) row.expiresAt = args.expiresAt as any;
-    row.metadata = { ...(row.metadata ?? {}), connectMethod: method.type, connectorKind: connector.kind };
+    row.metadata = { ...(row.metadata ?? {}), connectMethod: method.type, connectorKind: connector.kind, healthDetail: result.ok ? result.detail ?? null : null };
     if (method.type === 'api_key' && row.type === CredentialType.API_KEY) {
       row.keyName = row.keyName ?? 'Authorization';
       row.keyLocation = row.keyLocation ?? 'header';

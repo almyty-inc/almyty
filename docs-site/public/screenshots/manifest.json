@@ -21,7 +21,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -43,7 +43,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -65,7 +65,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -88,7 +88,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "37eaccf0c95694e8e005d10ea854d3177faab2174fbc0d2e667329b5a42ce553",
+      "sourceDigest": "8021ac37c8be730bc5927829f69b938fb4e4ebc6d84cd93d437a1b6e44a0cfaf",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -110,7 +110,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -132,7 +132,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -154,7 +154,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -176,7 +176,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d1b686ee37e11544c8ff405f1ddd192fb7e0e81cdd37b0cbb4dda99509671039",
+      "sourceDigest": "b7c5e9b04cd7456f7d4019344587be8597fe8ae563b329cc33fd833b6795f977",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -198,7 +198,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -220,7 +220,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "620f3938f86fd705a4cd5a1ad8d7d1269daf041c97c86b45ad2335005287c2c3",
+      "sourceDigest": "bffe45c1f07cfa2c9bce60ad5ec1672917931a558d15d06406e1410c1027755e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -242,7 +242,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
+      "sourceDigest": "1f06e01e8878675f0ec268cdd2360f5ed0533daa7b49a331bfacb9f74e9a2510",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -264,7 +264,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
+      "sourceDigest": "1f06e01e8878675f0ec268cdd2360f5ed0533daa7b49a331bfacb9f74e9a2510",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -286,7 +286,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
+      "sourceDigest": "1f06e01e8878675f0ec268cdd2360f5ed0533daa7b49a331bfacb9f74e9a2510",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -308,7 +308,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
+      "sourceDigest": "1f06e01e8878675f0ec268cdd2360f5ed0533daa7b49a331bfacb9f74e9a2510",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -330,7 +330,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
+      "sourceDigest": "1f06e01e8878675f0ec268cdd2360f5ed0533daa7b49a331bfacb9f74e9a2510",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -352,7 +352,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c2c5bf4ae17564ce0dcd9f56e47d7d37a53d6950adbd69ccedb75fe4e4d6f841",
+      "sourceDigest": "1f06e01e8878675f0ec268cdd2360f5ed0533daa7b49a331bfacb9f74e9a2510",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -374,7 +374,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3760da38adb934b5789db112c7513c44da4e174427d0de1fd8ea85d30025470f",
+      "sourceDigest": "fa6d678b2e7a568fbbdc2528a579aff1aa2781f6592517f3af30f56ff3701269",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -396,7 +396,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a6037fa3a9a6e123036c16830e89290202b56aa160d5fffb8ad9f6ca3ce6976d",
+      "sourceDigest": "c52078216ba74d9950ba0105d955e45df30350ed45b77dcbbd15304bbfa14545",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -418,7 +418,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c55d35aedd5e7f71a5f03c60526ba27dc86af7ede43f8ae0291171559371144",
+      "sourceDigest": "e06a4d7ad7ea5790aec6d6d731a39bb70caa252f62414bb1365332afc49b8d84",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -440,7 +440,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a6037fa3a9a6e123036c16830e89290202b56aa160d5fffb8ad9f6ca3ce6976d",
+      "sourceDigest": "c52078216ba74d9950ba0105d955e45df30350ed45b77dcbbd15304bbfa14545",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -470,7 +470,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30c8aed99dca1d06c1867b57e0f2e74de552587574af21f42a1b5fe157538b3b",
+      "sourceDigest": "ea07b26304a71df247946ce4c65490e55c141efb959e4546e5003a0479f62518",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -492,7 +492,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -514,7 +514,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36fa2e4a8458d6419a6303e0823f9adba5b7534460055d5c8167fb33c0915d04",
+      "sourceDigest": "98f4afa404f08e14fdc5f407e880734ed385ef47e029b51a466c625acce862e2",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -536,7 +536,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -558,7 +558,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -580,7 +580,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -602,7 +602,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -738,7 +738,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d1a4ae57d90fa61d96cc1c8b4f02ab3520097c5ed8db487d4e5e09287ef2fd2c",
+      "sourceDigest": "78b2352ba59c26e58602dd616c9fdb818e5e9068c294b117b3844f7a9f0b2ebf",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -746,7 +746,7 @@
       "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
       "capturedAt": "2026-10-09T13:17:56.093Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "eefce035d1be0f766b30a24863e889f52002926e71e7563012b91233d851efd1",
       "source": {
         "kind": "browser",
@@ -762,7 +762,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "471b002961b7bd0d976b9a3d3f630aedc0ebb39453e4940740778027768fe090",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The Credentials list now says \"Not checked\" (was \"Saved\") for keys that are only stored; recapture from the demo stack."
     },
     {
       "id": "environment-detail",
@@ -784,7 +785,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f2dc7e9e94532b3a1456e9ec7942d89797bd572136508dd46ff0e57379359aac",
+      "sourceDigest": "56bc72a780c20200540b43536af64477da2d617665b11c287c91ce4c0d44d258",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -807,7 +808,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7503c4645c50197aa533b9f55ac13c4fa2d58b8c6121c37d27840860332fa1eb",
+      "sourceDigest": "3b746518072ef94d221f8ca06ca36a88534d12fef76bb376455f4aaf03811821",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -829,7 +830,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
+      "sourceDigest": "2f7a93d2a19c6f84aa1fd2dbf44e01fe3ac4e3074f1c69c016d7052277735218",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -851,7 +852,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
+      "sourceDigest": "2f7a93d2a19c6f84aa1fd2dbf44e01fe3ac4e3074f1c69c016d7052277735218",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -874,7 +875,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "35eea2c0df14782183d9e2fbabe8588813c9eb5a61b46620171e4a4a8281645d",
+      "sourceDigest": "84b4901436b56ea1b035d34281a28bcd88b934dfeb8f77d3588734b7a0d97b60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -896,7 +897,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
+      "sourceDigest": "2f7a93d2a19c6f84aa1fd2dbf44e01fe3ac4e3074f1c69c016d7052277735218",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -918,7 +919,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
+      "sourceDigest": "2f7a93d2a19c6f84aa1fd2dbf44e01fe3ac4e3074f1c69c016d7052277735218",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -940,7 +941,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b95eae7298c95386d92871599083d16c3e7ca1a9a70c71c1a134bc07349b0916",
+      "sourceDigest": "0a039ff352eedda8f8e6cc6c09155c1eb415d1d0a2899b7eac2b7abdadf4308b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -962,7 +963,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
+      "sourceDigest": "2f7a93d2a19c6f84aa1fd2dbf44e01fe3ac4e3074f1c69c016d7052277735218",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -984,7 +985,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02573eb5dd793faebab6cd976c93039b33ffc8fdd15b670f6b07c64242654412",
+      "sourceDigest": "13a6ebe533f9e5d76f5798d3aed228b24f43cba262daf1a5fbcbe4a6ba0f7bdb",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1006,7 +1007,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "02573eb5dd793faebab6cd976c93039b33ffc8fdd15b670f6b07c64242654412",
+      "sourceDigest": "13a6ebe533f9e5d76f5798d3aed228b24f43cba262daf1a5fbcbe4a6ba0f7bdb",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1028,7 +1029,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
+      "sourceDigest": "cc5eb92baeece41a8f7ddf08e88bf0e082a0974831a23cc20bea36c705f18c93",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1050,7 +1051,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f55291c5a17e246c1fd03e4fb54a6557554e121602451d08c0ddd505c8a48f54",
+      "sourceDigest": "1269dfcc39b362f1979395a9be8da12f36d277c2d3196d7137688b7af994fa10",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1072,7 +1073,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1094,7 +1095,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1116,7 +1117,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1139,7 +1140,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
+      "sourceDigest": "b7084cec4c2d048c60f4b42659ae694a7405f375c54671ed4c1de0dc71972e01",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1161,7 +1162,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
+      "sourceDigest": "cc5eb92baeece41a8f7ddf08e88bf0e082a0974831a23cc20bea36c705f18c93",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1183,7 +1184,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1205,7 +1206,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1227,7 +1228,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36fa2e4a8458d6419a6303e0823f9adba5b7534460055d5c8167fb33c0915d04",
+      "sourceDigest": "98f4afa404f08e14fdc5f407e880734ed385ef47e029b51a466c625acce862e2",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1250,7 +1251,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7b1801f16a6392c82ec0f72f06e879c3e28c700207bafe4b1cfae236dfefc298",
+      "sourceDigest": "437c1f569e03edc01408ac2566d526c8eabc843ada9dd953053a41c5d19b53c9",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1272,7 +1273,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
+      "sourceDigest": "6924865def82bf20f37de0efbe5ac4d26da05bdb446f427db80a75d131864d68",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1294,7 +1295,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
+      "sourceDigest": "cc5eb92baeece41a8f7ddf08e88bf0e082a0974831a23cc20bea36c705f18c93",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1316,7 +1317,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1338,7 +1339,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1361,7 +1362,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
+      "sourceDigest": "b7084cec4c2d048c60f4b42659ae694a7405f375c54671ed4c1de0dc71972e01",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1384,7 +1385,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6a65ae41deaf626317e6048f4e4fe4a6b6a6887f922afabd96588181dfcf9bf1",
+      "sourceDigest": "b27abd77ce13508d1c80a01a08f31c3622b0efefe882a2b845d22497dcbf6dac",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1406,7 +1407,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d9af2690a8b166eb90162644d1ed5edac717842330c8e09e0b4143f0e771a542",
+      "sourceDigest": "9863ba00d3a21c237a524aa6d13c6bcc0a66cc4d4eb02bd8731d25d68dd53d63",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1428,7 +1429,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1450,7 +1451,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
+      "sourceDigest": "cc5eb92baeece41a8f7ddf08e88bf0e082a0974831a23cc20bea36c705f18c93",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1472,7 +1473,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1494,7 +1495,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1516,7 +1517,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1539,7 +1540,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
+      "sourceDigest": "b7084cec4c2d048c60f4b42659ae694a7405f375c54671ed4c1de0dc71972e01",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1561,7 +1562,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1584,7 +1585,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e1073f7b56eaf7800d39c571c440cebbcc0252c511499fe5ccdc955390c4a580",
+      "sourceDigest": "eaba7153c3bddeac4aac50add976ae3945ed193c9dd16effd7781a70cfab8e95",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1605,7 +1606,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f6a90ad3dc815275e708f6e9b5de0830879fcf9ae6f028e91fa587a0d901a5fa",
+      "sourceDigest": "a5d8a8e75fb52ff4ffd7cadb44a21c68a9f0008a2e4f4de08d0c4d89ab626f8c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1627,7 +1628,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "03a97d95276a28b27080c10d0c1d7ce6951b6fc7f2a670e362e26d46ef9fbff7",
+      "sourceDigest": "fcd4b52238593c49fe2730cd56b5e3f1f3d0133029d6d6780b24fda71e2e9682",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1649,7 +1650,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1672,7 +1673,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7b1801f16a6392c82ec0f72f06e879c3e28c700207bafe4b1cfae236dfefc298",
+      "sourceDigest": "437c1f569e03edc01408ac2566d526c8eabc843ada9dd953053a41c5d19b53c9",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1695,7 +1696,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
+      "sourceDigest": "b7084cec4c2d048c60f4b42659ae694a7405f375c54671ed4c1de0dc71972e01",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1718,7 +1719,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7c7a0ff2050c371541b64277302e8eb6016db9cf7d6c7709afff02bd67f1f073",
+      "sourceDigest": "b7084cec4c2d048c60f4b42659ae694a7405f375c54671ed4c1de0dc71972e01",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1740,7 +1741,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36fa2e4a8458d6419a6303e0823f9adba5b7534460055d5c8167fb33c0915d04",
+      "sourceDigest": "98f4afa404f08e14fdc5f407e880734ed385ef47e029b51a466c625acce862e2",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1762,7 +1763,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
+      "sourceDigest": "6924865def82bf20f37de0efbe5ac4d26da05bdb446f427db80a75d131864d68",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1785,7 +1786,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e6cf5b7327372bfebdb3033e77312717506e4f8a69f77fdec1db6db58463169a",
+      "sourceDigest": "b17d7e6c03a45993433776161dbaec4e10b8a41b3084f0f947df7c9826661206",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1807,7 +1808,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
+      "sourceDigest": "cc5eb92baeece41a8f7ddf08e88bf0e082a0974831a23cc20bea36c705f18c93",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1829,7 +1830,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1851,7 +1852,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1873,7 +1874,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1895,7 +1896,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1918,7 +1919,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "df4154615e8b29ee698c0157953c54b1d7ac98628f6292b91aed12ecaf956a0b",
+      "sourceDigest": "a7d12a8fa2f317c902eb420a12fc942752f616f631e96b432fe9ac664b6b888f",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1939,7 +1940,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f6a90ad3dc815275e708f6e9b5de0830879fcf9ae6f028e91fa587a0d901a5fa",
+      "sourceDigest": "a5d8a8e75fb52ff4ffd7cadb44a21c68a9f0008a2e4f4de08d0c4d89ab626f8c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1961,7 +1962,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
+      "sourceDigest": "6924865def82bf20f37de0efbe5ac4d26da05bdb446f427db80a75d131864d68",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1983,7 +1984,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4b0301021fc271cd10bd6bc042ce166a60bc806e04e37af62355a8d96acefcad",
+      "sourceDigest": "6924865def82bf20f37de0efbe5ac4d26da05bdb446f427db80a75d131864d68",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2005,7 +2006,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "03a97d95276a28b27080c10d0c1d7ce6951b6fc7f2a670e362e26d46ef9fbff7",
+      "sourceDigest": "fcd4b52238593c49fe2730cd56b5e3f1f3d0133029d6d6780b24fda71e2e9682",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2027,7 +2028,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2049,7 +2050,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f55291c5a17e246c1fd03e4fb54a6557554e121602451d08c0ddd505c8a48f54",
+      "sourceDigest": "1269dfcc39b362f1979395a9be8da12f36d277c2d3196d7137688b7af994fa10",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2071,7 +2072,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "1393e00393b73d5e09c2016054d69971b88770b625be4fe3b1321577e074215a",
+      "sourceDigest": "073269fd9ce0e4f77978fc302dc24385ddc7821d12644b773817a986368c1b57",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2093,7 +2094,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "74121abf1cc2185773e3b2db1167cc247a4de859b0195a63f7906a59d3daee3e",
+      "sourceDigest": "bb692c9a03d6b77fca75237258f19d93d65e0137af1e069caf48b99555c92db4",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2115,7 +2116,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "92b33ef45555dfdad0e83ea0b26777bb809acad074bdacfe0e635fca9456eafb",
+      "sourceDigest": "cc5eb92baeece41a8f7ddf08e88bf0e082a0974831a23cc20bea36c705f18c93",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2137,7 +2138,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
+      "sourceDigest": "2f7a93d2a19c6f84aa1fd2dbf44e01fe3ac4e3074f1c69c016d7052277735218",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2159,7 +2160,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
+      "sourceDigest": "2f7a93d2a19c6f84aa1fd2dbf44e01fe3ac4e3074f1c69c016d7052277735218",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2181,7 +2182,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bcc8aff745e1510a5997970fb7640a02ed28c5f45e6a046b24c4993911fd0eaf",
+      "sourceDigest": "2f7a93d2a19c6f84aa1fd2dbf44e01fe3ac4e3074f1c69c016d7052277735218",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2204,7 +2205,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "37560ef4d3fa75871f061392fb724d3c8079af95b3e8138ddcabc14ad3e90f0b",
+      "sourceDigest": "11bca8d11e404b064c89697accb66b908ccca95ecd88bb507cb7dd7a98ac78f8",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2227,7 +2228,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d04746b471be28b5d2a4e0c50f3d2d6b08dac965e547d96bbbaed35a8185277c",
+      "sourceDigest": "600b2c405bd73c61315ba58e2f9d3cb48627764cfa2c7fc9030a5787726b95e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2250,7 +2251,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7d5332f4d8fd50329e17ede4780c597e51a9f947d7053113bd6c7a7e2d432642",
+      "sourceDigest": "890f3063228e41ba16e96d2ca77121e4d81b9189460aac83b4f8f3d876f754d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2273,7 +2274,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7d5332f4d8fd50329e17ede4780c597e51a9f947d7053113bd6c7a7e2d432642",
+      "sourceDigest": "890f3063228e41ba16e96d2ca77121e4d81b9189460aac83b4f8f3d876f754d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2295,7 +2296,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2336,7 +2337,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "28834e8f787dc535884cc482db040d465a46569dff8fc478850cd37ebf896e05",
+      "sourceDigest": "e43577c218c2c3fbf77914fdd21e7e951e50de9c02f07beeb7fe208cf6cbf0d1",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2358,7 +2359,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "32954b16464319c115a5b5906786077524b6d9cbe1cee94241d4c5127805bd2c",
+      "sourceDigest": "b4abaec9b895cf78e3f1c4d67bc36cc0b64319fe2065bd12fc03517d2a21d7ce",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2380,7 +2381,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
+      "sourceDigest": "1ed92cabbb9d9ce1a5c1efc8077f3af8641a17668c1ae3b14726da037bf3b0e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2402,7 +2403,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
+      "sourceDigest": "1ed92cabbb9d9ce1a5c1efc8077f3af8641a17668c1ae3b14726da037bf3b0e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2424,7 +2425,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
+      "sourceDigest": "1ed92cabbb9d9ce1a5c1efc8077f3af8641a17668c1ae3b14726da037bf3b0e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2446,7 +2447,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
+      "sourceDigest": "1ed92cabbb9d9ce1a5c1efc8077f3af8641a17668c1ae3b14726da037bf3b0e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2468,7 +2469,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
+      "sourceDigest": "1ed92cabbb9d9ce1a5c1efc8077f3af8641a17668c1ae3b14726da037bf3b0e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2490,7 +2491,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
+      "sourceDigest": "1ed92cabbb9d9ce1a5c1efc8077f3af8641a17668c1ae3b14726da037bf3b0e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2512,7 +2513,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e6ae0ec97106e2fb81c036f51f8c4e7dbe8f34025fdbc4e36d4e5c2a5cddd295",
+      "sourceDigest": "1ed92cabbb9d9ce1a5c1efc8077f3af8641a17668c1ae3b14726da037bf3b0e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2535,7 +2536,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4106f4d44b8ca89b84772607d917b02468ea56b2cb2db3a5dad46cc25dc7095f",
+      "sourceDigest": "4a7e48259534bc42c743c76a772f9130cffce4873452085fbb1141d60c6c6970",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2557,7 +2558,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2579,7 +2580,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2601,7 +2602,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2623,7 +2624,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "306cfc88d84be5899e083a61761f1cf83622a3a65609f96c113069fc158acad1",
+      "sourceDigest": "353b35d48fda381136180b1ff4acbebf6c051e93e423555d0392f6f0146a11b2",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2645,7 +2646,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "306cfc88d84be5899e083a61761f1cf83622a3a65609f96c113069fc158acad1",
+      "sourceDigest": "353b35d48fda381136180b1ff4acbebf6c051e93e423555d0392f6f0146a11b2",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2667,7 +2668,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "742e8606339396a4a90c10f80513edb75cadb569f2d2ea0c84ec98ff016f5bc2",
+      "sourceDigest": "78ee5fc1b955158cf6610ce4936bc16c00dec1ffc40d866c8727bca2666ff0a8",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2689,7 +2690,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
+      "sourceDigest": "d6b0b7eb3cc4e4caeab5f5b0aab0d4dfa6ee0105f57b298ea5e6792e4695d193",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2710,7 +2711,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
+      "sourceDigest": "e1b0fbfb0c0728392c24f3b1d7dbfe08283e063380b802c6d555ccf428269b40",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2732,7 +2733,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "sourceDigest": "caacf15f1a8c00f52b84ac546a4a07951c8af2e631382830b52f344f7ae1f945",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2754,7 +2755,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "sourceDigest": "caacf15f1a8c00f52b84ac546a4a07951c8af2e631382830b52f344f7ae1f945",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2776,7 +2777,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "sourceDigest": "caacf15f1a8c00f52b84ac546a4a07951c8af2e631382830b52f344f7ae1f945",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2797,7 +2798,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3e6f5b03efd74cc0cf2be2ef74ffb1cc420f7eae8369c928a495bc5957520f55",
+      "sourceDigest": "204cf99bd2733dd830882ea7874d457b5cee8ee4c59952a862060da2fc7c41b3",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2819,7 +2820,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2841,7 +2842,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2863,7 +2864,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2885,7 +2886,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2907,7 +2908,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2928,7 +2929,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
+      "sourceDigest": "470d4b9ade9bf7d869bed4980c516154a866f41d07ee0175047574093a45ae4a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2949,7 +2950,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
+      "sourceDigest": "470d4b9ade9bf7d869bed4980c516154a866f41d07ee0175047574093a45ae4a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2971,7 +2972,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2993,7 +2994,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
+      "sourceDigest": "d6b0b7eb3cc4e4caeab5f5b0aab0d4dfa6ee0105f57b298ea5e6792e4695d193",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3015,7 +3016,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0ed93a9ce7fd0c2906bc5ab679cd20c53d1721c76031fc874e5b6cced519de56",
+      "sourceDigest": "d6b0b7eb3cc4e4caeab5f5b0aab0d4dfa6ee0105f57b298ea5e6792e4695d193",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3038,7 +3039,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9d8333608cadff0301eb066efb5aece3520781f8c30d4055ba14a4ed900ba862",
+      "sourceDigest": "33a0f4104bef70e80919f5719cdd7a11e19625ce23df31a67742789e3bdb28da",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
@@ -3059,7 +3060,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "caf849fbc6d2123bb417db0e7f47dfbfac07267e00ce1e66f9978375799d9f60",
+      "sourceDigest": "470d4b9ade9bf7d869bed4980c516154a866f41d07ee0175047574093a45ae4a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3082,7 +3083,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "46309c94159d1fdc8c21802a7d0ae1b9ccce853ae4ee069de896d024002719a1",
+      "sourceDigest": "3a9e010481ecbc223bc70dc3d793e36989c1c93e0802ffa769943552bd58ad64",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
@@ -3104,7 +3105,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5058173c7cfb0395b5df33f004e6925feb609b9beb91de1717211fa1d39bd87d",
+      "sourceDigest": "0ad2790cbb6b2631d4c2ad781d1952dc3626eca59ac47694940cec2b40faba01",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3125,7 +3126,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d14d9b75efaebdd2e5732e3e61d58f0faf63c40505a7e7db3087269e98cd3c38",
+      "sourceDigest": "51c89190a6e4841e4411636f1c5cce1672e854805677de3e2560985c0680faa0",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3146,7 +3147,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
+      "sourceDigest": "e1b0fbfb0c0728392c24f3b1d7dbfe08283e063380b802c6d555ccf428269b40",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3167,7 +3168,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d0518632ed2ccd225dd0adb391e985dc0216465782caeb7f5a3b38a0adb3f856",
+      "sourceDigest": "e1b0fbfb0c0728392c24f3b1d7dbfe08283e063380b802c6d555ccf428269b40",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3189,7 +3190,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "sourceDigest": "caacf15f1a8c00f52b84ac546a4a07951c8af2e631382830b52f344f7ae1f945",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3211,7 +3212,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "sourceDigest": "caacf15f1a8c00f52b84ac546a4a07951c8af2e631382830b52f344f7ae1f945",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3233,7 +3234,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "36e30929ba9a39c50addfb3759ac000af6b3dcec0c744104da20e1ab5f5e612c",
+      "sourceDigest": "caacf15f1a8c00f52b84ac546a4a07951c8af2e631382830b52f344f7ae1f945",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3254,7 +3255,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3e6f5b03efd74cc0cf2be2ef74ffb1cc420f7eae8369c928a495bc5957520f55",
+      "sourceDigest": "204cf99bd2733dd830882ea7874d457b5cee8ee4c59952a862060da2fc7c41b3",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3275,7 +3276,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "98f06eae4e38ba92d5fb471dc3cf32940072762b05e2f04266f8c75cd0fa4dc1",
+      "sourceDigest": "601de83d720d84f12fb19fe7dbc1cd6cfa359f325e557978d7d45988156aff4d",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3296,7 +3297,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e9de55dd8f5a58f4ccad0352ce8d40d253b4a2277c3f6f04b60cdc80fc816ef8",
+      "sourceDigest": "d1820fecfa360904a31a13cad63e8065c2da8b146a03b391c3a1a982323b018c",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3318,7 +3319,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3340,7 +3341,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3362,7 +3363,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6ad1a1b78e75413ebad77a0e71d4a023afba24dca260d55b3a3c1f666360e4ca",
+      "sourceDigest": "2447cec6611d2275381b5cd0dfd2dfb198f58673b5b2f0edced44debc6a3640d",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3384,7 +3385,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3406,7 +3407,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3427,7 +3428,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7ffeea47c39b09547336d2714850f9ef7f64cdd305b18478fd8b8e7e3902f465",
+      "sourceDigest": "1db7e9b4ac5d4c76f3d50090331e701800f3965703414c695df303fdc8277724",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3449,7 +3450,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3471,7 +3472,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6522f76d986bf1d5d42a17238faa7fb9b45f9510b8fd28a2d32f22433d1e40c6",
+      "sourceDigest": "00b1e067c307696bb01ec8a0ed9ec2310aa79ec8e3f640d97128948cea8fe049",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3492,7 +3493,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "061cc98a659b727970b1679472b4a05cbd7d01f1071bb1ac9f7a901f886fe241",
+      "sourceDigest": "e56a86814c238ebc83201cac7db2d057ceefe51619715869354993138930af98",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3514,7 +3515,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3536,7 +3537,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3558,7 +3559,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3580,7 +3581,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3602,7 +3603,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "186893297dfbe46dae11ed769208a4310616c9c59bbcc32acf9608bb39943d3f",
+      "sourceDigest": "eb661c7a8d2d54e826a23b8da0dd6a277ab5952a9dcae4eff09e0888222f9397",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3624,7 +3625,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0b0ad6551e31bfc26f47a03bc8efb00d12b7cddbb2d990a01335ac0c869a8ed",
+      "sourceDigest": "186196f0de6e05c95f88913079af5d951997566a129f5be74c018ce8eaaaca60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3647,7 +3648,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7b1801f16a6392c82ec0f72f06e879c3e28c700207bafe4b1cfae236dfefc298",
+      "sourceDigest": "437c1f569e03edc01408ac2566d526c8eabc843ada9dd953053a41c5d19b53c9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     }
   ]

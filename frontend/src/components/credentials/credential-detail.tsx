@@ -1,9 +1,17 @@
 /**
- * One credential (/credentials/:id): the detail header every resource has
- * (back, logo, name, whether it works, "Check again"), then Overview (the
- * account, the key, never shown and replaceable in place, and who can use
- * it) and Used by. Delete sits at the bottom of Overview behind a one-line
- * confirm.
+ * One credential (/credentials/:id), laid out like a provider connection's
+ * page: the shared DetailHeader (back, logo, name, what it is, whether it
+ * works, "Check again"), Overview and Used by tabs, a titled card of
+ * one-liners (the account, "Key: ... Replace key", "Who can use it: ... ·
+ * Change") and, under it, the bordered remove box.
+ *
+ * Nothing here knows a particular service. The logo is the connector's
+ * brand mark, the account line is named by the connector's own form, and
+ * whether the server can check the key is the connector's validation kind
+ * (connectorCanCheck): a key that is only stored shows "Not checked" and no
+ * "Check again". A check's answer lands in the status label, with what it
+ * learned (health.detail) beside it and, when it failed, one line under
+ * the name.
  *
  * A key a single API, MCP server, channel or app keeps for itself has the
  * same page, without the check: it is changed where it is used.
@@ -11,20 +19,20 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
-import { ServiceIcon } from '@/components/connect/service-tiles'
+import { DANGER_BUTTON_CLASSES, DangerZone } from '@/components/ui/danger-zone'
+import { DetailBackLink, DetailHeader } from '@/components/layout/detail-header'
+import { FormSection } from '@/components/layout/form-page'
 import { StatusLabel } from '@/components/connect/status-label'
 import { WhoCanUse, WhoCanUseLine } from '@/components/connect/who-can-use'
 import { ConnectServiceForm, connectorIcon, useConnectOwners, useConnectors } from '@/components/connections/connect-flow'
-import { connectionCheck, connectionWho } from '@/components/connections/connection-status'
+import { NOT_CHECKED, connectionCheck, connectionWho, connectorCanCheck } from '@/components/connections/connection-status'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { credentialsApi } from '@/lib/api'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
@@ -34,7 +42,7 @@ import type { Connection, Connector } from '@/types/connections'
 import { storedRow, type CredentialUse, type StoredCredential } from './credential-rows'
 import { CONNECTIONS_QUERY_KEY, CREDENTIALS_PATH, CREDENTIALS_QUERY_KEY } from './paths'
 
-type CheckOutcome = { ok: boolean; message: string }
+const BACK = { to: CREDENTIALS_PATH, label: 'Credentials' }
 
 export function useConnections() {
   return useQuery({
@@ -46,36 +54,19 @@ export function useConnections() {
   })
 }
 
-/** The header every detail page opens with: back, icon, name, one line under it, status and actions. */
-function DetailHeader({ icon, name, subtitle, status, actions }: { icon: ReactNode; name: string; subtitle: ReactNode; status?: ReactNode; actions?: ReactNode }) {
-  const navigate = useNavigate()
-  return (
-    <>
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to={CREDENTIALS_PATH} className="hover:text-foreground">
-          Credentials
-        </Link>
-        <ChevronRight className="h-3 w-3" aria-hidden />
-        <span className="truncate text-foreground">{name}</span>
-      </nav>
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <Button variant="outline" size="sm" onClick={() => navigate(CREDENTIALS_PATH)} aria-label="Back to credentials">
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-          </Button>
-          <ServiceIcon size="lg">{icon}</ServiceIcon>
-          <div className="min-w-0">
-            <h1 className={cn(DETAIL_TITLE_CLASSES, 'truncate')}>{name}</h1>
-            <p className="text-muted-foreground">{subtitle}</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {status}
-          {actions}
-        </div>
-      </header>
-    </>
-  )
+/**
+ * What the account row is called: the title the connector's own form gives
+ * the field the account comes from ("API server URL"), else "Account".
+ */
+export function accountLabelTitle(connector: Pick<Connector, 'validation' | 'connect'> | null | undefined): string {
+  const field = connector?.validation?.accountLabelFrom
+  if (typeof field === 'string') {
+    for (const method of connector?.connect ?? []) {
+      const title = (method.schema?.properties?.[field] as { title?: unknown } | undefined)?.title
+      if (typeof title === 'string' && title.trim()) return title
+    }
+  }
+  return 'Account'
 }
 
 function UsedByList({ uses }: { uses: CredentialUse[] }) {
@@ -97,28 +88,42 @@ function UsedByList({ uses }: { uses: CredentialUse[] }) {
   )
 }
 
-function DeleteSection({ name, uses, pending, onDelete }: { name: string; uses: number; pending: boolean; onDelete: () => void }) {
+/** The bordered remove box a provider connection's page ends with: what goes, what it costs, the button. */
+function DeleteCredential({ name, uses, pending, onDelete }: { name: string; uses: number; pending: boolean; onDelete: () => void }) {
   const { confirm, dialog } = useConfirm()
+  const cost = uses > 0 ? `${pluralized(uses, 'thing')} still use${uses === 1 ? 's' : ''} it and will stop working.` : undefined
   return (
-    <section className="border-t pt-6">
-      <Button
-        variant="ghost"
-        className="text-destructive hover:text-destructive"
-        disabled={pending}
-        onClick={async () => {
-          const ok = await confirm({
-            title: `Delete ${name}?`,
-            description: uses > 0 ? `${pluralized(uses, 'thing')} still use${uses === 1 ? 's' : ''} it and will stop working.` : undefined,
-            confirmLabel: 'Delete',
-            destructive: true,
-          })
-          if (ok) onDelete()
-        }}
-      >
-        Delete credential
-      </Button>
+    <>
+      <DangerZone
+        title="Delete this credential"
+        description={cost ?? 'The key goes for good. Nothing uses it yet.'}
+        action={
+          <Button
+            variant="outline"
+            className={DANGER_BUTTON_CLASSES}
+            disabled={pending}
+            onClick={async () => {
+              const ok = await confirm({ title: `Delete ${name}?`, description: cost, confirmLabel: 'Delete', destructive: true })
+              if (ok) onDelete()
+            }}
+          >
+            Delete credential
+          </Button>
+        }
+      />
       {dialog}
-    </section>
+    </>
+  )
+}
+
+/** "Key: Stored encrypted. Replace key", the line a provider connection's Key and access section has. */
+function KeyLine({ action }: { action?: ReactNode }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-testid="credential-key">
+      <span className="text-muted-foreground">Key:</span>
+      <span>Stored encrypted. It is never shown again.</span>
+      {action}
+    </p>
   )
 }
 
@@ -133,21 +138,22 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const [replacing, setReplacing] = useState(false)
-  const [outcome, setOutcome] = useState<CheckOutcome | null>(null)
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: CONNECTIONS_QUERY_KEY })
     queryClient.invalidateQueries({ queryKey: CREDENTIALS_QUERY_KEY })
   }
+  // The answer is on the page at once, before the list is fetched again.
+  const showAnswer = (next: Connection | null | undefined) => {
+    if (next?.id) queryClient.setQueryData<Connection[]>(CONNECTIONS_QUERY_KEY, (rows) => rows?.map((r) => (r.id === next.id ? { ...r, ...next } : r)))
+    invalidate()
+  }
 
+  const canCheck = connectorCanCheck(connector)
   const check = useMutation({
     mutationFn: () => connectionsApi.validate(connection.id),
-    onSuccess: (result) => {
-      invalidate()
-      const next = connectionCheck(result ?? connection, connector)
-      setOutcome({ ok: next.state === 'ok', message: next.state === 'ok' ? `${next.label}.` : next.error || `${connection.name} needs attention.` })
-    },
-    onError: (error: unknown) => setOutcome({ ok: false, message: errorMessage(error, 'The check did not finish.') }),
+    onSuccess: showAnswer,
+    onError: (error: unknown) => notifications.error('Could not check', errorMessage(error, 'The check did not finish.')),
   })
 
   const remove = useMutation({
@@ -159,7 +165,6 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
     },
     onError: (error: unknown) => notifications.error('Could not delete', errorMessage(error, 'The credential was not deleted.')),
   })
-
 
   // Who can use it, changed here like a provider connection's. The key a
   // provider connection keeps for itself is changed on that connection.
@@ -175,97 +180,85 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
     },
     onError: (error: unknown) => notifications.error('Could not change who can use it', errorMessage(error, 'Nothing was changed.')),
   })
+
   const status = connectionCheck(connection, connector)
   const uses: CredentialUse[] = (connection.usedBy ?? []).map((u) => ({ label: u.name }))
   const service = connector?.displayName ?? connection.connectorDisplayName ?? connection.connectorKey
+  const detail = status.state === 'ok' ? connection.health?.detail : null
 
   return (
-    <div className="space-y-8" data-testid="credential-detail">
+    <div className="mx-auto max-w-5xl space-y-6" data-testid="credential-detail">
       <DetailHeader
+        back={BACK}
         icon={connectorIcon(connector ?? { key: connection.connectorKey, displayName: service })}
-        name={connection.name}
-        subtitle={connection.accountLabel ? `${service} · ${connection.accountLabel}` : service}
-        status={<StatusLabel check={status} testId="credential-status" />}
+        title={connection.name}
+        meta={[
+          <span key="service">{service}</span>,
+          <StatusLabel key="status" check={status} testId="credential-status" />,
+          detail ? <span key="detail" data-testid="credential-check-detail">{detail}</span> : null,
+        ]}
+        problem={status.state === 'failed' ? status.error || 'The last check failed.' : null}
+        problemTestId="credential-last-error"
         actions={
-          <Button variant="outline" size="sm" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
-            <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
-            {check.isPending ? 'Checking...' : 'Check again'}
-          </Button>
+          canCheck && (
+            <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
+              <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
+              {check.isPending ? 'Checking...' : 'Check again'}
+            </Button>
+          )
         }
       />
 
-      {status.error && !outcome && (
-        <p className="break-words rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" data-testid="credential-last-error">
-          {status.error}
-        </p>
-      )}
-      {outcome && (
-        <p
-          role="status"
-          data-testid="credential-check-result"
-          className={cn(
-            'break-words rounded-md border p-3 text-sm',
-            outcome.ok ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-destructive/30 bg-destructive/5 text-destructive',
-          )}
-        >
-          {outcome.message}
-        </p>
-      )}
-
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="used-by">Used by ({uses.length})</TabsTrigger>
         </TabsList>
-        <TabsContent value="overview" className="space-y-6">
-          <Card>
-            <CardContent className="space-y-5 pt-6">
-              {connection.accountLabel && (
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Account:</span> {connection.accountLabel}
-                </p>
-              )}
-              <div className="space-y-2">
-                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  <span className="text-muted-foreground">Key:</span>
-                  <span>Stored encrypted. It is never shown again.</span>
-                  {!replacing && connector && (
+        <TabsContent value="overview" className="space-y-6 pt-2">
+          <FormSection title="Connection">
+            {connection.accountLabel && (
+              <p className="text-sm [overflow-wrap:anywhere]" data-testid="credential-account">
+                <span className="text-muted-foreground">{accountLabelTitle(connector)}:</span> {connection.accountLabel}
+              </p>
+            )}
+            <div className="space-y-2">
+              <KeyLine
+                action={
+                  !replacing && connector ? (
                     <button type="button" className="text-primary hover:underline" onClick={() => setReplacing(true)}>
                       Replace key
                     </button>
-                  )}
-                </p>
-                {replacing && connector && (
-                  <div className="rounded-lg border p-3">
-                    <ConnectServiceForm
-                      connector={connector}
-                      rotateConnection={connection}
-                      onCancel={() => setReplacing(false)}
-                      onConnected={(rotated) => {
-                        setReplacing(false)
-                        invalidate()
-                        const next = connectionCheck(rotated, connector)
-                        setOutcome({ ok: next.state === 'ok', message: next.state === 'ok' ? `New key saved. ${next.label}.` : next.error || 'New key saved.' })
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-              <WhoCanUse
-                value={{ visibility: who, teamId: connection.teamId ?? null }}
-                onChange={(next) => {
-                  if (next.visibility === 'team' && !next.teamId) return
-                  share.mutate(next)
-                }}
-                disabled={share.isPending}
-                noun="this credential"
-                options={shareOptions}
+                  ) : undefined
+                }
               />
-            </CardContent>
-          </Card>
-          <DeleteSection name={connection.name} uses={uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
+              {replacing && connector && (
+                <div className="rounded-lg border p-3">
+                  <ConnectServiceForm
+                    connector={connector}
+                    rotateConnection={connection}
+                    onCancel={() => setReplacing(false)}
+                    onConnected={(rotated) => {
+                      setReplacing(false)
+                      showAnswer(rotated)
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            <WhoCanUse
+              value={{ visibility: who, teamId: connection.teamId ?? null }}
+              onChange={(next) => {
+                if (next.visibility === 'team' && !next.teamId) return
+                share.mutate(next)
+              }}
+              disabled={share.isPending}
+              noun="this credential"
+              options={shareOptions}
+            />
+          </FormSection>
+          <DeleteCredential name={connection.name} uses={uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
         </TabsContent>
-        <TabsContent value="used-by">
+        <TabsContent value="used-by" className="pt-2">
           <UsedByList uses={uses} />
         </TabsContent>
       </Tabs>
@@ -291,31 +284,34 @@ export function StoredCredentialDetail({ credential, onDeleted }: { credential: 
   })
 
   return (
-    <div className="space-y-8" data-testid="credential-detail">
-      <DetailHeader icon={connectorIcon({ key: 'other' })} name={credential.name} subtitle={row.service} />
-      <Tabs defaultValue="overview" className="space-y-4">
+    <div className="mx-auto max-w-5xl space-y-6" data-testid="credential-detail">
+      <DetailHeader
+        back={BACK}
+        icon={connectorIcon({ key: 'other' })}
+        title={credential.name}
+        meta={[<span key="service">{row.service}</span>, <StatusLabel key="status" check={NOT_CHECKED} testId="credential-status" />]}
+      />
+      <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="used-by">Used by ({row.uses.length})</TabsTrigger>
         </TabsList>
-        <TabsContent value="overview" className="space-y-6">
-          <Card>
-            <CardContent className="space-y-5 pt-6">
-              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <span className="text-muted-foreground">Key:</span>
-                <span>Stored encrypted. It is never shown again.</span>
-                {owner?.href && (
+        <TabsContent value="overview" className="space-y-6 pt-2">
+          <FormSection title="Key and access">
+            <KeyLine
+              action={
+                owner?.href ? (
                   <Link to={owner.href} className="text-primary hover:underline">
                     Change it where it is used
                   </Link>
-                )}
-              </p>
-              <WhoCanUseLine summary={row.who} />
-            </CardContent>
-          </Card>
-          <DeleteSection name={credential.name} uses={row.uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
+                ) : undefined
+              }
+            />
+            <WhoCanUseLine summary={row.who} />
+          </FormSection>
+          <DeleteCredential name={credential.name} uses={row.uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
         </TabsContent>
-        <TabsContent value="used-by">
+        <TabsContent value="used-by" className="pt-2">
           <UsedByList uses={row.uses} />
         </TabsContent>
       </Tabs>
@@ -350,17 +346,10 @@ export function CredentialDetailPage() {
     }
   }, [name])
 
-  const back = (
-    <Link to={CREDENTIALS_PATH} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-      Credentials
-    </Link>
-  )
-
   if (connectionsQuery.isError) {
     return (
-      <div className="space-y-4">
-        {back}
+      <div className="mx-auto max-w-5xl space-y-4">
+        <DetailBackLink {...BACK} />
         <QueryError error={connectionsQuery.error} onRetry={() => connectionsQuery.refetch()} title="Couldn't load this credential" />
       </div>
     )
@@ -375,8 +364,8 @@ export function CredentialDetailPage() {
   if (connection) return <CredentialDetail connection={connection} connector={connector} onDeleted={() => navigate(CREDENTIALS_PATH)} />
   if (storedQuery.data) return <StoredCredentialDetail credential={storedQuery.data} onDeleted={() => navigate(CREDENTIALS_PATH)} />
   return (
-    <div className="space-y-4">
-      {back}
+    <div className="mx-auto max-w-5xl space-y-4">
+      <DetailBackLink {...BACK} />
       <p className="text-muted-foreground">This credential is gone. It may have been deleted.</p>
     </div>
   )
