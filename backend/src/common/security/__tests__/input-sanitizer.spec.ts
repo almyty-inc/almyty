@@ -175,3 +175,32 @@ describe('Input Sanitizer', () => {
     });
   });
 });
+
+describe('sanitizeToolParameters: the command of a shell tool', () => {
+  // `npm test && bash run.sh` sent to runner.<name>.shell.exec was refused
+  // as a shell-command injection. The tool's declared executable inputs
+  // skip the command checks; nothing else changes.
+  const commands = ['npm test && bash scripts/check.sh', 'cd app && python manage.py migrate', 'git log --format=`%h` -1', 'ls | sh -c cat'];
+
+  it.each(commands)('lets the command %j through', (command) => {
+    const result = sanitizeToolParameters({ command, cwd: 'repo' }, { executableInputs: ['command'] });
+    expect(result.safe).toBe(true);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it.each(commands)('still flags %j in an input that is not executable', (command) => {
+    const result = sanitizeToolParameters({ body: command });
+    // The backtick check only warns; the others block.
+    expect(result.safe).toBe(command.includes('`'));
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('still checks the shell tool\'s other inputs, and the command for everything else', () => {
+    expect(sanitizeToolParameters({ command: 'ls', cwd: 'x; rm -rf /' }, { executableInputs: ['command'] }).safe).toBe(false);
+    expect(sanitizeToolParameters({ command: 'curl http://169.254.169.254/latest' }, { executableInputs: ['command'] }).safe).toBe(false);
+  });
+
+  it('only exempts the top-level input, not a nested value with the same name', () => {
+    expect(sanitizeToolParameters({ env: { command: 'a; rm -rf /' } }, { executableInputs: ['command'] }).safe).toBe(false);
+  });
+});
