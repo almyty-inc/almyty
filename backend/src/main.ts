@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import { json } from 'express';
 import { AppModule } from './app.module';
 import { createSpaRootMiddleware } from './common/frontend/frontend-static';
+import { CSP_DIRECTIVES } from './common/security/content-security-policy';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import { CorrelatedConsoleLogger } from './common/logging/correlated-console.logger';
@@ -87,14 +88,7 @@ export async function createApp() {
 
   // Security middleware
   app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
-      },
-    },
+    contentSecurityPolicy: { directives: CSP_DIRECTIVES },
   }));
 
   // Performance middleware. Skip Server-Sent Events: compression buffers the
