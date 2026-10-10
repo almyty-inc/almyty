@@ -2,6 +2,9 @@ import { test, expect } from './setup/test-hooks'
 import { AuthHelper } from './helpers/auth.helper'
 
 test.describe('Authentication - Registration', () => {
+  // The tests that submit the form need a captcha token. Against a real site
+  // key (staging, production) a headless browser never gets one, so those
+  // skip (AuthHelper.skipUnlessCaptchaAutoPasses); the rest run anywhere.
   test.beforeEach(async ({ page }) => {
     await page.goto('/auth/register')
   })
@@ -18,6 +21,7 @@ test.describe('Authentication - Registration', () => {
   })
 
   test('should successfully register a new user', async ({ page, authHelper, assertHelper }) => {
+    await AuthHelper.skipUnlessCaptchaAutoPasses(page)
     const testUser = AuthHelper.generateTestUser()
 
     // Fill registration form
@@ -82,6 +86,7 @@ test.describe('Authentication - Registration', () => {
   })
 
   test('should handle duplicate email', async ({ page, apiHelper }) => {
+    await AuthHelper.skipUnlessCaptchaAutoPasses(page)
     // First, create a user via API
     const existingUser = AuthHelper.generateTestUser('existing')
     await apiHelper.register(existingUser)
@@ -105,6 +110,7 @@ test.describe('Authentication - Registration', () => {
   })
 
   test('should handle special characters in password [BUG FIX TEST]', async ({ page, assertHelper }) => {
+    await AuthHelper.skipUnlessCaptchaAutoPasses(page)
     // Test for CLAUDE.md mentioned issue: "special character parsing issues"
     const testUser = AuthHelper.generateTestUser()
     const specialPassword = 'T3st!@#$%^&*()_+-=[]{}|;:,.<>?'
@@ -163,6 +169,7 @@ test.describe('Authentication - Registration', () => {
   })
 
   test('should handle network errors gracefully', async ({ page }) => {
+    await AuthHelper.skipUnlessCaptchaAutoPasses(page)
     const testUser = AuthHelper.generateTestUser()
 
     // Intercept and fail the registration request
