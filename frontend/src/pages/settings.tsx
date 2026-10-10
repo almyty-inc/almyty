@@ -184,7 +184,7 @@ export function SettingsPage() {
                 asChild
                 size="sm"
                 variant={p.key === settingsTab ? 'outline' : 'ghost'}
-                className={p.key === settingsTab ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground'}
+                className={p.key === settingsTab ? 'font-semibold shadow-sm' : 'text-muted-foreground'}
               >
                 <Link to={settingsPath(p.key)} aria-current={p.key === settingsTab ? 'page' : undefined}>{p.label}</Link>
               </Button>

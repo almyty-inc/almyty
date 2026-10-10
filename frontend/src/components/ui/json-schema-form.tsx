@@ -226,7 +226,7 @@ function SchemaField({ id, name, prop, required, value, error, mode, disabled, o
         disabled={disabled}
         aria-invalid={!!error}
         aria-describedby={describedBy}
-        className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-9 w-full rounded-lg border border-input bg-field px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <option value="">{required ? 'Select...' : 'Not set'}</option>
         {prop.enum.map((opt) => (

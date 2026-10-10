@@ -34,7 +34,7 @@ import type { ReviewEnvironment, ReviewRow } from '@/types/connections-governanc
 import { pluralized, formatDateTime } from '@/lib/utils'
 
 const SELECT_CLASS =
-  'flex h-9 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30'
+  'flex h-9 rounded-lg border border-input bg-field px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30'
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return 'Never'

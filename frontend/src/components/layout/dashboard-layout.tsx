@@ -170,7 +170,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // Show loading only while hydrating or not authenticated
   if (!hasHydrated || !isAuthenticated) {
     return (
-      <div className="h-screen flex items-center justify-center bg-muted">
+      <div className="h-screen flex items-center justify-center bg-muted dark:bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-foreground mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading...</p>
@@ -209,7 +209,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-muted">
+    <div className="h-screen flex overflow-hidden bg-muted dark:bg-background">
       {/* Skip to main content — keyboard users should be able to
        * bypass the 14-item sidebar on every page. Hidden visually
        * until it receives focus, then pops in at the top-left as
