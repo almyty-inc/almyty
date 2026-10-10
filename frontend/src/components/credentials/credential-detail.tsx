@@ -1,11 +1,12 @@
 /**
- * One credential (/credentials/:id), laid out like every detail page: the
- * shared DetailHeader (back, logo, name, what it is, whether it works,
- * "Check again"), Overview and Used by tabs, one details section (the
- * account, the key, who can use it) closed by its DangerZone.
+ * One credential (/credentials/:id), laid out like a provider connection's
+ * page: the shared DetailHeader (back, logo, name, what it is, whether it
+ * works, "Check again"), Overview and Used by tabs, a titled card of
+ * one-liners (the account, "Key: ... Replace key", "Who can use it: ... ·
+ * Change") and, under it, the bordered remove box.
  *
  * Nothing here knows a particular service. The logo is the connector's
- * brand mark, the account row is named by the connector's own form, and
+ * brand mark, the account line is named by the connector's own form, and
  * whether the server can check the key is the connector's validation kind
  * (connectorCanCheck): a key that is only stored shows "Not checked" and no
  * "Check again". A check's answer lands in the status label, with what it
@@ -15,7 +16,7 @@
  * A key a single API, MCP server, channel or app keeps for itself has the
  * same page, without the check: it is changed where it is used.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { RefreshCw } from 'lucide-react'
@@ -26,11 +27,10 @@ import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DANGER_BUTTON_CLASSES, DangerZone } from '@/components/ui/danger-zone'
-import { DetailItem, DetailList } from '@/components/ui/detail-list'
 import { DetailBackLink, DetailHeader } from '@/components/layout/detail-header'
 import { FormSection } from '@/components/layout/form-page'
 import { StatusLabel } from '@/components/connect/status-label'
-import { WhoCanUse } from '@/components/connect/who-can-use'
+import { WhoCanUse, WhoCanUseLine } from '@/components/connect/who-can-use'
 import { ConnectServiceForm, connectorIcon, useConnectOwners, useConnectors } from '@/components/connections/connect-flow'
 import { NOT_CHECKED, connectionCheck, connectionWho, connectorCanCheck } from '@/components/connections/connection-status'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
@@ -88,20 +88,18 @@ function UsedByList({ uses }: { uses: CredentialUse[] }) {
   )
 }
 
-/** The section's last row: delete, behind a one-line confirm. */
+/** The bordered remove box a provider connection's page ends with: what goes, what it costs, the button. */
 function DeleteCredential({ name, uses, pending, onDelete }: { name: string; uses: number; pending: boolean; onDelete: () => void }) {
   const { confirm, dialog } = useConfirm()
   const cost = uses > 0 ? `${pluralized(uses, 'thing')} still use${uses === 1 ? 's' : ''} it and will stop working.` : undefined
   return (
     <>
       <DangerZone
-        variant="inline"
         title="Delete this credential"
-        description={cost ?? 'Nothing uses it.'}
+        description={cost ?? 'The key goes for good. Nothing uses it yet.'}
         action={
           <Button
             variant="outline"
-            size="sm"
             className={DANGER_BUTTON_CLASSES}
             disabled={pending}
             onClick={async () => {
@@ -118,8 +116,15 @@ function DeleteCredential({ name, uses, pending, onDelete }: { name: string; use
   )
 }
 
-function KeyValue() {
-  return <span>Stored encrypted</span>
+/** "Key: Stored encrypted. Replace key", the line a provider connection's Key and access section has. */
+function KeyLine({ action }: { action?: ReactNode }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-testid="credential-key">
+      <span className="text-muted-foreground">Key:</span>
+      <span>Stored encrypted. It is never shown again.</span>
+      {action}
+    </p>
+  )
 }
 
 export interface CredentialDetailProps {
@@ -209,13 +214,15 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="used-by">Used by ({uses.length})</TabsTrigger>
         </TabsList>
-        <TabsContent value="overview" className="pt-2">
-          <FormSection>
-            <DetailList testId="credential-details">
-              {connection.accountLabel && <DetailItem label={accountLabelTitle(connector)} value={connection.accountLabel} testId="credential-account" />}
-              <DetailItem
-                label="Key"
-                value={<KeyValue />}
+        <TabsContent value="overview" className="space-y-6 pt-2">
+          <FormSection title="Connection">
+            {connection.accountLabel && (
+              <p className="text-sm [overflow-wrap:anywhere]" data-testid="credential-account">
+                <span className="text-muted-foreground">{accountLabelTitle(connector)}:</span> {connection.accountLabel}
+              </p>
+            )}
+            <div className="space-y-2">
+              <KeyLine
                 action={
                   !replacing && connector ? (
                     <button type="button" className="text-primary hover:underline" onClick={() => setReplacing(true)}>
@@ -223,41 +230,33 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
                     </button>
                   ) : undefined
                 }
-                testId="credential-key"
-              >
-                {replacing && connector && (
-                  <div className="rounded-lg border p-3">
-                    <ConnectServiceForm
-                      connector={connector}
-                      rotateConnection={connection}
-                      onCancel={() => setReplacing(false)}
-                      onConnected={(rotated) => {
-                        setReplacing(false)
-                        showAnswer(rotated)
-                      }}
-                    />
-                  </div>
-                )}
-              </DetailItem>
-              <DetailItem
-                label="Who can use it"
-                value={
-                  <WhoCanUse
-                    showLabel={false}
-                    value={{ visibility: who, teamId: connection.teamId ?? null }}
-                    onChange={(next) => {
-                      if (next.visibility === 'team' && !next.teamId) return
-                      share.mutate(next)
-                    }}
-                    disabled={share.isPending}
-                    noun="this credential"
-                    options={shareOptions}
-                  />
-                }
               />
-            </DetailList>
-            <DeleteCredential name={connection.name} uses={uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
+              {replacing && connector && (
+                <div className="rounded-lg border p-3">
+                  <ConnectServiceForm
+                    connector={connector}
+                    rotateConnection={connection}
+                    onCancel={() => setReplacing(false)}
+                    onConnected={(rotated) => {
+                      setReplacing(false)
+                      showAnswer(rotated)
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            <WhoCanUse
+              value={{ visibility: who, teamId: connection.teamId ?? null }}
+              onChange={(next) => {
+                if (next.visibility === 'team' && !next.teamId) return
+                share.mutate(next)
+              }}
+              disabled={share.isPending}
+              noun="this credential"
+              options={shareOptions}
+            />
           </FormSection>
+          <DeleteCredential name={connection.name} uses={uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
         </TabsContent>
         <TabsContent value="used-by" className="pt-2">
           <UsedByList uses={uses} />
@@ -297,25 +296,20 @@ export function StoredCredentialDetail({ credential, onDeleted }: { credential: 
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="used-by">Used by ({row.uses.length})</TabsTrigger>
         </TabsList>
-        <TabsContent value="overview" className="pt-2">
-          <FormSection>
-            <DetailList testId="credential-details">
-              <DetailItem
-                label="Key"
-                value={<KeyValue />}
-                action={
-                  owner?.href ? (
-                    <Link to={owner.href} className="text-primary hover:underline">
-                      Change it where it is used
-                    </Link>
-                  ) : undefined
-                }
-                testId="credential-key"
-              />
-              <DetailItem label="Who can use it" value={<span data-testid="who-can-use">{row.who}</span>} />
-            </DetailList>
-            <DeleteCredential name={credential.name} uses={row.uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
+        <TabsContent value="overview" className="space-y-6 pt-2">
+          <FormSection title="Key and access">
+            <KeyLine
+              action={
+                owner?.href ? (
+                  <Link to={owner.href} className="text-primary hover:underline">
+                    Change it where it is used
+                  </Link>
+                ) : undefined
+              }
+            />
+            <WhoCanUseLine summary={row.who} />
           </FormSection>
+          <DeleteCredential name={credential.name} uses={row.uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
         </TabsContent>
         <TabsContent value="used-by" className="pt-2">
           <UsedByList uses={row.uses} />

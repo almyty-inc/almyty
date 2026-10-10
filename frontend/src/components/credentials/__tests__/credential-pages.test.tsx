@@ -313,7 +313,7 @@ describe('/credentials/:id', () => {
     expect(within(header).getByText('Kubernetes cluster')).toBeInTheDocument()
     expect(within(header).queryByText(/k8s\.example\.com/)).not.toBeInTheDocument()
     expect(screen.getAllByText('https://k8s.example.com')).toHaveLength(1)
-    expect(within(screen.getByTestId('credential-account')).getByText('API server URL')).toBeInTheDocument()
+    expect(screen.getByTestId('credential-account')).toHaveTextContent('API server URL: https://k8s.example.com')
     expect(within(header).getByTestId('credential-status')).toHaveTextContent('Works')
     expect(within(header).getByTestId('credential-check-detail')).toHaveTextContent('Kubernetes v1.31.2')
     expect(header.querySelector('[data-brand="kubernetes"]')).not.toBeNull()
@@ -321,12 +321,17 @@ describe('/credentials/:id', () => {
     expect(within(header).getByRole('button', { name: 'Check again' })).toBeInTheDocument()
   })
 
-  it('keeps delete at the bottom of the details section', async () => {
+  it('lays out like a provider connection: a titled card of one-liners, then the remove box under it', async () => {
     at()
-    const details = await screen.findByTestId('credential-details')
+    const card = (await screen.findByRole('heading', { name: 'Connection' })).closest('section')!
+    expect(within(card).getByTestId('credential-account')).toHaveTextContent('Account: octocat')
+    expect(within(card).getByTestId('credential-key')).toHaveTextContent('Key:Stored encrypted. It is never shown again.Replace key')
+    expect(within(card).getByTestId('who-can-use')).toHaveTextContent('Who can use it: Everyone · Change')
     const danger = screen.getByTestId('danger-zone')
-    expect(danger.parentElement).toContainElement(details)
-    expect(danger.parentElement!.lastElementChild).toBe(danger)
+    expect(card).not.toContainElement(danger)
+    expect(card.nextElementSibling).toBe(danger)
+    expect(danger).toHaveClass('rounded-xl', 'border')
+    expect(within(danger).getByRole('heading', { name: 'Delete this credential' })).toBeInTheDocument()
     expect(within(danger).getByRole('button', { name: 'Delete credential' })).toBeInTheDocument()
   })
 

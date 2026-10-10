@@ -1,13 +1,12 @@
 /**
  * The shared detail-page pieces: the header (back, logo, name, facts,
- * actions, one problem line), the details list and the danger zone.
+ * actions, one problem line) and the bordered remove box.
  */
 import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 import { DetailHeader } from '@/components/layout/detail-header'
-import { DetailItem, DetailList } from '@/components/ui/detail-list'
 import { DangerZone } from '@/components/ui/danger-zone'
 
 const inRouter = (ui: React.ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>)
@@ -42,21 +41,9 @@ describe('DetailHeader', () => {
   })
 })
 
-describe('DetailList', () => {
-  it('pairs each label with its value and puts the action after the value', () => {
-    render(
-      <DetailList>
-        <DetailItem label="Key" value="Stored encrypted" action={<button type="button">Replace key</button>} testId="row" />
-      </DetailList>,
-    )
-    expect(screen.getByRole('term')).toHaveTextContent('Key')
-    expect(screen.getByRole('definition')).toHaveTextContent('Stored encrypted · Replace key')
-  })
-})
-
 describe('DangerZone', () => {
   it('says what goes and holds the one destructive button', () => {
-    render(<DangerZone title="Delete this credential" description="Nothing uses it." action={<button type="button">Delete credential</button>} variant="inline" />)
+    render(<DangerZone title="Delete this credential" description="Nothing uses it." action={<button type="button">Delete credential</button>} />)
     const zone = screen.getByTestId('danger-zone')
     expect(within(zone).getByRole('heading', { name: 'Delete this credential' })).toBeInTheDocument()
     expect(zone).toHaveTextContent('Nothing uses it.')
