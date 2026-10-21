@@ -7,6 +7,7 @@ import {
   REDIRECT_METHODS,
   VALIDATION_KINDS,
 } from './connector.types';
+import { PemCertificateError, normalizePemCertificates } from '../../common/security/pem-certificate';
 
 /**
  * The small JSON-schema subset ConnectMethod forms use: flat objects of
@@ -65,6 +66,28 @@ export function splitSecrets(values: Record<string, unknown>, schema: JsonSchema
     else plain[k] = v;
   }
   return { secrets, plain };
+}
+
+/**
+ * Values with every `format: 'pem'` string rewritten to canonical PEM, so
+ * what is stored is what TLS can read even when the newlines were lost on
+ * the way in. A value that is not a certificate becomes a violation.
+ */
+export function normalizeFormattedFields(values: Record<string, unknown>, schema: JsonSchemaObject | undefined): { values: Record<string, unknown>; errors: string[] } {
+  if (!schema) return { values, errors: [] };
+  const out: Record<string, unknown> = { ...values };
+  const errors: string[] = [];
+  for (const [key, prop] of Object.entries(schema.properties)) {
+    const v = out[key];
+    if (prop.format !== 'pem' || typeof v !== 'string' || v.trim() === '') continue;
+    try {
+      out[key] = normalizePemCertificates(v, prop.title ?? key);
+    } catch (e) {
+      if (!(e instanceof PemCertificateError)) throw e;
+      errors.push(`${key}: ${e.message}`);
+    }
+  }
+  return { values: out, errors };
 }
 
 /** `{{field}}` substitution from non-secret values; unknown fields become empty strings. */

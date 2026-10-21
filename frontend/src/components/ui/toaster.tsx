@@ -32,7 +32,7 @@ const toastVariants = cva(
   {
     variants: {
       variant: {
-        default: "border bg-background text-foreground",
+        default: "border bg-card text-card-foreground",
         destructive:
           "destructive border-destructive bg-destructive text-destructive-foreground",
         // Each tint carries both halves. Light-only tints (bg-green-50

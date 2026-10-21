@@ -123,7 +123,7 @@ export function StartModelForm({ adapter, credentialId, onSubmit, onCancel, subm
                 {regions.length > 0 ? (
                   <select
                     id="start-model-region"
-                    className="mt-1 flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                    className="mt-1 flex h-9 w-full rounded-lg border border-input bg-field px-3 text-sm"
                     value={desired.region}
                     onChange={(e) => set('region', e.target.value)}
                   >

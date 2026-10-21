@@ -97,7 +97,7 @@ export function OverviewTab() {
             icon={AlertTriangle}
             label="Errors (24h)"
             value={formatNumber(overview.last24h?.errors || 0)}
-            className={overview.last24h?.errors > 0 ? 'border-red-200 bg-red-50/50' : ''}
+            className={overview.last24h?.errors > 0 ? 'border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/30' : ''}
           />
           <StatCard
             icon={MessageSquare}

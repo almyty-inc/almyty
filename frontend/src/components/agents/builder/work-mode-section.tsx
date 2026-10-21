@@ -264,7 +264,7 @@ function SlotRow({
               aria-checked={role.kind === kind}
               className={cn(
                 'rounded px-2 py-1 text-xs transition-colors',
-                role.kind === kind ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground',
+                role.kind === kind ? 'bg-background dark:bg-input shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground',
               )}
               onClick={() => changeKind(kind)}
             >

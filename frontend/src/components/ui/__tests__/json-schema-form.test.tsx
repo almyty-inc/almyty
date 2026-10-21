@@ -125,3 +125,35 @@ describe('JsonSchemaForm', () => {
     expect(screen.getByText(/needs no configuration/)).toBeInTheDocument()
   })
 })
+
+describe('multi-line fields', () => {
+  const multi: JsonSchemaObject = {
+    type: 'object',
+    properties: {
+      caCert: { type: 'string', title: 'CA certificate', format: 'pem' },
+      notes: { type: 'string', title: 'Notes', 'x-multiline': true },
+      name: { type: 'string', title: 'Name' },
+    },
+  }
+  const pem = '-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUQ\nZm9vYmFy\n-----END CERTIFICATE-----\n'
+
+  it('renders format pem and x-multiline as a textarea, other strings as an input', () => {
+    render(<JsonSchemaForm schema={multi} value={{}} onChange={() => {}} />)
+    expect(screen.getByLabelText('CA certificate').tagName).toBe('TEXTAREA')
+    expect(screen.getByLabelText('Notes').tagName).toBe('TEXTAREA')
+    expect(screen.getByLabelText('Name').tagName).toBe('INPUT')
+  })
+
+  it('submits a pasted multi-line value with its newlines', () => {
+    const onChange = vi.fn()
+    function Multi() {
+      const [value, setValue] = useState<SchemaFormValues>({})
+      return <JsonSchemaForm schema={multi} value={value} onChange={(next) => { setValue(next); onChange(next) }} />
+    }
+    render(<Multi />)
+    fireEvent.change(screen.getByLabelText('CA certificate'), { target: { value: pem } })
+    expect(onChange).toHaveBeenLastCalledWith({ caCert: pem })
+    expect((screen.getByLabelText('CA certificate') as HTMLTextAreaElement).value).toBe(pem)
+    expect(validateSchemaValues(multi, { caCert: pem }).value).toEqual({ caCert: pem })
+  })
+})

@@ -35,7 +35,7 @@ import { GrantsService } from './grants/grants.service';
 import { connectionVisibleTo, GrantPrincipal } from './grants/grant-check';
 import { RotationService, RotateOutcome } from './rotation/rotation.service';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
-import { interpolate, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
+import { interpolate, normalizeFormattedFields, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
 import {
   ConnectMethod,
   ConnectionOwner,
@@ -309,6 +309,7 @@ export class ConnectionsService {
     row.healthStatus = result.status;
     row.healthCheckedAt = new Date();
     row.healthError = result.ok ? null : result.error ?? 'validation failed';
+    row.metadata = { ...(row.metadata ?? {}), healthDetail: result.ok ? result.detail ?? null : null };
     if (result.accountLabel) row.accountLabel = result.accountLabel;
     if (result.scopesGranted) row.scopesGranted = result.scopesGranted;
     const saved = await this.credentials.save(row);
@@ -601,7 +602,7 @@ export class ConnectionsService {
       teamId: row.visibility === 'team' ? row.teamId ?? null : null,
       method: (row.metadata?.connectMethod as ConnectMethodType | undefined) ?? null,
       accountLabel: row.accountLabel ?? null,
-      health: { status: row.healthStatus ?? 'unknown', checkedAt: row.healthCheckedAt ?? null, error: row.healthError ?? null },
+      health: { status: row.healthStatus ?? 'unknown', checkedAt: row.healthCheckedAt ?? null, error: row.healthError ?? null, detail: typeof row.metadata?.healthDetail === 'string' ? row.metadata.healthDetail : null },
       scopesGranted: row.scopesGranted ?? [],
       expiresAt: row.expiresAt ?? null,
       createdAt: row.createdAt,
@@ -660,9 +661,13 @@ export class ConnectionsService {
   }
 
   private checkedInput(method: ConnectMethod, input: Record<string, unknown> | undefined): Record<string, unknown> {
-    const values = input ?? {};
-    const errors = schemaViolations(values, method.schema);
+    const errors = schemaViolations(input ?? {}, method.schema);
+    // Certificate fields are stored canonical: a PEM pasted into one line
+    // still verifies, and text that is no certificate is refused here.
+    const normalized = normalizeFormattedFields(input ?? {}, method.schema);
+    errors.push(...normalized.errors);
     if (errors.length) throw new BadRequestException({ code: 'CONNECT_INPUT_INVALID', message: errors.join('; '), errors });
+    const values = normalized.values;
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(values)) if (v !== undefined && v !== null && v !== '') out[k] = v;
     for (const [k, p] of Object.entries(method.schema?.properties ?? {})) if (out[k] === undefined && p.default !== undefined) out[k] = p.default;
@@ -1006,7 +1011,7 @@ export class ConnectionsService {
     row.healthError = result.ok ? null : result.error ?? 'validation failed';
     row.scopesGranted = result.scopesGranted ?? args.scopesGranted ?? row.scopesGranted ?? [];
     if (args.expiresAt !== undefined) row.expiresAt = args.expiresAt as any;
-    row.metadata = { ...(row.metadata ?? {}), connectMethod: method.type, connectorKind: connector.kind };
+    row.metadata = { ...(row.metadata ?? {}), connectMethod: method.type, connectorKind: connector.kind, healthDetail: result.ok ? result.detail ?? null : null };
     if (method.type === 'api_key' && row.type === CredentialType.API_KEY) {
       row.keyName = row.keyName ?? 'Authorization';
       row.keyLocation = row.keyLocation ?? 'header';

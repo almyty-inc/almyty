@@ -24,6 +24,9 @@
     --input: 240 5% 84%;
     --ring: 262 83% 58%;
     --radius: 0.5rem;
+    /* Fill of inputs, selects and outline buttons. */
+    --field: 0 0% 100%;
+    --field-hover: 240 5% 96%;
   }
 
   .dark {
@@ -46,6 +49,11 @@
     --border: 240 5% 17%;
     --input: 240 4% 26%;
     --ring: 262 83% 66%;
+    /* Inputs and outline buttons sit on the page (zinc-950) and on cards
+       (zinc-900). A translucent zinc-700 reads as a raised field on both;
+       an opaque --background made them black holes on a card. */
+    --field: 240 4% 26% / 0.35;
+    --field-hover: 240 4% 26% / 0.7;
   }
 }
 
