@@ -21,6 +21,7 @@ import {
 } from '../../common/authorization/execution-access.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { canAcceptWork } from '../runner/runner-state';
+import { type MachineProblem, describeMachineError, machineProblem, redactSecrets } from '../runner/hosted-dispatch';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { HostedRunnerSettingsService } from './hosted-runner-settings';
 import { WorkspaceLeaseService } from './workspace-lease.service';
@@ -65,12 +66,36 @@ export type HostedTarget =
   | { kind: 'waking'; workspaceId: string; hostedRunnerId: string; retryAfterMs: number; message: string }
   | { kind: 'busy'; workspaceId: string; hostedRunnerId: string; retryAfterMs: number; message: string };
 
-/** A call to an environment that cannot be served: say why, with the runner-call error code. */
+/**
+ * A call to an environment that cannot be served: say why, with the
+ * runner-call error code. `machine` is set when the machine itself could
+ * not start (failed, or not up within the wake budget), with its raw error.
+ */
 export class HostedDispatchError extends Error {
-  constructor(readonly code: 'workspace_unavailable' | 'workspace_required' | 'runner_not_found' | 'capacity_exhausted', message: string) {
+  constructor(
+    readonly code: 'workspace_unavailable' | 'workspace_required' | 'runner_not_found' | 'capacity_exhausted',
+    message: string,
+    readonly machine?: { failed: true; error: string | null },
+  ) {
     super(message);
     this.name = 'HostedDispatchError';
   }
+}
+
+/**
+ * Whether a machine is failing rather than starting: it failed, or a wake
+ * has run past the budget with an error on record. What the environment
+ * pages show as failed even while the reconcile loop keeps trying.
+ */
+export function machineFailing(
+  hr: Pick<HostedRunner, 'state' | 'lastError'> & { desired?: Pick<HostedRunnerDesired, 'replicas' | 'wakeRequestedAt'> | null },
+  budgetSeconds: number,
+  now = new Date(),
+): boolean {
+  if (hr.state === 'failed') return true;
+  if (!hr.lastError || hr.state === 'ready' || hr.desired?.replicas !== 1) return false;
+  const since = hr.desired.wakeRequestedAt ? Date.parse(hr.desired.wakeRequestedAt) : NaN;
+  return Number.isFinite(since) && now.getTime() - since > budgetSeconds * 1000;
 }
 
 /**
@@ -165,13 +190,20 @@ export class HostedRunnersService {
       };
     }
     if (hostedRunner.state === 'failed') {
-      throw new HostedDispatchError('workspace_unavailable', `The machine for this environment failed to start: ${hostedRunner.lastError ?? 'see the environment page'}`);
+      const error = hostedRunner.lastError ?? null;
+      throw new HostedDispatchError('workspace_unavailable', `The machine for this environment failed to start: ${describeMachineError(error)}`, { failed: true, error });
     }
     const woken = await this.ensureAwake(hostedRunner, now);
     const since = woken.desired.wakeRequestedAt ? new Date(woken.desired.wakeRequestedAt).getTime() : now.getTime();
     const budgetMs = this.settings.current.wake.budgetSeconds * 1000;
     if (now.getTime() - since > budgetMs) {
-      throw new HostedDispatchError('workspace_unavailable', `The machine for this environment did not start within ${this.settings.current.wake.budgetSeconds} seconds`);
+      const error = hostedRunner.lastError ?? null;
+      const why = error ? `: ${describeMachineError(error)}` : '';
+      throw new HostedDispatchError(
+        'workspace_unavailable',
+        `The machine for this environment did not start within ${this.settings.current.wake.budgetSeconds} seconds${why}`,
+        { failed: true, error },
+      );
     }
     return {
       kind: 'waking',
@@ -664,7 +696,7 @@ export class HostedRunnersService {
   }
 
   /** The persistent workspaces of an environment the caller may see: their own; all of them for an org admin. */
-  async listWorkspaces(environmentId: string, userId: string, organizationId: string): Promise<Array<Workspace & { machine: (Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> & { desired: { replicas: number } }) | null }>> {
+  async listWorkspaces(environmentId: string, userId: string, organizationId: string): Promise<Array<Workspace & { machine: ReturnType<HostedRunnersService['machineView']> | null }>> {
     await this.assertReadableEnvironment(environmentId, userId, organizationId);
     const role = await this.accessPolicy.getOrgRole(userId, organizationId);
     const admin = role === 'owner' || role === 'admin';
@@ -678,8 +710,33 @@ export class HostedRunnersService {
     return rows.map((w) => {
       const m = machines.find((h) => h.workspaceId === w.id);
       // desired.replicas says whether anything asked for the pod (a fresh machine is pending, not waking).
-      return Object.assign(w, { machine: m ? { id: m.id, state: m.state, desired: { replicas: m.desired?.replicas ?? 0 }, lastActiveAt: m.lastActiveAt, lastError: m.lastError } : null });
+      return Object.assign(w, { machine: m ? this.machineView(m) : null });
     });
+  }
+
+  /**
+   * A machine as the environment pages see it: its state, whether anything
+   * asked for the pod, its last error with secrets masked, whether it is
+   * failing (failed, or past the wake budget with an error on record), and
+   * the problem to show -- a sentence and the masked error -- when it has
+   * one: it failed or is failing, or it is starting with an error on
+   * record. A running or parked machine's old error is history.
+   */
+  machineView(
+    m: Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> & { desired?: HostedRunnerDesired | null },
+    now = new Date(),
+  ): Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> & { desired: { replicas: number }; failing: boolean; problem: MachineProblem | null } {
+    const failing = machineFailing(m, this.settings.current.wake.budgetSeconds, now);
+    const starting = m.state === 'pending' || m.state === 'provisioning';
+    return {
+      id: m.id,
+      state: m.state,
+      desired: { replicas: m.desired?.replicas ?? 0 },
+      lastActiveAt: m.lastActiveAt,
+      lastError: m.lastError ? redactSecrets(m.lastError) : null,
+      failing,
+      problem: failing || (starting && m.lastError) ? machineProblem(m.lastError) : null,
+    };
   }
 
   refuseWhenDisabled(): void {

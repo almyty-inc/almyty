@@ -37,6 +37,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
+import { executableInputs } from './tool-executable-inputs';
 import { ToolApprovalGateService, hitDetail } from './tool-approval-gate.service';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
 import { decideToolCaller } from '../../common/security/gateway-tool-permissions';
@@ -62,7 +63,7 @@ import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
 import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 import { isServableGatewayTool } from '../gateways/gateway-servable';
-import { HOSTED_DISPATCH, type HostedDispatch, WORKSPACE_BUSY, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
+import { HOSTED_DISPATCH, type HostedDispatch, MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -392,8 +393,11 @@ export class ToolExecutorService {
       }
 
       // Parameter sanitization — catches prototype pollution / NoSQL
-      // operator injection / obvious script payloads.
-      const sanitization = sanitizeToolParameters(parameters);
+      // operator injection / obvious script payloads. A shell tool's
+      // command is exempt from the command-injection checks here and in
+      // the security scanner below (tool-executable-inputs.ts).
+      const execInputs = executableInputs(tool);
+      const sanitization = sanitizeToolParameters(parameters, { executableInputs: execInputs });
       if (!sanitization.safe) {
         this.logger.warn(
           `Blocked dangerous parameters for tool ${tool.name}: ${sanitization.warnings.join('; ')}`,
@@ -429,7 +433,7 @@ export class ToolExecutorService {
             timestamp: new Date().toISOString(),
             plugin: { id: '', name: '', version: '' },
             execution: { attempt: 1, timeout: 0, startTime },
-            tool: { id: tool.id, name: tool.name },
+            tool: { id: tool.id, name: tool.name, executableInputs: execInputs },
           },
         });
         const halted = hooked.metadata.halted as
@@ -908,7 +912,19 @@ export class ToolExecutorService {
             signal: options.signal,
           });
         } catch (err: any) {
-          return this.runnerFailure(err?.code ?? 'workspace_unavailable', err?.message ?? String(err), startTime);
+          const failure = this.runnerFailure(err?.code ?? 'workspace_unavailable', err?.message ?? String(err), startTime);
+          // The machine itself could not start: the run fails on it rather
+          // than letting the model answer as if the call ran.
+          if (err?.machine?.failed) {
+            // The sentence and masked detail every caller shows: a run, the UI, MCP.
+            failure.metadata = {
+              ...failure.metadata,
+              [MACHINE_FAILED]: true,
+              machineError: err.machine.error ?? null,
+              machineProblem: machineProblem(err.machine.error ?? null),
+            };
+          }
+          return failure;
         }
         if (target.kind === 'waking' || target.kind === 'busy') {
           const code = target.kind === 'waking' ? WORKSPACE_WAKING : WORKSPACE_BUSY;

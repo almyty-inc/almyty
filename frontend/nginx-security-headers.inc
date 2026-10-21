@@ -22,4 +22,12 @@ add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 # script-src + frame-src on challenges.cloudflare.com; hCaptcha needs
 # script/frame/style/connect-src on hcaptcha.com and *.hcaptcha.com.
 # frame-src keeps 'self', the default-src fallback it had before.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://hcaptcha.com https://*.hcaptcha.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://*.almyty.com https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://hcaptcha.com https://*.hcaptcha.com; frame-src 'self' https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self';" always;
+# API: the SPA calls the API it was built against, and the chat widget
+# preview frames a page from it (/gateways/:id/widget-preview). Both sources
+# are nginx variables that docker-entrypoint.sh derives from
+# ALMYTY_API_BASE_URL when the container starts (/tmp/almyty-csp.conf, read
+# by nginx.conf), so an image built for another domain allows that domain:
+#   $almyty_api_connect_src  the API origin, or https://*.almyty.com when the
+#                            API is an almyty.com host; empty for same-origin
+#   $almyty_api_frame_src    the API origin exactly; empty for same-origin
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://hcaptcha.com https://*.hcaptcha.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' $almyty_api_connect_src https://*.ingest.de.sentry.io https://*.ingest.sentry.io https://hcaptcha.com https://*.hcaptcha.com; frame-src 'self' $almyty_api_frame_src https://challenges.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com; frame-ancestors 'self'; object-src 'none'; base-uri 'self';" always;

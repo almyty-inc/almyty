@@ -34,19 +34,38 @@ const SCRIPT_SRC: Record<Provider, string> = {
   hcaptcha: 'https://js.hcaptcha.com/1/api.js?render=explicit',
 }
 
+/**
+ * One load per provider script, shared by every caller. Each caller waits
+ * for the script itself, not just for its <script> tag: React's StrictMode
+ * mounts the widget twice in dev, and the second mount used to find the tag
+ * the first had added, resolve at once, see no global yet and give up, so
+ * the widget never rendered and sign-up could not be submitted.
+ */
+const scriptLoads = new Map<Provider, Promise<void>>()
+
 function loadScript(provider: Provider): Promise<void> {
+  const pending = scriptLoads.get(provider)
+  if (pending) return pending
   const src = SCRIPT_SRC[provider]
-  const existing = document.querySelector(`script[src="${src}"]`)
-  if (existing) return Promise.resolve()
-  return new Promise((resolve, reject) => {
+  const load = new Promise<void>((resolve, reject) => {
+    // A tag already on the page (put there by something else) has loaded or
+    // is loading; the render below polls for the global either way.
+    if (document.querySelector(`script[src="${src}"]`)) return resolve()
     const s = document.createElement('script')
     s.src = src
     s.async = true
     s.defer = true
     s.onload = () => resolve()
-    s.onerror = () => reject(new Error(`Failed to load ${provider} script`))
+    s.onerror = () => {
+      // Let a later mount try again rather than inherit the failure.
+      scriptLoads.delete(provider)
+      s.remove()
+      reject(new Error(`Failed to load ${provider} script`))
+    }
     document.head.appendChild(s)
   })
+  scriptLoads.set(provider, load)
+  return load
 }
 
 interface CaptchaWidgetProps {
@@ -61,23 +80,22 @@ export function CaptchaWidget({ onToken }: CaptchaWidgetProps) {
   React.useEffect(() => {
     if (!resolved || !containerRef.current) return
     let cancelled = false
+    let widgetId: string | undefined
     const { provider, siteKey } = resolved
+    const globalName = provider === 'turnstile' ? 'turnstile' : 'hcaptcha'
 
     loadScript(provider)
       .then(() => {
-        if (cancelled || !containerRef.current) return
-        // Both providers expose a global with a compatible render() signature.
-        const api = (window as any)[provider === 'turnstile' ? 'turnstile' : 'hcaptcha']
-        if (!api) return
-        // Poll briefly until the API is ready (script onload can fire slightly
-        // before the global is attached on some builds).
+        // Poll briefly until the API is ready: script onload can fire before
+        // the global is attached (Turnstile's api.js loads a second script).
         const tryRender = (attempt = 0) => {
-          const ready = (window as any)[provider === 'turnstile' ? 'turnstile' : 'hcaptcha']
-          if (!ready?.render) {
-            if (attempt < 20) setTimeout(() => tryRender(attempt + 1), 100)
+          if (cancelled || !containerRef.current) return
+          const api = (window as any)[globalName]
+          if (!api?.render) {
+            if (attempt < 50) setTimeout(() => tryRender(attempt + 1), 100)
             return
           }
-          ready.render(containerRef.current, {
+          widgetId = api.render(containerRef.current, {
             sitekey: siteKey,
             callback: (token: string) => onToken(token),
             'expired-callback': () => onToken(''),
@@ -93,6 +111,13 @@ export function CaptchaWidget({ onToken }: CaptchaWidgetProps) {
 
     return () => {
       cancelled = true
+      if (widgetId !== undefined) {
+        try {
+          ;(window as any)[globalName]?.remove?.(widgetId)
+        } catch {
+          // The provider already tore the widget down.
+        }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

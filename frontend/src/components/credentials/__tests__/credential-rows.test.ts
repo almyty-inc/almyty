@@ -43,9 +43,21 @@ describe('credentialRows', () => {
     expect(Object.fromEntries(rows.map((r) => [r.id, r.who]))).toEqual({ org: 'Everyone', team: 'One team', private: 'Only you' })
   })
 
-  it('says "Saved" for a key nobody can check, as the credential page does', () => {
+  it('says "Not checked" for a key nobody can check, as the credential page does', () => {
     const [row] = credentialRows([connection({ connectorKey: 'other' })], [], [{ key: 'other', kind: 'tool_source', displayName: 'Other service', connect: [], validation: { kind: 'format' } }])
-    expect(row.check).toMatchObject({ state: 'ok', label: 'Saved' })
+    expect(row.check).toEqual({ state: 'unchecked', label: 'Not checked' })
+  })
+
+  it('says "Works" for a key the server asked the service about, whatever the kind', () => {
+    for (const kind of ['http', 'kubernetes', 'mcp_initialize'] as const) {
+      const [row] = credentialRows([connection({ connectorKey: 'svc' })], [], [{ key: 'svc', kind: 'cloud', displayName: 'Svc', connect: [], validation: { kind } }])
+      expect(row.check).toMatchObject({ state: 'ok', label: 'Works' })
+    }
+  })
+
+  it('says "Not checked" for a key a single API keeps', () => {
+    const rows = credentialRows([], [{ id: 'k', name: 'Petstore key', type: 'api_key', connectorKey: null, metadata: { managedBy: { kind: 'api', id: 'a' } } }])
+    expect(rows[0].check).toEqual({ state: 'unchecked', label: 'Not checked' })
   })
 
   it('keeps someone else\'s private credential hidden when only the stored list has it', () => {

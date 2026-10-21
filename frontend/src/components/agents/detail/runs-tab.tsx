@@ -33,6 +33,8 @@ import { PromoteRunSection } from './promote-run-section'
 import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
 import { DeliveryNote } from './schedule-card'
+import { MachineProblem } from '@/components/runners/machine-problem'
+import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
 
 interface RunsTabProps {
   runs: AgentRun[]
@@ -43,6 +45,13 @@ interface RunsTabProps {
 /** Whether any of the run's calls went through routing, so there is a route to show. */
 export function runRouted(run: Pick<AgentRun, 'steps'>): boolean {
   return (run.steps ?? []).some((s) => !!(s.output as any)?.routing)
+}
+
+/** A tool step whose hosted machine could not start: the backend's sentence and the masked raw error. */
+export function stepMachineError(step: { output?: unknown }): MachineProblemInfo | null {
+  const m = (step.output as any)?.machineError
+  if (!m || typeof m.sentence !== 'string') return null
+  return { sentence: m.sentence, detail: typeof m.detail === 'string' ? m.detail : null }
 }
 
 export function RunsTab({ runs, agentId }: RunsTabProps) {
@@ -168,8 +177,9 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                     if (step.type === 'verify') return <VerifyStepCard key={idx} step={step} index={idx} />
                                     if (isCodeStep(step)) return <CodeStepCard key={idx} step={step} index={idx} agentId={agentId} runId={run.id} />
                                     const summary = stepSummary(step)
+                                    const machineError = stepMachineError(step)
                                     return (
-                                    <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm" data-testid={`run-step-${idx}`}>
+                                    <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background dark:bg-muted/40 border text-sm" data-testid={`run-step-${idx}`}>
                                       <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs font-mono text-muted-foreground">#{idx + 1}</span>
                                         <Badge variant="outline" className="text-[10px]">{step.type}</Badge>
@@ -182,12 +192,14 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                             In: {typeof step.input === 'string' ? step.input : JSON.stringify(step.input)}
                                           </div>
                                         )}
-                                        {step.output && !hasStepSummary(step) && (
+                                        {step.output && !hasStepSummary(step) && !machineError && (
                                           <div className="text-xs truncate">
                                             Out: {typeof step.output === 'string' ? step.output : JSON.stringify(step.output)}
                                           </div>
                                         )}
-                                        {step.error && (
+                                        {machineError ? (
+                                          <MachineProblem problem={machineError} testId={`run-step-${idx}-machine`} />
+                                        ) : step.error && (
                                           <div className="text-xs text-destructive truncate">
                                             Error: {step.error}
                                           </div>
@@ -209,7 +221,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                 <h4 className="text-sm font-medium mb-2">Thread</h4>
                                 <div className="space-y-1 max-h-[300px] overflow-y-auto">
                                   {run.thread.map((msg, idx) => (
-                                    <div key={idx} className={`p-2 rounded text-sm ${msg.role === 'assistant' ? 'bg-primary/5 border-l-2 border-primary' : 'bg-background border'}`}>
+                                    <div key={idx} className={`p-2 rounded text-sm ${msg.role === 'assistant' ? 'bg-primary/5 border-l-2 border-primary' : 'bg-background dark:bg-muted/40 border'}`}>
                                       <span className="text-xs font-medium text-muted-foreground">{msg.role}</span>
                                       <div className="text-xs mt-0.5 whitespace-pre-wrap">
                                         {typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content, null, 2)}

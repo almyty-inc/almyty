@@ -43,7 +43,7 @@ npm run test:e2e -- --grep "CRITICAL"       # Critical bug tests
 | `apis-crud.spec.ts` | 14 | Create/edit/delete APIs, search, validation |
 | `apis-schema-import.spec.ts` | 12 | Import Petstore, URL/file upload, tool generation |
 | `auth-login.spec.ts` | 12 | Login flow, validation, session persistence |
-| `auth-registration.spec.ts` | 12 | Registration, field validation, duplicate handling |
+| `auth-registration.spec.ts` | 12 | Registration, field validation, duplicate handling; with `npm run test:e2e:journey`, runs in CI (no captcha) and passes locally with the captcha test keys |
 | `auth-session.spec.ts` | 8 | Logout, token clearing, protected routes |
 | `complete-workflow.spec.ts` | 1 | Full pipeline: API -> Schema -> Tools -> Gateway -> Execute |
 | `core-journey.spec.ts` | 1 | Sign up -> model -> API -> shared tools (MCP, UTCP, Skills) -> autonomous agent -> web app a visitor chats with -> Connections, against a local fake; `npm run test:e2e:journey`, runs in CI |

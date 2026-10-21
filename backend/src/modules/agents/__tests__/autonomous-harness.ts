@@ -148,6 +148,8 @@ export async function runAgent(opts: {
   tracePrivacy?: any;
   /** More members of the organization, besides u-1 (a scheduled run acts as the agent's owner). */
   members?: string[];
+  /** Collects the run's sleeps (the built-in wait); without it a sleep is an error, as in every other case. */
+  sleeps?: Array<Record<string, any>>;
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -316,7 +318,12 @@ export async function runAgent(opts: {
     },
     builders: new AgentRuntimeBuilders(messageRepository as any, { listActiveRules: async () => [] } as any),
     builtInTools: {
-      executeBuiltInTool: async (name: string) => {
+      executeBuiltInTool: async (name: string, params: any) => {
+        // The run's own sleep, for a case that records it (a waking hosted machine).
+        if (name === 'wait' && opts.sleeps) {
+          opts.sleeps.push(params);
+          return { status: 'sleeping' };
+        }
         // store_memory and recall_memory are the memory keeper's, not this helper's.
         if (name in BUILT_IN_TOOLS && name !== 'store_memory' && name !== 'recall_memory') throw new Error(`built-in ${name} is not part of these runs`);
         return null;

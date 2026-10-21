@@ -113,9 +113,11 @@ Gradient rules:
 
 **Text:** Description = zinc-400 (#A1A1AA) dark minimum. Never darker than zinc-500.
 
-**Inputs:** Border --input (zinc-700 dark, zinc-300 light). Focus = violet ring. Placeholder = zinc-500 minimum.
+**Inputs:** Border --input (zinc-700 dark, zinc-300 light). Fill --field: white in light, translucent zinc-700 in dark so a field reads on the page and on a card alike; never an opaque --background, which is the deepest colour. Focus = violet ring. Placeholder = zinc-500 minimum.
 
-**Buttons:** Primary = solid violet-500, white text. Outline = zinc-800 border dark. Ghost = no bg, violet on hover.
+**Buttons:** Primary = solid violet-500, white text. Outline = --input border, --field fill, --field-hover on hover. Ghost = no bg, violet on hover.
+
+**Page:** The app shell is bg-muted in light (zinc-100 page under white cards) and bg-background in dark (zinc-950 page under zinc-900 cards). Active tabs and segmented toggles sit on zinc-700 (--input) in dark, lighter than their zinc-800 track.
 
 ## CSS Variables
 

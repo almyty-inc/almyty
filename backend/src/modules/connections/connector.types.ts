@@ -95,6 +95,13 @@ export interface JsonSchemaProperty {
   'x-secret'?: boolean;
   /** Shown under Advanced on the connect form even when secret (an optional client secret). */
   'x-advanced'?: boolean;
+  /** Shown on the connect form as a textarea whose newlines are kept. */
+  'x-multiline'?: boolean;
+  /**
+   * 'uri' is checked as a URL. 'pem' is certificate text: the connect form
+   * shows it multi-line, and on save it is normalised to canonical PEM
+   * (normalizePemCertificates) or refused.
+   */
   format?: string;
   default?: unknown;
   enum?: unknown[];
@@ -239,11 +246,17 @@ export type ValidationSpec =
    */
   | { kind: 'oauth2_client_credentials'; tokenUrl: string; scope: string; clientIdField?: string; clientSecretField?: string }
   | { kind: 's3_bucket' }
-  | { kind: 'mcp_initialize' };
+  | { kind: 'mcp_initialize' }
+  /** A Kubernetes API server: reachable, the token accepted, and allowed what the hosted runner adapter does. */
+  | {
+    kind: 'kubernetes';
+    /** Config field the account label comes from (the server); the UI names the account row by its title. */
+    accountLabelFrom?: string;
+  };
 
 export const VALIDATION_KINDS = [
   'http', 'format', 'aws_caller_identity', 'aws_assume_role', 'gcp_service_account',
-  'oauth2_client_credentials', 's3_bucket', 'mcp_initialize',
+  'oauth2_client_credentials', 's3_bucket', 'mcp_initialize', 'kubernetes',
 ] as const;
 
 export interface ConnectorDefinition {
@@ -275,6 +288,8 @@ export interface ValidationResult {
   accountLabel?: string;
   scopesGranted?: string[];
   error?: string;
+  /** What a passing check learned besides yes, in a few words ("Kubernetes v1.31.2"). */
+  detail?: string;
 }
 
 export interface ConnectionView {
@@ -289,7 +304,8 @@ export interface ConnectionView {
   teamId: string | null;
   method: ConnectMethodType | null;
   accountLabel: string | null;
-  health: { status: ConnectionHealthStatus; checkedAt: Date | null; error: string | null };
+  /** `detail`: what the last passing check learned besides yes, e.g. the cluster's version. */
+  health: { status: ConnectionHealthStatus; checkedAt: Date | null; error: string | null; detail: string | null };
   scopesGranted: string[];
   expiresAt: Date | null;
   createdAt: Date;

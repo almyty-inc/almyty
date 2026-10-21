@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { Credential } from '../../../entities/credential.entity';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
 import { MemoryConnectStateStore } from '../connect-state.store';
-import { ConnectionValidationService, ConnectionsHttp, S3ProbeClientFactory } from '../connection-validation.service';
+import { ConnectionValidationService, ConnectionsHttp, KubeProbeClientFactory, S3ProbeClientFactory } from '../connection-validation.service';
 import { ConnectionsService } from '../connections.service';
 import { ConnectorCatalogService } from '../connector-catalog.service';
 import { ConnectionPrincipal } from '../connections.permissions';
@@ -86,7 +86,7 @@ export interface Harness {
   mcpOAuth: McpOAuthClientService;
 }
 
-export function buildHarness(opts: { routes?: FixtureRoute[]; env?: Record<string, string>; s3Factory?: S3ProbeClientFactory; now?: () => number; adapters?: any; org?: Record<string, unknown>; grants?: any; rotation?: any } = {}): Harness {
+export function buildHarness(opts: { routes?: FixtureRoute[]; env?: Record<string, string>; s3Factory?: S3ProbeClientFactory; kubeFactory?: KubeProbeClientFactory; now?: () => number; adapters?: any; org?: Record<string, unknown>; grants?: any; rotation?: any } = {}): Harness {
   const credentials = fakeRepo<Credential>(() => new Credential());
   const organizations = fakeRepo<any>();
   organizations.rows.push({ id: 'org-1', plan: 'free', settings: null, ...(opts.org ?? {}) });
@@ -95,7 +95,7 @@ export function buildHarness(opts: { routes?: FixtureRoute[]; env?: Record<strin
   const catalog = new ConnectorCatalogService(customConnectors as any, audit, opts.adapters);
   const http = fixtureHttp(opts.routes ?? []);
   const config = fakeConfig({ PUBLIC_API_URL: 'https://api.test.almyty.com', ...(opts.env ?? {}) });
-  const validation = new ConnectionValidationService(config, http.http, opts.s3Factory);
+  const validation = new ConnectionValidationService(config, http.http, opts.s3Factory, undefined, opts.kubeFactory);
   const store = new MemoryConnectStateStore(opts.now);
   // Signing in to MCP servers, over the same fixture HTTP.
   const mcpOAuth = new McpOAuthClientService(credentials as any, fakeEnvelope, http.http);

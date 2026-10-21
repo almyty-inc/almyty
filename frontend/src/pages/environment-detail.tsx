@@ -31,6 +31,7 @@ import {
   type HostedEnvironment,
   type HostedWorkspace,
 } from '@/components/runners/hosted-shared'
+import { MachineProblem } from '@/components/runners/machine-problem'
 import { agentsApi, environmentsApi, organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { formatDate, formatDateTime, formatRelativeTime, pluralized } from '@/lib/utils'
@@ -261,15 +262,14 @@ function MachinesCard({
       header: 'Machine',
       cell: ({ row }) => {
         const status = machineStatus(row.original)
+        const problem = row.original.machine?.problem ?? null
         return (
           <div className="space-y-0.5">
             <div className="flex flex-wrap items-center gap-1">
               <Badge variant={MACHINE_STATUS_VARIANT[status]}>{MACHINE_STATUS_LABEL[status]}</Badge>
               {row.original.readOnly && <Badge variant="outline">read-only</Badge>}
             </div>
-            {status === 'failed' && row.original.machine?.lastError && (
-              <p className="max-w-xs text-xs text-destructive">{row.original.machine.lastError}</p>
-            )}
+            {problem && <MachineProblem problem={problem} />}
           </div>
         )
       },
