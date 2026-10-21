@@ -65,11 +65,13 @@ function hasDoctypeSystem(value: string): boolean {
 
 const matches = (pattern: RegExp) => (value: string) => pattern.test(value);
 
-// Patterns that suggest injection attempts
-const INJECTION_PATTERNS: Array<{ name: string; test: (value: string) => boolean; severity: 'block' | 'warn' }> = [
+// Patterns that suggest injection attempts. `command` marks the checks a
+// tool's executable inputs skip (tools/tool-executable-inputs.ts): a shell
+// tool's command is supposed to contain shell syntax.
+const INJECTION_PATTERNS: Array<{ name: string; test: (value: string) => boolean; severity: 'block' | 'warn'; command?: true }> = [
   // Command injection
-  { name: 'shell-command', test: hasShellCommand, severity: 'block' },
-  { name: 'backtick-exec', test: matches(/`[^`]+`/), severity: 'warn' },
+  { name: 'shell-command', test: hasShellCommand, severity: 'block', command: true },
+  { name: 'backtick-exec', test: matches(/`[^`]+`/), severity: 'warn', command: true },
 
   // XML entity injection (XXE)
   { name: 'xxe-entity', test: matches(/<!ENTITY\s/i), severity: 'block' },
@@ -90,18 +92,24 @@ const INJECTION_PATTERNS: Array<{ name: string; test: (value: string) => boolean
 /**
  * Sanitize tool parameters before execution.
  * Returns warnings for suspicious patterns and blocks critical ones.
+ *
+ * `executableInputs` names the top-level parameters that are the command
+ * the tool runs (tools/tool-executable-inputs.ts); the command-injection
+ * checks skip them and every other check still applies.
  */
 export function sanitizeToolParameters(
   parameters: Record<string, any>,
-  options?: { strict?: boolean },
+  options?: { strict?: boolean; executableInputs?: string[] },
 ): SanitizationResult {
   const warnings: string[] = [];
   const sanitized = deepClone(parameters);
   let safe = true;
+  const executable = new Set((options?.executableInputs ?? []).map((key) => `params.${key}`));
 
   function scanValue(value: any, path: string): any {
     if (typeof value === 'string') {
-      for (const { name, test, severity } of INJECTION_PATTERNS) {
+      for (const { name, test, severity, command } of INJECTION_PATTERNS) {
+        if (command && executable.has(path)) continue;
         if (test(value)) {
           const msg = `[${severity}] ${name} pattern detected in ${path}`;
           warnings.push(msg);

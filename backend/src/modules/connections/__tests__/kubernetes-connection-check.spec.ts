@@ -7,6 +7,7 @@ import { ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { KubeApiClient, KubeApiError, KubeResourceAttributes } from '../../hosted-runners/adapters/kubernetes/kube-api.client';
 import { HOSTED_RUNNER_ACCESS } from '../../hosted-runners/adapters/kubernetes/access';
 import { snapshotEnv } from '../../../test/env';
+import { makeTestCa } from '../../../common/security/__tests__/test-ca';
 
 /**
  * "Check again" on a Kubernetes cluster connection asks the cluster: the
@@ -23,7 +24,11 @@ describe('kubernetes connection check', () => {
   });
   afterEach(restore);
 
-  const config = { server: 'https://kube.example.com:6443/', caCert: '-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----', token: 'sa-token' };
+  // A real CA (openssl, made for this run): the check reads the saved CA as PEM before it dials.
+  let config: { server: string; caCert: string; token: string };
+  beforeAll(() => {
+    config = { server: 'https://kube.example.com:6443/', caCert: makeTestCa('kubernetes check CA').caCert, token: 'sa-token' };
+  });
 
   function check(fake: { version?: () => Promise<{ gitVersion: string }>; canI?: (a: KubeResourceAttributes) => Promise<boolean> }) {
     const reviews: KubeResourceAttributes[] = [];
@@ -105,6 +110,15 @@ describe('kubernetes connection check', () => {
     expect((await run({ ...config, server: 'http://kube.example.com' })).error).toMatch(/https server URL/);
     expect((await run({ ...config, token: '' })).error).toMatch(/ServiceAccount token/);
     expect(factory).not.toHaveBeenCalled();
+  });
+
+  it('reports a CA that is not a certificate without dialing, and dials with a CA pasted on one line', async () => {
+    const { run, factory } = check({});
+    const broken = '-----BEGIN CERTIFICATE-----\nnot a certificate\n-----END CERTIFICATE-----';
+    expect((await run({ ...config, caCert: broken })).error).toMatch(/^certificate 1 of the cluster CA certificate is not/);
+    expect(factory).not.toHaveBeenCalled();
+    expect((await run({ ...config, caCert: config.caCert.replace(/\n/g, '') })).ok).toBe(true);
+    expect(factory.mock.calls[0][0].caCert).toBe(config.caCert);
   });
 });
 

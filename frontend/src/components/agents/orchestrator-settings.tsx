@@ -57,7 +57,7 @@ export function OrchestratorSettings({ config, strategyKeys, roleKeys, onChange,
             <Label htmlFor="orchestrator-role">Role that decides</Label>
             <select
               id="orchestrator-role"
-              className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+              className="mt-1 w-full rounded-md border border-border bg-field px-2 py-1.5 text-sm"
               value={config.roleKey}
               disabled={disabled}
               onChange={(e) => set('roleKey', e.target.value)}
@@ -90,7 +90,7 @@ export function OrchestratorSettings({ config, strategyKeys, roleKeys, onChange,
             <Label htmlFor="orchestrator-fallback">Use this strategy if it does not answer</Label>
             <select
               id="orchestrator-fallback"
-              className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+              className="mt-1 w-full rounded-md border border-border bg-field px-2 py-1.5 text-sm"
               value={config.fallbackStrategyKey}
               disabled={disabled}
               onChange={(e) => set('fallbackStrategyKey', e.target.value)}

@@ -440,3 +440,61 @@ describe('splitConnectSchema', () => {
     expect(Object.keys(extra!.properties)).toEqual(['clientId', 'clientSecret'])
   })
 })
+
+describe('certificate fields', () => {
+  // Any connector whose schema marks a field as PEM text; nothing here is
+  // specific to the service that carries it.
+  const cluster: Connector = {
+    key: 'cluster',
+    kind: 'cloud',
+    displayName: 'Cluster',
+    connect: [
+      {
+        type: 'api_key',
+        schema: {
+          type: 'object',
+          properties: {
+            server: { type: 'string', title: 'API server URL', format: 'uri' },
+            caCert: { type: 'string', title: 'CA certificate (PEM)', format: 'pem' },
+            token: { type: 'string', title: 'Token', 'x-secret': true },
+          },
+          required: ['server', 'token'],
+        },
+      },
+    ],
+  }
+  const pem = '-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUQ\nZm9vYmFy\n-----END CERTIFICATE-----\n'
+
+  it('takes the PEM in a textarea and posts it with its newlines', async () => {
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ connectorKey: 'cluster' }) })
+    render(<ConnectServiceForm embedded onCancel={() => {}} connector={cluster} onConnected={() => {}} />)
+
+    fireEvent.change(await screen.findByLabelText('API server URL'), { target: { value: 'https://kube.example.com' } })
+    fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'sa-token' } })
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    const ca = screen.getByLabelText('CA certificate (PEM)')
+    expect(ca.tagName).toBe('TEXTAREA')
+    fireEvent.change(ca, { target: { value: pem } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(connectionsApi.connect).toHaveBeenCalledWith('cluster', expect.objectContaining({ input: { server: 'https://kube.example.com', caCert: pem, token: 'sa-token' } })),
+    )
+  })
+
+  it('keeps the newlines when the key is replaced', async () => {
+    const existing = connection({ id: 'conn-cluster', connectorKey: 'cluster' })
+    vi.mocked(connectionsApi.rotate).mockResolvedValue({ pending: false, connection: existing })
+    render(<ConnectServiceForm connector={cluster} embedded onCancel={() => {}} rotateConnection={existing} onConnected={() => {}} />)
+
+    fireEvent.change(await screen.findByLabelText('API server URL'), { target: { value: 'https://kube.example.com' } })
+    fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'sa-token-2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    fireEvent.change(screen.getByLabelText('CA certificate (PEM)'), { target: { value: pem } })
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }))
+
+    await waitFor(() =>
+      expect(connectionsApi.rotate).toHaveBeenCalledWith('conn-cluster', { input: { server: 'https://kube.example.com', caCert: pem, token: 'sa-token-2' } }),
+    )
+  })
+})
