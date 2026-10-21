@@ -785,6 +785,8 @@ describe('ToolExecutorService', () => {
       });
 
       expect(result).toMatchObject({ success: false, metadata: { runnerErrorCode: 'workspace_unavailable', machineFailed: true, machineError: tls } });
+      // An interactive caller (the UI, MCP) gets the same sentence and detail a run does.
+      expect(result.metadata?.machineProblem).toEqual({ sentence: "Can't reach the cluster: its certificate isn't trusted", detail: tls });
       expect((service as any).runnerCalls.dispatch).not.toHaveBeenCalled();
     });
 

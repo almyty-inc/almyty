@@ -40,6 +40,7 @@ import { allPagesOfTools } from '../../tools/tool-pages';
 import { CodeModeService } from '../../code-mode/code-mode.service';
 import { GATEWAY_META_NAMES, GatewayExposure, effectiveExposure, gatewayMetaTools } from '../../code-mode/code-exposure';
 import { CALL_TOOL, GET_TOOL, RUN_CODE, SEARCH_TOOLS } from '../../tool-discovery/meta-tools';
+import { type MachineProblem, machineProblemText } from '../../runner/hosted-dispatch';
 
 /** Errors this handler raised for an unknown tool: rethrown as protocol errors, never folded into isError. */
 const UNKNOWN_TOOL_ERRORS = new WeakSet<object>();
@@ -616,7 +617,12 @@ export class McpToolHandler {
         status: result.success ? MetricStatus.SUCCESS : MetricStatus.ERROR,
       });
 
-      const textContent = !result.success && result.error
+      // A hosted machine that cannot start: the same sentence and masked
+      // detail a run and the environment pages show (one backend mapping).
+      const problem = !result.success ? (result.metadata?.machineProblem as MachineProblem | undefined) : undefined;
+      const textContent = problem
+        ? machineProblemText(problem)
+        : !result.success && result.error
         ? result.error
         : typeof result.data === 'string'
           ? result.data
