@@ -1,6 +1,6 @@
 import { DEFAULT_HOSTED_RUNNER_SETTINGS } from '../hosted-runner-settings';
 import { HostedDispatchError, HostedRunnersService, machineFailing } from '../hosted-runners.service';
-import { describeMachineError, redactSecrets } from '../../runner/hosted-dispatch';
+import { describeMachineError, isTerminalClusterError, redactSecrets } from '../../runner/hosted-dispatch';
 
 /**
  * A machine that cannot start says so: the environment pages get its
@@ -102,6 +102,21 @@ describe('a hosted machine that cannot start', () => {
       const raw = 'Authorization: Bearer abc123 api_key=k-999 eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl';
       const masked = redactSecrets(raw);
       expect(masked).not.toMatch(/abc123|k-999|eyJhbGciOi/);
+    });
+  });
+
+  describe('which cluster errors fail a machine at once', () => {
+    it.each([
+      [Object.assign(new Error('self-signed certificate in certificate chain'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' }), true],
+      [new Error(TLS), true],
+      [Object.assign(new Error('create pod failed: HTTP 401'), { status: 401 }), true],
+      [Object.assign(new Error('read pod failed'), { status: 403 }), true],
+      [new Error('ErrImagePull: pulling image "registry.example/env:1": 401 Unauthorized'), false],
+      [new Error('0/3 nodes are available: 3 Insufficient cpu'), false],
+      [Object.assign(new Error('read pod failed: HTTP 503'), { status: 503 }), false],
+      [new Error('socket hang up'), false],
+    ])('%s -> %s', (error, terminal) => {
+      expect(isTerminalClusterError(error)).toBe(terminal);
     });
   });
 });

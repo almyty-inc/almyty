@@ -63,7 +63,7 @@ import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
 import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 import { isServableGatewayTool } from '../gateways/gateway-servable';
-import { HOSTED_DISPATCH, type HostedDispatch, MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
+import { HOSTED_DISPATCH, type HostedDispatch, MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -916,7 +916,13 @@ export class ToolExecutorService {
           // The machine itself could not start: the run fails on it rather
           // than letting the model answer as if the call ran.
           if (err?.machine?.failed) {
-            failure.metadata = { ...failure.metadata, [MACHINE_FAILED]: true, machineError: err.machine.error ?? null };
+            // The sentence and masked detail every caller shows: a run, the UI, MCP.
+            failure.metadata = {
+              ...failure.metadata,
+              [MACHINE_FAILED]: true,
+              machineError: err.machine.error ?? null,
+              machineProblem: machineProblem(err.machine.error ?? null),
+            };
           }
           return failure;
         }

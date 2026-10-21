@@ -131,6 +131,24 @@ describe('MCP tool results (2025-06-18 / 2025-11-25)', () => {
       expect(result.isError).toBe(false);
     });
 
+    it('names a hosted machine that cannot start in the sentence a run gets, with the masked detail', async () => {
+      rows = [tool({ name: 'shell_exec' })];
+      executor.executeTool.mockResolvedValue({
+        success: false,
+        error: 'workspace_unavailable: The machine for this environment failed to start',
+        metadata: {
+          runnerErrorCode: 'workspace_unavailable',
+          machineFailed: true,
+          machineProblem: { sentence: "Can't reach the cluster: its certificate isn't trusted", detail: 'x509: certificate signed by unknown authority' },
+        },
+      });
+      const result = await handler.handleToolCall({ name: 'shell_exec', arguments: {} }, 'org-1', 'u-1', 'gw-1');
+      expect(result).toEqual({
+        content: [{ type: 'text', text: "The hosted machine couldn't start: Can't reach the cluster: its certificate isn't trusted.\nDetails: x509: certificate signed by unknown authority" }],
+        isError: true,
+      });
+    });
+
     it('holds a result to the declared output schema, and reports a mismatch as a tool error carrying the data', async () => {
       rows = [tool({ name: 'get_pet', outputSchema: petSchema })];
       executor.executeTool.mockResolvedValue({ success: true, data: { name: 'Rex' } });
