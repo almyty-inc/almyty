@@ -41,3 +41,34 @@ export const WORKSPACE_WAKING = 'workspace_waking';
 
 /** The runner-call error code while another job works in the workspace; a run sleeps and retries on it too. */
 export const WORKSPACE_BUSY = 'workspace_busy';
+
+/**
+ * A call whose machine could not start: it failed to provision, or it was
+ * still not up when the wake budget ran out. The tool result carries it in
+ * `metadata.machineFailed` (with the raw `machineError`), and a run ends
+ * failed on it -- retrying cannot help, and the model must not answer as
+ * if the call ran.
+ */
+export const MACHINE_FAILED = 'machineFailed';
+
+/** Bearer tokens, key=value secrets, JWTs and long opaque strings, masked before an error is stored or shown. */
+export function redactSecrets(text: string): string {
+  return text
+    .replace(/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]')
+    .replace(/\b(token|access_token|api[_-]?key|password|secret|authorization)(["']?\s*[:=]\s*["']?)[^\s"',;}]+/gi, '$1$2[redacted]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(/[A-Za-z0-9+/_-]{40,}={0,2}/g, '[redacted]');
+}
+
+/**
+ * A machine's error in one short sentence, by its kind. The raw text is
+ * kept beside it, redacted, for whoever wants the details.
+ */
+export function describeMachineError(raw: string | null | undefined): string {
+  const text = raw ?? '';
+  if (/imagepullbackoff|errimagepull|pull(ing)? (the )?image|image pull|manifest unknown/i.test(text)) return "Couldn't download the environment image";
+  if (/certificate|x509|self[- ]signed|unable to verify|cert_|\btls\b|\bssl\b/i.test(text)) return "Can't reach the cluster: its certificate isn't trusted";
+  if (/\b40[13]\b|unauthori[sz]ed|forbidden/i.test(text)) return "The cluster rejected almyty's access";
+  if (/capacity|insufficient (cpu|memory)|unschedulable|failedscheduling|no nodes available/i.test(text)) return 'Waiting for a free sandbox machine';
+  return "The machine couldn't start";
+}

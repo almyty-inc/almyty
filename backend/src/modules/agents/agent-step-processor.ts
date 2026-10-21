@@ -61,7 +61,7 @@ import { CodeModeConfig, grantsLeftFor } from '../code-mode/code-write-policy';
 import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
-import { WORKSPACE_BUSY, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
+import { MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING, describeMachineError, redactSecrets } from '../runner/hosted-dispatch';
 
 /** One line per namespace a script can use: `petstore (19 functions)`. */
 function namespaceSummary(tools: Tool[]): string[] {
@@ -173,6 +173,34 @@ type GatedToolCall = {
   /** The rule in plain words. */
   rule: string;
 };
+
+/**
+ * A tool call that found its hosted machine still starting (or another job
+ * in the person's workspace), waiting on `run.workingMemory.wakingToolCalls`
+ * to run again once the run wakes (retryWakingCalls).
+ */
+type WakingToolCall = {
+  toolCallId: string;
+  toolId: string;
+  toolName: string;
+  parameters: Record<string, any>;
+};
+
+/** Why a run's hosted machine could not start: a sentence, and its raw error with secrets masked. */
+type MachineFailure = { summary: string; detail: string | null };
+
+/** A waking machine, or another job in the person's workspace: sleep and try the call again. */
+function isWaking(result: ToolExecutionResult): boolean {
+  const code = result.metadata?.runnerErrorCode;
+  return !result.success && (code === WORKSPACE_WAKING || code === WORKSPACE_BUSY);
+}
+
+/** The machine behind the call failed to start or wake within the budget (HostedDispatchError's `machine`). */
+function machineFailureOf(result: ToolExecutionResult): MachineFailure | null {
+  if (result.success || !result.metadata?.[MACHINE_FAILED]) return null;
+  const raw: string | null = result.metadata?.machineError ?? null;
+  return { summary: describeMachineError(raw), detail: raw ? redactSecrets(raw) : null };
+}
 
 /**
  * A script's change set waiting for a person (code mode), on
@@ -332,6 +360,11 @@ export class AgentStepProcessor {
       // run for it.
       // (principal: the run's, resolved above)
       const tools = await this.s.executionAccess.filterExecutable(principal, await this.resolveTools(agent));
+
+      // Calls that found their hosted machine starting run again first.
+      if (Array.isArray(run.workingMemory?.wakingToolCalls) && run.workingMemory.wakingToolCalls.length > 0) {
+        return await this.retryWakingCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart);
+      }
 
       // Calls an approval policy held on an earlier step, and scripts'
       // change sets, now decided: the approved ones run, as a step of their
@@ -651,6 +684,10 @@ export class AgentStepProcessor {
         const changeSets: PendingChangeSet[] = [];
         // A hosted workspace that was starting when a call needed it.
         let wakeRetryMs: number | null = null;
+        // The calls that found it starting, made again on the next step.
+        const waking: WakingToolCall[] = [];
+        // A call whose machine failed to start or wake: the run fails.
+        let machineFailure: MachineFailure | null = null;
         // Execute each tool call
         for (const toolCall of responseMessage.toolCalls) {
           // The tool-call budget, spent per call rather than per step.
@@ -1020,10 +1057,34 @@ export class AgentStepProcessor {
             }
 
             toolCall.result = toolResult.data;
-            // A waking machine, or another job in the person's workspace: sleep and try again.
-            if (!toolResult.success && (toolResult.metadata?.runnerErrorCode === WORKSPACE_WAKING || toolResult.metadata?.runnerErrorCode === WORKSPACE_BUSY)) {
+            // A waking machine, or another job in the person's workspace:
+            // the run sleeps and the processor makes this very call again
+            // (retryWakingCalls). The model gets no result for it until then,
+            // so it cannot answer "the machine is starting" and stop.
+            if (isWaking(toolResult)) {
               wakeRetryMs = Math.max(wakeRetryMs ?? 0, Number(toolResult.metadata?.retryAfterMs) || 0);
+              waking.push({ toolCallId: toolCall.id, toolId: matchingTool.id, toolName: matchingTool.name, parameters: callParams });
+              toolCall.executionTime = toolResult.executionTime;
+              this.s.emitEvent(runId, 'tool.result', {
+                step: run.currentStep,
+                toolCallId: toolCall.id,
+                tool: matchingTool.name,
+                success: false,
+                waking: true,
+                executionTime: toolResult.executionTime,
+              });
+              run.steps.push({
+                type: 'tool_call',
+                input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: callParams },
+                output: { status: 'waiting_for_machine' },
+                duration: toolResult.executionTime,
+                timestamp: new Date().toISOString(),
+              });
+              continue;
             }
+            // The machine failed to start or wake: the run fails after this step.
+            const failedMachine = machineFailureOf(toolResult);
+            if (failedMachine) machineFailure ??= failedMachine;
             toolCall.error = toolResult.success ? undefined : toolResult.error;
             toolCall.executionTime = toolResult.executionTime;
             toolCall.cached = toolResult.cached;
@@ -1051,7 +1112,7 @@ export class AgentStepProcessor {
             run.steps.push({
               type: 'tool_call',
               input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: callParams },
-              output: toolResult.data,
+              output: failedMachine ? { machineError: failedMachine } : toolResult.data,
               cost: toolResult.metadata?.cost || 0,
               duration: toolResult.executionTime,
               timestamp: new Date().toISOString(),
@@ -1085,6 +1146,23 @@ export class AgentStepProcessor {
           }
         }
 
+        // A call's hosted machine failed to start or wake: nothing more can
+        // run there, so the run ends failed instead of letting the model
+        // answer as if its calls had run.
+        if (machineFailure) {
+          run.steps.push({
+            type: 'llm_call',
+            role: stampOf(acting),
+            input: { messageCount: messages.length, toolCount: allToolDefs.length },
+            output: { toolCalls: responseMessage.toolCalls.map((tc) => ({ name: tc.name, hasResult: !!tc.result })), ...answeredBy(llmResponse, acting) },
+            cost: stepCost,
+            tokens: { input: stepInputTokens, output: stepOutputTokens },
+            duration: Date.now() - stepStart,
+            timestamp: new Date().toISOString(),
+          });
+          return this.failForMachine(run, machineFailure, expectedStep, stepStart);
+        }
+
         // A call an approval policy's amount rule held, or a script's change
         // set: the run waits for a person. The other calls of this reply have
         // run; the held ones run, and the change sets are run or dropped, on
@@ -1109,6 +1187,7 @@ export class AgentStepProcessor {
           run.workingMemory = {
             ...(run.workingMemory || {}),
             ...(gated.length ? { gatedToolCalls: gated } : {}),
+            ...(waking.length ? { wakingToolCalls: waking } : {}),
             ...(changeSets.length ? { pendingChangeSets: changeSets } : {}),
           };
           run.status = AgentRunStatus.WAITING_APPROVAL;
@@ -1119,13 +1198,15 @@ export class AgentStepProcessor {
           return 'waiting';
         }
 
-        // A hosted workspace was still starting: the call told the model so,
-        // and the run sleeps until the machine should be up, then takes its
-        // next step -- the wait tool's own sleep. A machine that does not
-        // come up within the wake budget fails the next call for good
-        // (HostedRunnersService.resolveTarget), so this cannot loop.
+        // A hosted workspace was still starting: the run sleeps until the
+        // machine should be up -- the wait tool's own sleep -- and its next
+        // step makes the waking calls again before the model is asked
+        // anything (retryWakingCalls). A machine that does not come up
+        // within the wake budget fails that call for good
+        // (HostedRunnersService.resolveTarget), and the run with it.
         if (wakeRetryMs !== null) {
           await this.s.builtInTools.executeBuiltInTool('wait', { seconds: Math.max(1, Math.ceil(wakeRetryMs / 1000)) }, run, agent);
+          run.workingMemory = { ...(run.workingMemory || {}), wakingToolCalls: waking };
           const stepDuration = Date.now() - stepStart;
           run.steps.push({
             type: 'llm_call',
@@ -2019,6 +2100,135 @@ export class AgentStepProcessor {
       stepOutput: { ...stepOutput, approvalId: approval.id },
       pending: { toolCallId: toolCall.id, codeExecutionId: outcome.codeExecutionId, approvalId: approval.id, forModel },
     };
+  }
+
+  /**
+   * Calls that found their hosted machine still starting run again here,
+   * as the very calls the model made, before the model is asked anything
+   * (docs/design/hosted-runners-and-always-on.md, "Waking": a retryable
+   * `workspace_waking` result, the run sleeps and resumes within the wake
+   * budget). The model never reads a "try again shortly" it could answer
+   * instead of retrying. Still starting: the run sleeps again. The machine
+   * failed, or did not come up within the budget: the run fails, naming
+   * the machine's problem.
+   */
+  private async retryWakingCalls(
+    run: AgentRun,
+    agent: Agent,
+    tools: Tool[],
+    resolvedLimits: ResolvedRunLimits,
+    expectedStep: number,
+    stepStart: number,
+  ): Promise<'continue' | 'done' | 'waiting'> {
+    const runId = run.id;
+    const pending: WakingToolCall[] = run.workingMemory?.wakingToolCalls ?? [];
+    const still: WakingToolCall[] = [];
+    const gated: GatedToolCall[] = [];
+    let retryMs = 0;
+    let failure: MachineFailure | null = null;
+    for (const call of pending) {
+      if (failure) break;
+      const started = Date.now();
+      const tool = tools.find((t) => t.id === call.toolId);
+      const result: ToolExecutionResult = tool
+        ? await this.s.toolExecutorService.executeTool(tool.id, call.parameters, {
+            userId: run.userId ?? undefined,
+            principal: principalOfRun(run),
+            organizationId: run.organizationId,
+            retries: resolvedLimits.toolErrorRetries,
+            runnerLabels: agent.agentConfig?.runnerLabels,
+            pinnedRunnerId: agentRunnerId(agent) ?? undefined,
+            environmentId: agentEnvironmentId(agent) ?? undefined,
+            runId: run.id,
+            agentId: agent.id,
+            agentTeamId: agent.teamId ?? null,
+            holdForApproval: 'caller',
+          })
+        : {
+            success: false,
+            error: `Tool '${call.toolName}' is no longer available to this run`,
+            executionTime: 0,
+            cached: false,
+            rateLimited: false,
+            retryCount: 0,
+          };
+      if (result.approvalRequired && tool) {
+        gated.push(await this.holdForApproval(run, agent, tool, { id: call.toolCallId, parameters: call.parameters }, result.approvalRequired));
+        continue;
+      }
+      if (isWaking(result)) {
+        still.push(call);
+        retryMs = Math.max(retryMs, Number(result.metadata?.retryAfterMs) || 0);
+        continue;
+      }
+      failure = machineFailureOf(result);
+      this.s.emitEvent(runId, 'tool.result', {
+        step: run.currentStep,
+        toolCallId: call.toolCallId,
+        tool: call.toolName,
+        success: result.success,
+        executionTime: result.executionTime,
+      });
+      if (run.conversationId) {
+        const content = result.success
+          ? typeof result.data === 'string'
+            ? result.data
+            : JSON.stringify(result.data)
+          : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
+        const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
+        msg.runId = run.id;
+        await this.s.messageRepository.save(msg);
+      }
+      run.steps.push({
+        type: 'tool_call',
+        input: { tool: call.toolName, toolId: call.toolId, parameters: call.parameters },
+        output: failure ? { machineError: failure } : result.data,
+        cost: result.metadata?.cost || 0,
+        duration: Date.now() - started,
+        timestamp: new Date().toISOString(),
+        error: result.success ? undefined : result.error,
+      });
+    }
+    const { wakingToolCalls: _retried, ...rest } = run.workingMemory || {};
+    run.workingMemory = {
+      ...rest,
+      ...(still.length && !failure ? { wakingToolCalls: still } : {}),
+      ...(gated.length ? { gatedToolCalls: [...(rest.gatedToolCalls ?? []), ...gated] } : {}),
+    };
+    if (failure) return this.failForMachine(run, failure, expectedStep, stepStart);
+    if (still.length) {
+      await this.s.builtInTools.executeBuiltInTool('wait', { seconds: Math.max(1, Math.ceil(retryMs / 1000)) }, run, agent);
+      run.steps.push({
+        type: 'tool_call',
+        input: { tools: still.map((c) => c.toolName) },
+        output: { status: 'sleeping', reason: 'the hosted workspace is starting' },
+        duration: Date.now() - stepStart,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    if (gated.length) run.status = AgentRunStatus.WAITING_APPROVAL;
+    run.currentStep++;
+    run.executionTime += Date.now() - stepStart;
+    if (!(await this.commitStep(run, expectedStep))) return 'done';
+    const status = gated.length ? 'waiting_approval' : still.length ? 'sleeping' : undefined;
+    this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, ...(status ? { status } : { total: run.maxSteps }) });
+    return status ? 'waiting' : 'continue';
+  }
+
+  /**
+   * The run's calls could not run because its hosted machine failed to
+   * start or wake: the run ends failed, not completed, with the machine's
+   * problem in a sentence and its raw error (redacted) in the metadata.
+   */
+  private async failForMachine(run: AgentRun, failure: MachineFailure, expectedStep: number, stepStart: number): Promise<'done'> {
+    run.status = AgentRunStatus.FAILED;
+    run.error = `The hosted machine for this run couldn't start: ${failure.summary}.`;
+    run.metadata = { ...(run.metadata || {}), machineFailure: failure };
+    run.currentStep++;
+    run.executionTime += Date.now() - stepStart;
+    if (!(await this.commitStep(run, expectedStep))) return 'done';
+    this.s.emitEvent(run.id, 'run.failed', { error: run.error, reasonCode: 'MACHINE_UNAVAILABLE', reason: failure.summary });
+    return 'done';
   }
 
   /**

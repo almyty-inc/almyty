@@ -773,6 +773,31 @@ describe('ToolExecutorService', () => {
       expect((service as any).runWorkspaces.acquire).not.toHaveBeenCalled();
     });
 
+    it('marks a call whose machine failed to start, with the machine\'s raw error, so a run can fail on it', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
+      const tls = 'Get "https://k8s.example:6443/api": x509: certificate signed by unknown authority';
+      hosted.resolveTarget.mockRejectedValue(
+        Object.assign(new Error('The machine for this environment failed to start'), { code: 'workspace_unavailable', machine: { failed: true, error: tls } }),
+      );
+
+      const result = await service.executeTool('tool-hosted', { command: 'ls' }, {
+        userId: 'user-1', organizationId: 'org-1', runId: 'run-1', agentId: 'agent-1', environmentId: ENV_ID,
+      });
+
+      expect(result).toMatchObject({ success: false, metadata: { runnerErrorCode: 'workspace_unavailable', machineFailed: true, machineError: tls } });
+      expect((service as any).runnerCalls.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('does not mark an ordinary unavailable workspace as a machine failure', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
+      hosted.resolveTarget.mockRejectedValue(Object.assign(new Error('A run with no user cannot be given a hosted workspace'), { code: 'workspace_required' }));
+
+      const result = await service.executeTool('tool-hosted', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1', environmentId: ENV_ID });
+
+      expect(result.success).toBe(false);
+      expect(result.metadata?.machineFailed).toBeUndefined();
+    });
+
     it('dispatches into the caller\'s persistent workspace on the environment\'s runner, whichever runner published the tool', async () => {
       toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
       hosted.resolveTarget.mockResolvedValue({ kind: 'ready', runnerId: 'runner-hosted', workspaceId: 'ws-p', hostedRunnerId: 'hr-1' });
