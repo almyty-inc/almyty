@@ -28,6 +28,7 @@ import {
   filesKeptUntil,
   formatMinutes,
   imageLabel,
+  machineProblem,
   machineStatus,
   readHostedSettings,
   type EnvironmentUsage,
@@ -35,6 +36,7 @@ import {
   type HostedWorkspace,
   type MyMachine,
 } from './hosted-shared'
+import { MachineProblem } from './machine-problem'
 
 export const NEW_ENVIRONMENT_PATH = '/runners/hosted/new'
 export const environmentPath = (id: string) => `/runners/hosted/${encodeURIComponent(id)}`
@@ -90,16 +92,21 @@ export function MachineCell({ mine, keepDays }: { mine: MyMachine | null | undef
     return <span className="text-sm text-muted-foreground" data-testid="machine-none">Not started yet</span>
   }
   const status = machineStatus(mine)
+  const problem = machineProblem(mine.machine)
   return (
     <div className="space-y-0.5" data-testid="machine-cell">
       <Badge variant={MACHINE_STATUS_VARIANT[status]}>{MACHINE_STATUS_LABEL[status]}</Badge>
-      <div className="text-xs text-muted-foreground">
-        {status === 'parked' && keepDays
-          ? `Files kept until ${formatDate(filesKeptUntil(mine, keepDays))}`
-          : mine.lastActiveAt
-            ? `Last active ${formatRelativeTime(mine.lastActiveAt)}`
-            : null}
-      </div>
+      {problem ? (
+        <MachineProblem problem={problem} />
+      ) : (
+        <div className="text-xs text-muted-foreground">
+          {status === 'parked' && keepDays
+            ? `Files kept until ${formatDate(filesKeptUntil(mine, keepDays))}`
+            : mine.lastActiveAt
+              ? `Last active ${formatRelativeTime(mine.lastActiveAt)}`
+              : null}
+        </div>
+      )}
     </div>
   )
 }

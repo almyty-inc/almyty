@@ -183,6 +183,27 @@ describe('EnvironmentDetailPage', () => {
     expect(screen.getByText('The image could not be pulled')).toBeInTheDocument()
   })
 
+  it('says why a machine is stuck waking, in a sentence, with the raw error behind Details', async () => {
+    api.workspaces.mockResolvedValue([
+      { ...running, machine: { ...running.machine, state: 'provisioning', failing: true, lastError: 'tls: failed to verify certificate: x509: certificate signed by unknown authority' } },
+    ])
+    render(<EnvironmentDetailPage />)
+    const machines = await screen.findByTestId('environment-machines')
+    expect(await within(machines).findByText("Can't reach the cluster: its certificate isn't trusted")).toBeInTheDocument()
+    expect(within(machines).getByText('failed')).toBeInTheDocument()
+    expect(within(machines).getByText('Details')).toBeInTheDocument()
+    expect(within(machines).getByTestId('machine-problem-detail')).toHaveTextContent('x509')
+  })
+
+  it('names the problem of a machine still starting with an error on record', async () => {
+    api.workspaces.mockResolvedValue([
+      { ...running, machine: { ...running.machine, state: 'pending', lastError: 'pods is forbidden: User "system:serviceaccount:almyty:runner" cannot create resource "pods" (403)' } },
+    ])
+    render(<EnvironmentDetailPage />)
+    const machines = await screen.findByTestId('environment-machines')
+    expect(await within(machines).findByText("The cluster rejected almyty's access")).toBeInTheDocument()
+  })
+
   it('lists the agents that run on it', async () => {
     getAgents.mockResolvedValue([{ id: 'a1', name: 'repo-helper', agentConfig: { environmentId: 'e1' } }, { id: 'a2', name: 'elsewhere', agentConfig: {} }])
     render(<EnvironmentDetailPage />)

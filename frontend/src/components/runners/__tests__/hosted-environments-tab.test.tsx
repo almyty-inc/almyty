@@ -111,6 +111,20 @@ describe('HostedEnvironmentsTab', () => {
     render(<HostedEnvironmentsTab />)
     await waitFor(() => expect(screen.getByText('Files kept until Oct 8, 2026')).toBeInTheDocument())
   })
+
+  it("says why the caller's machine is stuck starting, with the raw error behind Details and no token in it", async () => {
+    const stuck = {
+      ...mine('provisioning', 'active', null),
+      machine: { id: 'h', state: 'provisioning', desired: { replicas: 1 }, failing: true, lastError: 'Get "https://k8s.example:6443/api": x509: certificate signed by unknown authority (Bearer sk-live-123)' },
+    }
+    list.mockResolvedValue({ success: true, enabled: true, settings: SETTINGS, data: [env('e1', 'web-app', { mine: stuck })] })
+    render(<HostedEnvironmentsTab />)
+    expect(await screen.findByText("Can't reach the cluster: its certificate isn't trusted")).toBeInTheDocument()
+    expect(screen.getByText('failed')).toBeInTheDocument()
+    expect(screen.getByText('Details')).toBeInTheDocument()
+    expect(screen.getByTestId('machine-problem-detail')).toHaveTextContent('x509')
+    expect(screen.getByTestId('machine-problem-detail')).not.toHaveTextContent('sk-live-123')
+  })
 })
 
 describe('HostedIntro', () => {

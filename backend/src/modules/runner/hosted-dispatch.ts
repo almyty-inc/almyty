@@ -66,7 +66,7 @@ export function redactSecrets(text: string): string {
  */
 export function describeMachineError(raw: string | null | undefined): string {
   const text = raw ?? '';
-  if (/imagepullbackoff|errimagepull|pull(ing)? (the )?image|image pull|manifest unknown/i.test(text)) return "Couldn't download the environment image";
+  if (/imagepullbackoff|errimagepull|pull(ing)? (the )?image|image pull|could not be pulled|failed to pull|manifest unknown/i.test(text)) return "Couldn't download the environment image";
   if (/certificate|x509|self[- ]signed|unable to verify|cert_|\btls\b|\bssl\b/i.test(text)) return "Can't reach the cluster: its certificate isn't trusted";
   if (/\b40[13]\b|unauthori[sz]ed|forbidden/i.test(text)) return "The cluster rejected almyty's access";
   if (/capacity|insufficient (cpu|memory)|unschedulable|failedscheduling|no nodes available/i.test(text)) return 'Waiting for a free sandbox machine';
