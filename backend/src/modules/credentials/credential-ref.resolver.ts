@@ -10,7 +10,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { Team } from '../../entities/team.entity';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 import { decryptField, isEncrypted } from '../../common/security/field-crypto';
@@ -204,6 +206,8 @@ export class CredentialRefResolver {
     // The team rule at resolve time. Optional only for specs that build the
     // resolver by hand; without it a team row is refused (fail closed).
     @Optional() private readonly executionAccess?: ExecutionAccessService,
+    // Global; optional only for specs that build the resolver by hand.
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {
     this.policy = policy ?? new AllowAllConnectionUsePolicy();
   }
@@ -278,7 +282,57 @@ export class CredentialRefResolver {
     }
     await this.envelopeCrypto.warmOrg(organizationId);
     const config = this.decryptDeep(credential.getDecryptedConfig(), organizationId);
+    this.recordResolve(organizationId, credential, principal, execution, opts.context, decision || null);
     return { credential, config, secrets: CredentialRefResolver.secretsOf(config) };
+  }
+
+  /**
+   * The CONNECTION_RESOLVE row for one successful resolve. Every use of a
+   * stored secret is audited (docs/connections.md), including the ones
+   * with nobody behind them: hosted runner provisioning, a deployment's
+   * reconcile, a provider's health check. This is the only writer on the
+   * consumer seam; ConnectionsResolverService does not come through here
+   * and writes its own. Not awaited: the audit service never throws, and
+   * an LLM call should not wait on the insert.
+   */
+  private recordResolve(
+    organizationId: string,
+    credential: Credential,
+    principal: ConnectionUsePrincipal | undefined,
+    execution: ExecutionPrincipal | null,
+    context: ConnectionUseContext | undefined,
+    decision: ConnectionUseDecision | null,
+  ): void {
+    if (!this.auditLog) return;
+    const agentId = execution?.kind === 'agent'
+      ? execution.agentId
+      : context?.agentId ?? (context?.resourceType === 'agent' ? context.resourceId : undefined) ?? null;
+    const workspaceId = context?.resourceType === 'workspace' ? context.resourceId ?? null : null;
+    const gatewayId = execution?.kind === 'gateway' ? execution.gatewayId : null;
+    const owner = credential.visibility === 'private' ? 'private'
+      : credential.visibility === 'team' ? 'team'
+      : credential.ownerUserId ? 'user' : 'org';
+    void this.auditLog.log({
+      organizationId,
+      userId: principal?.id,
+      action: AuditAction.CONNECTION_RESOLVE,
+      resourceType: AuditResource.CONNECTION,
+      resourceId: credential.id,
+      resourceName: credential.name,
+      details: {
+        principal: { userId: principal?.id ?? null, agentId, workspaceId, gatewayId },
+        connectionId: credential.id,
+        connectorKey: credential.connectorKey ?? null,
+        owner,
+        agentId,
+        workspaceId,
+        purpose: context?.purpose ?? 'use',
+        resourceType: context?.resourceType ?? null,
+        resourceId: context?.resourceId ?? null,
+        via: decision?.via ?? (principal || execution ? null : 'system'),
+        grantId: decision?.grant?.id ?? null,
+      },
+    }).catch(() => undefined);
   }
 
   /** Same as resolve() but returns null for a missing/inactive row instead of throwing. Used by read-through shims. */
