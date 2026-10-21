@@ -610,7 +610,8 @@
       "title": "Agents CLI 1.5.5 help",
       "path": "screenshots/cli/agents-help.png",
       "capturedAt": "2026-10-09T14:53:23.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.5; recapture from published 1.5.6",
       "sha256": "8b4be89c766ea0c02067e2d80d44ad50f85078b72631ee122a553120a24f8b63",
       "source": {
         "kind": "published-cli",
@@ -629,7 +630,8 @@
       "title": "almyty CLI 1.5.5 help",
       "path": "screenshots/cli/almyty-help.png",
       "capturedAt": "2026-10-09T14:53:23.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.5; recapture from published 1.5.6",
       "sha256": "948b9dd0aadc8d0f4b7d8983cace716609f1ad2d4b6a57590a31e8b2c8c649a5",
       "source": {
         "kind": "published-cli",
@@ -648,7 +650,8 @@
       "title": "Auth CLI 1.5.5 help",
       "path": "screenshots/cli/auth-help.png",
       "capturedAt": "2026-10-09T14:53:23.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.5; recapture from published 1.5.6",
       "sha256": "2dafca7dd4921dd0e7bd46aad9b3969fd56ff467d81129f294bfbc67dc385e28",
       "source": {
         "kind": "published-cli",
@@ -667,7 +670,8 @@
       "title": "Chat CLI 1.5.5 help",
       "path": "screenshots/cli/chat-help.png",
       "capturedAt": "2026-10-09T14:53:23.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.5; recapture from published 1.5.6",
       "sha256": "aeabc0e0fa1f21eb3a3321b7cfd590ca021109cd40d34353de2ceeb2dffcff57",
       "source": {
         "kind": "published-cli",
@@ -686,7 +690,8 @@
       "title": "MCP server CLI 1.5.5 help",
       "path": "screenshots/cli/mcp-server-help.png",
       "capturedAt": "2026-10-09T14:53:23.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.5; recapture from published 1.5.6",
       "sha256": "f82d8f3b0da529dda0505a900257e4fede98b658659c334fe00e2ba1c414cce0",
       "source": {
         "kind": "published-cli",
@@ -705,7 +710,8 @@
       "title": "Skills CLI 1.5.5 help",
       "path": "screenshots/cli/skills-help.png",
       "capturedAt": "2026-10-09T14:53:23.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "banner shows 1.5.5; recapture from published 1.5.6",
       "sha256": "bf0197e2d24b96eb1e1b7a160efc85212e4b5ea6115cf6bc0d108175dfb1764d",
       "source": {
         "kind": "published-cli",
