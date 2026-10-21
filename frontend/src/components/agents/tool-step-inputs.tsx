@@ -142,7 +142,7 @@ export function ToolStepInputs({ node, nodes, tool, onUpdateNode }: ToolStepInpu
         const title = (prop.title as string) || key
         const id = `tool-param-${node.id}-${key}`
         return (
-          <div key={key} className="space-y-2 rounded-lg border bg-background p-2" data-testid={`tool-param-${key}`}>
+          <div key={key} className="space-y-2 rounded-lg border bg-background dark:bg-muted/40 p-2" data-testid={`tool-param-${key}`}>
             <div className="flex items-baseline justify-between gap-2">
               <Label htmlFor={`${id}-source`} className="text-xs">
                 {title}
@@ -198,7 +198,7 @@ export function OtherValues({ title, node, entries, known, write, hint }: { titl
       <p className="text-sm font-medium">{title}</p>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       {rows.map((row) => (
-        <div key={row.index} className="space-y-1 rounded-lg border bg-background p-2">
+        <div key={row.index} className="space-y-1 rounded-lg border bg-background dark:bg-muted/40 p-2">
           <div className="flex items-center gap-1">
             <Input className="h-8 text-xs" aria-label={`Value ${row.index + 1} name`} placeholder="name" value={row.key} onChange={(e) => patch(row.index, { key: e.target.value })} />
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`Remove value ${row.index + 1}`} onClick={() => write(entries.filter((_, i) => i !== row.index))}>

@@ -179,7 +179,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                     const summary = stepSummary(step)
                                     const machineError = stepMachineError(step)
                                     return (
-                                    <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm" data-testid={`run-step-${idx}`}>
+                                    <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background dark:bg-muted/40 border text-sm" data-testid={`run-step-${idx}`}>
                                       <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs font-mono text-muted-foreground">#{idx + 1}</span>
                                         <Badge variant="outline" className="text-[10px]">{step.type}</Badge>
@@ -221,7 +221,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                 <h4 className="text-sm font-medium mb-2">Thread</h4>
                                 <div className="space-y-1 max-h-[300px] overflow-y-auto">
                                   {run.thread.map((msg, idx) => (
-                                    <div key={idx} className={`p-2 rounded text-sm ${msg.role === 'assistant' ? 'bg-primary/5 border-l-2 border-primary' : 'bg-background border'}`}>
+                                    <div key={idx} className={`p-2 rounded text-sm ${msg.role === 'assistant' ? 'bg-primary/5 border-l-2 border-primary' : 'bg-background dark:bg-muted/40 border'}`}>
                                       <span className="text-xs font-medium text-muted-foreground">{msg.role}</span>
                                       <div className="text-xs mt-0.5 whitespace-pre-wrap">
                                         {typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content, null, 2)}

@@ -82,7 +82,7 @@ export function PromoteRunSection({ runId }: PromoteRunSectionProps) {
       <form
         id={formId}
         aria-label="Promote run to skill"
-        className="space-y-3 rounded-md border bg-background p-4"
+        className="space-y-3 rounded-md border bg-background dark:bg-muted/40 p-4"
         onSubmit={(e: FormEvent) => {
           e.preventDefault()
           mutation.mutate()

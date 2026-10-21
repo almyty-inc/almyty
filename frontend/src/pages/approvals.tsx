@@ -212,7 +212,7 @@ export function ApprovalsPage() {
                   const email = emailPreviewOf(row.payload)
                   if (!email) return null
                   return (
-                    <div className="mt-2 rounded-lg border bg-background p-3 text-sm text-foreground" data-testid="approval-email-preview">
+                    <div className="mt-2 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground" data-testid="approval-email-preview">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">The email it will send</p>
                       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                         <dt className="text-muted-foreground">To</dt>
@@ -240,7 +240,7 @@ export function ApprovalsPage() {
                 )}
                 {decisionFor?.row.id === row.id && (
                   <form
-                    className="mt-3 space-y-3 rounded-lg border bg-background p-3 text-sm text-foreground"
+                    className="mt-3 space-y-3 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground"
                     aria-label={decisionFor.intent === 'approve' ? 'Approve this action' : 'Reject this action'}
                     onSubmit={(e) => {
                       e.preventDefault()

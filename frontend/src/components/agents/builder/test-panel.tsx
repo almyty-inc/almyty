@@ -64,7 +64,7 @@ export function TestPanel({ agentId, onClose }: TestPanelProps) {
         </div>
         <div className="flex-1 space-y-2">
           <Label className="text-xs">Output</Label>
-          <pre role={testError ? 'alert' : 'status'} className={`font-mono text-xs bg-background border rounded-md p-3 h-[170px] overflow-auto whitespace-pre-wrap ${testError ? 'text-destructive' : ''}`}>
+          <pre role={testError ? 'alert' : 'status'} className={`font-mono text-xs bg-field border rounded-md p-3 h-[170px] overflow-auto whitespace-pre-wrap ${testError ? 'text-destructive' : ''}`}>
             {testError ? `Error: ${testError}` : testOutput || 'Run the agent to see output...'}
           </pre>
         </div>

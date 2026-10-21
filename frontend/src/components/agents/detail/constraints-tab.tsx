@@ -122,7 +122,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
               <div
                 key={c.id}
                 className={`flex items-start gap-3 p-2 rounded border text-sm ${
-                  c.active ? 'bg-background' : 'bg-muted/40 opacity-60'
+                  c.active ? 'bg-card' : 'bg-muted/40 opacity-60'
                 }`}
               >
                 <Switch

@@ -54,7 +54,7 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
   })
   const failed = step.output.status === 'failed'
   return (
-    <div className={`rounded border p-2 text-sm ${failed ? 'border-destructive/30 bg-destructive/5' : 'bg-background'}`} data-testid={`run-step-${index}`}>
+    <div className={`rounded border p-2 text-sm ${failed ? 'border-destructive/30 bg-destructive/5' : 'bg-background dark:bg-muted/40'}`} data-testid={`run-step-${index}`}>
       <div className="flex items-start gap-3">
         <div className="flex shrink-0 items-center gap-2">
           <span className="font-mono text-xs text-muted-foreground">#{index + 1}</span>
