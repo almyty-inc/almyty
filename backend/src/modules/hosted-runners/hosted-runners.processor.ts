@@ -10,6 +10,7 @@ import { Runner, RunnerState } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { AuditAction } from '../../entities/audit-log.entity';
 import { canAcceptWork } from '../runner/runner-state';
+import { isTerminalClusterError } from '../runner/hosted-dispatch';
 import { HostedAdapterRegistry } from './adapters/adapter.registry';
 import { HostedActual, HostedAdapterCredentials, HostedProvisionRequest, HostedRef, HostedRunnerAdapter } from './adapters/hosted-runner-adapter.interface';
 import { EnrollmentService, HOSTED_RENEW_PATH, HOSTED_STREAM_PATH } from './enrollment.service';
@@ -327,13 +328,15 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
   /**
    * A failed call is not a failed machine: it becomes one after
    * maxReadFailures in a row, or at once when the configuration itself is
-   * wrong (a missing or unusable cluster connection).
+   * wrong (a missing or unusable cluster connection) or the cluster can
+   * never be reached as configured: its certificate is not trusted, or it
+   * refused almyty (401/403). Waiting out the wake budget fixes neither.
    */
   private async recordError(hr: HostedRunner, error: any): Promise<HostedRunner> {
     const message = String(error?.message ?? error);
     const code = error?.response?.code ?? error?.code;
     const consecutive = ((hr.actual?.consecutiveErrors as number | undefined) ?? 0) + 1;
-    if (TERMINAL_ERROR_CODES.includes(code) || consecutive >= this.settings.current.reconcile.maxReadFailures) {
+    if (TERMINAL_ERROR_CODES.includes(code) || isTerminalClusterError(error) || consecutive >= this.settings.current.reconcile.maxReadFailures) {
       await this.writeObserved(hr, { actual: { ...(hr.actual ?? {}), consecutiveErrors: consecutive } });
       return this.fail(hr, message);
     }

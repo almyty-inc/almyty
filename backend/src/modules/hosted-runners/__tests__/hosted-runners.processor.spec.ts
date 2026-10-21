@@ -241,6 +241,29 @@ describe('hosted runner reconcile loop (stub adapter)', () => {
     expect(row()).toMatchObject({ state: 'failed', lastError: 'HOSTED_RUNNERS_CLUSTER_CONNECTION is not set' });
   });
 
+  it('fails at once on an untrusted cluster certificate, without waiting out the wake budget', async () => {
+    await processor.reconcile(HR);
+    jest.spyOn(stub, 'read').mockRejectedValueOnce(
+      Object.assign(new Error('unable to verify the first certificate'), { code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' }),
+    );
+    await processor.reconcile(HR);
+    expect(row()).toMatchObject({ state: 'failed', lastError: 'unable to verify the first certificate' });
+  });
+
+  it('fails at once when the cluster refuses almyty (401/403)', async () => {
+    await processor.reconcile(HR);
+    jest.spyOn(stub, 'read').mockRejectedValueOnce(Object.assign(new Error('read pod failed: HTTP 403 Forbidden'), { status: 403 }));
+    await processor.reconcile(HR);
+    expect(row()).toMatchObject({ state: 'failed', lastError: 'read pod failed: HTTP 403 Forbidden' });
+  });
+
+  it('keeps retrying other errors, an image pull refused with a 401 among them', async () => {
+    await processor.reconcile(HR);
+    jest.spyOn(stub, 'read').mockRejectedValueOnce(new Error('ErrImagePull: pulling image "registry.example/env:1": 401 Unauthorized'));
+    await processor.reconcile(HR);
+    expect(row()).toMatchObject({ state: 'suspended', actual: expect.objectContaining({ consecutiveErrors: 1 }) });
+  });
+
   it('orphans a machine the cluster lost, after the grace, and releases its workspace with the reason', async () => {
     await processor.reconcile(HR);
     stub.forget(HR);
