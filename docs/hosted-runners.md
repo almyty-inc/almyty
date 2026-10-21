@@ -545,6 +545,12 @@ the token decides which runner this is.
      On failure it is not, so the next start tries again, and the runner
      still comes online, so the problem can be looked at from a shell
      instead of from a restart loop.
+   - A `shell.exec` call that names no `cwd` starts in the checkout, so an
+     agent's relative paths land in the repository; without a repository,
+     or while the clone is missing, it starts in `/workspace`.
+     `ALMYTY_SHELL_CWD` (absolute, or relative to `/workspace`) overrides
+     the start folder. A `cwd` the call names is still relative to
+     `/workspace`.
 5. It holds `/runners/hosted/stream` with the credential (re-read on every
    request, so a renewed one is used at once), says `runner.hello` and
    heartbeats like any runner.

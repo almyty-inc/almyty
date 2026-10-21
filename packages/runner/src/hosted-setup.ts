@@ -68,6 +68,19 @@ export function workspaceRoot(env: Record<string, string | undefined>): string {
   return root.startsWith('/') ? root : DEFAULT_WORKSPACE_ROOT;
 }
 
+/**
+ * Where shell.exec starts when a call names no `cwd`. ALMYTY_SHELL_CWD
+ * when set (absolute, or relative to the workspace root), else the
+ * environment's checkout when it has a repository, else nothing and the
+ * shell starts in the workspace root. The handler falls back to the root
+ * when the folder is missing (a clone that failed).
+ */
+export function shellStartDir(env: Record<string, string | undefined>, prepared?: Pick<PrepareOutcome, 'repoDir'> | null): string | undefined {
+  const configured = (env.ALMYTY_SHELL_CWD ?? '').trim();
+  if (configured) return configured.startsWith('/') ? configured : join(workspaceRoot(env), configured);
+  return prepared?.repoDir ?? undefined;
+}
+
 export async function prepareHostedWorkspace(inputs: PrepareInputs = {}): Promise<PrepareOutcome> {
   const env = inputs.env ?? process.env;
   const run = inputs.run ?? runCommand;
