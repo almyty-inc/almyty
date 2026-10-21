@@ -191,8 +191,7 @@ type MachineFailure = { summary: string; detail: string | null };
 
 /** A waking machine, or another job in the person's workspace: sleep and try the call again. */
 function isWaking(result: ToolExecutionResult): boolean {
-  const code = result.metadata?.runnerErrorCode;
-  return !result.success && (code === WORKSPACE_WAKING || code === WORKSPACE_BUSY);
+  return !result.success && (result.metadata?.runnerErrorCode === WORKSPACE_WAKING || result.metadata?.runnerErrorCode === WORKSPACE_BUSY);
 }
 
 /** The machine behind the call failed to start or wake within the budget (HostedDispatchError's `machine`). */
@@ -2103,6 +2102,46 @@ export class AgentStepProcessor {
   }
 
   /**
+   * Make a call the model asked for on an earlier step, exactly as it asked:
+   * a held call once approved (with its approval), or a call that found its
+   * hosted machine starting. The one executor call site for both.
+   */
+  private async runHeldCall(
+    run: AgentRun,
+    agent: Agent,
+    tools: Tool[],
+    resolvedLimits: ResolvedRunLimits,
+    call: { toolId: string; toolName: string; parameters: Record<string, any> },
+    approvedGate?: { approvalId: string },
+  ): Promise<ToolExecutionResult> {
+    const tool = tools.find((t) => t.id === call.toolId);
+    if (!tool) {
+      return {
+        success: false,
+        error: `Tool '${call.toolName}' is no longer available to this run`,
+        executionTime: 0,
+        cached: false,
+        rateLimited: false,
+        retryCount: 0,
+      };
+    }
+    return this.s.toolExecutorService.executeTool(tool.id, call.parameters, {
+      userId: run.userId ?? undefined,
+      principal: principalOfRun(run),
+      organizationId: run.organizationId,
+      retries: resolvedLimits.toolErrorRetries,
+      runnerLabels: agent.agentConfig?.runnerLabels,
+      pinnedRunnerId: agentRunnerId(agent) ?? undefined,
+      environmentId: agentEnvironmentId(agent) ?? undefined,
+      runId: run.id,
+      agentId: agent.id,
+      agentTeamId: agent.teamId ?? null,
+      ...(approvedGate ? { approvedGate } : {}),
+      holdForApproval: 'caller',
+    });
+  }
+
+  /**
    * Calls that found their hosted machine still starting run again here,
    * as the very calls the model made, before the model is asked anything
    * (docs/design/hosted-runners-and-always-on.md, "Waking": a retryable
@@ -2130,28 +2169,7 @@ export class AgentStepProcessor {
       if (failure) break;
       const started = Date.now();
       const tool = tools.find((t) => t.id === call.toolId);
-      const result: ToolExecutionResult = tool
-        ? await this.s.toolExecutorService.executeTool(tool.id, call.parameters, {
-            userId: run.userId ?? undefined,
-            principal: principalOfRun(run),
-            organizationId: run.organizationId,
-            retries: resolvedLimits.toolErrorRetries,
-            runnerLabels: agent.agentConfig?.runnerLabels,
-            pinnedRunnerId: agentRunnerId(agent) ?? undefined,
-            environmentId: agentEnvironmentId(agent) ?? undefined,
-            runId: run.id,
-            agentId: agent.id,
-            agentTeamId: agent.teamId ?? null,
-            holdForApproval: 'caller',
-          })
-        : {
-            success: false,
-            error: `Tool '${call.toolName}' is no longer available to this run`,
-            executionTime: 0,
-            cached: false,
-            rateLimited: false,
-            retryCount: 0,
-          };
+      const result: ToolExecutionResult = await this.runHeldCall(run, agent, tools, resolvedLimits, call);
       if (result.approvalRequired && tool) {
         gated.push(await this.holdForApproval(run, agent, tool, { id: call.toolCallId, parameters: call.parameters }, result.approvalRequired));
         continue;
@@ -2352,30 +2370,7 @@ export class AgentStepProcessor {
     const waiting: GatedToolCall[] = [];
     for (const call of held) {
       const started = Date.now();
-      const tool = tools.find((t) => t.id === call.toolId);
-      const result: ToolExecutionResult = tool
-        ? await this.s.toolExecutorService.executeTool(tool.id, call.parameters, {
-            userId: run.userId ?? undefined,
-            principal: principalOfRun(run),
-            organizationId: run.organizationId,
-            retries: resolvedLimits.toolErrorRetries,
-            runnerLabels: agent.agentConfig?.runnerLabels,
-            pinnedRunnerId: agentRunnerId(agent) ?? undefined,
-            environmentId: agentEnvironmentId(agent) ?? undefined,
-            runId: run.id,
-            agentId: agent.id,
-            agentTeamId: agent.teamId ?? null,
-            approvedGate: { approvalId: call.approvalId },
-            holdForApproval: 'caller',
-          })
-        : {
-            success: false,
-            error: `Tool '${call.toolName}' is no longer available to this run`,
-            executionTime: 0,
-            cached: false,
-            rateLimited: false,
-            retryCount: 0,
-          };
+      const result: ToolExecutionResult = await this.runHeldCall(run, agent, tools, resolvedLimits, call, { approvalId: call.approvalId });
       if (result.approvalRequired) {
         waiting.push(call);
         continue;
