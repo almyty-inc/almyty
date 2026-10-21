@@ -129,7 +129,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
                 <div className="flex items-center justify-between mb-1">
                   <code className="text-sm font-semibold">{prop.name}</code>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs bg-background px-2 py-1 rounded">{prop.type}</span>
+                    <span className="text-xs bg-background dark:bg-input px-2 py-1 rounded">{prop.type}</span>
                     {prop.required && <span className="text-xs bg-red-100 text-red-700 dark:bg-destructive/20 dark:text-red-300 px-2 py-1 rounded">required</span>}
                   </div>
                 </div>

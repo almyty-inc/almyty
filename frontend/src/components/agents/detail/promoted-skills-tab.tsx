@@ -165,7 +165,7 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
                           <TableCell colSpan={5} className="bg-muted/30 p-4">
                             <section id={panelId} aria-label={`SKILL.md for ${skill.name}`} className="space-y-2">
                               <p className="text-xs text-muted-foreground">SKILL.md (Agent Skills format)</p>
-                              <pre className="bg-background border rounded p-3 text-xs whitespace-pre-wrap break-words max-h-[60vh] overflow-auto">
+                              <pre className="bg-background dark:bg-muted/40 border rounded p-3 text-xs whitespace-pre-wrap break-words max-h-[60vh] overflow-auto">
                                 {skill.content}
                               </pre>
                             </section>

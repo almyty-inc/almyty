@@ -200,7 +200,7 @@ export function RoutingPolicyEditor({ value, onChange, cards, cardsLoading }: Ro
         {chain.length > 0 && (
           <ol className="mt-1 space-y-1">
             {chain.map((id, index) => (
-              <li key={id} className="flex items-center gap-1 rounded border bg-background px-2 py-1 text-xs">
+              <li key={id} className="flex items-center gap-1 rounded border bg-background dark:bg-muted/40 px-2 py-1 text-xs">
                 <span className="text-muted-foreground font-mono w-4">{index + 1}.</span>
                 <span className="truncate flex-1" title={cardLabel(byId.get(id), id)}>{cardLabel(byId.get(id), id)}</span>
                 <button type="button" aria-label={`Move ${cardLabel(byId.get(id), id)} up`} className="text-muted-foreground hover:text-foreground disabled:opacity-30" disabled={index === 0} onClick={() => moveChain(index, -1)}>

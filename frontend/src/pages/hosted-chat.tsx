@@ -233,7 +233,7 @@ function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () =>
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="you@example.com"
-        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+        className="w-full rounded-md border bg-field px-3 py-2 text-sm"
       />
       {error && (
         <p role="alert" className="text-sm text-destructive">
@@ -267,7 +267,7 @@ function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () =>
         value={code}
         onChange={(e) => setCode(e.target.value)}
         placeholder="123456"
-        className="w-full rounded-md border bg-background px-3 py-2 text-center font-mono text-lg tracking-widest"
+        className="w-full rounded-md border bg-field px-3 py-2 text-center font-mono text-lg tracking-widest"
       />
       {error && (
         <p role="alert" className="text-sm text-destructive">

@@ -146,7 +146,7 @@ export function RoleCostTable({ run }: { run: AgentRun }) {
           </span>
         )}
       </h4>
-      <div className="overflow-x-auto rounded border bg-background">
+      <div className="overflow-x-auto rounded border bg-background dark:bg-muted/40">
         <table className="w-full text-xs">
           <thead className="text-muted-foreground">
             <tr className="border-b">

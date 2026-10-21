@@ -241,7 +241,7 @@ export function AuditTab() {
               setAuditResourceFilter(e.target.value)
               setAuditPage(1)
             }}
-            className="text-xs border rounded px-2 py-1 bg-background"
+            className="text-xs border rounded px-2 py-1 bg-field"
             aria-label="Filter by resource type"
           >
             <option value="">All</option>
@@ -269,7 +269,7 @@ export function AuditTab() {
               setAuditActionFilter(e.target.value)
               setAuditPage(1)
             }}
-            className="text-xs border rounded px-2 py-1 bg-background"
+            className="text-xs border rounded px-2 py-1 bg-field"
             aria-label="Filter by action"
           >
             <option value="">All</option>
