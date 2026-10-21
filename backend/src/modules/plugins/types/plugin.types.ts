@@ -142,6 +142,8 @@ export interface PluginContext {
       id: string;
       name: string;
       operation?: string;
+      /** Top-level inputs that are the command the tool runs (tools/tool-executable-inputs.ts). */
+      executableInputs?: string[];
     };
     api?: {
       id: string;

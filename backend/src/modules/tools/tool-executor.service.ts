@@ -37,6 +37,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
+import { executableInputs } from './tool-executable-inputs';
 import { ToolApprovalGateService, hitDetail } from './tool-approval-gate.service';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
 import { decideToolCaller } from '../../common/security/gateway-tool-permissions';
@@ -392,8 +393,11 @@ export class ToolExecutorService {
       }
 
       // Parameter sanitization — catches prototype pollution / NoSQL
-      // operator injection / obvious script payloads.
-      const sanitization = sanitizeToolParameters(parameters);
+      // operator injection / obvious script payloads. A shell tool's
+      // command is exempt from the command-injection checks here and in
+      // the security scanner below (tool-executable-inputs.ts).
+      const execInputs = executableInputs(tool);
+      const sanitization = sanitizeToolParameters(parameters, { executableInputs: execInputs });
       if (!sanitization.safe) {
         this.logger.warn(
           `Blocked dangerous parameters for tool ${tool.name}: ${sanitization.warnings.join('; ')}`,
@@ -429,7 +433,7 @@ export class ToolExecutorService {
             timestamp: new Date().toISOString(),
             plugin: { id: '', name: '', version: '' },
             execution: { attempt: 1, timeout: 0, startTime },
-            tool: { id: tool.id, name: tool.name },
+            tool: { id: tool.id, name: tool.name, executableInputs: execInputs },
           },
         });
         const halted = hooked.metadata.halted as

@@ -35,7 +35,7 @@ import { GrantsService } from './grants/grants.service';
 import { connectionVisibleTo, GrantPrincipal } from './grants/grant-check';
 import { RotationService, RotateOutcome } from './rotation/rotation.service';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
-import { interpolate, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
+import { interpolate, normalizeFormattedFields, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
 import {
   ConnectMethod,
   ConnectionOwner,
@@ -660,9 +660,13 @@ export class ConnectionsService {
   }
 
   private checkedInput(method: ConnectMethod, input: Record<string, unknown> | undefined): Record<string, unknown> {
-    const values = input ?? {};
-    const errors = schemaViolations(values, method.schema);
+    const errors = schemaViolations(input ?? {}, method.schema);
+    // Certificate fields are stored canonical: a PEM pasted into one line
+    // still verifies, and text that is no certificate is refused here.
+    const normalized = normalizeFormattedFields(input ?? {}, method.schema);
+    errors.push(...normalized.errors);
     if (errors.length) throw new BadRequestException({ code: 'CONNECT_INPUT_INVALID', message: errors.join('; '), errors });
+    const values = normalized.values;
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(values)) if (v !== undefined && v !== null && v !== '') out[k] = v;
     for (const [k, p] of Object.entries(method.schema?.properties ?? {})) if (out[k] === undefined && p.default !== undefined) out[k] = p.default;

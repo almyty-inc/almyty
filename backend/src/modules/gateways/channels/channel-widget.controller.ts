@@ -28,6 +28,8 @@ import { ChannelLinkService, ownerOf } from '../channel-link.service';
 import { ChannelPolicyService } from '../channel-policy.service';
 import { ChannelGatewayService } from './channel-gateway.service';
 import { buildWidgetScript, widgetConfigFor } from './widget-script';
+import { WIDGET_PREVIEW_PAGE, WIDGET_PREVIEW_SCRIPT, widgetPreviewCsp } from './widget-preview';
+import { dashboardAllowedOrigins } from '../../../common/security/allowed-origins';
 import { trustedClientIp } from '../../../common/security/client-ip';
 import { ChannelAttachmentReader, attachmentIdsFrom, type ReadAttachments } from './channel-attachments.service';
 import { FilesService } from '../../files/files.service';
@@ -94,6 +96,46 @@ export class ChannelWidgetController {
     // gateway is the allowed-origins list, enforced by SurfaceCorsService.
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     return res.send(buildWidgetScript(id));
+  }
+
+  /**
+   * The dashboard's live preview of this widget: a page on the API origin
+   * that loads the preview shim and the real widget.js (see widget-preview.ts).
+   * Same gate as widget.js. It carries its own CSP, which lets only the
+   * dashboard frame it, so helmet's X-Frame-Options (which would refuse the
+   * dashboard, a different origin) comes off.
+   */
+  @Get(':id/widget-preview')
+  @ApiOperation({ summary: 'Live preview page for the chat widget, framed by the dashboard' })
+  async widgetPreview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ) {
+    await this.channelGatewayService.findWidgetGateway(id);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Content-Security-Policy', widgetPreviewCsp(dashboardAllowedOrigins((name) => process.env[name])));
+    res.removeHeader('X-Frame-Options');
+    return res.send(WIDGET_PREVIEW_PAGE);
+  }
+
+  @Get(':id/widget-preview.js')
+  @ApiOperation({ summary: 'Preview shim the widget preview page loads before widget.js' })
+  async widgetPreviewScript(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ) {
+    await this.channelGatewayService.findWidgetGateway(id);
+
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // The preview frame is sandboxed (an opaque origin), so to the browser
+    // this is a cross-origin load, refused under helmet's same-origin CORP.
+    // Like widget.js it is public and carries no data.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    return res.send(WIDGET_PREVIEW_SCRIPT);
   }
 
   @Get(':id/widget-config')

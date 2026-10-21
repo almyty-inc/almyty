@@ -16,7 +16,8 @@ import { AuthHelper } from './helpers/auth.helper'
  *   API:    TURNSTILE_SECRET=1x0000000000000000000000000000000AA
  *   serve:  the build under the nginx CSP, see vite.csp-preview.config.ts
  *   E2E_BASE_URL=... npx playwright test --config=playwright.local.config.ts signup-captcha
- * Needs to reach challenges.cloudflare.com.
+ * Needs to reach challenges.cloudflare.com. Skips against a real site key
+ * (staging, production): its challenge does not pass a headless browser.
  */
 test('sign-up renders the captcha and completes', async ({ page }) => {
   const violations: string[] = []
@@ -31,6 +32,11 @@ test('sign-up renders the captcha and completes', async ({ page }) => {
   if (csp) {
     expect(csp).toContain('https://challenges.cloudflare.com')
   }
+
+  // Staging and production use a real key, whose challenge a headless browser
+  // cannot pass. The key is read from the provider's frame, so a CSP that
+  // blocks the frame still fails below rather than skipping.
+  await AuthHelper.skipUnlessCaptchaAutoPasses(page)
 
   // The provider's iframe is what the CSP blocked: it must load and settle.
   expect(await AuthHelper.waitForCaptcha(page)).toBe(true)

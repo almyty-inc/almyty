@@ -11,11 +11,11 @@
  * shows: `gateway.configuration.widget`, edited here and saved with the
  * channel page as a MERGE so everything else on the gateway is left alone.
  *
- * Live preview: an iframe (srcdoc) loads the REAL widget.js from the API
- * for this gateway, so the preview is exactly what the site embeds. The
- * only preview affordance is a fetch shim inside the iframe that answers
- * the widget's own /widget-config request with that look plus the
- * current (unsaved) placement.
+ * Live preview: an iframe of a page on the API (/gateways/:id/widget-preview)
+ * that loads the REAL widget.js for this gateway, so the preview is exactly
+ * what the site embeds. The only preview affordance is a fetch shim on that
+ * page that answers the widget's own /widget-config request with that look
+ * plus the current (unsaved) placement, passed in the URL fragment.
  */
 import { useEffect, useMemo, useState } from 'react'
 import * as z from 'zod'
@@ -102,43 +102,16 @@ export function widgetLookFromApp(app: WidgetOwnerApp): WidgetLook {
 }
 
 /**
- * srcdoc for the live preview iframe. Loads the real widget.js from the API
- * and shims only the widget-config fetch so unsaved values render. The
- * config travels as JSON in an inert script tag (with `<` escaped), never
- * interpolated into markup or code.
+ * URL of the live preview: a page on the API origin that loads the real
+ * widget.js and answers its widget-config request with `config`, so unsaved
+ * values render. Not an srcdoc document: one of those inherits this page's
+ * CSP, which (rightly) admits no inline script and no API-host script, so the
+ * preview never ran in production. The config travels in the fragment, which
+ * the browser never sends to the server; widget.js validates it field by
+ * field, as it does the real response.
  */
-export function buildPreviewSrcDoc(scriptSrc: string, config: WidgetPlacement & WidgetLook): string {
-  const payload = JSON.stringify({ success: true, data: config }).replace(/</g, '\\u003c')
-  const bg = config.theme === 'dark' ? '#09090b' : '#f4f4f5'
-  return [
-    '<!doctype html>',
-    '<html>',
-    `<head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:${bg}}</style></head>`,
-    '<body>',
-    `<script type="application/json" id="almyty-preview-config">${payload}</scr` + 'ipt>',
-    '<script>',
-    '(function () {',
-    "  var payload = document.getElementById('almyty-preview-config').textContent;",
-    '  var orig = window.fetch;',
-    '  window.fetch = function (input) {',
-    "    var url = typeof input === 'string' ? input : (input && input.url) || '';",
-    "    if (url.indexOf('/widget-config') !== -1) {",
-    "      return Promise.resolve(new Response(payload, { headers: { 'Content-Type': 'application/json' } }));",
-    '    }',
-    '    return orig.apply(window, arguments);',
-    '  };',
-    "  window.addEventListener('load', function () {",
-    '    setTimeout(function () {',
-    "      var b = document.querySelector('.almyty-widget-bubble');",
-    '      if (b) b.click();',
-    '    }, 150);',
-    '  });',
-    '})();',
-    '</scr' + 'ipt>',
-    `<script src="${scriptSrc}"></scr` + 'ipt>',
-    '</body>',
-    '</html>',
-  ].join('\n')
+export function buildPreviewUrl(apiBase: string, gatewayId: string, config: WidgetPlacement & WidgetLook): string {
+  return `${apiBase}/gateways/${encodeURIComponent(gatewayId)}/widget-preview#${encodeURIComponent(JSON.stringify(config))}`
 }
 
 export interface WidgetBuilderProps {
@@ -157,7 +130,6 @@ export interface WidgetBuilderProps {
 
 export function WidgetBuilder({ gateway, app, placement, onPlacementChange }: WidgetBuilderProps) {
   const apiBase = getApiBaseUrl()
-  const scriptSrc = `${apiBase}/gateways/${gateway.id}/widget.js`
   const embedSnippet = buildWidgetEmbedSnippet(apiBase, gateway.id)
   const look = widgetLookFromApp(app)
 
@@ -171,10 +143,10 @@ export function WidgetBuilder({ gateway, app, placement, onPlacementChange }: Wi
   }, [placementKey])
 
   const lookKey = JSON.stringify(look)
-  const previewSrcDoc = useMemo(
-    () => buildPreviewSrcDoc(scriptSrc, { ...look, ...previewPlacement }),
+  const previewUrl = useMemo(
+    () => buildPreviewUrl(apiBase, gateway.id, { ...look, ...previewPlacement }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scriptSrc, lookKey, previewPlacement],
+    [apiBase, gateway.id, lookKey, previewPlacement],
   )
 
   return (
@@ -226,9 +198,12 @@ export function WidgetBuilder({ gateway, app, placement, onPlacementChange }: Wi
           <div>
             <Label>Preview</Label>
             <iframe
+              // A new document per change: only the fragment differs, and a
+              // fragment change alone would not reload the widget.
+              key={previewUrl}
               title="Chat widget live preview"
               sandbox="allow-scripts"
-              srcDoc={previewSrcDoc}
+              src={previewUrl}
               className="mt-1 h-[480px] w-full rounded-lg border bg-muted/30"
             />
             <p className="mt-1 text-xs text-muted-foreground">

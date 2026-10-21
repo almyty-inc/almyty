@@ -694,7 +694,7 @@ function Advanced({ provider, models, onSaved }: { provider: any; models: ModelC
         ) : (
           <select
             aria-label="Model to change"
-            className="flex h-9 w-full max-w-md rounded-lg border border-input bg-background px-3 text-sm"
+            className="flex h-9 w-full max-w-md rounded-lg border border-input bg-field px-3 text-sm"
             value={modelId}
             onChange={(e) => setModelId(e.target.value)}
           >

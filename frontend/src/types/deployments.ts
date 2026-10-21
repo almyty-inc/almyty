@@ -39,10 +39,13 @@ export interface JsonSchemaProperty {
   enum?: Array<string | number>
   minimum?: number
   maximum?: number
+  /** 'pem' is certificate text: rendered multi-line, normalised by the API on save. */
   format?: string
   'x-secret'?: boolean
   /** Shown under Advanced on the connect form, even when secret (an optional client secret). */
   'x-advanced'?: boolean
+  /** Rendered as a multi-line textarea whose newlines are kept (certificates, keys, long text). */
+  'x-multiline'?: boolean
 }
 
 export interface JsonSchemaObject {

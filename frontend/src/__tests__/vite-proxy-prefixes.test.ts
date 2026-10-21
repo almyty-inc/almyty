@@ -19,6 +19,14 @@ describe('vite dev proxy keys', () => {
     expect(keys).toContain('/apis')
   })
 
+  // A repeated key is legal JavaScript: the later value silently replaces
+  // the earlier one, so whoever reads the first rule is reading dead config.
+  // '/kms' was listed twice, once with bypassHtmlGetRequests and once without.
+  it('name each prefix once', () => {
+    const repeated = keys.filter((key, i) => keys.indexOf(key) !== i)
+    expect(repeated).toEqual([])
+  })
+
   it('never let an earlier key swallow a later route by bare prefix', () => {
     const collisions: string[] = []
     keys.forEach((earlier, i) => {
