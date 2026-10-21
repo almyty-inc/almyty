@@ -99,11 +99,18 @@ Every connector must say how to prove a connection works. Kinds:
 | `oauth2_client_credentials` | the client credentials grant against the templated token URL; label is `clientId@tenantId` |
 | `s3_bucket` | `HeadBucket` then `ListObjectsV2(MaxKeys=1)` through `@aws-sdk/client-s3` (lazily required); label is `bucket@endpoint-or-region` |
 | `mcp_initialize` | JSON-RPC `initialize` against the server URL; label is `serverInfo.name` |
+| `kubernetes` | `GET /version` on the API server with the saved CA (system roots when empty) and ServiceAccount token, then one SelfSubjectAccessReview per thing the hosted runner adapter does (`hosted-runners/adapters/kubernetes/access.ts`) in the namespace it would use (`cluster.namespacePrefix` + organization id); label is the server, `health.detail` the cluster version |
+
+A check that learns more than yes or no (a cluster's version) returns it
+as `detail`; the connection shows it as `health.detail`. `format` proves
+nothing about the key, so the UI shows such a credential as "Not checked"
+and offers no "Check again".
 
 Every URL a probe fetches passes the SSRF guard
 (`common/security/url-validator`) first; private ranges are allowed
 only for connectors that name an escape-hatch env var
-(`OLLAMA_ALLOW_PRIVATE_URLS`, `MCP_ALLOW_PRIVATE_URLS`).
+(`OLLAMA_ALLOW_PRIVATE_URLS`, `MCP_ALLOW_PRIVATE_URLS`,
+`KUBERNETES_ALLOW_PRIVATE_URLS`).
 
 ## Rules
 

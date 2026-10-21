@@ -18,6 +18,7 @@ import {
   siGooglegemini,
   siHuggingface,
   siKimi,
+  siKubernetes,
   siMinimax,
   siMistralai,
   siModal,
@@ -60,6 +61,7 @@ export const BRAND_ICONS: Record<string, SimpleIcon> = {
   'registry-huggingface': siHuggingface,
   'mcp-custom': siModelcontextprotocol,
   'toolsource-openapi': siOpenapiinitiative,
+  kubernetes: siKubernetes,
 }
 
 /** A brand colour too dark or too light to read on one of the two themes draws in the text colour instead. */
