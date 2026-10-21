@@ -23,7 +23,7 @@ export function argumentsLine(args: Record<string, unknown>, max = 160): string 
 
 export function ChangeSetView({ entries }: { entries: ChangeSetEntry[] }) {
   return (
-    <ol className="divide-y rounded-md border bg-background text-sm" data-testid="change-set" aria-label="Changes in this set">
+    <ol className="divide-y rounded-md border bg-background dark:bg-muted/40 text-sm" data-testid="change-set" aria-label="Changes in this set">
       {entries.map((e) => (
         <li key={e.id} className="flex flex-col gap-1 p-2 sm:flex-row sm:items-start sm:gap-3">
           <span className="font-mono text-xs text-muted-foreground sm:w-6 sm:shrink-0">{e.id}</span>

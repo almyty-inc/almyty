@@ -30,7 +30,7 @@ export function VerifierPanelList({ verify }: { verify: Verify }) {
   return (
     <div className="space-y-1" data-testid="verifier-panel-list">
       {(verify.checkers || []).map((c, i) => (
-        <div key={i} className="flex items-center gap-2 text-sm rounded border bg-background px-2 py-1">
+        <div key={i} className="flex items-center gap-2 text-sm rounded border bg-background dark:bg-muted/40 px-2 py-1">
           <span className="text-foreground">{c.name || `Reviewer ${i + 1}`}</span>
           <Badge variant="secondary" className="text-[10px]">{nameOf(c.providerId)}</Badge>
           {c.model && <span className="font-mono text-[11px] text-muted-foreground">{c.model}</span>}

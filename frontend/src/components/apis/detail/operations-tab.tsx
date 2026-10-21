@@ -230,7 +230,7 @@ function OperationDetails({
         <div className="space-y-1">
           {relatedTools.length > 0 ? (
             relatedTools.map((tool: Tool) => (
-              <div key={tool.id} className="flex items-center justify-between rounded border bg-background p-2">
+              <div key={tool.id} className="flex items-center justify-between rounded border bg-background dark:bg-muted/40 p-2">
                 <span className="text-sm">{tool.name}</span>
                 <Button size="sm" variant="ghost" onClick={() => onViewTool(tool.id)}>
                   View tool
