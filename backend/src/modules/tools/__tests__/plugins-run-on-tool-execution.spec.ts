@@ -29,7 +29,7 @@ describe('plugins actually run on the tool execution path', () => {
   });
 
   it('runs the hook after validation and sanitization, not before', () => {
-    const sanitize = executor.indexOf('sanitizeToolParameters(parameters)');
+    const sanitize = executor.indexOf('sanitizeToolParameters(parameters, { executableInputs: execInputs })');
     const hook = executor.indexOf('executeHook(PluginHookType.PRE_TOOL_EXECUTION');
     expect(sanitize).toBeGreaterThan(-1);
     expect(hook).toBeGreaterThan(sanitize);
@@ -39,6 +39,14 @@ describe('plugins actually run on the tool execution path', () => {
     const hook = executor.indexOf('executeHook(PluginHookType.PRE_TOOL_EXECUTION');
     const dispatch = executor.indexOf('await this.executeRunnerCall(tool,');
     expect(dispatch).toBeGreaterThan(hook);
+  });
+
+  it('tells the sanitizer and the plugins which inputs are the command a shell tool runs', () => {
+    // Without this the security scanner read `ls && printf 'x' > NOTES.md`
+    // sent to runner.<name>.shell.exec as SQL and command injection and
+    // refused it (tool-executable-inputs.ts).
+    expect(executor).toContain('const execInputs = executableInputs(tool);');
+    expect(executor).toContain('tool: { id: tool.id, name: tool.name, executableInputs: execInputs }');
   });
 
   it('refuses the call when a plugin halts the chain', () => {
