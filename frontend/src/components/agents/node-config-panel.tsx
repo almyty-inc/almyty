@@ -872,7 +872,7 @@ function SubAgentConfig({ node, updateData, onUpdateNode }: { node: Node; update
       <div className="space-y-2">
         <p className="text-sm font-medium">What to send it</p>
         {mappings.map((m, i) => (
-          <div key={i} className="space-y-1 rounded-lg border bg-background p-2">
+          <div key={i} className="space-y-1 rounded-lg border bg-background dark:bg-muted/40 p-2">
             <div className="flex items-center gap-1">
               <Input className="h-8 text-xs" aria-label={`Value ${i + 1} name`} placeholder="name" value={m.key} onChange={(e) => updateMapping(i, 'key', e.target.value)} />
               <Button
@@ -999,7 +999,7 @@ function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateData
 
         <div className="mt-2 space-y-2">
           {checkers.map((checker, i) => (
-            <div key={i} className="rounded-lg border p-2 space-y-2 bg-background">
+            <div key={i} className="rounded-lg border p-2 space-y-2 bg-background dark:bg-muted/40">
               <div className="flex items-center gap-1">
                 <Input className="text-xs" aria-label={`Checker ${i + 1} name`} placeholder="name" value={checker.name || ''} onChange={(e) => patchChecker(i, { name: e.target.value })} />
                 <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`Remove checker ${i + 1}`} onClick={() => removeChecker(i)}>
@@ -1212,7 +1212,7 @@ function DecisionConfig({ node, updateData, onUpdateNode }: { node: Node; update
 
         <div className="mt-2 space-y-2">
           {options.map((option, i) => (
-            <div key={i} className="rounded-lg border p-2 space-y-2 bg-background">
+            <div key={i} className="rounded-lg border p-2 space-y-2 bg-background dark:bg-muted/40">
               <div className="flex items-center gap-1">
                 <Input className="text-xs font-mono" aria-label={`Answer ${i + 1}`} placeholder="answer" value={option.id || ''} onChange={(e) => patchOption(i, { id: e.target.value })} />
                 <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`Remove answer ${i + 1}`} onClick={() => removeOption(i)}>

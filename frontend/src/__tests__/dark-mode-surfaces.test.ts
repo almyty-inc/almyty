@@ -127,3 +127,54 @@ describe('fields read on the page and on cards', () => {
     expect(read('components/ui/switch.tsx')).toMatch(/bg-background dark:bg-foreground/)
   })
 })
+
+describe('panels inside cards do not sink to the page colour', () => {
+  // bg-background is the deepest dark colour, so a row, well or code block
+  // filled with it inside a card shows as a black hole on zinc-900. Nested
+  // panels pair it with a dark: fill (usually bg-muted/40, recessed) or use
+  // bg-card / bg-field; only a page-level surface keeps a bare bg-background.
+  const bareBackground = (src: string): string[] =>
+    src
+      .split('\n')
+      .filter((line) => /(^|[\s'"`{])bg-background(\/\d+)?(?=[\s'"`}]|$)/.test(line) && !/dark:(\S+:)?bg-/.test(line))
+      .map((line) => line.trim())
+
+  it('the detector flags a bare fill and allows a dark pair or a prefixed variant', () => {
+    expect(bareBackground('<div className="rounded border bg-background p-2">')).toHaveLength(1)
+    expect(bareBackground("{x ? 'bg-background' : 'bg-muted/40'}")).toHaveLength(1)
+    expect(bareBackground('<div className="bg-background/50 p-3">')).toHaveLength(1)
+    expect(bareBackground('<div className="rounded border bg-background dark:bg-muted/40 p-2">')).toEqual([])
+    expect(bareBackground('<kbd className="focus:bg-background">')).toEqual([])
+    expect(bareBackground('<div className="bg-muted dark:bg-background">')).toEqual([])
+  })
+
+  const NESTED = [
+    'components/agents/verifier-panel.tsx',
+    'components/agents/detail/run-roles.tsx',
+    'components/agents/detail/runs-tab.tsx',
+    'components/agents/detail/code-step.tsx',
+    'components/agents/detail/constraints-tab.tsx',
+    'components/agents/detail/promote-run-section.tsx',
+    'components/agents/detail/promoted-skills-tab.tsx',
+    'components/models/routing-policy-editor.tsx',
+    'components/approvals/change-set-view.tsx',
+    'pages/approvals.tsx',
+    'components/agents/node-config-panel.tsx',
+    'components/agents/tool-step-inputs.tsx',
+    'components/agents/builder/test-panel.tsx',
+    'components/apis/detail/operations-tab.tsx',
+    'components/JsonSchemaBuilder.tsx',
+    'components/channels/build-panel.tsx',
+    'components/analytics/audit-tab.tsx',
+    'pages/tool-detail.tsx',
+  ]
+  it.each(NESTED)('%s has no bare bg-background', (file) => {
+    expect(bareBackground(read(file))).toEqual([])
+  })
+
+  it('the hosted chat sign-in fields fill with bg-field, not the page colour', () => {
+    const src = read('pages/hosted-chat.tsx')
+    expect(src).not.toMatch(/rounded-md border bg-background px-3/)
+    expect(src.match(/rounded-md border bg-field px-3/g)?.length).toBe(2)
+  })
+})

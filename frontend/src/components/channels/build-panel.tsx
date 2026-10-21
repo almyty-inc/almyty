@@ -276,7 +276,7 @@ export function BuildPanel({
                     {build.handoff.command && (
                       <>
                         <div className="flex items-center gap-2">
-                          <code className="min-w-0 flex-1 truncate rounded bg-background px-2 py-1 font-mono text-[11px]">
+                          <code className="min-w-0 flex-1 truncate rounded bg-background dark:bg-muted px-2 py-1 font-mono text-[11px]">
                             {build.handoff.command}
                           </code>
                           <Button
