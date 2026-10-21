@@ -26,7 +26,6 @@ import {
   filesKeptUntil,
   formatMinutes,
   isLiveWorkspace,
-  machineProblem,
   machineStatus,
   type EnvironmentRun,
   type HostedEnvironment,
@@ -263,7 +262,7 @@ function MachinesCard({
       header: 'Machine',
       cell: ({ row }) => {
         const status = machineStatus(row.original)
-        const problem = machineProblem(row.original.machine)
+        const problem = row.original.machine?.problem ?? null
         return (
           <div className="space-y-0.5">
             <div className="flex flex-wrap items-center gap-1">

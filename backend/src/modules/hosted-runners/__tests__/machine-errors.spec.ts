@@ -37,6 +37,18 @@ describe('a hosted machine that cannot start', () => {
       expect(view).toMatchObject({ id: 'hr-1', state: 'provisioning', desired: { replicas: 1 }, failing: true });
       expect(view.lastError).toContain('x509');
       expect(view.lastError).not.toContain('s3cr3t-value');
+      expect(view.problem).toEqual({ sentence: "Can't reach the cluster: its certificate isn't trusted", detail: expect.stringContaining('x509') });
+      expect(view.problem!.detail).not.toContain('s3cr3t-value');
+    });
+
+    it('sends a problem only for a machine that has one to show', () => {
+      const problem = (state: any, lastError: string | null) =>
+        service({}).machineView({ id: 'hr-1', state, desired: { replicas: 1, resourceClass: 'small', wakeRequestedAt: ago(30) }, lastActiveAt: null, lastError }, NOW).problem;
+      expect(problem('ready', 'old x509 error')).toBeNull();
+      expect(problem('suspended', 'old x509 error')).toBeNull();
+      expect(problem('provisioning', null)).toBeNull();
+      expect(problem('pending', 'pods is forbidden (403)')).toEqual({ sentence: "The cluster rejected almyty's access", detail: 'pods is forbidden (403)' });
+      expect(problem('failed', null)).toEqual({ sentence: "The machine couldn't start", detail: null });
     });
 
     it('a failed machine is failing; a wake still inside its budget, or with no error, is not', () => {
@@ -77,6 +89,10 @@ describe('a hosted machine that cannot start', () => {
       ['pods is forbidden: User "system:serviceaccount:almyty:runner" cannot create resource (403)', "The cluster rejected almyty's access"],
       ['0/3 nodes are available: 3 Insufficient cpu. FailedScheduling', 'Waiting for a free sandbox machine'],
       ['Back-off pulling image "ghcr.io/almyty/env:1": ImagePullBackOff', "Couldn't download the environment image"],
+      ['Unauthorized (401)', "The cluster rejected almyty's access"],
+      ['0/3 nodes are available: 3 Insufficient memory', 'Waiting for a free sandbox machine'],
+      ['ErrImagePull: manifest unknown', "Couldn't download the environment image"],
+      ['The image could not be pulled', "Couldn't download the environment image"],
       ['something else entirely', "The machine couldn't start"],
     ])('%s', (raw, sentence) => {
       expect(describeMachineError(raw)).toBe(sentence);

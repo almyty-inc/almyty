@@ -61,7 +61,7 @@ import { CodeModeConfig, grantsLeftFor } from '../code-mode/code-write-policy';
 import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
-import { MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING, describeMachineError, redactSecrets } from '../runner/hosted-dispatch';
+import { MACHINE_FAILED, type MachineProblem, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
 
 /** One line per namespace a script can use: `petstore (19 functions)`. */
 function namespaceSummary(tools: Tool[]): string[] {
@@ -187,7 +187,7 @@ type WakingToolCall = {
 };
 
 /** Why a run's hosted machine could not start: a sentence, and its raw error with secrets masked. */
-type MachineFailure = { summary: string; detail: string | null };
+type MachineFailure = MachineProblem;
 
 /** A waking machine, or another job in the person's workspace: sleep and try the call again. */
 function isWaking(result: ToolExecutionResult): boolean {
@@ -198,7 +198,7 @@ function isWaking(result: ToolExecutionResult): boolean {
 function machineFailureOf(result: ToolExecutionResult): MachineFailure | null {
   if (result.success || !result.metadata?.[MACHINE_FAILED]) return null;
   const raw: string | null = result.metadata?.machineError ?? null;
-  return { summary: describeMachineError(raw), detail: raw ? redactSecrets(raw) : null };
+  return machineProblem(raw);
 }
 
 /**
@@ -2240,12 +2240,12 @@ export class AgentStepProcessor {
    */
   private async failForMachine(run: AgentRun, failure: MachineFailure, expectedStep: number, stepStart: number): Promise<'done'> {
     run.status = AgentRunStatus.FAILED;
-    run.error = `The hosted machine for this run couldn't start: ${failure.summary}.`;
+    run.error = `The hosted machine for this run couldn't start: ${failure.sentence}.`;
     run.metadata = { ...(run.metadata || {}), machineFailure: failure };
     run.currentStep++;
     run.executionTime += Date.now() - stepStart;
     if (!(await this.commitStep(run, expectedStep))) return 'done';
-    this.s.emitEvent(run.id, 'run.failed', { error: run.error, reasonCode: 'MACHINE_UNAVAILABLE', reason: failure.summary });
+    this.s.emitEvent(run.id, 'run.failed', { error: run.error, reasonCode: 'MACHINE_UNAVAILABLE', reason: failure.sentence });
     return 'done';
   }
 

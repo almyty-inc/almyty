@@ -37,8 +37,8 @@ const RUN: AgentRun = {
       input: { tool: 'env.app.shell.exec', parameters: { command: 'ls' } },
       output: {
         machineError: {
-          summary: "Can't reach the cluster: its certificate isn't trusted",
-          detail: 'x509: certificate signed by unknown authority (Bearer abc.def.ghi)',
+          sentence: "Can't reach the cluster: its certificate isn't trusted",
+          detail: 'x509: certificate signed by unknown authority (Bearer [redacted])',
         },
       },
       error: 'workspace_unavailable: The machine for this environment did not start within 180 seconds',
@@ -54,7 +54,7 @@ describe('a run step whose hosted machine could not start', () => {
     const step = screen.getByTestId('run-step-0')
     expect(step).toHaveTextContent("Can't reach the cluster: its certificate isn't trusted")
     expect(screen.getByTestId('run-step-0-machine-detail')).toHaveTextContent('x509')
-    expect(screen.getByTestId('run-step-0-machine-detail')).not.toHaveTextContent('abc.def.ghi')
+    expect(screen.getByTestId('run-step-0-machine-detail')).toHaveTextContent('Bearer [redacted]')
     expect(step).not.toHaveTextContent('Error: workspace_unavailable')
   })
 })

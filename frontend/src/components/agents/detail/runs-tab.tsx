@@ -34,7 +34,7 @@ import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
 import { DeliveryNote } from './schedule-card'
 import { MachineProblem } from '@/components/runners/machine-problem'
-import { redactSecrets, type MachineProblemInfo } from '@/components/runners/hosted-shared'
+import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
 
 interface RunsTabProps {
   runs: AgentRun[]
@@ -50,8 +50,8 @@ export function runRouted(run: Pick<AgentRun, 'steps'>): boolean {
 /** A tool step whose hosted machine could not start: the backend's sentence and the masked raw error. */
 export function stepMachineError(step: { output?: unknown }): MachineProblemInfo | null {
   const m = (step.output as any)?.machineError
-  if (!m || typeof m.summary !== 'string') return null
-  return { summary: m.summary, detail: typeof m.detail === 'string' ? redactSecrets(m.detail) : null }
+  if (!m || typeof m.sentence !== 'string') return null
+  return { sentence: m.sentence, detail: typeof m.detail === 'string' ? m.detail : null }
 }
 
 export function RunsTab({ runs, agentId }: RunsTabProps) {

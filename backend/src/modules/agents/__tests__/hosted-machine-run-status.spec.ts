@@ -77,13 +77,13 @@ describe('a run on a hosted machine that is waking or failed', () => {
     const run = result.runRepository.row('run-1')!;
     expect(run.status).toBe(AgentRunStatus.FAILED);
     expect(run.error).toBe("The hosted machine for this run couldn't start: Can't reach the cluster: its certificate isn't trusted.");
-    expect(run.metadata.machineFailure).toMatchObject({ summary: "Can't reach the cluster: its certificate isn't trusted" });
+    expect(run.metadata.machineFailure).toMatchObject({ sentence: "Can't reach the cluster: its certificate isn't trusted" });
     expect(run.metadata.machineFailure.detail).toContain('x509');
     expect(run.metadata.machineFailure.detail).not.toContain('abc.def.ghi');
     // The model was not asked to answer around a call that never ran.
     expect(result.bodies).toHaveLength(1);
     const step = run.steps.find((s: any) => s.type === 'tool_call' && s.output?.machineError);
-    expect(step?.output.machineError.summary).toBe("Can't reach the cluster: its certificate isn't trusted");
+    expect(step?.output.machineError.sentence).toBe("Can't reach the cluster: its certificate isn't trusted");
   });
 
   it('fails the run at once when the machine had already failed', async () => {

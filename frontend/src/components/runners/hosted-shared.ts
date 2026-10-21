@@ -55,6 +55,8 @@ export interface HostedMachine {
   lastError: string | null
   /** Failed, or past its wake budget with an error on record (the API decides; it knows the budget). */
   failing?: boolean
+  /** Set when the machine has a problem to show: failed, failing, or starting with an error on record. */
+  problem?: MachineProblemInfo | null
 }
 
 export interface HostedWorkspace {
@@ -163,41 +165,14 @@ export const MACHINE_STATUS_VARIANT: Record<MachineStatus, BadgeVariant> = {
   released: 'outline',
 }
 
-/** Bearer tokens, key=value secrets, JWTs and long opaque strings, masked before an error is shown. */
-export function redactSecrets(text: string): string {
-  return text
-    .replace(/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]')
-    .replace(/\b(token|access_token|api[_-]?key|password|secret|authorization)(["']?\s*[:=]\s*["']?)[^\s"',;}]+/gi, '$1$2[redacted]')
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted]')
-    .replace(/[A-Za-z0-9+/_-]{40,}={0,2}/g, '[redacted]')
-}
-
-/** A machine's error in one short sentence, by its kind; the raw text goes behind "Details". */
-export function describeMachineError(raw: string | null | undefined): string {
-  const text = raw ?? ''
-  if (/imagepullbackoff|errimagepull|pull(ing)? (the )?image|image pull|could not be pulled|failed to pull|manifest unknown/i.test(text)) return "Couldn't download the environment image"
-  if (/certificate|x509|self[- ]signed|unable to verify|cert_|\btls\b|\bssl\b/i.test(text)) return "Can't reach the cluster: its certificate isn't trusted"
-  if (/\b40[13]\b|unauthori[sz]ed|forbidden/i.test(text)) return "The cluster rejected almyty's access"
-  if (/capacity|insufficient (cpu|memory)|unschedulable|failedscheduling|no nodes available/i.test(text)) return 'Waiting for a free sandbox machine'
-  return "The machine couldn't start"
-}
-
-/** What went wrong with a machine: a sentence and the raw error (masked). */
-export interface MachineProblemInfo {
-  summary: string
-  detail: string | null
-}
-
 /**
- * The machine's problem, when it has one to show: it failed, or it is
- * starting (or stuck starting) with an error on record. A running or
- * parked machine's old error is history, not a problem.
+ * What went wrong with a machine, as the API says it: a short sentence and
+ * the raw error with secrets masked. The API owns the wording; the pages
+ * only render it.
  */
-export function machineProblem(machine: Pick<HostedMachine, 'state' | 'lastError' | 'failing'> | null | undefined): MachineProblemInfo | null {
-  if (!machine) return null
-  const starting = machine.state === 'pending' || machine.state === 'provisioning'
-  if (!(machine.state === 'failed' || machine.failing || (starting && machine.lastError))) return null
-  return { summary: describeMachineError(machine.lastError), detail: machine.lastError ? redactSecrets(machine.lastError) : null }
+export interface MachineProblemInfo {
+  sentence: string
+  detail: string | null
 }
 
 /** Whether the workspace is still held (its files exist). */

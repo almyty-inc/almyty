@@ -72,3 +72,17 @@ export function describeMachineError(raw: string | null | undefined): string {
   if (/capacity|insufficient (cpu|memory)|unschedulable|failedscheduling|no nodes available/i.test(text)) return 'Waiting for a free sandbox machine';
   return "The machine couldn't start";
 }
+
+/**
+ * What a person is shown about a machine that cannot start: the sentence,
+ * and the raw error with secrets masked (behind "Details"). The only place
+ * the mapping lives; the API and run traces carry it, the UI renders it.
+ */
+export interface MachineProblem {
+  sentence: string;
+  detail: string | null;
+}
+
+export function machineProblem(raw: string | null | undefined): MachineProblem {
+  return { sentence: describeMachineError(raw), detail: raw ? redactSecrets(raw) : null };
+}

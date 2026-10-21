@@ -1,14 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
-  describeMachineError,
   filesKeptUntil,
   formatMinutes,
   isPlainHost,
-  machineProblem,
   machineStatus,
   parseAllowedSites,
   readHostedSettings,
-  redactSecrets,
 } from '../hosted-shared'
 
 const machine = (state: string, replicas = 1) => ({ id: 'h', state: state as any, desired: { replicas }, lastActiveAt: null, lastError: null })
@@ -86,27 +83,8 @@ describe('allowed sites', () => {
 })
 
 describe('a machine that cannot start', () => {
-  it.each([
-    ['x509: certificate signed by unknown authority', "Can't reach the cluster: its certificate isn't trusted"],
-    ['Unauthorized (401)', "The cluster rejected almyty's access"],
-    ['pods is forbidden (403)', "The cluster rejected almyty's access"],
-    ['0/3 nodes are available: 3 Insufficient memory', 'Waiting for a free sandbox machine'],
-    ['ErrImagePull: manifest unknown', "Couldn't download the environment image"],
-  ])('says %s in a sentence', (raw, sentence) => {
-    expect(describeMachineError(raw)).toBe(sentence)
-  })
-
-  it('reads a machine past its wake budget as failed, and only problem machines have a problem', () => {
+  it('reads a machine past its wake budget as failed (the API says so with failing)', () => {
     expect(machineStatus({ status: 'active', machine: { ...machine('provisioning'), failing: true } })).toBe('failed')
-    expect(machineProblem({ state: 'ready', lastError: 'old x509 error' })).toBeNull()
-    expect(machineProblem({ state: 'provisioning', lastError: null })).toBeNull()
-    expect(machineProblem({ state: 'provisioning', lastError: 'x509: bad cert token=abc123' })).toEqual({
-      summary: "Can't reach the cluster: its certificate isn't trusted",
-      detail: 'x509: bad cert token=[redacted]',
-    })
-  })
-
-  it('masks tokens in the raw error', () => {
-    expect(redactSecrets('Authorization: Bearer sk-1 eyJa.eyJb.sig')).not.toMatch(/sk-1|eyJa/)
+    expect(machineStatus({ status: 'active', machine: machine('provisioning') })).toBe('waking')
   })
 })

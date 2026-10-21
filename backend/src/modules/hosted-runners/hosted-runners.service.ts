@@ -21,7 +21,7 @@ import {
 } from '../../common/authorization/execution-access.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { canAcceptWork } from '../runner/runner-state';
-import { describeMachineError, redactSecrets } from '../runner/hosted-dispatch';
+import { type MachineProblem, describeMachineError, machineProblem, redactSecrets } from '../runner/hosted-dispatch';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { HostedRunnerSettingsService } from './hosted-runner-settings';
 import { WorkspaceLeaseService } from './workspace-lease.service';
@@ -696,7 +696,7 @@ export class HostedRunnersService {
   }
 
   /** The persistent workspaces of an environment the caller may see: their own; all of them for an org admin. */
-  async listWorkspaces(environmentId: string, userId: string, organizationId: string): Promise<Array<Workspace & { machine: (Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> & { desired: { replicas: number }; failing: boolean }) | null }>> {
+  async listWorkspaces(environmentId: string, userId: string, organizationId: string): Promise<Array<Workspace & { machine: ReturnType<HostedRunnersService['machineView']> | null }>> {
     await this.assertReadableEnvironment(environmentId, userId, organizationId);
     const role = await this.accessPolicy.getOrgRole(userId, organizationId);
     const admin = role === 'owner' || role === 'admin';
@@ -716,20 +716,26 @@ export class HostedRunnersService {
 
   /**
    * A machine as the environment pages see it: its state, whether anything
-   * asked for the pod, its last error with secrets masked, and whether it
-   * is failing (failed, or past the wake budget with an error on record).
+   * asked for the pod, its last error with secrets masked, whether it is
+   * failing (failed, or past the wake budget with an error on record), and
+   * the problem to show -- a sentence and the masked error -- when it has
+   * one: it failed or is failing, or it is starting with an error on
+   * record. A running or parked machine's old error is history.
    */
   machineView(
     m: Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> & { desired?: HostedRunnerDesired | null },
     now = new Date(),
-  ): Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> & { desired: { replicas: number }; failing: boolean } {
+  ): Pick<HostedRunner, 'id' | 'state' | 'lastActiveAt' | 'lastError'> & { desired: { replicas: number }; failing: boolean; problem: MachineProblem | null } {
+    const failing = machineFailing(m, this.settings.current.wake.budgetSeconds, now);
+    const starting = m.state === 'pending' || m.state === 'provisioning';
     return {
       id: m.id,
       state: m.state,
       desired: { replicas: m.desired?.replicas ?? 0 },
       lastActiveAt: m.lastActiveAt,
       lastError: m.lastError ? redactSecrets(m.lastError) : null,
-      failing: machineFailing(m, this.settings.current.wake.budgetSeconds, now),
+      failing,
+      problem: failing || (starting && m.lastError) ? machineProblem(m.lastError) : null,
     };
   }
 

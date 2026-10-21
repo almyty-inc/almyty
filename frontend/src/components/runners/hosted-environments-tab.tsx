@@ -28,7 +28,6 @@ import {
   filesKeptUntil,
   formatMinutes,
   imageLabel,
-  machineProblem,
   machineStatus,
   readHostedSettings,
   type EnvironmentUsage,
@@ -92,7 +91,7 @@ export function MachineCell({ mine, keepDays }: { mine: MyMachine | null | undef
     return <span className="text-sm text-muted-foreground" data-testid="machine-none">Not started yet</span>
   }
   const status = machineStatus(mine)
-  const problem = machineProblem(mine.machine)
+  const problem = mine.machine?.problem ?? null
   return (
     <div className="space-y-0.5" data-testid="machine-cell">
       <Badge variant={MACHINE_STATUS_VARIANT[status]}>{MACHINE_STATUS_LABEL[status]}</Badge>
