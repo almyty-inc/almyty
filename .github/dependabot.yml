@@ -11,7 +11,7 @@
 # Scope:
 #
 #   - backend + frontend + docs-site: npm ecosystem, monthly cadence,
-#     one entry for all three folders (a critical advisory still
+#     one entry for every npm folder (a critical advisory still
 #     arrives right away as its own security PR)
 #
 #   - .github/workflows: GitHub Actions versions. actions/checkout and
@@ -25,15 +25,15 @@
 #     runs Trivy against a deploy months later.
 #
 # Opens max 5 PRs per ecosystem at a time so a lock-file regen burst
-# doesn't overwhelm review. The three npm folders share one entry, and
+# doesn't overwhelm review. The npm folders share one entry, and
 # all their version bumps (major + minor + patch) arrive as a single
 # monthly PR. Security fixes come one PR per package, covering every
 # folder that uses it (see the "npm security fixes" entry).
 version: 2
 updates:
-  # ── npm: backend (NestJS API), frontend (React/Vite), docs site (Nextra)
+  # ── npm: backend, frontend, docs site, packages ─────────────
   #
-  # One entry for all three folders, so a package used in more than one
+  # One entry for every npm folder, so a package used in more than one
   # of them arrives as one PR instead of one PR per folder. The ignore
   # list is shared across the folders; each rule names the folder that
   # needs it.
@@ -42,6 +42,7 @@ updates:
       - "/backend"
       - "/frontend"
       - "/docs-site"
+      - "/packages/*"
     target-branch: "development"
     schedule:
       interval: "monthly"
@@ -90,7 +91,7 @@ updates:
       # a diagnosis of the 30.1 change; the app itself never runs on jsdom.
       - dependency-name: "jsdom"
     groups:
-      # The monthly version bumps for all three folders, as one PR.
+      # The monthly version bumps for every npm folder, as one PR.
       npm-monthly:
         applies-to: version-updates
         update-types:
@@ -112,6 +113,7 @@ updates:
       - "/backend"
       - "/frontend"
       - "/docs-site"
+      - "/packages/*"
     schedule:
       interval: "monthly"
       day: "monday"
