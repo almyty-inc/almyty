@@ -5,6 +5,8 @@
  * description. A property with "x-secret": true renders as a password field;
  * in edit mode a blank secret means "keep the existing value" and is left out
  * of the submitted object rather than overwriting it with an empty string.
+ * A string with "x-multiline": true or "format": "pem" renders as a
+ * textarea, so a pasted certificate keeps its newlines.
  *
  * Controlled: the parent owns `value`, this component reports every change.
  * `validateSchemaValues` is the single source of truth for what gets sent.
@@ -16,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import type { JsonSchemaObject, JsonSchemaProperty } from '@/types/deployments'
 
@@ -48,6 +51,11 @@ export function schemaDefaults(schema: JsonSchemaObject | null | undefined, exis
 
 export function isSecretProperty(prop: JsonSchemaProperty): boolean {
   return prop['x-secret'] === true
+}
+
+/** A string field shown as a textarea: `x-multiline`, or certificate text (`format: 'pem'`). */
+export function isMultilineProperty(prop: JsonSchemaProperty): boolean {
+  return prop['x-multiline'] === true || prop.format === 'pem'
 }
 
 /** The x-secret property names of a schema. */
@@ -254,6 +262,21 @@ function SchemaField({ id, name, prop, required, value, error, mode, disabled, o
           {reveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </Button>
       </div>
+    )
+  } else if (isMultilineProperty(prop)) {
+    control = (
+      <Textarea
+        id={id}
+        rows={6}
+        spellCheck={false}
+        autoComplete="off"
+        className="font-mono text-xs"
+        value={value === undefined || value === null ? '' : String(value)}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        aria-invalid={!!error}
+        aria-describedby={describedBy}
+      />
     )
   } else {
     const numeric = prop.type === 'integer' || prop.type === 'number'

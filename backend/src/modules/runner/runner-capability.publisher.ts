@@ -9,13 +9,7 @@ import {
   ToolType,
 } from '../../entities/tool.entity';
 import { assertToolQuota } from '../tools/tool-quota';
-
-interface CapabilityDef {
-  method: string;
-  description: string;
-  requiresWorkspace: boolean;
-  parameters: Record<string, unknown>;
-}
+import { CapabilityDef, RUNNER_CAPABILITIES } from './runner-capabilities';
 
 /**
  * Publishes Tool rows for the methods a runner exposes. The rest of
@@ -38,59 +32,7 @@ interface CapabilityDef {
 export class RunnerCapabilityPublisher {
   private readonly logger = new Logger(RunnerCapabilityPublisher.name);
 
-  private static readonly CAPABILITIES: CapabilityDef[] = [
-    {
-      method: 'runner.info',
-      description: 'Return runtime info (OS, arch, node version, installed binaries) for the runner host.',
-      requiresWorkspace: false,
-      parameters: {
-        type: 'object',
-        properties: {},
-        additionalProperties: false,
-      },
-    },
-    {
-      method: 'agent.list',
-      description: 'List the coding-agent CLIs this runner can drive (claude, codex, gemini, cursor, copilot, …), with each platform\'s provider family, auth/config levers, MCP support, and resume mechanism.',
-      requiresWorkspace: false,
-      parameters: {
-        type: 'object',
-        properties: {},
-        additionalProperties: false,
-      },
-    },
-    {
-      method: 'shell.exec',
-      description: 'Execute a one-shot shell command on the runner host. Captures stdout/stderr and exit code. Workspace-scoped.',
-      requiresWorkspace: true,
-      parameters: {
-        type: 'object',
-        properties: {
-          command: {
-            type: 'string',
-            description: 'Shell command to run. Interpreted by the runner\'s default shell.',
-          },
-          cwd: {
-            type: 'string',
-            description: 'Working directory relative to the workspace root. Defaults to workspace root.',
-          },
-          env: {
-            type: 'object',
-            additionalProperties: { type: 'string' },
-            description: 'Extra environment variables for this invocation.',
-          },
-          timeoutMs: {
-            type: 'integer',
-            minimum: 1,
-            description: 'Hard timeout in milliseconds. The runner kills the process if exceeded.',
-          },
-        },
-        required: ['command'],
-        additionalProperties: false,
-      },
-    },
-  ];
-
+  private static readonly CAPABILITIES: CapabilityDef[] = RUNNER_CAPABILITIES;
   constructor(
     @InjectRepository(Tool)
     private readonly tools: Repository<Tool>,
