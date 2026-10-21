@@ -63,7 +63,7 @@ import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
 import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 import { isServableGatewayTool } from '../gateways/gateway-servable';
-import { HOSTED_DISPATCH, type HostedDispatch, WORKSPACE_BUSY, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
+import { HOSTED_DISPATCH, type HostedDispatch, MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING } from '../runner/hosted-dispatch';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -912,7 +912,13 @@ export class ToolExecutorService {
             signal: options.signal,
           });
         } catch (err: any) {
-          return this.runnerFailure(err?.code ?? 'workspace_unavailable', err?.message ?? String(err), startTime);
+          const failure = this.runnerFailure(err?.code ?? 'workspace_unavailable', err?.message ?? String(err), startTime);
+          // The machine itself could not start: the run fails on it rather
+          // than letting the model answer as if the call ran.
+          if (err?.machine?.failed) {
+            failure.metadata = { ...failure.metadata, [MACHINE_FAILED]: true, machineError: err.machine.error ?? null };
+          }
+          return failure;
         }
         if (target.kind === 'waking' || target.kind === 'busy') {
           const code = target.kind === 'waking' ? WORKSPACE_WAKING : WORKSPACE_BUSY;

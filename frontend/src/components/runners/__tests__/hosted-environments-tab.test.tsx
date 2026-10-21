@@ -111,6 +111,27 @@ describe('HostedEnvironmentsTab', () => {
     render(<HostedEnvironmentsTab />)
     await waitFor(() => expect(screen.getByText('Files kept until Oct 8, 2026')).toBeInTheDocument())
   })
+
+  it("shows the API's sentence for a machine stuck starting, with the masked raw error behind Details", async () => {
+    const detail = 'Get "https://k8s.example:6443/api": x509: certificate signed by unknown authority (Bearer [redacted])'
+    const stuck = {
+      ...mine('provisioning', 'active', null),
+      machine: {
+        id: 'h',
+        state: 'provisioning',
+        desired: { replicas: 1 },
+        failing: true,
+        lastError: detail,
+        problem: { sentence: "Can't reach the cluster: its certificate isn't trusted", detail },
+      },
+    }
+    list.mockResolvedValue({ success: true, enabled: true, settings: SETTINGS, data: [env('e1', 'web-app', { mine: stuck })] })
+    render(<HostedEnvironmentsTab />)
+    expect(await screen.findByText("Can't reach the cluster: its certificate isn't trusted")).toBeInTheDocument()
+    expect(screen.getByText('failed')).toBeInTheDocument()
+    expect(screen.getByText('Details')).toBeInTheDocument()
+    expect(screen.getByTestId('machine-problem-detail')).toHaveTextContent(detail)
+  })
 })
 
 describe('HostedIntro', () => {
