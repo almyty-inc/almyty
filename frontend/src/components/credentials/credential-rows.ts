@@ -11,7 +11,7 @@
 import type { ServiceCheck } from '@/components/connect/status-label'
 import type { Connection, Connector, ConnectorKind } from '@/types/connections'
 
-import { connectionCheck, connectionWhoShort } from '@/components/connections/connection-status'
+import { NOT_CHECKED, connectionCheck, connectionWhoShort } from '@/components/connections/connection-status'
 import { credentialPath } from './paths'
 import { connectProviderPath, providerPath } from '@/components/llm-providers/paths'
 import { providerCheck } from '@/components/llm-providers/provider-status'
@@ -63,7 +63,7 @@ export interface CredentialRow {
   service: string
   connectorKey: string | null
   kind: ConnectorKind | null
-  /** Whether it works; "Saved" for a key nobody can check from here. */
+  /** Whether it works; "Not checked" for a key nobody can check from here. */
   check: ServiceCheck
   who: string
   uses: CredentialUse[]
@@ -166,7 +166,7 @@ export function storedRow(credential: StoredCredential): CredentialRow {
     service: CREDENTIAL_TYPE_LABELS[credential.type] ?? 'Key',
     connectorKey: credential.connectorKey ?? null,
     kind: null,
-    check: { state: 'ok', label: 'Saved' },
+    check: NOT_CHECKED,
     who: credential.visibility === 'private' ? 'Only you' : credential.visibility === 'team' ? 'One team' : 'Everyone',
     uses,
     createdAt: credential.createdAt ?? null,

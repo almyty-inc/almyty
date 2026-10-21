@@ -337,9 +337,10 @@ export const REGISTRY_S3_CONNECTOR: ConnectorDefinition = {
  * A Kubernetes cluster that runs hosted runner pods (docs/hosted-runners.md):
  * its API server, the CA that signs it, and the token of a ServiceAccount
  * whose role reaches only the runner-pool namespaces. The platform pool's
- * connection is named by HOSTED_RUNNERS_CLUSTER_CONNECTION; the check is
- * shape only (an https server and a token), because a cluster's API is
- * often reachable only from the backend's own network.
+ * connection is named by HOSTED_RUNNERS_CLUSTER_CONNECTION. The check asks
+ * the cluster (validation kind `kubernetes`): /version, then whether the
+ * token may do what the hosted runner adapter does. An API server on a
+ * private address is reached only under KUBERNETES_ALLOW_PRIVATE_URLS.
  */
 export const KUBERNETES_CONNECTOR: ConnectorDefinition = {
   key: 'kubernetes',
@@ -361,7 +362,7 @@ export const KUBERNETES_CONNECTOR: ConnectorDefinition = {
     credentialType: CredentialType.KUBERNETES,
   }],
   capabilities: ['hosted_runners'],
-  validation: { kind: 'format', fields: { server: '^https://' }, accountLabelFrom: 'server' },
+  validation: { kind: 'kubernetes', accountLabelFrom: 'server' },
   keyPageUrl: null,
   docsUrl: 'https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/',
 };

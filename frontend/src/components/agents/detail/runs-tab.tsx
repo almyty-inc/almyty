@@ -33,6 +33,8 @@ import { PromoteRunSection } from './promote-run-section'
 import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
 import { DeliveryNote } from './schedule-card'
+import { MachineProblem } from '@/components/runners/machine-problem'
+import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
 
 interface RunsTabProps {
   runs: AgentRun[]
@@ -43,6 +45,13 @@ interface RunsTabProps {
 /** Whether any of the run's calls went through routing, so there is a route to show. */
 export function runRouted(run: Pick<AgentRun, 'steps'>): boolean {
   return (run.steps ?? []).some((s) => !!(s.output as any)?.routing)
+}
+
+/** A tool step whose hosted machine could not start: the backend's sentence and the masked raw error. */
+export function stepMachineError(step: { output?: unknown }): MachineProblemInfo | null {
+  const m = (step.output as any)?.machineError
+  if (!m || typeof m.sentence !== 'string') return null
+  return { sentence: m.sentence, detail: typeof m.detail === 'string' ? m.detail : null }
 }
 
 export function RunsTab({ runs, agentId }: RunsTabProps) {
@@ -168,6 +177,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                     if (step.type === 'verify') return <VerifyStepCard key={idx} step={step} index={idx} />
                                     if (isCodeStep(step)) return <CodeStepCard key={idx} step={step} index={idx} agentId={agentId} runId={run.id} />
                                     const summary = stepSummary(step)
+                                    const machineError = stepMachineError(step)
                                     return (
                                     <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm" data-testid={`run-step-${idx}`}>
                                       <div className="flex items-center gap-2 shrink-0">
@@ -182,12 +192,14 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                             In: {typeof step.input === 'string' ? step.input : JSON.stringify(step.input)}
                                           </div>
                                         )}
-                                        {step.output && !hasStepSummary(step) && (
+                                        {step.output && !hasStepSummary(step) && !machineError && (
                                           <div className="text-xs truncate">
                                             Out: {typeof step.output === 'string' ? step.output : JSON.stringify(step.output)}
                                           </div>
                                         )}
-                                        {step.error && (
+                                        {machineError ? (
+                                          <MachineProblem problem={machineError} testId={`run-step-${idx}-machine`} />
+                                        ) : step.error && (
                                           <div className="text-xs text-destructive truncate">
                                             Error: {step.error}
                                           </div>

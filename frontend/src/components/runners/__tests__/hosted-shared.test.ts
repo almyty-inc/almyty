@@ -81,3 +81,10 @@ describe('allowed sites', () => {
     }
   })
 })
+
+describe('a machine that cannot start', () => {
+  it('reads a machine past its wake budget as failed (the API says so with failing)', () => {
+    expect(machineStatus({ status: 'active', machine: { ...machine('provisioning'), failing: true } })).toBe('failed')
+    expect(machineStatus({ status: 'active', machine: machine('provisioning') })).toBe('waking')
+  })
+})

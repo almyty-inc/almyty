@@ -64,7 +64,7 @@ export class EnvironmentInsightsService {
    * runner's state, or null when they have none yet.
    */
   async machines(userId: string, organizationId: string, environmentIds: string[]) {
-    const out: Record<string, { workspaceId: string; status: string; lastActiveAt: Date | null; machine: { id: string; state: string; desired: { replicas: number }; lastError: string | null } | null } | null> = {};
+    const out: Record<string, { workspaceId: string; status: string; lastActiveAt: Date | null; machine: ReturnType<HostedRunnersService['machineView']> | null } | null> = {};
     for (const id of environmentIds) out[id] = null;
     if (environmentIds.length === 0) return out;
     const rows: Array<Record<string, any>> = await this.dataSource.query(
@@ -81,7 +81,7 @@ export class EnvironmentInsightsService {
         workspaceId: r.workspaceId,
         status: r.status,
         lastActiveAt: r.lastActiveAt,
-        machine: r.machineId ? { id: r.machineId, state: r.state, desired: { replicas: Number(r.desired?.replicas ?? 0) }, lastError: r.lastError } : null,
+        machine: r.machineId ? this.hosted.machineView({ id: r.machineId, state: r.state, desired: r.desired, lastActiveAt: null, lastError: r.lastError }) : null,
       };
     }
     return out;

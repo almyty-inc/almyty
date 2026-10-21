@@ -53,6 +53,10 @@ export interface HostedMachine {
   desired?: { replicas: number } | null
   lastActiveAt?: string | null
   lastError: string | null
+  /** Failed, or past its wake budget with an error on record (the API decides; it knows the budget). */
+  failing?: boolean
+  /** Set when the machine has a problem to show: failed, failing, or starting with an error on record. */
+  problem?: MachineProblemInfo | null
 }
 
 export interface HostedWorkspace {
@@ -121,8 +125,10 @@ export function imageLabel(name: string): string {
 /** The four states people see, a machine nothing has asked for yet, and a workspace that was let go. */
 export type MachineStatus = 'running' | 'parked' | 'waking' | 'idle' | 'failed' | 'released'
 
-export function machineStatus(w: { status: string; machine: { state: string; desired?: { replicas: number } | null } | null }): MachineStatus {
+export function machineStatus(w: { status: string; machine: { state: string; desired?: { replicas: number } | null; failing?: boolean } | null }): MachineStatus {
   if (w.status === 'released' || w.status === 'expired') return 'released'
+  // Still trying, but past its wake budget with an error: it is failing.
+  if (w.machine?.failing) return 'failed'
   switch (w.machine?.state) {
     case 'ready':
       return 'running'
@@ -157,6 +163,16 @@ export const MACHINE_STATUS_VARIANT: Record<MachineStatus, BadgeVariant> = {
   idle: 'outline',
   failed: 'destructive',
   released: 'outline',
+}
+
+/**
+ * What went wrong with a machine, as the API says it: a short sentence and
+ * the raw error with secrets masked. The API owns the wording; the pages
+ * only render it.
+ */
+export interface MachineProblemInfo {
+  sentence: string
+  detail: string | null
 }
 
 /** Whether the workspace is still held (its files exist). */
