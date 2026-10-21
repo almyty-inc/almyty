@@ -440,7 +440,7 @@ export function ModelPicker({
               window.setTimeout(() => searchRef.current?.focus(), 0)
             }}
             className={cn(
-              'flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left shadow-sm',
+              'flex w-full items-center justify-between gap-2 rounded-md border border-input bg-field px-3 text-left shadow-sm',
               'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60',
               compact ? 'h-8 text-xs' : 'h-9 text-sm',
             )}
