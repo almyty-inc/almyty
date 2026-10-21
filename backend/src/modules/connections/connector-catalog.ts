@@ -353,7 +353,7 @@ export const KUBERNETES_CONNECTOR: ConnectorDefinition = {
       type: 'object',
       properties: {
         server: { type: 'string', title: 'API server URL', format: 'uri', description: 'https://, as in the kubeconfig cluster entry.' },
-        caCert: { type: 'string', title: 'CA certificate (PEM)', description: 'The cluster CA; leave empty when the API server has a publicly trusted certificate.' },
+        caCert: { type: 'string', title: 'CA certificate (PEM)', format: 'pem', description: 'The cluster CA; leave empty when the API server has a publicly trusted certificate.' },
         token: { type: 'string', title: 'ServiceAccount token', 'x-secret': true },
       },
       required: ['server', 'token'],
