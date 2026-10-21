@@ -37,7 +37,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@almyty/client": "^1.5.5",
-    "@modelcontextprotocol/server": "^2.2.0",
+    "@modelcontextprotocol/server": "^2.3.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
