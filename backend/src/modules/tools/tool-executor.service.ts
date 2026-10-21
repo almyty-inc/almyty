@@ -63,7 +63,7 @@ import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
 import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 import { isServableGatewayTool } from '../gateways/gateway-servable';
-import { HOSTED_DISPATCH, type HostedDispatch, MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
+import { HOSTED_DISPATCH, type HostedDispatch, MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING, isWaitingForMachine, machineProblem } from '../runner/hosted-dispatch';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -181,7 +181,18 @@ export class ToolExecutorService {
     }
   }
 
-  /** The execution record, with personal data hidden in what is stored. */
+  /**
+   * The execution record, with personal data hidden in what is stored.
+   *
+   * A call told to wait for its hosted machine (`workspace_waking` while it
+   * starts inside its wake budget, `workspace_busy` while another job has
+   * the folder) has not run and has not failed: it is retried as the same
+   * call. Recording each answer wrote an error row to the audit log on
+   * every retry of a cold start and dragged the tool's success rate down.
+   * The wait shows in the hosted runner's own transitions (audited once
+   * each); the call is recorded once, when it runs or when the machine
+   * did not come up.
+   */
   private async recordFiltered(
     tool: Tool,
     parameters: Record<string, any>,
@@ -189,6 +200,7 @@ export class ToolExecutorService {
     options: ToolExecutionOptions,
     metadata: { cached: boolean; executionTime: number; retryCount: number },
   ): Promise<void> {
+    if (isWaitingForMachine(result)) return;
     const [storedParams, storedData] = await Promise.all([
       this.hidePersonalData(parameters, options, tool.id),
       this.hidePersonalData(result?.data, options, tool.id),

@@ -773,6 +773,55 @@ describe('ToolExecutorService', () => {
       expect((service as any).runWorkspaces.acquire).not.toHaveBeenCalled();
     });
 
+    // A cold start (image pull) answers `workspace_waking` to every retry
+    // of the run. Each retry was recorded as a failed execution: an error
+    // row in the audit log and the tool's success rate dragged down, for a
+    // machine that was starting inside its budget. The wait is the hosted
+    // runner's transitions (audited there, once each); the call is
+    // recorded once, with its outcome.
+    it('records a call that waited out a cold start once, with its outcome, and no error rows for the waits', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
+      const waking = { kind: 'waking', workspaceId: 'ws-p', hostedRunnerId: 'hr-1', retryAfterMs: 10_000, message: 'starting' };
+      hosted.resolveTarget
+        .mockResolvedValueOnce(waking)
+        .mockResolvedValueOnce(waking)
+        .mockResolvedValueOnce({ kind: 'busy', workspaceId: 'ws-p', hostedRunnerId: 'hr-1', retryAfterMs: 15_000, message: 'busy' })
+        .mockResolvedValueOnce({ kind: 'ready', runnerId: 'runner-hosted', workspaceId: 'ws-p', hostedRunnerId: 'hr-1' });
+      (service as any).runnerCalls.dispatch.mockResolvedValue({ ok: true, result: { stdout: 'ok\n', exitCode: 0 } });
+      const audit = (service as any).stats.auditLogService as { logToolExecution: jest.Mock };
+      audit.logToolExecution.mockClear();
+      toolExecutionRepository.save.mockClear();
+      const opts = { userId: 'user-1', organizationId: 'org-1', runId: 'run-1', agentId: 'agent-1', environmentId: ENV_ID };
+
+      for (let i = 0; i < 3; i++) {
+        const waiting = await service.executeTool('tool-hosted', { command: 'ls' }, opts);
+        expect(waiting.metadata?.retryable).toBe(true);
+      }
+      const done = await service.executeTool('tool-hosted', { command: 'ls' }, opts);
+
+      expect(done.success).toBe(true);
+      expect(audit.logToolExecution).toHaveBeenCalledTimes(1);
+      expect(audit.logToolExecution).toHaveBeenCalledWith('org-1', 'user-1', 'tool-hosted', 'env.app.shell.exec', expect.objectContaining({ success: true }));
+      expect(toolExecutionRepository.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('records the outcome once when the machine did not come up', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
+      hosted.resolveTarget
+        .mockResolvedValueOnce({ kind: 'waking', workspaceId: 'ws-p', hostedRunnerId: 'hr-1', retryAfterMs: 10_000, message: 'starting' })
+        .mockRejectedValueOnce(Object.assign(new Error('did not start within 300 seconds'), { code: 'workspace_unavailable', machine: { failed: true, error: null } }));
+      const audit = (service as any).stats.auditLogService as { logToolExecution: jest.Mock };
+      audit.logToolExecution.mockClear();
+      const opts = { userId: 'user-1', organizationId: 'org-1', runId: 'run-1', agentId: 'agent-1', environmentId: ENV_ID };
+
+      await service.executeTool('tool-hosted', { command: 'ls' }, opts);
+      const failed = await service.executeTool('tool-hosted', { command: 'ls' }, opts);
+
+      expect(failed.success).toBe(false);
+      expect(audit.logToolExecution).toHaveBeenCalledTimes(1);
+      expect(audit.logToolExecution).toHaveBeenCalledWith('org-1', 'user-1', 'tool-hosted', 'env.app.shell.exec', expect.objectContaining({ success: false }));
+    });
+
     it('marks a call whose machine failed to start, with the machine\'s raw error, so a run can fail on it', async () => {
       toolRepository.findOne.mockResolvedValue(runnerTool({ runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true }));
       const tls = 'Get "https://k8s.example:6443/api": x509: certificate signed by unknown authority';
