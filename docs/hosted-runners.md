@@ -644,6 +644,12 @@ script) can still start anything. The boundary is the pod.
 
 ## Not yet
 
+- Published `runner-env` 1.5.6 images: the Dockerfile pins @almyty/runner
+  1.5.6, and `settings.json` and the backend default `images` name the
+  1.5.6 tags without digests. TODO: the 1.5.6 images exist only after
+  1.5.6 is on npm and the release push has run; pin the pushed digests in
+  `settings.json`, the backend default `images` and
+  `docs/design/hosted-runners/image-prepull.yaml` then.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).
