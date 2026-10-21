@@ -21,6 +21,8 @@ import {
 } from '../../common/authorization/execution-access.service';
 import { type LabelRequirements, labelsMatch, noMatchingRunnerMessage } from './runner-labels';
 import { runnerIdOfSessionUser } from './runner-credential';
+import { RunnerOnlineHooks } from './runner-online.hooks';
+import { runtimeInfoProblem } from './runner-runtime-info';
 
 /**
  * Runner ids are uuids. Checked before an id that arrived over the wire
@@ -132,6 +134,9 @@ export class RunnerService {
     // The gateway rule for a dispatch made by a gateway run. Optional only
     // for hand-built specs; without it a gateway reaches org runners only.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
+    // Told when a runner comes online (hosted runners listen). Optional
+    // only for hand-built specs; Nest always injects it.
+    @Optional() private readonly onlineHooks?: RunnerOnlineHooks,
   ) {}
 
   /**
@@ -391,9 +396,28 @@ export class RunnerService {
         const fresh = await this.runners.findOne({ where: { id: runner.id } });
         return fresh ?? runner;
       }
+      const cameOnline = !canAcceptWork(runner.state) && canAcceptWork(transitioned);
       runner.state = transitioned;
+      // A hosted machine is marked ready on this beat, not on the next sweep.
+      if (cameOnline) this.onlineHooks?.notify(runner.id);
     }
     return runner;
+  }
+
+  /**
+   * The probed runtime snapshot a runner sends once it is online (enroll
+   * mode enrolls with the machine's basics and probes afterwards). Shaped
+   * like the registration's runtimeInfo and validated the same way;
+   * anything else is dropped with a warning. Returns whether it was stored.
+   */
+  async updateRuntimeInfo(runnerId: string, raw: unknown): Promise<boolean> {
+    const problem = runtimeInfoProblem(raw);
+    if (problem) {
+      this.logger.warn(`runtime report from runner ${runnerId} dropped: ${problem}`);
+      return false;
+    }
+    await this.runners.update({ id: runnerId }, { runtimeInfo: raw as RunnerRuntimeInfo });
+    return true;
   }
 
   /**

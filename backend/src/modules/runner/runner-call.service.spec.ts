@@ -103,6 +103,11 @@ class FakeRunnerService {
     this.heartbeats.push(runnerId);
     return this.runner;
   }
+  runtimeUpdates: Array<{ runnerId: string; runtimeInfo: unknown }> = [];
+  async updateRuntimeInfo(runnerId: string, runtimeInfo: unknown): Promise<boolean> {
+    this.runtimeUpdates.push({ runnerId, runtimeInfo });
+    return true;
+  }
 }
 /** Stands in for WorkspaceService.listActiveForRunner on the ack path. */
 class FakeWorkspaceService {
@@ -327,6 +332,29 @@ describe('RunnerCallService', () => {
     );
     await flush();
     expect(runners.heartbeats).toEqual(['runner-1']);
+  });
+
+  // A hosted runner enrolls with its machine's basics and sends the probed
+  // binaries once it is online, so probing never holds it offline.
+  it('runner.runtime stores the snapshot on the session\'s runner, not the one the payload names', async () => {
+    const { runners, transport } = makeService();
+    const runtimeInfo = { os: 'linux', binaries: { git: 'git version 2.47.0' } };
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e2', ts: Date.now(), payload: { kind: 'runner.runtime', runnerId: 'someone-else', runtimeInfo } },
+      { id: 'sh_session_1', organizationId: 'org-1', userId: 'owner-1' },
+    );
+    await flush();
+    expect(runners.runtimeUpdates).toEqual([{ runnerId: 'runner-1', runtimeInfo }]);
+  });
+
+  it('runner.runtime from a session bound to no runner is dropped', async () => {
+    const { runners, transport } = makeService();
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e2', ts: Date.now(), payload: { kind: 'runner.runtime', runtimeInfo: {} } },
+      { id: 'sh_unknown', organizationId: 'org-1', userId: 'owner-1' },
+    );
+    await flush();
+    expect(runners.runtimeUpdates).toEqual([]);
   });
 
   it('heartbeat for an unmapped session is dropped without throwing', async () => {
