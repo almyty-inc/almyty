@@ -11,12 +11,15 @@ import { probe, realExec, type ProbeExec } from '../binaries.js';
 import { listCodingAgents } from './registry.js';
 import type { DetectedCodingAgent } from './types.js';
 
-export async function detectCodingAgents(exec: ProbeExec = realExec): Promise<DetectedCodingAgent[]> {
+export async function detectCodingAgents(
+  exec: ProbeExec = realExec,
+  probeFn: (name: string) => Promise<string | null> = (n) => probe(n, exec),
+): Promise<DetectedCodingAgent[]> {
   const results = await Promise.all(
     listCodingAgents().map(async (spec) => {
       // Probe the primary binary first, then aliases; first hit wins.
       for (const name of [spec.binary, ...spec.binaryAliases]) {
-        const version = await probe(name, exec);
+        const version = await probeFn(name);
         if (version !== null) {
           const detected: DetectedCodingAgent = {
             id: spec.id,

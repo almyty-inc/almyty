@@ -1,6 +1,6 @@
 {
   "name": "@almyty/skills",
-  "version": "1.5.6",
+  "version": "1.5.7",
   "publishConfig": {
     "access": "public"
   },
@@ -35,7 +35,7 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^1.5.5",
+    "@almyty/client": "^1.5.6",
     "@clack/prompts": "^1.2.0"
   },
   "devDependencies": {

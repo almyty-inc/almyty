@@ -1,5 +1,5 @@
 import { InjectQueue, OnQueueFailed, Process, Processor } from '@nestjs/bull';
-import { Injectable, Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Job, Queue } from 'bull';
 import { In, Not, Repository } from 'typeorm';
@@ -11,6 +11,7 @@ import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { AuditAction } from '../../entities/audit-log.entity';
 import { canAcceptWork } from '../runner/runner-state';
 import { isTerminalClusterError } from '../runner/hosted-dispatch';
+import { RunnerOnlineHooks } from '../runner/runner-online.hooks';
 import { HostedAdapterRegistry } from './adapters/adapter.registry';
 import { HostedActual, HostedAdapterCredentials, HostedProvisionRequest, HostedRef, HostedRunnerAdapter } from './adapters/hosted-runner-adapter.interface';
 import { EnrollmentService, HOSTED_RENEW_PATH, HOSTED_STREAM_PATH } from './enrollment.service';
@@ -42,7 +43,7 @@ type ObservedColumns = Partial<Pick<HostedRunner, 'state' | 'actual' | 'external
  */
 @Injectable()
 @Processor(HOSTED_RECONCILE_QUEUE)
-export class HostedRunnersProcessor implements OnApplicationBootstrap {
+export class HostedRunnersProcessor implements OnApplicationBootstrap, OnModuleInit {
   private readonly logger = new Logger(HostedRunnersProcessor.name);
 
   constructor(
@@ -58,7 +59,27 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap {
     private readonly settings: HostedRunnerSettingsService,
     // Optional only for the positional harnesses; Nest always injects it.
     @Optional() private readonly modelTokens?: HostedModelTokenService,
+    // Optional only for the positional harnesses; Nest always injects it.
+    @Optional() private readonly onlineHooks?: RunnerOnlineHooks,
   ) {}
+
+  /**
+   * A woken machine is ready once its pod is up and its runner online, and
+   * only reconcile may say so. Waiting for the sweep to notice left it
+   * offline to callers for up to a minute after its first heartbeat
+   * (~15 s measured on staging); reconciling on that heartbeat makes it
+   * ready within the same second.
+   */
+  onModuleInit(): void {
+    this.onlineHooks?.on((runnerId) => this.onRunnerOnline(runnerId));
+  }
+
+  async onRunnerOnline(runnerId: string): Promise<void> {
+    if (!this.settings.enabled()) return;
+    const hr = await this.hostedRunners.findOne({ where: { runnerId, state: In(['pending', 'provisioning'] as HostedRunnerState[]) } });
+    if (!hr || hr.desired?.replicas !== 1) return;
+    await this.service.enqueue(hr.id);
+  }
 
   cron(): string | undefined {
     const raw = this.settings.current.reconcile.sweepCron?.trim();

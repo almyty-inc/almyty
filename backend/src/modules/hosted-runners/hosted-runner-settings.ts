@@ -140,7 +140,9 @@ export interface HostedRunnerSettings {
 export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   idleTimeoutMinutes: { default: 15, min: 5, max: 120 },
   suspendedRetention: { keepDays: 30, noticeDay: 23 },
-  wake: { budgetSeconds: 180, retryAfterSeconds: 10 },
+  // A woken machine is ready within a second of its runner's first
+  // heartbeat; a run that met it waking looks again this soon after.
+  wake: { budgetSeconds: 180, retryAfterSeconds: 3 },
   enrollment: { tokenTtlMinutes: 10, credentialTtlMinutes: 60 },
   reconcile: {
     sweepCron: '* * * * *',
@@ -161,8 +163,8 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   // release push has run (docs/hosted-runners.md, Not yet).
   // scripts/check-runner-env-images.js keeps these equal to images/runner-env/settings.json.
   images: {
-    standard: 'almyty/runner-env:standard-1.5.6',
-    'standard-browser': 'almyty/runner-env:standard-browser-1.5.6',
+    standard: 'almyty/runner-env:standard-1.5.7',
+    'standard-browser': 'almyty/runner-env:standard-browser-1.5.7',
   },
   capacity: { maxConcurrentRunners: 2, maxWorkspaces: 10, resourceClasses: null },
   cluster: {

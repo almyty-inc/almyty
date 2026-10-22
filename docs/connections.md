@@ -295,7 +295,12 @@ Secrets are stored in one place, the organization's credential store,
 encrypted with the platform key or, for organizations that bring their
 own KMS, with their key. They leave the backend only inside the request
 to the provider they belong to. Every connect, validate, rotate,
-disconnect and use is written to the audit log.
+disconnect and use is written to the audit log. A use with a person or a
+run behind it is recorded every time. A use with nobody behind it (a
+background loop such as hosted runner reconcile, which resolves the
+cluster connection every minute) is recorded on first use, whenever its
+outcome or the connection's state changes, and once a day after that
+(`CREDENTIAL_SYSTEM_RESOLVE_AUDIT_INTERVAL_MS`, default 24 hours).
 
 ### What points at the store
 

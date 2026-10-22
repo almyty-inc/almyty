@@ -11,8 +11,8 @@
 # runtimeClassName: gvisor puts it only on nodes the installer has marked
 # almyty.com/gvisor=ready and tolerates the sandbox taint (the RuntimeClass
 # scheduling), exactly like a runner pod. Keep the image equal to
-# `images.standard` in the hosted runner settings and change both together;
-# pin it by digest once the runner-env digests are pinned.
+# `images.standard` in the hosted runner settings, digest included, and
+# change both together.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -40,7 +40,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       initContainers:
       - name: pull-standard
-        image: almyty/runner-env:standard-1.5.6
+        image: almyty/runner-env:standard-1.5.7
         imagePullPolicy: IfNotPresent
         command: ["sh", "-c", "true"]
         resources:

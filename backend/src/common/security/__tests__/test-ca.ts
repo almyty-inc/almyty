@@ -34,10 +34,14 @@ export function makeTestCa(commonName = 'almyty test CA'): TestCa {
       '[v3]', 'basicConstraints=CA:FALSE', 'keyUsage=critical,digitalSignature', 'extendedKeyUsage=serverAuth',
       'subjectAltName=DNS:localhost,IP:127.0.0.1',
     ].join('\n'));
-    const ec = ['-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes'];
+    // Spelled out for LibreSSL (macOS's openssl), whose defaults Node
+    // rejects: `x509 -req` signs with SHA-1 ("CA signature digest algorithm
+    // too weak") and new EC keys carry explicit curve parameters ("explicit
+    // ECC parameters"). OpenSSL 3 does neither, so Linux never saw it.
+    const ec = ['-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-pkeyopt', 'ec_param_enc:named_curve', '-nodes', '-sha256'];
     openssl(['req', '-x509', ...ec, '-keyout', 'ca.key', '-out', 'ca.pem', '-days', '3650', '-config', 'ca.cnf'], dir);
     openssl(['req', '-new', ...ec, '-keyout', 'leaf.key', '-out', 'leaf.csr', '-config', 'leaf.cnf'], dir);
-    openssl(['x509', '-req', '-in', 'leaf.csr', '-CA', 'ca.pem', '-CAkey', 'ca.key', '-set_serial', '01', '-days', '3650', '-out', 'leaf.pem', '-extfile', 'leaf.cnf', '-extensions', 'v3'], dir);
+    openssl(['x509', '-req', '-sha256', '-in', 'leaf.csr', '-CA', 'ca.pem', '-CAkey', 'ca.key', '-set_serial', '01', '-days', '3650', '-out', 'leaf.pem', '-extfile', 'leaf.cnf', '-extensions', 'v3'], dir);
     return {
       caCert: fs.readFileSync(path.join(dir, 'ca.pem'), 'utf8'),
       serverCert: fs.readFileSync(path.join(dir, 'leaf.pem'), 'utf8'),

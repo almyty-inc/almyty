@@ -54,7 +54,7 @@ export const RUNNER_CAPABILITIES: CapabilityDef[] = [
         },
         cwd: {
           type: 'string',
-          description: 'Working directory relative to the workspace root. Defaults to workspace root.',
+          description: 'Working directory relative to the workspace root. Defaults to the cloned repository on a hosted environment with one, else the workspace root.',
         },
         env: {
           type: 'object',
