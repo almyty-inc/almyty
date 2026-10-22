@@ -829,7 +829,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -851,7 +851,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -873,7 +873,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -895,7 +895,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -917,7 +917,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -960,7 +960,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1090,7 +1090,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1112,7 +1112,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1221,7 +1221,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1243,7 +1243,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1265,7 +1265,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1287,7 +1287,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1354,7 +1354,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1462,7 +1462,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1484,7 +1484,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1506,7 +1506,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1528,7 +1528,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1593,7 +1593,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1615,7 +1615,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1701,7 +1701,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1723,7 +1723,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "0fefa8c0ade6ba41b216bb602582ac7bd36219ba3c0c3fffb24a19b6fae48c5e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1745,7 +1745,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "fbc49847761e2fa3b9e32497d505145398d90518a9b1d0bf997f6d130eecaed0",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
