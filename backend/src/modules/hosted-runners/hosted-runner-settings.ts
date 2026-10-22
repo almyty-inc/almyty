@@ -159,12 +159,11 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   },
   defaultResourceClass: 'small',
   // The images CI builds and pushes (images/runner-env), tagged with the
-  // runner version they carry; pin each by the pushed digest once the
-  // release push has run (docs/hosted-runners.md, Not yet).
+  // runner version they carry and pinned by the pushed digest;
   // scripts/check-runner-env-images.js keeps these equal to images/runner-env/settings.json.
   images: {
-    standard: 'almyty/runner-env:standard-1.5.7',
-    'standard-browser': 'almyty/runner-env:standard-browser-1.5.7',
+    standard: 'almyty/runner-env:standard-1.5.7@sha256:f1dacb5dcb49a64cbf2503e71f78b586e4e9b7c8d3ddc8bfab5a654b1b0339c2',
+    'standard-browser': 'almyty/runner-env:standard-browser-1.5.7@sha256:a520c1a719a75e458ae0d922e53723e2b431828d613edf6cb57501965ea02579',
   },
   capacity: { maxConcurrentRunners: 2, maxWorkspaces: 10, resourceClasses: null },
   cluster: {
