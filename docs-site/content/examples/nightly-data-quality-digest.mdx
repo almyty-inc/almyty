@@ -1,31 +1,97 @@
 # A nightly check on your data
 
-For data teams who hear about broken pipelines from annoyed colleagues. Every night the assistant checks that your key tables are up to date, that row counts haven't jumped or dropped, and that empty values haven't spiked. It groups what it finds into a short report, or says "all clear", before anyone opens a dashboard.
+## What you'll build
 
-For a full walk-through with screenshots of a nightly report, see [Nightly systems report](/examples/nightly-systems-report).
+An assistant that checks your shop data in BigQuery every night before anyone opens a dashboard, and posts what is wrong to `#data-alerts` in Slack at 06:30. It runs three checks you write in plain words: is every table up to date, did yesterday's order count jump or drop, and are values missing that should never be missing. Each problem comes with the number it found and the limit it breaks; checks that passed get one line.
+
+![The 06:30 message in #data-alerts: two problems, one check passed](/screenshots/examples/nightly-data-quality-digest/00-slack-report.png)
+
+This guide builds it for Larkspur Home, a made-up online homeware shop in Amsterdam whose orders, payments and website sessions are loaded into BigQuery (project `larkspur-analytics`, dataset `shop`) every hour. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 30 minutes.
 
 ## What you need
 
-- A way to run your checks over the web: a small query service in front of your data warehouse, or a metrics API.
-- Somewhere for the report to go: a Slack or email tool, or an address of yours that receives it.
+- **An almyty account** with an AI model connected (**Models**, **Connect a provider**).
+- **BigQuery connected in almyty** with a read-only Google account: steps 1 and 2 of [Ask your data in Slack](/examples/nl-query-your-database#1-create-a-google-sign-in-for-almyty) (an OAuth client, the BigQuery API description, and a sign-in with only the `cloud-platform.read-only` scope as an account with **BigQuery Data Viewer** and **BigQuery Job User**).
+- **A Slack app with a bot token** in your workspace (step 6 of the same guide), invited to `#data-alerts`.
 
-## How to build it
+## 1. Write the checks
 
-1. **Connect the checks.** Open **APIs**, click **Connect an API**, pick its kind, give its description link and click **Connect API**. If it is a single call, create an [HTTP tool](/tools/http-tools) under **Tools** instead.
-2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Run the freshness and anomaly checks, group failures by table, and write a short report. If nothing is wrong, say so." Pick the tools under **Tools and APIs**.
-3. **Let it remember.** Turn on **Remember between conversations** with **This agent's own** memory, so it can say "third night in a row for the orders table" instead of reporting each night on its own.
-4. **Put it on a schedule.** On its **Overview** tab, in the **Schedule** card, turn on **Enable schedule**, set **Interval (minutes)** to 1440 (once a day) and click **Save schedule**. almyty starts each run itself.
+Open **Agents**, click **Create agent**, pick **Autonomous**, name it `Data check` and pick a model under **Work mode** (for example **gpt-4o**). Under **Personality & style**, write `Short and factual. Problems first, with numbers.` Under **Instructions**, write each check the way you would explain it to a new analyst, with its limit:
 
-   ![The Schedule and Webhook cards](/screenshots/schedule-config.png)
+```
+You check Larkspur Home's shop data in BigQuery every night and report what is wrong.
 
-5. **Deliver the report.** Either give it a Slack or email tool and tell it to send the report as its last step, or paste an address of yours into the **Webhook** card: almyty sends the finished run there, and your service passes it on.
-6. **Look back.** Every night's run is on the **Runs** tab, with exactly what it checked.
+Run each check as one query with the query tool: projectId larkspur-analytics, defaultDataset with projectId larkspur-analytics and datasetId shop, useLegacySql false, maximumBytesBilled 1000000000. Name tables without project or backticks.
+1. Freshness: from shop.__TABLES__, every table except products must have been updated in the last 6 hours.
+2. Volume: yesterday's orders in shop.orders (by created_at) against the daily average of the 7 days before. Flag a change of more than 30%.
+3. Empty values: the share of yesterday's payments in shop.payments without a payment_method, and of yesterday's orders without a customer_id or shipping_country. Flag anything above 1%.
 
-## Ideas
+Report the problems first, each with the number you found and the limit it breaks. Then the checks that passed, in one line. If nothing is wrong, say "All checks passed."
+Only ever run SELECT.
+```
 
-- Swap the checks for uptime checks, service-level alerts or a daily numbers summary.
-- Keep the thresholds in a table your analysts can change without touching the assistant.
+Then, under **Capabilities**, **Tools and APIs**, search for `jobs_query` and tick **`bigquery_bigquery_jobs_query`**.
+
+![Data check with its three checks](/screenshots/examples/nightly-data-quality-digest/01-agent.png)
+
+Why limits in the instructions: "the table is late" means nothing without "late is more than 6 hours". With the numbers written down, the report says the same thing every night, and changing a limit is editing one line.
+
+Click **Save**, go back to the agent and click **Activate**.
+
+## 2. Try it
+
+Under **Try it** on the **Overview** tab, type `Run the nightly checks.` and press Enter.
+
+![A test run: two problems found](/screenshots/examples/nightly-data-quality-digest/02-try.png)
+
+It answered:
+
+> **Shop data check for Wed 21 Oct: 2 problems**
+>
+> - **`shop.web_sessions` was last updated 31 hours ago** (limit: 6). It has 1,892,860 rows. Every other table was updated within the last hour.
+> - **6.6% of yesterday's payments have no `payment_method`** (83 of 1,256; limit: 1%).
+>
+> Passed: order volume (1,256 orders yesterday, 7-day average 1,264.1, -0.6%); orders with customer and country (0 missing of 1,256).
+>
+> 3 queries, 31 MB read.
+
+Open the **Runs** tab and click the run: it shows the three queries it wrote and ran, and the rows BigQuery returned for each, so you can check how it got to every number.
+
+![The run: the three queries and their results](/screenshots/examples/nightly-data-quality-digest/03-run-steps.png)
+
+## 3. Post it to Slack every night
+
+On the agent's **Channels** tab, click **Add channel**, pick **Slack**, open **Advanced** and pick the Slack bot credential you already have (or click **Create one here** and paste the bot token and signing secret), then click **Save** and **Publish**.
+
+On the **Overview** tab, under **Schedule**, click **Set up a schedule**:
+
+1. **Repeat**: **At a time of day**. **Days**: **Every day**.
+2. **Time**: `06:30`. **Time zone**: **Europe/Amsterdam** (yours). The summary under it shows the next three runs.
+3. **Where**: **Slack**. **Slack channel**: **#data-alerts**.
+4. **Message**: `Run the nightly checks.`
+5. Click **Save schedule**.
+
+![The schedule: every day at 06:30, posted to #data-alerts](/screenshots/examples/nightly-data-quality-digest/04-schedule.png)
+
+Every morning the report is waiting in `#data-alerts`, like the one at the top of this page. Scheduled runs act with your access, so the BigQuery sign-in needs nothing more.
+
+## Make it yours
+
+- **Your checks.** Add one numbered line per check: "4. Duplicates: no order_id appears twice in yesterday's orders", "5. Revenue: yesterday's total_eur within 40% of the 7-day average". Keep a limit on every line.
+- **Quiet nights.** Add "If all checks passed, post only: All checks passed." so the channel stays readable.
+- **Who to tell.** Add the Slack member IDs of table owners to the instructions (`web_sessions belongs to <@U04ABCD>`) and ask it to mention the owner of a failing table.
+- **Snowflake, Postgres or another warehouse.** Any warehouse with a query API and a published description works the same way: connect it under **APIs**, sign in with a read-only role and tick its query tool. For Snowflake's SQL API, see [Ask your data in Slack](/examples/nl-query-your-database#make-it-yours).
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **A check query failed ... Security check blocked tool** | almyty's security check refuses backticks and some plain `SELECT a, b FROM` queries in a tool's input. Keep "Name tables without project or backticks" in the instructions; see [Ask your data in Slack](/examples/nl-query-your-database#if-something-goes-wrong). |
+| **Access Denied ... bigquery.jobs.create** | The Google account lacks **BigQuery Job User**. |
+| Freshness reports every table as hours old | Your tables are loaded less often than every 6 hours. Change the limit in check 1 to how often they load. |
+| No message at 06:30 | Check the **Schedule** card on the **Overview** tab for the last run and its error, and that the bot is in `#data-alerts`. |
 
 ## Related
 
-- [Scheduling](/agents/scheduling) · [Webhooks](/agents/webhooks) · [Memory](/memory)
+- [Scheduling](/agents/scheduling) · [Autonomous agents](/agents/autonomous) · [Connect an API](/tools) · [Channels](/channels)
+- [Ask your data in Slack](/examples/nl-query-your-database) · [Nightly systems report](/examples/nightly-systems-report)
