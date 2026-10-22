@@ -78,6 +78,19 @@ const CHANNEL_REGISTRAR_NAMES: Partial<Record<AgentChannel['type'], string>> = {
   imessage_sendblue: 'Sendblue',
 }
 
+
+/**
+ * What the Callback URL card says about the address. A channel whose
+ * registration was skipped for lack of a public address is not "registered
+ * for you when you publish": it waits for that address, as the warning
+ * under the URL says.
+ */
+export function callbackUrlDescription(where: string | undefined, registration: WebhookRegistration | null, platform: string): string | undefined {
+  if (registration?.action === 'register' && registration.status === 'skipped' && registration.code === 'PUBLIC_URL_NOT_CONFIGURED') {
+    return `${platform} will be told this address when this server has a public address and you publish.`
+  }
+  return where
+}
 /**
  * What publishing last did about the platform's webhook, in plain words.
  * A failure is said here, next to the URL, with the platform's own reason.
@@ -614,7 +627,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       {type === 'slack' && live && stored.gatewayId && <SlackInstall gatewayId={stored.gatewayId} />}
 
       {messaging && callbackUrl && inbound && (
-        <FormSection title="Callback URL" description={inbound.where}>
+        <FormSection title="Callback URL" description={inbound.mode === 'auto' ? callbackUrlDescription(inbound.where, registration, platformName) : inbound.where}>
           <CopyField id="channel-callback-url" value={callbackUrl} label="Callback URL" />
           {inbound.mode === 'auto' && live && <WebhookRegistrationLine registration={registration} platform={platformName} />}
         </FormSection>

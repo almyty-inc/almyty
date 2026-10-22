@@ -15,11 +15,12 @@ describe('actionDetailsOf', () => {
       _gate: { paramsHash: 'h' },
     }
     const schema = { properties: { calendarId: { title: 'Calendar' }, requestBody: { properties: { summary: { title: 'Title' } } } } }
+    // The schema's parameters first, in its order; send_updates (not in it) after.
     expect(actionDetailsOf(payload, schema)).toEqual([
       { label: 'Calendar', value: 'primary' },
-      { label: 'Send updates', value: 'all' },
       { label: 'Request body › Title', value: 'Dentist' },
       { label: 'Request body › Attendees', value: 'a@x.example, b@x.example' },
+      { label: 'Send updates', value: 'all' },
     ])
   })
 
@@ -54,6 +55,19 @@ describe('actionDetailsOf', () => {
       { label: 'Due', value: '2026-10-23' },
       { label: 'Order id', value: '20261023' },
     ])
+  })
+
+  it("follows the tool's parameter order, and puts a start before an end whatever order the call sent", () => {
+    const schema = { properties: { summary: {}, location: {}, endTime: {}, startTime: {} } }
+    const labels = (rows: Array<{ label: string }>) => rows.map((r) => r.label)
+    // Schema order (summary, location), then the start pulled ahead of the end.
+    expect(labels(actionDetailsOf({ parameters: { endTime: 'b', location: 'Room 2', startTime: 'a', summary: 'Review' } }, schema)))
+      .toEqual(['Summary', 'Location', 'Start time', 'End time'])
+    // No schema: the call's own order, but End never before Start.
+    expect(labels(actionDetailsOf({ parameters: { end: { dateTime: '2026-10-23T11:30:00Z' }, eventId: 'ev', start: { dateTime: '2026-10-23T10:30:00Z' } } })))
+      .toEqual(['Start', 'End', 'Event id'])
+    // A field merely containing "end" is not an end: send_updates keeps its place.
+    expect(labels(actionDetailsOf({ parameters: { send_updates: 'all', start: 'a' } }))).toEqual(['Send updates', 'Start'])
   })
 })
 

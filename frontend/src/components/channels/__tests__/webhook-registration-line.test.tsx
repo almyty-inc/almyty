@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-import { WebhookRegistrationLine } from '../channel-settings'
-import { notReceivingReason } from '@/lib/agent-channels'
+import { WebhookRegistrationLine, callbackUrlDescription } from '../channel-settings'
+import { CHANNEL_INBOUND, notReceivingReason } from '@/lib/agent-channels'
 
 /**
  * Publishing a Telegram channel on a server with no PUBLIC_API_URL skipped
@@ -25,5 +25,16 @@ describe('a channel on a server with no public address', () => {
     expect(line).toHaveTextContent('Not receiving messages: this server has no public address (PUBLIC_API_URL)')
     expect(line).toHaveTextContent('Telegram has nowhere to deliver them')
     expect(line).not.toHaveTextContent('Add the URL above there yourself')
+  })
+
+  it('does not tell the Callback URL card it was "registered for you" when it could not be', () => {
+    const where = CHANNEL_INBOUND.telegram.where!
+    expect(where).toContain('Registered with Telegram for you when you publish')
+    const said = callbackUrlDescription(where, skipped, 'Telegram')
+    expect(said).toBe('Telegram will be told this address when this server has a public address and you publish.')
+    expect(said).not.toContain('Registered with Telegram')
+    // Registered, or not tried yet: the usual words.
+    expect(callbackUrlDescription(where, { ...skipped, status: 'registered', code: null }, 'Telegram')).toBe(where)
+    expect(callbackUrlDescription(where, null, 'Telegram')).toBe(where)
   })
 })

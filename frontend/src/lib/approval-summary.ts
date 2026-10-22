@@ -78,8 +78,34 @@ function valueText(v: string | number | boolean): string {
   return isDateTime(v) ? formatDateTime(v) : String(v)
 }
 
+const START_WORDS = new Set(['start', 'starts', 'begin', 'begins'])
+const END_WORDS = new Set(['end', 'ends', 'finish', 'finishes', 'until'])
+const wordsOf = (key: string) => humanizeIdentifier(key).toLowerCase().split(' ')
+const isStartKey = (key: string) => wordsOf(key).some((w) => START_WORDS.has(w))
+const isEndKey = (key: string) => wordsOf(key).some((w) => END_WORDS.has(w))
+
+/**
+ * The fields in the order a person reads them: the tool's own parameter
+ * order where its schema gives one, then the rest as sent; and a start
+ * always before an end, whatever order the call put them in.
+ */
+function orderedEntries(args: Record<string, unknown>, schema: Schema): Array<[string, unknown]> {
+  const props = schema?.properties && typeof schema.properties === 'object' ? Object.keys(schema.properties) : []
+  const keys = [...props.filter((k) => k in args), ...Object.keys(args).filter((k) => !props.includes(k))]
+  const firstEnd = keys.findIndex(isEndKey)
+  if (firstEnd >= 0) {
+    const lateStarts = keys.slice(firstEnd + 1).filter((k) => isStartKey(k) && !isEndKey(k))
+    if (lateStarts.length) {
+      const rest = keys.filter((k) => !lateStarts.includes(k))
+      rest.splice(rest.indexOf(keys[firstEnd]), 0, ...lateStarts)
+      return rest.map((k) => [k, args[k]])
+    }
+  }
+  return keys.map((k) => [k, args[k]])
+}
+
 function collect(args: Record<string, unknown>, schema: Schema, prefix: string, depth: number, out: ActionDetail[]) {
-  for (const [key, value] of Object.entries(args)) {
+  for (const [key, value] of orderedEntries(args, schema)) {
     if (isInternal(key) || value === null || value === undefined || value === '') continue
     const sub = propertySchema(schema, key)
     const label = prefix ? `${prefix} › ${labelOf(key, sub)}` : labelOf(key, sub)
