@@ -6,7 +6,7 @@ import { resolveCredentialsOrExit } from '@almyty/client';
 
 import { ResolvedConfig, RunnerConfig } from './types.js';
 import { DEFAULT_BINARY_PROBE_LIST, describeIsolationPosture, loadConfig, runnerNameFromHostname } from './config.js';
-import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
+import { baseRuntimeInfo, detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
 import { createDefaultAdapterFactory, ProcessManager } from './process-manager.js';
 import { StreamableClient, envelope } from './streamable-client.js';
 import { WorkerEnvelope, RequestPayload, ResponsePayload, HeartbeatPayload, WORKER_ERROR_CODES } from './protocol.js';
@@ -52,6 +52,8 @@ export interface EnrolledStartOptions {
   installSignals?: boolean;
   /** Test injection for the first-start workspace setup. */
   prepare?: typeof prepareHostedWorkspace;
+  /** Test injection for the runtime probe that runs once the runner is online. */
+  detect?: typeof detectRuntimeInfo;
 }
 
 interface ConnectOptions {
@@ -101,6 +103,8 @@ export class RunnerDaemon {
   private reestablishing = false;
   /** Consecutive failed re-establish attempts; bounds the retry loop. */
   private sessionLostStreak = 0;
+  /** The finished runtime report (enroll mode); tests await it. */
+  runtimeReport: Promise<void> | null = null;
 
   /**
    * Bootstraps the daemon. Returns when the runner has registered and
@@ -198,16 +202,19 @@ export class RunnerDaemon {
       throw new EnrollmentError(err.message);
     }
 
+    const startedAt = Date.now();
     process.stdout.write(`almyty-runner v${RUNNER_VERSION} starting in enroll mode\n`);
     process.stdout.write(`url=${settings.backendUrl}\n`);
-    const runtime = await detectRuntimeInfo({ binaries: DEFAULT_BINARY_PROBE_LIST });
-    process.stdout.write(`detected ${Object.values(runtime.binaries).filter(v => v).length}/${DEFAULT_BINARY_PROBE_LIST.length} binaries on PATH\n`);
-
-    const enrolled = await enroll(settings, { runtimeInfo: runtime }, fetchImpl);
+    // Enroll with the machine's basics only. Probing every binary and
+    // coding CLI took ~16 s on a one-CPU hosted pod and held the machine
+    // offline the whole time; it runs once the runner is online instead
+    // (reportRuntime). The allowlist is not affected: policy.ts checks
+    // each command against it, probe or no probe.
+    const enrolled = await enroll(settings, { runtimeInfo: baseRuntimeInfo() }, fetchImpl);
     // Spent either way; nothing else needs it.
     settings.token = '';
     this.runnerId = enrolled.runnerId;
-    process.stdout.write(`enrolled as ${enrolled.runnerId}; credential valid until ${enrolled.expiresAt.toISOString()}\n`);
+    process.stdout.write(`enrolled as ${enrolled.runnerId} ${Date.now() - startedAt}ms after start; credential valid until ${enrolled.expiresAt.toISOString()}\n`);
 
     this.credential = new RunnerCredential({
       backendUrl: settings.backendUrl,
@@ -276,6 +283,31 @@ export class RunnerDaemon {
       fetch: opts.fetch,
       installSignals: opts.installSignals ?? true,
     });
+    process.stdout.write(`online ${Date.now() - startedAt}ms after start\n`);
+
+    // Now that the machine is online, find out which binaries it has and
+    // tell the backend. Nothing waits on it: the policy above is enforced
+    // on every command whether or not the probe has finished, and
+    // `coding.list` / `runner.info` probe afresh when asked.
+    this.runtimeReport = this.reportRuntime(opts.detect ?? detectRuntimeInfo);
+  }
+
+  /**
+   * Probe the binaries and coding CLIs, and send the snapshot as a
+   * `runner.runtime` event; the backend stores it on the runner row the
+   * enrollment created with only the machine's basics. A failed probe or
+   * send is logged, never fatal.
+   */
+  private async reportRuntime(detect: typeof detectRuntimeInfo): Promise<void> {
+    const t0 = Date.now();
+    try {
+      const runtime = await detect({ binaries: DEFAULT_BINARY_PROBE_LIST });
+      process.stdout.write(`detected ${Object.values(runtime.binaries).filter(v => v).length}/${DEFAULT_BINARY_PROBE_LIST.length} binaries on PATH in ${Date.now() - t0}ms\n`);
+      if (!this.client) return;
+      await this.client.send(envelope('event', { kind: 'runner.runtime', runnerId: this.runnerId, runtimeInfo: runtime }));
+    } catch (err: any) {
+      process.stderr.write(`runtime report failed: ${err?.message ?? err}\n`);
+    }
   }
 
   /** Stop heartbeats, renewal and the stream; tell the backend it is draining. */

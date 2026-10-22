@@ -140,7 +140,9 @@ export interface HostedRunnerSettings {
 export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   idleTimeoutMinutes: { default: 15, min: 5, max: 120 },
   suspendedRetention: { keepDays: 30, noticeDay: 23 },
-  wake: { budgetSeconds: 180, retryAfterSeconds: 10 },
+  // A woken machine is ready within a second of its runner's first
+  // heartbeat; a run that met it waking looks again this soon after.
+  wake: { budgetSeconds: 180, retryAfterSeconds: 3 },
   enrollment: { tokenTtlMinutes: 10, credentialTtlMinutes: 60 },
   reconcile: {
     sweepCron: '* * * * *',

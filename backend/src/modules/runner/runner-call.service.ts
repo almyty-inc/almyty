@@ -360,6 +360,19 @@ export class RunnerCallService implements OnModuleDestroy {
         this.rememberSession(session.id, payload.runnerId);
         await this.runners.onSessionConnect(payload.runnerId, session.id);
       }
+      if (payload?.kind === 'runner.runtime') {
+        // The probed snapshot a runner sends once online. Stored on the
+        // runner this session is bound to (by its hello), never on the id
+        // the payload names.
+        const runnerId =
+          this.sessionRunners.get(session.id) ??
+          (await this.runners.runnerIdForSession(session.id));
+        if (!runnerId) {
+          this.logger.debug(`runtime report for unmapped session ${session.id} dropped`);
+          return;
+        }
+        await this.runners.updateRuntimeInfo(runnerId, (env.payload as { runtimeInfo?: unknown }).runtimeInfo);
+      }
       // runner.draining and other events are observational here.
       return;
     }

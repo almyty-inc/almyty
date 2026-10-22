@@ -19,6 +19,10 @@ vi.mock('../src/runtime-info.js', () => ({
     os: 'linux', arch: 'x64', hostname: 'hr-ws-1', cpuCount: 1, memoryMb: 2048,
     runnerVersion: 'test', binaries: { git: '/usr/bin/git' }, codingAgents: [],
   }),
+  baseRuntimeInfo: () => ({
+    os: 'linux', arch: 'x64', hostname: 'hr-ws-1', cpuCount: 1, memoryMb: 2048,
+    runnerVersion: 'test', binaries: {}, codingAgents: [],
+  }),
 }));
 
 const RUNTIME = {
@@ -353,6 +357,81 @@ describe('enroll mode end to end (RunnerDaemon.startEnrolled against the fake AP
       expect(prepare).not.toHaveBeenCalled();
     } finally {
       outSpy.mockRestore();
+    }
+  });
+
+  it('comes online without waiting for the binary probe, then reports what it found', async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), 'almyty-enroll-state-'));
+    vi.stubEnv('ALMYTY_RUNNER_STATE_DIR', stateDir);
+    vi.resetModules();
+    const { RunnerDaemon } = await import('../src/daemon.js');
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const errSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    // A probe that does not finish until the test says so: on a hosted pod
+    // it took ~16 s, and nothing on the way online may wait for it.
+    let finishProbe!: () => void;
+    const probed = { ...RUNTIME, binaries: { git: 'git version 2.47.0', aider: 'aider 0.86.2' } };
+    const detect = vi.fn(() => new Promise<any>((resolve) => { finishProbe = () => resolve(probed); }));
+    const daemon = new RunnerDaemon();
+    try {
+      await daemon.startEnrolled({
+        env: { ALMYTY_ENROLLMENT_TOKEN: FAKE_TOKEN, ALMYTY_API_URL: api.url },
+        prepare: vi.fn().mockResolvedValue({ ok: true }), exit: vi.fn(), installSignals: false, detect,
+      });
+      // Enrolled with the machine's basics, before any binary was started.
+      expect(api.enrollBodies[0].runtimeInfo.binaries).toEqual({});
+      expect(api.enrollBodies[0].runtimeInfo.codingAgents).toEqual([]);
+      // Online (hello and the first heartbeat sent, stream open) while the probe is still running.
+      await vi.waitFor(() => {
+        expect(api.openStreams).toBe(1);
+        expect(api.envelopes.some((e) => e.type === 'heartbeat')).toBe(true);
+      });
+      expect(detect).toHaveBeenCalledTimes(1);
+      expect(api.envelopes.some((e) => e.payload?.kind === 'runner.runtime')).toBe(false);
+
+      finishProbe();
+      await daemon.runtimeReport;
+      const report = api.envelopes.find((e) => e.payload?.kind === 'runner.runtime');
+      expect(report.type).toBe('event');
+      expect(report.payload.runnerId).toBe('11111111-2222-4333-8444-555555555555');
+      expect(report.payload.runtimeInfo.binaries).toEqual(probed.binaries);
+    } finally {
+      await daemon.shutdown();
+      outSpy.mockRestore();
+      errSpy.mockRestore();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('opens the stream right after enrolling, with no fixed wait before the first connect', async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), 'almyty-enroll-state-'));
+    vi.stubEnv('ALMYTY_RUNNER_STATE_DIR', stateDir);
+    vi.resetModules();
+    const { RunnerDaemon } = await import('../src/daemon.js');
+    const out: string[] = [];
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation((s: any) => { out.push(String(s)); return true; });
+    const daemon = new RunnerDaemon();
+    try {
+      const t0 = Date.now();
+      await daemon.startEnrolled({
+        env: { ALMYTY_ENROLLMENT_TOKEN: FAKE_TOKEN, ALMYTY_API_URL: api.url },
+        prepare: vi.fn().mockResolvedValue({ ok: true }), exit: vi.fn(), installSignals: false,
+        detect: () => new Promise(() => undefined),
+      });
+      await vi.waitFor(() => expect(api.envelopes.some((e) => e.type === 'heartbeat')).toBe(true), { timeout: 900, interval: 10 });
+      // Loopback, no probe: the whole way online fits well inside a second.
+      expect(Date.now() - t0).toBeLessThan(1000);
+      // The way online is timed in the log, so a pod's log shows where the seconds went.
+      const printed = out.join('');
+      expect(printed).toMatch(/enrolled as \S+ \d+ms after start/);
+      expect(printed).toMatch(/online \d+ms after start/);
+      const paths = api.requests.map((r) => `${r.method} ${r.path}`);
+      expect(paths.indexOf('POST /runners/enroll')).toBe(0);
+      expect(paths.slice(1, 3)).toEqual(['POST /runners/hosted/stream', 'GET /runners/hosted/stream']);
+    } finally {
+      await daemon.shutdown();
+      outSpy.mockRestore();
+      rmSync(stateDir, { recursive: true, force: true });
     }
   });
 });

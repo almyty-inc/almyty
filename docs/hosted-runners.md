@@ -53,11 +53,16 @@ recorded).
    creates the pod's objects, writes a fresh enrollment token, a fresh pod
    model token and the environment's connection values into the pod's
    Secret, and scales it up.
-4. The runner in the pod calls `POST /runners/enroll` with the token, gets a
-   runner credential, and holds `/runners/hosted/stream` with it, like any
-   runner holds its stream. When it heartbeats, the machine is ready and the
-   call goes through, once no other job of the same person is working in the
-   workspace (see One folder, one job at a time).
+4. The runner in the pod calls `POST /runners/enroll` with the token and
+   the machine's basics (OS, CPUs, memory), gets a runner credential, and
+   holds `/runners/hosted/stream` with it, like any runner holds its stream.
+   Its first heartbeat queues a reconcile of its machine, which marks it
+   ready there and then rather than on the next sweep, and the call goes
+   through, once no other job of the same person is working in the
+   workspace (see One folder, one job at a time). Only then does the runner
+   probe which binaries and coding CLIs it has (`ALMYTY_PROBE_TIMEOUT_MS`
+   per binary, 10 s by default) and send them as a `runner.runtime` event;
+   the binary allowlist applies to every command either way.
 5. Each call restarts the idle clock. Past the environment's idle timeout
    the pod is scaled to zero, the Secret deleted, and the workspace marked
    `suspended`. The volume stays.
