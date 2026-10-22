@@ -27,6 +27,10 @@ vi.mock('@/components/channels/channel-page-loader', () => ({
 }))
 const success = vi.fn()
 vi.mock('@/store/app', () => ({ useNotifications: () => ({ success, error: vi.fn() }) }))
+vi.mock('@/lib/push-wakes', async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  pushWakesApi: { list: vi.fn().mockResolvedValue([]), options: vi.fn().mockResolvedValue({ presets: [], apis: [] }) },
+}))
 
 const CAP = { timerFloorMinutes: 15, maxWakesPerHour: 6, includedAgents: null }
 const TOOLS = [
@@ -53,6 +57,8 @@ describe('the Always on form', () => {
     const form = { ...formFromView(empty as any), enabled: true }
     expect(inputFromForm(form, 15).error).toBe('Say what it should keep doing.')
     expect(inputFromForm({ ...form, brief: 'x', timerOn: false }, 15).error).toBe('Choose at least one thing that wakes it.')
+    // A service that pushes changes to it (saved on its own) is something that wakes it.
+    expect(inputFromForm({ ...form, brief: 'x', timerOn: false }, 15, 1).input?.wakeOn.timer).toBeNull()
   })
 
   it('saves the ask-first list only when it acts on its own', () => {

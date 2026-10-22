@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto';
 import { Agent, AgentPauseReason, AgentStatus } from '../../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { AgentWake, WakeSource } from '../../../entities/agent-wake.entity';
+import { AgentPushWake } from '../../../entities/agent-push-wake.entity';
 import { AgentChannel, ChannelType } from '../../../entities/agent-channel.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { Tool } from '../../../entities/tool.entity';
@@ -152,6 +153,8 @@ export interface AlwaysOnView {
   hostedHome: boolean;
   /** The organization's always-on agents with a hosted home that are on now. */
   hostedAgentsOn: number;
+  /** Its push wakes (push-wakes/): services that tell it when something changed. */
+  pushWakes: number;
 }
 
 function bounded(text: string, max: number): string {
@@ -270,6 +273,13 @@ function wakeLine(w: Pick<AgentWake, 'source' | 'summary' | 'payload' | 'created
   const owner = w.payload?.ownerMessage?.text;
   if (owner) return `- ${clock(w.createdAt)}, your owner wrote: ${owner}`;
   const sent = w.source === 'webhook' && typeof w.payload?.text === 'string' ? `\n  What was sent: ${w.payload.text}` : '';
+  if (w.source === 'push' && Array.isArray(w.payload?.changes) && w.payload!.changes.length) {
+    const items = (w.payload!.changes as Array<Record<string, unknown>>).map(
+      (c) => `\n  - ${Object.entries(c).map(([k, v]) => `${k}: ${String(v)}`).join(', ')}`,
+    );
+    const more = w.payload!.more ? `\n  - and ${w.payload!.more} more` : '';
+    return `- ${clock(w.createdAt)}, ${w.summary}\n  What changed:${items.join('')}${more}`;
+  }
   return `- ${clock(w.createdAt)}, ${w.summary}${sent}`;
 }
 
@@ -318,6 +328,8 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly identity?: AgentIdentityService,
     // The owner's time zone, for a daily summary that names none.
     @Optional() @InjectRepository(User) private readonly users?: Repository<User>,
+    // Its push wakes count as something that wakes it (mergeAlwaysOn).
+    @Optional() @InjectRepository(AgentPushWake) private readonly pushWakes?: Repository<AgentPushWake>,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -413,6 +425,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       digest: await this.digestTimingFor(agent, config),
       hostedHome: hasHostedHome(config),
       hostedAgentsOn: (await this.hostedAgentsOn(organizationId)).length,
+      pushWakes: await this.pushWakeCount(agentId, organizationId),
     };
   }
 
@@ -434,7 +447,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Always on is for autonomous agents. Use a schedule or a webhook for a workflow.');
     }
     const before = readAlwaysOn(agent.alwaysOn);
-    const next = mergeAlwaysOn(before, input ?? {});
+    const next = mergeAlwaysOn(before, input ?? {}, { pushWakes: await this.pushWakeCount(agentId, organizationId) });
     const capacity = await this.capacityFor(organizationId);
 
     if (next.enabled && agent.status !== AgentStatus.ACTIVE) {
@@ -1419,6 +1432,33 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     const agentIds = [...new Set(grants.filter((g) => !g.expiresAt || g.expiresAt.getTime() > now).map((g) => g.principalId))];
     if (!agentIds.length) return 0;
     return this.connectionEvent({ ...event, agentIds });
+  }
+  /**
+   * A service told one of its push wakes that something changed
+   * (push-wakes/push-wakes.service.ts, after the debounce window and the
+   * "what changed" read). One wake per change set: the dedupe key carries
+   * the cursor, so a retried read is not a second wake.
+   */
+  async pushEvent(event: {
+    organizationId: string;
+    agentId: string;
+    pushWakeId: string;
+    summary: string;
+    dedupeKey: string;
+    payload: Record<string, any>;
+  }): Promise<AgentWake | null> {
+    return this.wake(event.agentId, event.organizationId, 'push', {
+      summary: event.summary,
+      dedupeKey: event.dedupeKey,
+      sourceRef: event.pushWakeId,
+      payload: event.payload,
+    });
+  }
+
+  /** How many push wakes an agent has; they count as something that wakes it. */
+  private async pushWakeCount(agentId: string, organizationId: string): Promise<number> {
+    if (!this.pushWakes) return 0;
+    return this.pushWakes.count({ where: { agentId, organizationId } }).catch(() => 0);
   }
   /** "Wake now" on the agent page. */
   async wakeNow(agentId: string, organizationId: string, userId?: string | null): Promise<AgentWake | null> {

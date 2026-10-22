@@ -90,4 +90,27 @@ describe('Always on is wired', () => {
     // Nothing counts every agent that is on.
     expect(service).not.toMatch(/async agentsOn\(/);
   });
+
+  it('push wakes are reached: the address, the debounced read, the renewal sweep, and agent deletion', () => {
+    const pushService = code('modules/agents/always-on/push-wakes/push-wakes.service.ts');
+    const controller = code('modules/agents/always-on/push-wakes/push-wakes.controller.ts');
+    // The public address hands every push to receive().
+    expect(controller).toMatch(/@Controller\('push-wakes'\)[\s\S]*?@Post\(':pushWakeId'\)[\s\S]*?this\.pushWakes\.receive\(/);
+    // receive() queues the debounced job, which the processor turns into processPushes().
+    expect(pushService).toMatch(/async receive\([\s\S]*?PUSH_WAKE_CHANGES_JOB/);
+    expect(processor).toMatch(/@Process\(PUSH_WAKE_CHANGES_JOB\)[\s\S]*?this\.pushWakes\.processPushes\(/);
+    // ...which wakes through Always on, as push.
+    expect(pushService).toMatch(/async processPushes\([\s\S]*?this\.alwaysOn\.pushEvent\(/);
+    // The sweep is scheduled at boot and handled by the processor.
+    expect(pushService).toMatch(/async onModuleInit\(\)[\s\S]*?PUSH_WAKE_RENEW_JOB/);
+    expect(processor).toMatch(/@Process\(PUSH_WAKE_RENEW_JOB\)[\s\S]*?this\.pushWakes\.renewDue\(/);
+    // Deleting an agent stops its subscriptions before the rows go.
+    const agents = code('modules/agents/agents.service.ts');
+    expect(agents.indexOf('this.pushWakesOf()?.removeAllFor(')).toBeGreaterThan(-1);
+    expect(agents.indexOf('this.pushWakesOf()?.removeAllFor(')).toBeLessThan(agents.indexOf('await this.agentRepository.remove(agent)'));
+    // Both controllers and the service are registered.
+    const mod = code('modules/agents/agents.module.ts');
+    expect(mod).toMatch(/PushWakesController, PushWakeReceiverController/);
+    expect(mod).toMatch(/AlwaysOnService, PushWakesService/);
+  });
 });

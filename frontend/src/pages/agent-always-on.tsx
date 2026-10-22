@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { WithAgent } from '@/components/channels/channel-page-loader'
+import { PushWakesSection } from '@/components/agents/always-on/push-wakes-section'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -98,8 +99,8 @@ export function minutesOf(form: Pick<AlwaysOnForm, 'every' | 'unit'>): number {
   return form.unit === 'hours' ? form.every * 60 : form.every
 }
 
-/** The request a form saves as, or what is missing in words. */
-export function inputFromForm(form: AlwaysOnForm, floorMinutes: number): { input?: AlwaysOnInput; error?: string } {
+/** The request a form saves as, or what is missing in words. `pushWakes`: services that push to it (saved on their own) also wake it. */
+export function inputFromForm(form: AlwaysOnForm, floorMinutes: number, pushWakes = 0): { input?: AlwaysOnInput; error?: string } {
   if (form.enabled && !form.brief.trim()) return { error: 'Say what it should keep doing.' }
   if (form.timerOn) {
     const minutes = minutesOf(form)
@@ -108,7 +109,7 @@ export function inputFromForm(form: AlwaysOnForm, floorMinutes: number): { input
   }
   const owner = form.ownerChannelId !== NO_CHANNEL
   if (owner && !form.ownerAddress.trim()) return { error: 'Enter your own address on the channel you talk to it on.' }
-  if (form.enabled && !form.timerOn && !form.channelIds.length && !form.connectionEvents.length && !owner) {
+  if (form.enabled && !form.timerOn && !form.channelIds.length && !form.connectionEvents.length && !owner && !pushWakes) {
     return { error: 'Choose at least one thing that wakes it.' }
   }
   if (form.report === 'daily_digest' && (!form.digestTime || !form.digestTimezone)) {
@@ -221,7 +222,7 @@ function AlwaysOnPage({
   })
 
   const submit = () => {
-    const { input, error } = inputFromForm(form, floor)
+    const { input, error } = inputFromForm(form, floor, view?.pushWakes ?? 0)
     if (!input) {
       setProblem(error ?? 'Something is missing.')
       return
@@ -347,6 +348,8 @@ function AlwaysOnPage({
             </div>
           ))}
         </div>
+
+        <PushWakesSection agentId={agent.id} />
       </FormSection>
 
       <FormSection

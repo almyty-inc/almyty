@@ -19,6 +19,7 @@ import {
   AlwaysOnService,
   LEGACY_HEARTBEAT_JOB,
 } from './always-on/always-on.service';
+import { PUSH_WAKE_CHANGES_JOB, PUSH_WAKE_RENEW_JOB, PushWakesService } from './always-on/push-wakes/push-wakes.service';
 
 /**
  * A run in one of these is finished; a late queue failure must not
@@ -55,6 +56,9 @@ export class AgentRuntimeProcessor {
     // standing thread reports through it. Optional for the positional tests.
     @Optional()
     private readonly alwaysOn?: AlwaysOnService,
+    // Push wakes: the debounced "what changed" job and the renewal sweep.
+    @Optional()
+    private readonly pushWakes?: PushWakesService,
   ) {}
 
   @Process('next-step')
@@ -166,6 +170,24 @@ export class AgentRuntimeProcessor {
     if (resumed) this.logger.log(`Always on: ${resumed} agent(s) back on, their plans have room again`);
   }
 
+  /**
+   * A push wake's debounce window closed: read what changed and wake the
+   * agent (push-wakes.service.ts). Queued by the first push of a window.
+   */
+  @Process(PUSH_WAKE_CHANGES_JOB)
+  async handlePushWakeChanges(job: Job<{ pushWakeId: string }>) {
+    if (!this.pushWakes) return;
+    const outcome = await this.pushWakes.processPushes(job.data.pushWakeId);
+    this.logger.debug(`Push wake ${job.data.pushWakeId}: ${outcome}`);
+  }
+
+  /** Subscribe again the push wakes whose subscriptions are about to end. */
+  @Process(PUSH_WAKE_RENEW_JOB)
+  async handlePushWakeRenewals() {
+    if (!this.pushWakes) return;
+    const { renewed, failed } = await this.pushWakes.renewDue();
+    if (renewed || failed) this.logger.log(`Push wakes: ${renewed} renewed, ${failed} failed`);
+  }
   /** Everything a finished run hands on: its scheduled result, its always-on report. */
   private async finished(runId: string): Promise<void> {
     await this.scheduler?.deliverScheduledRun(runId);
