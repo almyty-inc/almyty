@@ -811,6 +811,944 @@
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
+      "id": "examples-agent-that-remembers-00-second-run",
+      "title": "A later run using what it remembered",
+      "path": "screenshots/examples/agent-that-remembers/00-second-run.png",
+      "capturedAt": "2026-10-22T12:28:47.448Z",
+      "status": "current",
+      "sha256": "b9d2eab1db4c2b491853acd073c1b0a7e4b7d646a1d05fbc8ac8440cbea85d85",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-agent-that-remembers-01-instructions",
+      "title": "Account notes: instructions",
+      "path": "screenshots/examples/agent-that-remembers/01-instructions.png",
+      "capturedAt": "2026-10-22T12:28:26.669Z",
+      "status": "current",
+      "sha256": "5b95ddbbeb9d1a7ebc081a962a703adfc9ec115fd2a8ecb5d171681d9851b494",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-agent-that-remembers-02-memory-settings",
+      "title": "Account notes: memory settings",
+      "path": "screenshots/examples/agent-that-remembers/02-memory-settings.png",
+      "capturedAt": "2026-10-22T12:28:28.878Z",
+      "status": "current",
+      "sha256": "be958ad61c5ae5ea7d2f6a95edac24cfa4e942852aebd0ee4ebaacafcf257950",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-agent-that-remembers-03-first-run",
+      "title": "Account notes: first run stores facts",
+      "path": "screenshots/examples/agent-that-remembers/03-first-run.png",
+      "capturedAt": "2026-10-22T12:28:38.751Z",
+      "status": "current",
+      "sha256": "3892b4a2091dd8166c06bcdccd0a067a56ee5639a3d44d91b35fee24d30e171b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-agent-that-remembers-04-memory-tab",
+      "title": "What the agent remembers",
+      "path": "screenshots/examples/agent-that-remembers/04-memory-tab.png",
+      "capturedAt": "2026-10-22T12:28:41.927Z",
+      "status": "current",
+      "sha256": "b3f38e6217152fa38a0aaad5c0d3be9b925a941307b69bf56570fd81347a1dd6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-agent-that-remembers-05-org-memory",
+      "title": "Memory in the sidebar: everything the organization keeps",
+      "path": "screenshots/examples/agent-that-remembers/05-org-memory.png",
+      "capturedAt": "2026-10-22T12:28:50.742Z",
+      "status": "current",
+      "sha256": "2a622b761c8081b76c295a7a1c327092fea1f57df076caaaf03d6fd712bde9e1",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/memories"
+      },
+      "sources": [
+        "frontend/src/pages/memories.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d68de57347bc02b56607b606c6829a06cd1ed7d190ed0ffd99d623add7d2a2d3",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-connect-google-sharepoint-00-answer",
+      "title": "An answer from Google Drive documents, with sources",
+      "path": "screenshots/examples/connect-google-sharepoint/00-answer.png",
+      "capturedAt": "2026-10-22T12:29:24.238Z",
+      "status": "current",
+      "sha256": "f6b89867c8ab7323d3972c9666d46828759bcaa981c196a4c7e1498511197337",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-connect-google-sharepoint-01-drive-link",
+      "title": "Google Drive description link",
+      "path": "screenshots/examples/connect-google-sharepoint/01-drive-link.png",
+      "capturedAt": "2026-10-22T12:28:52.937Z",
+      "status": "current",
+      "sha256": "be8473f31aa7148e03d643f587f17bbd6500571de5c7a10d51f99e1933affa12",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "29469f37f8ec5e953bad066a37857e16015c51820a6096311366b983a9ad2c33",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-connect-google-sharepoint-02-drive-setup",
+      "title": "Finish connecting Google Drive",
+      "path": "screenshots/examples/connect-google-sharepoint/02-drive-setup.png",
+      "capturedAt": "2026-10-22T12:28:57.759Z",
+      "status": "current",
+      "sha256": "4a8e6dc541aee30b4a6dfcfa34153181069a82bf1b80020e104384b05c9ed574",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=28&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "14f3b73536431921c90729ed60345d7f6f5b0e08c430172a56c5494fe5aff92c",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-connect-google-sharepoint-03-google-sign-in",
+      "title": "Google sign-in: client ID, secret and permissions",
+      "path": "screenshots/examples/connect-google-sharepoint/03-google-sign-in.png",
+      "capturedAt": "2026-10-22T12:28:59.740Z",
+      "status": "current",
+      "sha256": "7368028c43c475e19ad3c8cc2346dd1d34e13cf5ef751038cc1dd6437a095db8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=28&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "14f3b73536431921c90729ed60345d7f6f5b0e08c430172a56c5494fe5aff92c",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-connect-google-sharepoint-04-signed-in",
+      "title": "Google Drive signed in",
+      "path": "screenshots/examples/connect-google-sharepoint/04-signed-in.png",
+      "capturedAt": "2026-10-22T12:29:02.042Z",
+      "status": "current",
+      "sha256": "d78f2df0166e18636f809a06b5c1d15adb76af227f6974032e0c830657bc66a8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=28&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "14f3b73536431921c90729ed60345d7f6f5b0e08c430172a56c5494fe5aff92c",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-connect-google-sharepoint-05-test-tool",
+      "title": "Testing the Drive search tool",
+      "path": "screenshots/examples/connect-google-sharepoint/05-test-tool.png",
+      "capturedAt": "2026-10-22T12:29:08.258Z",
+      "status": "current",
+      "sha256": "0bf7dc6086cfc4ae86507a3eae9abd1c25218377244d77d5c68b91c0b275cd2d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/tools/:id?tab=test"
+      },
+      "sources": [
+        "frontend/src/pages/tool-detail.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "cbeea75ea914932ec3c262495b83586202069a09686b584b359826ad0659d5cc",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-connect-google-sharepoint-06-agent",
+      "title": "Sales documents assistant: instructions",
+      "path": "screenshots/examples/connect-google-sharepoint/06-agent.png",
+      "capturedAt": "2026-10-22T12:29:10.925Z",
+      "status": "current",
+      "sha256": "4ce0ed9bc8c85f2d76ec61650851a57c3900464b90050c7f9eeaf3343e082fc5",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-connect-google-sharepoint-07-tools",
+      "title": "Sales documents assistant: Drive tools",
+      "path": "screenshots/examples/connect-google-sharepoint/07-tools.png",
+      "capturedAt": "2026-10-22T12:29:13.031Z",
+      "status": "current",
+      "sha256": "0aa300636e481db97f094c7bf111ce2e53b4260712cc773899a711a5378603ca",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-00-slack-thread",
+      "title": "Docs assistant answering in a Slack thread",
+      "path": "screenshots/examples/docs-deflection-bot/00-slack-thread.png",
+      "capturedAt": "2026-10-22T12:25:01.266Z",
+      "status": "current",
+      "sha256": "731927e4c3b0777a7522c76c71431790995a479f034f839b62a5139d30b22a74",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "807b6c34cf01736976b79157082897dbde136cb98e10581131061d1c962762b2",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
+    },
+    {
+      "id": "examples-docs-deflection-bot-01-connect-model",
+      "title": "Connect a provider: OpenAI",
+      "path": "screenshots/examples/docs-deflection-bot/01-connect-model.png",
+      "capturedAt": "2026-10-22T12:23:58.809Z",
+      "status": "current",
+      "sha256": "e27f42393da24cace8514f5b5e810471ecbd55e4114a60464ffffc5311b103e7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/models/providers/new?type=openai"
+      },
+      "sources": [
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/llm-providers",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "deb93f98f087dc7648e4293471874ca1d823ec30c6f765f327b756f900307bdc",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-02-intercom-link",
+      "title": "Intercom API description link",
+      "path": "screenshots/examples/docs-deflection-bot/02-intercom-link.png",
+      "capturedAt": "2026-10-22T12:24:05.330Z",
+      "status": "current",
+      "sha256": "10b559e03a9c23a6a7bdf89b7fb855ad02f5ac1ce098c667a688cacd178269d5",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "29469f37f8ec5e953bad066a37857e16015c51820a6096311366b983a9ad2c33",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-03-intercom-token",
+      "title": "Intercom access token",
+      "path": "screenshots/examples/docs-deflection-bot/03-intercom-token.png",
+      "capturedAt": "2026-10-22T12:24:10.996Z",
+      "status": "current",
+      "sha256": "f3355fe7329ce453a9a502f289888437c62f2129753dec97277d39e6d2aa1cef",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=21&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "14f3b73536431921c90729ed60345d7f6f5b0e08c430172a56c5494fe5aff92c",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-04-agent",
+      "title": "Docs assistant: model and instructions",
+      "path": "screenshots/examples/docs-deflection-bot/04-agent.png",
+      "capturedAt": "2026-10-22T12:24:13.857Z",
+      "status": "current",
+      "sha256": "72eceecd6172f033f918d31aa4813d7470594315e0c90cdc1f045cd399b400c5",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-05-tools",
+      "title": "Docs assistant: Intercom tools",
+      "path": "screenshots/examples/docs-deflection-bot/05-tools.png",
+      "capturedAt": "2026-10-22T12:24:16.365Z",
+      "status": "current",
+      "sha256": "c74c9d26dd07eb87ddd0d835e47fb1b6e88a0d7f8198e99bdfa55cbe1eb5b20d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-06-try-answer",
+      "title": "Docs assistant: an answer with its source",
+      "path": "screenshots/examples/docs-deflection-bot/06-try-answer.png",
+      "capturedAt": "2026-10-22T12:24:25.505Z",
+      "status": "current",
+      "sha256": "1f06accf23f893dbe30db65a36f9f1afc71816111b5b7c10c0f92100c4dab6f6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-07-try-ticket",
+      "title": "Docs assistant: a docs gap ticket",
+      "path": "screenshots/examples/docs-deflection-bot/07-try-ticket.png",
+      "capturedAt": "2026-10-22T12:24:32.948Z",
+      "status": "current",
+      "sha256": "e659f1b3a6f0b8fcaee9eb02772132c017d9e1f50ea1a942931c7aa6af400049",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-08-slack-keys",
+      "title": "Slack channel: bot token and signing secret",
+      "path": "screenshots/examples/docs-deflection-bot/08-slack-keys.png",
+      "capturedAt": "2026-10-22T12:24:38.195Z",
+      "status": "current",
+      "sha256": "598da67fd5a11840f8cc62ad5cf064a3280c0476c067a22763ec353c3b67c33b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2a5a9d60752d63eb957d3946c7600371a54ee7c5281767b23e170244d4233592",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-09-slack-live",
+      "title": "Slack channel, live",
+      "path": "screenshots/examples/docs-deflection-bot/09-slack-live.png",
+      "capturedAt": "2026-10-22T12:24:49.429Z",
+      "status": "current",
+      "sha256": "1ede08562a788b3b562f37f2608e92f6a8a741f001639bbe6054a27c00d5ac30",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2a5a9d60752d63eb957d3946c7600371a54ee7c5281767b23e170244d4233592",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-docs-deflection-bot-10-access",
+      "title": "Access: let the agent use Intercom for everyone who asks",
+      "path": "screenshots/examples/docs-deflection-bot/10-access.png",
+      "capturedAt": "2026-10-22T12:24:52.849Z",
+      "status": "current",
+      "sha256": "4ed1bc591cfca39578d0b487c4a9cb5317792e1ca2e321af256e0b5bb70a2e42",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/agents/builder/capabilities-section.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-00-slack-hot-leads",
+      "title": "Hot leads posted to Slack",
+      "path": "screenshots/examples/lead-enrichment-routing/00-slack-hot-leads.png",
+      "capturedAt": "2026-10-22T12:27:14.137Z",
+      "status": "current",
+      "sha256": "b9360f658b2fdab9bcaca2a94830ddf8ea45130f322109e1027b19dfd8b15298",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/schedule"
+      },
+      "sources": [
+        "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "807b6c34cf01736976b79157082897dbde136cb98e10581131061d1c962762b2",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-01-hubspot-link",
+      "title": "HubSpot Contacts description link",
+      "path": "screenshots/examples/lead-enrichment-routing/01-hubspot-link.png",
+      "capturedAt": "2026-10-22T12:25:04.299Z",
+      "status": "current",
+      "sha256": "30809355be59f2729fb20c9b7febc81ed2ea969f699b26e6cebe055e2fc16c93",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "29469f37f8ec5e953bad066a37857e16015c51820a6096311366b983a9ad2c33",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-02-hubspot-token",
+      "title": "HubSpot private app token",
+      "path": "screenshots/examples/lead-enrichment-routing/02-hubspot-token.png",
+      "capturedAt": "2026-10-22T12:25:09.968Z",
+      "status": "current",
+      "sha256": "3b4f6cfe8d96158297b93184d861d9646e67e7eaeb87d6ad1738c1c5e60ba94c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=22&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "14f3b73536431921c90729ed60345d7f6f5b0e08c430172a56c5494fe5aff92c",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-03-apis",
+      "title": "HubSpot Contacts, Companies and Owners connected",
+      "path": "screenshots/examples/lead-enrichment-routing/03-apis.png",
+      "capturedAt": "2026-10-22T12:25:22.939Z",
+      "status": "current",
+      "sha256": "0a2bbd2fbb2f42eece33d21153c73b4856588d247ba006b1a1b0e8159d586ba3",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "eb8e975d43f8e3ed840cbc105a65f3912b7e898a6db502acba8d29e307b2ec83",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-04-agent",
+      "title": "Lead scorer: instructions with the scoring rules",
+      "path": "screenshots/examples/lead-enrichment-routing/04-agent.png",
+      "capturedAt": "2026-10-22T12:25:26.873Z",
+      "status": "current",
+      "sha256": "c88c1772757c63b0b65dac152f47413cddd40f01ac355da39a49dc216f07e564",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-05-tools",
+      "title": "Lead scorer: HubSpot tools",
+      "path": "screenshots/examples/lead-enrichment-routing/05-tools.png",
+      "capturedAt": "2026-10-22T12:25:30.834Z",
+      "status": "current",
+      "sha256": "4343cde1b418e9ce968e27ee89e3b37d57be45ac20fc72622093f03bdae43978",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-06-try",
+      "title": "Lead scorer: a test run",
+      "path": "screenshots/examples/lead-enrichment-routing/06-try.png",
+      "capturedAt": "2026-10-22T12:25:47.487Z",
+      "status": "current",
+      "sha256": "7361610edde4c4ff2866aadbf2fd4ec90a000b691531365535a3bfec12b47eb9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-07-run-steps",
+      "title": "Lead scorer: what the run did in HubSpot",
+      "path": "screenshots/examples/lead-enrichment-routing/07-run-steps.png",
+      "capturedAt": "2026-10-22T12:25:54.551Z",
+      "status": "current",
+      "sha256": "a2692c71ab6f10088b2eb92ea236624104a1b1a975a6a407373f1635894bf82b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-08-slack-live",
+      "title": "Slack channel for the lead scorer, live",
+      "path": "screenshots/examples/lead-enrichment-routing/08-slack-live.png",
+      "capturedAt": "2026-10-22T12:26:08.557Z",
+      "status": "current",
+      "sha256": "12b5b95c587aff2c224d052678c68583b567f566e2b505c9887ea35b0e85c1ad",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2a5a9d60752d63eb957d3946c7600371a54ee7c5281767b23e170244d4233592",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-09-schedule",
+      "title": "Schedule: every hour, posted to #sales-leads",
+      "path": "screenshots/examples/lead-enrichment-routing/09-schedule.png",
+      "capturedAt": "2026-10-22T12:26:14.187Z",
+      "status": "current",
+      "sha256": "d9bbe80c440337d5147c4a7a189536ad1d8caa0ad2d7a38ea6f6a17f647a9be8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/schedule"
+      },
+      "sources": [
+        "frontend/src/pages/agent-schedule.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "28c0d30a061f9d9eb2f9ec562a7df12a75a41f9ee1acbd6084a0ae23b37ccc3d",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-lead-enrichment-routing-10-schedule-card",
+      "title": "The schedule on the agent page",
+      "path": "screenshots/examples/lead-enrichment-routing/10-schedule-card.png",
+      "capturedAt": "2026-10-22T12:26:18.851Z",
+      "status": "current",
+      "sha256": "63425a1a628e42738e14a8e8bad244b39c7fb703068d2e246825c3a322a388e8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-meeting-notes-to-crm-00-result",
+      "title": "Call notes turned into HubSpot updates and an email draft",
+      "path": "screenshots/examples/meeting-notes-to-crm/00-result.png",
+      "capturedAt": "2026-10-22T12:28:17.444Z",
+      "status": "current",
+      "sha256": "42697c684d193f738984df2530eefc2f2e95c4f672f7dde49a927cb4d89a2486",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-meeting-notes-to-crm-01-notes-link",
+      "title": "HubSpot Notes description link",
+      "path": "screenshots/examples/meeting-notes-to-crm/01-notes-link.png",
+      "capturedAt": "2026-10-22T12:27:21.014Z",
+      "status": "current",
+      "sha256": "e2a7693f12bacdb78a9369f1ae566e29918f41d219a8070cd44bf9ed118fc66d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "29469f37f8ec5e953bad066a37857e16015c51820a6096311366b983a9ad2c33",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-meeting-notes-to-crm-02-pick-key",
+      "title": "HubSpot Notes: pick the saved key",
+      "path": "screenshots/examples/meeting-notes-to-crm/02-pick-key.png",
+      "capturedAt": "2026-10-22T12:27:25.924Z",
+      "status": "current",
+      "sha256": "452070e92f0b1baabaf9b102b9ba75266d0e807b101d7b85623d3c1fabf20bcf",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=26&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "14f3b73536431921c90729ed60345d7f6f5b0e08c430172a56c5494fe5aff92c",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-meeting-notes-to-crm-03-apis",
+      "title": "HubSpot Deals, Notes and Tasks connected",
+      "path": "screenshots/examples/meeting-notes-to-crm/03-apis.png",
+      "capturedAt": "2026-10-22T12:27:33.389Z",
+      "status": "current",
+      "sha256": "c60b99ffda8a6c11e4cc3345eb08b5ae582087abf09fb254d97cc81567778b94",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "eb8e975d43f8e3ed840cbc105a65f3912b7e898a6db502acba8d29e307b2ec83",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-meeting-notes-to-crm-04-agent",
+      "title": "Call notes assistant: instructions",
+      "path": "screenshots/examples/meeting-notes-to-crm/04-agent.png",
+      "capturedAt": "2026-10-22T12:27:36.165Z",
+      "status": "current",
+      "sha256": "5a3a18eb144e2291459709a40ac30d5071ea268a989ac72526e11cc69c3f9a26",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-meeting-notes-to-crm-05-tools",
+      "title": "Call notes assistant: HubSpot tools",
+      "path": "screenshots/examples/meeting-notes-to-crm/05-tools.png",
+      "capturedAt": "2026-10-22T12:27:39.346Z",
+      "status": "current",
+      "sha256": "500ca7db1ead75ec9b78772dac11d591cf3f061a775a18e4f121fff991537000",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-meeting-notes-to-crm-06-run-steps",
+      "title": "Call notes assistant: what the run changed",
+      "path": "screenshots/examples/meeting-notes-to-crm/06-run-steps.png",
+      "capturedAt": "2026-10-22T12:28:23.874Z",
+      "status": "current",
+      "sha256": "70afcf3396999f14b4130dfcf95fbacf1ca34bf11ac4cee1ec43a7d7109ec660",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
