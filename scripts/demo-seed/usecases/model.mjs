@@ -44,8 +44,35 @@ const bodyOf = (msg) => { const d = msg?.payload?.body?.data; try { return d ? B
 const firstName = (s) => String(s || '').replace(/<.*>/, '').trim().split(/\s+/)[0]
 
 // ---------- conversation state ----------
+// Always-on runs compact their standing conversation: the old part is folded
+// into the system message as a summary. This model "summarizes" by keeping
+// the transcript as it is (see sideCall), so here the summary is read back
+// into messages and a plan picks up where it was even after compaction.
+const SUMMARY = '[EARLIER CONVERSATION SUMMARY]'
+function fromSummary(s) {
+  const out = []
+  const ids = []
+  for (const [, role, rest] of s.matchAll(/^(user|assistant|tool): ([\s\S]*?)(?=^(?:user|assistant|tool): |(?![\s\S]))/gm)) {
+    if (role === 'assistant') {
+      const k = rest.indexOf(' toolCalls=')
+      const calls = k >= 0 ? (parse(rest.slice(k + 11).trim()) || []) : []
+      const list = Array.isArray(calls) ? calls : []
+      for (const c of list) ids.push(c.id)
+      out.push({ role, content: k >= 0 ? rest.slice(0, k) : rest.trim(), tool_calls: list.map((c) => ({ id: c.id, function: { name: c.name, arguments: JSON.stringify(c.parameters ?? c.arguments ?? {}) } })) })
+    } else if (role === 'tool') out.push({ role, tool_call_id: ids.shift(), content: rest.trim() })
+    else out.push({ role, content: rest.trim() })
+  }
+  return out
+}
+function withSummary(msgs) {
+  const sys = text(msgs.find((m) => m.role === 'system')?.content)
+  const i = sys.indexOf(SUMMARY)
+  if (i < 0) return msgs
+  return [msgs[0], ...fromSummary(sys.slice(i + SUMMARY.length).replace(/^\s*NEW MESSAGES TO FOLD IN:\s*/gm, '')), ...msgs.slice(1)]
+}
+
 function stateOf(body) {
-  const msgs = body.messages || []
+  const msgs = withSummary(body.messages || [])
   const system = text(msgs.find((m) => m.role === 'system')?.content)
   const lastUser = msgs.map((m) => m.role).lastIndexOf('user')
   const userText = text(msgs[lastUser]?.content)
@@ -355,8 +382,168 @@ function bizFollowUp(st, memory) {
   return { content: lines.join('\n') }
 }
 
+// ---------- onboarding agent ----------
+// It keeps its progress on the CRM deal, one line per thing done
+// ("Shared folder: ...", "Welcome email sent: ...", "Reminder sent: ..."),
+// and checks before every change that it was not done already: the deal,
+// the Drive folder by name and who it is shared with, a sent email with
+// that subject.
+const CS = { name: 'Sam Ortiz', email: 'sam.ortiz@lumenlabs.example' }
+const FOLDER_TYPE = 'application/vnd.google-apps.folder'
+const dayMs = 86400000
+const days = (a, b) => Math.floor((a - b) / dayMs)
+const lineOf = (desc, label) => (desc.match(new RegExp(`^${label}:\\s*(.*)$`, 'mi')) || [])[1] || null
+function kickoffSlot(now) {
+  const d = new Date(now.getTime() + 2 * dayMs); d.setUTCHours(10, 0, 0, 0)
+  while ([0, 6].includes(d.getUTCDay())) d.setTime(d.getTime() + dayMs)
+  return d
+}
+
+function onboarding(st) {
+  const td = needTool(st, 'won', /deals_post_.*search/, 'search deals in the CRM')
+  if (td.call) return { toolCalls: [td.call] }
+  if (td.name && !has(st, 'won')) return { toolCalls: [call(st, 'won', td.name, { filterGroups: [{ filters: [{ propertyName: 'dealstage', operator: 'EQ', value: 'closedwon' }] }], properties: ['dealname', 'dealstage', 'description', 'closedate'], sorts: [], limit: 20, after: '0' })] }
+  const won = unwrap(st.results.won?.[0]?.result)?.results || []
+  const deal = won.find((d) => !lineOf(d.properties.description || '', 'Handed over'))
+  if (!deal) return { content: won.length ? 'Nothing to do: every new customer is handed over.' : 'Nothing to do: no new customers in the CRM.' }
+  const desc = deal.properties.description || ''
+  const company = String(deal.properties.dealname).split(':')[0].trim()
+  const folderName = `${company} onboarding`
+  const tu = needTool(st, 'deal', /deals_patch_.*update$/, 'update a deal in the CRM')
+  if (tu.call) return { toolCalls: [tu.call] }
+  const note = (lines) => call(st, 'deal', tu.name, { dealId: deal.id, properties: { description: `${desc}\n${lines.join('\n')}`.trim() } })
+  const today = st.now.toISOString().slice(0, 10)
+  const tfl = needTool(st, 'folder', /drive_files_list$/, 'find files in Google Drive')
+  if (tfl.call) return { toolCalls: [tfl.call] }
+
+  // ---- a new customer: shared folder, welcome email
+  if (!lineOf(desc, 'Welcome email sent')) {
+    const tc = needTool(st, 'contact', /contacts_post_.*search/, 'search contacts in the CRM')
+    if (tc.call) return { toolCalls: [tc.call] }
+    if (tc.name && !has(st, 'contact')) return { toolCalls: [call(st, 'contact', tc.name, { filterGroups: [{ filters: [{ propertyName: 'company', operator: 'EQ', value: company }] }], properties: ['firstname', 'lastname', 'email', 'jobtitle'], sorts: [], limit: 10, after: '0' })] }
+    const people = unwrap(st.results.contact?.[0]?.result)?.results || []
+    const score = (p) => { const i = RANK.findIndex((re) => re.test(p.properties.jobtitle || '')); return i < 0 ? 99 : i }
+    const who = people.sort((a, b) => score(a) - score(b))[0]?.properties
+    if (!who) return { content: `I could not find a contact for ${company} in the CRM. Add one to the company and I will start at the next wake.` }
+
+    // One condition per search: Drive's "a = 'x' and b = 'y'" is refused by almyty's security check.
+    if (tfl.name && !has(st, 'folder')) return { toolCalls: [call(st, 'folder', tfl.name, { q: `name = '${folderName.replace(/'/g, "\\'")}'` })] }
+    let folder = (unwrap(st.results.folder?.[0]?.result)?.files || []).find((f) => f.mimeType === FOLDER_TYPE)
+    const tfc = needTool(st, 'mkdir', /drive_files_create$/, 'create a folder in Google Drive')
+    if (tfc.call) return { toolCalls: [tfc.call] }
+    if (!folder && tfc.name && !has(st, 'mkdir')) return { toolCalls: [call(st, 'mkdir', tfc.name, { name: folderName, mimeType: FOLDER_TYPE })] }
+    folder ||= unwrap(st.results.mkdir?.[0]?.result)
+    if (!folder?.id) return { content: `Creating the shared folder for ${company} failed: ${String(st.results.mkdir?.[0]?.result).slice(0, 200)}` }
+    const link = folder.webViewLink || `https://drive.google.com/drive/folders/${folder.id}`
+    const tpl = needTool(st, 'shared', /drive_permissions_list$/, 'list who a Google Drive file is shared with')
+    if (tpl.call) return { toolCalls: [tpl.call] }
+    if (tpl.name && !has(st, 'shared')) return { toolCalls: [call(st, 'shared', tpl.name, { fileId: folder.id })] }
+    const sharedWith = (unwrap(st.results.shared?.[0]?.result)?.permissions || []).map((x) => String(x.emailAddress).toLowerCase())
+    const tpc = needTool(st, 'share', /drive_permissions_create$/, 'share a Google Drive file')
+    if (tpc.call) return { toolCalls: [tpc.call] }
+    if (tpc.name && !sharedWith.includes(who.email) && !has(st, 'share')) return { toolCalls: [call(st, 'share', tpc.name, { fileId: folder.id, type: 'user', role: 'writer', emailAddress: who.email, sendNotificationEmail: false })] }
+
+    const tl = needTool(st, 'sentwelcome', /messages_list$/, 'search email messages')
+    if (tl.call) return { toolCalls: [tl.call] }
+    if (tl.name && !has(st, 'sentwelcome')) return { toolCalls: [call(st, 'sentwelcome', tl.name, { userId: 'me', q: `in:sent to:${who.email} subject:"Welcome to Lumen"`, maxResults: 5 })] }
+    const already = (unwrap(st.results.sentwelcome?.[0]?.result)?.messages || []).length > 0
+    const ts = needTool(st, 'welcome', /messages_send$/, 'send an email')
+    if (ts.call) return { toolCalls: [ts.call] }
+    if (ts.name && !already && !has(st, 'welcome')) {
+      const body = `Hi ${who.firstname},\n\nWelcome to Lumen, and thank you for choosing us.\n\nTo plan your first routes we need two files from you:\n- your vehicles: one row per vehicle, with plate, type and capacity\n- your depots: address and opening hours\n\nA spreadsheet export is fine. Please drop both into this shared folder:\n${link}\n\nAs soon as they are in, we book a 45-minute kickoff call to walk through your first plan together.\n\nBest,\nMaya Chen\nLumen`
+      const raw = Buffer.from(`To: ${who.email}\r\nSubject: Welcome to Lumen, ${company}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}`).toString('base64url')
+      return { toolCalls: [call(st, 'welcome', ts.name, { userId: 'me', raw })] }
+    }
+    if (tu.name && !has(st, 'deal')) return { toolCalls: [note([`Onboarding started: ${today}`, `Contact: ${who.firstname} ${who.lastname} <${who.email}>`, `Shared folder: ${folder.id} ${link}`, `Welcome email sent: ${today}`])] }
+    return { content: [`**Onboarding started: ${company}**`, '', `- Created the shared folder "${folderName}" in Google Drive and shared it with ${who.firstname} ${who.lastname} (${who.jobtitle}).`, `- ${already ? 'The welcome email had already gone out; I did not send it again.' : `Sent the welcome email to ${who.email}, asking for their vehicles and depots.`}`, '- Wrote both on the deal in HubSpot.', '', 'Now I wait for their files. I look at the folder at every wake and send a friendly reminder after 3 days without them.'].join('\n') }
+  }
+
+  // ---- waiting for their files
+  const folderId = (lineOf(desc, 'Shared folder') || '').split(' ')[0]
+  const who = lineOf(desc, 'Contact') || ''
+  const email = (who.match(/<([^>]+)>/) || [])[1]
+  const first = who.split(' ')[0]
+  if (!lineOf(desc, 'Kickoff booked')) {
+    if (tfl.name && !has(st, 'folder')) return { toolCalls: [call(st, 'folder', tfl.name, { q: `'${folderId}' in parents` })] }
+    const got = unwrap(st.results.folder?.[0]?.result)?.files || []
+    if (got.length < 2) {
+      const tl = needTool(st, 'thread', /messages_list$/, 'search email messages')
+      if (tl.call) return { toolCalls: [tl.call] }
+      if (tl.name && !has(st, 'thread')) return { toolCalls: [call(st, 'thread', tl.name, { userId: 'me', q: `(to:${email} OR from:${email}) newer_than:30d`, maxResults: 10 })] }
+      const msgs = unwrap(st.results.thread?.[0]?.result)?.messages || []
+      const tg = needTool(st, 'read', /messages_get$/, 'read one email message')
+      if (tg.call) return { toolCalls: [tg.call] }
+      const doneIds = (st.results.read || []).map((r) => r.args?.id ?? r.args?.arguments?.id)
+      const next = msgs.find((m) => !doneIds.includes(m.id))
+      if (tg.name && next) return { toolCalls: [call(st, 'read', tg.name, { userId: 'me', id: next.id, format: 'full' })] }
+      const mails = (st.results.read || []).map((r) => unwrap(r.result)).filter((m) => m?.payload)
+      const ours = mails.filter((m) => !header(m, 'From').toLowerCase().includes(email))
+      const theirs = mails.filter((m) => header(m, 'From').toLowerCase().includes(email))
+      const last = Math.max(...ours.map((m) => Number(m.internalDate)))
+      const waited = days(st.now.getTime(), last)
+      const reminders = (desc.match(/^Reminder sent:/gmi) || []).length
+      const welcome = ours.find((m) => /^Welcome to Lumen/.test(header(m, 'Subject')))
+      const heard = theirs.length ? ` ${first} wrote back: "${bodyOf(theirs[0]).slice(0, 140)}"` : ''
+      const missing = got.length ? ` One file is in (${got.map((f) => f.name).join(', ')}); one is missing.` : ''
+      if (waited >= 3 && reminders < 2) {
+        const ts = needTool(st, 'chase', /messages_send$/, 'send an email')
+        if (ts.call) return { toolCalls: [ts.call] }
+        if (ts.name && !has(st, 'chase')) {
+          const body = reminders === 0
+            ? `Hi ${first},\n\nA quick nudge on the two files for your route planning: your vehicles and your depots. A rough spreadsheet is completely fine; we tidy it up together in the kickoff.\n\nIf someone else on your team has them, just forward this email.\n\nBest,\nMaya`
+            : `Hi ${first},\n\nI know onboarding is rarely anyone's first priority. If it helps, reply with a good time and I will call you and fill in the vehicles and depots with you in 20 minutes.\n\nBest,\nMaya`
+          const raw = Buffer.from(`To: ${email}\r\nSubject: Re: ${header(welcome, 'Subject')}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}`).toString('base64url')
+          return { toolCalls: [call(st, 'chase', ts.name, { userId: 'me', threadId: welcome?.threadId, raw })] }
+        }
+        if (tu.name && !has(st, 'deal')) return { toolCalls: [note([`Reminder sent: ${today} (${reminders + 1} of 2)`])] }
+        return { content: `**${company}: reminder ${reminders + 1} of 2 sent**\n\nThe shared folder is still empty ${waited} days after my last email, so I sent ${first} a short, friendly reminder in the same thread.${heard}` }
+      }
+      if (waited >= 3) return { content: `**${company} needs you**\n\nStill no files, ${waited} days after my second reminder. I will not send a third: could you call ${who}?${heard}` }
+      return { content: `Waiting for ${company}'s files: my last email was ${waited === 0 ? 'today' : `${waited} day${waited === 1 ? '' : 's'} ago`}.${missing}${heard} Next reminder in ${3 - waited} day${3 - waited === 1 ? '' : 's'} if nothing arrives.` }
+    }
+    // the files are in: book the kickoff (this tool asks Maya first)
+    const tk = needTool(st, 'kickoff', /calendar_events_insert$/, 'create a calendar event')
+    if (tk.call) return { toolCalls: [tk.call] }
+    const slot = kickoffSlot(st.now)
+    const listed = got.map((f) => f.name).join(', ')
+    if (tk.name && !has(st, 'kickoff')) {
+      return { toolCalls: [call(st, 'kickoff', tk.name, { calendarId: 'primary', sendUpdates: 'all', summary: `Lumen kickoff: ${company}`, description: `Walk through the first route plan for ${company}. Their files: ${listed}.`, start: { dateTime: slot.toISOString() }, end: { dateTime: new Date(slot.getTime() + 45 * 60000).toISOString() }, attendees: [{ email }, { email: CS.email }] })] }
+    }
+    const res = String(st.results.kickoff[0].result)
+    if (!/"id"/.test(res) || /reject|denied|not approved/i.test(res)) return { content: `${company}'s files are in, but the kickoff was not booked: ${res.slice(0, 160)}. Tell me a time that suits you and I will try again.` }
+    const when = `${slot.toISOString().slice(0, 10)} at ${hhmm(slot.toISOString())} UTC`
+    const th = needTool(st, 'handover', /messages_send$/, 'send an email')
+    if (th.call) return { toolCalls: [th.call] }
+    if (th.name && !has(st, 'handover')) {
+      const body = `Hi Sam,\n\n${company} is ready for you.\n\n- Contact: ${who}\n- Their files: ${listed}, in the shared folder https://drive.google.com/drive/folders/${folderId}\n- Kickoff: ${when}, you are invited.\n- The onboarding log is on the deal in HubSpot.\n\nThanks,\nOnboarding agent`
+      const raw = Buffer.from(`To: ${CS.email}\r\nSubject: Handover: ${company}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}`).toString('base64url')
+      return { toolCalls: [call(st, 'handover', th.name, { userId: 'me', raw })] }
+    }
+    if (tu.name && !has(st, 'deal')) return { toolCalls: [note([`Files received: ${today} (${listed})`, `Kickoff booked: ${when}`, `Handed over: ${today} to ${CS.name}`])] }
+    return { content: [`**${company} is onboarded**`, '', `- Their files arrived: ${listed}.`, `- Kickoff booked for ${when}, after you approved it.`, `- Handed over to ${CS.name} with a short summary.`, '- Every step is written on the deal in HubSpot.'].join('\n') }
+  }
+  return { content: `${company}: the kickoff is booked; handing over is the last step left.` }
+}
+
 // ---------- helpers for almyty's own side calls ----------
 function sideCall(st) {
+  if (/compact an AI agent's conversation transcript/i.test(st.system)) {
+    // Keep the current wake word for word (from its last "user:" entry on),
+    // once each, and drop earlier wakes: what they did is on the deal.
+    const u = st.userText
+    const prior = (u.match(/^PRIOR SUMMARY:\n([\s\S]*?)\n\nNEW MESSAGES TO FOLD IN:\n/) || [])[1] || ''
+    const fresh = u.replace(/^PRIOR SUMMARY:\n[\s\S]*?\n\nNEW MESSAGES TO FOLD IN:\n/, '').replace(/^NEW MESSAGES TO FOLD IN:\n/, '')
+    const entries = [...`${prior}\n${fresh}`.matchAll(/^(?:user|assistant|tool): [\s\S]*?(?=^(?:user|assistant|tool): |(?![\s\S]))/gm)].map((m) => m[0].trimEnd())
+    const start = entries.map((e) => e.startsWith('user: ')).lastIndexOf(true)
+    const seen = new Set()
+    const kept = []
+    for (let i = Math.max(0, start); i < entries.length; i++) {
+      const e = entries[i]
+      if (e.startsWith('assistant: ')) { if (seen.has(e)) { if (entries[i + 1]?.startsWith('tool: ')) i++; continue } seen.add(e) }
+      kept.push(e)
+    }
+    return { content: kept.join('\n') }
+  }
   if (/pick out what is worth remembering/i.test(st.system)) {
     const facts = []
     if (/Tom Becker/.test(st.all) && /Priya/.test(st.all)) facts.push('Maya knows Priya Raman (Kestrel Logistics) through an intro from Tom Becker.')
@@ -370,13 +557,14 @@ export function decide(body) {
   const st = stateOf(body)
   let out = sideCall(st)
   if (!out) {
-    if (/associate/i.test(st.system)) out = founder(st)
+    if (/onboard/i.test(st.system)) out = onboarding(st)
+    else if (/associate/i.test(st.system)) out = founder(st)
     else if (/business development|outreach|prospect/i.test(st.system)) out = bizdev(st)
     else if (/verdict|refute/i.test(st.system)) out = { content: '{"verdict":"pass","confidence":0.9,"issues":[]}' }
     else out = { content: 'Done.' }
   }
   appendFileSync(LOG, JSON.stringify({
-    at: new Date().toISOString(), model: body.model, tools: st.tools,
+    at: new Date().toISOString(), model: body.model, tools: st.tools, roles: st.msgs.map((m) => m.role[0]).join(''),
     system: st.system.slice(0, 200), user: st.userText.slice(0, 4000),
     turn: st.turn.map((m) => ({ role: m.role, id: m.tool_call_id, calls: (m.tool_calls || []).map((c) => [c.id, c.function?.name, String(c.function?.arguments).slice(0, 200)]), content: text(m.content).slice(0, 300) })),
     out: out.toolCalls ? out.toolCalls.map((c) => [c.id, c.name, JSON.stringify(c.args).slice(0, 200)]) : out.content.slice(0, 300),
