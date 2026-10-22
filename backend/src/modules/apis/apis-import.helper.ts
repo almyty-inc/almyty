@@ -18,6 +18,7 @@ import { SchemaParserService } from '../schema-parser/schema-parser.service';
 import { ToolsService } from '../tools/tools.service';
 import { ApisService } from './apis.service';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
+import { maxToolsPerSchema, ToolQuotaExceededException } from '../tools/tool-quota';
 
 @Injectable()
 export class ApisImportHelper {
@@ -41,7 +42,15 @@ export class ApisImportHelper {
     organizationId: string,
     options: ImportSchemaOptions = {},
     onProgress?: (pct: number) => void | Promise<void>,
-  ): Promise<{ api: Api; schema: ApiSchema; operations: Operation[]; resources: Resource[]; tools?: Tool[] }> {
+  ): Promise<{
+    api: Api;
+    schema: ApiSchema;
+    operations: Operation[];
+    resources: Resource[];
+    tools?: Tool[];
+    /** Set when the description has more operations than one schema may make tools from; no tools were made. */
+    selectionRequired?: { operations: number; limit: number };
+  }> {
     const api = await this.apis.findOne(apiId, organizationId);
 
     if (!api) {
@@ -302,7 +311,20 @@ export class ApisImportHelper {
       this.toolGen.logMemoryPhase('after-commit');
 
       let generatedTools: Tool[] = [];
-      if (options.generateTools) {
+      // A description with more operations than one schema may make tools
+      // from (Microsoft Graph's Files area: 1,600+) is imported whole and
+      // makes no tools yet: the result says so, and the person picks the
+      // operations to make tools from (`POST /apis/:id/operations/selection`).
+      // Refusing it after a minutes-long parse -- three times, with retries --
+      // left "Finish connecting" spinning with nothing to pick from.
+      let selectionRequired: { operations: number; limit: number } | undefined;
+      const activeCount = savedOperations.filter((op) => op.isActive !== false).length;
+      if (options.generateTools && activeCount > maxToolsPerSchema()) {
+        selectionRequired = { operations: activeCount, limit: maxToolsPerSchema() };
+        this.logger.log(
+          `API ${apiId} has ${activeCount} operations, over the per-schema limit of ${selectionRequired.limit}: no tools made until a subset is picked`,
+        );
+      } else if (options.generateTools) {
         try {
           ({ tools: generatedTools } =
             await this.toolGen.generateToolsFromApi(
@@ -362,6 +384,7 @@ export class ApisImportHelper {
         operations: savedOperations,
         resources: savedResources,
         tools: generatedTools.length > 0 ? generatedTools : undefined,
+        ...(selectionRequired ? { selectionRequired } : {}),
       };
     } catch (error) {
       // Only roll back if we haven't already committed. Once the
@@ -372,6 +395,11 @@ export class ApisImportHelper {
         await queryRunner.rollbackTransaction();
       }
       this.logger.error(`Failed to import schema for API ${apiId}: ${error.message}`);
+      // A quota refusal keeps its type: it is the same on every attempt, so
+      // the import job fails at once instead of retrying (schema-import.processor).
+      if (error instanceof ToolQuotaExceededException) {
+        throw new ToolQuotaExceededException(`Schema import failed: ${error.message}`);
+      }
       throw new BadRequestException(`Schema import failed: ${error.message}`);
     } finally {
       await queryRunner.release();

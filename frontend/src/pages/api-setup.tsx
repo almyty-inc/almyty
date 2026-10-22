@@ -11,19 +11,28 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { PageHeader } from '@/components/layout/page-header'
 import { ApiKeyForm } from '@/components/apis/api-key-form'
+import { OperationPicker } from '@/components/apis/operation-picker'
 import { apiKeyQueryKey } from '@/components/apis/detail/key-card'
 import { apisApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import type { Api } from '@/types'
 import { pluralized } from '@/lib/utils'
 
-type ImportState = { status: 'running' } | { status: 'done'; operations: number; tools: number } | { status: 'failed'; error: string }
+type Selection = { operations: number; limit: number }
+type ImportState =
+  | { status: 'running' }
+  | { status: 'done'; operations: number; tools: number; selection?: Selection }
+  | { status: 'failed'; error: string }
 
-function countsOf(result: any): { operations: number; tools: number } {
+function countsOf(result: any): { operations: number; tools: number; selection?: Selection } {
   const r = result?.result ?? result
+  const selection = r?.selectionRequired
   return {
     operations: r?.operations?.length ?? r?.operationCount ?? 0,
     tools: r?.tools?.length ?? r?.toolCount ?? 0,
+    ...(selection && typeof selection.operations === 'number' && typeof selection.limit === 'number'
+      ? { selection: { operations: selection.operations, limit: selection.limit } }
+      : {}),
   }
 }
 
@@ -38,7 +47,7 @@ function countsOf(result: any): { operations: number; tools: number } {
  */
 export function ApiSetupPage() {
   const { id = '' } = useParams<{ id: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const job = searchParams.get('job')
@@ -54,6 +63,7 @@ export function ApiSetupPage() {
   useEffect(() => {
     if (!job || polled.current === job) return
     polled.current = job
+    setImportState({ status: 'running' })
     apisApi
       .pollImportStatus(id, job)
       .then((result) => {
@@ -67,6 +77,14 @@ export function ApiSetupPage() {
       .catch((err) => setImportState({ status: 'failed', error: getApiErrorMessage(err, 'The import failed.') }))
   }, [id, job, queryClient])
 
+  // Tools for the picked operations are made by a second job; its id
+  // replaces the import's in the URL, so a refresh picks that one up.
+  const startGeneration = (jobId: string) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('job', jobId)
+    setSearchParams(next, { replace: true })
+  }
+
   const [address, setAddress] = useState('')
   const [addressError, setAddressError] = useState<string | null>(null)
   const saveAddress = useMutation({
@@ -77,7 +95,9 @@ export function ApiSetupPage() {
 
   const keyDone = !askKey || !!keyQuery.data?.source
   const addressDone = !askAddress || !!api?.baseUrl
-  const importDone = importState.status === 'done'
+  // Over the per-description limit: imported, but no tools until a subset is picked.
+  const selection = importState.status === 'done' ? importState.selection : undefined
+  const importDone = importState.status === 'done' && !selection
   const everythingDone = keyDone && addressDone && importDone
 
   useEffect(() => {
@@ -148,6 +168,10 @@ export function ApiSetupPage() {
               </p>
             )}
           </div>
+
+          {selection && (
+            <OperationPicker apiId={id} total={selection.operations} limit={selection.limit} onStarted={startGeneration} />
+          )}
 
           {askAddress && (
             <section className="space-y-2" aria-labelledby="setup-address">

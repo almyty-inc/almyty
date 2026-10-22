@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsBoolean, ValidateNested, Matches, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsBoolean, ValidateNested, Matches, MaxLength, IsArray, ArrayNotEmpty, ArrayMaxSize, IsUUID } from 'class-validator';
 import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/authorization/access-policy.service';
 import { Type, Transform } from 'class-transformer';
 import { ApiType } from '../../../entities/api.entity';
@@ -167,6 +167,15 @@ export class ImportSchemaDto {
   @IsOptional()
   @IsBoolean()
   generateTools?: boolean;
+}
+
+/** The operations to make tools from, when a description is over the per-schema limit. */
+export class SelectOperationsDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(20000)
+  @IsUUID('all', { each: true })
+  operationIds!: string[];
 }
 export class CreateHttpApiDto {
   @Transform(stripHtml)

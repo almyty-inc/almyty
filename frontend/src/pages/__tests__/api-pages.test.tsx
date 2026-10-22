@@ -27,6 +27,8 @@ vi.mock('@/lib/api', () => ({
     createHttpApi: vi.fn(),
     importSchema: vi.fn(),
     pollImportStatus: vi.fn(),
+    getOperationOutline: vi.fn(),
+    selectOperations: vi.fn(),
     getKey: vi.fn(),
     setKey: vi.fn(),
     removeKey: vi.fn(),
@@ -438,6 +440,64 @@ describe('/apis/:id/setup: finish connecting', () => {
     vi.mocked(apisApi.getKey).mockResolvedValue(keyView as any)
     renderAt('/apis/api-1/setup?job=job-1&key=1')
     expect(await screen.findByRole('alert')).toHaveTextContent("The import failed: We couldn't read this as OpenAPI, GraphQL, WSDL or proto.")
+  })
+
+  // Microsoft Graph's Files description: 1,619 operations, a limit of 1,000.
+  // The page used to sit on "Reading the description" for 10+ minutes and
+  // offer nothing to pick from.
+  it('over the limit, asks which operations to make tools from and makes them', async () => {
+    vi.mocked(apisApi.pollImportStatus)
+      .mockResolvedValueOnce({ status: 'completed', result: { operationCount: 4, toolCount: 0, selectionRequired: { operations: 4, limit: 3 } } } as any)
+      .mockResolvedValueOnce({ status: 'completed', result: { operationCount: 2, toolCount: 2 } } as any)
+    vi.mocked(apisApi.getOperationOutline).mockResolvedValue({
+      limit: 3,
+      operations: [
+        { id: 'op-1', name: 'List children', method: 'GET', endpoint: '/drives/{drive-id}/items/{id}/children', tags: ['drives.driveItem'] },
+        { id: 'op-2', name: 'Delete item', method: 'DELETE', endpoint: '/drives/{drive-id}/items/{id}', tags: ['drives.driveItem'] },
+        { id: 'op-3', name: 'Get my drive', method: 'GET', endpoint: '/me/drive', tags: ['me.drive'] },
+        { id: 'op-4', name: 'Search sites', method: 'GET', endpoint: '/v1.0/sites', tags: [] },
+      ],
+    } as any)
+    vi.mocked(apisApi.selectOperations).mockResolvedValue({ jobId: 'job-2', selected: 2 } as any)
+    const user = userEvent.setup()
+    const { router } = renderAt('/apis/api-1/setup?job=job-1')
+
+    expect(await screen.findByRole('heading', { name: 'Pick the operations to make tools from' })).toBeInTheDocument()
+    expect(screen.getByText(/This description has 4 operations; one description makes tools from up to 3/)).toBeInTheDocument()
+    // It stays: nothing to ask but the pick, and the pick is not made yet.
+    expect(router.state.location.pathname).toBe('/apis/api-1/setup')
+    expect(await screen.findByRole('button', { name: 'Make tools' }, { timeout: 5000 })).toBeDisabled()
+
+    // Filed by tag, or by path prefix when there is none.
+    expect(screen.getByRole('checkbox', { name: 'Pick every operation in /sites' })).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'Pick every operation in drives.driveItem' }))
+    expect(screen.getByTestId('picked-count')).toHaveTextContent('2 of 3 picked')
+
+    // The search narrows the list.
+    await user.type(screen.getByRole('textbox', { name: 'Search operations' }), 'me.drive')
+    expect(screen.queryByRole('checkbox', { name: 'Pick every operation in drives.driveItem' })).not.toBeInTheDocument()
+    await user.clear(screen.getByRole('textbox', { name: 'Search operations' }))
+
+    await user.click(screen.getByRole('button', { name: 'Make 2 tools' }))
+    await waitFor(() => expect(apisApi.selectOperations).toHaveBeenCalledWith('api-1', ['op-1', 'op-2']))
+    await waitFor(() => expect(apisApi.pollImportStatus).toHaveBeenLastCalledWith('api-1', 'job-2'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/apis/api-1'))
+  })
+
+  it('will not make more tools than the limit allows', async () => {
+    vi.mocked(apisApi.pollImportStatus).mockResolvedValue({ status: 'completed', result: { operationCount: 3, selectionRequired: { operations: 3, limit: 1 } } } as any)
+    vi.mocked(apisApi.getOperationOutline).mockResolvedValue({
+      limit: 1,
+      operations: [
+        { id: 'op-1', name: 'a', method: 'GET', endpoint: '/a', tags: ['t'] },
+        { id: 'op-2', name: 'b', method: 'GET', endpoint: '/b', tags: ['t'] },
+      ],
+    } as any)
+    const user = userEvent.setup()
+    renderAt('/apis/api-1/setup?job=job-1')
+    await user.click(await screen.findByRole('checkbox', { name: 'Pick every operation in t' }, { timeout: 5000 }))
+    expect(screen.getByRole('alert')).toHaveTextContent('That is 1 over the limit of 1.')
+    expect(screen.getByRole('button', { name: 'Make 2 tools' })).toBeDisabled()
   })
 })
 

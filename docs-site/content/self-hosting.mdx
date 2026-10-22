@@ -215,6 +215,7 @@ The `:?` form makes Compose refuse to start rather than silently fall back. Rota
 | `DB_MIGRATIONS_RUN` | Whether the API runs pending migrations on startup (see [Database migrations](#database-migrations)) | `true` |
 | `RATE_LIMIT_TTL` | Rate-limit window in seconds | `60` |
 | `RATE_LIMIT_MAX` | Requests allowed per window, per client address (see [Rate limiting](#rate-limiting)) | `100` |
+| `MAX_TOOLS_PER_SCHEMA` | Most tools one API description makes. A description with more operations is imported whole, and you pick the operations to make tools from | `1000` |
 | `TRUSTED_PROXY_HOPS` | How many proxies in front of the API append to `X-Forwarded-For`. The client address is read this many entries from the right of the header. Keep `1` behind a single ingress or reverse proxy; add one for each extra proxy (a CDN, an L7 load balancer) | `1` |
 | `BULL_REDIS_HOST` | Separate Redis for BullMQ (if desired) | Falls back to `REDIS_HOST` |
 | `RESEND_API_KEY` | [Resend](https://resend.com) API key. The only outbound-email transport. Without it no mail is sent at all (see [Outbound email](#outbound-email)) | -- |
