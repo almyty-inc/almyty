@@ -156,6 +156,7 @@ source, { summary, dedupeKey, payload?, ownerMessage? })`:
 | `webhook`, `channel` | `ChannelGatewayService.handleInboundMessage` -> `AlwaysOnService.routeInbound` | the delivery id |
 | `connection` | `connections/connection-events.ts`, published where `connections.*` notifications are made (credentials governance) | connection + event + day |
 | `manual` | `POST /agents/:id/always-on/wake` | time |
+| `push` | `PushWakesService.processPushes` (`push-wake-changes` job, after a verified push and the debounce window) -> `AlwaysOnService.pushEvent` | wake source + cursor before and after + item ids |
 
 `always-on-wiring.guard.spec.ts` fails if a source loses its caller.
 
@@ -257,4 +258,20 @@ resumed automatically.
 `GET /agents/:id/always-on/wakes`. Audit actions: `always_on_enable`,
 `always_on_disable`, `always_on_pause`, `wake_dropped`.
 
+**Push wakes.** `agent_push_wakes` (migration `1791000500000-AgentPushWakes`):
+one row per service that pushes changes to an agent. The spec is data
+(`push-wakes/push-wake.types.ts`): a verification method (`shared_token`,
+`hmac`, `oidc_jwt`), header checks, and optional `subscribe`, `renew`, `stop`
+and `changes` steps run as calls to the chosen connection's own tools by
+operation id, as the agent's unattended principal. Google Calendar and Gmail
+are presets (`push-wake-presets.ts`), nothing in the code names them. The
+verification value is a managed credential (`agent_push_wake`). Flow:
+`POST /push-wakes/:id` -> `PushWakesService.receive` (verify, checks, ignore,
+count) -> first push of a window queues `push-wake-changes` after
+`debounceSeconds` -> `processPushes` reads what changed from the stored cursor
+-> `AlwaysOnService.pushEvent` -> `wake(..., 'push', ...)`. The
+`push-wake-renew` repeatable job (every `PUSH_WAKE_RENEW_SWEEP_MINUTES`)
+subscribes again whatever is due. Deleting an agent stops its subscriptions
+first (`AgentsService.deleteAgent`). Field reference: the docs site, Always
+on, "Push wakes, for developers".
 **Retention.** See [retention.md](retention.md#an-always-on-agents-standing-conversation).

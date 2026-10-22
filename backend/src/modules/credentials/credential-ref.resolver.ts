@@ -156,7 +156,7 @@ export interface ResolvedCredential {
 
 /** Who created a managed row; stored in `metadata.managedBy` so it can be rotated and released by the same consumer only. */
 export interface ManagedBy {
-  kind: 'llm_provider' | 'llm_provider_usage' | 'mcp_source' | 'channel_installation' | 'api' | 'gateway_channel' | 'hosted_chat_oauth' | 'gateway_company_signin';
+  kind: 'llm_provider' | 'llm_provider_usage' | 'mcp_source' | 'channel_installation' | 'api' | 'gateway_channel' | 'hosted_chat_oauth' | 'gateway_company_signin' | 'agent_push_wake';
   id?: string;
   label?: string;
 }
