@@ -18,7 +18,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import type { Api } from '@/types'
 import { pluralized } from '@/lib/utils'
 
-type Selection = { operations: number; limit: number }
+type Selection = { operations: number; limit: number; newOperationIds?: string[] }
 type ImportState =
   | { status: 'running' }
   | { status: 'done'; operations: number; tools: number; selection?: Selection }
@@ -31,7 +31,13 @@ function countsOf(result: any): { operations: number; tools: number; selection?:
     operations: r?.operations?.length ?? r?.operationCount ?? 0,
     tools: r?.tools?.length ?? r?.toolCount ?? 0,
     ...(selection && typeof selection.operations === 'number' && typeof selection.limit === 'number'
-      ? { selection: { operations: selection.operations, limit: selection.limit } }
+      ? {
+          selection: {
+            operations: selection.operations,
+            limit: selection.limit,
+            ...(Array.isArray(selection.newOperationIds) ? { newOperationIds: selection.newOperationIds as string[] } : {}),
+          },
+        }
       : {}),
   }
 }
@@ -170,7 +176,7 @@ export function ApiSetupPage() {
           </div>
 
           {selection && (
-            <OperationPicker apiId={id} total={selection.operations} limit={selection.limit} onStarted={startGeneration} />
+            <OperationPicker apiId={id} total={selection.operations} limit={selection.limit} newOperationIds={selection.newOperationIds} onStarted={startGeneration} />
           )}
 
           {askAddress && (

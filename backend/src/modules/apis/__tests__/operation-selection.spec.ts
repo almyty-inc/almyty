@@ -57,7 +57,13 @@ describe('per-schema tool limit is configurable', () => {
 describe('an import over the limit asks for a subset instead of failing', () => {
   const api = { id: 'api-1', type: ApiType.OPENAPI, status: ApiStatus.ACTIVE, organizationId: 'org-1', metadata: null } as any as Api;
 
-  function helperWith(operationCount: number) {
+  function helperWith(
+    operationCount: number,
+    existing: Array<Record<string, unknown>> = [],
+    incoming: () => Operation[] = () =>
+      // The parsers turn every operation on.
+      Array.from({ length: operationCount }, (_, i) => Object.assign(new Operation(), { operationId: `op${i}`, name: `op${i}`, isActive: true })),
+  ) {
     const saved: Operation[] = [];
     const generateToolsFromApi = jest.fn().mockResolvedValue({ tools: [{ id: 't' }], generated: 1, failed: 0, total: operationCount });
     const queryRunner = {
@@ -68,7 +74,7 @@ describe('an import over the limit asks for a subset instead of failing', () => 
       release: jest.fn(),
       isTransactionActive: false,
       manager: {
-        find: jest.fn().mockResolvedValue([]),
+        find: jest.fn(async (entity: unknown) => (entity === Operation ? existing : [])),
         findOne: jest.fn().mockResolvedValue(null),
         save: jest.fn(async (arg: any) => {
           if (Array.isArray(arg)) {
@@ -87,8 +93,7 @@ describe('an import over the limit asks for a subset instead of failing', () => 
         parseApiSchema: jest.fn().mockResolvedValue({ version: '1.0', metadata: {} }),
         getParserForApiType: () => ({
           extractResources: async () => [],
-          extractOperations: async () =>
-            Array.from({ length: operationCount }, (_, i) => Object.assign(new Operation(), { operationId: `op${i}`, name: `op${i}` })),
+          extractOperations: async () => incoming(),
         }),
       } as any,
       {} as any,
@@ -120,6 +125,43 @@ describe('an import over the limit asks for a subset instead of failing', () => 
     const result = await helper.importSchema('api-1', '{}', 'org-1', { generateTools: true });
     expect(generateToolsFromApi).toHaveBeenCalledTimes(1);
     expect(result.selectionRequired).toBeUndefined();
+  }));
+
+  it('a re-import keeps the operations the person switched off, matched by operationId or by method and path', withLimit(undefined, async () => {
+    const { helper, saved } = helperWith(0, [
+      { id: 'kept-off', operationId: 'deleteEverything', method: 'DELETE', endpoint: '/all', isActive: false },
+      { id: 'route-off', operationId: null as any, method: 'POST', endpoint: '/reports/run', isActive: false },
+      { id: 'still-on', operationId: 'listReports', method: 'GET', endpoint: '/reports', isActive: true },
+    ], () => [
+      Object.assign(new Operation(), { operationId: 'deleteEverything', name: 'Delete', method: 'DELETE', endpoint: '/all', isActive: true }),
+      Object.assign(new Operation(), { operationId: null, name: 'POST /reports/run', method: 'POST', endpoint: '/reports/run', isActive: true }),
+      Object.assign(new Operation(), { operationId: 'listReports', name: 'List', method: 'GET', endpoint: '/reports', isActive: true }),
+      Object.assign(new Operation(), { operationId: 'getReport', name: 'Get', method: 'GET', endpoint: '/reports/{id}', isActive: true }),
+    ]);
+    await helper.importSchema('api-1', '{}', 'org-1', { generateTools: true });
+    const byId = Object.fromEntries(saved.map((op) => [op.id, op.isActive]));
+    expect(byId).toMatchObject({ 'kept-off': false, 'route-off': false, 'still-on': true });
+    expect(saved.find((op) => op.operationId === 'getReport')?.isActive).toBe(true);
+  }));
+
+  it('a later import over the limit keeps the earlier pick and names only the new operations', withLimit('3', async () => {
+    // op0 and op1 were picked last time; op2 was left out.
+    const { helper, saved, generateToolsFromApi } = helperWith(5, [
+      { id: 'e0', operationId: 'op0', isActive: true },
+      { id: 'e1', operationId: 'op1', isActive: true },
+      { id: 'e2', operationId: 'op2', isActive: false },
+    ]);
+    const result = await helper.importSchema('api-1', '{}', 'org-1', { generateTools: true });
+    expect(generateToolsFromApi).not.toHaveBeenCalled();
+    const idOf = (operationId: string) => saved.find((op) => op.operationId === operationId)!.id;
+    expect(result.selectionRequired).toEqual({ operations: 5, limit: 3, newOperationIds: [idOf('op3'), idOf('op4')] });
+    expect(saved.find((op) => op.operationId === 'op2')?.isActive).toBe(false);
+  }));
+
+  it('a first import over the limit names no operations as new: there is no earlier pick', withLimit('3', async () => {
+    const { helper } = helperWith(5);
+    const result = await helper.importSchema('api-1', '{}', 'org-1', { generateTools: true });
+    expect(result.selectionRequired).toEqual({ operations: 5, limit: 3 });
   }));
 });
 

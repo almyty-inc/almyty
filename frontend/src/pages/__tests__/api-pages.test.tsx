@@ -499,6 +499,37 @@ describe('/apis/:id/setup: finish connecting', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('That is 1 over the limit of 1.')
     expect(screen.getByRole('button', { name: 'Make 2 tools' })).toBeDisabled()
   })
+
+  it('a later import over the limit keeps the earlier pick and asks only about new operations', async () => {
+    vi.mocked(apisApi.pollImportStatus).mockResolvedValue({
+      status: 'completed',
+      result: { operationCount: 4, selectionRequired: { operations: 4, limit: 3, newOperationIds: ['op-4'] } },
+    } as any)
+    vi.mocked(apisApi.getOperationOutline).mockResolvedValue({
+      limit: 3,
+      operations: [
+        { id: 'op-1', name: 'a', method: 'GET', endpoint: '/a', tags: ['t'], isActive: true },
+        { id: 'op-2', name: 'b', method: 'GET', endpoint: '/b', tags: ['t'], isActive: true },
+        // Left out of the earlier pick.
+        { id: 'op-3', name: 'c', method: 'GET', endpoint: '/c', tags: ['t'], isActive: false },
+        { id: 'op-4', name: 'd', method: 'GET', endpoint: '/d', tags: ['u'], isActive: true },
+      ],
+    } as any)
+    vi.mocked(apisApi.selectOperations).mockResolvedValue({ jobId: 'job-2', selected: 3 } as any)
+    const user = userEvent.setup()
+    renderAt('/apis/api-1/setup?job=job-1')
+
+    expect(await screen.findByText(/What you picked last time is still picked\. 1 operation is new/, {}, { timeout: 5000 })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('picked-count')).toHaveTextContent('2 of 3 picked'))
+    // Only the new one is left to decide.
+    await user.click(screen.getByRole('checkbox', { name: 'Only new' }))
+    expect(screen.queryByRole('checkbox', { name: 'Pick every operation in t' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^u/ }))
+    expect(screen.getByText('New')).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'Pick every operation in u' }))
+    await user.click(screen.getByRole('button', { name: 'Make 3 tools' }))
+    await waitFor(() => expect(apisApi.selectOperations).toHaveBeenCalledWith('api-1', ['op-1', 'op-2', 'op-4']))
+  })
 })
 
 describe('/apis/:id/import: update the description', () => {

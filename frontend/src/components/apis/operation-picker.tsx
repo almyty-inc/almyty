@@ -6,7 +6,7 @@
  * operation in it that the search shows. Used on "Finish connecting"
  * (`pages/api-setup.tsx`) when the import says `selectionRequired`.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 
@@ -27,13 +27,18 @@ interface OperationPickerProps {
   total: number
   /** How many one description may make tools from, from the import result. */
   limit: number
+  /**
+   * On a re-import: the operations the description added. The earlier pick
+   * starts picked and only these are left to decide.
+   */
+  newOperationIds?: string[]
   /** Tool generation for the picked operations was queued as this job. */
   onStarted: (jobId: string) => void
 }
 
 const number = (n: number) => n.toLocaleString('en-US')
 
-export function OperationPicker({ apiId, total, limit: importLimit, onStarted }: OperationPickerProps) {
+export function OperationPicker({ apiId, total, limit: importLimit, newOperationIds, onStarted }: OperationPickerProps) {
   const outline = useQuery({
     queryKey: ['api-operation-outline', apiId],
     queryFn: () => apisApi.getOperationOutline(apiId),
@@ -42,10 +47,23 @@ export function OperationPicker({ apiId, total, limit: importLimit, onStarted }:
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [open, setOpen] = useState<Set<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
+  const [onlyNew, setOnlyNew] = useState(false)
+  const newIds = useMemo(() => new Set(newOperationIds ?? []), [newOperationIds])
 
   const operations = outline.data?.operations ?? []
   const limit = outline.data?.limit ?? importLimit
-  const groups = useMemo(() => groupOperations(operations, search), [operations, search])
+
+  // A re-import keeps the earlier pick: what is still active and not new.
+  // A first import starts with nothing picked.
+  const seeded = useRef(false)
+  useEffect(() => {
+    if (seeded.current || !outline.data || !newOperationIds) return
+    seeded.current = true
+    setSelected(new Set(outline.data.operations.filter((op) => op.isActive !== false && !newIds.has(op.id)).map((op) => op.id)))
+  }, [outline.data, newOperationIds, newIds])
+
+  const shown = useMemo(() => (onlyNew ? operations.filter((op) => newIds.has(op.id)) : operations), [operations, onlyNew, newIds])
+  const groups = useMemo(() => groupOperations(shown, search), [shown, search])
   const overLimit = selected.size > limit
 
   const submit = useMutation({
@@ -80,7 +98,9 @@ export function OperationPicker({ apiId, total, limit: importLimit, onStarted }:
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           This description has {pluralized(total, 'operation')}; one description makes tools from up to {number(limit)}.
-          All of them are imported. Pick the ones your agents need, by area or one by one.
+          {newIds.size > 0
+            ? ` What you picked last time is still picked. ${pluralized(newIds.size, 'operation is', 'operations are')} new: pick the ones your agents need.`
+            : ' All of them are imported. Pick the ones your agents need, by area or one by one.'}
         </p>
       </div>
 
@@ -101,6 +121,12 @@ export function OperationPicker({ apiId, total, limit: importLimit, onStarted }:
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            {newIds.size > 0 && (
+              <label className="flex shrink-0 items-center gap-2 text-sm">
+                <Checkbox checked={onlyNew} onCheckedChange={(on) => setOnlyNew(on === true)} />
+                Only new
+              </label>
+            )}
             <p className={overLimit ? 'text-sm font-medium text-destructive' : 'text-sm text-muted-foreground'} data-testid="picked-count">
               {number(selected.size)} of {number(limit)} picked
             </p>
@@ -157,6 +183,11 @@ export function OperationPicker({ apiId, total, limit: importLimit, onStarted }:
                                 <code className="block break-all font-mono text-xs">{op.endpoint}</code>
                                 {op.name && op.name !== op.endpoint && <span className="text-muted-foreground">{op.name}</span>}
                               </span>
+                              {newIds.has(op.id) && (
+                                <Badge variant="outline" className="shrink-0 border-cyan-600 text-xs text-cyan-600 dark:border-cyan-400 dark:text-cyan-400">
+                                  New
+                                </Badge>
+                              )}
                             </label>
                           </li>
                         ))}
