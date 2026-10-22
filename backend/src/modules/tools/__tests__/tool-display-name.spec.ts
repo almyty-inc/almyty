@@ -16,7 +16,17 @@ describe('toolDisplayName', () => {
     [{ name: 'GET /crm/v3/owners', operationId: 'get-/crm/v3/owners/_getPage', method: 'GET', endpoint: '/crm/v3/owners' }, 'Get owners'],
     [{ name: 'GET /crm/v3/objects/companies/{companyId}', method: 'GET', endpoint: '/crm/v3/objects/companies/{companyId}' }, 'Get company by id'],
     [{ name: 'DELETE /crm/v3/objects/companies/{companyId}', method: 'DELETE', endpoint: '/crm/v3/objects/companies/{companyId}' }, 'Delete company by id'],
-    [{ name: 'POST /crm/v3/objects/companies/batch/read', method: 'POST', endpoint: '/crm/v3/objects/companies/batch/read' }, 'Create read'],
+    // Action words at the end of the path are the verb, never "Create read".
+    [{ name: 'POST /crm/v3/objects/contacts/batch/read', operationId: 'post-/crm/v3/objects/contacts/batch/read_read', method: 'POST', endpoint: '/crm/v3/objects/contacts/batch/read' }, 'Batch read contacts'],
+    [{ name: 'POST /crm/v3/objects/contacts/search', operationId: 'post-/crm/v3/objects/contacts/search_doSearch', method: 'POST', endpoint: '/crm/v3/objects/contacts/search' }, 'Search contacts'],
+    [{ method: 'POST', endpoint: '/crm/v3/objects/contacts/batch/archive' }, 'Batch archive contacts'],
+    [{ method: 'POST', endpoint: '/crm/v3/objects/contacts/merge' }, 'Merge contacts'],
+    [{ method: 'POST', endpoint: '/crm/v3/objects/deals/{dealId}/archive' }, 'Archive deal'],
+    [{ method: 'POST', endpoint: '/search' }, 'Search'],
+    [{ method: 'POST', endpoint: '/crm/v3/objects/contacts' }, 'Create contacts'],
+    // A readable operationId beats the method and path.
+    [{ name: 'searchContacts', operationId: 'searchContacts', method: 'POST', endpoint: '/crm/v3/objects/contacts/search' }, 'Search contacts'],
+    [{ name: 'batchReadContacts', operationId: 'batchReadContacts', method: 'POST', endpoint: '/x/batch/read' }, 'Batch read contacts'],
     [{ method: 'GET', endpoint: '/v1.0/drives/{drive-id}/items/{driveItem-id}' }, 'Get item by drive item id'],
     [{ method: 'PATCH', endpoint: '/users/{userId}/settings' }, 'Update settings'],
     // An operationId in words.

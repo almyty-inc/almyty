@@ -69,12 +69,52 @@ function singular(word: string): string {
   return word;
 }
 
-/** "GET /crm/v3/objects/companies/{companyId}" -> "Get company by id". */
+/**
+ * Path segments that name what the call does rather than what it acts on:
+ * `POST /contacts/batch/read`, `POST /contacts/search`. Read before the
+ * method's verb, which would otherwise make "Create read".
+ */
+const ACTIONS = new Set([
+  'batch', 'read', 'search', 'query', 'archive', 'unarchive', 'merge', 'upsert', 'create', 'update', 'delete',
+  'purge', 'gdpr-delete', 'restore', 'export', 'import', 'send', 'cancel', 'close', 'reopen', 'copy', 'move',
+  'upload', 'download', 'publish', 'unpublish', 'approve', 'reject', 'assign', 'unassign', 'validate', 'verify',
+  'test', 'sync', 'run', 'execute', 'start', 'stop', 'pause', 'resume', 'retry', 'refresh', 'invite', 'revoke',
+  'subscribe', 'unsubscribe', 'enable', 'disable', 'lock', 'unlock', 'count', 'estimate', 'preview', 'convert',
+  'clone', 'duplicate', 'reset', 'complete', 'submit', 'void', 'refund', 'capture', 'confirm',
+]);
+
+function isAction(segment: string): boolean {
+  return ACTIONS.has(segment.toLowerCase());
+}
+
+/**
+ * "GET /crm/v3/objects/companies/{companyId}" -> "Get company by id";
+ * "POST /crm/v3/objects/contacts/batch/read" -> "Batch read contacts".
+ */
 export function nameFromPath(method: string | null | undefined, endpoint: string | null | undefined): string | null {
   const segments = (endpoint ?? '').split('?')[0].split('/').filter((s) => !isNoise(s));
   if (segments.length === 0) return null;
   const verb = VERBS[(method ?? 'get').toLowerCase()] ?? sentence((method ?? '').toLowerCase());
   let last = segments.length - 1;
+
+  // The call's own action words at the end of the path: they are the verb.
+  const actions: string[] = [];
+  while (last >= 0 && !isParam(segments[last]) && isAction(segments[last])) actions.unshift(segments[last--]);
+  if (actions.length > 0) {
+    const action = actions.map(words).join(' ');
+    let i = last;
+    let ofOne = false;
+    while (i >= 0 && isParam(segments[i])) {
+      i--;
+      ofOne = true;
+    }
+    if (i < 0) return sentence(action);
+    const target = words(segments[i]);
+    // `/contacts/{id}/archive` acts on one contact.
+    const object = ofOne ? target.split(' ').slice(0, -1).concat(singular(target.split(' ').pop() ?? target)).join(' ') : target;
+    return sentence(`${action} ${object}`);
+  }
+
   const trailing: string[] = [];
   while (last >= 0 && isParam(segments[last])) trailing.unshift(segments[last--]);
   if (last < 0) return null;
