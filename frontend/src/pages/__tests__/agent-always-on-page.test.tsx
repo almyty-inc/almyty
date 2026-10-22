@@ -6,6 +6,7 @@ import { AgentAlwaysOnPage, formFromView, inputFromForm } from '../agent-always-
 import { agentsApi } from '@/lib/api'
 import { agentChannelsApi } from '@/lib/agent-channels'
 import { renderAtRoute } from '../../test/render-at-route'
+import { REPORT_LABELS, describeReport } from '@/lib/always-on'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
@@ -43,6 +44,20 @@ describe('the Always on form', () => {
     expect(form.askFirstToolIds).toEqual(['t-write'])
   })
 
+  it('reports when it has something to tell you on a new agent, and keeps what a stored one chose', () => {
+    expect(formFromView(empty as any).report).toBe('when_news')
+    expect(inputFromForm({ ...formFromView(empty as any), brief: 'x' }, 15).input!.report).toBe('when_news')
+    const stored = { enabled: false, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_acted' }
+    expect(formFromView({ ...empty, alwaysOn: stored } as any).report).toBe('when_acted')
+    expect(formFromView({ ...empty, alwaysOn: { ...stored, report: 'every_wake' } } as any).report).toBe('every_wake')
+  })
+
+  it('offers "When it has something to tell you" first among when it reports', () => {
+    expect(Object.keys(REPORT_LABELS)[0]).toBe('when_news')
+    expect(REPORT_LABELS.when_news).toBe('When it has something to tell you')
+    expect(describeReport({ report: 'when_news' } as any)).toBe('Reports when it has something to tell you')
+    expect(describeReport({ report: 'when_acted' } as any)).toBe('Reports when it did something')
+  })
   it('never offers a timer under the plan floor', () => {
     expect(formFromView({ ...empty, capacity: { ...CAP, timerFloorMinutes: 60 } } as any)).toMatchObject({ every: 1, unit: 'hours' })
     const form = { ...formFromView(empty as any), brief: 'x', every: 5 }

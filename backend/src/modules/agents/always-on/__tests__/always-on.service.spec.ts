@@ -307,10 +307,12 @@ describe('Always on: reporting', () => {
     await w.service.process(AGENT, ORG);
     w.approvals.emit('approval.requested', { id: 'ap-1', runId: 'run-1', reason: 'Ask before “Issue refund” (it is on the ask-first list).', organizationId: ORG });
     await new Promise((r) => setTimeout(r, 10));
-    expect(w.posted).toHaveLength(1);
+    // The owner's own channel, and where reports go.
+    expect(w.posted.map((p) => p.delivery.to)).toEqual(['U-OWNER', 'C-REPORTS']);
     expect(w.posted[0].text).toContain('waiting for your OK');
     // One full stop, not the reason's and the notice's both.
-    expect(w.posted[0].text).toContain('(it is on the ask-first list). Approve or reject it in Approvals.');
+    expect(w.posted[0].text).toContain('(it is on the ask-first list).\n');
+    expect(w.posted[0].text).not.toContain('list)..');
     // The notice is recorded on the run the way a post is, and the run keeps what it carries.
     expect(w.runs.row('run-1')!.metadata).toMatchObject({ triggerType: 'always_on', channelDelivery: { status: 'delivered' } });
     w.service.onModuleDestroy();

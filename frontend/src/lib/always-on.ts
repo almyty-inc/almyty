@@ -10,7 +10,7 @@ export { formatRunTime as formatWakeTime } from '@/lib/schedule'
 
 export type ConnectionWakeEvent = 'expiring' | 'expired' | 'rotation_due'
 export type AlwaysOnActMode = 'propose' | 'act'
-export type AlwaysOnReport = 'every_wake' | 'when_acted' | 'daily_digest'
+export type AlwaysOnReport = 'every_wake' | 'when_news' | 'when_acted' | 'daily_digest'
 
 /** The daily summary's time of day ("HH:MM") and IANA time zone. */
 export interface DigestTiming {
@@ -134,12 +134,16 @@ export function wakeSourceLabel(source: WakeSource): string {
   return SOURCE_WORDS[source] ?? source
 }
 
-/** What the report picker says for each choice. */
+/** What the report picker says for each choice, in the order it offers them. */
 export const REPORT_LABELS: Record<AlwaysOnReport, string> = {
+  when_news: 'When it has something to tell you',
   when_acted: 'Only when it did something',
   every_wake: 'After every wake',
   daily_digest: 'Once a day, a short summary of what it did',
 }
+
+/** What a new agent reports on: when it has something to tell you. */
+export const DEFAULT_REPORT: AlwaysOnReport = 'when_news'
 
 /** "09:00" as the person's clock reads it: 9:00. */
 function clockTime(time: string): string {
@@ -154,5 +158,7 @@ export function describeReport(config: AlwaysOnConfig | null | undefined, digest
     const at = digest ? ` at ${clockTime(digest.time)}, ${digest.timezone.replace(/_/g, ' ')}` : ''
     return `Sends a short summary once a day${at}`
   }
-  return config.report === 'every_wake' ? 'Reports after every wake' : 'Reports when it did something'
+  if (config.report === 'every_wake') return 'Reports after every wake'
+  if (config.report === 'when_news') return 'Reports when it has something to tell you'
+  return 'Reports when it did something'
 }
