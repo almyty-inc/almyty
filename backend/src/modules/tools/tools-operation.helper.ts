@@ -9,6 +9,7 @@ import { ApiSchema } from '../../entities/api-schema.entity';
 import { ToolsService } from './tools.service';
 import { capGeneratedDescription, precheckToolQuota, withToolQuota } from './tool-quota';
 import { applyGeneratedToolScope, generatedToolScope } from './generated-tool-scope';
+import { operationHeaderParams } from './operation-header-params';
 
 export interface GenerateFromOperationOptions {
   name: string;
@@ -257,6 +258,20 @@ export class ToolsOperationHelper {
           parameters.required.push(name);
         }
       });
+    }
+
+    // Add header parameters (xero-tenant-id, Notion-Version, ...); the
+    // executor sends them as headers (operation-header-params.ts).
+    for (const [name, param] of operationHeaderParams(operation)) {
+      parameters.properties[name] = {
+        type: param.type || 'string',
+        description: param.description || `Header parameter: ${name}`,
+        ...(param.enum && { enum: param.enum }),
+        ...(param.example && { example: param.example }),
+      };
+      if (param.required) {
+        parameters.required.push(name);
+      }
     }
 
     // GraphQL operations have a different body shape: instead of a

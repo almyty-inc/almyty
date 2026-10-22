@@ -1,8 +1,8 @@
 // Demo harness only (stack.sh loads it with node --import when USECASES=1): the API's outbound calls to
-// Resend (email) and Slack go to the local fake upstream instead, so no
+// Resend (email) and Slack (messages and shared files) go to the local fake upstream instead, so no
 // real email or Slack message is ever sent. Everything else is untouched.
 const FAKE = `${process.env.USECASE_UPSTREAM_URL || 'http://localhost:4291'}/_ext`
-const HOSTS = new Set(['api.resend.com', 'slack.com', 'hooks.slack.com'])
+const HOSTS = new Set(['api.resend.com', 'slack.com', 'hooks.slack.com', 'files.slack.com'])
 const realFetch = globalThis.fetch
 globalThis.fetch = async (input, init) => {
   try {
