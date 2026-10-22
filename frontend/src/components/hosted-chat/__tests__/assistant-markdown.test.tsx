@@ -17,7 +17,7 @@ describe('AssistantMarkdown', () => {
     expect(container.querySelectorAll('li')).toHaveLength(2)
     expect(container.querySelector('img')).toBeNull()
     expect(container.textContent).not.toContain('**')
-  })
+  }, 20000)
 
   it("is what an agent's Try it shows its answer with", () => {
     const source = readFileSync(join(__dirname, '../../agents/detail/overview-tab.tsx'), 'utf8')

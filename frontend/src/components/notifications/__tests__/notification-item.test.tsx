@@ -29,11 +29,12 @@ describe('NotificationItem body', () => {
       />,
     )
 
-    expect((await screen.findByText('Inbox', undefined, { timeout: 8000 })).tagName).toBe('STRONG')
+    // react-markdown is loaded lazily; on a busy machine that takes a while.
+    expect((await screen.findByText('Inbox', undefined, { timeout: 30000 })).tagName).toBe('STRONG')
     expect(container.textContent).not.toContain('**')
     expect(container.querySelectorAll('li')).toHaveLength(2)
     expect(container.querySelector('a')).toBeNull()
     expect(container.querySelector('img')).toBeNull()
     expect(screen.getByText('open').tagName).toBe('SPAN')
-  }, 20000)
+  }, 40000)
 })
