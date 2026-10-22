@@ -8,11 +8,13 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { createHash } from 'crypto';
 import { Repository } from 'typeorm';
 
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { SystemResolveAuditDedupe, type SystemResolveKey } from './system-resolve-audit-dedupe';
 import { Team } from '../../entities/team.entity';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 import { decryptField, isEncrypted } from '../../common/security/field-crypto';
@@ -212,6 +214,9 @@ export class CredentialRefResolver {
     this.policy = policy ?? new AllowAllConnectionUsePolicy();
   }
 
+  /** Which system resolves get a row (see recordResolve). */
+  private readonly systemResolveAudit = new SystemResolveAuditDedupe();
+
   /** Replace the use policy at runtime (gate 2 calls this from its module init). */
   usePolicy(policy: ConnectionUsePolicy): void {
     this.policy = policy;
@@ -224,6 +229,19 @@ export class CredentialRefResolver {
    * throws.
    */
   async resolve(
+    organizationId: string,
+    credentialId: string,
+    opts: ResolveOptions,
+  ): Promise<ResolvedCredential> {
+    try {
+      return await this.resolveAndRecord(organizationId, credentialId, opts);
+    } catch (err) {
+      if (!opts.principal) this.recordSystemFailure(organizationId, credentialId, opts.context, err);
+      throw err;
+    }
+  }
+
+  private async resolveAndRecord(
     organizationId: string,
     credentialId: string,
     opts: ResolveOptions,
@@ -290,10 +308,14 @@ export class CredentialRefResolver {
    * The CONNECTION_RESOLVE row for one successful resolve. Every use of a
    * stored secret is audited (docs/connections.md), including the ones
    * with nobody behind them: hosted runner provisioning, a deployment's
-   * reconcile, a provider's health check. This is the only writer on the
-   * consumer seam; ConnectionsResolverService does not come through here
-   * and writes its own. Not awaited: the audit service never throws, and
-   * an LLM call should not wait on the insert.
+   * reconcile, a provider's health check. Those run in loops, so a
+   * system resolve is written on first use, on a change of outcome or of
+   * the connection's state, and once per heartbeat interval
+   * (SystemResolveAuditDedupe); a resolve with a user or a run behind it
+   * is written every time. This is the only writer on the consumer seam;
+   * ConnectionsResolverService does not come through here and writes its
+   * own. Not awaited: the audit service never throws, and an LLM call
+   * should not wait on the insert.
    */
   private recordResolve(
     organizationId: string,
@@ -304,6 +326,11 @@ export class CredentialRefResolver {
     decision: ConnectionUseDecision | null,
   ): void {
     if (!this.auditLog) return;
+    const system = !principal && !execution;
+    if (system && !this.systemResolveAudit.shouldRecord(
+      CredentialRefResolver.systemResolveKey(organizationId, credential.id, context),
+      CredentialRefResolver.successOutcome(credential),
+    )) return;
     const agentId = execution?.kind === 'agent'
       ? execution.agentId
       : context?.agentId ?? (context?.resourceType === 'agent' ? context.resourceId : undefined) ?? null;
@@ -319,6 +346,7 @@ export class CredentialRefResolver {
       resourceType: AuditResource.CONNECTION,
       resourceId: credential.id,
       resourceName: credential.name,
+      status: 'success',
       details: {
         principal: { userId: principal?.id ?? null, agentId, workspaceId, gatewayId },
         connectionId: credential.id,
@@ -329,10 +357,68 @@ export class CredentialRefResolver {
         purpose: context?.purpose ?? 'use',
         resourceType: context?.resourceType ?? null,
         resourceId: context?.resourceId ?? null,
-        via: decision?.via ?? (principal || execution ? null : 'system'),
+        via: decision?.via ?? (system ? 'system' : null),
         grantId: decision?.grant?.id ?? null,
       },
     }).catch(() => undefined);
+  }
+
+  /**
+   * A system resolve that failed. Written on a change only (the first
+   * failure, the first after a success, a different failure code) and
+   * once per heartbeat interval while it keeps failing, so a background
+   * loop that lost its connection leaves one row, not one a minute. A
+   * refused resolve with a user behind it writes nothing here.
+   */
+  private recordSystemFailure(
+    organizationId: string,
+    credentialId: string,
+    context: ConnectionUseContext | undefined,
+    err: unknown,
+  ): void {
+    if (!this.auditLog) return;
+    const e = err as { response?: { code?: string }; code?: string; name?: string } | null;
+    const code = e?.response?.code ?? e?.code ?? e?.name ?? 'ERROR';
+    if (!this.systemResolveAudit.shouldRecord(
+      CredentialRefResolver.systemResolveKey(organizationId, credentialId, context),
+      `fail:${code}`,
+    )) return;
+    void this.auditLog.log({
+      organizationId,
+      action: AuditAction.CONNECTION_RESOLVE,
+      resourceType: AuditResource.CONNECTION,
+      resourceId: credentialId,
+      status: 'error',
+      details: {
+        connectionId: credentialId,
+        purpose: context?.purpose ?? 'use',
+        resourceType: context?.resourceType ?? null,
+        resourceId: context?.resourceId ?? null,
+        via: 'system',
+        error: code,
+      },
+    }).catch(() => undefined);
+  }
+
+  private static systemResolveKey(organizationId: string, credentialId: string, context: ConnectionUseContext | undefined): SystemResolveKey {
+    return {
+      organizationId,
+      credentialId,
+      purpose: context?.purpose ?? null,
+      resourceType: context?.resourceType ?? null,
+      resourceId: context?.resourceId ?? null,
+    };
+  }
+
+  /**
+   * What a successful resolve looked like: the connection's health and a
+   * digest of its stored (still encrypted) config, so a rotation or a
+   * health change writes a fresh row and a health-check timestamp alone
+   * does not.
+   */
+  private static successOutcome(credential: Credential): string {
+    const digest = createHash('sha256').update(JSON.stringify(credential.config ?? null)).digest('hex').slice(0, 16);
+    return `ok:${credential.healthStatus ?? 'unknown'}:${digest}`;
   }
 
   /** Same as resolve() but returns null for a missing/inactive row instead of throwing. Used by read-through shims. */

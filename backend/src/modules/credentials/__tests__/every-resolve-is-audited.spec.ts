@@ -87,11 +87,11 @@ describe('every CredentialRefResolver resolve is audited once', () => {
     expect(audit.log).toHaveBeenCalledTimes(1);
   });
 
-  it('writes nothing for a refused or missing resolve', async () => {
+  it('writes nothing for a refused or missing resolve with a user behind it', async () => {
     const { store, audit, resolver } = await build({ assertCanUse: async () => { throw new ForbiddenException({ code: 'CONNECTION_NOT_GRANTED' }); } });
     const row = store.seed({ organizationId: 'org-1', connectorKey: 'openai', config: { apiKey: 'x' } } as Partial<Credential>);
     await expect(resolver.resolve('org-1', row.id, { principal: { id: 'u-1' }, context: { purpose: 'llm_call' } })).rejects.toBeDefined();
-    await expect(resolver.resolve('org-1', 'missing', { principal: null })).rejects.toBeDefined();
+    await expect(resolver.resolve('org-1', 'missing', { principal: { id: 'u-1' } })).rejects.toBeDefined();
     expect(audit.log).not.toHaveBeenCalled();
   });
 });
