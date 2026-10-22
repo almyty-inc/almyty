@@ -16,6 +16,7 @@ import { AgentVerifierHelper } from '../../modules/agents/agent-verifier.helper'
 import { AgentContextCompactor } from '../../modules/agents/agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../modules/agent-constraints/agent-constraints.service';
 import { AgentRun } from '../../entities/agent-run.entity';
+import { RunEventsTable, withRunEvents } from '../fake-run-events';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -41,6 +42,7 @@ describe('Agent Streaming (integration)', () => {
   let runStore: AgentRun[];
   let agentStore: Agent[];
   let mockRunRepo: any;
+  let runEvents: RunEventsTable;
   let mockAgentRepo: any;
   let mockToolRepo: any;
   let mockConversationRepo: any;
@@ -131,6 +133,9 @@ describe('Agent Streaming (integration)', () => {
       }),
       findAndCount: jest.fn().mockResolvedValue([[], 0]),
     };
+    // The step commit writes the row and its run events in one transaction
+    // through the repository's manager (durable runs step 1).
+    runEvents = withRunEvents(mockRunRepo);
 
     const qbChain = {
       update: jest.fn().mockReturnThis(),
@@ -356,6 +361,17 @@ describe('Agent Streaming (integration)', () => {
 
       expect(llmStartedIdx).toBeLessThan(llmResponseIdx);
       expect(llmResponseIdx).toBeLessThan(runCompletedIdx);
+    });
+
+    it('should append the run events of the step with its commit, numbered from the head of the run', async () => {
+      const { run } = await runAndCollectEvents();
+
+      const logged = runEvents.rows(run.id);
+      expect(logged.length).toBeGreaterThan(0);
+      expect(logged.map(e => e.seq)).toEqual(logged.map((_, i) => i + 1));
+      expect(logged.map(e => e.type)).toEqual(expect.arrayContaining(['run_started', 'model_call', 'run_completed', 'step_committed']));
+      // The row's head moved to the last event the commit wrote.
+      expect(runStore.find(r => r.id === run.id)!.headSeq).toBe(logged.length);
     });
   });
 
