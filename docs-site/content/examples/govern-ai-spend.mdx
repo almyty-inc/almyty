@@ -1,30 +1,106 @@
-# Put a ceiling on AI spending
+# Cap what your AI assistants spend
 
-For whoever has to explain the AI bill. Set a spending budget for the whole organization or for one assistant, per day or per month, with an early warning before the limit. When the limit is reached you choose what happens: a warning only, or no new runs until the next day or month. A runaway assistant can't quietly spend the quarter's money.
+## What you'll build
 
-For example: $300 a month for the support assistant, a warning email at 80%, and new runs blocked at $300.
+Three limits that keep the AI bill predictable, set up for Larkspur Home, a made-up online homeware shop:
+
+- **The whole organization**: at most $300 a month. Owners and admins get an email at $240 (80%) and again at $300, and runs carry on.
+- **One experimental assistant**, `Product copy drafts`: at most $5 a day. At the limit, it stops taking new runs until midnight UTC.
+- **Any single run of that assistant**: at most $0.50, so one run that goes round in circles cannot use up the day's budget on its own.
+
+![Two budgets, and the alerts from the one that blocked](/screenshots/examples/govern-ai-spend/00-budgets.png)
+
+Step 6 shows the block happening, with a deliberately tiny limit. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 15 minutes.
 
 ## What you need
 
-- Owner or admin access to your organization.
+- **Owner or admin** in your almyty organization. Members can see budgets but not change them.
+- **At least one agent that has run**, so there is spend to look at. This guide uses Larkspur's assistants from [Check Stripe payouts against Xero](/examples/stripe-payout-reconciliation) and [Ask your data in Slack](/examples/nl-query-your-database), plus `Product copy drafts`, an assistant that writes product descriptions and has no tools.
 
-## How to build it
+## 1. See where the money goes
 
-1. **See where the money goes first.** Open **Analytics**. The **Cost** tab shows spending over time and by assistant, so you know where to set the numbers.
+Open **Analytics** in the sidebar and click the **Cost** tab. **Total spend** is this month's (or today's, with **Today**); **Spend by agent** shows how many runs each assistant made and what they cost.
 
-   ![Analytics overview for the demo organization](/screenshots/analytics-overview.png)
+![Analytics, Cost: spend this month and per agent](/screenshots/examples/govern-ai-spend/01-cost.png)
 
-2. **Create a budget.** On the **Budgets** tab, click **New budget**. Under **Applies to**, choose **The whole organization** or **A single agent**.
-3. **Set the limit.** Enter the **Limit (USD)** and the **Period**: **Per day** or **Per month**.
-4. **Choose what happens.** Under **When the limit is reached**, pick **Warn only** (runs carry on; owners and admins get an email, once per period) or **Block new runs** (scheduled runs, chat replies and API calls all stop until the period rolls over).
-5. **Get an early warning.** Set **Warn at (% of limit)**, for example 80. Nothing is blocked at that point; you just hear about it in time.
+Start from these numbers when you pick limits. Costs are almyty's estimate from the text sent and received and the model maker's price list; the figure on your model maker's invoice is the real one (see [Compare with your model vendor's figures](/cost-governance#compare-with-your-model-vendors-figures)).
 
-## Ideas
+## 2. A monthly ceiling for the whole organization
 
-- Give an experimental assistant a small daily budget of its own.
-- For assistants open to the public, also set the per-visitor and per-day limits in its **Branding and visitor rules** (see [Channels](/channels)).
-- To split costs across teams, the Enterprise plan adds a **Chargeback** report under **Analytics**.
+Click the **Budgets** tab, then **New budget**:
+
+1. **Applies to**: **The whole organization**.
+2. **Limit (USD)**: `300`. **Period**: **Per month**.
+3. **When the limit is reached**: **Warn only**.
+4. **Warn at (% of limit)**: `80`.
+5. Click **Create budget**.
+
+![The organization budget: $300 a month, warn only](/screenshots/examples/govern-ai-spend/02-org-budget.png)
+
+**Warn only** never stops anything: the support assistant keeps answering customers even in a busy month, and you hear about it at $240 and at $300. Months start on the first, UTC.
+
+## 3. A daily limit for one assistant
+
+Click **New budget** again:
+
+1. **Applies to**: **A single agent**. **Agent**: **Product copy drafts**.
+2. **Limit (USD)**: `5`. **Period**: **Per day**.
+3. **When the limit is reached**: **Block new runs**. The form says what that means: scheduled runs, chat replies and API calls all stop until the period rolls over.
+4. **Warn at (% of limit)**: `80`.
+5. Click **Create budget**.
+
+![The agent budget: $5 a day, block new runs](/screenshots/examples/govern-ai-spend/03-agent-budget.png)
+
+Use **Block new runs** for assistants nobody depends on yet. A budget is checked when a run starts, so a run that has started finishes; the next one is refused.
+
+## 4. A cap on each run
+
+A budget adds up many runs. To stop one run from spending too much, set a cap on the assistant itself. Open **Agents**, open **Product copy drafts**, click **Edit**, scroll to **Run limits**, open **Advanced** and set **Spending cap ($)** to `0.50`. Click **Save**.
+
+![Run limits: a spending cap of $0.50 per run](/screenshots/examples/govern-ai-spend/04-run-limit.png)
+
+A run that reaches $0.50 stops there, after the step that crossed it. Without a cap of its own, every run may spend up to $1 (see [Run limits](/run-limits)).
+
+## 5. Try it
+
+Under **Try it** on the agent's **Overview** tab, type:
+
+```
+Write product descriptions for: oak serving board (FSC European oak, linseed oil, fits a cheese board for six); linen napkins (set of 4, stonewashed, 45x45 cm, 40 degree wash); ceramic pendant lamp (chalk glaze, 28 cm, 1.5 m cotton cord, E27 up to 60 W).
+```
+
+It writes the three descriptions. On the **Budgets** tab, **Period to date** for `Product copy drafts` now shows what that run cost.
+
+## 6. See the block happen
+
+To see a block without spending $5, lower the limit for a minute. On the **Budgets** tab, click the pencil next to **Product copy drafts**, set **Limit (USD)** to `0.02` and click **Save budget**. Then send the same message under **Try it** until the budget is used up. The next one is refused:
+
+![The run refused: the daily budget is used up](/screenshots/examples/govern-ai-spend/05-blocked.png)
+
+Owners and admins get the alert by email and in **Notifications** (the bell at the top right):
+
+![The budget alert in Notifications](/screenshots/examples/govern-ai-spend/06-notification.png)
+
+**Recent budget alerts** on the **Budgets** tab lists every early warning and every limit reached, at most one of each per budget per period. Now set the limit back to `5`.
+
+## Make it yours
+
+- **Several experiments.** Give each experimental assistant its own small daily budget, and keep one monthly budget for the organization.
+- **Public assistants.** For an assistant anyone can talk to, also set the spend and message limits per visitor under **Branding and visitor rules** on its **Channels** tab (see [Channels](/channels)).
+- **Check the estimate.** Add your OpenAI or Anthropic admin key on the provider's **Settings** tab and click **Sync now** under **Provider actual vs our estimate** on the **Cost** tab, to compare almyty's figures with the invoice.
+- **Costs per team.** The Enterprise plan adds a **Chargeback** tab with spend per team and a forecast.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **New budget** is missing or greyed out | Only owners and admins change budgets. Ask one of them. |
+| A budget shows **$0.00** although the agent ran | Budgets count agent runs. Chatting with a model outside an agent run is not counted. |
+| No alert email arrived | The alert is also in **Notifications**. Each person can turn budget alert emails off for themselves, so check your own notification settings. |
+| A run stopped with **BUDGET_EXCEEDED** | That is the per-run cap from step 4, not a budget. Raise **Spending cap ($)** if the work really needs more. |
+| Runs are refused after the limit was raised | The refused runs were refused at the time. Send them again; the new limit applies straight away. |
 
 ## Related
 
-- [Cost governance](/cost-governance) · [Analytics](/analytics) · [Connect a provider](/llm-providers) · [Run limits](/run-limits)
+- [Cost governance](/cost-governance) · [Run limits](/run-limits) · [Analytics](/analytics) · [Connect a provider](/llm-providers)
+- [Check Stripe payouts against Xero](/examples/stripe-payout-reconciliation) · [Contract review by several models](/examples/cross-vendor-contract-review)

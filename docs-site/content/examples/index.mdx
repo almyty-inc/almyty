@@ -2,7 +2,7 @@
 
 almyty turns the software your company already runs into AI assistants that do real work, and puts them where your staff and customers already talk. Here is what that looks like in practice.
 
-The six step-by-step guides below build a complete assistant each, with a screenshot for every step. They are written for anyone: you do not need to write code. The shorter examples after them show more ideas, in fewer words.
+The step-by-step guides below build a complete assistant each, with a screenshot for every step. They are written for anyone: you do not need to write code. The shorter examples after them show more ideas, in fewer words.
 
 ![Assistants built from these guides, on the Agents page](/screenshots/agents-list.png)
 
@@ -14,6 +14,11 @@ The six step-by-step guides below build a complete assistant each, with a screen
 - **[Nightly systems report](/examples/nightly-systems-report)**: an assistant that checks your systems every night and posts a short report to Slack.
 - **[Internal help desk](/examples/internal-help-desk)**: an assistant in Microsoft Teams or Slack that answers staff questions about HR, IT and the office.
 - **[For developers](/examples/developers-apis-and-machines)**: your company's APIs as tools in coding assistants, and agents that run jobs on your own machines.
+- **[Stripe payouts against Xero](/examples/stripe-payout-reconciliation)**: every weekday at 07:00, yesterday's Stripe payouts checked against Xero, with the ones that are missing or booked wrong posted to Slack.
+- **[Nightly data check](/examples/nightly-data-quality-digest)**: every night, freshness, volume and missing-value checks on your BigQuery tables, with the problems posted to Slack.
+- **[Ask your data in Slack](/examples/nl-query-your-database)**: colleagues ask in plain words; it runs one read-only BigQuery query and answers with the number and the query.
+- **[Contract review by several models](/examples/cross-vendor-contract-review)**: post a supplier contract in Slack and get one risk memo from models of two companies, each reading it from its own angle.
+- **[Cap AI spending](/examples/govern-ai-spend)**: a monthly ceiling for the organization, a daily limit that blocks one assistant, and a cap on every run.
 
 ## How every guide works
 
@@ -39,15 +44,10 @@ Around all of it: your keys are stored safely under **Credentials**, you decide 
 **Operations, data and finance**
 
 - [An assistant that checks and reports on a schedule](/examples/scheduled-monitoring-agent)
-- [A nightly check on your data](/examples/nightly-data-quality-digest)
-- [Ask your database questions in plain English](/examples/nl-query-your-database)
-- [Match Stripe payouts against your books](/examples/stripe-payout-reconciliation)
-- [Contract review by several AI models](/examples/cross-vendor-contract-review)
 - [Put your Google Drive or SharePoint to work](/examples/connect-google-sharepoint)
 
 **Control and compliance**
 
-- [Put a ceiling on AI spending](/examples/govern-ai-spend)
 - [Decide who signs off, once, for every assistant](/examples/approval-policies)
 - [Keep each team's assistants to that team](/examples/multi-team-rbac)
 - [Sign in with your company accounts](/examples/sso-scim-onboarding)

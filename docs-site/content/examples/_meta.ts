@@ -8,6 +8,11 @@ export default {
   'nightly-systems-report': 'Nightly systems report',
   'internal-help-desk': 'Internal help desk',
   'developers-apis-and-machines': 'For developers',
+  'stripe-payout-reconciliation': 'Stripe payouts against Xero',
+  'nightly-data-quality-digest': 'Nightly data check',
+  'nl-query-your-database': 'Ask your data in Slack',
+  'cross-vendor-contract-review': 'Contract review by several models',
+  'govern-ai-spend': 'Cap AI spending',
 
   'support-separator': { type: 'separator', title: 'Support and sales' },
   'support-ticket-triage': 'Sort tickets, draft replies',
@@ -19,14 +24,9 @@ export default {
 
   'ops-separator': { type: 'separator', title: 'Operations, data and finance' },
   'scheduled-monitoring-agent': 'Checks on a schedule',
-  'nightly-data-quality-digest': 'Nightly data check',
-  'nl-query-your-database': 'Ask your database',
-  'stripe-payout-reconciliation': 'Match Stripe payouts',
-  'cross-vendor-contract-review': 'Contract review',
   'connect-google-sharepoint': 'Google Drive and SharePoint',
 
   'governance-separator': { type: 'separator', title: 'Control and compliance' },
-  'govern-ai-spend': 'Cap AI spending',
   'approval-policies': 'Who signs off',
   'multi-team-rbac': 'Keep teams separate',
   'sso-scim-onboarding': 'Company sign-in',
