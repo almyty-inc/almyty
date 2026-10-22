@@ -21,14 +21,14 @@ export function AccessCard({ agentId }: { agentId: string }) {
           Access
         </CardTitle>
         <CardDescription className="text-xs">
-          When someone other than you writes to it on a channel, it can use only the accounts given to it here. Without access it says so instead of guessing.
+          Your own runs always use your accounts, so nothing here limits you. This is about other people: when someone else writes to it on a channel, it can use only the accounts given to it here. Without access it tells them so instead of guessing.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <WhatItCannotReach
           agentId={agentId}
-          intro="It has not been given these yet:"
-          okText="It has been given every account its tools and settings use."
+          intro="Not yet given for other people's messages (your own runs still use them):"
+          okText="Other people's messages can use every account its tools and settings use."
         />
       </CardContent>
     </Card>

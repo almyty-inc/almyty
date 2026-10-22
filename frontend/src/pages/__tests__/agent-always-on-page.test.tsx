@@ -173,6 +173,29 @@ describe('/agents/:id/always-on', () => {
     expect(vi.mocked(agentsApi.setAlwaysOn).mock.calls[0][1].ownerChannel).toEqual({ channelId: 'c-mail', address: 'U1', trustEmail: true })
   })
 
+  it('says what "your address there" is for the chosen channel: a Telegram numeric user ID, a Slack member ID', async () => {
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([
+      { id: 'c-slack', type: 'slack', name: 'Support Slack' },
+      { id: 'c-tg', type: 'telegram', name: 'Bot' },
+    ] as any)
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      alwaysOn: {
+        enabled: true, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_acted',
+        ownerChannel: { channelId: 'c-tg', address: '' },
+      },
+    } as any)
+    open()
+    await screen.findByText('Talk to it yourself')
+    expect(screen.getByText(/numeric Telegram user ID, not your @username/)).toBeInTheDocument()
+    expect(screen.getByText(/@userinfobot/)).toBeInTheDocument()
+    expect(screen.queryByText(/Slack member ID/)).toBeNull()
+    await userEvent.click(screen.getByLabelText('Channel'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Support Slack (Slack)' }))
+    expect(screen.getByText(/Your Slack member ID/)).toBeInTheDocument()
+    expect(screen.queryByText(/@userinfobot/)).toBeNull()
+  })
+
   it('offers a daily summary in the report picker; choosing it asks when, pre-filled with the defaults, and saves them', async () => {
     vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
       ...empty,
