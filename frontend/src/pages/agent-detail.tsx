@@ -54,7 +54,7 @@ export function AgentDetailPage() {
     return () => { document.title = 'almyty' }
   }, [])
 
-  const { id } = useParams<{ id: string }>()
+  const { id, runId } = useParams<{ id: string; runId?: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
@@ -62,8 +62,9 @@ export function AgentDetailPage() {
 
   const [runPanelOpen, setRunPanelOpen] = useState(false)
   // `?tab=channels` opens a tab directly: the channel pages link back to it.
+  // /agents/:id/runs/:runId (Last woke, What woke it lately, Approvals) opens the Runs tab with that run open.
   const [searchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview')
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || (runId ? 'runs' : 'overview'))
 
   // Webhook state (lifted so overview tab can use it, synced from agent data)
   const [webhookUrl, setWebhookUrl] = useState('')
@@ -413,7 +414,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
-          <RunsTab runs={runs} agentId={agent.id} />
+          <RunsTab runs={runs} agentId={agent.id} openRunId={runId} />
         </TabsContent>
 
         <TabsContent value="memory" className="space-y-4">
