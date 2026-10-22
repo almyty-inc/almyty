@@ -65,6 +65,11 @@ export function AgentDetailPage() {
   // /agents/:id/runs/:runId (Last woke, What woke it lately, Approvals) opens the Runs tab with that run open.
   const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || (runId ? 'runs' : 'overview'))
+  // Last woke on the Overview tab links here from this same page, which stays
+  // mounted (both routes render this page): switch to Runs when the link is followed.
+  useEffect(() => {
+    if (runId) setActiveTab('runs')
+  }, [runId])
 
   // Webhook state (lifted so overview tab can use it, synced from agent data)
   const [webhookUrl, setWebhookUrl] = useState('')
