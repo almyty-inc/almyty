@@ -144,8 +144,15 @@ describe('security scanner: SQL injection needs SQL', () => {
     "' OR 1=1--",
     'id=1 OR 1=1',
     "x' AND sleep(5)",
-    'SELECT * FROM users',
-    'SELECT id, password FROM users',
+    '1; SELECT * FROM users',
+    "x'; SELECT id, password FROM users",
+    "x' UNION SELECT password FROM users",
+    "' OR ''='",
+    "x' OR x=x",
+    "x') OR ('a'='a",
+    "' or true--",
+    "admin'#",
+    "' AND 1=1 --",
     "INSERT INTO users (name) VALUES ('x')",
     "UPDATE users SET role='admin'",
     'DELETE FROM users WHERE 1=1',
@@ -171,5 +178,49 @@ describe('security scanner: SQL injection needs SQL', () => {
   it('a request scan names the checks, without tool wording', async () => {
     const result = await plugin.scanRequest(request("' UNION SELECT * FROM users-- <script>alert(1)</script>"), settings);
     expect(result.error?.message).toBe('Security threat detected: SQL injection; XSS');
+  });
+});
+
+/**
+ * A Google Drive search, `fullText contains 'discount' and trashed = false`,
+ * was refused as "SQL injection in input q": a quote, then `and x =`, read as
+ * a tautology. API query languages quote strings, join clauses with AND/OR
+ * and compare fields; injection is a break-out from the string it was put in.
+ */
+describe('security scanner: API query languages are not SQL injection', () => {
+  const plugin = new SecurityScannerPlugin();
+
+  it.each([
+    // Google Drive
+    "fullText contains 'discount' and trashed = false",
+    "'1AbCdEfG_folder' in parents and trashed = false",
+    "name contains 'Q3' and mimeType = 'application/vnd.google-apps.spreadsheet' and modifiedTime > '2026-01-01T00:00:00'",
+    // Gmail
+    "from:alice@example.com subject:'quarterly report' -in:spam after:2026/01/01",
+    "'invoice' OR 'receipt' has:attachment",
+    // Jira JQL
+    "project = 'OPS' AND status = 'In Progress' ORDER BY created DESC",
+    "assignee = currentUser() and resolution = Unresolved or labels = 'urgent'",
+    // Salesforce SOQL
+    "SELECT Id, Name FROM Account WHERE Industry = 'Technology' AND BillingCountry = 'US' LIMIT 10",
+    "SELECT Name, (SELECT LastName FROM Contacts) FROM Account WHERE Name LIKE 'Acme%' OR Type = 'Partner'",
+    // Slack / prose
+    "post it to '#general' and '#sales'",
+    "Set the title to 'Draft'; then share it",
+  ])('lets %j through', async (q) => {
+    const result = await plugin.scanToolParameters(toolCall(HTTP_TOOL, { q }), settings);
+    expect({ q, ok: result.success, threats: (result.error?.details as any)?.threats ?? [] }).toEqual({ q, ok: true, threats: [] });
+    expect(result.metadata.warnings).toEqual([]);
+  });
+
+  it('still refuses an injection smuggled into the same input', async () => {
+    for (const q of [
+      "fullText contains 'x' or 'a'='a",
+      "fullText contains 'x'; DROP TABLE files; --",
+      "name = 'x' UNION SELECT token FROM sessions",
+    ]) {
+      const result = await plugin.scanToolParameters(toolCall(HTTP_TOOL, { q }), settings);
+      expect({ q, message: result.error?.message }).toEqual({ q, message: 'Security check blocked tool "notes_api_create": SQL injection in input "q"' });
+    }
   });
 });

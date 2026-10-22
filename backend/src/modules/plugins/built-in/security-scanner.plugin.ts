@@ -49,19 +49,34 @@ export class SecurityScannerPlugin {
     // The previous three flagged any text with a word like "update",
     // "select" or "delete" before a space, and any `'` followed by a
     // space -- `printf 'one line' > NOTES.md`, "the users' files".
+    //
+    // Query languages that APIs take as an ordinary input -- Google Drive
+    // (`fullText contains 'x' and trashed = false`), Gmail search, Jira JQL,
+    // Salesforce SOQL (`SELECT Id, Name FROM Account WHERE ...`) -- quote
+    // strings, join clauses with AND/OR and compare with `=`. None of that is
+    // injection. Injection breaks out of the string or statement it was
+    // placed in: a tautology whose two sides are the same, a comment or
+    // terminator right after a closing quote, a stacked statement.
     sqlInjection: [
       /\bunion(\s+all)?\s+select\b/i,
-      /\bselect\s+(\*|[\w.]+(\s*,\s*[\w.]+)+)\s+from\b/i,
+      // A SELECT stacked after a terminator or a closing quote. A bare
+      // `SELECT a, b FROM x` is a query a SOQL or database tool exists to take.
+      /(;|'|\\")[\s)]*select\s+(\*|[\w.]+(\s*,\s*[\w.]+)*)\s+from\b/i,
       /\binsert\s+into\s+[\w.`"[\]]+\s*(\(|values\b|select\b)/i,
       /\bupdate\s+[\w.`"[\]]+\s+set\s+[\w.`"]+\s*=/i,
       /\bdelete\s+from\s+[\w.`"[\]]+\s*(where\b|;|--|$)/im,
       /\bdrop\s+(table|database|schema|view|index|user|procedure|function)\b/i,
       /\b(truncate\s+table|exec(ute)?\s+(xp_|sp_)\w|waitfor\s+delay\s+')/i,
-      // Tautologies: `OR 1=1`, `' OR 'a'='a`, `' AND sleep(5)`.
+      // Tautologies: `OR 1=1`, `' OR 'a'='a`, `' OR ''='`, `' OR x=x`. The two
+      // sides must be the same; `' and trashed = false` compares a field.
       /(\s|^)(or|and)\s+['"]?\d+['"]?\s*=\s*['"]?\d+/i,
-      /'\s*(\)\s*)?(or|and)\s+(['"]?\w+['"]?\s*(=|<>|!=|\blike\b)|(sleep|benchmark|pg_sleep|extractvalue|updatexml)\s*\()/i,
-      // A quote closing the string, then a terminator or comment: `admin'--`, `'; DROP`.
-      /'\s*(;|--|#|\/\*)/,
+      /'[\s)]*(or|and)\s[\s(]*(['"]?)(\w+)\2\s*(=|\blike\b)\s*['"]?\3(?!\w)/i,
+      /'[\s)]*or\s+(true\b|''\s*=\s*'|\d+\s*(--|#|\/\*|;|$|\\?"))/i,
+      /'[\s)]*(or|and)\s+(sleep|benchmark|pg_sleep|extractvalue|updatexml)\s*\(/i,
+      // A quote closing the string, then a comment or a terminator that ends
+      // the statement: `admin'--`, `admin'#`, `'; DROP`. `'#general'` is a
+      // channel name, `'x'; then` is prose.
+      /'\s*(--|\/\*|#(?![\w-])|;\s*($|\\?"|--|(select|insert|update|delete|drop|exec|execute|declare|shutdown|waitfor|create|alter|truncate)\b))/i,
     ],
     // The tag, event-handler and `$(` checks are linear matchers: as
     // regexes they rescanned the body from every `<script`, `on` or `$(`
