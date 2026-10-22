@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Walks the two beginner tutorials in docs-site/content/tutorials (the
-// founder's associate and the biz-dev assistant) through the UI, step by
+// Walks the tutorials in docs-site/content/tutorials (the founder's
+// associate, the biz-dev assistant and new customer onboarding) through the UI, step by
 // step as their text says, and takes the screenshots they show into
 // $SHOT_DIR/tutorials (default /tmp/almyty-demo/shots/tutorials) for review.
 //
@@ -22,8 +22,10 @@
 // documents, HubSpot's published specs), read from their links as a user
 // would; the APIs themselves are never called.
 //
-//   node scripts/demo-seed/usecases/tutorials.mjs                 both tutorials
-//   node scripts/demo-seed/usecases/tutorials.mjs founder         only this one
+//   node scripts/demo-seed/usecases/tutorials.mjs                 all three
+//   node scripts/demo-seed/usecases/tutorials.mjs founder         only this one (or bizdev, onboarding)
+//   THEME=light ...                                               light mode (the onboarding captures)
+//   RESTART_API='<command>' ... onboarding                        restart the API between two wakes
 //   node scripts/demo-seed/usecases/tutorials.mjs --fresh         Maya's organization removed first
 //   node scripts/demo-seed/usecases/tutorials.mjs --register [shot...]
 import { createRequire } from 'node:module'

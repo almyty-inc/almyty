@@ -6,7 +6,7 @@ An agent that onboards each new customer over their first two weeks, without you
 
 ![The kickoff call waiting for approval on the Approvals page, with Action details open](/screenshots/tutorials/onboarding/00-approve-kickoff.png)
 
-What makes this different from the other tutorials is time. The job takes two weeks, but the agent is not running for two weeks. Between two checks nothing runs at all: no run is open, nothing is held in memory, nothing waits on a connection. Each time it wakes it reads where things stand from HubSpot, Drive and Gmail, does the next step, writes it down on the deal and stops. That is why you can restart almyty between two wakes and lose nothing, and why a wake never sends the welcome email a second time: it checks first.
+What makes this different from the other tutorials is time. The job takes two weeks, but the agent is not running for two weeks. Between two checks nothing runs at all: no run is open, nothing is held in memory, nothing waits on a connection. (One run does stay open: the one waiting for your OK on the kickoff. It is parked in the database, not running, until you decide.) Each time it wakes it reads where things stand from HubSpot, Drive and Gmail, does the next step, writes it down on the deal and stops. That is why you can restart almyty between two wakes and lose nothing, and why a wake never sends the welcome email a second time: it checks first.
 
 The screenshots in this tutorial come from a test installation with made-up people (Maya Chen, founder of "Lumen", and her new customer Bluefin Couriers), so web addresses in them start with `http://localhost`. In the test installation the two weeks pass in a few minutes, so the times in the screenshots are close together. Yours start with your almyty address and take as long as your customer does.
 
@@ -34,7 +34,7 @@ https://www.googleapis.com/discovery/v1/apis/drive/v3/rest
 4. almyty makes a tool for each of the 64 things Google Drive can do. Under **Sign-in**, click **Create one here**, and paste the **Client ID** and **Client secret** of your Google app (the same ones as for Gmail and Calendar). The redirect address is the same as before, so you do not need to add it in Google again.
 5. Under **What it asks for**, untick everything except two:
    - `https://www.googleapis.com/auth/drive.file`: it may create folders and share the ones it created, and nothing else of yours.
-   - `https://www.googleapis.com/auth/drive.readonly`: it may see the files your customer puts into those folders. Those files belong to your customer, not to the agent, so `drive.file` alone does not show them.
+   - `https://www.googleapis.com/auth/drive.readonly`: it may see the files your customer puts into those folders. Those files belong to your customer, not to the agent, so `drive.file` alone does not show them. Google counts `drive.readonly` among the permissions it checks closely, like reading mail: with an **External** app in **Testing** it works for your test users, as in the founder's tutorial.
 6. Click **Sign in** and allow it on Google's consent screen.
 
 ![The Google Drive sign-in, with only drive.file and drive.readonly ticked](/screenshots/tutorials/onboarding/02-drive-sign-in.png)
@@ -74,7 +74,7 @@ When you search Google Drive, use one condition per search, such as name = 'Blue
 
 ![The agent's model, personality and instructions](/screenshots/tutorials/onboarding/04-agent-instructions.png)
 
-The last paragraph matters most. The agent does each step at a different wake, days apart, so it must never assume where it is: it looks at the deal, the folder and the sent emails first, and only then acts. The lines it writes on the deal are its notes to itself, and to you.
+The last two lines matter most. The agent does each step at a different wake, days apart, so it must never assume where it is: it looks at the deal, the folder and the sent emails first, and only then acts. The lines it writes on the deal are its notes to itself, and to you.
 
 4. **Capabilities → Tools and APIs:** search for and tick these eleven:
 
@@ -142,9 +142,9 @@ The welcome email, as Jonas gets it:
 
 ## 5. Waiting
 
-Now nothing happens for a while, and that is the point. Every 12 hours the agent wakes, looks in the folder and your mail, writes nothing, and stops after a few seconds. A wake that changed nothing does not notify you.
+Now nothing happens for a while, and that is the point. Every 12 hours the agent wakes, looks in the folder and your mail, writes nothing, and stops. A wake that changed nothing does not notify you.
 
-Three days after the welcome email the folder is still empty, so the next wake sends a reminder in the same thread and notes it on the deal. Jonas answers that the files come on Monday; the following wake reads his reply and simply keeps waiting, with the reminder count where it was. Each of these shows in your notifications:
+Three days after the welcome email the folder is still empty, so the next wake sends a reminder in the same thread and notes it on the deal. Jonas answers that the files come on Monday; the following wake reads his reply and simply keeps waiting, with the reminder count where it was. The start and the reminder show in your notifications; the wakes that only looked do not:
 
 ![Notifications: onboarding started, reminder 1 of 2 sent](/screenshots/tutorials/onboarding/11-notifications.png)
 
@@ -187,8 +187,8 @@ Because nothing runs between two wakes, restarting almyty (an update, a new serv
 ## Make it yours
 
 - **Your own product.** If the customer needs an account in your product too, and your product has an OpenAPI description, connect it under **APIs** the same way (paste its link or upload the file, add its API key), tick its "create account" and "invite user" tools, and add a step to the instructions: "Before you create their account, look for one with the deal id."
-- **Another CRM.** With Pipedrive, connect its OpenAPI description and use its "search deals", "update deal" and "search persons" tools; tell the agent which stage means won (`won` in Pipedrive) and to write its steps in a note.
-- **Other files.** Change the two files in the instructions, and the reminder text. The agent compares what is in the folder with what you asked for.
+- **Another CRM.** With Pipedrive, connect its OpenAPI description and use its "search deals", "update deal" and "search persons" tools; tell the agent to look for deals whose status is `won` and to write its steps in a note on the deal.
+- **Other files.** Change the two files in steps 3 and 4 of the instructions. The agent compares what is in the folder with what you asked for.
 - **Read every email first.** Put `gmail_gmail_users_messages_send` on the **Ask me first before** list too: every welcome, reminder and handover then waits in **Approvals**.
 - **A Slack message when it is done.** Add a Slack channel (see the [biz-dev tutorial](/tutorials/biz-dev-assistant#3-put-it-in-slack)) and pick it under **Post reports to**.
 
