@@ -16,9 +16,17 @@
 export const GOOGLE_AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
-/** Parameters every Google method accepts that are about transport, not the call (alt, fields, prettyPrint, ...). */
+/**
+ * Parameters every Google method accepts (the document's top-level
+ * `parameters`) that are about the wire, not the call: credentials, which
+ * come from the connection (key, access_token, oauth_token), and response
+ * formats the tool cannot read (alt, callback, prettyPrint, ...). The
+ * other standard ones -- `fields`, which Drive needs to return a file's
+ * link, and `quotaUser` -- are declared on every operation as query
+ * parameters, so a write sends them in the query string, not in its body.
+ */
 const TRANSPORT_PARAMETERS = new Set([
-  '$.xgafv', 'access_token', 'alt', 'callback', 'fields', 'key', 'oauth_token', 'prettyPrint', 'quotaUser', 'upload_protocol', 'uploadType', 'userIp',
+  '$.xgafv', 'access_token', 'alt', 'callback', 'key', 'oauth_token', 'prettyPrint', 'upload_protocol', 'uploadType', 'userIp',
 ]);
 
 export function isGoogleDiscoveryDocument(doc: unknown): boolean {
