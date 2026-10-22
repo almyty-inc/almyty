@@ -355,6 +355,103 @@ function bizFollowUp(st, memory) {
   return { content: lines.join('\n') }
 }
 
+// ---------- personal assistant ----------
+// Elena's assistant: learns what she tells it (store_memory), wakes by
+// itself, notices a flight change that clashes with a meeting, offers to
+// fix it, and acts only after her yes (the platform also holds every
+// changing tool for her OK).
+const said = (st) => st.msgs.filter((m) => m.role === 'assistant').map((m) => text(m.content)).join('\n')
+const earlier = (st) => st.msgs.slice(0, st.msgs.map((m) => m.role).lastIndexOf('user')).map((m) => text(m.content)).join('\n')
+
+function personal(st) {
+  // Her own words: a wake quotes them ("your owner wrote: ..."); Try it passes them as they are.
+  const quoted = [...st.userText.matchAll(/your owner wrote: ([\s\S]*?)(?=\n- \d\d:\d\d|\n\nDo what needs|$)/g)].map((m) => m[1].trim())
+  const u = /You are always on/i.test(st.userText) ? quoted.join('\n') : st.userText
+  // 1. She tells it about herself: keep each thing as its own memory.
+  if (/a few things about me|remember (?:that|this)/i.test(u)) {
+    const facts = [
+      ['preference', ['routine'], 'Elena does not take meetings before 9:00, except when she is travelling.'],
+      ['preference', ['style'], 'Elena wants messages short: the news first, then one question.'],
+      ['fact', ['people', 'work'], 'Tom Becker is Elena\'s manager at Northwind Studio (tom.becker@northwind-studio.example). He is fine with short-notice changes if told early.'],
+      ['fact', ['people', 'family'], 'Ana Park is Elena\'s sister (ana.park@example.com). They have lunch whenever Elena is in Berlin.'],
+      ['preference', ['travel'], 'Elena always takes a window seat and needs about 40 minutes from Berlin airport to the Northwind office.'],
+    ].filter(([, , c]) => !(st.results.store || []).some((r) => JSON.stringify(r.args).includes(c.slice(0, 30))))
+    if (st.tools.includes('store_memory') && facts.length) {
+      const [type, tags, content] = facts[0]
+      return { toolCalls: [{ id: `call_store_${seq++}`, name: 'store_memory', args: { type, tags, content } }] }
+    }
+    return { content: 'Got it, I will remember that:\n- no meetings before 9:00 unless you are travelling\n- short messages, news first\n- Tom Becker is your manager and is fine with short-notice changes\n- Ana is your sister; lunch when you are in Berlin\n- window seat, and 40 minutes from Berlin airport to the office\n\nI will keep an eye on your calendar, mail and tasks and tell you when something needs you.' }
+  }
+  if (st.tools.includes('recall_memory') && !has(st, 'recall')) return { toolCalls: [{ id: `call_recall_${seq++}`, name: 'recall_memory', args: { query: 'Elena preferences, routines, people, what she agreed to before' } }] }
+  const memory = (st.results.recall || []).map((r) => r.result).join(' ')
+
+  // 3. She said yes to the offer: move the meeting, tell Tom.
+  const offered = /Shall I move/i.test(said(st))
+  if (offered && /\b(yes|yep|sure|please do|go ahead|ok)\b/i.test(u) && !/^\s*no\b/i.test(u)) {
+    const tp = needTool(st, 'patch', /calendar_events_patch$/, 'change a calendar event')
+    if (tp.call) return { toolCalls: [tp.call] }
+    const day = new Date(st.now.getTime() + 86400000).toISOString().slice(0, 10)
+    if (tp.name && !has(st, 'patch')) return { toolCalls: [call(st, 'patch', tp.name, { calendarId: 'primary', eventId: 'ev-review', sendUpdates: 'all', start: { dateTime: `${day}T10:30:00Z` }, end: { dateTime: `${day}T11:30:00Z` } })] }
+    const ts = needTool(st, 'tell', /messages_send$/, 'send an email')
+    if (ts.call) return { toolCalls: [ts.call] }
+    if (ts.name && !has(st, 'tell')) {
+      const body = 'Hi Tom,\n\nMy flight tomorrow was moved and now lands at 09:20, so I will not make 9:00. I have moved our design review to 10:30, same place. See you then.\n\nElena'
+      const raw = Buffer.from(`To: tom.becker@northwind-studio.example\r\nSubject: Re: Agenda for tomorrow\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}`).toString('base64url')
+      return { toolCalls: [call(st, 'tell', ts.name, { userId: 'me', threadId: 'p1', raw })] }
+    }
+    const ok = (step) => (st.results[step] || []).some((r) => !/denied|rejected|not approved|declined/i.test(r.result) && /"id"|dateTime|SENT/.test(r.result))
+    if (st.tools.includes('store_memory') && !has(st, 'store')) {
+      return { toolCalls: [{ id: `call_store_${seq++}`, name: 'store_memory', args: { type: 'preference', tags: ['travel', 'yes-before'], content: `When a flight delay clashes with a meeting, Elena said yes to moving the meeting to later the same morning and telling the other person (${st.now.toISOString().slice(0, 10)}, design review with Tom moved to 10:30).` } }] }
+    }
+    const lines = []
+    lines.push(ok('patch') ? '- Moved "Design review with Tom" to 10:30 tomorrow.' : '- I did not move the design review: it was not approved.')
+    lines.push(ok('tell') ? '- Wrote Tom that your flight lands at 09:20 and that you meet at 10:30.' : '- I did not write to Tom: it was not approved.')
+    lines.push('', 'Next time a delay clashes with a meeting I will suggest the same, and still ask you first.')
+    return { content: `Done.\n${lines.join('\n')}` }
+  }
+
+  // 2. A wake (or a question): look at what is coming and what changed.
+  const t1 = needTool(st, 'events', /calendar_events_list$/, 'list calendar events')
+  if (t1.call) return { toolCalls: [t1.call] }
+  const cals = ['primary', 'family.park@example.com']
+  const doneCals = (st.results.events || []).map((r) => r.args?.calendarId ?? r.args?.arguments?.calendarId)
+  const nextCal = cals.find((c) => !doneCals.includes(c))
+  if (t1.name && nextCal) return { toolCalls: [call(st, 'events', t1.name, { calendarId: nextCal, timeMin: st.now.toISOString(), timeMax: new Date(st.now.getTime() + 2 * 86400000).toISOString(), singleEvents: true, orderBy: 'startTime' })] }
+  const t2 = needTool(st, 'mlist', /messages_list$/, 'search email messages')
+  if (t2.call) return { toolCalls: [t2.call] }
+  if (t2.name && !has(st, 'mlist')) return { toolCalls: [call(st, 'mlist', t2.name, { userId: 'me', q: 'in:inbox newer_than:1d', maxResults: 10 })] }
+  const ids = (unwrap(st.results.mlist?.[0]?.result)?.messages || []).map((m) => m.id)
+  const t3 = needTool(st, 'mget', /messages_get$/, 'read one email message')
+  if (t3.call) return { toolCalls: [t3.call] }
+  const doneIds = (st.results.mget || []).map((r) => r.args?.id ?? r.args?.arguments?.id)
+  const nextId = ids.find((i) => !doneIds.includes(i))
+  if (t3.name && nextId) return { toolCalls: [call(st, 'mget', t3.name, { userId: 'me', id: nextId, format: 'full' })] }
+  const t4 = needTool(st, 'tasks', /tasks_tasks_list$/, 'list tasks in a task list')
+  if (t4.call) return { toolCalls: [t4.call] }
+  if (t4.name && !has(st, 'tasks')) return { toolCalls: [call(st, 'tasks', t4.name, { tasklist: 'list-mine', showCompleted: false })] }
+
+  const events = (st.results.events || []).flatMap((r) => unwrap(r.result)?.items || []).sort((a, b) => Date.parse(a.start.dateTime) - Date.parse(b.start.dateTime))
+  const mails = (st.results.mget || []).map((r) => unwrap(r.result)).filter((m) => m && m.payload)
+  const tasks = (unwrap(st.results.tasks?.[0]?.result)?.items || []).filter((t) => t.status !== 'completed')
+  const before = earlier(st)
+  const out = []
+  const change = mails.find((m) => /schedule change|new schedule/i.test(header(m, 'Subject') + bodyOf(m)))
+  if (change && !/Shall I move/i.test(before)) {
+    const lands = (bodyOf(change).match(/new arrival (\d\d:\d\d)/i) || [])[1] || '09:20'
+    const meeting = events.find((e) => /Tom/.test(e.summary))
+    const landsAt = Date.parse(`${meeting ? meeting.start.dateTime.slice(0, 10) : ''}T${lands}:00Z`)
+    if (meeting && landsAt + 40 * 60000 > Date.parse(meeting.start.dateTime)) {
+      const tom = mails.find((m) => /Tom Becker/.test(header(m, 'From')))
+      out.push(`Your flight AT 552 tomorrow was moved: it now lands at ${lands} instead of 08:10. With the 40 minutes to the office, the 9:00 "${meeting.summary}" no longer works.`)
+      if (tom && /later in the morning/i.test(bodyOf(tom))) out.push('Tom wrote this morning that he can move to later in the morning.')
+      out.push('', 'Shall I move the design review to 10:30 and tell Tom you will be late?')
+    }
+  }
+  const dueSoon = tasks.filter((t) => t.due && Date.parse(t.due) < st.now.getTime() + 2 * 86400000)
+  if (out.length && dueSoon.length) out.push('', `Also due by tomorrow: ${dueSoon.map((t) => t.title).join(', ')}.`)
+  if (!out.length) return { content: 'Nothing needs you right now.' }
+  return { content: out.join('\n') }
+}
 // ---------- helpers for almyty's own side calls ----------
 function sideCall(st) {
   if (/pick out what is worth remembering/i.test(st.system)) {
@@ -370,7 +467,8 @@ export function decide(body) {
   const st = stateOf(body)
   let out = sideCall(st)
   if (!out) {
-    if (/associate/i.test(st.system)) out = founder(st)
+    if (/personal assistant/i.test(st.system)) out = personal(st)
+    else if (/associate/i.test(st.system)) out = founder(st)
     else if (/business development|outreach|prospect/i.test(st.system)) out = bizdev(st)
     else if (/verdict|refute/i.test(st.system)) out = { content: '{"verdict":"pass","confidence":0.9,"issues":[]}' }
     else out = { content: 'Done.' }

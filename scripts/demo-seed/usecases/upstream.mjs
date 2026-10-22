@@ -10,6 +10,7 @@
 //   GET  /_admin/state         everything sent/created so far
 //   POST /_admin/reply         {to, body}: the prospect at `to` answers our last mail
 //   POST /_admin/age?days=4    move every sent mail N days into the past
+//   POST /_admin/mail          {from, subject, body}: a new email arrives in the inbox
 import http from 'node:http'
 import { appendFileSync } from 'node:fs'
 
@@ -23,7 +24,9 @@ const at = (dayOffset, hh, mm = 0) => {
 }
 
 // ---------------- calendar ----------------
-const ME = { email: 'maya@lumenlabs.example', name: 'Maya Chen' }
+// USECASE_PERSONA=elena serves the personal assistant's person instead of Maya (see below).
+const PERSONA = process.env.USECASE_PERSONA || 'maya'
+const ME = PERSONA === 'elena' ? { email: 'elena.park@example.com', name: 'Elena Park' } : { email: 'maya@lumenlabs.example', name: 'Maya Chen' }
 const calendars = [
   { id: 'primary', summary: 'Maya Chen (work)', primary: true, accessRole: 'owner', timeZone: 'UTC' },
   { id: 'team@lumenlabs.example', summary: 'Lumen Labs team', accessRole: 'reader', timeZone: 'UTC' },
@@ -74,6 +77,38 @@ const tasks = {
     { id: 't4', title: 'Review pricing page copy', status: 'completed', completed: at(-1, 15) },
   ],
   'list-personal': [{ id: 't5', title: 'Book flights for the offsite', status: 'needsAction', due: at(3, 0) }],
+}
+
+// ---------------- the personal assistant's person (USECASE_PERSONA=elena) ----------------
+// The personal-assistant tutorial is about one private person, Elena Park,
+// not Maya's company, so the same endpoints serve her calendars, mail and
+// tasks instead. A flight change arrives later through POST /_admin/mail.
+if (PERSONA === 'elena') {
+  calendars.splice(0, calendars.length,
+    { id: 'primary', summary: 'Elena Park', primary: true, accessRole: 'owner', timeZone: 'UTC' },
+    { id: 'family.park@example.com', summary: 'Family', accessRole: 'writer', timeZone: 'UTC' })
+  const mine = { email: ME.email, self: true, responseStatus: 'accepted' }
+  events.splice(0, events.length,
+    ev('primary', 'ev-yoga', 0, 17, 30, 18, 30, 'Yoga', { location: 'Studio Alfama' }),
+    ev('primary', 'ev-flight', 1, 6, 0, 8, 10, 'Flight AT 552 Lisbon to Berlin', { location: 'Lisbon airport (LIS)', description: 'Booking ref QX7P2L. Seat 14A.' }),
+    ev('primary', 'ev-review', 1, 9, 0, 10, 0, 'Design review with Tom', {
+      location: 'Northwind Studio, Berlin', description: 'Onboarding flow mockups, open questions on the settings page.',
+      organizer: { email: 'tom.becker@northwind-studio.example', displayName: 'Tom Becker' },
+      attendees: [mine, { email: 'tom.becker@northwind-studio.example', displayName: 'Tom Becker', responseStatus: 'accepted' }],
+    }),
+    ev('family.park@example.com', 'ev-lunch', 1, 13, 0, 14, 0, 'Lunch with Ana', { location: 'Cafe Einstein', attendees: [mine, { email: 'ana.park@example.com', displayName: 'Ana Park' }] }),
+    ev('family.park@example.com', 'ev-dinner', 3, 19, 0, 21, 0, "Dinner at Marta's"))
+  mail.splice(0, mail.length)
+  addMail({ id: 'p1', from: 'Tom Becker <tom.becker@northwind-studio.example>', to: ME.email, subject: 'Agenda for tomorrow', date: at(0, 8, 14), body: 'Hi Elena, for tomorrow at 9: the onboarding flow mockups and the open questions on the settings page. If your flight runs late just tell me, I can move us to later in the morning. Tom' })
+  addMail({ id: 'p2', from: 'Ana Park <ana.park@example.com>', to: ME.email, subject: 'Lunch in Berlin?', date: at(-1, 19, 2), body: 'So you are in Berlin tomorrow! Lunch at 1 at Cafe Einstein like last time? Ana' })
+  addMail({ id: 'p3', from: 'City Library <notices@library.example>', to: ME.email, subject: 'Your books are due on Friday', date: at(-1, 7, 0), body: 'Two items are due back on Friday.' })
+  taskLists.splice(0, taskLists.length, { kind: 'tasks#taskList', id: 'list-mine', title: 'My tasks' })
+  for (const k of Object.keys(tasks)) delete tasks[k]
+  tasks['list-mine'] = [
+    { id: 'e1', title: 'Send Tom the onboarding mockups', status: 'needsAction', due: at(1, 0) },
+    { id: 'e2', title: 'Renew passport', status: 'needsAction', due: at(9, 0), notes: 'It runs out in two months.' },
+    { id: 'e3', title: "Book a table for Ana's birthday", status: 'needsAction', due: at(4, 0) },
+  ]
 }
 
 // ---------------- hubspot ----------------
@@ -201,6 +236,11 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/_ext/')) {
       outbox.push({ at: new Date().toISOString(), url: p.slice(5) + u.search, body })
       if (p.startsWith('/_ext/api.resend.com')) return send(res, 200, { id: 'local-email-' + outbox.length })
+      if (p.startsWith('/_ext/api.telegram.org')) {
+        const result = p.endsWith('/getMe') ? { id: 7000001, is_bot: true, first_name: 'Elena assistant', username: 'elena_assistant_bot' }
+          : p.endsWith('/sendMessage') ? { message_id: outbox.length, date: Math.floor(Date.now() / 1000), chat: { id: body?.chat_id, type: 'private' }, text: body?.text } : true
+        return send(res, 200, { ok: true, result })
+      }
       if (p.includes('/users.info')) return send(res, 200, { ok: true, user: { id: 'U0MAYA', name: 'maya', real_name: 'Maya Chen', profile: { email: ME.email, real_name: 'Maya Chen', display_name: 'Maya' } } })
       if (p.includes('/conversations.list')) return send(res, 200, { ok: true, channels: [{ id: 'C0SALES', name: 'sales' }] })
       if (p.includes('/auth.test')) return send(res, 200, { ok: true, team: 'Lumen Labs', team_id: 'T0LUMEN', user_id: 'U0BOT', bot_id: 'B0BOT' })
@@ -222,6 +262,9 @@ const server = http.createServer(async (req, res) => {
       const start = Date.now() + Number(u.searchParams.get('inMinutes') || 40) * 60000
       e.start.dateTime = new Date(start).toISOString(); e.end.dateTime = new Date(start + len).toISOString()
       return send(res, 200, e)
+    }
+    if (p === '/_admin/mail' && req.method === 'POST') {
+      return send(res, 200, addMail({ from: body.from, to: ME.email, subject: body.subject, body: body.body, date: now().toISOString() }))
     }
     if (p === '/_admin/age' && req.method === 'POST') {
       const days = Number(u.searchParams.get('days') || 4)
@@ -249,7 +292,14 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { kind: 'calendar#events', summary: calendars.find((c) => c.id === cal)?.summary, timeZone: 'UTC', items })
     }
     if ((m = p.match(/\/calendars\/([^/]+)\/events\/([^/]+)$/))) {
-      const e = events.find((x) => x.id === m[2]); return e ? send(res, 200, e) : send(res, 404, { error: { code: 404, message: 'Not Found' } })
+      const e = events.find((x) => x.id === m[2])
+      if (!e) return send(res, 404, { error: { code: 404, message: 'Not Found' } })
+      // patch/update: a moved meeting keeps its id, as in Google Calendar
+      if (req.method === 'PATCH' || req.method === 'PUT') {
+        for (const k of ['summary', 'description', 'location', 'start', 'end', 'attendees']) if (body?.[k] !== undefined) e[k] = body[k]
+        e.updated = now().toISOString()
+      }
+      return send(res, 200, e)
     }
     if (p.endsWith('/freeBusy') && req.method === 'POST') {
       const tMin = Date.parse(body.timeMin), tMax = Date.parse(body.timeMax)

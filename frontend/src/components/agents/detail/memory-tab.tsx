@@ -41,6 +41,7 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { Memory } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { MEMORY_TIER_LABELS } from '@/components/memory/memory-words'
 
 interface MemoryTabProps {
   agentId: string
@@ -54,6 +55,25 @@ interface MemoryTabProps {
    */
   error?: unknown
   onRetry?: () => void
+}
+
+/**
+ * The list comes from the memory store, which names a row's length `tier`,
+ * its owner `scope_type` and its reads `access_count`; older rows carried
+ * `type`, `scope` and `accessCount`. Read either, so the columns are never blank.
+ */
+type StoredMemory = Memory & { tier?: string; scope_type?: string; access_count?: number }
+const SCOPE_WORDS: Record<string, string> = { agent: 'This agent', user: 'One person', workspace: 'Shared by all agents', team: 'A team' }
+function memoryKind(mem: StoredMemory): string {
+  const tier = mem.tier as keyof typeof MEMORY_TIER_LABELS | undefined
+  return (tier && MEMORY_TIER_LABELS[tier]) || tier || String(mem.type ?? '')
+}
+function memoryOwner(mem: StoredMemory): string {
+  const scope = mem.scope_type ?? (mem.scope as unknown as string | undefined)
+  return scope ? SCOPE_WORDS[scope] ?? scope : ''
+}
+function memoryReads(mem: StoredMemory): number {
+  return mem.access_count ?? mem.accessCount ?? 0
 }
 
 export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTabProps) {
@@ -243,10 +263,10 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
                         {mem.content}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs">{mem.type}</Badge>
+                        <Badge variant="outline" className="text-xs">{memoryKind(mem)}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="text-xs">{mem.scope}</Badge>
+                        <Badge variant="secondary" className="text-xs">{memoryOwner(mem)}</Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {mem.tags && mem.tags.length > 0 ? (
@@ -260,7 +280,7 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
                         ) : '--'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {mem.accessCount}
+                        {memoryReads(mem)}
                       </TableCell>
                     </TableRow>
                   ))}
