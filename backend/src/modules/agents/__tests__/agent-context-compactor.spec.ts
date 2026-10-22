@@ -145,37 +145,4 @@ describe('AgentContextCompactor', () => {
     expect(res.compacted).toBe(true);
     expect(res.messages[0].content).toContain('earlier message(s) omitted');
   });
-
-  // The history is the conversation's newest messages (agent-runtime-builders.ts
-  // loads the last 100), so in a long always-on conversation it slides
-  // forward one step at a time. A summary that remembered only how many
-  // leading messages it covered then pointed past the messages that slid
-  // under it: they were in neither the summary nor the tail, and a run lost
-  // its own earlier tool results a few steps in.
-  it('finds where the summary ends after the window slides, and skips nothing', async () => {
-    llm.chat.mockResolvedValue({ message: { content: 'SUMMARY' }, cost: 0, usage: { totalTokens: 1 } });
-    const pair = (n: number) => [
-      { role: 'assistant', content: `a${n} ${LONG}`, toolCalls: [{ id: `c${n}`, name: 't' }] },
-      { role: 'tool', content: `t${n} ${LONG}`, toolCallId: `c${n}` },
-    ]
-    const conversation = [{ role: 'user', content: `TASK ${LONG}` }, ...[1, 2, 3, 4, 5, 6].flatMap(pair)]
-    const window = (from: number, to: number) => messages(conversation.slice(from, to))
-    const config = { enabled: true, maxContextTokens: 3000, keepRecentMessages: 4, providerId: 'p1' }
-    const r = run()
-
-    // Step 1: messages 0..8 are in the window; the prefix is summarized, 4 kept.
-    const first = await compactor.compact(window(0, 9), r, config, 'org-1')
-    const firstTail = first.messages.slice(1).map((m: any) => m.content.split(' ')[0])
-    expect(firstTail).toEqual(['a3', 't3', 'a4', 't4'])
-
-    // Step 2: two new messages arrived and the window dropped its oldest two.
-    const second = await compactor.compact(window(2, 11), r, config, 'org-1')
-    // a3 and t3 were after the summary and are no longer in the tail: they
-    // must have gone into the summary, not vanished.
-    expect(llm.chat).toHaveBeenCalledTimes(2)
-    const folded = llm.chat.mock.calls[1][1].messages[1].content as string
-    expect(folded).toContain(`assistant: a3 `)
-    expect(folded).toContain(`tool: t3 `)
-    expect(second.messages.slice(1).map((m: any) => m.content.split(' ')[0])).toEqual(['a4', 't4', 'a5', 't5'])
-  })
 });

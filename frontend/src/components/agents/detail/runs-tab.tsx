@@ -35,12 +35,11 @@ import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-
 import { DeliveryNote } from './schedule-card'
 import { MachineProblem } from '@/components/runners/machine-problem'
 import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
+
 interface RunsTabProps {
   runs: AgentRun[]
   /** Needed to fetch a run's route trace, which is scoped by agent. */
   agentId?: string
-  /** A run to show opened, from a link to /agents/:id/runs/:runId. */
-  openRunId?: string
 }
 
 /** Whether any of the run's calls went through routing, so there is a route to show. */
@@ -55,8 +54,8 @@ export function stepMachineError(step: { output?: unknown }): MachineProblemInfo
   return { sentence: m.sentence, detail: typeof m.detail === 'string' ? m.detail : null }
 }
 
-export function RunsTab({ runs, agentId, openRunId }: RunsTabProps) {
-  const [expandedRunId, setExpandedRunId] = useState<string | null>(openRunId ?? null)
+export function RunsTab({ runs, agentId }: RunsTabProps) {
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
 
   return (
     <Card>

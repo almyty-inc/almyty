@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { AgentRun } from '../../entities/agent-run.entity';
@@ -27,21 +26,6 @@ export interface CompactionConfig {
 interface ContextSummaryCache {
   coveredCount: number; // how many leading history messages are folded into `text`
   text: string;
-  /**
-   * The first message after the summary. The history handed in is the
-   * conversation's newest messages (agent-runtime-builders.ts), so in a long
-   * conversation it slides forward with every step: a count alone then
-   * points further and further past the summary, and the messages in
-   * between were in neither the summary nor the tail.
-   */
-  nextKey?: string;
-}
-
-/** A message's identity for finding it again: tool calls and results carry unique ids. */
-function messageKey(m: any): string {
-  const content = typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? '');
-  const calls = m?.toolCalls ? JSON.stringify(m.toolCalls) : '';
-  return createHash('sha256').update(`${m?.role}\u0000${m?.toolCallId ?? ''}\u0000${calls}\u0000${content}`).digest('hex');
 }
 
 const DEFAULTS = {
@@ -91,26 +75,20 @@ export class AgentContextCompactor {
       coveredCount: 0,
       text: '',
     };
-    // Where the summary ends in this step's window (see nextKey). When that
-    // message is no longer in the window, fold everything that is: some of
-    // it may be in the summary already, but nothing is skipped.
-    if (cache.nextKey) {
-      const at = history.findIndex((m) => messageKey(m) === cache.nextKey);
-      cache = { ...cache, coveredCount: Math.max(0, at) };
-    }
     // Guard against a stale cache that claims to cover more than exists.
     if (cache.coveredCount > history.length) cache = { coveredCount: 0, text: '' };
 
     const render = (c: ContextSummaryCache) => {
-      const sys = c.text
-        ? { ...system, content: `${system.content}\n\n[EARLIER CONVERSATION SUMMARY]\n${c.text}` }
-        : system;
+      const sys =
+        c.coveredCount > 0
+          ? { ...system, content: `${system.content}\n\n[EARLIER CONVERSATION SUMMARY]\n${c.text}` }
+          : system;
       return [sys, ...history.slice(c.coveredCount)];
     };
 
     let current = render(cache);
     if (this.estimateTokens(current) <= budget) {
-      return { messages: current, cost: 0, tokens: 0, compacted: !!cache.text };
+      return { messages: current, cost: 0, tokens: 0, compacted: cache.coveredCount > 0 };
     }
 
     // Over budget: advance the covered boundary to a pair-safe point that keeps
@@ -119,7 +97,7 @@ export class AgentContextCompactor {
     const boundary = this.safeBoundary(history, target);
     if (boundary <= cache.coveredCount) {
       // Can't compact further (the tail alone exceeds the budget). Best effort.
-      return { messages: current, cost: 0, tokens: 0, compacted: !!cache.text };
+      return { messages: current, cost: 0, tokens: 0, compacted: cache.coveredCount > 0 };
     }
 
     const toCompact = history.slice(cache.coveredCount, boundary);
@@ -153,7 +131,6 @@ export class AgentContextCompactor {
     const newCache: ContextSummaryCache = {
       coveredCount: boundary,
       text: cache.text ? `${cache.text}\n${addedText}` : addedText,
-      nextKey: messageKey(history[boundary]),
     };
     run.workingMemory = { ...(run.workingMemory || {}), contextSummary: newCache };
 

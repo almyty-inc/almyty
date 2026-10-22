@@ -200,7 +200,6 @@ export function createAppRoutes() {
           <Route path="/agents/new" element={<AgentBuilderPage />} />
           <Route path="/agents/import" element={<AgentImportPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
-          <Route path="/agents/:id/runs/:runId" element={<AgentDetailPage />} />
           <Route path="/agents/:id/channels/new" element={<AgentChannelNewPage />} />
           <Route path="/agents/:id/schedule" element={<AgentSchedulePage />} />
           <Route path="/agents/:id/always-on" element={<AgentAlwaysOnPage />} />
