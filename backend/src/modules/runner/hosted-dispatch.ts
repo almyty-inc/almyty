@@ -42,6 +42,12 @@ export const WORKSPACE_WAKING = 'workspace_waking';
 /** The runner-call error code while another job works in the workspace; a run sleeps and retries on it too. */
 export const WORKSPACE_BUSY = 'workspace_busy';
 
+/** A call told to wait for its hosted machine (starting, or busy with another job): it did not run, and is retried. */
+export function isWaitingForMachine(result: { success?: boolean; metadata?: Record<string, any> } | null | undefined): boolean {
+  const code = result?.metadata?.runnerErrorCode;
+  return !!result && !result.success && (code === WORKSPACE_WAKING || code === WORKSPACE_BUSY);
+}
+
 /**
  * A call whose machine could not start: it failed to provision, or it was
  * still not up when the wake budget ran out. The tool result carries it in

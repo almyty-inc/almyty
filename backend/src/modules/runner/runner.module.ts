@@ -20,6 +20,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
 import { WorkerStreamTransport } from './transport/worker-stream.transport';
 import { WorkerStreamController } from './transport/worker-stream.controller';
 import { RunnerCredentialGuard, RunnerCredentialService } from './runner-credential';
+import { RunnerOnlineHooks } from './runner-online.hooks';
 
 /**
  * Runner module: registration, heartbeat, FSM, the worker stream, and the
@@ -57,11 +58,13 @@ import { RunnerCredentialGuard, RunnerCredentialService } from './runner-credent
     // hosted-runners module's enrollment, checked on the hosted stream.
     RunnerCredentialService,
     RunnerCredentialGuard,
+    // Announces a runner coming online; hosted runners listen.
+    RunnerOnlineHooks,
   ],
   // WorkerStreamController first: Express matches routes in registration
   // order, and RunnerController's GET /runners/:runnerId (ParseUUIDPipe)
   // would otherwise take GET /runners/stream and answer 400.
   controllers: [WorkerStreamController, RunnerController],
-  exports: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService, RunWorkspaceService, RunnerCredentialService, RunnerCredentialGuard],
+  exports: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService, RunWorkspaceService, RunnerCredentialService, RunnerCredentialGuard, RunnerOnlineHooks],
 })
 export class RunnerModule {}

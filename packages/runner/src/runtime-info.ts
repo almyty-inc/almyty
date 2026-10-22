@@ -1,6 +1,6 @@
 import { hostname, arch as osArch, platform as osPlatform, cpus, totalmem } from 'os';
 
-import { probeAll, ProbeExec, realExec } from './binaries.js';
+import { memoizeProbe, probeAll, ProbeExec, realExec } from './binaries.js';
 import { detectCodingAgents } from './coding-agents/index.js';
 import { RunnerRuntimeInfo } from './types.js';
 
@@ -29,12 +29,12 @@ export interface DetectInputs {
   exec?: ProbeExec;
 }
 
-export async function detectRuntimeInfo(inputs: DetectInputs): Promise<RunnerRuntimeInfo> {
-  const exec = inputs.exec ?? realExec;
-  const [binaries, codingAgents] = await Promise.all([
-    probeAll(inputs.binaries, exec),
-    detectCodingAgents(exec),
-  ]);
+/**
+ * Everything about the machine that costs nothing to read: no binary is
+ * started. Enroll mode reports this much when it enrolls and sends the
+ * probed snapshot once the runner is online.
+ */
+export function baseRuntimeInfo(): RunnerRuntimeInfo {
   return {
     os: osPlatform(),
     arch: osArch(),
@@ -42,7 +42,18 @@ export async function detectRuntimeInfo(inputs: DetectInputs): Promise<RunnerRun
     cpuCount: cpus().length,
     memoryMb: Math.round(totalmem() / (1024 * 1024)),
     runnerVersion: RUNNER_VERSION,
-    binaries,
-    codingAgents,
+    binaries: {},
+    codingAgents: [],
   };
+}
+
+export async function detectRuntimeInfo(inputs: DetectInputs): Promise<RunnerRuntimeInfo> {
+  const exec = inputs.exec ?? realExec;
+  // One probe per binary: the coding CLIs are in both lists.
+  const probeOnce = memoizeProbe(exec);
+  const [binaries, codingAgents] = await Promise.all([
+    probeAll(inputs.binaries, exec, probeOnce),
+    detectCodingAgents(exec, probeOnce),
+  ]);
+  return { ...baseRuntimeInfo(), binaries, codingAgents };
 }

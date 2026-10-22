@@ -1,6 +1,7 @@
+import { existsSync } from 'fs';
 import { mkdir, realpath } from 'fs/promises';
 import { homedir } from 'os';
-import { isAbsolute, join, resolve as resolvePath } from 'path';
+import { isAbsolute, join, relative, resolve as resolvePath } from 'path';
 import { ProcessManager, shellExec } from './process-manager.js';
 import { enforceSpawnPolicy, enforceShellPolicy, enforceWorkspaceFolderPolicy } from './policy.js';
 import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
@@ -61,6 +62,12 @@ export interface HandlerContext {
    * allowedCwdRoot, else ~/.almyty/workspaces (workspaceFolderRoot).
    */
   workspacesRoot?: string;
+  /**
+   * Where shell.exec starts when a call names no `cwd`: a hosted runner's
+   * checkout (hosted-setup.ts `shellStartDir`). Used only while it exists
+   * inside the call's workspace root; otherwise the root, as before.
+   */
+  defaultShellCwd?: string;
 }
 
 export async function dispatchHandler(ctx: HandlerContext, req: RequestPayload): Promise<ResponsePayload> {
@@ -182,7 +189,7 @@ async function shell(ctx: HandlerContext, req: RequestPayload): Promise<unknown>
   // through the published tool failed "cmd is required".
   const p = req.params as { command?: string; cwd?: string; env?: Record<string, string>; timeoutMs?: number };
   const cmd = requireString(p.command, 'command');
-  const cwd = resolveShellCwd(req.workspaceCwd, p.cwd);
+  const cwd = resolveShellCwd(req.workspaceCwd, p.cwd, ctx.defaultShellCwd);
   // Enforce the same execution policy as process.spawn — isolation
   // fail-closed, denyPatterns, installBlocked, allowedCwdRoots — and run
   // with the sanitized env. Without this, shell.exec was a hole straight
@@ -193,20 +200,28 @@ async function shell(ctx: HandlerContext, req: RequestPayload): Promise<unknown>
 
 /**
  * Where a shell.exec runs: the workspace root, or `cwd` resolved against
- * it. With no workspace root known, an absolute `cwd` is used as given
- * and a relative one is refused rather than resolved against wherever
- * the daemon was started. The policy then holds the result to
- * allowedCwdRoots.
+ * it. With no `cwd`, the runner's start folder (the hosted checkout) when
+ * it exists inside the workspace root, else the root. With no workspace
+ * root known, an absolute `cwd` is used as given and a relative one is
+ * refused rather than resolved against wherever the daemon was started.
+ * The policy then holds the result to allowedCwdRoots.
  */
-function resolveShellCwd(workspaceCwd: string | undefined, cwd: unknown): string | undefined {
+function resolveShellCwd(workspaceCwd: string | undefined, cwd: unknown, startDir?: string): string | undefined {
   const root = typeof workspaceCwd === 'string' && workspaceCwd.length > 0 ? workspaceCwd : undefined;
-  if (cwd === undefined || cwd === null || cwd === '') return root;
+  if (cwd === undefined || cwd === null || cwd === '') {
+    return root && startDir && isWithin(root, startDir) && existsSync(startDir) ? startDir : root;
+  }
   if (typeof cwd !== 'string') {
     throw new RunnerError('cwd must be a string', RUNNER_ERROR_CODES.PATH_DENIED);
   }
   if (root) return resolvePath(root, cwd);
   if (isAbsolute(cwd)) return cwd;
   throw new RunnerError('a relative cwd needs a workspace root', RUNNER_ERROR_CODES.PATH_DENIED);
+}
+
+function isWithin(root: string, dir: string): boolean {
+  const rel = relative(resolvePath(root), resolvePath(dir));
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
 async function info(ctx: HandlerContext): Promise<unknown> {

@@ -53,11 +53,16 @@ recorded).
    creates the pod's objects, writes a fresh enrollment token, a fresh pod
    model token and the environment's connection values into the pod's
    Secret, and scales it up.
-4. The runner in the pod calls `POST /runners/enroll` with the token, gets a
-   runner credential, and holds `/runners/hosted/stream` with it, like any
-   runner holds its stream. When it heartbeats, the machine is ready and the
-   call goes through, once no other job of the same person is working in the
-   workspace (see One folder, one job at a time).
+4. The runner in the pod calls `POST /runners/enroll` with the token and
+   the machine's basics (OS, CPUs, memory), gets a runner credential, and
+   holds `/runners/hosted/stream` with it, like any runner holds its stream.
+   Its first heartbeat queues a reconcile of its machine, which marks it
+   ready there and then rather than on the next sweep, and the call goes
+   through, once no other job of the same person is working in the
+   workspace (see One folder, one job at a time). Only then does the runner
+   probe which binaries and coding CLIs it has (`ALMYTY_PROBE_TIMEOUT_MS`
+   per binary, 10 s by default) and send them as a `runner.runtime` event;
+   the binary allowlist applies to every command either way.
 5. Each call restarts the idle clock. Past the environment's idle timeout
    the pod is scaled to zero, the Secret deleted, and the workspace marked
    `suspended`. The volume stays.
@@ -545,6 +550,12 @@ the token decides which runner this is.
      On failure it is not, so the next start tries again, and the runner
      still comes online, so the problem can be looked at from a shell
      instead of from a restart loop.
+   - A `shell.exec` call that names no `cwd` starts in the checkout, so an
+     agent's relative paths land in the repository; without a repository,
+     or while the clone is missing, it starts in `/workspace`.
+     `ALMYTY_SHELL_CWD` (absolute, or relative to `/workspace`) overrides
+     the start folder. A `cwd` the call names is still relative to
+     `/workspace`.
 5. It holds `/runners/hosted/stream` with the credential (re-read on every
    request, so a renewed one is used at once), says `runner.hello` and
    heartbeats like any runner.
@@ -644,12 +655,6 @@ script) can still start anything. The boundary is the pod.
 
 ## Not yet
 
-- Published `runner-env` 1.5.6 images: the Dockerfile pins @almyty/runner
-  1.5.6, and `settings.json` and the backend default `images` name the
-  1.5.6 tags without digests. TODO: the 1.5.6 images exist only after
-  1.5.6 is on npm and the release push has run; pin the pushed digests in
-  `settings.json`, the backend default `images` and
-  `docs/design/hosted-runners/image-prepull.yaml` then.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).

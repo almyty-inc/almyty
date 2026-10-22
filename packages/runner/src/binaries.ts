@@ -6,8 +6,15 @@ import { spawn } from 'child_process';
 // probed alongside two dozen others in the runner-env image, 1.5 s missed
 // gemini, and a one-CPU hosted pod under gVisor is slower still. A missing
 // binary still answers at once (ENOENT), and a timeout ends the probe of
-// that binary without trying the other flags.
-const VERSION_TIMEOUT_MS = 10_000;
+// that binary without trying the other flags. ALMYTY_PROBE_TIMEOUT_MS
+// overrides it.
+export const DEFAULT_PROBE_TIMEOUT_MS = 10_000;
+
+/** The per-binary probe timeout: ALMYTY_PROBE_TIMEOUT_MS when it is a positive integer. */
+export function probeTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const n = Number((env.ALMYTY_PROBE_TIMEOUT_MS ?? '').trim());
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_PROBE_TIMEOUT_MS;
+}
 
 /**
  * Probe `binary --version` (or equivalent) with a tight timeout.
@@ -66,7 +73,7 @@ export const realExec: ProbeExec = (bin, args) => {
     const timer = setTimeout(() => {
       timedOut = true;
       try { child.kill('SIGKILL'); } catch { /* */ }
-    }, VERSION_TIMEOUT_MS);
+    }, probeTimeoutMs());
     timer.unref?.();
     child.on('close', (code) => {
       clearTimeout(timer);
@@ -106,16 +113,37 @@ export async function probe(name: string, execImpl: ProbeExec = realExec): Promi
 }
 
 /**
- * Probe a list of binaries concurrently. Bounded by the OS subprocess
- * cap implicitly; in practice a 15-binary probe finishes well under
- * a second on macOS/Linux.
+ * Probe a list of binaries concurrently. Pass `probeFn` to share probes
+ * with another caller (detectRuntimeInfo shares one memoized prober with
+ * coding-agent detection, so no binary is spawned twice).
  */
 export async function probeAll(
   names: string[],
   execImpl: ProbeExec = realExec,
+  probeFn: (name: string) => Promise<string | null> = (n) => probe(n, execImpl),
 ): Promise<Record<string, string | null>> {
-  const entries = await Promise.all(names.map(async n => [n, await probe(n, execImpl)] as const));
+  const entries = await Promise.all(names.map(async n => [n, await probeFn(n)] as const));
   return Object.fromEntries(entries);
+}
+
+/**
+ * A prober that runs each binary's probe at most once. The binary
+ * catalog and the coding-agent detection ask about the same CLIs (every
+ * coding CLI is in the default probe list too); probed separately, every
+ * one of them was started twice at once. On a one-CPU hosted pod under
+ * gVisor, where `aider --version` and `gemini --version` cost seconds of
+ * CPU each, the duplicates roughly doubled the time to come online.
+ */
+export function memoizeProbe(execImpl: ProbeExec = realExec): (name: string) => Promise<string | null> {
+  const seen = new Map<string, Promise<string | null>>();
+  return (name) => {
+    let p = seen.get(name);
+    if (!p) {
+      p = probe(name, execImpl);
+      seen.set(name, p);
+    }
+    return p;
+  };
 }
 
 function firstLine(s: string): string {

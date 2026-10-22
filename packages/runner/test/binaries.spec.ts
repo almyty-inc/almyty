@@ -70,3 +70,33 @@ describe('probeAll', () => {
     });
   });
 });
+
+describe('detectRuntimeInfo probes each binary once', () => {
+  it('shares one probe per binary between the catalog and coding-agent detection', async () => {
+    const { detectRuntimeInfo } = await import('../src/runtime-info.js');
+    const { DEFAULT_BINARY_PROBE_LIST } = await import('../src/config.js');
+    const starts = new Map<string, number>();
+    const exec: ProbeExec = async (bin) => {
+      starts.set(bin, (starts.get(bin) ?? 0) + 1);
+      if (bin === 'claude' || bin === 'aider') return { stdout: `${bin} 1.0.0\n`, stderr: '', exitCode: 0, timedOut: false };
+      return { stdout: '', stderr: '', exitCode: 127, timedOut: false };
+    };
+    const info = await detectRuntimeInfo({ binaries: DEFAULT_BINARY_PROBE_LIST, exec });
+    // Every coding CLI is in both lists; each was started twice at once.
+    const twice = [...starts].filter(([, n]) => n > 1).map(([b]) => b);
+    expect(twice).toEqual([]);
+    expect(info.binaries.claude).toBe('claude 1.0.0');
+    expect(info.codingAgents.map((a) => a.id).sort()).toEqual(['aider', 'claude']);
+  });
+});
+
+describe('probeTimeoutMs', () => {
+  it('defaults to 10 s and takes ALMYTY_PROBE_TIMEOUT_MS when it is a positive integer', async () => {
+    const { probeTimeoutMs, DEFAULT_PROBE_TIMEOUT_MS } = await import('../src/binaries.js');
+    expect(DEFAULT_PROBE_TIMEOUT_MS).toBe(10_000);
+    expect(probeTimeoutMs({})).toBe(10_000);
+    expect(probeTimeoutMs({ ALMYTY_PROBE_TIMEOUT_MS: '3000' })).toBe(3000);
+    expect(probeTimeoutMs({ ALMYTY_PROBE_TIMEOUT_MS: '0' })).toBe(10_000);
+    expect(probeTimeoutMs({ ALMYTY_PROBE_TIMEOUT_MS: 'soon' })).toBe(10_000);
+  });
+});
