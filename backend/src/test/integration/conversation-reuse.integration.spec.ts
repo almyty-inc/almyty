@@ -16,6 +16,7 @@ import { AgentStepProcessor } from '../../modules/agents/agent-step-processor';
 import { AgentVerifierHelper } from '../../modules/agents/agent-verifier.helper';
 import { AgentContextCompactor } from '../../modules/agents/agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../modules/agent-constraints/agent-constraints.service';
+import { RunEventsTable, withRunEvents } from '../fake-run-events';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -43,6 +44,7 @@ describe('Conversation reuse (integration)', () => {
   let mockConversationRepo: any;
   let mockMessageRepo: any;
   let mockRunRepo: any;
+  let runEvents: RunEventsTable;
   let mockLlmService: any;
 
   const makeAgent = (): Agent => {
@@ -143,6 +145,9 @@ describe('Conversation reuse (integration)', () => {
       }),
       findAndCount: jest.fn().mockResolvedValue([[], 0]),
     };
+    // The step commit writes the row and its run events in one transaction
+    // through the repository's manager (durable runs step 1).
+    runEvents = withRunEvents(mockRunRepo);
 
     const qbChain = {
       update: jest.fn().mockReturnThis(),
@@ -400,5 +405,14 @@ describe('Conversation reuse (integration)', () => {
     const lastCallMessages = mockLlmService.chatStream.mock.calls[4][1].messages;
     // Should include system prompt + at least 8 history messages + current user message
     expect(lastCallMessages.length).toBeGreaterThanOrEqual(9);
+
+    // Each run keeps its own event log, numbered from 1, beside the shared conversation.
+    expect(runStore).toHaveLength(5);
+    for (const r of runStore) {
+      const logged = runEvents.rows(r.id);
+      expect(logged.map(e => e.seq)).toEqual(logged.map((_, i) => i + 1));
+      expect(logged.map(e => e.type)).toContain('run_completed');
+      expect(r.headSeq).toBe(logged.length);
+    }
   });
 });
