@@ -375,7 +375,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4d587ec492aaac76d81558175831ed6e3387ddb1d1fdbe03a53139dce2d81b37",
+      "sourceDigest": "df69e5d616532e76d55a11c03d4f4f5354794f49d21ded38b0d5ed576141ba96",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1029,7 +1029,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "591d206bbeeda54fff1eaad2fd2d2a26ee58c82c1c75ee70ba8cf1e5485038fe",
+      "sourceDigest": "ba7c2f4fc066db45f3d82a90ba4be53e395baac45d9aeddda71bf5a95de64ac3",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1164,7 +1164,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "591d206bbeeda54fff1eaad2fd2d2a26ee58c82c1c75ee70ba8cf1e5485038fe",
+      "sourceDigest": "ba7c2f4fc066db45f3d82a90ba4be53e395baac45d9aeddda71bf5a95de64ac3",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1298,7 +1298,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "591d206bbeeda54fff1eaad2fd2d2a26ee58c82c1c75ee70ba8cf1e5485038fe",
+      "sourceDigest": "ba7c2f4fc066db45f3d82a90ba4be53e395baac45d9aeddda71bf5a95de64ac3",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1455,7 +1455,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "591d206bbeeda54fff1eaad2fd2d2a26ee58c82c1c75ee70ba8cf1e5485038fe",
+      "sourceDigest": "ba7c2f4fc066db45f3d82a90ba4be53e395baac45d9aeddda71bf5a95de64ac3",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1792,7 +1792,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5fd1165c0229af1a919dbf03289efea2e1bca5291d3a6aebfcd71f5fe99d8b07",
+      "sourceDigest": "104b92bf1dcfa69d4b25496e20c04b645ec98d298f5a4211be338ae737a56f72",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1814,7 +1814,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "591d206bbeeda54fff1eaad2fd2d2a26ee58c82c1c75ee70ba8cf1e5485038fe",
+      "sourceDigest": "ba7c2f4fc066db45f3d82a90ba4be53e395baac45d9aeddda71bf5a95de64ac3",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2123,7 +2123,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "591d206bbeeda54fff1eaad2fd2d2a26ee58c82c1c75ee70ba8cf1e5485038fe",
+      "sourceDigest": "ba7c2f4fc066db45f3d82a90ba4be53e395baac45d9aeddda71bf5a95de64ac3",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {

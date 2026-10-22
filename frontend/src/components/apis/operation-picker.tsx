@@ -79,7 +79,7 @@ export function OperationPicker({ apiId, total, limit: importLimit, onStarted }:
           Pick the operations to make tools from
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          This description has {number(total)} operations; one description makes tools from up to {number(limit)}.
+          This description has {pluralized(total, 'operation')}; one description makes tools from up to {number(limit)}.
           All of them are imported. Pick the ones your agents need, by area or one by one.
         </p>
       </div>
