@@ -328,6 +328,22 @@ export class ToolsOperationHelper {
             parameters.required.push(...bodySchema.required);
           }
         }
+        // A body that may take one of several shapes (GitHub's "add labels"
+        // takes {labels: [...]} or a bare list): offer the first object
+        // shape's fields, so the tool still has inputs for its body.
+        else if (Array.isArray(bodySchema.oneOf ?? bodySchema.anyOf)) {
+          const objectShape = (bodySchema.oneOf ?? bodySchema.anyOf).find(
+            (s: any) => s && typeof s === 'object' && s.properties && typeof s.properties === 'object',
+          );
+          if (objectShape) {
+            Object.entries(objectShape.properties).forEach(([name, prop]: [string, any]) => {
+              parameters.properties[name] = prop;
+            });
+            if (Array.isArray(objectShape.required)) {
+              parameters.required.push(...objectShape.required);
+            }
+          }
+        }
       }
     }
 

@@ -67,4 +67,53 @@ describe('API tools fill path parameters on every method', () => {
     expect(config.url).toBe('https://helpdesk.example.com/tickets/T-1001/comments');
     expect(config.params).toEqual({ limit: 5 });
   });
+
+  it('POST whose body has a field named body (GitHub issue comments): flat, with the path filled', async () => {
+    const operation = op('POST', '/repos/{owner}/{repo}/issues/{issue_number}/comments', {
+      path: { owner: {}, repo: {}, issue_number: {} },
+      body: { schema: { type: 'object', properties: { body: { type: 'string' } } } },
+    });
+    await executor.executeRestOperation(tool, operation, api, { owner: 'tidewater-labs', repo: 'ledgerly', issue_number: 482, body: 'Same as #431.' }, {} as any);
+
+    const config = mockedAxios.mock.calls[0][0];
+    expect(config.url).toBe('https://helpdesk.example.com/repos/tidewater-labs/ledgerly/issues/482/comments');
+    expect(config.data).toEqual({ body: 'Same as #431.' });
+  });
+
+  it('POST whose body has a field named query (HubSpot search): flat, the text stays in the body', async () => {
+    const operation = op('POST', '/crm/v3/objects/deals/search', {
+      body: { schema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer' } } } },
+    });
+    await executor.executeRestOperation(tool, operation, api, { query: 'Bluefin', limit: 5 }, {} as any);
+
+    const config = mockedAxios.mock.calls[0][0];
+    expect(config.url).toBe('https://helpdesk.example.com/crm/v3/objects/deals/search');
+    expect(config.data).toEqual({ query: 'Bluefin', limit: 5 });
+  });
+
+  it('arguments grouped by where they go are still read as groups', async () => {
+    const operation = op('POST', '/repos/{owner}/{repo}/issues/{issue_number}/comments', {
+      path: { owner: {}, repo: {}, issue_number: {} },
+      body: { schema: { type: 'object', properties: { body: { type: 'string' } } } },
+    });
+    await executor.executeRestOperation(tool, operation, api, { path: { owner: 'o', repo: 'r', issue_number: 1 }, body: { body: 'hi' } }, {} as any);
+
+    const config = mockedAxios.mock.calls[0][0];
+    expect(config.url).toBe('https://helpdesk.example.com/repos/o/r/issues/1/comments');
+    expect(config.data).toEqual({ body: 'hi' });
+  });
+
+  it('POST with a declared header parameter (PagerDuty notes): the header is sent as a header', async () => {
+    const operation = op('POST', '/incidents/{id}/notes', {
+      path: { id: {} },
+      header: { Accept: {}, 'Content-Type': {}, From: {} },
+      body: { schema: { type: 'object', properties: { note: { type: 'object' } } } },
+    });
+    await executor.executeRestOperation(tool, operation, api, { id: 'Q2KF8NXJ1T', From: 'oncall@tidewater.example', note: { content: 'Likely the pool again.' } }, {} as any);
+
+    const config = mockedAxios.mock.calls[0][0];
+    expect(config.url).toBe('https://helpdesk.example.com/incidents/Q2KF8NXJ1T/notes');
+    expect(config.headers.From).toBe('oncall@tidewater.example');
+    expect(config.data).toEqual({ note: { content: 'Likely the pool again.' } });
+  });
 });
