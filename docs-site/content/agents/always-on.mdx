@@ -50,11 +50,20 @@ the builder), then **Set up always on**. You choose:
 
   Your approval rules (for example "ask before a refund over 500") apply
   either way.
-- **Reports.** A channel to post reports to, and when it reports: after
-  every wake, only when it did something, or **once a day, a short summary
-  of what it did** (see [The daily summary](#the-daily-summary)). Reports
-  also show on the agent's page and in your notifications. When it is
-  waiting for your OK, it says so there too.
+- **Reports.** A channel to post reports to, and when it reports:
+  - **When it has something to tell you** (the default for a new agent):
+    what it found, what it did, or a question for you. A wake with nothing
+    for you posts nothing and sends no notification.
+  - **Only when it did something**: only when it used a tool that changes
+    something; something it only found out is not posted.
+  - **After every wake**: every time, "Nothing to report right now."
+    included.
+  - **Once a day, a short summary of what it did** (see
+    [The daily summary](#the-daily-summary)).
+
+  Reports also show on the agent's page and in your notifications. When it
+  is waiting for your OK, it says so there too, and on your own channel
+  (see [Approving from your channel](#approving-from-your-channel)).
 
 The card then shows what wakes it, what it may do, when it reports, when it
 last woke and why, and when the timer fires next. **Wake now** wakes it
@@ -81,6 +90,36 @@ messages, and a note when it is waiting for your OK.
 
 You pick the time and the time zone next to the choice, for each agent.
 Until you change them, it goes out at 9:00 in your own time zone.
+
+## Approving from your channel
+
+When you named a channel under **Talk to it yourself**, anything the agent
+wants to do that needs your OK comes to you there, as well as to
+**Approvals**. That covers its wakes and every other run of the agent: **Try
+it**, a schedule, a chat someone else started on one of its channels. The
+message says what it wants to do in words you can check: the email it would
+send (To, Subject and the text), or the tool and what it would pass to it.
+
+- On **Telegram, Slack, Microsoft Teams and Discord** the message has
+  **Approve** and **Reject** buttons.
+- On every channel you can also answer in words: **yes** or **approve** to
+  let it go ahead, **no** or **reject** to stop it, in any case. Reply to
+  the message, or just write it when only one thing is waiting. When more
+  than one is waiting, it lists them with a short ref each; answer
+  "yes 3F9A1C" for the one you mean.
+
+Only you can decide there, from your own address on that channel. Anyone
+else who presses a button or answers "yes" to it is told, politely, that
+only you can. On an email channel this works only with **Treat email from
+my address as me** on, because an email sender can be faked.
+
+Approving in chat and in **Approvals** is the same decision: whichever you
+do first counts, and the other then says it was already approved or
+rejected. Every decision made in chat, and every refused attempt, is in the
+audit log with the channel and who answered.
+
+When it asks you a question while it works, the question comes to the same
+channel. Reply there and it carries on.
 
 ## What happens at a wake
 

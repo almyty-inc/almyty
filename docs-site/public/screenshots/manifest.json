@@ -1134,7 +1134,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "807b6c34cf01736976b79157082897dbde136cb98e10581131061d1c962762b2",
+      "sourceDigest": "6fdcaa2113b6a29b1f28ec5459dd2fc0c442fa3b5611d145922650aadabccbfb",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
     },
     {
@@ -1376,7 +1376,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "807b6c34cf01736976b79157082897dbde136cb98e10581131061d1c962762b2",
+      "sourceDigest": "6fdcaa2113b6a29b1f28ec5459dd2fc0c442fa3b5611d145922650aadabccbfb",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
     },
     {
@@ -3853,7 +3853,8 @@
       "title": "Always on: standing instructions and timer",
       "path": "screenshots/tutorials/bizdev/11-always-on.png",
       "capturedAt": "2026-10-21T15:31:57.144Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "A new agent's report choice now starts on \"When it has something to tell you\"; the Reports row on this page may show it.",
       "sha256": "74f1225280e3f64c2d6e7f64c4f20b5b67baba2d8cffc4dffc8b45eae40a5861",
       "source": {
         "kind": "browser",
@@ -3874,7 +3875,8 @@
       "title": "Always on: ask before sending email",
       "path": "screenshots/tutorials/bizdev/12-ask-first.png",
       "capturedAt": "2026-10-21T15:31:58.183Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "A new agent's report choice now starts on \"When it has something to tell you\"; the Reports row on this page may show it.",
       "sha256": "fd16e5e1d159470d19ef2e98e5a8314be7aab1e642f31a019d442c0802eef79b",
       "source": {
         "kind": "browser",
@@ -3976,7 +3978,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7047dee474893b788f55c7e31dfc053a9f531a3906481a0e6e5d6a777a70756c",
+      "sourceDigest": "108687095de50ec036c14126ec45cd03767e454575a569fd09b6481ed47d9c6d",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
@@ -3997,7 +3999,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7abe656084ca9507bfa506362f3b61679e5a0d50b1d6e1a41b46a1d658ab1cfb",
+      "sourceDigest": "d49f089c303b864a9f36211a09308fc40ff6c06bfb258c3e7f63d5c0c16b73ac",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {

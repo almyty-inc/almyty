@@ -29,6 +29,7 @@ import { CHANNEL_LABELS, agentChannelsApi, isMessagingChannel, type AgentChannel
 import {
   ALWAYS_ON_VS_SCHEDULE,
   CONNECTION_EVENT_LABELS,
+  DEFAULT_REPORT,
   type AlwaysOnActMode,
   type AlwaysOnInput,
   type AlwaysOnReport,
@@ -87,7 +88,8 @@ export function formFromView(view: AlwaysOnView | undefined): AlwaysOnForm {
     askFirstToolIds: c ? c.askFirstToolIds ?? [] : (view?.tools ?? []).filter((t) => !t.readOnly).map((t) => t.id),
     reportChannelId: c?.reportTo?.channelId ?? NO_CHANNEL,
     reportTo: c?.reportTo?.to ?? '',
-    report: c?.report ?? 'when_acted',
+    // A new agent starts on the default; a stored one keeps its choice.
+    report: c ? c.report ?? 'when_acted' : DEFAULT_REPORT,
     // The agent's own setting, else the default the server worked out: 09:00 in your time zone.
     digestTime: c?.digest?.time ?? view?.digest?.time ?? '',
     digestTimezone: c?.digest?.timezone ?? view?.digest?.timezone ?? '',

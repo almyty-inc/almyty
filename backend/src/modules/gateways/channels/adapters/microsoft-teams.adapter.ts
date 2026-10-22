@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  ActionPress,
   BaseAdapter,
   NormalizedMessage,
   AdapterResponse,
@@ -103,17 +104,99 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
   /**
    * Images go as attachments Teams shows in the message, by link. A PDF or
    * other file would need the file-consent flow, so it stays a link.
+   * Buttons (Approve, Reject) go as an Adaptive Card with the text in its
+   * body and one Action.Submit per button, its data naming the action.
    */
   formatOutbound(response: AdapterResponse): any {
     const images = (response.attachments ?? []).filter(isImage).slice(0, MicrosoftTeamsAdapter.MAX_IMAGES);
     const text = textWithMedia(response, images);
-    return images.length
-      ? {
-          type: 'message',
-          text,
-          attachments: images.map((image) => ({ contentType: image.type, contentUrl: image.url, name: image.name })),
-        }
-      : { type: 'message', text };
+    const card = MicrosoftTeamsAdapter.actionCard(text, response.actions);
+    const attachments = [
+      ...images.map((image) => ({ contentType: image.type, contentUrl: image.url, name: image.name })),
+      ...(card ? [card] : []),
+    ];
+    if (card) return { type: 'message', attachments };
+    return attachments.length ? { type: 'message', text, attachments } : { type: 'message', text };
+  }
+
+  /** The key an Action.Submit's data carries the action under. */
+  static readonly ACTION_KEY = 'almytyAction';
+
+  /** An Adaptive Card with the text and a button per action, or null when there are no actions. */
+  static actionCard(text: string, actions: AdapterResponse['actions']): any | null {
+    const buttons = (actions ?? []).filter((a) => a && typeof a.id === 'string');
+    if (!buttons.length) return null;
+    return {
+      contentType: 'application/vnd.microsoft.card.adaptive',
+      content: {
+        type: 'AdaptiveCard',
+        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+        version: '1.4',
+        body: [{ type: 'TextBlock', text, wrap: true }],
+        actions: buttons.map((a) => ({
+          type: 'Action.Submit',
+          title: a.label,
+          data: { [MicrosoftTeamsAdapter.ACTION_KEY]: a.id },
+          ...(a.style === 'primary' ? { style: 'positive' } : a.style === 'danger' ? { style: 'destructive' } : {}),
+        })),
+      },
+    };
+  }
+
+  /**
+   * A pressed card button: Teams posts it as a message activity whose
+   * `value` is the Action.Submit's data, on the same messaging endpoint
+   * and with the same Bot Framework token as any message.
+   */
+  actionOf(rawPayload: any): ActionPress | null {
+    const value = rawPayload?.value;
+    const data = value && typeof value === 'object' ? value[MicrosoftTeamsAdapter.ACTION_KEY] : undefined;
+    const userId = rawPayload?.from?.id || rawPayload?.from?.aadObjectId;
+    if (rawPayload?.type !== 'message' || typeof data !== 'string' || !userId) return null;
+    return {
+      data,
+      userId,
+      userName: rawPayload.from?.name || undefined,
+      group: ['groupChat', 'channel'].includes(rawPayload.conversation?.conversationType) || rawPayload.conversation?.isGroup === true,
+      context: {
+        serviceUrl: rawPayload.serviceUrl,
+        conversationId: rawPayload.conversation?.id,
+        replyToId: rawPayload.replyToId,
+      },
+    };
+  }
+
+  /**
+   * Answer in the conversation the card is in. Teams has no answer only
+   * the presser sees for a submit, so a refusal is said there too; settled,
+   * the card is replaced by its outcome so it cannot be pressed again.
+   */
+  async answerAction(config: Record<string, any>, press: ActionPress, text: string, settled: boolean): Promise<void> {
+    const metadata = { serviceUrl: press.context?.serviceUrl, conversationId: press.context?.conversationId };
+    await this.sendResponse(config, { type: 'message', text }, { metadata });
+    if (!settled || !press.context?.replyToId) return;
+    await this.updateActivity(config, metadata, String(press.context.replyToId), { type: 'message', text }).catch(() => undefined);
+  }
+
+  /** Replace an activity the bot posted (PUT on the conversation's activity). */
+  private async updateActivity(
+    config: Record<string, any>,
+    metadata: { serviceUrl?: string; conversationId?: string },
+    activityId: string,
+    activity: any,
+  ): Promise<void> {
+    if (!metadata.serviceUrl || !metadata.conversationId) return;
+    const token = await this.getAccessToken(config.bot_id, config.bot_password);
+    if (!token) return;
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const url = `${metadata.serviceUrl}/v3/conversations/${metadata.conversationId}/activities/${encodeURIComponent(activityId)}`;
+    this.assertEgress(url);
+    const res = await (fetch as any)(url, this.egressInit({
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...activity, id: activityId }),
+    }));
+    if (this.httpRejected(res)) this.sendFailed(`the Bot Framework refused the update: HTTP ${this.httpStatus(res)}`);
   }
 
   /** Images one reply shows. */

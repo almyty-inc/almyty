@@ -102,6 +102,10 @@ export class AgentRuntimeProcessor {
             // Run is either sleeping (delayed resume enqueued by runtime) or waiting for user input.
             // Do NOT enqueue the next step — it will be resumed by the runtime when appropriate.
             this.logger.log(`Run ${runId} is waiting (sleeping or awaiting user input)`);
+            // An always-on run that asked its owner a question has it posted on their channel.
+            await this.alwaysOn?.onRunWaiting(runId).catch((err: any) =>
+              this.logger.warn(`Could not post the question of run ${runId}: ${err?.message ?? err}`),
+            );
           } else {
             this.logger.log(`Run ${runId} completed`);
             // Finished (completed, failed, cancelled or timed out): its
