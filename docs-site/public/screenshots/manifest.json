@@ -7,7 +7,7 @@
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": "2026-10-21T15:48:51.996Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5d40eb3d0b4e1f726ebf1b034bb2358418cbf2feb5ae84eb9cc4e2f6feffb2aa",
       "source": {
         "kind": "browser",
@@ -22,14 +22,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
       "capturedAt": "2026-10-21T15:48:54.705Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "35d16079cb1d70a36e838f389df94633e28b302b59e856294b608b3b547ac431",
       "source": {
         "kind": "browser",
@@ -44,14 +45,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
       "capturedAt": "2026-10-21T15:48:57.377Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c8816e93a740fe46cbe9488a35579ad87ecbb6041a949b758154ede42c94496a",
       "source": {
         "kind": "browser",
@@ -66,14 +68,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
       "capturedAt": "2026-10-21T15:49:00.032Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a3714934c02de352e521aa46857b537781b51013bd12b9b3cdcf0040cdef4256",
       "source": {
         "kind": "browser",
@@ -89,14 +92,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9d7b6571f50aa6e03fdf4cec6fb65aa0706dcaebcbd2a55dec31b38f47dbd985",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
       "capturedAt": "2026-10-21T15:49:02.759Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e77b454667dc53a794f695c8000135da3bdf646e1af8a479d7aef2caed4fc10c",
       "source": {
         "kind": "browser",
@@ -111,14 +115,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-10-21T15:49:05.528Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "80ba48e2b7aba392287dcc9f858501eb357afe4138e3872d913015c2c986b2b1",
       "source": {
         "kind": "browser",
@@ -133,14 +138,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
       "capturedAt": "2026-10-21T15:49:08.148Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c65ef54b6f1764441c884ea082433a3ca0e5e45a7b55900fb90ac072868f9f53",
       "source": {
         "kind": "browser",
@@ -155,7 +161,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "agent-tool-mode",
@@ -184,7 +191,7 @@
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
       "capturedAt": "2026-10-21T15:49:11.350Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "31482acb5315a6c0e7aadc5dd72d21dca3afd9d8eff3cddf06e6773c869e7ac9",
       "source": {
         "kind": "browser",
@@ -199,14 +206,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
       "capturedAt": "2026-10-21T15:49:13.983Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fd176606a4865f59be3ac57bd46a3e936ae04f3c3e6fcef77576df5714042b73",
       "source": {
         "kind": "browser",
@@ -221,7 +229,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bd4245d945064d5936169492496978e2128ddee879fa97ac7ea8df7cefbc577b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "analytics-agents",
@@ -478,7 +487,7 @@
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
       "capturedAt": "2026-10-21T15:50:17.214Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "187197e349725e8b828000f9d69addacf684c6b35b0710bacc08ac2366f86eb9",
       "source": {
         "kind": "browser",
@@ -493,7 +502,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "channel-branding-rules",
@@ -1058,7 +1068,7 @@
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
       "capturedAt": "2026-10-21T15:55:16.811Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7116fd5275f1a06956b81c242a60541351667159253eb5ec1140182aa01d5a4f",
       "source": {
         "kind": "browser",
@@ -1073,14 +1083,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-helpdesk-4-leave",
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
       "capturedAt": "2026-10-21T15:55:25.772Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3219c103d37fb4b1f807b447a31479de64598b9bb43ac503e77ae3ba1fe35fcc",
       "source": {
         "kind": "browser",
@@ -1095,14 +1106,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
       "capturedAt": "2026-10-21T15:55:27.849Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "28addf1b788d29b4d32b3d875bf1b08506cc01c4f700561f45f7c7ebcdae7e88",
       "source": {
         "kind": "browser",
@@ -1117,7 +1129,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-helpdesk-6-teams",
@@ -1169,7 +1182,7 @@
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
       "capturedAt": "2026-10-21T15:53:50.475Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fa6248a4703ebc4ce1aa1c0457030ee7471c091cefac40040b49f0a9f61a7583",
       "source": {
         "kind": "browser",
@@ -1184,14 +1197,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-marketing-3-try",
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
       "capturedAt": "2026-10-21T15:53:59.432Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ff4f332856e80f0ee94dffcec798541f3d9758c5e9f82815ddd916a02a3b4aae",
       "source": {
         "kind": "browser",
@@ -1206,7 +1220,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-marketing-4-limits",
@@ -1302,7 +1317,7 @@
       "title": "The nightly check and its status tools",
       "path": "screenshots/guides/ops-2-agent.png",
       "capturedAt": "2026-10-21T15:54:30.745Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f275dacd01a9af84380936567c080d8cd52c9d84346d86256660ccdc42369326",
       "source": {
         "kind": "browser",
@@ -1317,14 +1332,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-ops-3-try",
       "title": "A test run writes the report",
       "path": "screenshots/guides/ops-3-try.png",
       "capturedAt": "2026-10-21T15:54:39.709Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "89b0e43d1d77a46e9093757249170420d047b46ea39cd056779198c3777c6f94",
       "source": {
         "kind": "browser",
@@ -1339,7 +1355,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-ops-4-slack",
@@ -1392,7 +1409,7 @@
       "title": "The schedule on the agent",
       "path": "screenshots/guides/ops-6-schedule-card.png",
       "capturedAt": "2026-10-21T15:20:25.098Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "13bb97c993a3a65b6c43a30f038e0c4181fb513750062dd208ce3d28b7518c17",
       "source": {
         "kind": "browser",
@@ -1407,14 +1424,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2971307da7ca6bd302b837b49715a7a266859f3e797bf8ff9e271cffabdc45d8",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-ops-7-report-run",
       "title": "A report run, step by step",
       "path": "screenshots/guides/ops-7-report-run.png",
       "capturedAt": "2026-10-21T15:55:01.607Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f815b696fc05efae60b8b5f2fc3f1040a62521a7c1419f290d37e977d4c7eb61",
       "source": {
         "kind": "browser",
@@ -1429,7 +1447,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-sales-1-connect-crm",
@@ -1458,7 +1477,7 @@
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
       "capturedAt": "2026-10-21T15:53:22.050Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a2b39451e71dc80bd45d00fb5259db61f21681368c2a4b314a45a5464a14fc34",
       "source": {
         "kind": "browser",
@@ -1473,14 +1492,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-sales-3-brief",
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
       "capturedAt": "2026-10-21T15:53:31.011Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "daa84648803454cb622011e4be1b37eb78b9c01fb54a19f4cf0459d1c2222778",
       "source": {
         "kind": "browser",
@@ -1495,14 +1515,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
       "capturedAt": "2026-10-21T15:53:33.089Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "20c15d0d9b80d5e194f55ad5750b2015b4307f14a0689bd5a521af2dc9b6dd43",
       "source": {
         "kind": "browser",
@@ -1517,7 +1538,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-sales-5-slack-keys",
@@ -1815,7 +1837,7 @@
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
       "capturedAt": "2026-10-21T15:51:54.068Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d0413b66f535338f2a5a94d45a73b44fb03e1e5a6c0a774ee21b08b7532ef3bf",
       "source": {
         "kind": "browser",
@@ -1830,14 +1852,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
       "capturedAt": "2026-10-21T15:51:54.656Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6f5d0e7d95ea5b39fbc0109fcf016dfba96707c0c0b61823ca5a226b3fa203bf",
       "source": {
         "kind": "browser",
@@ -1852,14 +1875,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-support-6-activate",
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
       "capturedAt": "2026-10-21T15:51:58.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "dc11fff5cd2b3b8838b2e8f4eb6b043ef8ffaeb6d7ae175635b9f142456b1023",
       "source": {
         "kind": "browser",
@@ -1874,14 +1898,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
       "capturedAt": "2026-10-21T15:52:00.097Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7c3e882f7d388f06896a7e00dc6c907406cdc351c71c624909402f6e1710cf43",
       "source": {
         "kind": "browser",
@@ -1896,7 +1921,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "guides-support-8-amount-rule",
@@ -2189,7 +2215,7 @@
       "title": "A script step in a run",
       "path": "screenshots/run-script-step.png",
       "capturedAt": "2026-10-21T15:50:58.027Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c78a7c65ab729719b54fcd315bcf48199250dc3a6bcf804a2ee75e9c5b05b4d5",
       "source": {
         "kind": "browser",
@@ -2205,7 +2231,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "bd69f0142f1300af98d54e7083043fd67fd02fbf2e4db8051afdb0491b403012",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "runner-detail",
@@ -2281,7 +2308,7 @@
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
       "capturedAt": "2026-10-21T15:51:01.254Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1e5d246261d28ff8ab3d9717ce2e4b7056052b4d0e8dd41feda9a2d70168ae00",
       "source": {
         "kind": "browser",
@@ -2296,7 +2323,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "self-hosting-compose",
@@ -2543,7 +2571,7 @@
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
       "capturedAt": "2026-10-21T15:51:03.986Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fc0abc30e09a703a25fce293020a38d868ee02f86b9974060ec89a208e780b17",
       "source": {
         "kind": "browser",
@@ -2558,14 +2586,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
       "capturedAt": "2026-10-21T15:51:06.658Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "530e85b06a2bc8587beab8ae9adf0026db8c3b6b8ac4d42c6e9ec2536c60795a",
       "source": {
         "kind": "browser",
@@ -2580,14 +2609,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
       "capturedAt": "2026-10-21T15:51:10.072Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "98d6b70c39f192074378aaa481b0a67d795b7f6e592bc426787284425fd3da72",
       "source": {
         "kind": "browser",
@@ -2602,7 +2632,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tool-detail",
@@ -2805,7 +2836,7 @@
       "title": "Biz-dev assistant: model, instructions, memory",
       "path": "screenshots/tutorials/bizdev/06-agent-instructions.png",
       "capturedAt": "2026-10-21T15:59:28.865Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3283ba41f0bd02cb1994d5dcc6bbdfcdd559b953b319c55f5b711ec8bc4a908c",
       "source": {
         "kind": "browser",
@@ -2820,14 +2851,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-bizdev-07-agent-tools",
       "title": "Biz-dev assistant: tools",
       "path": "screenshots/tutorials/bizdev/07-agent-tools.png",
       "capturedAt": "2026-10-21T15:59:32.915Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f1e35d4c46e00c54f87992570f1f01674b023411955c8de55827b0e9c2e4de03",
       "source": {
         "kind": "browser",
@@ -2842,7 +2874,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-bizdev-08-slack-channel",
@@ -2957,7 +2990,7 @@
       "title": "Always on, on the agent page",
       "path": "screenshots/tutorials/bizdev/13-always-on-card.png",
       "capturedAt": "2026-10-21T16:00:05.875Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5213f2bcc8d1d554d9f6461383b201f614cf27dcc011925ff3e9038f6701ba5f",
       "source": {
         "kind": "browser",
@@ -2972,7 +3005,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-bizdev-14-approve-note",
@@ -3304,7 +3338,7 @@
       "title": "Founder's associate: model and instructions",
       "path": "screenshots/tutorials/founder/11-agent-instructions.png",
       "capturedAt": "2026-10-21T15:56:17.395Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d710181535b8a9232390d944da7bb6cbc52f93889089870ad01f3a5983470172",
       "source": {
         "kind": "browser",
@@ -3319,14 +3353,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-founder-12-agent-memory",
       "title": "Founder's associate: memory",
       "path": "screenshots/tutorials/founder/12-agent-memory.png",
       "capturedAt": "2026-10-21T15:56:19.529Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "13d3620653706c5249c408416a7117cfe60bf5ac1628bf19127299e86025a334",
       "source": {
         "kind": "browser",
@@ -3341,14 +3376,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-founder-13-agent-tools",
       "title": "Founder's associate: tools",
       "path": "screenshots/tutorials/founder/13-agent-tools.png",
       "capturedAt": "2026-10-21T15:56:22.780Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "93e5e22cc71d61862b7c2fd26bbbe21c3fcfb8437b4dc97be10a13b414b4dd2c",
       "source": {
         "kind": "browser",
@@ -3363,14 +3399,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-founder-14-first-run",
       "title": "Founder's associate: first test run",
       "path": "screenshots/tutorials/founder/14-first-run.png",
       "capturedAt": "2026-10-21T15:56:32.033Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "24c619334296ecd26ecf6e8baea58a2d278222871b5a3c06a75731cebe671d93",
       "source": {
         "kind": "browser",
@@ -3385,14 +3422,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-founder-15-run-steps",
       "title": "A run, step by step",
       "path": "screenshots/tutorials/founder/15-run-steps.png",
       "capturedAt": "2026-10-21T15:56:37.893Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8dc466afc45d8f304d598eb221813eb7be9c3306c7986f341dd1933376ca08ac",
       "source": {
         "kind": "browser",
@@ -3407,7 +3445,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-founder-16-add-channel",
@@ -3500,7 +3539,7 @@
       "title": "The schedule on the agent page",
       "path": "screenshots/tutorials/founder/20-schedule-card.png",
       "capturedAt": "2026-10-21T15:57:02.960Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e9012913eb6b9e6ae5edf9227cbcf675be70394a1bee3f71edf64531cf28eb41",
       "source": {
         "kind": "browser",
@@ -3515,14 +3554,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-founder-21-memory",
       "title": "What the associate remembers",
       "path": "screenshots/tutorials/founder/21-memory.png",
       "capturedAt": "2026-10-21T15:56:40.478Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "be131e0240d3e532666c3eef995c3e34dbb54e53d10e332915d80c54e8d384e0",
       "source": {
         "kind": "browser",
@@ -3537,7 +3577,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "tutorials-onboarding-00-approve-kickoff",
@@ -3890,7 +3931,7 @@
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
       "capturedAt": "2026-10-21T15:51:19.605Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "477021ab431ff8e9898ea2243de8a6a9dac102b3ed37a49a6e066cec47754f2d",
       "source": {
         "kind": "browser",
@@ -3905,14 +3946,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
       "capturedAt": "2026-10-21T15:51:22.739Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c710fe75bef4de346bd73d53e26a779db6b155f1456ed87ef3b3d528e8a5fba6",
       "source": {
         "kind": "browser",
@@ -3927,7 +3969,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "visitor-data-request",
@@ -3956,7 +3999,7 @@
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
       "capturedAt": "2026-10-21T15:51:25.889Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1e5d246261d28ff8ab3d9717ce2e4b7056052b4d0e8dd41feda9a2d70168ae00",
       "source": {
         "kind": "browser",
@@ -3971,7 +4014,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Fingerprints frontend/src/components/agents or pages/agent-detail.tsx, which the run-link fix touched (a link to /agents/:id/runs/:runId now opens the Runs tab with that run open). The screen this image shows should look the same; not re-verified."
     },
     {
       "id": "widget-builder",
