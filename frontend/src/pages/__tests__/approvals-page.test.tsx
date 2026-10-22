@@ -63,6 +63,36 @@ describe('ApprovalsPage', () => {
     expect(within(preview).getByText('Hi Jonas, would a short call next week help?')).toBeInTheDocument()
   })
 
+  it('shows a calendar event call as readable fields with its parameter titles, never the internal _gate', async () => {
+    ;(approvalsApi.list as any).mockResolvedValue([
+      {
+        id: 'a-cal', organizationId: 'org-1', teamId: null, visibility: 'org', runId: 'run-cal', agentId: 'agent-cal',
+        toolCallId: null, reason: 'Ask before "calendar.events.insert" (it is on the ask-first list).',
+        payload: {
+          tool: 'Creates an event',
+          parameters: { calendarId: 'primary', requestBody: { summary: 'Dentist', start: { dateTime: '2026-10-23T09:00:00Z' }, attendees: [{ email: 'ana@example.com' }] } },
+          _gate: { kind: 'tool_call', paramsHash: 'deadbeefhash', rule: 'Ask before calendar.events.insert' },
+        },
+        parameterSchema: { type: 'object', properties: { calendarId: { type: 'string', title: 'Calendar' } } },
+        status: 'pending', decidedBy: null, decidedAt: null, decisionReason: null, expiresAt: null, createdAt: new Date().toISOString(),
+      },
+    ])
+
+    render(<ApprovalsPage />)
+
+    const preview = await screen.findByTestId('approval-action-preview')
+    expect(within(preview).getByText('Calendar')).toBeInTheDocument()
+    expect(within(preview).getByText('primary')).toBeInTheDocument()
+    expect(within(preview).getByText('Request body › Summary')).toBeInTheDocument()
+    expect(within(preview).getByText('Dentist')).toBeInTheDocument()
+    expect(within(preview).getByText('Request body › Start › Date time')).toBeInTheDocument()
+    expect(within(preview).getByText('ana@example.com')).toBeInTheDocument()
+    // The raw view stays behind the expander, without the server's bookkeeping.
+    expect(screen.getByText('Show details')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('_gate')
+    expect(document.body.textContent).not.toContain('deadbeefhash')
+  })
+
   it('renders a pending approval from a flat array (post-extractData shape)', async () => {
     ;(approvalsApi.list as any).mockResolvedValue([
       {

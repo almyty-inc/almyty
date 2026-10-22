@@ -41,12 +41,13 @@ describe("the agent's Access card", () => {
       .mockResolvedValueOnce([])
     api.addGrant.mockResolvedValue({ id: 'g-1' })
     renderCard()
-
-    expect(screen.getByTestId('agent-access-card')).toHaveTextContent('When someone other than you writes to it on a channel')
-    expect(await screen.findByText('It has not been given these yet:')).toBeInTheDocument()
+    // Said as being about other people: the owner's own runs use the owner's accounts anyway.
+    expect(screen.getByTestId('agent-access-card')).toHaveTextContent('Your own runs always use your accounts')
+    expect(screen.getByTestId('agent-access-card')).toHaveTextContent('when someone else writes to it on a channel')
+    expect(await screen.findByText("Not yet given for other people's messages (your own runs still use them):")).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Let this agent use HubSpot private app' }))
     expect(api.addGrant).toHaveBeenCalledWith('c-hub', { principalType: 'agent', principalId: 'a-1' })
-    expect(await screen.findByText('It has been given every account its tools and settings use.')).toBeInTheDocument()
+    expect(await screen.findByText("Other people's messages can use every account its tools and settings use.")).toBeInTheDocument()
     await waitFor(() => expect(api.apiGet).toHaveBeenCalledTimes(2))
   })
 })

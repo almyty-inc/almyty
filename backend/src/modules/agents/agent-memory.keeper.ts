@@ -22,10 +22,38 @@ import type { AgentAccountUse } from '../memory/canonical/memory-accounts.servic
 /** The most facts one run adds. */
 export const FACTS_PER_RUN_MAX = 5;
 
+/** What kind of memory a store_memory call says it saves; the tool's own enum. */
+export const MEMORY_KINDS = ['fact', 'preference', 'context', 'episode', 'instruction'] as const;
+export type MemoryKind = (typeof MEMORY_KINDS)[number];
+
+/** The kind a store_memory call asked for, or undefined for none or one outside the enum. */
+export function memoryKindOf(value: unknown): MemoryKind | undefined {
+  return typeof value === 'string' && (MEMORY_KINDS as readonly string[]).includes(value) ? (value as MemoryKind) : undefined;
+}
+
 /** What the screening call answers when nothing may be kept. */
 const NOTHING = 'NOTHING';
 
 const asText = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : JSON.stringify(v));
+
+/**
+ * What a person wrote on this run, for the facts and conversation saves.
+ * A run someone started carries their words as its input. An always-on
+ * run's input is the wake prompt the system wrote; the only person's words
+ * in it are the owner's messages, which the run carries in
+ * `metadata.personWords` (AlwaysOnService). '' when nobody wrote anything.
+ */
+export function personWordsOf(run: Pick<AgentRun, 'input' | 'metadata'>): string {
+  if (run.metadata?.triggerType === 'always_on') {
+    const words = run.metadata?.personWords;
+    if (!Array.isArray(words)) return '';
+    return words
+      .filter((w: unknown): w is string => typeof w === 'string' && w.trim().length > 0)
+      .map((w: string) => w.trim())
+      .join('\n\n');
+  }
+  return asText(run.input).trim();
+}
 
 function rulesBlock(rules: string[]): string {
   return rules.map((r) => `- ${r}`).join('\n');
@@ -146,7 +174,8 @@ export class AgentMemoryKeeper {
     const kept = await this.screen(run, team.main, content, s.neverSave);
     if (kept === null) return { result: 'Not saved: the agent is told never to save that.' };
     try {
-      const item = await this.put(agent, run, scope, s, kept, legacyTypeToTier(params.type as string | undefined), Array.isArray(params.tags) ? params.tags : [], 'store_memory');
+      const kind = memoryKindOf(params.type);
+      const item = await this.put(agent, run, scope, s, kept, legacyTypeToTier(kind), Array.isArray(params.tags) ? params.tags : [], 'store_memory', kind);
       return { result: `Memory stored (id: ${item.id})` };
     } catch (err: any) {
       if (err instanceof MemoryError) return { result: null, error: `memory rejected: ${err.tag.kind}` };
@@ -166,9 +195,13 @@ export class AgentMemoryKeeper {
     if (run.metadata?.actAs) return;
     const scope = memoryScopeFor(agent, run);
     if (!scope || !runMayWriteSharedMemory(run)) return;
-    const input = asText(run.input).trim();
+    // Only what a person wrote is theirs. An always-on run's input is the
+    // wake prompt the system wrote ("You are always on, and something woke
+    // you..."); read as the person's words it became facts about them.
+    const input = personWordsOf(run);
+    // Nothing a person said: nothing to learn about them.
+    if (!input) return;
     const output = asText(run.output).trim();
-    if (!input && !output) return;
     const exchange = `Person: ${input}\nAgent: ${output}`;
     const startedAt = Date.now();
     const costBefore = run.totalCost || 0;
@@ -196,6 +229,7 @@ export class AgentMemoryKeeper {
           s.save === 'facts' ? 'long' : 'project',
           ['auto-saved', s.save === 'facts' ? 'fact' : 'conversation'],
           s.save === 'facts' ? 'auto_save_facts' : 'auto_save_conversation',
+          s.save === 'facts' ? 'fact' : 'episode',
         );
         saved++;
       } catch (err: any) {
@@ -276,6 +310,7 @@ export class AgentMemoryKeeper {
     tier: Tier,
     tags: string[],
     via: string,
+    kind?: MemoryKind,
   ): Promise<{ id: string }> {
     const provenance: Provenance = {
       agent_id: agent.id,
@@ -293,7 +328,9 @@ export class AgentMemoryKeeper {
       content,
       tier,
       tags,
-      metadata: { source: { type: 'agent_runtime', id: run.id, name: agent.name } },
+      // What kind of memory it is (fact, preference, ...): the tier keeps how
+      // long it lasts, this keeps what it is, for the agent's Memory tab.
+      metadata: { source: { type: 'agent_runtime', id: run.id, name: agent.name }, ...(kind ? { type: kind } : {}) },
       provenance,
     };
     const actor = { user_id: run.userId ?? undefined };

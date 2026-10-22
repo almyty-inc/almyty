@@ -32,6 +32,7 @@ import {
   isBuildable,
   isMessagingChannel,
   isOpenToAnyone,
+  notReceivingReason,
   webChatAddressError,
   webChatUrl,
   type AgentChannel,
@@ -97,6 +98,18 @@ export function WebhookRegistrationLine({ registration, platform }: { registrati
     )
   }
   const reason = registration.error?.trim() || 'no reason was given'
+  if (registration.status === 'skipped' && registration.code === 'PUBLIC_URL_NOT_CONFIGURED') {
+    // No public address: nobody, not even a URL pasted by hand, can reach it.
+    return (
+      <p className="flex gap-2 text-sm text-destructive" role="alert" data-testid="webhook-registration">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>
+          Not receiving messages: public address not configured. This server has no public address (PUBLIC_API_URL), so{' '}
+          {platform} has nowhere to deliver them. Set it, then unpublish and publish again.
+        </span>
+      </p>
+    )
+  }
   return (
     <p className="flex gap-2 text-sm text-destructive" role="alert" data-testid="webhook-registration">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -518,7 +531,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">{label}</Badge>
-          <Badge variant={status.variant}>{status.label}</Badge>
+          {notReceivingReason(stored) ? <Badge variant="warning">Not receiving messages</Badge> : <Badge variant={status.variant}>{status.label}</Badge>}
           <Button
             type="button"
             variant="outline"

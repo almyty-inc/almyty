@@ -11,6 +11,14 @@ import { ChannelCredentialService } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 /**
+ * Why a registration was skipped, for the channel's status: this server
+ * has no public address, so no platform can deliver to it and the channel
+ * receives nothing (not merely "register it yourself").
+ */
+export const PUBLIC_URL_NOT_CONFIGURED = 'PUBLIC_URL_NOT_CONFIGURED';
+export type WebhookRegistrationCode = typeof PUBLIC_URL_NOT_CONFIGURED;
+
+/**
  * Automatic inbound-webhook registration for channel gateways whose
  * platform exposes an API for it. When an org deploys an agent to a
  * channel (gateway created/activated), the platform is pointed at the
@@ -121,9 +129,18 @@ export class ChannelWebhookRegistrar {
   // ---------------------------------------------------------------------------
 
   private async register(gateway: Gateway): Promise<void> {
+    // Without a public address nothing can reach this server, so the channel
+    // receives no messages at all. Said on the channel's status, not only here.
+    if (!this.publicBase()) {
+      this.logger.warn(
+        `PUBLIC_API_URL is not set, so the ${gateway.type} channel (gateway ${gateway.id}) was not registered and will not receive messages`,
+      );
+      await this.record(gateway, 'register', 'skipped', null, 'the public address of this server is not configured (PUBLIC_API_URL)', PUBLIC_URL_NOT_CONFIGURED);
+      return;
+    }
     const publicUrl = await this.buildPublicUrl(gateway);
     if (!publicUrl) {
-      await this.record(gateway, 'register', 'skipped', null, 'PUBLIC_API_URL not configured');
+      await this.record(gateway, 'register', 'skipped', null, 'the organization has no address (slug) yet');
       return;
     }
 
@@ -356,13 +373,18 @@ export class ChannelWebhookRegistrar {
   // Helpers
   // ---------------------------------------------------------------------------
 
+  /** PUBLIC_API_URL without a trailing slash; '' when it is not set. */
+  private publicBase(): string {
+    return (this.configService.get<string>('PUBLIC_API_URL') || '').replace(/\/$/, '');
+  }
+
   /**
    * `<PUBLIC_API_URL>/<orgSlug><endpoint>` — the unified-endpoint URL
    * platforms deliver webhooks to. Null (-> skip + warning) when
    * PUBLIC_API_URL or the org slug is unavailable.
    */
   private async buildPublicUrl(gateway: Gateway): Promise<string | null> {
-    const base = (this.configService.get<string>('PUBLIC_API_URL') || '').replace(/\/$/, '');
+    const base = this.publicBase();
     if (!base) {
       this.logger.warn(
         `PUBLIC_API_URL is not set — skipping webhook registration for gateway ${gateway.id}`,
@@ -390,6 +412,7 @@ export class ChannelWebhookRegistrar {
     status: 'registered' | 'unregistered' | 'failed' | 'skipped',
     url: string | null,
     error?: string,
+    code?: WebhookRegistrationCode,
   ): Promise<void> {
     try {
       const metadata: Record<string, any> = {
@@ -399,6 +422,7 @@ export class ChannelWebhookRegistrar {
           status,
           url,
           error: error ?? null,
+          code: code ?? null,
           at: new Date().toISOString(),
         },
       };
