@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { actionDetailsOf, withoutInternalFields } from '../approval-summary'
+import { formatDateTime } from '../utils'
 
 /**
  * A held calendar call showed its arguments as JSON with the server's own
@@ -32,6 +33,27 @@ describe('actionDetailsOf', () => {
   it('gives nothing for an empty or missing payload', () => {
     expect(actionDetailsOf(null)).toEqual([])
     expect(actionDetailsOf({ _gate: { kind: 'tool_call' } })).toEqual([])
+  })
+
+  it('reads a moved event\'s times as dates, labelled "Start" and "End" rather than "Start › Date time"', () => {
+    const payload = {
+      tool: 'Updates an event',
+      parameters: { start: { dateTime: '2026-10-23T10:30:00Z' }, end: { dateTime: '2026-10-23T11:30:00Z', timeZone: 'Europe/Berlin' }, eventId: 'ev-review' },
+    }
+    const rows = actionDetailsOf(payload)
+    expect(rows[0]).toEqual({ label: 'Start', value: formatDateTime('2026-10-23T10:30:00Z') })
+    expect(rows[0].value).not.toContain('T10:30')
+    // Two fields under it: each keeps its own label, the time still in words.
+    expect(rows[1]).toEqual({ label: 'End › Date time', value: formatDateTime('2026-10-23T11:30:00Z') })
+    expect(rows[2]).toEqual({ label: 'End › Time zone', value: 'Europe/Berlin' })
+    expect(rows[3]).toEqual({ label: 'Event id', value: 'ev-review' })
+  })
+
+  it('leaves a plain date and things that only look like numbers as they are', () => {
+    expect(actionDetailsOf({ parameters: { due: '2026-10-23', orderId: '20261023' } })).toEqual([
+      { label: 'Due', value: '2026-10-23' },
+      { label: 'Order id', value: '20261023' },
+    ])
   })
 })
 

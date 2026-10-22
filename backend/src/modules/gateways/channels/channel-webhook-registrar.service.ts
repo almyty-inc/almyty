@@ -94,34 +94,61 @@ export class ChannelWebhookRegistrar {
   }
 
   /**
+   * The syncs still running or waiting, per gateway. Publishing a channel
+   * fires two without waiting (the gateway saved while still inactive,
+   * then activated). Run side by side, the unregister, a network call,
+   * finished after a register that had nothing to call (no public
+   * address) and its record replaced the register's, so a live channel
+   * read "unregistered" and never said it was not receiving messages.
+   * One gateway's syncs therefore run in the order they were asked for.
+   */
+  private readonly queued = new Map<string, Promise<void>>();
+
+  private inOrder(gatewayId: string, work: () => Promise<void>): Promise<void> {
+    const previous = this.queued.get(gatewayId) ?? Promise.resolve();
+    const next = previous.then(work, work);
+    const settled = next.catch(() => undefined);
+    this.queued.set(gatewayId, settled);
+    void settled.then(() => {
+      if (this.queued.get(gatewayId) === settled) this.queued.delete(gatewayId);
+    });
+    return next;
+  }
+
+  /**
    * Reconcile the platform webhook with the gateway state: active ->
-   * register, anything else -> unregister. Never throws.
+   * register, anything else -> unregister. Never throws. Runs after any
+   * earlier sync of the same gateway has finished.
    */
   async sync(gateway: Gateway): Promise<void> {
     if (!ChannelWebhookRegistrar.isRegistrable(gateway.type)) return;
-    try {
-      if (gateway.status === GatewayStatus.ACTIVE) {
-        await this.register(gateway);
-      } else {
-        await this.unregister(gateway);
+    return this.inOrder(gateway.id, async () => {
+      try {
+        if (gateway.status === GatewayStatus.ACTIVE) {
+          await this.register(gateway);
+        } else {
+          await this.unregister(gateway);
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `webhook registration sync failed (gateway ${gateway.id}): ${err?.message ?? err}`,
+        );
       }
-    } catch (err: any) {
-      this.logger.warn(
-        `webhook registration sync failed (gateway ${gateway.id}): ${err?.message ?? err}`,
-      );
-    }
+    });
   }
 
   /** Remove the platform webhook registration (gateway deleted). Never throws. */
   async remove(gateway: Gateway): Promise<void> {
     if (!ChannelWebhookRegistrar.isRegistrable(gateway.type)) return;
-    try {
-      await this.unregister(gateway, /* recordOnGateway */ false);
-    } catch (err: any) {
-      this.logger.warn(
-        `webhook unregistration failed (gateway ${gateway.id}): ${err?.message ?? err}`,
-      );
-    }
+    return this.inOrder(gateway.id, async () => {
+      try {
+        await this.unregister(gateway, /* recordOnGateway */ false);
+      } catch (err: any) {
+        this.logger.warn(
+          `webhook unregistration failed (gateway ${gateway.id}): ${err?.message ?? err}`,
+        );
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------

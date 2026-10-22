@@ -22,7 +22,7 @@ describe('a channel on a server with no public address', () => {
   it('says on the channel page that nothing can reach it, not "add the URL yourself"', () => {
     render(<WebhookRegistrationLine registration={skipped} platform="Telegram" />)
     const line = screen.getByTestId('webhook-registration')
-    expect(line).toHaveTextContent('Not receiving messages: public address not configured')
+    expect(line).toHaveTextContent('Not receiving messages: this server has no public address (PUBLIC_API_URL)')
     expect(line).toHaveTextContent('Telegram has nowhere to deliver them')
     expect(line).not.toHaveTextContent('Add the URL above there yourself')
   })

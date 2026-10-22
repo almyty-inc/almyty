@@ -104,7 +104,7 @@ export function WebhookRegistrationLine({ registration, platform }: { registrati
       <p className="flex gap-2 text-sm text-destructive" role="alert" data-testid="webhook-registration">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         <span>
-          Not receiving messages: public address not configured. This server has no public address (PUBLIC_API_URL), so{' '}
+          Not receiving messages: this server has no public address (PUBLIC_API_URL), so{' '}
           {platform} has nowhere to deliver them. Set it, then unpublish and publish again.
         </span>
       </p>

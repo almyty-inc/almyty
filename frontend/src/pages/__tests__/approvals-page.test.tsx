@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '../../test/setup'
 import { ApprovalsPage } from '../approvals'
 import { approvalsApi } from '../../lib/api'
+import { formatDateTime } from '../../lib/utils'
 
 // Regression for #119: approvalsApi.list() goes through apiGet which
 // already extracts the {success, data} envelope, so the resolved
@@ -85,7 +86,10 @@ describe('ApprovalsPage', () => {
     expect(within(preview).getByText('primary')).toBeInTheDocument()
     expect(within(preview).getByText('Request body › Summary')).toBeInTheDocument()
     expect(within(preview).getByText('Dentist')).toBeInTheDocument()
-    expect(within(preview).getByText('Request body › Start › Date time')).toBeInTheDocument()
+    // The time in words, under the field's own name rather than "Start › Date time".
+    expect(within(preview).getByText('Request body › Start')).toBeInTheDocument()
+    expect(within(preview).getByText(formatDateTime('2026-10-23T09:00:00Z'))).toBeInTheDocument()
+    expect(preview.textContent).not.toContain('2026-10-23T09:00')
     expect(within(preview).getByText('ana@example.com')).toBeInTheDocument()
     // The raw view stays behind the expander, without the server's bookkeeping.
     expect(screen.getByText('Show details')).toBeInTheDocument()

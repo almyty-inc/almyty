@@ -9,6 +9,7 @@
  * shown, not even in the raw view.
  */
 import { humanizeIdentifier } from '@/lib/tool-names'
+import { formatDateTime } from '@/lib/utils'
 
 export interface ActionDetail {
   label: string
@@ -65,17 +66,32 @@ function arrayText(items: unknown[]): string {
     .join(', ')
 }
 
+/** A full date and time (2026-10-23T10:30:00Z), as an approver reads one. */
+const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/
+
+function isDateTime(v: unknown): v is string {
+  return typeof v === 'string' && DATE_TIME.test(v) && !Number.isNaN(Date.parse(v))
+}
+
+/** A plain value in words: a date and time in the approver's own time zone, anything else as it is. */
+function valueText(v: string | number | boolean): string {
+  return isDateTime(v) ? formatDateTime(v) : String(v)
+}
+
 function collect(args: Record<string, unknown>, schema: Schema, prefix: string, depth: number, out: ActionDetail[]) {
   for (const [key, value] of Object.entries(args)) {
     if (isInternal(key) || value === null || value === undefined || value === '') continue
     const sub = propertySchema(schema, key)
     const label = prefix ? `${prefix} › ${labelOf(key, sub)}` : labelOf(key, sub)
     if (isPrimitive(value)) {
-      out.push({ label, value: String(value) })
+      out.push({ label, value: valueText(value) })
     } else if (Array.isArray(value)) {
       if (value.length) out.push({ label, value: arrayText(value) })
     } else if (typeof value === 'object') {
-      if (depth >= MAX_DEPTH) out.push({ label, value: JSON.stringify(withoutInternalFields(value)) })
+      // `start: { dateTime }` reads as "Start", not "Start › Date time".
+      const shown = Object.entries(value as Record<string, unknown>).filter(([k, v]) => !isInternal(k) && v !== null && v !== undefined && v !== '')
+      if (shown.length === 1 && isDateTime(shown[0][1])) out.push({ label, value: valueText(shown[0][1]) })
+      else if (depth >= MAX_DEPTH) out.push({ label, value: JSON.stringify(withoutInternalFields(value)) })
       else collect(value as Record<string, unknown>, sub, label, depth + 1, out)
     }
   }
