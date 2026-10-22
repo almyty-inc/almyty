@@ -1,7 +1,7 @@
 import { FindOperator } from 'typeorm';
 
 import { AgentStepProcessor } from '../agent-step-processor';
-import { AgentRunStatus } from '../../../entities/agent-run.entity';
+import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 
 /**
  * Cancelling a run has to stick.
@@ -34,13 +34,19 @@ describe('a cancelled run is not revived by the step it was cancelled during', (
     );
 
   const harness = (row: Record<string, any>) => {
-    const runRepository = {
+    // The column's default: a run with no events yet.
+    row.headSeq ??= 0;
+    const runRepository: any = {
       findOne: jest.fn(async () => ({ id: row.id, status: row.status })),
       update: jest.fn(async (where: any, patch: Record<string, any>) => {
         if (!matches(row, where)) return { affected: 0 };
         Object.assign(row, patch);
         return { affected: 1 };
       }),
+    };
+    // The commit writes the row (this update) and its run events in one transaction.
+    runRepository.manager = {
+      transaction: async (work: any) => work({ getRepository: (entity: any) => (entity === AgentRun ? runRepository : { insert: jest.fn() }) }),
     };
     const processor = new AgentStepProcessor(
       { runRepository, logger: { log: jest.fn(), warn: jest.fn(), debug: jest.fn() } } as any,

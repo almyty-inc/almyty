@@ -127,6 +127,12 @@ describe('AgentRuntimeService (integration)', () => {
       // visible — the mock just needs to report the row was updated.
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
+    // The commit writes the row and its run events in one transaction
+    // (run-events.ts); the row write is this same update().
+    mockRunRepo.manager = {
+      transaction: async (work: any) =>
+        work({ getRepository: (entity: any) => (entity === AgentRun ? mockRunRepo : { insert: jest.fn().mockResolvedValue({}) }) }),
+    };
 
     // bumpAgentStats uses a queryBuilder chain for an atomic
     // UPDATE. The mock's chain resolves to {affected: 1} so the
