@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -336,6 +336,58 @@ describe('enroll mode end to end (RunnerDaemon.startEnrolled against the fake AP
       outSpy.mockRestore();
       rmSync(stateDir, { recursive: true, force: true });
     }
+  });
+
+  // The environment's repository is cloned to <workspace>/repo, but the
+  // shell started in <workspace>, so an agent's relative paths landed
+  // outside the checkout (staging QA, 2026-10-21).
+  describe('where shell.exec starts', () => {
+    async function pwdAfterStart(o: { repo: boolean; env?: Record<string, string> }): Promise<{ stdout: string; ws: string }> {
+      const stateDir = mkdtempSync(join(tmpdir(), 'almyty-enroll-state-'));
+      const ws = realpathSync(mkdtempSync(join(tmpdir(), 'almyty-ws-')));
+      if (o.repo) mkdirSync(join(ws, 'repo'));
+      api.allowedCwdRoots = [ws];
+      vi.stubEnv('ALMYTY_RUNNER_STATE_DIR', stateDir);
+      vi.resetModules();
+      const { RunnerDaemon } = await import('../src/daemon.js');
+      const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const daemon = new RunnerDaemon();
+      try {
+        await daemon.startEnrolled({
+          env: { ALMYTY_ENROLLMENT_TOKEN: FAKE_TOKEN, ALMYTY_API_URL: api.url, ALMYTY_WORKSPACE_ROOT: ws, ...(o.env ?? {}) },
+          prepare: vi.fn().mockResolvedValue({ ok: true, upToDate: false, cloned: o.repo, setupRan: false, repoDir: o.repo ? join(ws, 'repo') : null }),
+          exit: vi.fn(), installSignals: false,
+        });
+        await vi.waitFor(() => expect(api.openStreams).toBe(1));
+        api.push({
+          v: 1, type: 'request', id: 'req-pwd', ts: Date.now(),
+          payload: { method: 'shell.exec', params: { command: 'pwd -P' }, workspaceId: 'ws-1', workspaceCwd: ws },
+        });
+        await vi.waitFor(() => expect(api.envelopes.some((e) => e.type === 'response' && e.id === 'req-pwd')).toBe(true));
+        const response = api.envelopes.find((e) => e.type === 'response' && e.id === 'req-pwd');
+        expect(response.payload.ok).toBe(true);
+        return { stdout: response.payload.result.stdout.trim(), ws };
+      } finally {
+        await daemon.shutdown();
+        outSpy.mockRestore();
+        rmSync(stateDir, { recursive: true, force: true });
+      }
+    }
+
+    it('starts in the cloned repository when the environment has one', async () => {
+      const { stdout, ws } = await pwdAfterStart({ repo: true });
+      expect(stdout).toBe(join(ws, 'repo'));
+    });
+
+    it('starts in the workspace root when there is no repository', async () => {
+      const { stdout, ws } = await pwdAfterStart({ repo: false });
+      expect(stdout).toBe(ws);
+    });
+
+    it('starts where ALMYTY_SHELL_CWD says, relative to the workspace', async () => {
+      const { stdout, ws } = await pwdAfterStart({ repo: true, env: { ALMYTY_SHELL_CWD: '.' } });
+      expect(stdout).toBe(ws);
+    });
   });
 
   it('refuses to start, without spending the token, on an allowlist it cannot read', async () => {

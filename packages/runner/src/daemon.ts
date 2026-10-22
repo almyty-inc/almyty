@@ -15,7 +15,7 @@ import { CodingSessionManager } from './coding-sessions.js';
 import { WorkspaceReclaimer } from './workspace-reclaimer.js';
 import { enroll, EnrollmentError, readEnrollSettings, RunnerCredential } from './enroll.js';
 import { parseAllowBinaries, withAllowBinaries } from './policy.js';
-import { prepareHostedWorkspace } from './hosted-setup.js';
+import { prepareHostedWorkspace, shellStartDir } from './hosted-setup.js';
 import { ModelToken, readModelAccess, startModelProxy } from './model-proxy.js';
 
 // An override keeps independent local test/demo daemons away from the user's runner.
@@ -92,6 +92,8 @@ export class RunnerDaemon {
   private coding: CodingSessionManager | null = null;
   private reclaimer: WorkspaceReclaimer | null = null;
   private runnerId: string | null = null;
+  /** Where shell.exec starts when a call names no cwd (enroll mode: the checkout). */
+  private shellCwd: string | undefined;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private status: DaemonStatus | null = null;
   /** A hosted runner's renewable credential (enroll mode only). */
@@ -266,7 +268,10 @@ export class RunnerDaemon {
 
     // Before the stream opens, so the machine reports ready only once its
     // checkout and setup are in place. The credential renews meanwhile.
-    await (opts.prepare ?? prepareHostedWorkspace)({ env });
+    const prepared = await (opts.prepare ?? prepareHostedWorkspace)({ env });
+    // The shell starts in the checkout, where an agent's relative paths
+    // are meant to land, not in the volume root above it.
+    this.shellCwd = shellStartDir(env, prepared);
 
     this.resolved = {
       name: runnerNameFromHostname(hostname()) || 'hosted-runner',
@@ -481,6 +486,7 @@ export class RunnerDaemon {
       maxConcurrent: this.resolved.config.maxConcurrent,
       config: this.resolved.config,
       coding: this.coding ?? undefined,
+      defaultShellCwd: this.shellCwd,
     };
     const response: ResponsePayload = await dispatchHandler(ctx, req.payload);
     await this.client.send(envelope('response', response, req.id));

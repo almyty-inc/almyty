@@ -24,6 +24,8 @@ export interface FakeHostedApi {
   renewStatus: number;
   /** Seconds each issued credential lives. */
   credentialTtlSeconds: number;
+  /** The cwd roots the enrollment answers with (the backend's is the mount path). */
+  allowedCwdRoots: string[];
   /** Send an envelope down every open stream, as the backend does. */
   push(envelope: unknown): void;
   close(): Promise<void>;
@@ -32,7 +34,6 @@ export interface FakeHostedApi {
 const EFFECTIVE_CONFIG = {
   defaultIsolation: 'host',
   maxConcurrent: 1,
-  allowedCwdRoots: ['/workspace'],
   denyPatterns: [],
   networkBlocked: false,
   installBlocked: false,
@@ -51,6 +52,7 @@ export async function startFakeHostedApi(): Promise<FakeHostedApi> {
     openStreams: 0,
     renewStatus: 200,
     credentialTtlSeconds: 3600,
+    allowedCwdRoots: ['/workspace'],
     push: (envelope) => {
       for (const s of streams) s.write(`data: ${JSON.stringify(envelope)}\n\n`);
     },
@@ -93,7 +95,7 @@ export async function startFakeHostedApi(): Promise<FakeHostedApi> {
         data: {
           runnerId: '11111111-2222-4333-8444-555555555555',
           ...issue(),
-          effectiveConfig: EFFECTIVE_CONFIG,
+          effectiveConfig: { ...EFFECTIVE_CONFIG, allowedCwdRoots: api.allowedCwdRoots },
           streamPath: '/runners/hosted/stream',
           renewPath: '/runners/hosted/credential',
         },
