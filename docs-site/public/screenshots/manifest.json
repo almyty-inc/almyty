@@ -21,7 +21,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -43,7 +43,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -65,7 +65,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -88,7 +88,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9d7b6571f50aa6e03fdf4cec6fb65aa0706dcaebcbd2a55dec31b38f47dbd985",
+      "sourceDigest": "416af63aa9e964acb328fd2067bcf46dfa159617eac6803b912ce354939938fe",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -110,7 +110,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -132,7 +132,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -154,7 +154,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -198,7 +198,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -220,7 +220,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "bd4245d945064d5936169492496978e2128ddee879fa97ac7ea8df7cefbc577b",
+      "sourceDigest": "bde187a69e81e468c41f6ac34268fd295b0575f060f173795bb7df2123f77fe8",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -492,7 +492,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1078,7 +1078,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1100,7 +1100,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1122,7 +1122,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1189,7 +1189,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1211,7 +1211,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1322,7 +1322,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1344,7 +1344,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1434,7 +1434,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1478,7 +1478,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1500,7 +1500,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1522,7 +1522,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1835,7 +1835,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1857,7 +1857,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1879,7 +1879,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -1901,7 +1901,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2301,7 +2301,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2563,7 +2563,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2585,7 +2585,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2607,7 +2607,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2825,7 +2825,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2847,7 +2847,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2977,7 +2977,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3324,7 +3324,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3346,7 +3346,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3368,7 +3368,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "39915ff4ae05d4d2296d01d0705c119a314c3ee15439c4b4dafbccb420142eb5",
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3390,7 +3390,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3412,7 +3412,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3520,7 +3520,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3528,7 +3528,7 @@
       "title": "What the associate remembers",
       "path": "screenshots/tutorials/founder/21-memory.png",
       "capturedAt": "2026-10-21T15:56:40.478Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "be131e0240d3e532666c3eef995c3e34dbb54e53d10e332915d80c54e8d384e0",
       "source": {
         "kind": "browser",
@@ -3542,8 +3542,427 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.",
+      "reason": "The Memory tab's Type, Scope and Access count columns were blank for memories the agent saves itself; they now show how long it is kept, whose it is and how often it was read. Recapture with scripts/demo-seed/usecases/tutorials.mjs founder."
+    },
+    {
+      "id": "tutorials-personal-00-telegram-flight",
+      "title": "Personal assistant: the flight change in Telegram",
+      "path": "screenshots/tutorials/personal/00-telegram-flight.png",
+      "capturedAt": "2026-10-22T11:52:11.275Z",
+      "status": "current",
+      "sha256": "24663af14e405194318afdbc73594780dd2ddb51b870469ef75e8a6aab6f76f3",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "backend/src/modules/gateways/channels/adapters/telegram.adapter.ts",
+        "backend/src/modules/agents/always-on/always-on.service.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "41ff983b566fc8a8df8fd80508b13998838a42a0003d069492fb7713bf21eab4",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data. The page lays out the messages exactly as almyty sent them to Telegram; Telegram was not used."
+    },
+    {
+      "id": "tutorials-personal-01-calendar-scopes",
+      "title": "Google Calendar sign-in: permission to change events",
+      "path": "screenshots/tutorials/personal/01-calendar-scopes.png",
+      "capturedAt": "2026-10-22T11:50:02.357Z",
+      "status": "current",
+      "sha256": "b7c14485738bee6cbc80b4ab5efd1c9a12a77463f21d7ecf14a40c3b446b4d63",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=4&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "14f3b73536431921c90729ed60345d7f6f5b0e08c430172a56c5494fe5aff92c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-02-apis",
+      "title": "Google Calendar, Gmail and Google Tasks connected",
+      "path": "screenshots/tutorials/personal/02-apis.png",
+      "capturedAt": "2026-10-22T11:50:14.180Z",
+      "status": "current",
+      "sha256": "230d3217c2bef4ac62633ed15173660e5c932012784afb785ace139c33b44d64",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "eb8e975d43f8e3ed840cbc105a65f3912b7e898a6db502acba8d29e307b2ec83",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-03-agent-instructions",
+      "title": "Personal assistant: model, personality and instructions",
+      "path": "screenshots/tutorials/personal/03-agent-instructions.png",
+      "capturedAt": "2026-10-22T11:50:16.826Z",
+      "status": "current",
+      "sha256": "80442cb30e13c9e6bd629f5904f030c20f77abc50ceca30429dee704264b909c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-04-agent-memory",
+      "title": "Personal assistant: memory",
+      "path": "screenshots/tutorials/personal/04-agent-memory.png",
+      "capturedAt": "2026-10-22T11:50:19.151Z",
+      "status": "current",
+      "sha256": "ff777abe84c2db2f495598abb8e1d13b12f0c49bb91f0f18e4120d4a43bfd760",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-05-agent-tools",
+      "title": "Personal assistant: tools",
+      "path": "screenshots/tutorials/personal/05-agent-tools.png",
+      "capturedAt": "2026-10-22T11:50:22.963Z",
+      "status": "current",
+      "sha256": "dae8391aed1d2bae8930fea8fb2e4affd3f9383ff17139927a26c4ff12fc920c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c18aa081235d7c75452d269d86ce9d859b8c22d05ce7e2775d48791ba519657b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-06-telegram-token",
+      "title": "Telegram channel: the bot token",
+      "path": "screenshots/tutorials/personal/06-telegram-token.png",
+      "capturedAt": "2026-10-22T11:50:32.134Z",
+      "status": "current",
+      "sha256": "df61e909508814ed66ccff41fc5ab78e22c9dd741c38f6b2c0740e47d3d131ac",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2a5a9d60752d63eb957d3946c7600371a54ee7c5281767b23e170244d4233592",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-07-telegram-live",
+      "title": "Telegram channel, live and registered with Telegram",
+      "path": "screenshots/tutorials/personal/07-telegram-live.png",
+      "capturedAt": "2026-10-22T11:50:43.972Z",
+      "status": "current",
+      "sha256": "3988c346205f01c0100d32945b8af07190974ba76cb6cb3621b18263512ed81e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2a5a9d60752d63eb957d3946c7600371a54ee7c5281767b23e170244d4233592",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-08-always-on",
+      "title": "Always on: standing instructions and what wakes it",
+      "path": "screenshots/tutorials/personal/08-always-on.png",
+      "capturedAt": "2026-10-22T11:50:47.653Z",
+      "status": "current",
+      "sha256": "76921ac353a1131020ae2d133d0761629afdaaf0d031b63a2139c25137193654",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "ea807afdb113a1e163ce2d533c7a7d465e860caca5044f3e4f4818c3818b343c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-09-talk-and-ask-first",
+      "title": "Always on: talk to it in Telegram, ask first before every change",
+      "path": "screenshots/tutorials/personal/09-talk-and-ask-first.png",
+      "capturedAt": "2026-10-22T11:50:51.507Z",
+      "status": "current",
+      "sha256": "050e9be090107e316ff0fd904b87ee4771b4a2e1905905c12a3f79dae207898b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "ea807afdb113a1e163ce2d533c7a7d465e860caca5044f3e4f4818c3818b343c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-10-reports",
+      "title": "Always on: reports to Telegram",
+      "path": "screenshots/tutorials/personal/10-reports.png",
+      "capturedAt": "2026-10-22T11:50:54.164Z",
+      "status": "current",
+      "sha256": "4fdf68e6089754fac971d46fdfa4fab438e9460dc32fc1bdf6cdc410f0f50f7a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "ea807afdb113a1e163ce2d533c7a7d465e860caca5044f3e4f4818c3818b343c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-11-always-on-card",
+      "title": "Always on, on the agent page",
+      "path": "screenshots/tutorials/personal/11-always-on-card.png",
+      "capturedAt": "2026-10-22T11:50:59.653Z",
+      "status": "current",
+      "sha256": "73159b25006e63643967a298de4cb2056352ed1b4bba0745e206610a04a11476",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-12-privacy",
+      "title": "Settings, Compliance: hide personal data",
+      "path": "screenshots/tutorials/personal/12-privacy.png",
+      "capturedAt": "2026-10-22T11:51:05.731Z",
+      "status": "current",
+      "sha256": "85c4b478d5615aadb444db90dcf74bf1b69d35d2f9066abca02cf448c27d9c27",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/compliance"
+      },
+      "sources": [
+        "frontend/src/components/settings/compliance-settings.tsx",
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "a769de20ea8893c8d5842bb4ef8300f0c4ba4f44493c44900001fd65c4fa3286",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-13-telegram-intro",
+      "title": "Telling the assistant about yourself in Telegram",
+      "path": "screenshots/tutorials/personal/13-telegram-intro.png",
+      "capturedAt": "2026-10-22T11:51:24.195Z",
+      "status": "current",
+      "sha256": "0d8091015e2d1e804af909ce77938363457cced59f0ea3af6b2d158e55808120",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "backend/src/modules/gateways/channels/adapters/telegram.adapter.ts",
+        "backend/src/modules/agents/always-on/always-on.service.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "41ff983b566fc8a8df8fd80508b13998838a42a0003d069492fb7713bf21eab4",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data. The page lays out the messages exactly as almyty sent them to Telegram; Telegram was not used."
+    },
+    {
+      "id": "tutorials-personal-14-memory",
+      "title": "What the assistant remembers about Elena",
+      "path": "screenshots/tutorials/personal/14-memory.png",
+      "capturedAt": "2026-10-22T11:51:29.344Z",
+      "status": "current",
+      "sha256": "304213036ccf8337920b507720d3d8307322c07c068847f0eccb44affa466f71",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-15-approve-move",
+      "title": "Approving the moved meeting",
+      "path": "screenshots/tutorials/personal/15-approve-move.png",
+      "capturedAt": "2026-10-22T11:51:48.744Z",
+      "status": "current",
+      "sha256": "e0ad3c54d47cdade24d3bd6a63ae6f617ad91b1c1ec9722792dbd3955c42269f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9883240912b69fcb800adfe1a7b576be31956e0acf20a262c04947a89c72d735",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-16-approve-email",
+      "title": "Approving the email to Tom",
+      "path": "screenshots/tutorials/personal/16-approve-email.png",
+      "capturedAt": "2026-10-22T11:52:01.220Z",
+      "status": "current",
+      "sha256": "1ac0257b216f12bf2ef698190239168256b7490b560b4fa8640306f2b6ee5eb3",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9883240912b69fcb800adfe1a7b576be31956e0acf20a262c04947a89c72d735",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-17-what-woke-it",
+      "title": "What woke it lately",
+      "path": "screenshots/tutorials/personal/17-what-woke-it.png",
+      "capturedAt": "2026-10-22T11:52:17.652Z",
+      "status": "current",
+      "sha256": "a362821078e4522ea0510ccc9595909d7be970731fccab8e9a4589580e0f97f3",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "ea807afdb113a1e163ce2d533c7a7d465e860caca5044f3e4f4818c3818b343c",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-18-memory-after",
+      "title": "The assistant remembers what Elena said yes to",
+      "path": "screenshots/tutorials/personal/18-memory-after.png",
+      "capturedAt": "2026-10-22T11:52:22.908Z",
+      "status": "current",
+      "sha256": "058702eced5690da523d0cb914e97c135a7123bde9ee5efac69cdd7ea25e51a0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
     },
     {
       "id": "versioning-history",
@@ -3564,7 +3983,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3586,7 +4005,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3630,7 +4049,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "78a383886be54a6bd8b9d8ad5452888573b9da1ed06e034e7259771dc0adc612",
+      "sourceDigest": "f5df7e2ceb9068585a54b92c4aed6c0db3fe05f0f67432c4d92146d2c36f9b58",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {

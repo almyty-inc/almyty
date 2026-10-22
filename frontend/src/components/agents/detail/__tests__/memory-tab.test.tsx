@@ -104,4 +104,20 @@ describe('MemoryTab add memory', () => {
     expect(screen.getByLabelText(/Content/)).toHaveValue('')
     expect(memoriesApi.put).not.toHaveBeenCalled()
   })
+
+// The memory store lists rows as it keeps them: tier, scope_type, access_count.
+describe('MemoryTab rows from the memory store', () => {
+  it('shows how long it is kept, whose it is and how often it was read', () => {
+    const stored = {
+      id: 'm9', content: 'Elena does not take meetings before 9:00', tier: 'long', scope_type: 'agent',
+      tags: ['routine'], access_count: 3,
+    } as unknown as Memory
+    renderWithProviders(<MemoryTab agentId="agent-1" memories={[stored]} />)
+
+    const row = screen.getByText('Elena does not take meetings before 9:00').closest('tr')!
+    expect(within(row).getByText('Long-term')).toBeInTheDocument()
+    expect(within(row).getByText('This agent')).toBeInTheDocument()
+    expect(within(row).getByText('3')).toBeInTheDocument()
+  })
+})
 })
