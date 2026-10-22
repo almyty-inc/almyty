@@ -13,18 +13,18 @@ export default {
   'nl-query-your-database': 'Ask your data in Slack',
   'cross-vendor-contract-review': 'Contract review by several models',
   'govern-ai-spend': 'Cap AI spending',
+  'docs-deflection-bot': 'Answer from your help center in Slack',
+  'lead-enrichment-routing': 'Score and route HubSpot leads',
+  'meeting-notes-to-crm': 'Call notes to HubSpot',
+  'agent-that-remembers': 'An assistant that remembers',
+  'connect-google-sharepoint': 'Answers from Google Drive',
 
   'support-separator': { type: 'separator', title: 'Support and sales' },
   'support-ticket-triage': 'Sort tickets, draft replies',
-  'docs-deflection-bot': 'Answer from your docs',
   'governed-refund-agent': 'Refunds with safeguards',
-  'lead-enrichment-routing': 'Score and route leads',
-  'meeting-notes-to-crm': 'Call notes to your CRM',
-  'agent-that-remembers': 'An assistant that remembers',
 
   'ops-separator': { type: 'separator', title: 'Operations, data and finance' },
   'scheduled-monitoring-agent': 'Checks on a schedule',
-  'connect-google-sharepoint': 'Google Drive and SharePoint',
 
   'governance-separator': { type: 'separator', title: 'Control and compliance' },
   'approval-policies': 'Who signs off',
