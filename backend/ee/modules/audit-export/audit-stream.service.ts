@@ -19,6 +19,13 @@ export interface CreateStreamConfigInput {
   enabled?: boolean;
 }
 
+export interface UpdateStreamConfigInput {
+  endpoint?: string;
+  token?: string | null;
+  actionFilter?: string[] | null;
+  enabled?: boolean;
+}
+
 export interface DeliveryResult {
   configId: string;
   target: AuditStreamTarget;
@@ -77,8 +84,8 @@ export class AuditStreamService {
    *
    * Checked at write time, once, rather than per delivery -- the same
    * place and for the same reason as the provider save path in
-   * `llm-providers.service`. The endpoint column is write-once: there is
-   * no update route, so a stored row was gated here.
+   * `llm-providers.service`. Both writes of the endpoint (create, and
+   * update when it changes) pass through here, so a stored row was gated.
    */
   private async assertEndpointAllowed(organizationId: string, endpoint: string): Promise<void> {
     let allowlist: string[] = [];
@@ -108,6 +115,41 @@ export class AuditStreamService {
     const row = await this.configs.findOne({ where: { id, organizationId } });
     if (!row) throw new NotFoundException('stream config not found');
     await this.configs.remove(row);
+  }
+
+  /**
+   * Change a target in place: its endpoint (gated again, exactly as on
+   * create), its token (absent keeps it, empty or null clears it), which
+   * actions it streams (empty or null: all of them), and whether it is on.
+   * A changed endpoint or token starts over: the last delivery and error
+   * belonged to the old one.
+   */
+  async update(organizationId: string, id: string, patch: UpdateStreamConfigInput): Promise<AuditStreamConfig> {
+    const row = await this.configs.findOne({ where: { id, organizationId } });
+    if (!row) throw new NotFoundException('stream config not found');
+    let reset = false;
+    if (patch.endpoint !== undefined) {
+      const endpoint = patch.endpoint?.trim();
+      if (!endpoint) throw new BadRequestException('endpoint is required');
+      if (endpoint !== row.endpoint) {
+        await this.assertEndpointAllowed(organizationId, endpoint);
+        row.endpoint = endpoint;
+        reset = true;
+      }
+    }
+    if (patch.token !== undefined) {
+      row.token = patch.token ? patch.token : null;
+      reset = true;
+    }
+    if (patch.actionFilter !== undefined) {
+      row.actionFilter = patch.actionFilter?.length ? patch.actionFilter : null;
+    }
+    if (patch.enabled !== undefined) row.enabled = patch.enabled;
+    if (reset) {
+      row.lastError = null;
+      row.lastDeliveredAt = null;
+    }
+    return this.configs.save(row);
   }
 
   async setEnabled(
