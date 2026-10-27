@@ -151,6 +151,10 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
 
     const scope = await this.scopeOfRequestingAgent(input);
     const policy = await this.resolveGoverningPolicy(input, scope.teamId ?? null);
+    // The policy's steps as they stand before anyone approved, so the
+    // Approvals page can say "Step 1 of 2: waiting for finance" from the
+    // start, not only after the first approval.
+    const initialProgress = policy ? await this.initialPolicyProgress(input.organizationId, policy.id) : null;
 
     const ttl = Math.min(input.ttlSeconds ?? DEFAULT_TTL_SECONDS, MAX_TTL_SECONDS);
     const expiresAt = new Date(Date.now() + ttl * 1000);
@@ -166,7 +170,12 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       payload: policy
         ? {
             ...(input.payload ?? {}),
-            _policy: { policyId: policy.id, policyName: policy.name, approvals: [] },
+            _policy: {
+              policyId: policy.id,
+              policyName: policy.name,
+              approvals: [],
+              ...(initialProgress ? { progress: initialProgress } : {}),
+            },
           }
         : input.payload ?? null,
       status: 'pending' as ApprovalStatus,
@@ -367,6 +376,16 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       });
     } catch (err: any) {
       this.logger.warn(`approval policy resolution failed: ${err?.message ?? err}`);
+      return null;
+    }
+  }
+
+  /** The policy's progress with no approvals yet; null when it cannot be scored now. */
+  private async initialPolicyProgress(organizationId: string, policyId: string): Promise<ApprovalPolicyProgress | null> {
+    try {
+      return (await this.approvalPolicyHook?.scoreProgress(organizationId, policyId, [])) ?? null;
+    } catch (err: any) {
+      this.logger.warn(`approval policy initial scoring failed: ${err?.message ?? err}`);
       return null;
     }
   }

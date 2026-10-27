@@ -19,7 +19,7 @@ import { formatRelativeTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { emailPreviewOf } from '@/lib/email-preview'
-import { actionDetailsOf, withoutInternalFields } from '@/lib/approval-summary'
+import { actionDetailsOf, policyStepOf, withoutInternalFields } from '@/lib/approval-summary'
 import { ChangeSetView } from '@/components/approvals/change-set-view'
 import type { ChangeSetEntry } from '@/types'
 
@@ -211,6 +211,17 @@ export function ApprovalsPage() {
                     <> · expires {formatRelativeTime(row.expiresAt)}</>
                   )}
                 </div>
+                {(() => {
+                  // A multi-step policy: which step it is on, said from the
+                  // server's score, never the raw `_policy` bookkeeping.
+                  const step = policyStepOf(row.payload)
+                  if (!step) return null
+                  return (
+                    <p className="mt-1 text-sm font-medium text-foreground" data-testid="approval-policy-step">
+                      {step}
+                    </p>
+                  )
+                })()}
                 {(() => {
                   const email = emailPreviewOf(row.payload)
                   if (email) return (

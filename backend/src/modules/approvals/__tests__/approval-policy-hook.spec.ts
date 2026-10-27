@@ -125,6 +125,9 @@ describe('ApprovalsService — approval policy hook', () => {
         policyId: 'pol-1',
         policyName: 'two-approver quorum',
         approvals: [],
+        // Scored with no approvals yet, so the Approvals page can say
+        // "Step 1 of 1" before anyone has acted.
+        progress: expect.objectContaining({ currentStep: 0, satisfied: false, totalCollected: 0 }),
       });
       // Agent payload is preserved alongside the reserved key.
       expect((row.payload as any).amount).toBe(25000);
@@ -244,6 +247,8 @@ describe('ApprovalsService — approval policy hook', () => {
       const { svc } = makeService(hook);
 
       const row = await svc.create(createInput);
+      // Create scores the empty policy once, for the page's "Step 1 of N".
+      hook.scoreProgress.mockClear();
       const decided = await svc.reject(row.id, { decidedBy: 'u1', decisionReason: 'no' }, { id: 'u1' }, row.organizationId);
 
       expect(decided.status).toBe('rejected');
