@@ -6,6 +6,7 @@ import { EventEmitter } from 'events';
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Agent } from '../../entities/agent.entity';
+import { Tool } from '../../entities/tool.entity';
 import { ApprovalPolicyApprovalRecord } from '../../entities/approval-policy-approval.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
@@ -556,8 +557,13 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
    * The pending requests the caller may see, each with the name of the
    * agent that asked (`agentName`), so the page can say who is waiting
    * rather than an id. null when that agent has since been deleted.
+   * A held tool call also carries the tool's parameter schema
+   * (`parameterSchema`), so the page can label its arguments with the
+   * tool's own parameter titles.
    */
-  async listPending(args: { organizationId: string; caller: { id: string } }): Promise<Array<ApprovalRequest & { agentName: string | null }>> {
+  async listPending(args: { organizationId: string; caller: { id: string } }): Promise<
+    Array<ApprovalRequest & { agentName: string | null; parameterSchema: Record<string, any> | null }>
+  > {
     const qb = this.approvals
       .createQueryBuilder('a')
       .where('a.status = :status', { status: 'pending' });
@@ -571,7 +577,22 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
         })
       : [];
     const names = new Map(agents.map((a) => [a.id, a.name]));
-    return rows.map((r) => Object.assign(r, { agentName: names.get(r.agentId) ?? null }));
+    // A run's held call names its tool in the payload; a held call without a run on the row.
+    const toolIdOf = (r: ApprovalRequest): string | null => r.toolId ?? (r.payload as any)?._gate?.toolId ?? null;
+    const toolIds = [...new Set(rows.map(toolIdOf).filter((id): id is string => typeof id === 'string'))];
+    const tools = toolIds.length
+      ? await this.approvals.manager.getRepository(Tool).find({
+          where: { id: In(toolIds), organizationId: args.organizationId },
+          select: { id: true, parameters: true },
+        })
+      : [];
+    const schemas = new Map(tools.map((t) => [t.id, t.parameters ?? null]));
+    return rows.map((r) =>
+      Object.assign(r, {
+        agentName: names.get(r.agentId) ?? null,
+        parameterSchema: schemas.get(toolIdOf(r) ?? '') ?? null,
+      }),
+    );
   }
 
   async listForRun(runId: string): Promise<ApprovalRequest[]> {

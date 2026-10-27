@@ -145,6 +145,24 @@ export function latestUserText(messages: ChatRequest['messages'], fallback: unkn
   return asText(fallback);
 }
 
+/**
+ * The messages with a role's extra instructions added as a system message
+ * after the agent's own system prompt. The builder offers "Extra
+ * instructions" on every panelist, and a model panelist used to answer
+ * without them: three panelists with three angles gave the same reading.
+ */
+export function withRoleInstructions(
+  messages: ChatRequest['messages'],
+  role: Pick<ModelRoleCall, 'name' | 'instructions'>,
+): ChatRequest['messages'] {
+  const extra = role.instructions?.trim();
+  if (!extra) return messages;
+  let at = 0;
+  while (at < messages.length && (messages[at] as any)?.role === 'system') at++;
+  const note = { role: 'system', content: `[YOUR ROLE: ${role.name}]\n${extra}` } as any;
+  return [...messages.slice(0, at), note, ...messages.slice(at)] as ChatRequest['messages'];
+}
+
 export class AutonomousStrategyRunner {
   constructor(
     private readonly s: AgentRuntimeService,
@@ -199,12 +217,13 @@ export class AutonomousStrategyRunner {
   /**
    * A no-tools answer from a model role over the loop's conversation: the
    * same system prompt, memory and turns the loop's own call saw, with the
-   * tool turns written out as text (final-answer.ts).
+   * tool turns written out as text (final-answer.ts), and the role's own
+   * extra instructions (a panelist's angle) after the system prompt.
    */
   answerOver(run: AgentRun, role: ModelRoleCall, loopRequest: ChatRequest): Promise<RoleAnswer> {
     return this.callModel(run, role, {
       ...loopRequest,
-      messages: answerCallMessages(loopRequest.messages as any[]) as ChatRequest['messages'],
+      messages: withRoleInstructions(answerCallMessages(loopRequest.messages as any[]) as ChatRequest['messages'], role),
       tools: undefined,
     });
   }

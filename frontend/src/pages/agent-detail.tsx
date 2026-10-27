@@ -21,7 +21,6 @@ import type {
   AgentVersionSnapshot,
   AgentAuditEntry,
   AgentRun,
-  Memory,
   AgentFile,
 } from '@/types'
 
@@ -38,7 +37,7 @@ import { ReadinessBanner, type ReadinessResult } from '@/components/agents/detai
 import { PipelineCanvas } from '@/components/agents/detail/pipeline-canvas'
 import { OverviewTab } from '@/components/agents/detail/overview-tab'
 import { RunsTab } from '@/components/agents/detail/runs-tab'
-import { MemoryTab } from '@/components/agents/detail/memory-tab'
+import { MemoryTab, type AgentMemoryItem } from '@/components/agents/detail/memory-tab'
 import { agentMemoryScope } from '@/components/agents/agent-memory-scope'
 import { FilesTab } from '@/components/agents/detail/files-tab'
 import { ChannelsTab } from '@/components/channels/channels-tab'
@@ -173,7 +172,7 @@ export function AgentDetailPage() {
     enabled: !!id && !!orgId && activeTab === 'memory',
   })
 
-  const memories: Memory[] = Array.isArray(memoriesData) ? memoriesData : []
+  const memories: AgentMemoryItem[] = Array.isArray(memoriesData) ? memoriesData : []
 
   // Fetch files
   const { data: filesData, error: filesError, refetch: refetchFiles } = useQuery({
