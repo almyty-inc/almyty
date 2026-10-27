@@ -37,12 +37,13 @@ export function pluralize(n: number, word: string, plural?: string): string {
 
 /**
  * The count and its noun: pluralized(1, 'member') -> '1 member',
- * pluralized(3, 'member') -> '3 members'. Every "{n} things" in the UI
- * goes through here; plural-copy.test.ts holds the source to that.
+ * pluralized(3, 'member') -> '3 members', pluralized(1872, 'operation') ->
+ * '1,872 operations'. Every "{n} things" in the UI goes through here;
+ * plural-copy.test.ts holds the source to that.
  */
 export function pluralized(n: number | null | undefined, word: string, plural?: string): string {
   const count = n ?? 0
-  return count + ' ' + pluralize(count, word, plural);
+  return count.toLocaleString('en-US') + ' ' + pluralize(count, word, plural);
 }
 
 export function formatDate(date: Date | string): string {
