@@ -10,7 +10,10 @@ import {
   Header,
   ServiceUnavailableException,
   UnauthorizedException,
+  UseFilters,
+  Optional,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 
@@ -19,6 +22,8 @@ import { AuthService } from '../../../src/modules/auth/auth.service';
 import { SsoService, SsoUserProfile } from './sso.service';
 import { SsoConfigService } from './sso-config.service';
 import { ParkedSamlSignIn, PendingSamlSignIn, SamlSignInStore } from './saml-sign-in.store';
+import { OrgDomainService } from './org-domain.service';
+import { SsoBrowserErrorFilter } from './sso-browser-error.filter';
 import {
   publicBaseUrl,
   ssoSuccessRedirect,
@@ -69,13 +74,50 @@ const SIGN_IN_EXPIRED = 'Sign-in session expired or did not match. Start again.'
 // SsoConfigService.getDecrypted, which every route below passes through
 // and which knows the org from the URL.
 @Public()
+// A refusal on these browser pages goes to the sign-in error page, not a
+// raw JSON body (SsoBrowserErrorFilter); API clients still get JSON.
+@UseFilters(SsoBrowserErrorFilter)
 export class SsoController {
   constructor(
     private readonly ssoService: SsoService,
     private readonly authService: AuthService,
     private readonly configService: SsoConfigService,
     private readonly signIns: SamlSignInStore,
+    @Optional() private readonly domains?: OrgDomainService,
   ) {}
+
+  /**
+   * Does this address sign in through single sign-on? The sign-in page asks
+   * once an address is typed, and offers "Continue with single sign-on"
+   * when the address is on a domain an organization has verified and that
+   * organization has SSO switched on. Says nothing about the organization
+   * beyond where its sign-in starts.
+   */
+  @Get('discover')
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
+  @ApiOperation({ summary: "Whether an email address signs in with its organization's single sign-on" })
+  async discover(@Query('email') email: string, @Req() req: Request) {
+    const none = { success: true, data: { sso: false } };
+    if (!this.domains || typeof email !== 'string' || !email.includes('@')) return none;
+    const orgId = await this.domains.organizationForEmail(email);
+    if (!orgId) return none;
+    let config: Awaited<ReturnType<SsoConfigService['getDecrypted']>> = null;
+    try {
+      config = await this.configService.getDecrypted(orgId);
+    } catch {
+      // Not on a plan with SSO: the address signs in with its password.
+      return none;
+    }
+    if (!config?.enabled || !config.protocol) return none;
+    return {
+      success: true,
+      data: {
+        sso: true,
+        protocol: config.protocol,
+        loginUrl: `${publicBaseUrl(req)}/sso/${orgId}/${config.protocol}/login`,
+      },
+    };
+  }
 
   /**
    * The session names the organization whose IdP vouched for the person

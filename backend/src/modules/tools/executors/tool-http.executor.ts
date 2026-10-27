@@ -58,6 +58,7 @@ import {
 import { executeWithPagination, processHttpResponse } from './tool-http-pagination';
 import { matchDelimited } from '../../../common/security/linear-text';
 import { operationHeaderParams } from '../operation-header-params';
+import { formEncode, isFormBody } from './form-encode';
 import { isGroupedArguments } from './argument-shape';
 const MAX_ERR_MESSAGE = 500;
 
@@ -445,6 +446,12 @@ export class ToolHttpExecutor {
 
       if (bodyData && ['post', 'put', 'patch'].includes(operation.method.toLowerCase())) {
         config.data = bodyData;
+        // A form body (Stripe's writes) goes as a form; sent as JSON, the
+        // API read it as no parameters.
+        if (isFormBody(operation) && bodyData && typeof bodyData === 'object' && !Array.isArray(bodyData)) {
+          config.data = formEncode(bodyData);
+          config.headers = { ...(config.headers ?? {}), 'Content-Type': 'application/x-www-form-urlencoded' };
+        }
       }
 
       const response: AxiosResponse = await axios(config);

@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +19,37 @@ const loginSchema = z.object({
 })
 
 type LoginFormData = z.infer<typeof loginSchema>
+
+const emailShape = z.string().email()
+
+/**
+ * Where this address's single sign-on starts, or null. Asked once the typed
+ * address has settled (so not on every keystroke); an address on a domain
+ * whose organization has SSO switched on gets "Continue with single
+ * sign-on" on the sign-in page.
+ */
+export function useSsoFor(email: string | undefined, delayMs = 400): string | null {
+  const [loginUrl, setLoginUrl] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    setLoginUrl(null)
+    const address = (email ?? '').trim()
+    if (!emailShape.safeParse(address).success) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const found = await authApi.discoverSso(address)
+        if (!cancelled && found?.sso && found.loginUrl) setLoginUrl(found.loginUrl)
+      } catch {
+        // No answer: the password form is still there.
+      }
+    }, delayMs)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [email, delayMs])
+  return loginUrl
+}
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -37,11 +68,13 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<LoginFormData>({
     mode: 'onTouched',
     resolver: zodResolver(loginSchema),
   })
+  const ssoLoginUrl = useSsoFor(watch('email'))
 
   // Honour ?returnTo=… so flows like the CLI browser login (which sends
   // the user through /auth/login?returnTo=/cli-login?…) and the MCP OAuth
@@ -160,6 +193,24 @@ export function LoginPage() {
               <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
             )}
           </div>
+          {ssoLoginUrl && (
+            <div className="mt-3 space-y-2" data-testid="sso-sign-in">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  window.location.href = ssoLoginUrl
+                }}
+              >
+                <KeyRound className="mr-2 h-4 w-4" aria-hidden />
+                Continue with single sign-on
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Your organization signs you in through its identity provider. Or use your password below.
+              </p>
+            </div>
+          )}
         </div>
 
         <div>

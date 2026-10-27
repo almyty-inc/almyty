@@ -96,6 +96,37 @@ describe('ApprovalsPage', () => {
     expect(document.body.textContent).not.toContain('_gate')
     expect(document.body.textContent).not.toContain('deadbeefhash')
   })
+  it('says which step of a multi-step policy a request is on, without the policy bookkeeping', async () => {
+    ;(approvalsApi.list as any).mockResolvedValue([
+      {
+        id: 'a-steps', organizationId: 'org-1', teamId: null, visibility: 'org', runId: null, agentId: null,
+        toolCallId: null, reason: 'Refund over 1000',
+        payload: {
+          parameters: { amount: 2500 },
+          _policy: {
+            policyId: 'pol-secret-id', policyName: 'Big refunds', approvals: [{ approverId: 'u-fin', roles: ['finance'] }],
+            progress: {
+              currentStep: 1, satisfied: false,
+              steps: [
+                { index: 0, name: 'Finance review', approverRole: 'finance', required: 1, satisfiedBy: 1, satisfied: true },
+                { index: 1, name: 'Admin sign-off', approverRole: 'admin', required: 1, satisfiedBy: 0, satisfied: false },
+              ],
+            },
+          },
+        },
+        status: 'pending', decidedBy: null, decidedAt: null, decisionReason: null, expiresAt: null, createdAt: new Date().toISOString(),
+      },
+    ])
+
+    render(<ApprovalsPage />)
+
+    expect(await screen.findByTestId('approval-policy-step')).toHaveTextContent(
+      'Step 2 of 2 (Admin sign-off): waiting for an admin',
+    )
+    expect(document.body.textContent).not.toContain('pol-secret-id')
+    expect(document.body.textContent).not.toContain('_policy')
+  })
+
 
   it('renders a pending approval from a flat array (post-extractData shape)', async () => {
     ;(approvalsApi.list as any).mockResolvedValue([

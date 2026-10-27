@@ -16,7 +16,7 @@ export type AbacEffect = 'allow' | 'deny';
  */
 export interface AbacCondition {
   attr: string;
-  op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains';
+  op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains' | 'not_contains';
   value: unknown;
 }
 

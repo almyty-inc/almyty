@@ -311,6 +311,12 @@ export const authApi = {
     apiPost('/auth/login', data),
   
   logout: () => apiPost('/auth/logout'),
+
+  /** Whether this address signs in through its organization's single sign-on, and where that starts. */
+  discoverSso: (email: string) =>
+    apiGet<{ sso: boolean; protocol?: 'saml' | 'oidc'; loginUrl?: string }>(
+      `/sso/discover?email=${encodeURIComponent(email)}`,
+    ),
   
   getProfile: () => apiGet('/auth/profile'),
   
@@ -867,6 +873,8 @@ export interface CreatePolicyPayload {
 
 export const rbacApi = {
   // Custom roles
+  /** The permissions a custom role can grant, each with what it unlocks; nothing else gates a route. */
+  listPermissions: () => apiGet<Array<{ permission: string; description: string }>>('/rbac/permissions'),
   listRoles: () => apiGet<CustomRole[]>('/rbac/roles'),
   createRole: (data: CreateRolePayload) => apiPost<CustomRole>('/rbac/roles', data),
   updateRole: (id: string, data: UpdateRolePayload) =>

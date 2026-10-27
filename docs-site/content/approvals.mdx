@@ -49,7 +49,7 @@ What happens next:
 - A number written in words, such as "eight hundred", counts as over the amount.
 - Every call a rule holds, and every approved call that then runs, is written to the audit log.
 
-One approval from an owner or an admin (or, for a team's rule, the team's lead) decides a rule. Sign-off in several steps comes with approval policies on the Business plan.
+One approval from an owner or an admin (or, for a team's rule, the team's lead) decides a rule. Sign-off in several steps comes with approval policies on the Business plan: there, the rule's page has **Who approves**, where you set its steps (for example finance, then an admin).
 
 ## Who can approve
 
@@ -84,7 +84,7 @@ The assistant asks through its built-in `request_approval` tool:
 request_approval(reason="Send a $500 wire to ACME Corp", payload={...})
 ```
 
-The runtime creates an `ApprovalRequest` row, sets the run to `waiting_approval` and emits an event. The decision is recorded with `decidedBy`, `decidedAt` and `decisionReason`. On approve, the run returns to `running` and the approval result is the tool call's return value; on reject or expiry, the run is cancelled with the reason recorded.
+The runtime creates an `ApprovalRequest` row, sets the run to `waiting_approval` and emits an event. The decision is recorded with `decidedBy`, `decidedAt` and `decisionReason`, and on the audit trail as `approval_decided`. On approve, the run returns to `running` and the tool call's result becomes the decision, `{ "approved": true, "status": "approved", "decided_by": "<reviewer's name>", "decision_reason": "<their note>" }`, so the assistant knows who approved and what they wrote; on reject or expiry, the run is cancelled with the reason recorded (and the call's result in the conversation says so).
 
 - **Authorization** is enforced on the server with `AccessPolicyService.canAccess(user, approvalRequest, 'manage')`. Org-wide agents (`visibility='org'`): org `owner` or `admin`. Team agents (`visibility='team'`): org `owner`/`admin` or the team's `team_admin` (TeamRole.LEAD). Private agents: the owner.
 - **Expiry**: the default 24 hours can be set up to 7 days when a request is created through the API. A scheduled sweep flips expired requests to `expired`.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { actionDetailsOf, withoutInternalFields } from '../approval-summary'
+import { actionDetailsOf, policyStepOf, withoutInternalFields } from '../approval-summary'
 import { formatDateTime } from '../utils'
 
 /**
@@ -74,5 +74,46 @@ describe('actionDetailsOf', () => {
 describe('withoutInternalFields', () => {
   it('drops _-prefixed keys at every depth', () => {
     expect(withoutInternalFields({ a: 1, _gate: { call: {} }, b: { _c: 2, d: [{ _e: 1, f: 2 }] } })).toEqual({ a: 1, b: { d: [{ f: 2 }] } })
+  })
+})
+
+describe('policyStepOf', () => {
+  const progress = (currentStep: number, steps: Array<[string, string, number, number]>) => ({
+    amount: 2500,
+    _policy: {
+      policyId: 'p1',
+      policyName: 'Big refunds',
+      approvals: [],
+      progress: {
+        currentStep,
+        satisfied: false,
+        steps: steps.map(([name, approverRole, required, satisfiedBy], index) => ({
+          index, name, approverRole, required, satisfiedBy, satisfied: satisfiedBy >= required,
+        })),
+      },
+    },
+  })
+
+  it('says which step a multi-step request is on and who it waits for', () => {
+    const payload = progress(1, [['Finance review', 'finance', 1, 1], ['Admin sign-off', 'admin', 1, 0], ['Owner', 'owner', 1, 0]])
+    expect(policyStepOf(payload)).toBe('Step 2 of 3 (Admin sign-off): waiting for an admin')
+  })
+
+  it('names a custom role and counts what a quorum still needs', () => {
+    expect(policyStepOf(progress(0, [['Finance', 'finance', 1, 0], ['Admin', 'admin', 1, 0]]))).toBe(
+      'Step 1 of 2 (Finance): waiting for someone with the “finance” role',
+    )
+    expect(policyStepOf(progress(0, [['Quorum', '*', 3, 1]]))).toBe('Step 1 of 1 (Quorum): waiting for 2 more approvers')
+  })
+
+  it('says nothing for a single plain approval or a request no policy governs', () => {
+    expect(policyStepOf(progress(0, [['Approval', '*', 1, 0]]))).toBeNull()
+    expect(policyStepOf({ amount: 1 })).toBeNull()
+    expect(policyStepOf(null)).toBeNull()
+  })
+
+  it('never puts the internal bookkeeping in its words', () => {
+    const text = policyStepOf(progress(0, [['Finance', 'finance', 1, 0], ['Admin', 'admin', 1, 0]]))!
+    expect(text).not.toMatch(/policyId|_policy|p1/)
   })
 })

@@ -146,3 +146,48 @@ export function actionDetailsOf(payload: unknown, schema?: Schema): ActionDetail
   collect(argumentsOf(payload as Record<string, any>), schema, '', 1, out)
   return out
 }
+
+/** Who a step waits for, in words: one of them, or how many more. */
+function approverWords(role: string, remaining: number): string {
+  const one: Record<string, string> = {
+    '*': 'any approver',
+    owner: 'an owner',
+    admin: 'an admin',
+    member: 'a member',
+    viewer: 'a viewer',
+    team_lead: "the team's lead",
+    team_member: 'a team member',
+  }
+  const many: Record<string, string> = {
+    '*': 'approvers',
+    owner: 'owners',
+    admin: 'admins',
+    member: 'members',
+    viewer: 'viewers',
+    team_lead: 'team leads',
+    team_member: 'team members',
+  }
+  if (remaining <= 1) return one[role] ?? `someone with the “${role}” role`
+  return `${remaining} more ${many[role] ?? `people with the “${role}” role`}`
+}
+
+/**
+ * Where a request under a multi-step approval policy stands, from the
+ * server's own score of it (`_policy.progress`): "Step 2 of 3: waiting for
+ * an admin". Null for a request no policy governs, or one with a single
+ * step that needs one approval (there is nothing to say beyond "pending").
+ */
+export function policyStepOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const progress = (payload as Record<string, any>)._policy?.progress
+  const steps: any[] = Array.isArray(progress?.steps) ? progress.steps : []
+  if (steps.length === 0 || progress.satisfied) return null
+  const index = typeof progress.currentStep === 'number' && progress.currentStep >= 0 ? progress.currentStep : 0
+  const step = steps[index]
+  if (!step) return null
+  const required = Number(step.required) || 1
+  if (steps.length === 1 && required <= 1) return null
+  const remaining = Math.max(1, required - (Number(step.satisfiedBy) || 0))
+  const name = typeof step.name === 'string' && step.name.trim() ? ` (${step.name.trim()})` : ''
+  return `Step ${index + 1} of ${steps.length}${name}: waiting for ${approverWords(String(step.approverRole ?? '*'), remaining)}`
+}

@@ -369,4 +369,18 @@ describe('what an agent would not reach acting as itself', () => {
     // The connection the API's Key card points at (a Google sign-in picked there).
     expect(byId[PICKED]).toMatchObject({ kind: 'connection', scope: 'organization', canGrant: true, neededFor: 'The key for Payments' });
   });
+
+  // A team-scoped key (a Stripe key the Finance team owns) cannot serve the
+  // agent on a channel open to everyone, granted or not -- by design. The
+  // Access card names that rule rather than "acting as itself" alone.
+  it("explains a team connection: the team's members and its channels only, never an open channel", async () => {
+    const { reach } = build();
+    const TEAM_KEY = randomUUID();
+    const credentials = (reach as any).agents.manager.getRepository(Credential);
+    await credentials.save({ id: TEAM_KEY, organizationId: ORG, name: 'Stripe restricted key', connectorKey: 'stripe', visibility: 'team', teamId: TEAM, ownerUserId: null, apiId: API, metadata: null });
+    const items = await reach.unreachable({ ...orgAgent, toolIds: ['t-1'], agentConfig: {} } as any);
+    const item = items.find((i) => i.id === TEAM_KEY)!;
+    expect(item).toMatchObject({ kind: 'connection', scope: 'team', canGrant: false });
+    expect(item.note).toMatch(/channels set up for that team, never on a channel open to everyone/);
+  });
 });
