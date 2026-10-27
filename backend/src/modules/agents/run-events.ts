@@ -3,18 +3,21 @@ import type { AgentRun } from '../../entities/agent-run.entity';
 /**
  * The run event log, step 1 of durable runs (docs/design/durable-runs.md).
  *
- * Every commit of an autonomous step appends the events that describe what
- * it did to `agent_run_events`, in the same transaction as the run row
- * write. Nothing reads them yet: `projectRunEvents` folding them back into
- * the row's state is the check that they are complete, and the read path
- * the later steps build on.
+ * Every write of a run's state appends the events that describe it to
+ * `agent_run_events`, in the same transaction as the row write: the step
+ * commit, and every writer outside it (cancel, input, an approval and its
+ * decision, the reaper, delivery bookkeeping), all through
+ * run-event-writer.ts. Nothing reads them yet: `projectRunEvents` folding
+ * them back into the row's state is the check that they are complete, and
+ * the read path the later steps build on.
  *
  * Two kinds of event. State events carry what the fold needs to rebuild
  * the row: `run_started`, the step events, `memory_changed`,
  * `metadata_changed` and `step_committed`. Markers (`status_changed`,
- * `approval_requested`, `approval_resolved`, `waiting_input`, `compaction`,
- * `run_completed`, `run_failed`) say what happened in the words a reader or
- * a stream wants and change nothing in the fold.
+ * `approval_requested`, `approval_decided`, `approval_resolved`,
+ * `input_received`, `waiting_input`, `compaction`, `delivery_claimed`,
+ * `run_completed`, `run_failed`) say what happened in the words a reader
+ * or a stream wants and change nothing in the fold.
  */
 export const RUN_EVENT_TYPES = [
   'run_started',
@@ -28,9 +31,12 @@ export const RUN_EVENT_TYPES = [
   'metadata_changed',
   'compaction',
   'approval_requested',
+  'approval_decided',
   'approval_resolved',
+  'input_received',
   'waiting_input',
   'status_changed',
+  'delivery_claimed',
   'run_completed',
   'run_failed',
   'step_committed',
@@ -82,11 +88,10 @@ export interface RunProjection extends RunState {
 }
 
 /**
- * What the row held when a worker loaded it (or last committed it): the
- * values a commit is diffed against. `stepRefs` are the in-memory step
- * objects, which are append-only once pushed (see stepsForPersist), so a
- * new step is one past the baseline length and a replaced one is a
- * different object at the same index.
+ * What the row held just before a write: the values the write's events are
+ * diffed against. The writer reads it under the row lock in the write's own
+ * transaction (run-event-writer.ts), so whatever another writer committed
+ * first is already in it and the log describes the row exactly.
  */
 export interface RunBaseline {
   headSeq: number;
@@ -96,7 +101,8 @@ export interface RunBaseline {
   error: string | null;
   workingMemory: any;
   metadata: any;
-  stepRefs: unknown[];
+  /** The steps as stored. */
+  steps: Step[];
 }
 
 /** Fields of a tool step that are its result, carried by `tool_result`. */
@@ -123,7 +129,7 @@ export function baselineOf(run: Omit<CommittedRun, 'totalCost' | 'totalTokens' |
     error: run.error ?? null,
     workingMemory: asStored(run.workingMemory ?? null),
     metadata: asStored(run.metadata ?? null),
-    stepRefs: Array.isArray(run.steps) ? [...run.steps] : [],
+    steps: asStored(Array.isArray(run.steps) ? run.steps : []),
   };
 }
 
@@ -181,10 +187,10 @@ function stepEvents(step: Step, index: number, nextCall: () => number, at: numbe
 }
 
 /**
- * What a commit changes, as events, in order. `steps` is the array as the
- * row will store it (capped, personal data hidden), index-aligned with
- * `run.steps`. `notes` are markers the processor recorded during the step
- * that leave no other trace in the row (a compaction).
+ * What a write changes, as events, in order. `steps` is the array as the
+ * row will store it (capped, personal data hidden), index-aligned with the
+ * baseline's. `notes` are markers the writer recorded that leave no other
+ * trace in the row (a compaction, an approval decision, input received).
  */
 export function commitEvents(base: RunBaseline, run: CommittedRun, steps: Step[], notes: RunEventDraft[] = []): RunEventDraft[] {
   const at = base.currentStep;
@@ -193,7 +199,7 @@ export function commitEvents(base: RunBaseline, run: CommittedRun, steps: Step[]
   const metadata = asStored(run.metadata ?? null);
   const output = asStored(run.output ?? null);
   const error = run.error ?? null;
-  const baseLength = base.stepRefs.length;
+  const baseLength = base.steps.length;
   const events: RunEventDraft[] = [];
 
   // The first commit of a run opens its log with what the row held before
@@ -209,7 +215,7 @@ export function commitEvents(base: RunBaseline, run: CommittedRun, steps: Step[]
         error: base.error,
         workingMemory: base.workingMemory,
         metadata: base.metadata,
-        steps: persisted.slice(0, Math.min(baseLength, persisted.length)),
+        steps: base.steps,
       },
     });
   }
@@ -223,12 +229,11 @@ export function commitEvents(base: RunBaseline, run: CommittedRun, steps: Step[]
   if (persisted.length < baseLength) {
     events.push({ type: 'steps_reset', step: at, payload: { steps: persisted } });
   } else {
-    const live = Array.isArray(run.steps) ? run.steps : [];
     let calls = 0;
     const nextCall = () => calls++;
     for (let i = 0; i < persisted.length; i++) {
       if (i < baseLength) {
-        if (live[i] !== base.stepRefs[i]) events.push({ type: 'step_replaced', step: at, payload: { index: i, step: persisted[i] } });
+        if (!same(persisted[i], base.steps[i])) events.push({ type: 'step_replaced', step: at, payload: { index: i, step: persisted[i] } });
         continue;
       }
       events.push(...stepEvents(persisted[i], i, nextCall, at));
@@ -247,8 +252,10 @@ export function commitEvents(base: RunBaseline, run: CommittedRun, steps: Step[]
     asked++;
   }
   // The request_approval tool pauses the run with no held call in working
-  // memory: the request is the run itself.
-  if (!asked && !after.size && run.status === 'waiting_approval' && base.status !== 'waiting_approval') {
+  // memory: the request is the run itself (unless the writer said so in a
+  // note, with the approval's id).
+  const noted = notes.some((n) => n.type === 'approval_requested');
+  if (!asked && !noted && !after.size && run.status === 'waiting_approval' && base.status !== 'waiting_approval') {
     events.push({ type: 'approval_requested', step: at, payload: { kind: 'run' } });
   }
 

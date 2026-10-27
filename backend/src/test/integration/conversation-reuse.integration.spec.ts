@@ -17,6 +17,7 @@ import { AgentVerifierHelper } from '../../modules/agents/agent-verifier.helper'
 import { AgentContextCompactor } from '../../modules/agents/agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../modules/agent-constraints/agent-constraints.service';
 import { RunEventsTable, withRunEvents } from '../fake-run-events';
+import { cloneRow } from '../fake-repository';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -122,15 +123,23 @@ describe('Conversation reuse (integration)', () => {
         });
         return run;
       }),
+      // The table keeps its own copy of each row, as Postgres does: a run
+      // write diffs against the row as stored (run-event-writer.ts), so a
+      // store sharing the worker's object would hide every change.
       save: jest.fn().mockImplementation((run: AgentRun) => {
         const existing = runStore.findIndex(r => r.id === run.id);
-        if (existing >= 0) runStore[existing] = run;
-        else runStore.push(run);
+        const copy = cloneRow(run);
+        copy.headSeq ??= 0;
+        if (existing >= 0) runStore[existing] = copy;
+        else runStore.push(copy);
         return Promise.resolve(run);
       }),
-      // commitStep() guards step writes via update(); findOne returns the
-      // stored object by reference so mutations are visible — just report success.
-      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      update: jest.fn().mockImplementation(async (where: any, patch: any) => {
+        const row = runStore.find(r => r.id === where.id && (where.headSeq === undefined || r.headSeq === where.headSeq));
+        if (!row) return { affected: 0 };
+        Object.assign(row, cloneRow(patch));
+        return { affected: 1 };
+      }),
       findOne: jest.fn().mockImplementation(({ where, relations }: any) => {
         const found = runStore.find(r => {
           if (where.id && r.id !== where.id) return false;
@@ -138,10 +147,12 @@ describe('Conversation reuse (integration)', () => {
           if (where.agentId && r.agentId !== where.agentId) return false;
           return true;
         });
-        if (found && relations?.agent) {
-          found.agent = agentStore.find(a => a.id === found.agentId) || null as any;
+        if (!found) return Promise.resolve(null);
+        const copy = cloneRow(found);
+        if (relations?.agent) {
+          copy.agent = agentStore.find(a => a.id === copy.agentId) || null as any;
         }
-        return Promise.resolve(found || null);
+        return Promise.resolve(copy);
       }),
       findAndCount: jest.fn().mockResolvedValue([[], 0]),
     };

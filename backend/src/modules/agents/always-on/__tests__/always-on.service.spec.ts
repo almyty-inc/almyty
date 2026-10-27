@@ -287,6 +287,8 @@ describe('Always on: reporting', () => {
     await w.service.onRunFinished('run-1');
     await w.service.onRunFinished('run-1');
     expect(w.posted).toHaveLength(1);
+    // The claim is on the run's log, once.
+    expect(w.runEvents.rows('run-1').filter((e) => e.type === 'delivery_claimed').map((e) => e.payload)).toEqual([{ via: 'always_on' }]);
   });
 
   it('looks at the inbox again when the run ends', async () => {

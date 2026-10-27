@@ -1,9 +1,9 @@
 import { Inject, Injectable, Optional, forwardRef } from '@nestjs/common';
-import { In, Not } from 'typeorm';
+import { FindOptionsWhere, In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
-import { AgentRunEvent } from '../../entities/agent-run-event.entity';
-import { RunBaseline, RunEventDraft, baselineOf, commitEvents } from './run-events';
+import { RunEventDraft } from './run-events';
+import { RunChange, writeRun } from './run-event-writer';
 import { Message, MessageRole } from '../../entities/message.entity';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
@@ -257,11 +257,6 @@ export class AgentStepProcessor {
    */
   private readonly cappedStepCache = new WeakMap<object, any>();
 
-  /**
-   * Per loaded run object: the row as this worker last read or wrote it,
-   * which a commit's events are diffed against (run-events.ts).
-   */
-  private readonly baselines = new WeakMap<AgentRun, RunBaseline>();
   /** Markers recorded during a step that leave no trace in the row (a compaction), written with its commit. */
   private readonly pendingNotes = new WeakMap<AgentRun, RunEventDraft[]>();
 
@@ -288,10 +283,6 @@ export class AgentStepProcessor {
       this.s.logger.debug(`Run ${runId} already done (${run.status}), skipping`);
       return 'done';
     }
-
-    // What the row held as loaded: the commit appends the events for what
-    // this step changes against it (run-events.ts).
-    this.baselines.set(run, baselineOf(run));
 
     // Optimistic-lock token: the step number we believe we're processing.
     // Every step-completing write is guarded on this via commitStep(), so a
@@ -478,7 +469,6 @@ export class AgentStepProcessor {
         ? { ...(agent.modelConfig?.compaction ?? {}), enabled: true }
         : agent.modelConfig?.compaction;
       if (compaction?.enabled) {
-        const coveredBefore = Number(run.workingMemory?.contextSummary?.coveredCount ?? 0);
         const compacted = await this.compactor.compact(
           messages,
           run,
@@ -490,10 +480,20 @@ export class AgentStepProcessor {
         run.totalCost += compacted.cost;
         run.totalTokens += compacted.tokens;
         // More of the conversation was folded this step (reusing the cached
-        // summary is not a compaction): the run's log says so, and at what cost.
-        const coveredNow = Number(run.workingMemory?.contextSummary?.coveredCount ?? 0);
-        if (coveredNow > coveredBefore) {
-          this.noteEvent(run, { type: 'compaction', step: null, payload: { coveredBefore, coveredNow, cost: compacted.cost, tokens: compacted.tokens } });
+        // summary is not a compaction): the run's log says so, with the
+        // run-wide count and what the summarizer cost. It is written by the
+        // same commit as the step it belongs to (persistWithEvents).
+        if (compacted.folded > 0) {
+          this.noteEvent(run, {
+            type: 'compaction',
+            step: null,
+            payload: {
+              folded: compacted.folded,
+              foldedTotal: Number(run.workingMemory?.contextSummary?.foldedTotal ?? compacted.folded),
+              cost: compacted.cost,
+              tokens: compacted.tokens,
+            },
+          });
         }
       }
 
@@ -1596,13 +1596,13 @@ export class AgentStepProcessor {
         await memory.afterRun(agent, run, team);
         if (run.steps.length !== stepsBefore) {
           // Logged like a commit: the memory_save step and its cost are
-          // events too. Guarded only on the log's head, the run being done.
+          // events too. The run is done, so nothing but its id guards it.
           const saved = await this.persistWithEvents(
             run,
             { id: run.id },
             { steps: await this.stepsForPersist(run), totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata },
           );
-          if (!saved) this.s.logger.warn(`Run ${run.id}: the memory step after completion was not recorded (its event log moved on)`);
+          if (!saved) this.s.logger.warn(`Run ${run.id}: the memory step after completion was not recorded (the run is gone)`);
         }
         return 'done';
       }
@@ -1800,7 +1800,10 @@ export class AgentStepProcessor {
       select: { id: true, status: true },
     });
     if (!live || !TERMINAL_STATUSES.includes(live.status)) return null;
-    await this.s.runRepository.update(
+    // Logged like any write: the cost goes on the run's log with the status
+    // the canceller left (the row as locked), not this worker's `running`.
+    await writeRun(
+      this.s.runRepository,
       { id: run.id, currentStep: expectedStep },
       { totalCost: run.totalCost, totalTokens: run.totalTokens },
     );
@@ -2489,33 +2492,19 @@ export class AgentStepProcessor {
 
   /**
    * Write the run row and append the events describing the write, in one
-   * transaction (durable runs step 1, run-events.ts). The events take seq
-   * headSeq+1.., and the guard includes the headSeq this worker read, so a
-   * second commit after the same seq matches no row and appends nothing:
-   * the log has no gaps and no repeats. The primary key (runId, seq) backs
-   * that up.
+   * transaction (durable runs step 1, run-event-writer.ts), together with
+   * the markers this step noted (a compaction). The events are diffed
+   * against the row as locked in that transaction, so a write another
+   * writer made during the step (a held call pausing the run, a wake's
+   * reply address) is already in the log and in the diff's starting point.
    */
-  private async persistWithEvents(run: AgentRun, guard: Record<string, any>, patch: Record<string, any>): Promise<boolean> {
-    const base = this.baselines.get(run) ?? baselineOf(run);
+  private async persistWithEvents(run: AgentRun, guard: FindOptionsWhere<AgentRun> & { id: any }, patch: RunChange): Promise<boolean> {
     const notes = this.pendingNotes.get(run) ?? [];
-    // `run` carries every value the patch writes (the patch is read off it);
-    // its live step objects tell new steps from ones already logged.
-    const events = commitEvents(base, run, patch.steps ?? (await this.stepsForPersist(run)), notes);
-    const headSeq = base.headSeq + events.length;
-    const won = await this.s.runRepository.manager.transaction(async (tx) => {
-      const res = await tx.getRepository(AgentRun).update({ ...guard, headSeq: base.headSeq }, { ...patch, headSeq } as any);
-      if ((res.affected ?? 0) === 0) return false;
-      await tx.getRepository(AgentRunEvent).insert(
-        events.map((e, i) => ({ runId: run.id, seq: base.headSeq + i + 1, type: e.type, step: e.step, payload: e.payload })),
-      );
-      return true;
-    });
-    if (won) {
-      run.headSeq = headSeq;
-      this.baselines.set(run, { ...baselineOf(run), headSeq });
-      this.pendingNotes.delete(run);
-    }
-    return won;
+    const written = await writeRun(this.s.runRepository, guard, patch, notes);
+    if (!written) return false;
+    run.headSeq = written.headSeq;
+    this.pendingNotes.delete(run);
+    return true;
   }
 
   /**

@@ -582,11 +582,20 @@ describe('AgentRuntimeService (integration)', () => {
       const run = await service.startRun('agent-1', 'org-1', 'user-1', 'cas');
       const startStep = run.currentStep;
       mockRunRepo.update.mockClear();
+      mockRunRepo.findOne.mockClear();
 
       await service.processStep(run.id);
 
+      // The commit locks the row on the CAS (run-event-writer.ts), then
+      // writes it at the head it read.
+      expect(mockRunRepo.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: run.id, currentStep: startStep }),
+          lock: { mode: 'pessimistic_write' },
+        }),
+      );
       expect(mockRunRepo.update).toHaveBeenCalledWith(
-        expect.objectContaining({ id: run.id, currentStep: startStep }),
+        expect.objectContaining({ id: run.id, headSeq: 0 }),
         expect.objectContaining({ currentStep: expect.any(Number) }),
       );
     });

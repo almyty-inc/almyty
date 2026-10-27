@@ -42,26 +42,46 @@ for run R". `agent_runs.headSeq` is the seq of the last event. Deleting a
 run deletes its events (ON DELETE CASCADE), so retention and erasure need
 nothing of their own.
 
-Every commit appends, in the same transaction as the row write, the events
-for what it changed, numbered headSeq+1.. . The commit's guard includes the
-headSeq the worker read, so two commits after the same head cannot both
-land: the second matches no row and appends nothing. The log never has a
-gap or a repeat.
+Every write of a run's state appends, in the same transaction as the row
+write, the events for what it changed, numbered headSeq+1.. . There is one
+way to write a run, `writeRun` (`backend/src/modules/agents/run-event-writer.ts`),
+used by the step commit and by every writer outside it: cancel, sending
+input, an approval request pausing the run and its decision resuming or
+ending it, the reaper, the queue giving up, a sub-agent wait timing out,
+a race cancelling its losers, collaboration steps, the delivery claim of
+a scheduled or always-on result, and metadata a channel or a wake adds
+(the AI disclosure flag, reply addresses, the channel post outcome).
+
+`writeRun` reads the row under a row lock (`SELECT ... FOR UPDATE`) with
+the writer's guard (the step commit's is the step number and a status
+that is not terminal), diffs the change against the row as locked, and
+writes the row and the events at headSeq+1.. . The lock orders writers,
+so a write made while a step runs (an approval pausing it, a wake leaving
+a reply address) is already in the step commit's starting point: the log
+never has a gap or a repeat, and folds into exactly what the row holds.
+The UPDATE also names the headSeq it read, and the primary key refuses a
+repeated seq, should anything write around the lock. A change can be a
+function of the locked row, for a merge (one metadata key) that must not
+write back a stale copy of the rest.
 
 Event types (`backend/src/modules/agents/run-events.ts`):
 
 | Type | What it carries |
 |---|---|
-| `run_started` | First event of a run: the row as it stood before its first commit (status, step, working memory, metadata, steps). |
+| `run_started` | First event of a run: the row as it stood before its first write (status, step, working memory, metadata, steps). |
 | `model_call` | A model call step, whole. |
 | `tool_call` / `tool_result` | A tool or sub-agent call: the call, then its result (output, error, duration, cost, tokens), paired by `callIndex` within the commit. |
 | `step_recorded` | Any other step (verify, error, memory save, ...). |
 | `step_replaced` / `steps_reset` | A recorded step rewritten, or the list shortened. Not expected; present so the log stays complete if it happens. |
 | `memory_changed` / `metadata_changed` | Top-level keys set and removed in working memory or metadata. |
-| `compaction` | More of the conversation folded into the summary, and what it cost. |
-| `approval_requested` / `approval_resolved` | A held tool call or change set waiting on a person, and its decision taking effect. |
+| `compaction` | The step folded more of the conversation into its summary: `folded` (messages folded this step), `foldedTotal` (folded over the run, only grows), and what the summarizer cost. Written by the commit of the step it belongs to, and only when `folded > 0`. |
+| `approval_requested` | A held tool call or change set waiting on a person (from the step that holds it), or a `request_approval` pause (from the request, with its id). |
+| `approval_decided` | The decision: approval id, approved / rejected / expired, who decided, their note. |
+| `approval_resolved` | A held call or change set taken off the run once its decision took effect. |
+| `input_received` | A person's input resumed a waiting run (the message by id; its words stay in the conversation). |
+| `delivery_claimed` | A finished run's result claimed for posting (schedule or always-on), once. |
 | `waiting_input`, `status_changed`, `run_completed`, `run_failed` | Status transitions. |
-| `step_committed` | Last event of every commit: status, step, cost, tokens, tool calls, time, and output and error when they changed. |
+| `step_committed` | Last event of every write: status, step, cost, tokens, tool calls, time, and output and error when they changed. |
 
 Folding the events (`projectRunEvents`) gives back the row's status, step,
 totals, output, error, steps, working memory and metadata. That equality is
@@ -100,10 +120,11 @@ last seq it saw and gets everything after it, then the live stream.
 5. **The log is the source of truth.** `steps` and `workingMemory` on the
    row become a cache of the projection.
 
-Writers outside the step commit (cancel, sending input, an approval
-decision, the reaper) still write the row only. Step 1 does not need them:
-`step_committed` carries absolute values, so the next commit's events bring
-the projection back to the row. They join the log in step 2.
+Not on the log: creating the run (its INSERT is what `run_started` records
+at the first write) and deleting it (its events go with it). Every other
+write of a run, anywhere in the backend, goes through `writeRun`; a guard
+spec (`run-writes-are-logged.spec.ts`) fails on an `AgentRun` repository
+write anywhere else.
 
 ## The worker-kill test
 
