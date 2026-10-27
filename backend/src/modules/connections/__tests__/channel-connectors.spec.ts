@@ -30,7 +30,8 @@ const ADAPTER_FIELDS: Record<string, string[]> = {
   [GatewayType.MATRIX]: ['homeserver_url', 'access_token', 'room_id', 'inbound_token'],
   [GatewayType.IRC]: ['webhook_url', 'bridge_token', 'inbound_token', 'channel', 'nick'],
   [GatewayType.EMAIL]: ['resend_api_key', 'reply_from', 'inbound_address', 'resend_inbound_signing_secret'],
-  [GatewayType.WEBHOOK]: ['callback_url', 'secret'],
+  // The reply address and how the caller signs (webhook-signature.helper.ts).
+  [GatewayType.WEBHOOK]: ['callback_url', 'secret', 'signature_header', 'signature_algorithm', 'signature_encoding', 'signature_prefix', 'signed_content'],
 };
 
 /** Fields a form may carry that no adapter reads: they steer the probe, not the transport. */
