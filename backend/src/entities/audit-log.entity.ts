@@ -115,6 +115,10 @@ export enum AuditAction {
   ALWAYS_ON_DISABLE = 'always_on_disable',
   ALWAYS_ON_PAUSE = 'always_on_pause',
   WAKE_DROPPED = 'wake_dropped',
+  // An approval decided in chat, from the owner's own channel (a button or a
+  // reply), and an attempt there by anyone else, refused: details.outcome,
+  // the channel and the platform identity that pressed or wrote.
+  CHANNEL_APPROVAL = 'channel_approval',
 
   // Hosted runners (docs/hosted-runners.md): an environment's changes, every
   // move of its machines (details.from/to: provisioned, woken, suspended,

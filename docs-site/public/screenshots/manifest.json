@@ -996,7 +996,7 @@
         "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
         "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
       ],
-      "sourceDigest": "a374f6754304ff8e0d22fd06b794597d42849f45ed2aeb13f26df92d534e7604",
+      "sourceDigest": "7914c5a8cde0e5491b8a74d0c6f37275e13cef5ce7668952784a1ae5e60188f5",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
     },
     {
@@ -1129,7 +1129,7 @@
         "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
         "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
       ],
-      "sourceDigest": "a374f6754304ff8e0d22fd06b794597d42849f45ed2aeb13f26df92d534e7604",
+      "sourceDigest": "7914c5a8cde0e5491b8a74d0c6f37275e13cef5ce7668952784a1ae5e60188f5",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
     },
     {
@@ -1470,7 +1470,7 @@
         "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
         "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
       ],
-      "sourceDigest": "a374f6754304ff8e0d22fd06b794597d42849f45ed2aeb13f26df92d534e7604",
+      "sourceDigest": "7914c5a8cde0e5491b8a74d0c6f37275e13cef5ce7668952784a1ae5e60188f5",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
     },
     {
@@ -1807,7 +1807,7 @@
         "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
         "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
       ],
-      "sourceDigest": "a374f6754304ff8e0d22fd06b794597d42849f45ed2aeb13f26df92d534e7604",
+      "sourceDigest": "7914c5a8cde0e5491b8a74d0c6f37275e13cef5ce7668952784a1ae5e60188f5",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
     },
     {
@@ -1901,7 +1901,7 @@
         "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
         "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
       ],
-      "sourceDigest": "a374f6754304ff8e0d22fd06b794597d42849f45ed2aeb13f26df92d534e7604",
+      "sourceDigest": "7914c5a8cde0e5491b8a74d0c6f37275e13cef5ce7668952784a1ae5e60188f5",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
     },
     {
@@ -2072,7 +2072,7 @@
         "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
         "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
       ],
-      "sourceDigest": "a374f6754304ff8e0d22fd06b794597d42849f45ed2aeb13f26df92d534e7604",
+      "sourceDigest": "7914c5a8cde0e5491b8a74d0c6f37275e13cef5ce7668952784a1ae5e60188f5",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to Slack; Slack itself was not used."
     },
     {
@@ -4047,7 +4047,7 @@
       "id": "tutorials-bizdev-11-always-on",
       "title": "Always on: standing instructions and timer",
       "path": "screenshots/tutorials/bizdev/11-always-on.png",
-      "capturedAt": "2026-10-21T15:31:57.144Z",
+      "capturedAt": "2026-10-27T10:19:08.887Z",
       "status": "current",
       "sha256": "74f1225280e3f64c2d6e7f64c4f20b5b67baba2d8cffc4dffc8b45eae40a5861",
       "source": {
@@ -4058,16 +4058,16 @@
       "sources": [
         "frontend/src/pages/agent-always-on.tsx"
       ],
-      "sourceDigest": "fe019a28d758e86fce8f2aaddc64be7f3c115332fd078176f06cc4c846ccba14",
+      "sourceDigest": "c2bc211622f24d8e59f0ade5bf639f47771fd442d885cd46d63c92a4466991ec",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-12-ask-first",
       "title": "Always on: ask before sending email",
       "path": "screenshots/tutorials/bizdev/12-ask-first.png",
-      "capturedAt": "2026-10-22T16:21:39.003Z",
+      "capturedAt": "2026-10-27T10:19:09.977Z",
       "status": "current",
-      "sha256": "4af8ed1475051278b2b726e67a74949f7493df8178a2a12fc1feec766cd13763",
+      "sha256": "aae93f4e4194c8fef68b6b59cb53a3427f471279d7c40acb5027f22f6b9f3f4e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -4076,7 +4076,7 @@
       "sources": [
         "frontend/src/pages/agent-always-on.tsx"
       ],
-      "sourceDigest": "fe019a28d758e86fce8f2aaddc64be7f3c115332fd078176f06cc4c846ccba14",
+      "sourceDigest": "c2bc211622f24d8e59f0ade5bf639f47771fd442d885cd46d63c92a4466991ec",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4140,9 +4140,9 @@
       "id": "tutorials-bizdev-16-slack-reports",
       "title": "Biz-dev reports as posted to Slack",
       "path": "screenshots/tutorials/bizdev/16-slack-reports.png",
-      "capturedAt": "2026-10-21T15:33:04.007Z",
+      "capturedAt": "2026-10-27T10:20:19.377Z",
       "status": "current",
-      "sha256": "f1d003f854ecd713abd1ba75566b9628654651d22edc09d56d356a60912ab0e8",
+      "sha256": "fe7b150bb96962aa5867d7ecf792ffa3ecd6cc201a32d3ec0c64cce0477d789b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -4153,16 +4153,16 @@
         "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
         "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
       ],
-      "sourceDigest": "aaaeebc08e96061071ecfef43d18020163d20c8a61e5b6d058ae89cd98776d0d",
+      "sourceDigest": "9c7ac2769618f4b0819a5159bc4b26d16a20d8d9f14d16b3f5ed58d851598a88",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
       "id": "tutorials-bizdev-17-what-woke-it",
       "title": "What woke it lately",
       "path": "screenshots/tutorials/bizdev/17-what-woke-it.png",
-      "capturedAt": "2026-10-21T15:33:02.135Z",
+      "capturedAt": "2026-10-27T10:20:17.154Z",
       "status": "current",
-      "sha256": "90498d8d98041d664e08b7dbf53fb0fba25c285268e100989d19ee4c36a6cd2d",
+      "sha256": "1cda9183485227b8ef6dc8bf28c6e2fc876f9b0163f56625941d41ccb1ae2bef",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -4171,7 +4171,7 @@
       "sources": [
         "frontend/src/pages/agent-always-on.tsx"
       ],
-      "sourceDigest": "fe019a28d758e86fce8f2aaddc64be7f3c115332fd078176f06cc4c846ccba14",
+      "sourceDigest": "c2bc211622f24d8e59f0ade5bf639f47771fd442d885cd46d63c92a4466991ec",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
