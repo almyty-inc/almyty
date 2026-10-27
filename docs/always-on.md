@@ -217,7 +217,12 @@ fire time as the owner (`OWNER_CANNOT_RUN`); the run then acts as
 agent itself under `agent_identity`, and `IDENTITY_LAPSED` pauses it when the
 plan no longer includes that. The standing thread is always
 compacted (`AgentContextCompactor`, the agent's own settings when it has
-them).
+them, over `ALWAYS_ON_COMPACTION`). A wake's run starts from the summary the
+previous run of the thread left (`carriedContextSummary`), so it folds in
+only what came after it, and a tool result from an earlier wake is cut to
+2,000 characters (`earlierToolResultChars`); the run's own results stay
+whole. `always-on-wake-cost.spec.ts` measures what a wake that only looks
+costs.
 
 **Timers.** `reconcileTimer` on every change; `restoreTimers` at boot
 removes every `always-on-tick` and legacy `heartbeat` repeatable job and
