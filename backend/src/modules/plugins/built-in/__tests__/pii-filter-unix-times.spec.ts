@@ -40,7 +40,7 @@ describe('PII filter: Unix times are not phone numbers', () => {
     expect(out.note).toBe('reach me on ******1234');
     // Separators make it a phone number whatever the field says.
     expect(out.created).toBe('********1234');
-    expect(await filter('{"phone": "1696204800"}')).toBe('{"phone": "******0800"}');
+    expect(await filter('{"phone": "1696204800"}')).toBe('{"phone": "******4800"}');
   });
 
   it('masks numbers outside the Unix-time range even in a time field', async () => {

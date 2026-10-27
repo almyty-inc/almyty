@@ -353,11 +353,11 @@ export function serializeQueryParams(params: Record<string, any>, styles: Record
     const exploded = spec?.explode !== false;
     if (Array.isArray(value)) {
       if (spec?.style === 'deepObject') brackets(key, value);
-      else if (!exploded) push(key, value.map(String).join(','));
+      else if (!exploded) parts.push(`${key}=${value.map((v) => enc(String(v))).join(',')}`);
       else value.forEach((v) => push(key, v));
     } else if (value !== null && typeof value === 'object') {
       if (!spec || spec.style === 'deepObject') brackets(key, value);
-      else if (!exploded) push(key, Object.entries(value).flat().map(String).join(','));
+      else if (!exploded) parts.push(`${key}=${Object.entries(value).flat().map((v) => enc(String(v))).join(',')}`);
       else for (const [k, v] of Object.entries(value)) push(enc(k), v);
     } else {
       push(key, value);
