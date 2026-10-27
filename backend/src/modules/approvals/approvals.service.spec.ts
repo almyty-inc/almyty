@@ -3,7 +3,6 @@ import { ApprovalsService } from './approvals.service';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
 import { FakePolicyApprovalsRepo } from './__tests__/fake-policy-approvals';
 import { fakeApprovalsRepo } from './__tests__/approvals-repo.fixture';
-import { fakeRepository } from '../../test/fake-repository';
 import { runsWithEvents } from '../../test/fake-run-events';
 
 class FakePolicy {

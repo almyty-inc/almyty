@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
 import { BadRequestException } from '@nestjs/common';
 
-import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
+import { AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Message } from '../../../entities/message.entity';
 import { fakeRepository } from '../../../test/fake-repository';
 import { runsWithEvents } from '../../../test/fake-run-events';
