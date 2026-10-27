@@ -1200,20 +1200,60 @@ const CHANNEL_CONNECTORS: ConnectorDefinition[] = [
   {
     key: channelKey('webhook'),
     kind: 'channel',
-    displayName: 'Outbound webhook',
-    description: 'An HTTPS endpoint of yours that receives channel events, signed with a shared secret.',
+    displayName: 'Webhook',
+    description:
+      'Any service that can call an HTTPS address: it calls the channel, signed with a shared secret, and the agent runs. ' +
+      'Give a reply address to have each answer posted back; leave it empty for a channel that only receives.',
     // Your endpoint, not a vendor's: calling it would deliver a message.
     // Shape check only.
     connect: [{
       type: 'api_key',
-      label: 'Webhook URL and secret',
+      label: 'Signing secret and reply address',
       schema: {
         type: 'object',
         properties: {
-          callback_url: { type: 'string', title: 'Webhook URL', format: 'uri' },
           secret: { type: 'string', title: 'Signing secret', 'x-secret': true, minLength: 16 },
+          callback_url: {
+            type: 'string',
+            title: 'Reply address',
+            format: 'uri',
+            description: 'Where each answer is posted. Leave empty if the caller expects no reply.',
+          },
+          // How the caller signs its requests (webhook-signature.helper.ts).
+          // The defaults are almyty's own scheme; a service that signs
+          // another way is described here, never in code.
+          signature_header: {
+            type: 'string',
+            title: 'Signature header',
+            default: 'X-Webhook-Signature',
+            description: 'The request header the caller puts its signature in.',
+          },
+          signature_algorithm: {
+            type: 'string',
+            title: 'Signature hash',
+            enum: ['sha256', 'sha1', 'sha512'],
+            default: 'sha256',
+            description: 'The HMAC hash the caller signs with.',
+          },
+          signature_encoding: {
+            type: 'string',
+            title: 'Signature encoding',
+            enum: ['hex', 'base64'],
+            default: 'hex',
+          },
+          signature_prefix: {
+            type: 'string',
+            title: 'Signature prefix',
+            description: 'Text in front of the signature, such as v1= or sha256=. Leave empty if there is none.',
+          },
+          signed_content: {
+            type: 'string',
+            title: 'Signed content',
+            default: '{body}',
+            description: 'What the caller signs: {body} is the request body, {header:Name} a request header, e.g. {header:X-Timestamp}.{body}.',
+          },
         },
-        required: ['callback_url', 'secret'],
+        required: ['secret'],
       },
       credentialType: CredentialType.CUSTOM,
     }],

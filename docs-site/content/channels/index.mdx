@@ -18,7 +18,7 @@ You set channels up on the assistant itself, and you decide when each one goes l
 | **Signal**, **Matrix**, **IRC** | Answers through a small relay program (a "bridge") you run |
 | **Email**, **SMS** | Answers mail sent to your receiving address, or texts sent to your Twilio number |
 | **iMessage** | Answers one-to-one and group iMessages through a service that owns the number: Sendblue or LoopMessage |
-| **Webhook** | Takes messages from, and sends replies to, a web address you own |
+| **Webhook** | Lets any service that can call a web address start the assistant; replies go to an address you own, or nowhere |
 | **Desktop app**, **Terminal app** | An app people download and install; see [Downloadable apps](/channels/builds) |
 | **Other agents (A2A)** | Other AI agents can call your assistant. A2A ("agent to agent") is a shared standard that lets agents from different companies talk to each other; see [A2A](/gateways/a2a) |
 
@@ -84,6 +84,16 @@ Files are kept with the conversation they arrived in. When the conversation is r
 **Group chats say who is talking.** In a conversation with several people (a Slack channel, a Teams group chat, a Discord server, a Telegram or Signal group, a Google Chat space, an IRC channel, a Matrix room, an iMessage group) each message reaches the assistant with the writer's name in front, like "Anna: can someone check order 1182?". It is the name the platform shows. Where there is none, or the name is an email address or phone number, a short code such as `user-3fa21c` is used instead, the same one each time for that person. Contact details are never put in front of a message.
 
 **Pictures and files in replies.** When the assistant's answer includes an image or a link to a file, apps that can show media send it as a picture or attachment: Slack, Telegram, Discord, WhatsApp, Microsoft Teams, Google Chat, Signal, email and iMessage. SMS, Matrix and IRC keep the link, and so do the web chat and widget, which show an image as a link rather than loading it.
+
+## The webhook channel
+
+A webhook channel lets any service that can call a web address start your assistant: a monitoring tool when an alert fires, a form when someone submits it, a CI system when a build fails. Its key holds:
+
+- **Signing secret**: a shared secret both sides know. Every call must be signed with it, or almyty refuses the call.
+- **Reply address** (optional): where each answer is posted. Leave it empty when the caller expects nothing back. The assistant still runs, and its answer is kept in the run history.
+- **How the caller signs.** By default almyty expects the signature in an `X-Webhook-Signature` header, as the hex HMAC-SHA256 of the request body. A service that signs another way is described in the key's other fields: **Signature header**, **Signature hash** (SHA-256, SHA-1 or SHA-512), **Signature encoding** (hex or base64), **Signature prefix** (text in front of the signature, such as `v1=`) and **Signed content** (`{body}` is the request body; `{header:Name}` puts a request header in, for a service that signs a timestamp and the body).
+
+For example, a PagerDuty v3 webhook signs the body with HMAC-SHA256 and sends `v1=<signature>` in `X-PagerDuty-Signature`. Set **Signature header** to `X-PagerDuty-Signature` and **Signature prefix** to `v1=`, paste PagerDuty's signing secret, and leave the reply address empty. When a service sends several signatures at once (while it changes secrets), any one that matches is accepted.
 
 ## Why a publish can be refused
 

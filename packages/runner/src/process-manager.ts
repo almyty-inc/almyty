@@ -465,19 +465,37 @@ export function createDefaultAdapterFactory(): AdapterFactory {
 
 // ── Standalone shell.exec (no PTY, no buffer; one-shot) ─────────────
 
+/**
+ * Run `cmd` under /bin/sh and collect its output.
+ *
+ * Standard input is closed: `input` when given is written to it first,
+ * otherwise it is closed empty at once. execFile leaves the child's stdin
+ * an open pipe nobody writes to, so a CLI that reads stdin when it is not
+ * a terminal (`codex exec`, `cat`, many `--stdin` tools) waited for input
+ * that never came until the timeout killed it.
+ */
 export async function shellExec(
   cmd: string,
   env?: Record<string, string>,
   timeoutMs = 60_000,
   cwd?: string,
+  input?: string,
 ): Promise<ShellExecResult> {
   try {
-    const { stdout, stderr } = await execFileAsync('/bin/sh', ['-c', cmd], {
+    const running = execFileAsync('/bin/sh', ['-c', cmd], {
       env: { ...process.env, ...(env ?? {}) } as NodeJS.ProcessEnv,
       timeout: timeoutMs,
       maxBuffer: 10 * 1024 * 1024,
       ...(cwd ? { cwd } : {}),
     });
+    const stdin = running.child.stdin;
+    if (stdin) {
+      // A command that exits without reading its input closes the pipe;
+      // writing to it then is EPIPE, which is not the command failing.
+      stdin.on('error', () => undefined);
+      stdin.end(typeof input === 'string' ? input : undefined);
+    }
+    const { stdout, stderr } = await running;
     return { stdout, stderr, exitCode: 0 };
   } catch (err: any) {
     return {

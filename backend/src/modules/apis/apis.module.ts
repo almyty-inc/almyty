@@ -10,6 +10,7 @@ import { ApisCredentialsController } from './apis-credentials.controller';
 import { ApisService } from './apis.service';
 import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
+import { ApisSdkAnalysisHelper } from './apis-sdk-analysis.helper';
 import { CredentialService } from './credential.service';
 import { ApiConnectService } from './api-connect.service';
 import { ApiKeyService } from './api-key.service';
@@ -25,6 +26,7 @@ import { Credential } from '../../entities/credential.entity';
 // Modules
 import { SchemaParserModule } from '../schema-parser/schema-parser.module';
 import { ToolsModule } from '../tools/tools.module';
+import { NodeSandboxModule } from '../tools/node-sandbox/node-sandbox.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 @Module({
@@ -66,10 +68,11 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     }),
     SchemaParserModule,
     ToolsModule,
+    NodeSandboxModule,
     AuthorizationModule,
   ],
   controllers: [ApisController, ApisCredentialsController],
-  providers: [ApisService, ApisImportHelper, ApisToolGeneratorHelper, CredentialService, ApiConnectService, ApiKeyService],
-  exports: [ApisService, CredentialService],
+  providers: [ApisService, ApisImportHelper, ApisToolGeneratorHelper, ApisSdkAnalysisHelper, CredentialService, ApiConnectService, ApiKeyService],
+  exports: [ApisService, CredentialService, ApisSdkAnalysisHelper],
 })
 export class ApisModule {}
