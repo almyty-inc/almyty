@@ -66,6 +66,10 @@ export const RUNNER_CAPABILITIES: CapabilityDef[] = [
           minimum: 1,
           description: 'Hard timeout in milliseconds. The runner kills the process if exceeded.',
         },
+        input: {
+          type: 'string',
+          description: 'Text written to the command\'s standard input. Without it standard input is closed, so a command that reads it sees end-of-input instead of waiting.',
+        },
       },
       required: ['command'],
       additionalProperties: false,
