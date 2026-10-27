@@ -288,7 +288,7 @@ export function ToolsPage() {
             </div>
             <div className="max-w-[300px]">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-primary hover:underline truncate" title={tool.name}>{tool.name}</span>
+                <span className="font-medium text-primary hover:underline truncate" title={tool.name}>{tool.metadata?.displayName || tool.name}</span>
                 {isRunnerTool && (
                   <Badge variant="outline" className="text-cyan-600 border-cyan-300 dark:border-cyan-800 dark:text-cyan-400 shrink-0">
                     runner: {tool.runnerConfig?.runnerName}

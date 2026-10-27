@@ -316,7 +316,7 @@ export class ApisToolGeneratorHelper {
         break;
 
       case 'basic':
-        const credentials = Buffer.from(`${authConfig.config.username}:${authConfig.config.password}`).toString('base64');
+        const credentials = Buffer.from(`${authConfig.config.username}:${authConfig.config.password ?? ''}`).toString('base64');
         config.headers.Authorization = `Basic ${credentials}`;
         break;
 

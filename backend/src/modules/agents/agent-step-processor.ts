@@ -750,7 +750,16 @@ export class AgentStepProcessor {
             ? toolCall.name === 'store_memory'
               ? await memory.store(agent, run, team, toolCall.parameters || {})
               : await memory.recall(agent, run, toolCall.parameters || {})
-            : await this.s.builtInTools.executeBuiltInTool(toolCall.name, toolCall.parameters || {}, run, agent);
+            : await this.s.builtInTools.executeBuiltInTool(
+                toolCall.name,
+                // request_approval records its call id on the approval, so the
+                // decision can be written back as this call's result.
+                toolCall.name === 'request_approval'
+                  ? { ...(toolCall.parameters || {}), _toolCallId: toolCall.id }
+                  : toolCall.parameters || {},
+                run,
+                agent,
+              );
           if (builtInResult) {
             // Built-in tool was handled
             toolCall.result = builtInResult.result;

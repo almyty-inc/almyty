@@ -140,12 +140,16 @@ export type AuditAction =
   | 'credential_create' | 'credential_update' | 'credential_delete' | 'credential_use'
   | 'ownership_transfer' | 'visibility_change'
   | 'visitor_data_export' | 'visitor_data_erase'
+  | 'approval_gate' | 'approval_decided' | 'sso_login'
+  | 'invite_send' | 'invite_accept' | 'invite_revoke' | 'member_role_change' | 'member_remove'
+  | 'team_create' | 'team_update' | 'team_delete'
+  | 'team_member_add' | 'team_member_role_change' | 'team_member_remove'
 
 export type AuditResource =
   | 'agent' | 'agent_run' | 'tool' | 'gateway' | 'api'
   | 'memory' | 'file' | 'interface' | 'credential'
   | 'api_key' | 'user' | 'organization' | 'llm_provider' | 'llm_session'
-  | 'runner'
+  | 'runner' | 'approval' | 'team' | 'invitation'
 
 export interface AuditLogEntry {
   id: string

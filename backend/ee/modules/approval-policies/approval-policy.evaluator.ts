@@ -175,9 +175,24 @@ export class ApprovalPolicyEvaluator {
     }
   }
 
+  /**
+   * A dot-path against the request context. A path the context itself
+   * does not carry (`amount`, `customer.tier`) is read from the payload
+   * the agent sent, so `amount` and `payload.amount` both work.
+   */
   private resolve(path: string, ctx: ApprovalContext): unknown {
+    const direct = this.walk(path, ctx);
+    if (direct !== undefined) return direct;
+    const payload = ctx.payload;
+    if (payload && typeof payload === 'object' && !path.startsWith('payload.')) {
+      return this.walk(path, payload as Record<string, unknown>);
+    }
+    return undefined;
+  }
+
+  private walk(path: string, root: Record<string, unknown>): unknown {
     const parts = path.split('.');
-    let cur: unknown = ctx;
+    let cur: unknown = root;
     for (const part of parts) {
       if (cur == null || typeof cur !== 'object') return undefined;
       cur = (cur as Record<string, unknown>)[part];

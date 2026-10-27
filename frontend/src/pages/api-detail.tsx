@@ -24,6 +24,7 @@ import { ApiKeyCard } from '@/components/apis/detail/key-card'
 import { OperationsTab } from '@/components/apis/detail/operations-tab'
 import { OverviewTab } from '@/components/apis/detail/overview-tab'
 import { SchemaTab } from '@/components/apis/detail/schema-tab'
+import { SdkPackagesCard } from '@/components/apis/detail/sdk-packages-card'
 
 import { apisApi } from '@/lib/api'
 import { toolsQuery } from '@/lib/list-queries'
@@ -45,6 +46,11 @@ export function ApiDetailPage() {
     queryKey: ['api', id],
     queryFn: () => apisApi.getById(id!),
     enabled: !!id,
+    // An SDK API's packages are analysed in the background: follow it.
+    refetchInterval: (query) =>
+      (query.state.data as { metadata?: { sdkAnalysis?: { state?: string } } } | undefined)?.metadata?.sdkAnalysis?.state === 'analysing'
+        ? 2000
+        : false,
   })
 
   // The API detail endpoint deliberately stopped eager-loading the schemas
@@ -128,6 +134,7 @@ export function ApiDetailPage() {
   const operationsExtracted = apiOperations?.operations || apiOperations || []
   const operations: ApiOperation[] = Array.isArray(operationsExtracted) ? operationsExtracted : []
   const TypeIcon = getApiTypeIcon(api.type)
+  const isSdk = api.type === ApiType.SDK
 
   return (
     <div className="space-y-8">
@@ -171,29 +178,35 @@ export function ApiDetailPage() {
           </Button>
         </div>
       </div>
+      {/* An SDK API has packages, not a description: no import, no operations. */}
+      {isSdk ? (
+        <SdkPackagesCard api={api} apiTools={apiTools} />
+      ) : (
+        <OverviewTab
+          api={api}
+          operations={operations}
+          apiTools={apiTools}
+          onOpenSchemaViewer={() => setSchemaOpen(true)}
+          onOpenAuthConfig={() => {
+            setKeyEditing(true)
+            keyCardRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+          }}
+          onOpenSchemaImport={() => navigate(`/apis/${api.id}/import`)}
+        />
+      )}
 
-      <OverviewTab
-        api={api}
-        operations={operations}
-        apiTools={apiTools}
-        onOpenSchemaViewer={() => setSchemaOpen(true)}
-        onOpenAuthConfig={() => {
-          setKeyEditing(true)
-          keyCardRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
-        }}
-        onOpenSchemaImport={() => navigate(`/apis/${api.id}/import`)}
-      />
-
-      <SchemaTab api={api} open={schemaOpen} onOpenChange={setSchemaOpen} />
+      {!isSdk && <SchemaTab api={api} open={schemaOpen} onOpenChange={setSchemaOpen} />}
 
       <ApiKeyCard ref={keyCardRef} apiId={api.id} apiName={api.name} editing={keyEditing} onEditingChange={setKeyEditing} />
 
-      <OperationsTab
-        api={api}
-        operations={operations}
-        apiTools={apiTools}
-        onOpenSchemaImport={() => navigate(`/apis/${api.id}/import`)}
-      />
+      {!isSdk && (
+        <OperationsTab
+          api={api}
+          operations={operations}
+          apiTools={apiTools}
+          onOpenSchemaImport={() => navigate(`/apis/${api.id}/import`)}
+        />
+      )}
     </div>
   )
 }

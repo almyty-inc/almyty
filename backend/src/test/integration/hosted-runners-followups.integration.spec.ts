@@ -330,7 +330,7 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       expect(call.totalCost).toBeCloseTo((1000 * 3 + 100 * 15) / 1_000_000, 10);
       // The organization's spend, which its budgets are measured against, includes it.
       const spend = new SpendService(repo(AgentRun), repo(AgentExecution), repo(HostedModelCall));
-      expect(await spend.periodToDateCents({ organizationId, from: new Date(Date.now() - 60_000) })).toBe(Math.round(call.totalCost * 100));
+      expect(await spend.periodToDateCents({ organizationId, from: new Date(Date.now() - 60_000) })).toBeCloseTo(call.totalCost * 100, 4);
 
       // A pod lists the shared provider's models, not agents.
       const openai = new AgentOpenAICompatController(agents as any, {} as any, repo(ApiKey), {} as any, undefined, allow as any, undefined, modelTokens, passThrough);

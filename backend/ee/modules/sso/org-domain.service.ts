@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { promises as dns } from 'dns';
 
 import { OrgDomain, OrgDomainStatus } from '../../../src/entities/org-domain.entity';
@@ -131,5 +131,24 @@ export class OrgDomainService {
     if (!host) return false;
     const verified = await this.repo.find({ where: { organizationId, status: 'verified' } });
     return verified.some((d) => host === d.domain || host.endsWith(`.${d.domain}`));
+  }
+
+  /**
+   * The organization that has verified this address's domain (or the
+   * closest parent of it), or null. A domain is verified by one
+   * organization at most (DOMAIN_TAKEN_MESSAGE).
+   */
+  async organizationForEmail(email: string): Promise<string | null> {
+    const at = (email || '').lastIndexOf('@');
+    if (at < 1) return null;
+    const host = email.slice(at + 1).trim().toLowerCase();
+    if (!host || !host.includes('.')) return null;
+    const labels = host.split('.');
+    // a.b.example.com -> a.b.example.com, b.example.com, example.com
+    const candidates = labels.slice(0, -1).map((_, i) => labels.slice(i).join('.'));
+    const rows = await this.repo.find({ where: { domain: In(candidates), status: 'verified' } });
+    if (rows.length === 0) return null;
+    const closest = rows.reduce((best, row) => (row.domain.length > best.domain.length ? row : best));
+    return closest.organizationId;
   }
 }

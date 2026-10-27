@@ -55,6 +55,20 @@ export function secretFieldsOf(schema: JsonSchemaObject | undefined): string[] {
   return Object.entries(schema.properties).filter(([, p]) => p['x-secret'] === true).map(([k]) => k);
 }
 
+/**
+ * The fields of `values` kept secret: the `x-secret` ones, plus each
+ * `x-secret-without` one whose named field is empty (an API key typed as
+ * a basic-auth username with no password).
+ */
+export function secretFieldsFor(schema: JsonSchemaObject | undefined, values: Record<string, unknown>): string[] {
+  if (!schema) return [];
+  const empty = (k: string) => values[k] === undefined || values[k] === null || values[k] === '';
+  const conditional = Object.entries(schema.properties)
+    .filter(([, p]) => typeof p['x-secret-without'] === 'string' && empty(p['x-secret-without']))
+    .map(([k]) => k);
+  return [...secretFieldsOf(schema), ...conditional];
+}
+
 /** Splits form values into secret and plain parts according to the schema. */
 export function splitSecrets(values: Record<string, unknown>, schema: JsonSchemaObject | undefined): { secrets: Record<string, string>; plain: Record<string, unknown> } {
   const secretKeys = new Set(secretFieldsOf(schema));

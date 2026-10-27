@@ -1,7 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Agent } from '../../entities/agent.entity';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 export type AgentAuditAction =
   | 'created'
@@ -34,6 +36,22 @@ export interface AgentAuditEvent {
 
 const MAX_AUDIT_ENTRIES = 100;
 
+/** Each agent event as the organization's audit trail records it. */
+const TRAIL_ACTION: Record<AgentAuditAction, AuditAction> = {
+  created: AuditAction.CREATE,
+  updated: AuditAction.UPDATE,
+  deleted: AuditAction.DELETE,
+  activated: AuditAction.ACTIVATE,
+  deactivated: AuditAction.DEACTIVATE,
+  invoked: AuditAction.INVOKE,
+  scheduled: AuditAction.SCHEDULE,
+  version_saved: AuditAction.UPDATE,
+  rolled_back: AuditAction.ROLLBACK,
+  duplicated: AuditAction.DUPLICATE,
+  exported: AuditAction.EXPORT,
+  imported: AuditAction.IMPORT,
+};
+
 @Injectable()
 export class AgentAuditService {
   private readonly logger = new Logger(AgentAuditService.name);
@@ -41,11 +59,18 @@ export class AgentAuditService {
   constructor(
     @InjectRepository(Agent)
     private agentRepository: Repository<Agent>,
+    // The organization's audit trail (and its SIEM streams). Agent edits
+    // were only kept in the agent's own metadata, so Settings > Audit and
+    // every streaming target missed them. @Optional for unit wiring.
+    @Optional()
+    private readonly auditLogService?: AuditLogService,
   ) {}
 
   /**
    * Append an audit log entry to the agent's metadata.auditLog array.
    * Keeps the last MAX_AUDIT_ENTRIES entries (append-only, capped).
+   * The same event is written to the organization's audit trail, which
+   * a deleted agent (no row left to append to) still reaches.
    *
    * Concurrency: two overlapping calls for the same agent used to
    * race — both callers read the same current log, both pushed their
@@ -61,6 +86,7 @@ export class AgentAuditService {
    * metadata update, so contention is negligible in practice.
    */
   async log(event: AgentAuditEvent): Promise<void> {
+    let agentName: string | undefined;
     try {
       await this.agentRepository.manager.transaction(async (tx) => {
         const agent = await tx.findOne(Agent, {
@@ -72,6 +98,7 @@ export class AgentAuditService {
           this.logger.warn(`[AUDIT] Agent not found: ${event.agentId}`);
           return;
         }
+        agentName = agent.name;
 
         const entry: AgentAuditEntry = {
           action: event.action,
@@ -107,6 +134,17 @@ export class AgentAuditService {
         `[AUDIT] Failed to log ${event.action} for agent=${event.agentId}: ${error.message}`,
       );
     }
+
+    // log() never throws.
+    await this.auditLogService?.log({
+      organizationId: event.organizationId,
+      userId: event.userId || undefined,
+      action: TRAIL_ACTION[event.action] ?? AuditAction.UPDATE,
+      resourceType: AuditResource.AGENT,
+      resourceId: event.agentId,
+      resourceName: agentName ?? (typeof event.details?.name === 'string' ? event.details.name : undefined),
+      details: { ...(event.details ?? {}), agentEvent: event.action },
+    });
   }
 
   /**

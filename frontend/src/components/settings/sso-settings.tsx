@@ -24,6 +24,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { SsoDomains } from './sso-domains'
+import { useOrganizationStore } from '@/store/organization'
 
 type Protocol = 'saml' | 'oidc'
 
@@ -67,6 +68,7 @@ function SsoSettingsForm() {
   const queryClient = useQueryClient()
   const { success, error } = useNotifications()
   const copySensitive = useCopySensitive()
+  const { currentOrganization } = useOrganizationStore()
 
   const { data, isLoading } = useQuery<SsoConfigView>({
     queryKey: ['sso-config'],
@@ -138,6 +140,10 @@ function SsoSettingsForm() {
   }
 
   const protocol: Protocol = (form.protocol as Protocol) || 'saml'
+  // The addresses an identity provider needs: the API's own base (the SCIM
+  // base URL without its path) and this organization's id.
+  const orgId = currentOrganization?.id
+  const apiBase = (data?.scimBaseUrl || '').replace(/\/scim\/v2\/?$/, '')
 
   return (
     <div className="space-y-6">
@@ -267,6 +273,30 @@ function SsoSettingsForm() {
             </div>
           )}
 
+          {orgId && apiBase && (
+            <div className="space-y-3 rounded-md border bg-muted/30 p-3" data-testid="sso-idp-addresses">
+              <p className="text-sm font-medium">For your identity provider</p>
+              {protocol === 'saml' ? (
+                <>
+                  <IdpAddress id="sso-saml-acs" label="Reply URL (assertion consumer service)" value={`${apiBase}/sso/${orgId}/saml/callback`} />
+                  <IdpAddress id="sso-saml-metadata" label="Service provider metadata" value={`${apiBase}/sso/${orgId}/saml/metadata`} />
+                </>
+              ) : (
+                <IdpAddress
+                  id="sso-oidc-callback"
+                  label="Redirect URI to register"
+                  hint="Register it with your identity provider, and enter the same address under Redirect URI above."
+                  value={`${apiBase}/sso/${orgId}/oidc/callback`}
+                />
+              )}
+              <IdpAddress
+                id="sso-login-url"
+                label="Sign-in link"
+                hint="Where your people sign in with their company account. Put it in your identity provider's app portal, or share it."
+                value={`${apiBase}/sso/${orgId}/${protocol}/login`}
+              />
+            </div>
+          )}
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
             {saveMutation.isPending ? 'Saving...' : 'Save SSO settings'}
           </Button>
@@ -349,6 +379,23 @@ function SsoSettingsForm() {
       </Card>
       {confirmDialog}
       {guard.element}
+    </div>
+  )
+}
+
+/** One address an identity provider needs from us, read-only with a copy button. */
+function IdpAddress({ id, label, hint, value }: { id: string; label: string; hint?: string; value: string }) {
+  const copySensitive = useCopySensitive()
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="flex gap-2">
+        <Input id={id} readOnly value={value} className="font-mono text-xs" />
+        <Button type="button" variant="outline" size="icon" aria-label={`Copy ${label}`} onClick={() => copySensitive(value, label)}>
+          <Copy className="h-4 w-4" />
+        </Button>
+      </div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   )
 }

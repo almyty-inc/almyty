@@ -1,30 +1,109 @@
-# Sign in with your company accounts
+# Sign in with Microsoft Entra ID, and add and remove people automatically
 
-For IT admins who want almyty behind the same company login as everything else. People sign in with their company account (from Okta, Microsoft Entra ID or another provider that supports SAML or OIDC, the two common single sign-on standards). With SCIM, a third standard, your directory adds new starters automatically and removes leavers the day they go, with no manual invites and no forgotten accounts.
+## What you'll build
 
-Single sign-on needs the Business plan.
+almyty behind your company login, set up for Velora Energy (a made-up energy supplier) with Microsoft Entra ID:
+
+- People sign in with their Microsoft work account. There is no separate almyty password to forget.
+- When IT adds someone to the almyty app in Entra, they get an almyty account. When IT disables them, they lose access the same day.
+- Groups in Entra become teams in almyty.
+
+Eva de Groot started this week. IT added her in Entra; she opened the sign-in link and was in, without an invitation:
+
+![Eva signed in with her Microsoft account on her first day](/screenshots/examples/sso-scim-onboarding/00-signed-in.png)
+
+Single sign-on and automatic provisioning (SCIM) need the **Business** plan. The screenshots come from a test installation: web addresses start with `http://localhost` instead of `https://api.almyty.com`, and Microsoft's sign-in was stood in for by a local service. It takes about 30 minutes, most of it in Entra.
 
 ## What you need
 
-- The Business plan.
-- Admin access to your company's identity provider, and to your company's DNS (to prove you own your email domain).
+- The Business plan, and **owner or admin** in your almyty organization.
+- In Microsoft Entra ID, the **Application Administrator** role (or higher).
+- Access to your domain's DNS, to add one TXT record.
 
-## How to build it
+## 1. Prove you own your email domain
 
-1. **Prove your email domain.** Open **Settings**, then **Single sign-on**. Under **Email domains**, add your domain (for example `example.com`), add the TXT record it shows at your DNS provider, and click **Check DNS**. almyty only creates accounts for addresses on a domain you have proven.
-2. **Connect your identity provider.** On the same page, pick the **Protocol** and enter the details from your provider. Turn on **Just-in-time provisioning** if people should get an account the first time they sign in (they start as members). Turn on **Enable SSO login** and save.
-3. **Turn on provisioning.** Click **Generate SCIM token** on the same page and give it, with the **SCIM base URL** shown there, to your identity provider. New starters get an account; leavers lose access to your organization as soon as they are removed.
-4. **Teams follow your directory.** Groups sent from your directory become teams in almyty, with their members.
-5. **Check the record.** Sign-ins and changes are in the [audit trail](/examples/audit-to-siem), tied to real people from your directory.
+In almyty, open **Settings**, then **People and access → Single sign-on**. Under **Email domains**, enter your domain (`veloraenergy.example` here) and click **Add domain**. The page shows a TXT record:
 
-Password sign-in stays available alongside single sign-on; almyty can't switch it off for your organization.
+![The TXT record to add for the domain](/screenshots/examples/sso-scim-onboarding/01-domain-record.png)
 
-Single sign-on is built and tested, but every identity provider is set up a little differently: try it with a test user before you rely on it.
+Add it at your DNS provider exactly as shown, then click **Check DNS**. Once the record is found the domain shows **Verified**:
 
-## For developers
+![The domain, verified](/screenshots/examples/sso-scim-onboarding/02-domain-verified.png)
 
-The settings as JSON, the sign-in endpoints and the SCIM operations are in [SSO and SCIM](/enterprise/sso).
+almyty only creates accounts, through sign-in or through Entra, for addresses on a verified domain. That stops anyone from creating an account for a mailbox your company does not own. Keep the record in place.
+
+## 2. Register almyty in Entra
+
+On the same almyty page, set **Protocol** to **OpenID Connect**. Under **For your identity provider** you now see two addresses: the **Redirect URI to register** and the **Sign-in link**. Copy the redirect URI.
+
+In the Microsoft Entra admin center (entra.microsoft.com):
+
+1. **Identity → Applications → App registrations → New registration.** **Name**: `almyty`. **Supported account types**: **Accounts in this organizational directory only**. **Redirect URI**: platform **Web**, and paste the redirect URI from almyty. Click **Register**.
+2. On the app's **Overview**, copy the **Application (client) ID** and the **Directory (tenant) ID**.
+3. **Certificates & secrets → Client secrets → New client secret.** Give it a description and an expiry, click **Add** and copy the **Value** (it is shown once).
+4. **Token configuration → Add optional claim → ID → email**, click **Add**, and accept the Microsoft Graph email permission. almyty finds people by their email address, so the sign-in must carry it.
+
+## 3. Connect almyty to Entra
+
+Back in almyty, fill in:
+
+- **Issuer URL**: `https://login.microsoftonline.com/<Directory (tenant) ID>/v2.0`
+- **Client ID**: the Application (client) ID
+- **Client secret**: the secret's Value
+- **Redirect URI**: the same redirect URI you registered in Entra
+- Leave **Just-in-time provisioning** off: Entra will create the accounts (next step), so nobody gets in who IT has not added.
+- Turn on **Enable SSO login**.
+
+![Single sign-on with Entra ID over OpenID Connect](/screenshots/examples/sso-scim-onboarding/03-entra-oidc.png)
+
+Click **Save SSO settings**.
+
+## 4. Let Entra add and remove people
+
+In almyty, under **SCIM provisioning**, click **Generate SCIM token**. Copy the token now (it is shown once) and the **SCIM base URL**:
+
+![The SCIM base URL and a new token](/screenshots/examples/sso-scim-onboarding/04-scim-token.png)
+
+In Entra:
+
+1. **Identity → Applications → Enterprise applications**, open **almyty** (the registration made it).
+2. **Provisioning → Get started**. **Provisioning Mode**: **Automatic**. Under **Admin Credentials**, **Tenant URL** is the SCIM base URL and **Secret Token** the token. Click **Test Connection**, then **Save**.
+3. Under **Settings**, keep **Scope** on **Sync only assigned users and groups**, and set **Provisioning Status** to **On**. Save.
+4. **Users and groups → Add user/group**: assign the people and groups who should have almyty. Velora assigns the group `Field service` with Eva de Groot and Tom Hendriks.
+
+Entra then creates Eva and Tom in almyty, creates the team **Field service** and puts them in it. Entra syncs about every 40 minutes; to see it at once, use **Provision on demand** on the **Provisioning** page.
+
+## 5. Hand out the sign-in link
+
+The **Sign-in link** under **For your identity provider** is where people start. Put it in the app's **Properties → Home page URL** in Entra, so almyty shows up in your people's My Apps portal, or share it on your intranet. The normal almyty sign-in page has no single sign-on button.
+
+## Try it
+
+**A new starter.** Eva opens the sign-in link, signs in with her Microsoft account and lands in Velora Energy's almyty (the picture at the top). Her account was made by Entra; she was never invited.
+
+**Who is in.** Entra created Eva and Tom and put both in a new **Field service** team. Then Tom leaves Velora: IT blocks his sign-in in Entra (or removes his assignment), and on its next sync Entra tells almyty he is no longer active. His membership is switched off. **Settings → Members and teams** lists Eva, and Tom no longer appears:
+
+![Members after Entra added Eva and Tom and then disabled Tom](/screenshots/examples/sso-scim-onboarding/05-members.png)
+
+**A leaver.** When Tom opens the sign-in link, Microsoft signs him in but almyty refuses him: "Your access to this organization has been deactivated". (It is shown as a bare error message, not a styled page.) His almyty account itself stays, in case he belongs to another organization.
+
+## Make it yours
+
+- **SAML instead.** Pick **SAML 2.0**: give Entra the **Reply URL** and **Service provider metadata** address shown under **For your identity provider**, and enter Entra's **Login URL**, an entity ID and the signing certificate in almyty.
+- **Okta.** The same setup with an Okta OIDC web app (redirect URI under **Sign-in redirect URIs**) and SCIM under the app's **Provisioning** tab.
+- **Teams from groups.** Assign more Entra groups to the app; each becomes a team. Then give assistants and keys to those teams (see [Keep each team's assistants to that team](/examples/multi-team-rbac)).
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **Check DNS** does not verify | DNS changes take a few minutes. Check the record's name and value are exactly as shown, without quotes added by your DNS provider. |
+| Entra's **Test Connection** fails | Paste the SCIM base URL without anything after `/scim/v2`, and the token without spaces. If you clicked **Rotate SCIM token**, give Entra the new one. |
+| A person is refused at sign-in with "OIDC claims did not include an email" | Add the **email** optional claim in Entra (step 2.4), and check the person has an email address in Entra. |
+| A person is refused although they are in Entra | They are not assigned to the app, Entra has not synced yet, or their address is not on a verified domain. |
+| Entra reports a conflict for a group | almyty already has a team with that name, made by hand. Rename or delete that team, or rename the group. |
+| An existing almyty user from another company cannot sign in | Single sign-on never adds an existing account to your organization. Invite them instead. |
 
 ## Related
 
-- [SSO](/enterprise/sso) · [Organizations](/organizations) · [Keep each team's assistants to that team](/examples/multi-team-rbac) · [Compliance](/compliance)
+- [SSO and SCIM](/enterprise/sso) · [Organizations](/organizations) · [Keep each team's assistants to that team](/examples/multi-team-rbac) · [Send your audit trail to Splunk](/examples/audit-to-siem)

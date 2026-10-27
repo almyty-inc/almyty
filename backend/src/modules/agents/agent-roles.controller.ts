@@ -11,6 +11,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentByAgentIdGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { AgentRole } from '../../entities/agent-role.entity';
 import { AgentRolesService } from './agent-roles.service';
 
@@ -56,6 +57,7 @@ export class AgentRolesController {
 
   @Get()
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: "An agent's roles and what fills each" })
   async list(@Request() req: any, @Param('agentId', ParseUUIDPipe) agentId: string) {
     return { success: true, data: await this.rolesService.list(this.orgId(req), agentId) };
@@ -63,6 +65,7 @@ export class AgentRolesController {
 
   @Post()
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Create or update a role by key' })
   async upsert(
     @Request() req: any,
@@ -100,6 +103,7 @@ export class AgentRolesController {
 
   @Delete(':key')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Remove a role' })
   async remove(@Request() req: any, @Param('agentId', ParseUUIDPipe) agentId: string, @Param('key') key: string) {
     await this.roles.delete({ organizationId: this.orgId(req), agentId, key });
@@ -108,6 +112,7 @@ export class AgentRolesController {
 
   @Post('resolve')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'What each role would resolve to right now' })
   async resolve(@Request() req: any, @Param('agentId', ParseUUIDPipe) agentId: string) {
     try {
