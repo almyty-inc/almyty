@@ -97,4 +97,12 @@ regexes = [
   # PostHog PUBLISHABLE client key (phc_...) — a public browser-side key,
   # baked into the frontend bundle by design; not a secret.
   '''phc_[A-Za-z0-9]+''',
+  # GitHub's own example temp_clone_token, copied verbatim from the response
+  # examples in GitHub's published OpenAPI description (the subset served at
+  # docs-site/public/files/github-issues-and-pulls.openapi.json); not a secret.
+  '''ABTLWHOULUVAXGTRYU7OC2876QJ2O''',
+  # PagerDuty's documented sample API token, typed into a password field by
+  # the demo seed's walkthrough against a local fake (scripts/demo-seed); not
+  # a secret.
+  '''y_NbAkKc66ryYTWUXYEu''',
 ]

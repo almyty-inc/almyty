@@ -4699,6 +4699,1027 @@
       ],
       "sourceDigest": "c62f5ca9e6b3a3207c1b434c02ae425349b5776e1fdde3080e93d5413173c3d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed) with Google Calendar served by the use-case stand-in; not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-00-result",
+      "title": "Issue triage: the report of a run",
+      "path": "screenshots/examples/github-issue-triage/00-result.png",
+      "capturedAt": "2026-10-27T09:31:39.394Z",
+      "status": "current",
+      "sha256": "d0a7dea661db65f2014965aff603a4f932d7d3173be0270030a5cdaf5d7f20e1",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-01-model",
+      "title": "OpenAI connected",
+      "path": "screenshots/examples/github-issue-triage/01-model.png",
+      "capturedAt": "2026-10-27T09:30:57.888Z",
+      "status": "current",
+      "sha256": "a21d538c62854f064c53755b5b20200090b4a8006f94fa778fcab254c0a1be16",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/models/providers/:id"
+      },
+      "sources": [
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/llm-providers"
+      ],
+      "sourceDigest": "380966bbe0fbd9d77f44f29b0651296008b21c407a360b2b0cfa8c79b20f0196",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-02-connect",
+      "title": "Connect an API: the GitHub file",
+      "path": "screenshots/examples/github-issue-triage/02-connect.png",
+      "capturedAt": "2026-10-27T09:31:00.616Z",
+      "status": "current",
+      "sha256": "256b44a96089e2cdb3cd76522699baf0309cfdf573ffd6be7e1437a272fa7cf0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new-description.tsx"
+      ],
+      "sourceDigest": "1ce513bd262587698730ff5fcf715cbbe92cc9f24c33c1103b6eda9e3ccd26e3",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-03-key",
+      "title": "GitHub token as a bearer token",
+      "path": "screenshots/examples/github-issue-triage/03-key.png",
+      "capturedAt": "2026-10-27T09:31:06.755Z",
+      "status": "current",
+      "sha256": "dfb701b7e4dda2982f92560d0b3cde073012ebbde5e6da804a2024c2dde2d703",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-04-api",
+      "title": "GitHub connected: 12 tools",
+      "path": "screenshots/examples/github-issue-triage/04-api.png",
+      "capturedAt": "2026-10-27T09:31:09.687Z",
+      "status": "current",
+      "sha256": "d187856758c4335db3a04e4fd854041f983d3ad12480cda9fcb371f0438757f6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis"
+      ],
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-05-test-tool",
+      "title": "Testing github_issues_list_for_repo",
+      "path": "screenshots/examples/github-issue-triage/05-test-tool.png",
+      "capturedAt": "2026-10-27T09:31:16.570Z",
+      "status": "current",
+      "sha256": "4c358178f360b7956bab4e5d462d52669e8dd546d90ee4bde0f05fc6282f6ab7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/tools/:id?tab=test"
+      },
+      "sources": [
+        "frontend/src/pages/tool-detail.tsx"
+      ],
+      "sourceDigest": "7b7a9a25c3372a2c43f91f18f80879448f9b92bf882e12327351ef6c2bc01b61",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-06-agent",
+      "title": "Issue triage: model and instructions",
+      "path": "screenshots/examples/github-issue-triage/06-agent.png",
+      "capturedAt": "2026-10-27T09:31:19.110Z",
+      "status": "current",
+      "sha256": "4b1cc498b81ccc51bf189fb93ddfe2d3948ffd4999c4cb6e75f8ef93c53a5ca5",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-07-tools",
+      "title": "Issue triage: five tools",
+      "path": "screenshots/examples/github-issue-triage/07-tools.png",
+      "capturedAt": "2026-10-27T09:31:22.062Z",
+      "status": "current",
+      "sha256": "2be66820312d2b7421c1837b65d26f91b354c0d4931397b86799cc1be22e641c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-08-try",
+      "title": "Issue triage: Try it",
+      "path": "screenshots/examples/github-issue-triage/08-try.png",
+      "capturedAt": "2026-10-27T09:31:37.939Z",
+      "status": "current",
+      "sha256": "17355d0491ce79de6ececb742f1bbbb41dfd9b1ad5ab265a16b3fbb4e4695f77",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-09-run",
+      "title": "Issue triage: the run step by step",
+      "path": "screenshots/examples/github-issue-triage/09-run.png",
+      "capturedAt": "2026-10-27T09:31:46.167Z",
+      "status": "current",
+      "sha256": "6de5ddb6f66d11100352db20fa9ed77a0bd61a0767abe1816e2b0ce9205c1090",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-github-issue-triage-10-schedule",
+      "title": "Issue triage: every hour",
+      "path": "screenshots/examples/github-issue-triage/10-schedule.png",
+      "capturedAt": "2026-10-27T09:31:50.501Z",
+      "status": "current",
+      "sha256": "e34acbd5bab077376a438b11b15324f2f4395b3ce2d0210c69b16437ca7f37f7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/schedule"
+      },
+      "sources": [
+        "frontend/src/pages/agent-schedule.tsx"
+      ],
+      "sourceDigest": "d92271faf99cb347f6df08d1bb2d35c9164c98e830934afc2b467fcaa5d34433",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-00-result",
+      "title": "Stock assistant: an answer from the SOAP system",
+      "path": "screenshots/examples/modernize-legacy-soap/00-result.png",
+      "capturedAt": "2026-10-27T09:34:54.348Z",
+      "status": "current",
+      "sha256": "39481f24c84fd159e455fa95a524ddccbb44990884f9d805df7250820afbe8a0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-01-connect",
+      "title": "Connect an API: the WSDL file",
+      "path": "screenshots/examples/modernize-legacy-soap/01-connect.png",
+      "capturedAt": "2026-10-27T09:34:19.713Z",
+      "status": "current",
+      "sha256": "2921e1c32a194bdc3541f33f017d7bed1cda8d36b130e49e03f32dd96ae1d97c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/soap"
+      },
+      "sources": [
+        "frontend/src/pages/api-new-description.tsx"
+      ],
+      "sourceDigest": "1ce513bd262587698730ff5fcf715cbbe92cc9f24c33c1103b6eda9e3ccd26e3",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-02-api",
+      "title": "The SOAP service connected: three tools",
+      "path": "screenshots/examples/modernize-legacy-soap/02-api.png",
+      "capturedAt": "2026-10-27T09:34:25.179Z",
+      "status": "current",
+      "sha256": "e002da6da0e7a77c6c2b901170dd8fa0a78312cacf4e3145ac743d68682aa038",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis"
+      ],
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-03-key",
+      "title": "The service account as a username and password",
+      "path": "screenshots/examples/modernize-legacy-soap/03-key.png",
+      "capturedAt": "2026-10-27T09:34:27.772Z",
+      "status": "current",
+      "sha256": "ecd67ffe3b41e0e24d9d4dfb109d4014eb55339cd09ae760731254f0aa94036b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-04-test-tool",
+      "title": "Testing the stock level tool",
+      "path": "screenshots/examples/modernize-legacy-soap/04-test-tool.png",
+      "capturedAt": "2026-10-27T09:34:37.497Z",
+      "status": "current",
+      "sha256": "455783110d9a87f65d248c2fc752356dd52db283fac83acf12caaf2ab23d7f17",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/tools/:id?tab=test"
+      },
+      "sources": [
+        "frontend/src/pages/tool-detail.tsx"
+      ],
+      "sourceDigest": "7b7a9a25c3372a2c43f91f18f80879448f9b92bf882e12327351ef6c2bc01b61",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-05-agent",
+      "title": "Stock assistant: model and instructions",
+      "path": "screenshots/examples/modernize-legacy-soap/05-agent.png",
+      "capturedAt": "2026-10-27T09:34:40.103Z",
+      "status": "current",
+      "sha256": "1e987cb7d8de76ff2afe043fd838ffce6d0c8e2d325cc416e843e5a8a7af12d7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-06-tools",
+      "title": "Stock assistant: three tools",
+      "path": "screenshots/examples/modernize-legacy-soap/06-tools.png",
+      "capturedAt": "2026-10-27T09:34:42.549Z",
+      "status": "current",
+      "sha256": "a38033028f6a1ae816ba289fa642367a8d8b963892aaa0660894da8415b69093",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-07-try",
+      "title": "Stock assistant: Try it",
+      "path": "screenshots/examples/modernize-legacy-soap/07-try.png",
+      "capturedAt": "2026-10-27T09:34:52.831Z",
+      "status": "current",
+      "sha256": "6bc30c900f51c75d329c5aab764dc94e75c3ffe34a8c891e31abe52d7662804e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-08-run",
+      "title": "Stock assistant: the run step by step",
+      "path": "screenshots/examples/modernize-legacy-soap/08-run.png",
+      "capturedAt": "2026-10-27T09:35:01.423Z",
+      "status": "current",
+      "sha256": "fc014cc5bb81013bc057f3ac317125577ab05ebdc6b85797e511aaec6c4ef142",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-09-gateway-new",
+      "title": "Create gateway: MCP with the stock tools",
+      "path": "screenshots/examples/modernize-legacy-soap/09-gateway-new.png",
+      "capturedAt": "2026-10-27T09:35:05.792Z",
+      "status": "current",
+      "sha256": "0ea6b406bb390834afe4de425c38677aa9e9b76065367b714aca41b1d7bbe31d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/new"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-new.tsx",
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways"
+      ],
+      "sourceDigest": "b5d7aae3de186f0b034dc4aadeb20465da053c5b6404b6345f33b9107374abfe",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-modernize-legacy-soap-10-gateway",
+      "title": "The MCP gateway and its Claude Code command",
+      "path": "screenshots/examples/modernize-legacy-soap/10-gateway.png",
+      "capturedAt": "2026-10-27T09:35:09.521Z",
+      "status": "current",
+      "sha256": "ea5e41d11800addad186cba7a972ab09977f0f5bd3e56eb152bd4f5283bf223c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-new.tsx",
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways"
+      ],
+      "sourceDigest": "b5d7aae3de186f0b034dc4aadeb20465da053c5b6404b6345f33b9107374abfe",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-00-result",
+      "title": "Coding lead: the report of a run",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/00-result.png",
+      "capturedAt": "2026-10-27T09:55:59.865Z",
+      "status": "current",
+      "sha256": "3cf696e376182f72d7653b60fd93eecee33b158d94dfa90fb7ea569b65545e33",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-01-model",
+      "title": "OpenAI connected",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/01-model.png",
+      "capturedAt": "2026-10-27T09:52:27.008Z",
+      "status": "current",
+      "sha256": "39927a531677fbefa17e410f05b5d5cb49579b554ee57adecf81f018c584ab2c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/models/providers/:id"
+      },
+      "sources": [
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/llm-providers"
+      ],
+      "sourceDigest": "380966bbe0fbd9d77f44f29b0651296008b21c407a360b2b0cfa8c79b20f0196",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-02-start-runner",
+      "title": "Start a runner: the commands",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/02-start-runner.png",
+      "capturedAt": "2026-10-27T09:52:31.373Z",
+      "status": "current",
+      "sha256": "04f7910abc87ab05a646fbde67bff147b714e2d203f0fc12cde4b9717833dcba",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners/new"
+      },
+      "sources": [
+        "frontend/src/pages/runners.tsx",
+        "frontend/src/pages/runner-new.tsx",
+        "frontend/src/pages/runner-detail.tsx"
+      ],
+      "sourceDigest": "11c6b895b719a425b786342940769a049a4fca8d9037979e438d65e415d87203",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-03-runners",
+      "title": "The runner, online",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/03-runners.png",
+      "capturedAt": "2026-10-27T09:52:48.371Z",
+      "status": "current",
+      "sha256": "347bd69c859d02597fd74a24c4c9638a259a8a7e20ad8f5cbfc79a19a357326b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners"
+      },
+      "sources": [
+        "frontend/src/pages/runners.tsx",
+        "frontend/src/pages/runner-new.tsx",
+        "frontend/src/pages/runner-detail.tsx"
+      ],
+      "sourceDigest": "11c6b895b719a425b786342940769a049a4fca8d9037979e438d65e415d87203",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-04-runner",
+      "title": "The coding assistants the runner found",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/04-runner.png",
+      "capturedAt": "2026-10-27T09:52:51.994Z",
+      "status": "current",
+      "sha256": "9448cae59aa0e000f6ab8dcffe127671aadad5eb21169ff966aac7c93ae2e7ff",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners/:id"
+      },
+      "sources": [
+        "frontend/src/pages/runners.tsx",
+        "frontend/src/pages/runner-new.tsx",
+        "frontend/src/pages/runner-detail.tsx"
+      ],
+      "sourceDigest": "11c6b895b719a425b786342940769a049a4fca8d9037979e438d65e415d87203",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-05-agent",
+      "title": "Coding lead: model and instructions",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/05-agent.png",
+      "capturedAt": "2026-10-27T09:52:54.508Z",
+      "status": "current",
+      "sha256": "8dd32b52861d6b074c7e0c62bf909e54386f2b665d567c79713b72e482564976",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-06-tools",
+      "title": "Coding lead: the runner tools",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/06-tools.png",
+      "capturedAt": "2026-10-27T09:52:56.293Z",
+      "status": "current",
+      "sha256": "67869caf1747f7338056f674ad31f29269d6c1c40e7a1737ebeca41dc197cfc9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-07-only-you",
+      "title": "Coding lead: only you",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/07-only-you.png",
+      "capturedAt": "2026-10-27T09:52:58.316Z",
+      "status": "current",
+      "sha256": "17f862377e138e86696d65eaa8077e17eb61da62f9d6cd34fc87bce5aa89bae6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-08-try",
+      "title": "Coding lead: Try it",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/08-try.png",
+      "capturedAt": "2026-10-27T09:55:58.462Z",
+      "status": "current",
+      "sha256": "04d907a01572049c913a625f5c3d165bd4ee43906fc805f943b33b533aa545bd",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-vendor-coding-fleet-09-run",
+      "title": "Coding lead: the run step by step",
+      "path": "screenshots/examples/multi-vendor-coding-fleet/09-run.png",
+      "capturedAt": "2026-10-27T09:56:06.381Z",
+      "status": "current",
+      "sha256": "5836175bd31ab43a54b394e93fc0449adc38f1a6e959d31e997f91bc8b4f1149",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-00-slack",
+      "title": "The on-call summary as posted to Slack",
+      "path": "screenshots/examples/oncall-alert-triage/00-slack.png",
+      "capturedAt": "2026-10-27T09:33:57.782Z",
+      "status": "current",
+      "sha256": "00517eae1b1ef2690206f7e3c571357840047ab20be27195fe3c1ed8651c4afe",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "backend/src/modules/gateways/channels/adapters/slack.adapter.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
+      ],
+      "sourceDigest": "6a3af89582d2c3ca4bd35d0321708bb4e7443bf100c2830ebf9252043209b453",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
+    },
+    {
+      "id": "examples-oncall-alert-triage-01-model",
+      "title": "OpenAI connected",
+      "path": "screenshots/examples/oncall-alert-triage/01-model.png",
+      "capturedAt": "2026-10-27T09:32:58.183Z",
+      "status": "current",
+      "sha256": "39927a531677fbefa17e410f05b5d5cb49579b554ee57adecf81f018c584ab2c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/models/providers/:id"
+      },
+      "sources": [
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/llm-providers"
+      ],
+      "sourceDigest": "380966bbe0fbd9d77f44f29b0651296008b21c407a360b2b0cfa8c79b20f0196",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-02-connect",
+      "title": "PagerDuty's description link",
+      "path": "screenshots/examples/oncall-alert-triage/02-connect.png",
+      "capturedAt": "2026-10-27T09:32:59.968Z",
+      "status": "current",
+      "sha256": "0ce1895bcdce9e36a1a5f1cc7828eedc8ada649b98e0a59574375406ecb0c945",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new-description.tsx"
+      ],
+      "sourceDigest": "1ce513bd262587698730ff5fcf715cbbe92cc9f24c33c1103b6eda9e3ccd26e3",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-03-found",
+      "title": "PagerDuty: 473 tools made, a key needed",
+      "path": "screenshots/examples/oncall-alert-triage/03-found.png",
+      "capturedAt": "2026-10-27T09:33:07.163Z",
+      "status": "current",
+      "sha256": "ee7b009783e91e983620320fad17e8d854794f13021f7435c48895ca69ff2a5b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=3&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-04-key",
+      "title": "The PagerDuty key",
+      "path": "screenshots/examples/oncall-alert-triage/04-key.png",
+      "capturedAt": "2026-10-27T09:33:08.894Z",
+      "status": "current",
+      "sha256": "b7c69b34ea91a5d4c49f6b14fe9cfc573ba65ebdde06852d6e31c5e073045db4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=3&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-05-agent",
+      "title": "On-call summaries: model and instructions",
+      "path": "screenshots/examples/oncall-alert-triage/05-agent.png",
+      "capturedAt": "2026-10-27T09:33:12.867Z",
+      "status": "current",
+      "sha256": "071a48eb9d99ce9616d93e70b8c361165c315838c8b994131ae1d9ab03b67367",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-06-tools",
+      "title": "On-call summaries: four PagerDuty tools",
+      "path": "screenshots/examples/oncall-alert-triage/06-tools.png",
+      "capturedAt": "2026-10-27T09:33:15.689Z",
+      "status": "current",
+      "sha256": "a76a47f6db8210a0e05aa98c3d890070aac2624a2b5ab802c0664f68289aaadb",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-07-slack-key",
+      "title": "Slack bot token and signing secret",
+      "path": "screenshots/examples/oncall-alert-triage/07-slack-key.png",
+      "capturedAt": "2026-10-27T09:33:25.553Z",
+      "status": "current",
+      "sha256": "431fb94d006935221c8d95f64a2d9c8704c307e92a05d4639cbe13c1d16913d0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels"
+      ],
+      "sourceDigest": "252c7c1f567e1c9aff770c87bccfcb918d02c132cf5cb178916a7ebfb1d95156",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-08-slack-live",
+      "title": "Slack channel, live",
+      "path": "screenshots/examples/oncall-alert-triage/08-slack-live.png",
+      "capturedAt": "2026-10-27T09:33:36.992Z",
+      "status": "current",
+      "sha256": "a1d4fb5b241d6c93a0f3f4d10284e9e90d69fc2f1284ea2a33bfe45410badd5a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels"
+      ],
+      "sourceDigest": "252c7c1f567e1c9aff770c87bccfcb918d02c132cf5cb178916a7ebfb1d95156",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-09-always-on",
+      "title": "Always on: every 15 minutes",
+      "path": "screenshots/examples/oncall-alert-triage/09-always-on.png",
+      "capturedAt": "2026-10-27T09:33:43.120Z",
+      "status": "current",
+      "sha256": "fc426894001c0baef64e1f2a6691c9c7f78564092ad5c5bac960b6273c525d1e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx"
+      ],
+      "sourceDigest": "639cc02139669fba0158f75b8d7059afbedfb42f84304fd79ae6d4ae00de97a1",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-10-act",
+      "title": "Always on: acts on its own",
+      "path": "screenshots/examples/oncall-alert-triage/10-act.png",
+      "capturedAt": "2026-10-27T09:33:44.415Z",
+      "status": "current",
+      "sha256": "4bb3c57e34deaae74aa87e9feb54efeea30ae34b8b0a6cd241623b04666c0913",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx"
+      ],
+      "sourceDigest": "639cc02139669fba0158f75b8d7059afbedfb42f84304fd79ae6d4ae00de97a1",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-oncall-alert-triage-11-card",
+      "title": "The Always on card",
+      "path": "screenshots/examples/oncall-alert-triage/11-card.png",
+      "capturedAt": "2026-10-27T09:33:55.543Z",
+      "status": "current",
+      "sha256": "fb8e73162e0ca2153fd27459923c8b4012969df5f777adf5340c6b071038ff24",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-00-review-on-github",
+      "title": "The review as sent to GitHub",
+      "path": "screenshots/examples/pr-review-bot/00-review-on-github.png",
+      "capturedAt": "2026-10-27T09:32:45.137Z",
+      "status": "current",
+      "sha256": "299ca8dd3f7b9f1470e43b1556fb6148cac3e7a00c67ab9dbdf0bd17a0d07f5a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "backend/src/modules/tools/executors/tool-http.executor.ts"
+      ],
+      "sourceDigest": "b081ed19359b425419246d985cfeb710911996193d66c6a8dad604826dd8727e",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
+    },
+    {
+      "id": "examples-pr-review-bot-01-model",
+      "title": "OpenAI connected",
+      "path": "screenshots/examples/pr-review-bot/01-model.png",
+      "capturedAt": "2026-10-27T09:32:05.255Z",
+      "status": "current",
+      "sha256": "39927a531677fbefa17e410f05b5d5cb49579b554ee57adecf81f018c584ab2c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/models/providers/:id"
+      },
+      "sources": [
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/llm-providers"
+      ],
+      "sourceDigest": "380966bbe0fbd9d77f44f29b0651296008b21c407a360b2b0cfa8c79b20f0196",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-02-connect",
+      "title": "Connect an API: the GitHub file",
+      "path": "screenshots/examples/pr-review-bot/02-connect.png",
+      "capturedAt": "2026-10-27T09:32:07.589Z",
+      "status": "current",
+      "sha256": "0f9b4dc88bb62de154d6b339dda2ca30eb2a09d8151c9b4e429dfdedeac397db",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new-description.tsx"
+      ],
+      "sourceDigest": "1ce513bd262587698730ff5fcf715cbbe92cc9f24c33c1103b6eda9e3ccd26e3",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-03-key",
+      "title": "GitHub token as a bearer token",
+      "path": "screenshots/examples/pr-review-bot/03-key.png",
+      "capturedAt": "2026-10-27T09:32:13.942Z",
+      "status": "current",
+      "sha256": "9a30d81b622222c963cf0eff5e6ad3e7599fddb6b146f873d44df791e9862e48",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-04-api",
+      "title": "GitHub connected: 12 tools",
+      "path": "screenshots/examples/pr-review-bot/04-api.png",
+      "capturedAt": "2026-10-27T09:32:16.305Z",
+      "status": "current",
+      "sha256": "bc7d61eb2d3cf133bf1b28ad63f05bbc4a0fa920e826ae1fba7775a430b92793",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis"
+      ],
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-05-agent",
+      "title": "Pull request review: model and instructions",
+      "path": "screenshots/examples/pr-review-bot/05-agent.png",
+      "capturedAt": "2026-10-27T09:32:18.754Z",
+      "status": "current",
+      "sha256": "411839df9a8442a828a287ca7ac9dc88096665d544637b2b65d6e3ce2dbfb206",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-06-tools",
+      "title": "Pull request review: five tools",
+      "path": "screenshots/examples/pr-review-bot/06-tools.png",
+      "capturedAt": "2026-10-27T09:32:21.737Z",
+      "status": "current",
+      "sha256": "17bd585ec450951dbcd7c36057216dcf0d1a590740a6595814c0da32ccfb016c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-07-try",
+      "title": "Pull request review: Try it",
+      "path": "screenshots/examples/pr-review-bot/07-try.png",
+      "capturedAt": "2026-10-27T09:32:30.667Z",
+      "status": "current",
+      "sha256": "25fc37a5af7011173d22511652dbf45a8e7a7c32333eda89f317f92e2fdd4643",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-08-run",
+      "title": "Pull request review: the run step by step",
+      "path": "screenshots/examples/pr-review-bot/08-run.png",
+      "capturedAt": "2026-10-27T09:32:37.193Z",
+      "status": "current",
+      "sha256": "a4b222f0551099fd9990575836f90a225c709b9aaf7c65425f1f00189282d7df",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-pr-review-bot-09-schedule",
+      "title": "Pull request review: every 30 minutes",
+      "path": "screenshots/examples/pr-review-bot/09-schedule.png",
+      "capturedAt": "2026-10-27T09:32:41.062Z",
+      "status": "current",
+      "sha256": "5683836a3b671f8f54b2f386ec2cb07c10ee7f89435023ce7f0ac6ce5ec02f81",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/schedule"
+      },
+      "sources": [
+        "frontend/src/pages/agent-schedule.tsx"
+      ],
+      "sourceDigest": "d92271faf99cb347f6df08d1bb2d35c9164c98e830934afc2b467fcaa5d34433",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     }
   ]
 }
