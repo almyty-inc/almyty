@@ -33,7 +33,13 @@ describe('toolDisplayName', () => {
     [{ name: 'listPets', operationId: 'listPets', method: 'GET', endpoint: '/pets' }, 'List pets'],
     // Microsoft Graph: the last part is the action; the area is the tag.
     [{ name: 'drives.items.ListChildren', operationId: 'drives.items.ListChildren', method: 'GET', endpoint: '/drives/{id}/items/{id}/children' }, 'List children'],
-    [{ name: 'gmail.users.messages.send', operationId: 'gmail.users.messages.send', method: 'POST', endpoint: '/gmail/v1/users/{userId}/messages/send' }, 'Gmail users messages send'],
+    // Google: a one-word verb after the resource it acts on.
+    [{ name: 'gmail.users.messages.send', operationId: 'gmail.users.messages.send', method: 'POST', endpoint: '/gmail/v1/users/{userId}/messages/send' }, 'Send message'],
+    [{ name: 'gmail.users.threads.get', operationId: 'gmail.users.threads.get', method: 'GET', endpoint: '/gmail/v1/users/{userId}/threads/{id}' }, 'Get thread'],
+    [{ name: 'gmail.users.messages.trash', operationId: 'gmail.users.messages.trash', method: 'POST', endpoint: '/gmail/v1/users/{userId}/messages/{id}/trash' }, 'Trash message'],
+    [{ name: 'calendar.events.watch', operationId: 'calendar.events.watch', method: 'POST', endpoint: '/calendars/{calendarId}/events/watch' }, 'Watch events'],
+    [{ name: 'calendar.events.list', operationId: 'calendar.events.list', method: 'GET', endpoint: '/calendars/{calendarId}/events' }, 'List events'],
+    [{ name: 'drive.files.insert', operationId: 'drive.files.insert', method: 'POST', endpoint: '/files' }, 'Insert file'],
     // A summary wins.
     [{ name: 'Retrieve a company.', operationId: 'getCompany', method: 'GET', endpoint: '/companies/{id}' }, 'Retrieve a company'],
   ])('%j -> %s', (operation, expected) => {
