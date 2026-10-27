@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import fs from 'fs'
 import type { IncomingMessage } from 'http'
 
 const bypassHtmlGetRequests = (req: IncomingMessage) => {
@@ -48,6 +49,57 @@ const devRuntimeConfig: Plugin = {
  * which sent auth to whatever else was listening on 4000.
  */
 const apiTarget = process.env.ALMYTY_API_TARGET || 'http://localhost:4000'
+
+/**
+ * First path segments vite serves itself, besides `@`-prefixed ones
+ * (`/@vite/client`, `/@fs/...`), which the pattern below never matches.
+ */
+export const VITE_OWN_SEGMENTS = ['src', 'node_modules']
+
+/** The folders of frontend/public: vite serves files under them as-is. */
+function publicFolders(): string[] {
+  try {
+    const dir = path.resolve(__dirname, 'public')
+    return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Gateway endpoints: `/<org>/<gateway>` and everything under it (MCP,
+ * UTCP, A2A, skills, channel webhooks), served by the backend's
+ * unified-endpoint.controller.ts. Neither segment is a fixed prefix, so
+ * no '/<prefix>' rule can carry them: without this every MCP client
+ * pointed at the dev server got index.html. Any path of two or more
+ * segments whose first is not vite's own (or a public folder) goes to the
+ * API; the rules above are tried first, and the SPA's own route segments
+ * (/apis/new, /settings/...) are excluded, so its pages still load.
+ */
+export function gatewayPathPattern(reserved: string[]): string {
+  const escaped = reserved.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const exclude = escaped.length ? `(?!(?:${escaped.join('|')})(?:/|$))` : ''
+  return `^/${exclude}[^/@.?#][^/?#]*/[^/?#]+`
+}
+
+/**
+ * The first segments of the SPA's own routes (src/App.tsx). A path under
+ * one of them is a page, or an API call a '/<prefix>' rule above carries,
+ * never a gateway; read from the router so a new page needs no edit here.
+ */
+export function spaRouteSegments(appSource: string): string[] {
+  return [...new Set([...appSource.matchAll(/path="\/([^/"*:]+)/g)].map((m) => m[1]))]
+}
+
+function readSpaRouteSegments(): string[] {
+  try {
+    return spaRouteSegments(fs.readFileSync(path.resolve(__dirname, 'src', 'App.tsx'), 'utf8'))
+  } catch {
+    return []
+  }
+}
+
+const GATEWAY_PATHS_RULE = gatewayPathPattern([...VITE_OWN_SEGMENTS, ...publicFolders(), ...readSpaRouteSegments()])
 
 export default defineConfig({
   // Client-exposed env vars carry the product's name, not the build
@@ -363,6 +415,14 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
+      },
+      // Gateway endpoints, /<org>/<gateway>/... (see gatewayPathPattern).
+      // Last: every fixed prefix above is tried first. No HTML bypass: the
+      // SPA's routes are excluded from the pattern, and a gateway's browser
+      // pages (the MCP sign-in at .../authorize) are the API's.
+      [GATEWAY_PATHS_RULE]: {
+        target: apiTarget,
+        changeOrigin: true,
       },
     },
   },
