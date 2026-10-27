@@ -55,9 +55,9 @@ import { type InboundPush, type KeySetFor, failedRule, ignored, remoteKeySet, ve
 export const PUSH_WAKE_CHANGES_JOB = 'push-wake-changes';
 export const PUSH_WAKE_RENEW_JOB = 'push-wake-renew';
 
-/** Where services send pushes: PUSH_WAKE_PUBLIC_URL, else BASE_URL, else API_BASE_URL (localhost in development). */
+/** Where services send pushes: PUSH_WAKE_PUBLIC_URL, else PUBLIC_API_URL (the channels' public address), else BASE_URL, else API_BASE_URL (localhost in development). */
 export function pushWakeBaseUrl(env: Record<string, string | undefined> = process.env): string {
-  let url = env.PUSH_WAKE_PUBLIC_URL || env.BASE_URL || env.API_BASE_URL || 'http://localhost:3000';
+  let url = env.PUSH_WAKE_PUBLIC_URL || env.PUBLIC_API_URL || env.BASE_URL || env.API_BASE_URL || 'http://localhost:3000';
   while (url.endsWith('/')) url = url.slice(0, -1);
   return url;
 }

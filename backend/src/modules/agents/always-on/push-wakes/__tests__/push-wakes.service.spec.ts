@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto';
 
-import { PUSH_WAKE_CHANGES_JOB, PUSH_WAKE_RENEW_JOB, flattenArgs, nextRenewAt, pushWakeUrl } from '../push-wakes.service';
+import { PUSH_WAKE_CHANGES_JOB, PUSH_WAKE_RENEW_JOB, flattenArgs, nextRenewAt, pushWakeBaseUrl, pushWakeUrl } from '../push-wakes.service';
 import { PUSH_WAKE_PRESETS } from '../push-wake-presets';
 import { mergeAlwaysOn, defaultAlwaysOn } from '../../always-on.types';
 import { wakeMessage } from '../../always-on.service';
@@ -244,6 +244,13 @@ describe('push wakes: arguments reach the tool flat', () => {
   });
 });
 
+describe('push wakes: the push address', () => {
+  it('is the public address the channels use, unless push wakes have their own', () => {
+    expect(pushWakeBaseUrl({ PUBLIC_API_URL: 'https://api.example.com/', BASE_URL: 'http://internal:3000' })).toBe('https://api.example.com');
+    expect(pushWakeBaseUrl({ PUSH_WAKE_PUBLIC_URL: 'https://push.example.com', PUBLIC_API_URL: 'https://api.example.com' })).toBe('https://push.example.com');
+    expect(pushWakeBaseUrl({ BASE_URL: 'http://internal:3000' })).toBe('http://internal:3000');
+  });
+});
 describe('push wakes: when to renew', () => {
   const now = new Date('2026-10-22T10:00:00Z');
   it('takes the earlier of "every N minutes" and "N minutes before it ends"', () => {
@@ -332,7 +339,8 @@ describe('push wakes: the Google Calendar preset', () => {
     expect(row.state).toEqual({ subscription: { id: watch.params.id, resourceId: 'res-primary' }, cursor: 's1' });
     // Renewed three hours before Google closes the channel.
     expect(row.renewAt.getTime()).toBe(row.subscriptionExpiresAt.getTime() - 180 * 60_000);
-    expect(view.setup.some((s) => s.command === pushWakeUrl(view.subscriptionId))).toBe(true);
+    expect(view.endpointUrl).toBe(pushWakeUrl(view.subscriptionId));
+    expect(view.setup.map((s) => s.text).join(' ')).toMatch(/public HTTPS address/);
   });
 
   it('checks the token and the channel, ignores the opening sync, and acknowledges a replaced channel', async () => {

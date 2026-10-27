@@ -161,12 +161,15 @@ export function CustomPushWakeForm({
   addressPrefix,
   form,
   onChange,
+  secretField,
 }: {
   agentId: string
   apiId: string
   addressPrefix: string
   form: CustomPushForm
   onChange: (form: CustomPushForm) => void
+  /** The key or shared value field, shown right under how a push is proven when it needs one. */
+  secretField?: ReactNode
 }) {
   const operations = useQuery({
     queryKey: ['agent-push-wake-operations', agentId, apiId],
@@ -267,6 +270,8 @@ export function CustomPushWakeForm({
           <PairRows id="push-wake-claims" label="Required claims" rows={form.claims} onChange={(claims) => set({ claims })} namePlaceholder="email" valuePlaceholder="push@service.example" />
         </div>
       )}
+
+      {secretField}
 
       <p className="text-sm font-medium">Steps, all optional</p>
       <Step

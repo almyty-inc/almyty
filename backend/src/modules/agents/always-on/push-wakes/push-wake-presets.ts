@@ -51,8 +51,7 @@ export const PUSH_WAKE_PRESETS: PushWakePreset[] = [
         text: 'Nothing to set up in Google Cloud: almyty opens a notification channel on the calendar with your Google Calendar sign-in, and renews it before Google closes it.',
       },
       {
-        text: 'Google sends notifications only to a public HTTPS address. This is the one almyty gives it:',
-        command: '{{endpoint.url}}',
+        text: 'Google sends notifications only to a public HTTPS address: the address above has to be reachable from the internet.',
       },
     ],
     spec: {

@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { CopyField } from '@/components/ui/copy-field'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { SecretInput } from '@/components/ui/secret-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -141,13 +142,15 @@ function PushWakeRow({ agentId, view }: { agentId: string; view: PushWakeView })
           <CopyField id={`push-wake-url-${view.id}`} value={view.endpointUrl} label="Push address" />
         </Field>
         <SetupSteps steps={view.setup} />
-        <div className="flex flex-wrap items-end gap-2">
-          <Field id={`push-wake-wait-${view.id}`} label="Wait before waking (seconds)" hint="Changes within this window wake it once.">
+        <div className="space-y-1">
+          <Label htmlFor={`push-wake-wait-${view.id}`}>Wait before waking (seconds)</Label>
+          <div className="flex items-center gap-2">
             <Input id={`push-wake-wait-${view.id}`} type="number" min={0} max={3600} className="w-32" value={wait} onChange={(e) => setWait(e.target.value)} />
-          </Field>
-          <Button type="button" variant="outline" size="sm" disabled={saveWait.isPending || wait === String(view.debounceSeconds)} onClick={() => saveWait.mutate()}>
-            Save
-          </Button>
+            <Button type="button" variant="outline" size="sm" disabled={saveWait.isPending || wait === String(view.debounceSeconds)} onClick={() => saveWait.mutate()}>
+              Save
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Changes within this window wake it once. It is the same for every agent on this subscription.</p>
         </div>
       </Disclosure>
       {dialog}
@@ -235,6 +238,13 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
     })
   }
 
+  // Asked for right under how a push is proven (inside the custom form), else after the fields.
+  const secretField = (
+    <Field id="push-wake-secret" label={method === 'hmac' ? 'Signing key' : 'Shared value'} hint="Kept in Credentials, never shown again.">
+      <SecretInput id="push-wake-secret" value={secret} onChange={(e) => setSecret(e.target.value)} />
+    </Field>
+  )
+
   return (
     <div className="space-y-4 rounded-md border p-4" data-testid="push-wake-add">
       <Field id="push-wake-kind" label="Watch">
@@ -311,7 +321,14 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
       )}
 
       {custom && json === null && (
-        <CustomPushWakeForm agentId={agentId} apiId={apiId} addressPrefix={options.data?.addressPrefix ?? ''} form={form} onChange={setForm} />
+        <CustomPushWakeForm
+          agentId={agentId}
+          apiId={apiId}
+          addressPrefix={options.data?.addressPrefix ?? ''}
+          form={form}
+          onChange={setForm}
+          secretField={needsSecret ? secretField : null}
+        />
       )}
       {custom && (
         <Disclosure
@@ -343,11 +360,7 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
         </Disclosure>
       )}
 
-      {kind && needsSecret && (
-        <Field id="push-wake-secret" label={method === 'hmac' ? 'Signing key' : 'Shared value'} hint="Kept in Credentials, never shown again.">
-          <SecretInput id="push-wake-secret" value={secret} onChange={(e) => setSecret(e.target.value)} />
-        </Field>
-      )}
+      {kind && needsSecret && !(custom && json === null) && secretField}
 
       {kind && (
         <Field id="push-wake-debounce" label="Wait before waking (seconds)" hint="Changes within this window wake it once.">

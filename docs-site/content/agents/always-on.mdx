@@ -76,6 +76,8 @@ choose what it watches, and the connection it uses. The steps for that
 service are shown right there, with the commands to copy. **Save and
 subscribe** saves it and asks the service to start sending.
 
+![A Google Calendar push wake on the always-on page, with its health, address and setup](/screenshots/always-on-push-wakes.png)
+
 Each one then shows, the way connections do:
 
 - whether it is working (**Valid**, **Failed** with the reason, or
@@ -260,7 +262,7 @@ A push wake is data. Google Calendar and Gmail are presets that fill these
 fields (`backend/src/modules/agents/always-on/push-wakes/push-wake-presets.ts`);
 a custom one sends the same shape as `spec`.
 
-- Address: `POST {PUSH_WAKE_PUBLIC_URL or BASE_URL}/push-wakes/<subscription id>`. It
+- Address: `POST {PUSH_WAKE_PUBLIC_URL, else PUBLIC_API_URL, else BASE_URL}/push-wakes/<subscription id>`. It
   answers `204` for a push that is taken or deliberately ignored, `401` when
   it does not verify, `404` for an unknown id.
 - `verification`, one of:
