@@ -25,7 +25,7 @@ import { TimeZoneSelect } from '@/components/settings/time-zone-select'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { agentsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { CHANNEL_LABELS, agentChannelsApi, isMessagingChannel, type AgentChannel } from '@/lib/agent-channels'
+import { CHANNEL_LABELS, OWNER_ADDRESS_HINTS, agentChannelsApi, isMessagingChannel, type AgentChannel } from '@/lib/agent-channels'
 import {
   ALWAYS_ON_VS_SCHEDULE,
   CONNECTION_EVENT_LABELS,
@@ -370,10 +370,14 @@ function AlwaysOnPage({
             </Select>
           </Field>
           {form.ownerChannelId !== NO_CHANNEL && (
-            <Field id="always-on-owner-address" label="Your address there" hint="Your Slack member ID, your email address, your phone number.">
+            <Field
+              id="always-on-owner-address"
+              label="Your address there"
+              hint={ownerChannel ? OWNER_ADDRESS_HINTS[ownerChannel.type]?.hint : undefined}
+            >
               <Input
                 id="always-on-owner-address"
-                placeholder="U012ABCDEF or you@example.com"
+                placeholder={ownerChannel ? OWNER_ADDRESS_HINTS[ownerChannel.type]?.placeholder : undefined}
                 value={form.ownerAddress}
                 onChange={(e) => set({ ownerAddress: e.target.value })}
               />
