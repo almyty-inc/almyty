@@ -27,6 +27,10 @@ import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { AgentFile } from '../../entities/file.entity';
 import { Workspace } from '../../entities/workspace.entity';
 import { AgentWake } from '../../entities/agent-wake.entity';
+import { AgentPushWake } from '../../entities/agent-push-wake.entity';
+import { PushSubscription } from '../../entities/push-subscription.entity';
+import { Api } from '../../entities/api.entity';
+import { Operation } from '../../entities/operation.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
 import { ConnectionGrant } from '../../entities/connection-grant.entity';
 
@@ -53,6 +57,8 @@ import { AgentVerifierHelper } from './agent-verifier.helper';
 import { AgentContextCompactor } from './agent-context-compactor.helper';
 import { AlwaysOnService } from './always-on/always-on.service';
 import { AlwaysOnController } from './always-on/always-on.controller';
+import { PushWakesService } from './always-on/push-wakes/push-wakes.service';
+import { PushWakeReceiverController, PushWakesController } from './always-on/push-wakes/push-wakes.controller';
 import { AgentIdentityService } from './agent-identity';
 import { AgentIdentityReachController, AgentIdentityReachService } from './agent-identity-reach';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
@@ -115,6 +121,11 @@ import { BudgetsModule } from '../budgets/budgets.module';
       AgentWake,
       AgentChannel,
       ConnectionGrant,
+      // Push wakes, and the connection (API, operations) their steps call.
+      AgentPushWake,
+      PushSubscription,
+      Api,
+      Operation,
     ]),
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),
@@ -141,7 +152,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
   ],
   providers: [AgentApiAccessService, AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentIdentityService, AgentIdentityReachService,
-    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
+    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, PushWakesService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
     // Carries a workflow run on once the change sets its Code steps wait on are decided.
     WorkflowApprovalResumeService,
     // Personal data hidden in the traces runs store.
@@ -149,6 +160,8 @@ import { BudgetsModule } from '../budgets/budgets.module';
     // Hosted pods' coding CLIs: their own calls, forwarded to an organization-wide provider.
     ModelPassThroughService],
   controllers: [AgentApiAccessController, AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
+    // Push wakes: an agent's settings, and the address services push to.
+    PushWakesController, PushWakeReceiverController,
     AgentIdentityReachController,
     // The model pass-through's own routes: /v1/responses, /v1/messages/count_tokens (hosted pods only).
     ModelPassThroughController],

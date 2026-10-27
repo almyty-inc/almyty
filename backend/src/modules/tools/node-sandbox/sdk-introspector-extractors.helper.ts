@@ -5,6 +5,7 @@ import {
   getJsDocDescription,
   hasNonMethodProperties,
   isPromiseType,
+  typeText,
 } from './sdk-introspector-helpers.helper';
 
 /** Maximum depth for recursive type resolution to prevent infinite loops */
@@ -231,14 +232,19 @@ function extractNamespace(
   };
 }
 
+// `depth` is how deep in resolveType this method or parameter was met.
+// It used to restart at 0 here, so a recursive type (a method whose
+// parameter's type has that method again, as eventemitter3's listener
+// types do) recursed until the stack ran out and the package failed.
 function extractMethodFromSignature(
   name: string,
   sig: ts.Signature,
   checker: ts.TypeChecker,
   symbol?: ts.Symbol,
+  depth = 0,
 ): SdkMethod {
-  const params = sig.getParameters().map((p) => extractParam(p, checker));
-  const returnType = resolveType(sig.getReturnType(), checker, 0);
+  const params = sig.getParameters().map((p) => extractParam(p, checker, depth));
+  const returnType = resolveType(sig.getReturnType(), checker, depth);
   const description = symbol ? getJsDocDescription(symbol) : undefined;
 
   return {
@@ -251,7 +257,7 @@ function extractMethodFromSignature(
   };
 }
 
-function extractParam(paramSymbol: ts.Symbol, checker: ts.TypeChecker): SdkParam {
+function extractParam(paramSymbol: ts.Symbol, checker: ts.TypeChecker, depth = 0): SdkParam {
   const name = paramSymbol.getName();
   const decl = paramSymbol.valueDeclaration;
   const optional = decl
@@ -262,7 +268,7 @@ function extractParam(paramSymbol: ts.Symbol, checker: ts.TypeChecker): SdkParam
   if (decl) {
     let paramType = checker.getTypeOfSymbolAtLocation(paramSymbol, decl);
     if (optional) paramType = paramType.getNonNullableType();
-    type = resolveType(paramType, checker, 0);
+    type = resolveType(paramType, checker, depth);
   }
 
   return { name, type, optional };
@@ -289,10 +295,10 @@ function extractProperty(symbol: ts.Symbol, checker: ts.TypeChecker): SdkPropert
 
 function resolveType(type: ts.Type, checker: ts.TypeChecker, depth: number): SdkType {
   if (depth >= MAX_TYPE_DEPTH) {
-    return { raw: checker.typeToString(type), kind: 'unknown' };
+    return { raw: typeText(type, checker), kind: 'unknown' };
   }
 
-  const raw = checker.typeToString(type);
+  const raw = typeText(type, checker);
 
   if (isPromiseType(type, checker)) {
     const typeArgs = (type as ts.TypeReference).typeArguments;
@@ -363,7 +369,7 @@ function resolveType(type: ts.Type, checker: ts.TypeChecker, depth: number): Sdk
       const propCallSigs = propType.getCallSignatures();
 
       if (propCallSigs.length > 0 && !hasNonMethodProperties(propType)) {
-        sdkMethods.push(extractMethodFromSignature(propName, propCallSigs[0], checker, prop));
+        sdkMethods.push(extractMethodFromSignature(propName, propCallSigs[0], checker, prop, depth + 1));
       } else {
         const resolved = resolveType(propType, checker, depth + 1);
         const desc = getJsDocDescription(prop);

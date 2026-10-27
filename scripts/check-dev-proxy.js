@@ -95,8 +95,35 @@ function proxiedPrefixes() {
   return prefixes;
 }
 
+/**
+ * Routes whose first segment is a parameter, on a controller with no
+ * prefix: the gateway endpoints, /<org>/<gateway>/... (the unified
+ * endpoint). No '/<prefix>' rule can carry them, so the dev proxy needs
+ * its gateway-path rule, keyed [GATEWAY_PATHS_RULE] in vite.config.ts.
+ */
+function parameterisedRoutes() {
+  const found = [];
+  for (const file of [...walk(backendSrc), ...(fs.existsSync(backendEe) ? walk(backendEe) : [])]) {
+    const source = fs.readFileSync(file, 'utf8');
+    if (!/@Controller\(\s*\)/.test(source)) continue;
+    const routes = /@(?:Get|Post|Put|Patch|Delete|All)\(\s*['"]([^'"]+)['"]/g;
+    let route;
+    while ((route = routes.exec(source)) !== null) {
+      if (/^\/?:[^/]+\/:/.test(route[1])) found.push(`${path.relative(repoRoot, file)}: ${route[1]}`);
+    }
+  }
+  return found;
+}
+
 const declared = controllerPrefixes();
 const proxied = proxiedPrefixes();
+const gatewayRoutes = parameterisedRoutes();
+if (gatewayRoutes.length > 0 && !/\[GATEWAY_PATHS_RULE\]\s*:\s*\{/.test(fs.readFileSync(viteConfig, 'utf8'))) {
+  console.error('check-dev-proxy: gateway routes with no dev-proxy rule in frontend/vite.config.ts:\n');
+  for (const r of gatewayRoutes) console.error(`  ${r}`);
+  console.error('\nAdd the gateway-path rule ([GATEWAY_PATHS_RULE], see gatewayPathPattern) to the proxy map.');
+  process.exit(1);
+}
 
 if (declared.size === 0) {
   console.error('check-dev-proxy: found no controllers, which means this check is broken');
