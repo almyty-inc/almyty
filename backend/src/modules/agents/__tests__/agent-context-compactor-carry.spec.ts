@@ -6,8 +6,8 @@ import { fakeRepository } from '../../../test/fake-repository';
 
 /**
  * A run of a standing thread (always on) or a chat starts from the summary
- * the previous run of its conversation left. The summary names the message
- * it ends at, so it is found again in a window that has moved on; the
+ * the previous run of its conversation left. Stored messages are found by
+ * their ids, so the summary's edge is found again in a window that has moved on; the
  * summarizer's merged summary replaces the old one instead of being
  * appended to it.
  */
@@ -39,7 +39,7 @@ describe('A conversation summary carried from run to run', () => {
     const first: any = { id: 'r1', organizationId: 'o', conversationId: 'c', workingMemory: {} };
     await compactor.compact([system, ...thread(0, 10)], first, config, 'o');
     const left = first.workingMemory.contextSummary;
-    expect(left).toMatchObject({ throughId: 'm7', text: 'MERGED SUMMARY' });
+    expect(left).toMatchObject({ lastKey: 'id:m7', nextKey: 'id:m8', text: 'MERGED SUMMARY', foldedTotal: 8 });
 
     // The next run's window starts four messages later and has four new ones.
     const runs = fakeRepository<any>([{ id: 'r1', conversationId: 'c', createdAt: new Date(1), workingMemory: first.workingMemory }]);
@@ -57,7 +57,8 @@ describe('A conversation summary carried from run to run', () => {
     expect(transcript).not.toMatch(/^(user|assistant): [4-7] /m);
     expect(transcript).not.toMatch(/^(user|assistant): 1[23] /m);
     // The merged summary replaces the prior one; it is not appended to it.
-    expect(second.workingMemory.contextSummary).toMatchObject({ throughId: 'm11', text: 'MERGED SUMMARY' });
+    expect(second.workingMemory.contextSummary).toMatchObject({ lastKey: 'id:m11', nextKey: 'id:m12', text: 'MERGED SUMMARY', foldedTotal: 12 });
+    expect(out.folded).toBe(4);
     expect(out.messages[0].content.match(/MERGED SUMMARY/g)).toHaveLength(1);
     expect(out.messages.slice(1).map((m: any) => m.content.split(' ')[0])).toEqual(['12', '13']);
   });

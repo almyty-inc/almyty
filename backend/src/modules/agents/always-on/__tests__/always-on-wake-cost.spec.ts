@@ -133,7 +133,7 @@ describe('An always-on wake that only looks', () => {
 
     // Once the thread is long (a day of hourly wakes), a wake that only looks.
     // Measured with this harness: before, every wake re-summarized the whole
-    // history window (~64k summarizer tokens) and cost ~92k; now ~21k-44k,
+    // history window (~64k summarizer tokens) and cost ~92k-99k; now ~22k-44k,
     // ~32k on average, the summarizer folding in only the last few wakes.
     const steady = measured.perWake.slice(15);
     const mean = steady.reduce((a, b) => a + b, 0) / steady.length;
