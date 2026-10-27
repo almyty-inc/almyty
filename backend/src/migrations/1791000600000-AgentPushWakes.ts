@@ -14,8 +14,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   with their agent and with their subscription.
  * - `agent_wakes.source` takes `push`.
  */
-export class AgentPushWakes1791000500000 implements MigrationInterface {
-  name = 'AgentPushWakes1791000500000';
+export class AgentPushWakes1791000600000 implements MigrationInterface {
+  name = 'AgentPushWakes1791000600000';
 
   public async up(q: QueryRunner): Promise<void> {
     await q.query(`

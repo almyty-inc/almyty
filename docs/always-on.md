@@ -259,7 +259,7 @@ resumed automatically.
 `always_on_disable`, `always_on_pause`, `wake_dropped`.
 
 **Push wakes.** `push_subscriptions` and `agent_push_wakes` (migration
-`1791000500000-AgentPushWakes`). A push subscription is one subscription at a
+`1791000600000-AgentPushWakes`). A push subscription is one subscription at a
 service: its address (`POST /push-wakes/:subscriptionId`), spec, settings,
 cursor, health and verification credential. `agent_push_wakes` is an agent's
 membership in one. The spec is data (`push-wakes/push-wake.types.ts`): a
