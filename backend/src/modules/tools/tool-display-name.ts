@@ -138,6 +138,15 @@ export function toolDisplayName(operation: OperationNaming): string | null {
     return summary;
   }
   const operationId = (operation.operationId ?? '').trim();
-  if (operationId && isWordlike(operationId)) return sentence(words(operationId));
+  if (operationId && isWordlike(operationId)) {
+    // Microsoft Graph's `drives.items.ListChildren`: the last part is the
+    // action ("List children"); the parts before it are its area, which the
+    // tag already says. A one-word last part (`gmail.users.messages.send`)
+    // reads better whole.
+    let last = operationId.split('.').pop() ?? '';
+    while (/\d$/.test(last)) last = last.slice(0, -1);
+    if (operationId.includes('.') && words(last).split(' ').length >= 2) return sentence(words(last));
+    return sentence(words(operationId));
+  }
   return nameFromPath(operation.method, operation.endpoint) ?? (name || null);
 }

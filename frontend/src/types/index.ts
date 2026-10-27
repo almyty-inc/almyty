@@ -351,6 +351,8 @@ export interface OperationOutline {
   tags?: string[] | null
   isActive?: boolean
   operationId?: string | null
+  /** The name the tool made from it would show (backend tools/tool-display-name.ts). */
+  displayName?: string | null
 }
 
 export enum ApiHealthStatus {

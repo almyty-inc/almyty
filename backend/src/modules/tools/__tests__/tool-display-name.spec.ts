@@ -31,7 +31,9 @@ describe('toolDisplayName', () => {
     [{ method: 'PATCH', endpoint: '/users/{userId}/settings' }, 'Update settings'],
     // An operationId in words.
     [{ name: 'listPets', operationId: 'listPets', method: 'GET', endpoint: '/pets' }, 'List pets'],
-    [{ name: 'drives.items.ListChildren', operationId: 'drives.items.ListChildren', method: 'GET', endpoint: '/drives/{id}/items/{id}/children' }, 'Drives items list children'],
+    // Microsoft Graph: the last part is the action; the area is the tag.
+    [{ name: 'drives.items.ListChildren', operationId: 'drives.items.ListChildren', method: 'GET', endpoint: '/drives/{id}/items/{id}/children' }, 'List children'],
+    [{ name: 'gmail.users.messages.send', operationId: 'gmail.users.messages.send', method: 'POST', endpoint: '/gmail/v1/users/{userId}/messages/send' }, 'Gmail users messages send'],
     // A summary wins.
     [{ name: 'Retrieve a company.', operationId: 'getCompany', method: 'GET', endpoint: '/companies/{id}' }, 'Retrieve a company'],
   ])('%j -> %s', (operation, expected) => {

@@ -452,8 +452,8 @@ describe('/apis/:id/setup: finish connecting', () => {
     vi.mocked(apisApi.getOperationOutline).mockResolvedValue({
       limit: 3,
       operations: [
-        { id: 'op-1', name: 'List children', method: 'GET', endpoint: '/drives/{drive-id}/items/{id}/children', tags: ['drives.driveItem'] },
-        { id: 'op-2', name: 'Delete item', method: 'DELETE', endpoint: '/drives/{drive-id}/items/{id}', tags: ['drives.driveItem'] },
+        { id: 'op-1', name: 'drives.driveItem.ListChildren', operationId: 'drives.driveItem.ListChildren', displayName: 'List children', method: 'GET', endpoint: '/drives/{drive-id}/items/{id}/children', tags: ['drives.driveItem'] },
+        { id: 'op-2', name: 'Delete item', displayName: 'Delete item', method: 'DELETE', endpoint: '/drives/{drive-id}/items/{id}', tags: ['drives.driveItem'] },
         { id: 'op-3', name: 'Get my drive', method: 'GET', endpoint: '/me/drive', tags: ['me.drive'] },
         { id: 'op-4', name: 'Search sites', method: 'GET', endpoint: '/v1.0/sites', tags: [] },
       ],
@@ -468,14 +468,23 @@ describe('/apis/:id/setup: finish connecting', () => {
     expect(router.state.location.pathname).toBe('/apis/api-1/setup')
     expect(await screen.findByRole('button', { name: 'Make tools' }, { timeout: 5000 })).toBeDisabled()
 
-    // Filed by tag, or by path prefix when there is none.
+    // Filed by tag, or by path prefix when there is none; a dotted tag reads in words.
     expect(screen.getByRole('checkbox', { name: 'Pick every operation in /sites' })).toBeInTheDocument()
-    await user.click(screen.getByRole('checkbox', { name: 'Pick every operation in drives.driveItem' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Pick every operation in Drives › Drive item' }))
     expect(screen.getByTestId('picked-count')).toHaveTextContent('2 of 3 picked')
 
-    // The search narrows the list.
+    // A row is the operation's display name, its method and path under it,
+    // and its operationId only as the tooltip.
+    await user.click(screen.getByRole('button', { name: /^Drives › Drive item/ }))
+    const row = screen.getByText('List children').closest('label')!
+    expect(row).toHaveTextContent('GET /drives/{drive-id}/items/{id}/children')
+    expect(row).toHaveAttribute('title', 'drives.driveItem.ListChildren')
+    expect(screen.queryByText('drives.driveItem.ListChildren')).not.toBeInTheDocument()
+
+    // The search narrows the list, by the raw tag too.
     await user.type(screen.getByRole('textbox', { name: 'Search operations' }), 'me.drive')
-    expect(screen.queryByRole('checkbox', { name: 'Pick every operation in drives.driveItem' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Pick every operation in Drives › Drive item' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Pick every operation in Me › Drive' })).toBeInTheDocument()
     await user.clear(screen.getByRole('textbox', { name: 'Search operations' }))
 
     await user.click(screen.getByRole('button', { name: 'Make 2 tools' }))
@@ -495,7 +504,7 @@ describe('/apis/:id/setup: finish connecting', () => {
     } as any)
     const user = userEvent.setup()
     renderAt('/apis/api-1/setup?job=job-1')
-    await user.click(await screen.findByRole('checkbox', { name: 'Pick every operation in t' }, { timeout: 5000 }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Pick every operation in T' }, { timeout: 5000 }))
     expect(screen.getByRole('alert')).toHaveTextContent('That is 1 over the limit of 1.')
     expect(screen.getByRole('button', { name: 'Make 2 tools' })).toBeDisabled()
   })
@@ -523,10 +532,10 @@ describe('/apis/:id/setup: finish connecting', () => {
     await waitFor(() => expect(screen.getByTestId('picked-count')).toHaveTextContent('2 of 3 picked'))
     // Only the new one is left to decide.
     await user.click(screen.getByRole('checkbox', { name: 'Only new' }))
-    expect(screen.queryByRole('checkbox', { name: 'Pick every operation in t' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /^u/ }))
+    expect(screen.queryByRole('checkbox', { name: 'Pick every operation in T' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^U/ }))
     expect(screen.getByText('New')).toBeInTheDocument()
-    await user.click(screen.getByRole('checkbox', { name: 'Pick every operation in u' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Pick every operation in U' }))
     await user.click(screen.getByRole('button', { name: 'Make 3 tools' }))
     await waitFor(() => expect(apisApi.selectOperations).toHaveBeenCalledWith('api-1', ['op-1', 'op-2', 'op-4']))
   })

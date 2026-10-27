@@ -19,7 +19,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { apisApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { pluralized } from '@/lib/utils'
-import { groupOperations } from './operation-groups'
+import { groupLabel, groupOperations } from './operation-groups'
 
 interface OperationPickerProps {
   apiId: string
@@ -147,7 +147,7 @@ export function OperationPicker({ apiId, total, limit: importLimit, newOperation
                       <Checkbox
                         checked={state}
                         onCheckedChange={() => setMany(ids, state !== true)}
-                        aria-label={`Pick every operation in ${group.key}`}
+                        aria-label={`Pick every operation in ${groupLabel(group.key)}`}
                       />
                       <button
                         type="button"
@@ -160,7 +160,7 @@ export function OperationPicker({ apiId, total, limit: importLimit, newOperation
                         ) : (
                           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                         )}
-                        <span className="truncate font-medium">{group.key}</span>
+                        <span className="truncate font-medium" title={group.key}>{groupLabel(group.key)}</span>
                         <Badge variant="outline" className="ml-auto shrink-0 text-xs">
                           {picked > 0 ? `${picked} / ${ids.length}` : ids.length}
                         </Badge>
@@ -170,18 +170,22 @@ export function OperationPicker({ apiId, total, limit: importLimit, newOperation
                       <ul className="space-y-1 pb-2 pl-10 pr-3">
                         {group.operations.map((op) => (
                           <li key={op.id}>
-                            <label className="flex cursor-pointer items-start gap-3 rounded px-1 py-1 text-sm hover:bg-muted">
+                            <label
+                              className="flex cursor-pointer items-start gap-3 rounded px-1 py-1 text-sm hover:bg-muted"
+                              title={op.operationId ?? undefined}
+                            >
                               <Checkbox
                                 className="mt-0.5"
                                 checked={selected.has(op.id)}
                                 onCheckedChange={(on) => setMany([op.id], on === true)}
                               />
-                              {op.method && (
-                                <span className="w-14 shrink-0 font-mono text-xs uppercase text-muted-foreground">{op.method}</span>
-                              )}
+                              {/* The name its tool will have; the method and path under it. */}
                               <span className="min-w-0 flex-1">
-                                <code className="block break-all font-mono text-xs">{op.endpoint}</code>
-                                {op.name && op.name !== op.endpoint && <span className="text-muted-foreground">{op.name}</span>}
+                                <span className="block">{op.displayName || op.name || op.endpoint}</span>
+                                <span className="block break-all font-mono text-xs text-muted-foreground">
+                                  {op.method ? `${op.method.toUpperCase()} ` : ''}
+                                  {op.endpoint}
+                                </span>
                               </span>
                               {newIds.has(op.id) && (
                                 <Badge variant="outline" className="shrink-0 border-cyan-600 text-xs text-cyan-600 dark:border-cyan-400 dark:text-cyan-400">

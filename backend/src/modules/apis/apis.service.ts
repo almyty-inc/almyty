@@ -30,6 +30,7 @@ import { connectionAuthConfig, hasInlineApiSecret, inlineApiAuthView, splitInlin
 import { generatedToolScope } from '../tools/generated-tool-scope';
 import { assertRegistryHoldsNoSecret } from '../tools/tool-auth-config';
 import { assertWithinPerSchemaCap, maxToolsPerSchema } from '../tools/tool-quota';
+import { toolDisplayName } from '../tools/tool-display-name';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -647,14 +648,22 @@ export class ApisService {
   async getOperationOutline(
     apiId: string,
     organizationId: string,
-  ): Promise<{ operations: Array<Pick<Operation, 'id' | 'name' | 'method' | 'endpoint' | 'tags' | 'isActive' | 'operationId'>>; limit: number }> {
+  ): Promise<{
+    operations: Array<Pick<Operation, 'id' | 'name' | 'method' | 'endpoint' | 'tags' | 'isActive' | 'operationId'> & { displayName: string | null }>;
+    limit: number;
+  }> {
     await this.assertApiInOrganization(apiId, organizationId);
     const operations = await this.operationRepository.find({
       where: { apiId },
       select: { id: true, name: true, method: true, endpoint: true, tags: true, isActive: true, operationId: true },
       order: { endpoint: 'ASC', method: 'ASC' },
     });
-    return { operations, limit: maxToolsPerSchema() };
+    // The name the tool made from it would show (tool-display-name.ts), so
+    // the picker reads the way the tools list will.
+    return {
+      operations: operations.map((op) => ({ ...op, displayName: toolDisplayName(op) })),
+      limit: maxToolsPerSchema(),
+    };
   }
 
   /**

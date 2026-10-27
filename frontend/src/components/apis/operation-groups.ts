@@ -27,7 +27,7 @@ export function groupKey(operation: OperationOutline): string {
 export function matchesSearch(operation: OperationOutline, search: string): boolean {
   const q = search.trim().toLowerCase()
   if (!q) return true
-  return [groupKey(operation), operation.endpoint, operation.method, operation.name, operation.operationId]
+  return [groupKey(operation), operation.endpoint, operation.method, operation.name, operation.operationId, operation.displayName]
     .some((field) => typeof field === 'string' && field.toLowerCase().includes(q))
 }
 
@@ -44,4 +44,21 @@ export function groupOperations(operations: OperationOutline[], search = ''): Op
   return [...groups.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, list]) => ({ key, operations: list }))
+}
+
+/** "driveItem" -> "Drive item", "crm_owners" -> "Crm owners". */
+function words(part: string): string {
+  const text = part.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim().toLowerCase()
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : part
+}
+
+/**
+ * A group's name for people. A dotted tag (Microsoft Graph's `me.drive`,
+ * `drives.driveItem`) reads as "Me › Drive", "Drives › Drive item"; a path
+ * prefix stays as it is. The raw tag is still what the search matches.
+ */
+export function groupLabel(key: string): string {
+  if (key.startsWith('/')) return key
+  const parts = key.split('.').filter(Boolean)
+  return parts.length > 1 ? parts.map(words).join(' › ') : words(key)
 }

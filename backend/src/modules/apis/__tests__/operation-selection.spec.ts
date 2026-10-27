@@ -165,6 +165,25 @@ describe('an import over the limit asks for a subset instead of failing', () => 
   }));
 });
 
+describe('the operation picker outline', () => {
+  // The picker listed `drives.driveItem.driveItem.GetWorkbook123` as the name.
+  it('names each operation the way its tool will be named', async () => {
+    const service = Object.create(ApisService.prototype) as ApisService;
+    Object.assign(service, {
+      apiRepository: { findOne: jest.fn().mockResolvedValue({ id: 'api-1' }) },
+      operationRepository: {
+        find: jest.fn().mockResolvedValue([
+          { id: 'a', name: 'drives.driveItem.GetWorkbook', operationId: 'drives.driveItem.GetWorkbook', method: 'GET', endpoint: '/drives/{id}/items/{id}/workbook', tags: ['drives.driveItem'] },
+          { id: 'b', name: 'POST /crm/v3/objects/contacts/search', operationId: 'post-/crm/v3/objects/contacts/search_doSearch', method: 'POST', endpoint: '/crm/v3/objects/contacts/search', tags: [] },
+          { id: 'c', name: 'Retrieve a company', operationId: 'getCompany', method: 'GET', endpoint: '/companies/{id}', tags: [] },
+        ]),
+      },
+    });
+    const { operations } = await service.getOperationOutline('api-1', 'org-1');
+    expect(operations.map((op) => op.displayName)).toEqual(['Get workbook', 'Search contacts', 'Retrieve a company']);
+  });
+});
+
 describe('picking the operations to make tools from', () => {
   function serviceWith(existingIds: string[]) {
     const updates: Array<{ where: any; patch: any }> = [];
