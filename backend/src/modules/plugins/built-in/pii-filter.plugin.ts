@@ -35,6 +35,53 @@ const MAX_DEPTH = 100;
 /** ReDoS bound: if a single custom-pattern match() takes longer than this, bail. */
 const CUSTOM_PATTERN_BUDGET_MS = 50;
 
+/**
+ * Field names that hold a time: `created`, `arrival_date`, `available_on`,
+ * `period_start`, `createdAt`, `expires`, `ts`. A ten-digit number in one
+ * is a Unix time, not a phone number. Settable per organization as
+ * `timestampFieldPattern`; `keepUnixTimestamps: false` masks them again.
+ */
+export const DEFAULT_TIMESTAMP_FIELD_PATTERN =
+  '(^|[_.-])(date|time|timestamp|ts|at|on|created|updated|modified|deleted|expires?|expiry|start|end|since|until|from|to)$|(At|On|Date|Time|Timestamp|Start|End|Since|Until)$';
+
+/** Unix seconds a phone-shaped number may be read as: 2001-09-09 to 2100-01-01. */
+const UNIX_TIME_MIN = 1_000_000_000;
+const UNIX_TIME_MAX = 4_102_444_800;
+
+/** How far before a number its key is looked for in text (`"created": 1696204800`). */
+const KEY_LOOKBEHIND = 64;
+
+const ISO_DATE = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
+
+function timestampFieldRegex(settings: any): RegExp | null {
+  const source = typeof settings?.timestampFieldPattern === 'string' && settings.timestampFieldPattern
+    ? settings.timestampFieldPattern
+    : DEFAULT_TIMESTAMP_FIELD_PATTERN;
+  return compileSafeRegex(source).regex ?? null;
+}
+
+/**
+ * True when `match` (a phone-pattern hit at `offset` in `text`) is a
+ * plausible Unix time where a time is meant: ten bare digits in range,
+ * and either the field it sits in, the key written just before it, or an
+ * ISO date next to it says it is a time. A number with separators
+ * (555-123-4567) or under a key like `phone` is never one.
+ */
+export function isUnixTimeInContext(match: string, text: string, offset: number, field: string | undefined, settings: any): boolean {
+  if (settings?.keepUnixTimestamps === false) return false;
+  if (!/^\d{10}$/.test(match)) return false;
+  const n = Number(match);
+  if (n < UNIX_TIME_MIN || n > UNIX_TIME_MAX) return false;
+  const timeField = timestampFieldRegex(settings);
+  if (!timeField) return false;
+  if (field && text.trim() === match && timeField.test(field)) return true;
+  const before = text.slice(Math.max(0, offset - KEY_LOOKBEHIND), offset);
+  const key = /["']?([A-Za-z0-9_.-]+)["']?\s*[:=]\s*["']?$/.exec(before)?.[1];
+  if (key) return timeField.test(key);
+  const around = text.slice(Math.max(0, offset - KEY_LOOKBEHIND), offset + match.length + KEY_LOOKBEHIND);
+  return ISO_DATE.test(around);
+}
+
 export class PiiFilterPlugin {
   private readonly piiPatterns: PatternEntry[] = [
     { setting: 'detectCreditCards',  name: 'credit_card', pattern: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g },
@@ -76,6 +123,9 @@ export class PiiFilterPlugin {
           detectSSN: true,
           detectPhoneNumbers: true,
           detectIPAddresses: true,
+          // A ten-digit Unix time in a time-named field is not a phone number.
+          keepUnixTimestamps: true,
+          timestampFieldPattern: DEFAULT_TIMESTAMP_FIELD_PATTERN,
           customPatterns: [],
           logDetections: true,
         },
@@ -183,12 +233,14 @@ export class PiiFilterPlugin {
     modifications: string[],
     seen: WeakSet<object>,
     depth: number,
+    /** The key the value sits under, if any: a time-named field keeps its Unix times. */
+    field?: string,
   ): any {
     if (typeof obj === 'string') {
       // Track whether the string was actually modified so the caller's
       // parent-key bookkeeping doesn't false-positive on untouched strings.
       const before = obj;
-      const after = this.filterPiiFromString(obj, settings, modifications);
+      const after = this.filterPiiFromString(obj, settings, modifications, field);
       if (after !== before) {
         // The per-match breadcrumbs have already been pushed by
         // filterPiiFromString; we don't double-count here.
@@ -219,7 +271,7 @@ export class PiiFilterPlugin {
     if (Array.isArray(obj)) {
       let anyChanged = false;
       const out = obj.map((item, index) => {
-        const filtered = this.filterPiiFromObject(item, settings, modifications, seen, depth + 1);
+        const filtered = this.filterPiiFromObject(item, settings, modifications, seen, depth + 1, field);
         // For primitives the reference check is a correct "was it
         // modified" signal; for objects/arrays we always allocated a new
         // container, so this SAME check used to false-positive. Gate the
@@ -240,7 +292,7 @@ export class PiiFilterPlugin {
     let anyChanged = false;
     const filtered: any = {};
     for (const [key, value] of Object.entries(obj)) {
-      const filteredValue = this.filterPiiFromObject(value, settings, modifications, seen, depth + 1);
+      const filteredValue = this.filterPiiFromObject(value, settings, modifications, seen, depth + 1, key);
       if (typeof value === 'string' && filteredValue !== value) {
         anyChanged = true;
         if (modifications.length < MAX_MODIFICATIONS) {
@@ -254,9 +306,15 @@ export class PiiFilterPlugin {
     return anyChanged ? filtered : obj;
   }
 
-  private filterPiiFromString(text: string, settings: any, modifications: string[]): string {
+  private filterPiiFromString(text: string, settings: any, modifications: string[], field?: string): string {
     let filteredText = text;
     const maskChar = settings.maskCharacter || '*';
+    const mask = (match: string) => {
+      if (modifications.length < MAX_MODIFICATIONS) {
+        modifications.push(`PII detected and masked: ${match.slice(0, 2)}...`);
+      }
+      return maskChar.repeat(Math.max(4, match.length - 4)) + match.slice(-4);
+    };
 
     // Honour the per-category detect* toggles. The previous shape iterated
     // a flat pattern array with no lookup, so `detectEmails: false` had
@@ -264,15 +322,21 @@ export class PiiFilterPlugin {
     for (const entry of this.piiPatterns) {
       if (settings && settings[entry.setting] === false) continue;
 
-      const matches = entry.pattern instanceof RegExp ? filteredText.match(entry.pattern) : entry.pattern(filteredText);
+      if (entry.pattern instanceof RegExp) {
+        // A ten-digit Unix time where a time is meant (a `created` field,
+        // `"arrival_date": 1696204800` in a tool's text, next to an ISO
+        // date) reads like a phone number to the pattern but is not one.
+        filteredText = filteredText.replace(entry.pattern, (match: string, offset: number, whole: string) =>
+          entry.name === 'phone' && isUnixTimeInContext(match, whole, offset, field, settings) ? match : mask(match),
+        );
+        continue;
+      }
+
+      const matches = entry.pattern(filteredText);
       if (!matches) continue;
 
       for (const match of matches) {
-        const masked = maskChar.repeat(Math.max(4, match.length - 4)) + match.slice(-4);
-        filteredText = filteredText.replace(match, masked);
-        if (modifications.length < MAX_MODIFICATIONS) {
-          modifications.push(`PII detected and masked: ${match.slice(0, 2)}...`);
-        }
+        filteredText = filteredText.replace(match, mask(match));
       }
     }
 

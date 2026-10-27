@@ -46,6 +46,7 @@ import {
   applyJsonBodyTemplate,
   substituteHeaderValue,
   encodeFormUrlencoded,
+  serializeQueryParams,
   generateRequestId,
 } from '../tool-execution-utils';
 
@@ -428,19 +429,9 @@ export class ToolHttpExecutor {
         httpAgent: fullUrlCheck.httpAgent ?? ssrfSafeHttpAgent,
         httpsAgent: fullUrlCheck.httpsAgent ?? ssrfSafeHttpsAgent,
         params: queryParams,
-        paramsSerializer: (params: any) => {
-          const parts: string[] = [];
-          for (const [key, value] of Object.entries(params)) {
-            if (Array.isArray(value)) {
-              value.forEach(v =>
-                parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`),
-              );
-            } else if (value !== undefined && value !== null) {
-              parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
-            }
-          }
-          return parts.join('&');
-        },
+        // Each declared parameter as its style says (deepObject ranges like
+        // Stripe's created[gte]); anything else as name=value.
+        paramsSerializer: (params: any) => serializeQueryParams(params, operation.parameters?.query ?? {}),
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'LLM-Tool-Gateway/1.0',
