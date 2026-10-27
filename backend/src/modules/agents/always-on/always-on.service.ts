@@ -273,6 +273,13 @@ function wakeLine(w: Pick<AgentWake, 'source' | 'summary' | 'payload' | 'created
   return `- ${clock(w.createdAt)}, ${w.summary}${sent}`;
 }
 
+/** What the owner wrote in these wakes, oldest first: the only words a person wrote into a wake run. */
+export function ownerWordsOf(wakes: Array<Pick<AgentWake, 'payload'>>): string[] {
+  return wakes
+    .map((w) => w.payload?.ownerMessage?.text)
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+}
+
 /** The note a live run gets when wakes arrive while it works. */
 export function whileYouWereWorking(wakes: Array<Pick<AgentWake, 'source' | 'summary' | 'payload' | 'createdAt'>>): string {
   return ['While you were working:', ...wakes.map(wakeLine)].join('\n');
@@ -848,6 +855,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
             triggerType: 'always_on',
             wakeIds: claimed.map((w) => w.id),
             replyTo: this.repliesOf(claimed),
+            // The owner's own words, apart from the wake prompt the system
+            // wrote: only these are what a person said (memory reads them).
+            personWords: ownerWordsOf(claimed),
           },
         });
       } catch (err: any) {
@@ -928,11 +938,14 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
 
   private async rememberReplies(run: AgentRun, wakes: AgentWake[]): Promise<void> {
     const replies = this.repliesOf(wakes);
-    if (!replies.length) return;
+    // The owner's words handed to a run already going are a person's words on it too.
+    const words = ownerWordsOf(wakes);
+    if (!replies.length && !words.length) return;
     const existing: ChannelDelivery[] = Array.isArray(run.metadata?.replyTo) ? run.metadata.replyTo : [];
     const merged = [...existing];
     for (const r of replies) if (!merged.some((d) => d.channelId === r.channelId && d.to === r.to)) merged.push(r);
-    run.metadata = { ...(run.metadata ?? {}), replyTo: merged };
+    const personWords = [...(Array.isArray(run.metadata?.personWords) ? run.metadata.personWords : []), ...words];
+    run.metadata = { ...(run.metadata ?? {}), replyTo: merged, personWords };
     await this.runs.update({ id: run.id }, { metadata: run.metadata });
   }
 

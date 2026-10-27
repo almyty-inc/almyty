@@ -5,7 +5,7 @@ import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
 import { stepKindSignal } from '../dto/llm-providers.dto';
-import { callLlmProviderHttp, callLlmProviderHttpStream } from './safe-request';
+import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
 import { toAnthropicContent } from '../content-parts';
 import { requireModel } from '../model-errors';
 
@@ -93,7 +93,7 @@ export async function callAnthropic(
   };
 
   const response: AxiosResponse = await callWithDeprecatedParamRetry(
-    () => callLlmProviderHttp(config),
+    () => callLlmProviderHttp(config, llmCallOptionsFor(provider)),
     anthropicRequest,
   );
   const responseTime = Date.now() - startTime;
@@ -219,7 +219,7 @@ export async function callAnthropicStream(
   };
 
   const response: AxiosResponse = await callWithDeprecatedParamRetry(
-    () => callLlmProviderHttpStream(config),
+    () => callLlmProviderHttpStream(config, llmCallOptionsFor(provider)),
     anthropicRequest,
   );
 

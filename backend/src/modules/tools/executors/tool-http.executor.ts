@@ -57,6 +57,8 @@ import {
  */
 import { executeWithPagination, processHttpResponse } from './tool-http-pagination';
 import { matchDelimited } from '../../../common/security/linear-text';
+import { operationHeaderParams } from '../operation-header-params';
+import { isGroupedArguments } from './argument-shape';
 const MAX_ERR_MESSAGE = 500;
 
 /** Default per-response size cap. 10MB for success, 5MB for the body we send. */
@@ -347,12 +349,7 @@ export class ToolHttpExecutor {
       let headerParams: Record<string, any> = {};
       let bodyData: any = null;
 
-      if (
-        parameters.path ||
-        parameters.query ||
-        parameters.header ||
-        parameters.body !== undefined
-      ) {
+      if (isGroupedArguments(parameters, operation)) {
         // Grouped shape
         pathParams = parameters.path || {};
         queryParams = parameters.query || {};
@@ -372,7 +369,12 @@ export class ToolHttpExecutor {
             pathParams[name] = parameters[name];
           }
         });
-        const rest = Object.keys(parameters).filter(key => !pathParamNames.includes(key));
+        // Declared header parameters (xero-tenant-id) are headers, never query.
+        const headerNames = new Set(operationHeaderParams(operation).map(([name]) => name));
+        for (const name of headerNames) {
+          if (parameters[name] !== undefined && parameters[name] !== null) headerParams[name] = String(parameters[name]);
+        }
+        const rest = Object.keys(parameters).filter(key => !pathParamNames.includes(key) && !headerNames.has(key));
         if (
           ['POST', 'PUT', 'PATCH'].includes(operation.method) &&
           operation.parameters?.body
