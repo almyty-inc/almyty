@@ -18,6 +18,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../../../src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../src/modules/auth/guards/roles.guard';
 import { Roles } from '../../../src/modules/auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../../src/common/authorization/rbac-actions';
 import { EntitlementGuard } from '../../../src/modules/licensing/guards/entitlement.guard';
 import { RequiresEntitlement } from '../../../src/modules/licensing/decorators/requires-entitlement.decorator';
 import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
@@ -55,6 +56,7 @@ class CreateStreamDto {
 @UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard)
 @RequiresEntitlement(EE_ENTITLEMENTS.AUDIT_EXPORT)
 @Roles('admin', 'owner')
+@RbacAction(RBAC_PERMISSIONS.AUDIT_EXPORT)
 export class AuditExportController {
   constructor(
     private readonly exportService: AuditExportService,

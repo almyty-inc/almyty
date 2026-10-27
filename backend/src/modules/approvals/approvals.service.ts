@@ -15,6 +15,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { assertManageable } from '../../common/authorization/read-rule';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import {
+  ADVANCED_RBAC_HOOK,
+  AdvancedRbacHook,
   APPROVAL_POLICY_HOOK,
   ApprovalPolicyApproval,
   ApprovalPolicyHook,
@@ -103,6 +105,11 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     // no module import edge (the cycle-safe pattern used for EE hooks).
     @Optional()
     private readonly notifications?: NotificationsService,
+    // EE hook (advanced_rbac): custom role names, so a policy step whose
+    // approver role is a custom role ("finance") matches its holders.
+    @Optional()
+    @Inject(ADVANCED_RBAC_HOOK)
+    private readonly rbacHook?: AdvancedRbacHook,
   ) {
     super();
   }
@@ -349,6 +356,9 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
         agentId: input.agentId,
         runId: input.runId,
         toolCallId: input.toolCallId ?? null,
+        // A held tool call names its tool, so a policy can match on
+        // `toolName` as the docs describe.
+        toolName: await this.toolNameOf(input),
         teamId,
         payload: input.payload ?? {},
         // Raised by an approval policy's amount rule at the tool call: that
@@ -359,6 +369,23 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       this.logger.warn(`approval policy resolution failed: ${err?.message ?? err}`);
       return null;
     }
+  }
+
+  /** The held tool call's tool name, else what the payload says, else null. */
+  private async toolNameOf(input: CreateApprovalInput): Promise<string | null> {
+    if (input.toolId) {
+      try {
+        const tool = await this.approvals.manager.getRepository(Tool).findOne({
+          where: { id: input.toolId, organizationId: input.organizationId },
+          select: { id: true, name: true },
+        });
+        if (tool?.name) return tool.name;
+      } catch {
+        // Falls through to the payload.
+      }
+    }
+    const fromPayload = (input.payload as Record<string, unknown> | null | undefined)?.toolName;
+    return typeof fromPayload === 'string' ? fromPayload : null;
   }
 
   /**
@@ -497,8 +524,9 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
 
   /**
    * Role names used to match a policy step's `approverRole`: the caller's
-   * org role ('owner' | 'admin' | 'member' | 'viewer') plus, when the
-   * request is team-scoped, 'team_lead' / 'team_member'.
+   * org role ('owner' | 'admin' | 'member' | 'viewer'), their active
+   * custom roles by name (EE advanced_rbac), and, when the request is
+   * team-scoped, 'team_lead' / 'team_member'.
    */
   private async resolveApproverRoles(
     userId: string,
@@ -518,6 +546,15 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       }
     } catch (err: any) {
       this.logger.warn(`approver role resolution failed: ${err?.message ?? err}`);
+    }
+    if (this.rbacHook?.roleNames) {
+      try {
+        for (const name of await this.rbacHook.roleNames(row.organizationId, userId)) {
+          if (!roles.includes(name)) roles.push(name);
+        }
+      } catch (err: any) {
+        this.logger.warn(`custom role resolution failed: ${err?.message ?? err}`);
+      }
     }
     return roles;
   }

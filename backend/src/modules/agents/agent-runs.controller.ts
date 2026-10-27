@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { CodeModeService } from '../code-mode/code-mode.service';
 
@@ -60,6 +61,7 @@ export class AgentRunsController {
    */
   @Get(':id/executions/:executionId/trace')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Where a run\'s requests went, hop by hop' })
   async trace(
     @Param('id', ParseUUIDPipe) id: string,
@@ -99,6 +101,7 @@ export class AgentRunsController {
 
   @Post(':id/runs')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @Throttle({ default: { ttl: 60000, limit: 20 } })
   @ApiOperation({ summary: 'Start a new autonomous agent run' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
@@ -142,6 +145,7 @@ export class AgentRunsController {
 
   @Get(':id/runs')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'List runs for an agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   async listRuns(
@@ -181,6 +185,7 @@ export class AgentRunsController {
 
   @Get(':id/runs/:runId')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get run status and steps' })
   async getRun(
     @Param('id', ParseUUIDPipe) id: string,
@@ -217,6 +222,7 @@ export class AgentRunsController {
    */
   @Get(':id/runs/:runId/code-executions')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: "A run's run_code scripts" })
   async listCodeExecutions(
     @Param('id', ParseUUIDPipe) id: string,
@@ -232,6 +238,7 @@ export class AgentRunsController {
   /** One script of a run, with its call tree: the tool executions it made, in order. */
   @Get(':id/runs/:runId/code-executions/:codeExecutionId')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'A run_code script and the calls it made' })
   async getCodeExecution(
     @Param('id', ParseUUIDPipe) id: string,
@@ -248,6 +255,7 @@ export class AgentRunsController {
 
   @Get(':id/runs/:runId/stream')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'SSE stream of run progress' })
   async streamRun(
     @Param('id', ParseUUIDPipe) id: string,
@@ -298,6 +306,7 @@ export class AgentRunsController {
 
   @Post(':id/runs/:runId/input')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @ApiOperation({ summary: 'Send input to a waiting run (human-in-the-loop)' })
   async sendRunInput(
     @Param('id', ParseUUIDPipe) id: string,
@@ -326,6 +335,7 @@ export class AgentRunsController {
 
   @Post(':id/runs/:runId/cancel')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @ApiOperation({ summary: 'Cancel a running run' })
   async cancelRun(
     @Param('id', ParseUUIDPipe) id: string,
