@@ -310,6 +310,12 @@ export const authApi = {
     apiPost('/auth/login', data),
   
   logout: () => apiPost('/auth/logout'),
+
+  /** Whether this address signs in through its organization's single sign-on, and where that starts. */
+  discoverSso: (email: string) =>
+    apiGet<{ sso: boolean; protocol?: 'saml' | 'oidc'; loginUrl?: string }>(
+      `/sso/discover?email=${encodeURIComponent(email)}`,
+    ),
   
   getProfile: () => apiGet('/auth/profile'),
   
