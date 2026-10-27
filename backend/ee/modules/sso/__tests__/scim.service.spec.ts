@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ScimService } from '../scim.service';
 import { OrganizationRole } from '../../../../src/entities/user-organization.entity';
 
@@ -210,6 +210,36 @@ describe('ScimService — Groups', () => {
     expect(userTeamRepo.save).toHaveBeenCalled();
     expect(result.displayName).toBe('Engineering');
     expect(result.members).toEqual([{ value: 'u-1' }]);
+  });
+
+  // A group named like a team someone made by hand answered 409, so the
+  // IdP retried forever and the two never joined. Now it links.
+  it('links a group to a hand-made team of the same name instead of refusing it', async () => {
+    const { service, teamRepo, userTeamRepo, membershipRepo } = makeService();
+    const handMade = { id: 'team-fin', organizationId: 'org-1', name: 'Finance', isDefault: false, settings: { color: 'teal' } };
+    teamRepo.findOne.mockImplementation(async ({ where }: any) => (where.id ? handMade : handMade));
+    userTeamRepo.findOne.mockResolvedValue(null);
+    membershipRepo.findOne.mockResolvedValue({ userId: 'u-1', organizationId: 'org-1', isActive: true });
+    userTeamRepo.find.mockResolvedValue([{ userId: 'u-manual', isActive: true }, { userId: 'u-1', isActive: true }]);
+
+    const result = await service.createGroup('org-1', { displayName: 'finance', externalId: 'okta-123', members: [{ value: 'u-1' }] });
+
+    // The same team, kept (its own settings too), marked as linked.
+    expect(teamRepo.create).not.toHaveBeenCalled();
+    expect(teamRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'team-fin', settings: expect.objectContaining({ color: 'teal', scim: expect.objectContaining({ externalId: 'okta-123' }) }) }),
+    );
+    expect(userTeamRepo.save).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'team-fin', userId: 'u-1' }));
+    expect(result.id).toBe('team-fin');
+    expect(result.displayName).toBe('Finance');
+    expect(result.members).toEqual([{ value: 'u-manual' }, { value: 'u-1' }]);
+  });
+
+  it("still refuses to link the organization's default team", async () => {
+    const { service, teamRepo } = makeService();
+    teamRepo.findOne.mockResolvedValue({ id: 'team-all', organizationId: 'org-1', name: 'Everyone', isDefault: true });
+    await expect(service.createGroup('org-1', { displayName: 'Everyone' })).rejects.toBeInstanceOf(ConflictException);
+    expect(teamRepo.save).not.toHaveBeenCalled();
   });
 
   it('adds and removes members via PATCH', async () => {

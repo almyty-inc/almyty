@@ -59,12 +59,21 @@ export interface AlwaysOnOwnerChannel {
 export type AlwaysOnActMode = 'propose' | 'act';
 
 /**
- * When it reports to `reportTo`: after every wake, only when it did
- * something, or once a day with a short summary of the last 24 hours
- * (always-on-digest.ts).
+ * When it reports to `reportTo`: after every wake; only when it has
+ * something to tell you (`when_news`: findings, questions, things it did;
+ * a wake it answers with NOTHING_TO_REPORT is quiet, always-on-report.ts);
+ * only when it did something (a tool that changes something ran); or once
+ * a day with a short summary of the last 24 hours (always-on-digest.ts).
  */
-export const ALWAYS_ON_REPORTS = ['every_wake', 'when_acted', 'daily_digest'] as const;
+export const ALWAYS_ON_REPORTS = ['every_wake', 'when_news', 'when_acted', 'daily_digest'] as const;
 export type AlwaysOnReport = (typeof ALWAYS_ON_REPORTS)[number];
+
+/**
+ * What a stored setting without a report reads as. Agents set up before
+ * `when_news` existed keep reporting the way they did; a new agent starts
+ * with `when_news` (defaultAlwaysOn).
+ */
+const STORED_REPORT_FALLBACK: AlwaysOnReport = 'when_acted';
 
 /** The daily summary's time of day ("HH:MM", 24-hour) and IANA time zone. */
 export interface AlwaysOnDigest {
@@ -136,7 +145,7 @@ export function hasHostedHome(config: Pick<AlwaysOnConfig, 'home'> | null | unde
   return typeof id === 'string' && id.length > 0;
 }
 
-/** A new agent's always-on settings. */
+/** A new agent's always-on settings. It reports when it has something to tell you. */
 export function defaultAlwaysOn(): AlwaysOnConfig {
   return {
     enabled: false,
@@ -146,7 +155,7 @@ export function defaultAlwaysOn(): AlwaysOnConfig {
     actMode: 'propose',
     askFirstToolIds: [],
     reportTo: null,
-    report: 'when_acted',
+    report: 'when_news',
     maxWakesPerHour: null,
   };
 }
@@ -176,6 +185,7 @@ export function readAlwaysOn(raw: unknown): AlwaysOnConfig | null {
       brief: typeof r.prompt === 'string' ? r.prompt : '',
       wakeOn: { timer: { everyMinutes: Number(r.intervalMinutes) || 60 }, channelIds: [], connectionEvents: [] },
       actMode: 'act',
+      report: STORED_REPORT_FALLBACK,
       ...(r.pausedReason ? { pausedReason: r.pausedReason } : {}),
     };
   }
@@ -192,7 +202,7 @@ export function readAlwaysOn(raw: unknown): AlwaysOnConfig | null {
     },
     actMode: r.actMode === 'act' ? 'act' : 'propose',
     askFirstToolIds: Array.isArray(r.askFirstToolIds) ? r.askFirstToolIds : [],
-    report: (ALWAYS_ON_REPORTS as readonly string[]).includes(r.report) ? r.report : 'when_acted',
+    report: (ALWAYS_ON_REPORTS as readonly string[]).includes(r.report) ? r.report : STORED_REPORT_FALLBACK,
     digest: r.digest && typeof r.digest === 'object' ? r.digest : null,
   } as AlwaysOnConfig;
 }
@@ -218,7 +228,12 @@ export const MAX_BRIEF_CHARS = 8000;
  * timer floor, wakes an hour) are checked by the service, which knows the
  * plan; channels and tools are checked against the agent there too.
  */
-export function mergeAlwaysOn(current: AlwaysOnConfig | null, input: AlwaysOnInput): AlwaysOnConfig {
+export function mergeAlwaysOn(
+  current: AlwaysOnConfig | null,
+  input: AlwaysOnInput,
+  /** Wake sources kept outside these settings: its push wakes (push-wakes/). */
+  other: { pushWakes?: number } = {},
+): AlwaysOnConfig {
   const base = current ?? defaultAlwaysOn();
   const next: AlwaysOnConfig = { ...base };
   if (input.enabled !== undefined) next.enabled = input.enabled === true;
@@ -268,7 +283,7 @@ export function mergeAlwaysOn(current: AlwaysOnConfig | null, input: AlwaysOnInp
   if (input.reportTo !== undefined) next.reportTo = input.reportTo ?? null;
   if (input.report !== undefined) {
     if (!(ALWAYS_ON_REPORTS as readonly string[]).includes(input.report as string)) {
-      throw new BadRequestException('Choose when it reports: after every wake, only when it did something, or once a day.');
+      throw new BadRequestException('Choose when it reports: after every wake, when it has something to tell you, only when it did something, or once a day.');
     }
     next.report = input.report;
   }
@@ -291,8 +306,8 @@ export function mergeAlwaysOn(current: AlwaysOnConfig | null, input: AlwaysOnInp
   if (next.enabled && !next.brief) {
     throw new BadRequestException('Say what it should keep doing before turning it on.');
   }
-  if (next.enabled && !next.wakeOn.timer && !(next.wakeOn.channelIds?.length) && !(next.wakeOn.connectionEvents?.length) && !next.ownerChannel) {
-    throw new BadRequestException('Choose at least one thing that wakes it: a timer, a channel or a connection event.');
+  if (next.enabled && !next.wakeOn.timer && !(next.wakeOn.channelIds?.length) && !(next.wakeOn.connectionEvents?.length) && !next.ownerChannel && !other.pushWakes) {
+    throw new BadRequestException('Choose at least one thing that wakes it: a timer, a channel, a connection event or a service that pushes changes.');
   }
   return next;
 }

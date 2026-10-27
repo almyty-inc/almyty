@@ -13,6 +13,8 @@
  * Pure: no I/O.
  */
 
+import { matchDelimited } from '../../common/security/linear-text';
+
 export const GOOGLE_AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
@@ -52,9 +54,18 @@ function schemaOf(s: any, depth = 0): any {
   return out;
 }
 
-/** `{+name}` (reserved expansion) is a plain path parameter to the importer. */
+/**
+ * The method's path, with `{+name}` (reserved expansion) as a plain path
+ * parameter. flatPath is preferred, but only when its placeholders are the
+ * method's parameters: BigQuery's jobs.query has the flatPath
+ * `projects/{projectsId}/queries` and a parameter named `projectId`, so the
+ * flatPath left `{projectsId}` in every URL and the call went nowhere.
+ */
 function pathOf(method: any): string {
-  const raw = String(method.flatPath ?? method.path ?? '');
+  const names = new Set(Object.keys(method.parameters ?? {}));
+  const placeholders = (p: string) => matchDelimited(p, '{', '}').map((m) => m.slice(1, -1).replace(/^\+/, ''));
+  const flat = typeof method.flatPath === 'string' && placeholders(method.flatPath).every((n) => names.has(n)) ? method.flatPath : null;
+  const raw = String(flat ?? method.path ?? method.flatPath ?? '');
   return `/${raw.replace(/^\/+/, '').replace(/\{\+([^}]+)\}/g, '{$1}')}`;
 }
 

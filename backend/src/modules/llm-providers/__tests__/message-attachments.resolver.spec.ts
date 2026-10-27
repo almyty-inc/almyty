@@ -150,6 +150,28 @@ describe('MessageAttachmentResolver', () => {
     await custom.resolver.resolve(ORG, provider(LlmProviderType.CUSTOM, { custom: { requestFormat: 'custom' } }), ask(ref('f1', 'image/png')) as any);
     expect(custom.models.findOne).not.toHaveBeenCalled();
   });
+
+  it("gives a model that cannot open PDFs the PDF's extracted text, read from the file row", async () => {
+    const row = { ...fileRow('f9', 'application/pdf', 900), extractedText: 'Total paid out: 1,284.50 EUR' };
+    const h = harness({ capabilities: {}, files: [row] });
+    const out = await h.resolver.resolve(ORG, provider(LlmProviderType.MISTRAL), ask(ref('f9', 'application/pdf', { name: 'payouts.pdf' })) as any);
+    expect(parts(out)[1]).toEqual({ type: 'text', text: 'Contents of payouts.pdf:\nTotal paid out: 1,284.50 EUR' });
+    expect(h.fileQueries).toEqual([{ id: 'f9', organizationId: ORG }]);
+  });
+
+  it('caps the stored text at FILES_MODEL_TEXT_MAX_CHARS, and says only a sentence for a PDF with none', async () => {
+    const before = process.env.FILES_MODEL_TEXT_MAX_CHARS;
+    process.env.FILES_MODEL_TEXT_MAX_CHARS = '5';
+    try {
+      const h = harness({ capabilities: {}, files: [{ ...fileRow('f9', 'application/pdf', 900), extractedText: 'abcdefghij' }, fileRow('f8', 'application/pdf', 900)] });
+      const out = await h.resolver.resolve(ORG, provider(LlmProviderType.MISTRAL), ask(ref('f9', 'application/pdf', { name: 'a.pdf' }), ref('f8', 'application/pdf', { name: 'b.pdf' })) as any);
+      expect(parts(out)[1].text).toBe('Contents of a.pdf:\nabcde\n[truncated]');
+      expect(parts(out)[2].text).toBe('(b.pdf is a PDF; the model answering cannot read PDF files.)');
+    } finally {
+      if (before === undefined) delete process.env.FILES_MODEL_TEXT_MAX_CHARS;
+      else process.env.FILES_MODEL_TEXT_MAX_CHARS = before;
+    }
+  });
 });
 
 describe('the runner resolves files before every dispatch', () => {

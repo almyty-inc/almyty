@@ -1,28 +1,147 @@
-# Turn call notes into CRM updates
+# Turn call notes into HubSpot updates
 
-For reps who have good calls and then never update the CRM. Paste your notes (or a transcript) after a call. The assistant pulls out the next steps, updates the deal in your CRM, and drafts a follow-up email. Anything that leaves the company waits for your approval first.
+## What you'll build
 
-"CRM" here means your own CRM connected through its API: almyty has no built-in CRM connector.
+An assistant for sales reps who have good calls and then never update the CRM. After a call, the rep pastes their notes. The assistant finds the deal in HubSpot, moves its stage, sets the close date and the next step, adds the notes to the deal, creates a follow-up task for the deal owner, and writes a short follow-up email for the rep to send. It never sends anything itself, and it only writes what the notes say.
 
-For a full walk-through with screenshots, see [Sales assistant in Slack](/examples/sales-assistant-slack): it looks up an account before a call and writes the meeting notes back afterwards.
+![The notes turned into HubSpot updates: new stage, close date, next step, a note and a task, plus an email draft](/screenshots/examples/meeting-notes-to-crm/00-result.png)
+
+This guide builds it for Parcelwise, a made-up company that sells shipping software to online shops; the deal and the people are made up too. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 25 minutes.
 
 ## What you need
 
-- Your CRM's API (and, if it should send the email itself, your email service's API).
+- **An almyty account** with an AI model connected (**Models**, **Connect a provider**; see step 1 of [Answer product questions from your help center](/examples/docs-deflection-bot#1-connect-an-ai-model)).
+- **A HubSpot account** with your deals in it, where you may create a private app (usually a HubSpot admin).
 
-## How to build it
+## 1. Create a HubSpot private app
 
-1. **Connect the CRM.** Open **APIs**, click **Connect an API**, and connect your CRM. Its operations, such as "update deal" and "log activity", become tools.
-2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "From these notes, list the action items, update the deal stage and next-step date, and draft a follow-up email in the rep's voice." Pick the CRM tools under **Tools and APIs**.
-3. **Keep the CRM honest.** On its **Constraints** tab, add "Never move a deal to a stage the notes don't support" and "Never invent a commitment".
-4. **Approve before anything goes out.** Add to its instructions: "Ask for approval before sending any email." When it asks, the draft and the reason appear on the **Approvals** page; you approve or reject it.
-5. **Use it.** Paste the notes into its web chat or Slack (add the channel on its **Channels** tab), or have your note-taking tool send the notes to it when a call ends.
+**In HubSpot**, open **Settings**, **Integrations**, **Private Apps** (newer accounts find it under **Development**, as a legacy app) and click **Create a private app**. Name it `almyty call notes`. Under **Scopes**, tick:
 
-## Ideas
+- `crm.objects.deals.read` and `crm.objects.deals.write`: find the deal and update it.
+- `crm.objects.contacts.read` and `crm.objects.contacts.write`: HubSpot has no separate write permission for notes and tasks; creating them is covered by these.
 
-- Only ask for approval on the outgoing email, and let the CRM update go through on its own.
-- Turn on memory so it remembers each account's tone and earlier promises.
+Click **Create app** and copy the **access token**.
+
+If you already connected HubSpot for [lead scoring](/examples/lead-enrichment-routing), add the deal scopes to that private app instead and keep using its token.
+
+## 2. Connect HubSpot's deals, notes and tasks
+
+HubSpot describes its CRM API in separate parts. You need three: deals, notes and tasks. For each one, open **APIs**, click **Connect an API**, pick **OpenAPI / Swagger**, paste the link under **Link to the description**, open **Advanced**, set **Name** as below and click **Connect API**.
+
+| Name | Link to the description |
+|---|---|
+| `HubSpot Deals` | `https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/CRM/Deals/Rollouts/424/v3/deals.json` |
+| `HubSpot Notes` | `https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/CRM/Notes/Rollouts/424/v3/notes.json` |
+| `HubSpot Tasks` | `https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/CRM/Tasks/Rollouts/424/v3/tasks.json` |
+
+![The link to HubSpot's notes description, pasted](/screenshots/examples/meeting-notes-to-crm/01-notes-link.png)
+
+On **Finish connecting**, the first time, under **Sign-in**, click **Create one here**, then **Paste an access token instead**, name it `HubSpot private app`, paste the token and click **Save**. For the other two, pick **HubSpot private app** under **Sign-in**: one token serves all three.
+
+![HubSpot Notes connected: 11 tools, and the key saved](/screenshots/examples/meeting-notes-to-crm/02-pick-key.png)
+
+**APIs** now lists the parts you connected.
+
+![HubSpot Deals, Notes and Tasks on the APIs page](/screenshots/examples/meeting-notes-to-crm/03-apis.png)
+
+## 3. Create the assistant
+
+Open **Agents**, click **Create agent**, pick **Autonomous**, name it `Call notes to HubSpot` and pick a model under **Work mode** (for example **gpt-4o**).
+
+- **Personality & style**: `Brief and factual. Writes emails the way a busy account executive does: short, friendly, one clear next step.`
+- **Instructions**:
+
+```
+You turn a sales rep's call notes into HubSpot updates for Parcelwise.
+
+When a rep pastes call notes:
+1. Find the deal for the company named in the notes.
+2. Update the deal: move the stage to "Presentation scheduled" when a demo was agreed, set the close date when the notes give a decision date, and write the next step in one line.
+3. Add the notes to the deal as a note, as short bullet points.
+4. Create a task for the deal owner for the first thing that was promised, due the next working day at 09:00.
+5. Reply with what you changed (old and new values) and a short follow-up email the rep can send. Never send email yourself.
+
+Only write what the notes say. Never invent a date, an amount or a promise.
+```
+
+Use your own pipeline's stage names. Why "old and new values": the rep sees at a glance what changed, and can put it back if the assistant misread the notes.
+
+![The assistant with its personality and instructions](/screenshots/examples/meeting-notes-to-crm/04-agent.png)
+
+## 4. Pick its four HubSpot tools
+
+Under **Capabilities**, **Tools and APIs**, search for and tick:
+
+| Tool | HubSpot endpoint |
+|---|---|
+| `hubspot_deals_post_crm_v3_objects_0_3_search_do_search` | `POST /crm/v3/objects/0-3/search` (deals are object type `0-3`) |
+| `hubspot_deals_patch_crm_v3_objects_0_3_deal_id_update` | `PATCH /crm/v3/objects/0-3/{dealId}` |
+| `hubspot_notes_post_crm_v3_objects_notes_create` | `POST /crm/v3/objects/notes` |
+| `hubspot_tasks_post_crm_v3_objects_tasks_create` | `POST /crm/v3/objects/tasks` |
+
+It cannot delete or merge deals, and it cannot change contacts or companies.
+
+![The four HubSpot tools picked](/screenshots/examples/meeting-notes-to-crm/05-tools.png)
+
+Click **Save**, go back to the agent and click **Activate**.
+
+## 5. Try it with real notes
+
+Under **Try it** on the **Overview** tab, paste the notes from a call and press Enter. These are the notes Daniel, a Parcelwise account executive, wrote after a call:
+
+```
+Call with Lena Fischer (Kaffeewerk), 22 Oct. They ship about 1,200 orders a week, mostly DHL, and around 8% come back. Return labels are made by hand today, which is the main pain. Shopify store, 2 warehouse staff. Budget is approved for Q1, decision by end of November. They want a demo for Jonas, their warehouse lead, on Thursday 30 Oct. Asked for pricing for 8 seats on the Business plan, with DHL return labels.
+```
+
+The assistant searched HubSpot for the Kaffeewerk deal, updated it, added a note and a task, and answered:
+
+> **Updated in HubSpot: Kaffeewerk - Business plan**
+> - Stage: Appointment scheduled → **Presentation scheduled**
+> - Close date: 2026-12-21 → **2026-11-30**
+> - Next step: Demo for Jonas, their warehouse lead, on Thursday 30 Oct; send pricing for 8 seats
+> - Note added with 7 points from the call
+> - Task for tomorrow 09:00: "Send Kaffeewerk pricing for 8 seats"
+>
+> **Follow-up email for you to send**
+>
+> Subject: Pricing and next steps
+>
+> Hi Lena,
+>
+> Thanks for the time today. As promised, I will send pricing for 8 seats with the DHL return labels add-on by tomorrow. I have also put the demo with Jonas in for Thursday 30 Oct; I will send an invitation.
+>
+> If anything else comes up before then, just reply here.
+>
+> Best,
+> Daniel
+
+The **Try it** box shows the first part; scroll inside it for the email. The close date came from "decision by end of November", and nothing in the update was not in the notes.
+
+## 6. Check what it wrote
+
+Open the **Runs** tab and click the run. Every step is there: the deal search, the deal update with the exact properties (`dealstage: presentationscheduled`, `closedate`, `hs_next_step`), the note linked to the deal, and the task linked to the deal and assigned to its owner.
+
+![The run, step by step: each HubSpot call and what HubSpot answered](/screenshots/examples/meeting-notes-to-crm/06-run-steps.png)
+
+In HubSpot, the Kaffeewerk deal now shows the new stage and close date, the note in its activity timeline, and the task in Daniel's task list.
+
+## Make it yours
+
+- **Use it from Slack.** Add a **Slack** channel on the **Channels** tab (the Slack steps are in [Answer product questions from your help center](/examples/docs-deflection-bot#7-put-it-in-slack)) and reps paste their notes in a direct message to it. Then give it access to the HubSpot key under **Access** on the **Overview** tab, because a Slack message is not you.
+- **Send the notes automatically.** If your call recorder can call a webhook when a call ends, point it at the assistant's address under **Integration** on the **Overview** tab. See the [OpenAI-compatible API](/api-reference/openai-compatible).
+- **Notes and tasks only.** Untick the deal update tool and take step 2 out of the instructions: it then adds the note and the task and leaves the deal itself to the rep.
+- **Salesforce or Pipedrive instead.** Connect their published API description under **APIs** and tick their "find deal / opportunity", "update", "create note" and "create task" tools.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **I could not find a deal for "..."** | The company name in the notes does not match the deal name. Write the name as it is in HubSpot, or add "the deal is called ..." to the notes. |
+| Notes or tasks fail with **This app hasn't been granted all required scopes** | Add `crm.objects.contacts.write` to the private app, then copy the token into the `HubSpot private app` credential under **Credentials**. |
+| The stage is not changed | Your pipeline uses other stage names. Put your stage names in the instructions, using HubSpot's internal values (HubSpot: **Settings**, **Objects**, **Deals**, **Pipelines**). |
+| Line breaks in pasted notes disappear | **Try it** is a single line. That is fine for the assistant; for long transcripts, use a channel such as Slack or the API. |
 
 ## Related
 
-- [Autonomous agents](/agents/autonomous) · [Approvals](/approvals) · [Connect an API](/tools)
+- [Autonomous agents](/agents/autonomous) · [Connect an API](/tools) · [Credentials](/credentials) · [Approvals](/approvals)
+- [Score new HubSpot leads](/examples/lead-enrichment-routing) · [Sales assistant in Slack](/examples/sales-assistant-slack)

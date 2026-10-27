@@ -52,6 +52,26 @@ describe('ApprovalPolicyEvaluator', () => {
       const p = policy({ enabled: false });
       expect(evalr.resolvePolicy([p], {})).toBeNull();
     });
+
+    // The context ApprovalsService really builds: the agent's fields are
+    // under `payload`. The docs write `amount`; `payload.amount` works too.
+    it('reads `amount` from the payload when the context has no such key', () => {
+      const p = policy({
+        id: 'refunds',
+        match: [
+          { attr: 'amount', op: 'gt', value: 1000 },
+          { attr: 'toolName', op: 'eq', value: 'issue_refund' },
+        ],
+      });
+      const ctx = { reason: 'refund', toolName: 'issue_refund', payload: { amount: 5000 } };
+      expect(evalr.resolvePolicy([p], ctx)?.id).toBe('refunds');
+      expect(evalr.resolvePolicy([p], { ...ctx, payload: { amount: 50 } })).toBeNull();
+    });
+
+    it('still accepts the explicit payload.* path', () => {
+      const p = policy({ match: [{ attr: 'payload.amount', op: 'gt', value: 1000 }] });
+      expect(evalr.resolvePolicy([p], { payload: { amount: 5000 } })?.id).toBe('p1');
+    });
   });
 
   describe('progress (quorum)', () => {

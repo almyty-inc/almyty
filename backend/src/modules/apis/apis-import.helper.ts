@@ -18,6 +18,18 @@ import { SchemaParserService } from '../schema-parser/schema-parser.service';
 import { ToolsService } from '../tools/tools.service';
 import { ApisService } from './apis.service';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
+import { maxToolsPerSchema, ToolQuotaExceededException } from '../tools/tool-quota';
+
+/**
+ * An import over the per-schema limit made no tools: the person picks.
+ * `newOperationIds` is set on a re-import: the operations the description
+ * added. The earlier pick (operations still active and not new) stands.
+ */
+export interface SelectionRequired {
+  operations: number;
+  limit: number;
+  newOperationIds?: string[];
+}
 
 @Injectable()
 export class ApisImportHelper {
@@ -41,7 +53,15 @@ export class ApisImportHelper {
     organizationId: string,
     options: ImportSchemaOptions = {},
     onProgress?: (pct: number) => void | Promise<void>,
-  ): Promise<{ api: Api; schema: ApiSchema; operations: Operation[]; resources: Resource[]; tools?: Tool[] }> {
+  ): Promise<{
+    api: Api;
+    schema: ApiSchema;
+    operations: Operation[];
+    resources: Resource[];
+    tools?: Tool[];
+    /** Set when the description has more operations than one schema may make tools from; no tools were made. */
+    selectionRequired?: SelectionRequired;
+  }> {
     const api = await this.apis.findOne(apiId, organizationId);
 
     if (!api) {
@@ -197,21 +217,41 @@ export class ApisImportHelper {
       // leave in place — `onDelete: 'CASCADE'` on Tool→Operation
       // means an unconditional cleanup would risk wiping live tools
       // if any of them were ever relinked to a newer dupe.
-      const existingByOpId = new Map<string, string>();
+      //
+      // An operation without an operationId is matched by method and path.
+      // The match also carries the person's choice over: an operation they
+      // switched off (or left out of an over-limit pick) stays off, where the
+      // parser would turn every operation back on.
+      const existingByOpId = new Map<string, { id: string; isActive: boolean }>();
+      const existingByRoute = new Map<string, { id: string; isActive: boolean }>();
+      const routeOf = (op: { method?: string | null; endpoint?: string | null }) =>
+        `${(op.method ?? '').toUpperCase()} ${op.endpoint ?? ''}`;
       const ops = await queryRunner.manager.find(Operation, {
         where: { apiId },
-        select: { id: true, operationId: true },
+        select: { id: true, operationId: true, method: true, endpoint: true, isActive: true },
         order: { createdAt: 'ASC' },
       });
       for (const op of ops) {
-        if (op.operationId && !existingByOpId.has(op.operationId)) {
-          existingByOpId.set(op.operationId, op.id);
+        const row = { id: op.id, isActive: op.isActive !== false };
+        if (op.operationId && !existingByOpId.has(op.operationId)) existingByOpId.set(op.operationId, row);
+        if (op.endpoint && !existingByRoute.has(routeOf(op))) existingByRoute.set(routeOf(op), row);
+      }
+      // Operations this description adds; on a re-import over the limit, the
+      // only ones the person is asked about.
+      const newOperations = new Set<Operation>();
+      const claimed = new Set<string>();
+      for (const op of operations) {
+        let existing = op.operationId ? existingByOpId.get(op.operationId) : undefined;
+        if (!existing && op.endpoint) existing = existingByRoute.get(routeOf(op));
+        if (existing && !claimed.has(existing.id)) {
+          claimed.add(existing.id);
+          (op as any).id = existing.id;
+          if (!existing.isActive) op.isActive = false;
+        } else {
+          newOperations.add(op);
         }
       }
-      for (const op of operations) {
-        const existing = existingByOpId.get(op.operationId);
-        if (existing) (op as any).id = existing;
-      }
+      const reimport = ops.length > 0;
 
       const savedOperations: Operation[] = [];
       for (let i = 0; i < operations.length; i += SAVE_CHUNK) {
@@ -302,7 +342,28 @@ export class ApisImportHelper {
       this.toolGen.logMemoryPhase('after-commit');
 
       let generatedTools: Tool[] = [];
-      if (options.generateTools) {
+      // A description with more operations than one schema may make tools
+      // from (Microsoft Graph's Files area: 1,600+) is imported whole and
+      // makes no tools yet: the result says so, and the person picks the
+      // operations to make tools from (`POST /apis/:id/operations/selection`).
+      // Refusing it after a minutes-long parse -- three times, with retries --
+      // left "Finish connecting" spinning with nothing to pick from.
+      let selectionRequired: SelectionRequired | undefined;
+      const activeCount = savedOperations.filter((op) => op.isActive !== false).length;
+      if (options.generateTools && activeCount > maxToolsPerSchema()) {
+        selectionRequired = {
+          operations: savedOperations.length,
+          limit: maxToolsPerSchema(),
+          // A re-import keeps the earlier pick (the operations still active
+          // and not new) and asks only about what the description added.
+          ...(reimport
+            ? { newOperationIds: savedOperations.filter((op) => newOperations.has(op)).map((op) => op.id) }
+            : {}),
+        };
+        this.logger.log(
+          `API ${apiId} has ${activeCount} operations, over the per-schema limit of ${selectionRequired.limit}: no tools made until a subset is picked`,
+        );
+      } else if (options.generateTools) {
         try {
           ({ tools: generatedTools } =
             await this.toolGen.generateToolsFromApi(
@@ -362,6 +423,7 @@ export class ApisImportHelper {
         operations: savedOperations,
         resources: savedResources,
         tools: generatedTools.length > 0 ? generatedTools : undefined,
+        ...(selectionRequired ? { selectionRequired } : {}),
       };
     } catch (error) {
       // Only roll back if we haven't already committed. Once the
@@ -372,6 +434,11 @@ export class ApisImportHelper {
         await queryRunner.rollbackTransaction();
       }
       this.logger.error(`Failed to import schema for API ${apiId}: ${error.message}`);
+      // A quota refusal keeps its type: it is the same on every attempt, so
+      // the import job fails at once instead of retrying (schema-import.processor).
+      if (error instanceof ToolQuotaExceededException) {
+        throw new ToolQuotaExceededException(`Schema import failed: ${error.message}`);
+      }
       throw new BadRequestException(`Schema import failed: ${error.message}`);
     } finally {
       await queryRunner.release();

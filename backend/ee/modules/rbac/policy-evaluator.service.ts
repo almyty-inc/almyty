@@ -127,6 +127,8 @@ export class PolicyEvaluatorService {
         return Array.isArray(expected) && !expected.includes(actual as never);
       case 'contains':
         return Array.isArray(actual) && (actual as unknown[]).includes(expected);
+      case 'not_contains':
+        return !Array.isArray(actual) || !(actual as unknown[]).includes(expected);
       default:
         return false;
     }

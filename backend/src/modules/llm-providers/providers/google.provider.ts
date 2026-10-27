@@ -54,7 +54,7 @@ export async function callGoogle(
     signal: request.signal,
   };
 
-  const response: AxiosResponse = await callLlmProviderHttp(config);
+  const response: AxiosResponse = await callLlmProviderHttp(config, llmCallOptionsFor(provider));
   const responseTime = Date.now() - startTime;
 
   const candidate = response.data.candidates?.[0];

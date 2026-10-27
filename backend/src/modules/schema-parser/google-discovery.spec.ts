@@ -74,4 +74,28 @@ describe("Google's discovery documents", () => {
     expect(doc.paths['/v1/{name}'].get.parameters[0]).toMatchObject({ name: 'name', in: 'path', required: true });
     expect(doc.components.schemas.Message.properties.labelIds).toEqual({ type: 'array', items: { type: 'string' } });
   });
+
+  it("use the flatPath only when its placeholders are the method's parameters", () => {
+    // BigQuery's jobs.query, as published: flatPath names `projectsId`, the parameter is `projectId`.
+    const doc = discoveryToOpenApi({
+      kind: 'discovery#restDescription',
+      rootUrl: 'https://bigquery.googleapis.com/',
+      servicePath: 'bigquery/v2/',
+      title: 'BigQuery API',
+      resources: {
+        jobs: {
+          methods: {
+            query: { id: 'bigquery.jobs.query', flatPath: 'projects/{projectsId}/queries', path: 'projects/{+projectId}/queries', httpMethod: 'POST', parameters: { projectId: { type: 'string', location: 'path', required: true } } },
+          },
+        },
+        files: {
+          methods: {
+            get: { id: 'drive.files.get', flatPath: 'files/{fileId}', path: 'files/{fileId}', httpMethod: 'GET', parameters: { fileId: { type: 'string', location: 'path', required: true } } },
+          },
+        },
+      },
+    });
+    expect(Object.keys(doc.paths)).toEqual(['/projects/{projectId}/queries', '/files/{fileId}']);
+    expect(doc.paths['/projects/{projectId}/queries'].post.parameters[0]).toMatchObject({ name: 'projectId', in: 'path' });
+  });
 });

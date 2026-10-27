@@ -7,6 +7,7 @@ import { AuditLogService } from './audit-log.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { AuditResource, AuditAction } from '../../entities/audit-log.entity';
 
 @Controller('audit-logs')
@@ -36,6 +37,7 @@ export class AuditLogController {
 
   @Get()
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AUDIT_READ)
   async findAll(
     @Query() query: {
       resourceType?: AuditResource;
@@ -82,6 +84,7 @@ export class AuditLogController {
 
   @Get('resource')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AUDIT_READ)
   async getResourceHistory(
     @Query('resourceType') resourceType: AuditResource,
     @Query('resourceId') resourceId: string,

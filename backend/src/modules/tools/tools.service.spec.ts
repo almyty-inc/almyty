@@ -1713,6 +1713,43 @@ describe('ToolsService', () => {
       expect(params.required).toEqual([]);
     });
 
+    it('offers the header parameters a caller supplies, not Accept, Content-Type or Authorization', async () => {
+      const op = makeOperation({
+        parameters: {
+          path: { id: { type: 'string', required: true } },
+          header: {
+            Accept: { type: 'string', required: true },
+            'Content-Type': { type: 'string', required: true },
+            From: { type: 'string', description: 'The email address of a valid user', required: true },
+          },
+        },
+      });
+
+      const params = await service['generateToolParametersFromOperation'](op);
+
+      expect(Object.keys(params.properties).sort()).toEqual(['From', 'id']);
+      expect(params.required).toEqual(['id', 'From']);
+    });
+
+    it('takes the inputs of a body that may have one of several shapes from its object shape', async () => {
+      const op = makeOperation({
+        parameters: {
+          body: {
+            schema: {
+              oneOf: [
+                { type: 'object', properties: { labels: { type: 'array', items: { type: 'string' } } } },
+                { type: 'array', items: { type: 'string' } },
+              ],
+            },
+          },
+        },
+      });
+
+      const params = await service['generateToolParametersFromOperation'](op);
+
+      expect(params.properties.labels).toEqual({ type: 'array', items: { type: 'string' } });
+    });
+
     it('should include path parameters in output', async () => {
       const op = makeOperation({
         parameters: {

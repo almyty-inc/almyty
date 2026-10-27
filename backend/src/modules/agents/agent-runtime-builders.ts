@@ -13,6 +13,7 @@ import { buildCollaborationContext } from './collaboration-participants';
 import { messageContentForModel } from './attached-files';
 import { memorySettings, type AgentMemoryConfig } from './agent-memory-settings';
 import { tagStoredMessage } from './agent-context-compactor.helper';
+import { REPORT_RULE } from './always-on/always-on-report';
 
 /**
  * What the store_memory tool tells the model: when to save (every time it
@@ -98,6 +99,12 @@ export class AgentRuntimeBuilders {
 
     // [INSTRUCTIONS] — what to do
     parts.push(`[INSTRUCTIONS]\n${agent.instructions || 'You are a helpful autonomous agent.'}`);
+
+    // [ALWAYS ON] — a wake of the standing thread reports only what is worth
+    // telling (always-on-report.ts): the rest is answered with the marker.
+    if (run.metadata?.triggerType === 'always_on') {
+      parts.push(`[ALWAYS ON]\nYou work in the background for your owner, who is not watching. ${REPORT_RULE}`);
+    }
 
     // [CURRENT TIME] -- a model does not know what day it is. "What is on
     // my calendar today" or "follow up after three days" needs the date.

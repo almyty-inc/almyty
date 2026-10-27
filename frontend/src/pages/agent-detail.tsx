@@ -21,7 +21,6 @@ import type {
   AgentVersionSnapshot,
   AgentAuditEntry,
   AgentRun,
-  Memory,
   AgentFile,
 } from '@/types'
 
@@ -38,7 +37,7 @@ import { ReadinessBanner, type ReadinessResult } from '@/components/agents/detai
 import { PipelineCanvas } from '@/components/agents/detail/pipeline-canvas'
 import { OverviewTab } from '@/components/agents/detail/overview-tab'
 import { RunsTab } from '@/components/agents/detail/runs-tab'
-import { MemoryTab } from '@/components/agents/detail/memory-tab'
+import { MemoryTab, type AgentMemoryItem } from '@/components/agents/detail/memory-tab'
 import { agentMemoryScope } from '@/components/agents/agent-memory-scope'
 import { FilesTab } from '@/components/agents/detail/files-tab'
 import { ChannelsTab } from '@/components/channels/channels-tab'
@@ -54,7 +53,7 @@ export function AgentDetailPage() {
     return () => { document.title = 'almyty' }
   }, [])
 
-  const { id } = useParams<{ id: string }>()
+  const { id, runId } = useParams<{ id: string; runId?: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
@@ -62,8 +61,14 @@ export function AgentDetailPage() {
 
   const [runPanelOpen, setRunPanelOpen] = useState(false)
   // `?tab=channels` opens a tab directly: the channel pages link back to it.
+  // /agents/:id/runs/:runId (Last woke, What woke it lately, Approvals) opens the Runs tab with that run open.
   const [searchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview')
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || (runId ? 'runs' : 'overview'))
+  // Last woke on the Overview tab links here from this same page, which stays
+  // mounted (both routes render this page): switch to Runs when the link is followed.
+  useEffect(() => {
+    if (runId) setActiveTab('runs')
+  }, [runId])
 
   // Webhook state (lifted so overview tab can use it, synced from agent data)
   const [webhookUrl, setWebhookUrl] = useState('')
@@ -173,7 +178,7 @@ export function AgentDetailPage() {
     enabled: !!id && !!orgId && activeTab === 'memory',
   })
 
-  const memories: Memory[] = Array.isArray(memoriesData) ? memoriesData : []
+  const memories: AgentMemoryItem[] = Array.isArray(memoriesData) ? memoriesData : []
 
   // Fetch files
   const { data: filesData, error: filesError, refetch: refetchFiles } = useQuery({
@@ -413,7 +418,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
-          <RunsTab runs={runs} agentId={agent.id} />
+          <RunsTab runs={runs} agentId={agent.id} openRunId={runId} />
         </TabsContent>
 
         <TabsContent value="memory" className="space-y-4">

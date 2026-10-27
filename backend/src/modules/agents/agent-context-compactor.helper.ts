@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { AgentRun } from '../../entities/agent-run.entity';
@@ -23,20 +24,44 @@ export interface CompactionConfig {
   /**
    * Cut a tool result from an earlier run of the conversation to this many
    * characters (this run's own results stay whole). Off unless set; an
-   * always-on standing thread uses 2000.
+   * always-on standing thread uses 2000 (ALWAYS_ON_COMPACTION).
    */
   earlierToolResultChars?: number;
 }
 
-/** Cached, incrementally-grown summary of the conversation prefix. */
+/**
+ * Cached, incrementally-grown summary of the conversation prefix.
+ *
+ * The history handed in is the conversation's newest messages
+ * (agent-runtime-builders.ts loads the last 100), so in a long conversation it
+ * slides forward with every step. Where the summary ends is therefore found
+ * again each step from the messages either side of that edge (`lastKey`,
+ * `nextKey`), never from a count.
+ */
 export interface ContextSummaryCache {
-  coveredCount: number; // how many leading history messages are folded into `text`
+  /**
+   * Where the summary ended in the window of the step that last compacted:
+   * an index into THAT step's window. Not comparable across steps (the
+   * window moves under it); read `foldedTotal` to see whether more was folded.
+   */
+  coveredCount: number;
   text: string;
-  /** The last message the summary covers, and when it was written: how a later step or run finds where the summary ends. */
-  throughId?: string;
-  throughAt?: string;
-  /** Truncation: how many messages it has dropped so far. */
-  omitted?: number;
+  /** The last message the summary covers. */
+  lastKey?: string;
+  /** The first message after the summary. */
+  nextKey?: string;
+  /** How many messages have been folded into `text` over the run, and the runs of the conversation it was carried from (carriedContextSummary). Only grows. */
+  foldedTotal?: number;
+}
+
+export interface CompactionResult {
+  messages: any[];
+  cost: number;
+  tokens: number;
+  /** A summary is in the context (folded this step or earlier). */
+  compacted: boolean;
+  /** Messages newly folded into the summary this call; 0 when the cached summary was reused. */
+  folded: number;
 }
 
 /**
@@ -54,22 +79,18 @@ export function tagStoredMessage(entry: Record<string, any>, message: { id?: str
   }
 }
 
-function messageIdOf(entry: any): string | undefined {
-  return entry?.[MESSAGE_ID];
-}
-
-function coveredThrough(entry: any): Pick<ContextSummaryCache, 'throughId' | 'throughAt'> {
-  const id = messageIdOf(entry);
-  const at = entry?.[MESSAGE_AT];
-  return { ...(id ? { throughId: id } : {}), ...(at ? { throughAt: at } : {}) };
-}
-
-/** How many leading entries were written no later than `through`. */
-function coveredByTime(history: any[], through: string | undefined): number {
-  if (!through) return 0;
-  let n = 0;
-  while (n < history.length && typeof history[n]?.[MESSAGE_AT] === 'string' && history[n][MESSAGE_AT] <= through) n++;
-  return n;
+/**
+ * A message's identity for finding it again: the stored message's id when
+ * the entry carries one (two messages with the same text stay apart, and a
+ * cut tool result is still the same message), else a hash of what it says
+ * (tool calls and results carry unique ids).
+ */
+function messageKey(m: any): string {
+  const id = m?.[MESSAGE_ID];
+  if (typeof id === 'string') return `id:${id}`;
+  const content = typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? '');
+  const calls = m?.toolCalls ? JSON.stringify(m.toolCalls) : '';
+  return createHash('sha256').update(`${m?.role}\u0000${m?.toolCallId ?? ''}\u0000${calls}\u0000${content}`).digest('hex');
 }
 
 /**
@@ -90,7 +111,7 @@ function clipEarlierToolResults(history: any[], runStartedAt: Date | string | un
       ...entry,
       content: `${entry.content.slice(0, limit)}\n[cut: ${entry.content.length - limit} more characters of an earlier tool result]`,
     };
-    tagStoredMessage(clipped, { id: messageIdOf(entry), createdAt: at });
+    tagStoredMessage(clipped, { id: entry[MESSAGE_ID], createdAt: at });
     return clipped;
   });
 }
@@ -100,8 +121,9 @@ function clipEarlierToolResults(history: any[], runStartedAt: Date | string | un
  * has none yet. A standing thread (always on) or a chat is one run per
  * turn; each run started with no summary, so its first step summarized the
  * whole history window again -- most of the tokens a wake that only looked
- * at the inbox spent. Only a summary that names the message it ends at is
- * carried: a bare count means nothing in another run's window.
+ * at the inbox spent. Where it ends is found in the new run's window the
+ * same way a later step finds it (locate). Only a summary that names that
+ * edge is carried: a bare count means nothing in another run's window.
  */
 export async function carriedContextSummary(
   runs: { find(options: any): Promise<Array<Pick<AgentRun, 'id' | 'workingMemory'>>> },
@@ -117,7 +139,7 @@ export async function carriedContextSummary(
   for (const r of earlier) {
     if (r.id === run.id) continue;
     const summary = r.workingMemory?.contextSummary as ContextSummaryCache | undefined;
-    if (summary?.throughId && summary.text) return summary;
+    if (summary?.nextKey && summary.text) return summary;
   }
   return null;
 }
@@ -161,8 +183,8 @@ export class AgentContextCompactor {
     /** Who the summarizer call acts as: the run's principal (see LlmChatHelper.chat). */
     userId?: string | ExecutionPrincipal,
     signal?: AbortSignal,
-  ): Promise<{ messages: any[]; cost: number; tokens: number; compacted: boolean }> {
-    const noop = { messages, cost: 0, tokens: 0, compacted: false };
+  ): Promise<CompactionResult> {
+    const noop = { messages, cost: 0, tokens: 0, compacted: false, folded: 0 };
     if (!config?.enabled || messages.length < 2) return noop;
 
     const budget = config.maxContextTokens ?? DEFAULTS.maxContextTokens;
@@ -172,20 +194,14 @@ export class AgentContextCompactor {
     const system = messages[0];
     const history = clipEarlierToolResults(messages.slice(1), run.createdAt, config.earlierToolResultChars);
 
-    let cache: ContextSummaryCache = { ...(run.workingMemory?.contextSummary ?? { coveredCount: 0, text: '' }) };
-    // Where the summary ends in this history. A summary that names the last
-    // message it covers is found by that message: the history is the
-    // newest N messages, so it shifts as the thread grows, and a summary
-    // carried over from an earlier run of the thread (carriedContextSummary)
-    // was counted against another window. When that message is no longer in
-    // the window, everything the window holds came after it.
-    if (cache.throughId) {
-      const at = history.findIndex((m) => messageIdOf(m) === cache.throughId);
-      cache.coveredCount = at >= 0 ? at + 1 : coveredByTime(history, cache.throughAt);
-    } else if (cache.coveredCount > history.length) {
-      // Guard against a stale cache that claims to cover more than exists.
-      cache = { coveredCount: 0, text: '' };
-    }
+    let cache: ContextSummaryCache = run.workingMemory?.contextSummary ?? {
+      coveredCount: 0,
+      text: '',
+    };
+    // Where the summary ends in this step's window (locate).
+    if (cache.nextKey) cache = { ...cache, coveredCount: this.locate(history, cache) };
+    // Guard against a stale cache that claims to cover more than exists.
+    if (cache.coveredCount > history.length) cache = { coveredCount: 0, text: '' };
 
     const render = (c: ContextSummaryCache) => {
       const sys = c.text
@@ -196,7 +212,7 @@ export class AgentContextCompactor {
 
     let current = render(cache);
     if (this.estimateTokens(current) <= budget) {
-      return { messages: current, cost: 0, tokens: 0, compacted: !!cache.text };
+      return { messages: current, cost: 0, tokens: 0, compacted: !!cache.text, folded: 0 };
     }
 
     // Over budget: advance the covered boundary to a pair-safe point that keeps
@@ -205,22 +221,21 @@ export class AgentContextCompactor {
     const boundary = this.safeBoundary(history, target);
     if (boundary <= cache.coveredCount) {
       // Can't compact further (the tail alone exceeds the budget). Best effort.
-      return { messages: current, cost: 0, tokens: 0, compacted: !!cache.text };
+      return { messages: current, cost: 0, tokens: 0, compacted: !!cache.text, folded: 0 };
     }
 
     const toCompact = history.slice(cache.coveredCount, boundary);
-    // Summarize returns ONE summary with the prior one merged in, so it
-    // replaces the text; appending it repeated the prior summary on every
-    // compaction, and a standing thread's summary grew without end.
-    // Truncation keeps one running count of what it dropped.
+    const foldedTotal = (cache.foldedTotal ?? 0) + toCompact.length;
+    // Summarize returns ONE summary with the prior one merged in (its prompt
+    // says so), so it replaces the text; appending it repeated the prior
+    // summary on every compaction, and a standing thread's summary, carried
+    // from wake to wake, grew without end. Truncation keeps one running count.
     let newText: string;
-    let omitted = cache.omitted ?? 0;
     let cost = 0;
     let tokens = 0;
 
     if (strategy === 'truncate') {
-      omitted += toCompact.length;
-      newText = `[${omitted} earlier message(s) omitted]`;
+      newText = `[${foldedTotal} earlier message(s) omitted]`;
     } else {
       try {
         const summary = await this.summarize(
@@ -245,13 +260,41 @@ export class AgentContextCompactor {
 
     const newCache: ContextSummaryCache = {
       coveredCount: boundary,
-      ...coveredThrough(history[boundary - 1]),
       text: newText,
-      ...(omitted ? { omitted } : {}),
+      lastKey: messageKey(history[boundary - 1]),
+      nextKey: messageKey(history[boundary]),
+      foldedTotal,
     };
     run.workingMemory = { ...(run.workingMemory || {}), contextSummary: newCache };
 
-    return { messages: render(newCache), cost, tokens, compacted: true };
+    return { messages: render(newCache), cost, tokens, compacted: true, folded: toCompact.length };
+  }
+
+  /**
+   * Where the summary ends in this step's window: the index of the first
+   * message it does not cover. Every fallback errs toward folding a message
+   * the summary may already hold (the summarizer merges it into the prior
+   * summary) rather than skipping one that is in neither summary nor tail.
+   *
+   * 1. The message after the summary, right behind the last one it covers:
+   *    unambiguous even when the same text recurs (two "ok"s, a repeated wake).
+   * 2. The last covered message is there but its successor is not (edited or
+   *    removed since): the summary ends right after it.
+   * 3. Only the message after the summary is there: the last covered one slid
+   *    out of the front of the window (or was removed).
+   * 4. Neither: the window has moved past the whole summary, so every message
+   *    in it is new.
+   */
+  private locate(history: any[], cache: ContextSummaryCache): number {
+    const keys = history.map(messageKey);
+    if (cache.lastKey) {
+      for (let i = 1; i < keys.length; i++) {
+        if (keys[i] === cache.nextKey && keys[i - 1] === cache.lastKey) return i;
+      }
+      const last = keys.indexOf(cache.lastKey);
+      if (last >= 0) return last + 1;
+    }
+    return Math.max(0, keys.indexOf(cache.nextKey!));
   }
 
   /**

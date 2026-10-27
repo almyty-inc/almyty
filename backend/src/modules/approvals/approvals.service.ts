@@ -6,14 +6,19 @@ import { EventEmitter } from 'events';
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Agent } from '../../entities/agent.entity';
+import { Tool } from '../../entities/tool.entity';
 import { ApprovalPolicyApprovalRecord } from '../../entities/approval-policy-approval.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { assertManageable } from '../../common/authorization/read-rule';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import {
+  ADVANCED_RBAC_HOOK,
+  AdvancedRbacHook,
   APPROVAL_POLICY_HOOK,
   ApprovalPolicyApproval,
   ApprovalPolicyHook,
@@ -102,6 +107,15 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     // no module import edge (the cycle-safe pattern used for EE hooks).
     @Optional()
     private readonly notifications?: NotificationsService,
+    // EE hook (advanced_rbac): custom role names, so a policy step whose
+    // approver role is a custom role ("finance") matches its holders.
+    @Optional()
+    @Inject(ADVANCED_RBAC_HOOK)
+    private readonly rbacHook?: AdvancedRbacHook,
+    // The organization's audit trail (AuditLogModule is @Global):
+    // decisions were missing from it.
+    @Optional()
+    private readonly auditLog?: AuditLogService,
   ) {
     super();
   }
@@ -143,6 +157,10 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
 
     const scope = await this.scopeOfRequestingAgent(input);
     const policy = await this.resolveGoverningPolicy(input, scope.teamId ?? null);
+    // The policy's steps as they stand before anyone approved, so the
+    // Approvals page can say "Step 1 of 2: waiting for finance" from the
+    // start, not only after the first approval.
+    const initialProgress = policy ? await this.initialPolicyProgress(input.organizationId, policy.id) : null;
 
     const ttl = Math.min(input.ttlSeconds ?? DEFAULT_TTL_SECONDS, MAX_TTL_SECONDS);
     const expiresAt = new Date(Date.now() + ttl * 1000);
@@ -158,7 +176,12 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       payload: policy
         ? {
             ...(input.payload ?? {}),
-            _policy: { policyId: policy.id, policyName: policy.name, approvals: [] },
+            _policy: {
+              policyId: policy.id,
+              policyName: policy.name,
+              approvals: [],
+              ...(initialProgress ? { progress: initialProgress } : {}),
+            },
           }
         : input.payload ?? null,
       status: 'pending' as ApprovalStatus,
@@ -239,7 +262,11 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     // immediate (a single rejection kills the request, as in OSS).
     if (next === 'approved') {
       const stillPending = await this.applyPolicyProgress(row, caller);
-      if (stillPending) return stillPending;
+      if (stillPending) {
+        // One step of a multi-step sign-off: on the trail too.
+        this.auditDecision(stillPending, 'step_approved', caller.id, decision.decisionReason);
+        return stillPending;
+      }
     }
 
     // The flip IS the guard.
@@ -281,7 +308,33 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
 
     this.emit('approval.decided', saved);
     this.notifyDecided(saved).catch(() => {});
+    this.auditDecision(saved, next, caller.id, decision.decisionReason);
     return saved;
+  }
+
+  /**
+   * An approval decision on the organization's audit trail (and its SIEM
+   * streams): who decided, what, on which request, with their note.
+   * Fire and forget: AuditLogService.log never throws.
+   */
+  private auditDecision(row: ApprovalRequest, status: string, userId: string | null, note?: string | null): void {
+    void this.auditLog?.log({
+      organizationId: row.organizationId,
+      userId: userId ?? undefined,
+      action: AuditAction.APPROVAL_DECIDED,
+      resourceType: AuditResource.APPROVAL,
+      resourceId: row.id,
+      resourceName: row.reason?.slice(0, 200),
+      status,
+      details: {
+        decision: status,
+        note: note ?? null,
+        runId: row.runId ?? null,
+        agentId: row.agentId ?? null,
+        toolId: row.toolId ?? null,
+        policy: (row.payload as Record<string, any> | null)?._policy?.policyName ?? null,
+      },
+    });
   }
 
   /**
@@ -348,6 +401,9 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
         agentId: input.agentId,
         runId: input.runId,
         toolCallId: input.toolCallId ?? null,
+        // A held tool call names its tool, so a policy can match on
+        // `toolName` as the docs describe.
+        toolName: await this.toolNameOf(input),
         teamId,
         payload: input.payload ?? {},
         // Raised by an approval policy's amount rule at the tool call: that
@@ -358,6 +414,33 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       this.logger.warn(`approval policy resolution failed: ${err?.message ?? err}`);
       return null;
     }
+  }
+
+  /** The policy's progress with no approvals yet; null when it cannot be scored now. */
+  private async initialPolicyProgress(organizationId: string, policyId: string): Promise<ApprovalPolicyProgress | null> {
+    try {
+      return (await this.approvalPolicyHook?.scoreProgress(organizationId, policyId, [])) ?? null;
+    } catch (err: any) {
+      this.logger.warn(`approval policy initial scoring failed: ${err?.message ?? err}`);
+      return null;
+    }
+  }
+
+  /** The held tool call's tool name, else what the payload says, else null. */
+  private async toolNameOf(input: CreateApprovalInput): Promise<string | null> {
+    if (input.toolId) {
+      try {
+        const tool = await this.approvals.manager.getRepository(Tool).findOne({
+          where: { id: input.toolId, organizationId: input.organizationId },
+          select: { id: true, name: true },
+        });
+        if (tool?.name) return tool.name;
+      } catch {
+        // Falls through to the payload.
+      }
+    }
+    const fromPayload = (input.payload as Record<string, unknown> | null | undefined)?.toolName;
+    return typeof fromPayload === 'string' ? fromPayload : null;
   }
 
   /**
@@ -496,8 +579,9 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
 
   /**
    * Role names used to match a policy step's `approverRole`: the caller's
-   * org role ('owner' | 'admin' | 'member' | 'viewer') plus, when the
-   * request is team-scoped, 'team_lead' / 'team_member'.
+   * org role ('owner' | 'admin' | 'member' | 'viewer'), their active
+   * custom roles by name (EE advanced_rbac), and, when the request is
+   * team-scoped, 'team_lead' / 'team_member'.
    */
   private async resolveApproverRoles(
     userId: string,
@@ -517,6 +601,15 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       }
     } catch (err: any) {
       this.logger.warn(`approver role resolution failed: ${err?.message ?? err}`);
+    }
+    if (this.rbacHook?.roleNames) {
+      try {
+        for (const name of await this.rbacHook.roleNames(row.organizationId, userId)) {
+          if (!roles.includes(name)) roles.push(name);
+        }
+      } catch (err: any) {
+        this.logger.warn(`custom role resolution failed: ${err?.message ?? err}`);
+      }
     }
     return roles;
   }
@@ -556,8 +649,13 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
    * The pending requests the caller may see, each with the name of the
    * agent that asked (`agentName`), so the page can say who is waiting
    * rather than an id. null when that agent has since been deleted.
+   * A held tool call also carries the tool's parameter schema
+   * (`parameterSchema`), so the page can label its arguments with the
+   * tool's own parameter titles.
    */
-  async listPending(args: { organizationId: string; caller: { id: string } }): Promise<Array<ApprovalRequest & { agentName: string | null }>> {
+  async listPending(args: { organizationId: string; caller: { id: string } }): Promise<
+    Array<ApprovalRequest & { agentName: string | null; parameterSchema: Record<string, any> | null }>
+  > {
     const qb = this.approvals
       .createQueryBuilder('a')
       .where('a.status = :status', { status: 'pending' });
@@ -571,7 +669,22 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
         })
       : [];
     const names = new Map(agents.map((a) => [a.id, a.name]));
-    return rows.map((r) => Object.assign(r, { agentName: names.get(r.agentId) ?? null }));
+    // A run's held call names its tool in the payload; a held call without a run on the row.
+    const toolIdOf = (r: ApprovalRequest): string | null => r.toolId ?? (r.payload as any)?._gate?.toolId ?? null;
+    const toolIds = [...new Set(rows.map(toolIdOf).filter((id): id is string => typeof id === 'string'))];
+    const tools = toolIds.length
+      ? await this.approvals.manager.getRepository(Tool).find({
+          where: { id: In(toolIds), organizationId: args.organizationId },
+          select: { id: true, parameters: true },
+        })
+      : [];
+    const schemas = new Map(tools.map((t) => [t.id, t.parameters ?? null]));
+    return rows.map((r) =>
+      Object.assign(r, {
+        agentName: names.get(r.agentId) ?? null,
+        parameterSchema: schemas.get(toolIdOf(r) ?? '') ?? null,
+      }),
+    );
   }
 
   async listForRun(runId: string): Promise<ApprovalRequest[]> {
@@ -609,6 +722,7 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       row.decisionReason = 'approval expired';
       flipped++;
       this.emit('approval.decided', row);
+      this.auditDecision(row, 'expired', null, 'approval expired');
       this.notifyDecided(row).catch(() => {});
     }
     return flipped;

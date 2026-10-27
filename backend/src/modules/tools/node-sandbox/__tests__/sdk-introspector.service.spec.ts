@@ -294,4 +294,35 @@ export declare function query(sql: string, params?: any[]): Promise<any>;
       expect(map).toEqual({});
     });
   });
+
+  // A real package (eventemitter3) failed its whole analysis with
+  // "Maximum call stack size exceeded": a method whose parameter's type
+  // carries that method again recursed without end, because the depth
+  // limit restarted at every method and parameter.
+  describe('recursive types', () => {
+    it('reads a type that refers to itself through its methods', () => {
+      const base = createTempPackage(
+        'recursive-pkg',
+        `
+export interface Listener {
+  on(event: string, listener: Listener): Listener;
+  emit(event: string, ...args: any[]): boolean;
+}
+export declare class Bus<Events extends Record<string, (bus: Bus<Events>) => void> = {}> {
+  on<K extends keyof Events>(event: K, fn: Events[K], context?: Bus<Events>): this;
+  listeners(): Listener[];
+  child: Listener;
+}
+`,
+      );
+      try {
+        const map = introspector.introspect('recursive-pkg', base);
+        expect(map.Bus.isClass).toBe(true);
+        expect(map.Bus.methods.map((m) => m.name)).toEqual(expect.arrayContaining(['on', 'listeners']));
+        expect(JSON.stringify(map).length).toBeLessThan(200_000);
+      } finally {
+        cleanupTemp(base);
+      }
+    });
+  });
 });

@@ -1,28 +1,162 @@
-# Sort and label GitHub issues
+# Sort new GitHub issues
 
-For maintainers whose issue list has got out of hand. The assistant reads each new issue, labels it (bug, feature, question, needs steps to reproduce), points out likely duplicates, suggests who should look at it, and asks for reproduction steps when a bug report has none.
+## What you'll build
+
+An assistant that goes through the new issues in a GitHub repository every hour. It labels each one (bug, feature or question, plus the area of the product), finds issues that report something already reported and links them, asks for steps to reproduce when a bug report has none, and tells you who should look at what. It never closes, assigns or edits an issue.
+
+![The assistant's report: five new issues labelled, two duplicates linked, one asked for steps, and a regression flagged as urgent](/screenshots/examples/github-issue-triage/00-result.png)
+
+This guide builds it for Tidewater Labs, a made-up company that makes the invoicing app Ledgerly, with its code in the repository `tidewater-labs/ledgerly`. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 20 minutes.
 
 ## What you need
 
-- Your GitHub repository and a GitHub token that may read issues, add labels and comment. Give the token nothing more: it is what really limits what the assistant can do.
+- **An almyty account** and a key for an AI model, for example from OpenAI.
+- **A GitHub repository** where you may manage issues, and permission to make a token for it.
+- **The labels you want to use**, created in the repository (GitHub: the repository's **Issues** tab, **Labels**). This guide uses `bug`, `feature`, `question`, `duplicate`, `needs-repro` and four area labels such as `area: pdf-export`.
 
-## How to build it
+## 1. Connect an AI model
 
-1. **Connect GitHub.** Open **APIs**, click **Connect an API**, pick **SDK / npm** and add GitHub's official package, `@octokit/rest`. Then, under **Tools**, **Create tool**, **SDK / npm package**, make a tool for each thing it should do: list issues, add labels, comment. Keep the token in [Credentials](/credentials).
-2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write your rules: "Label by type and area, link duplicates, and ask for steps to reproduce when a bug has none." Pick the GitHub tools under **Tools and APIs**.
-3. **Add firm rules.** On its **Constraints** tab, add "Never close an issue" and "Never use the core-team-only labels".
-4. **Let it remember.** Turn on **Remember between conversations** and set **Whose memory** to **This agent's own**, so it recognises the same bug reported five different ways.
-5. **Run it regularly.** On its **Overview** tab, turn on **Schedule** and set how often it sweeps new issues, for example every 60 minutes.
+In the sidebar, open **Models** and click **Connect a provider**. Set **Name** to `OpenAI`, pick **OpenAI** under **Provider**, paste your key into **API key** and click **Save**. almyty checks the key and lists the models you can use.
 
-## Ideas
+![OpenAI connected: Key works, and its models with their prices](/screenshots/examples/github-issue-triage/01-model.png)
 
-- Send suspected security reports to a private channel instead of labelling them in public.
-- Turn a good triage run into a skill (**Promote to skill** on the run) so other repositories reuse the same rules.
+## 2. Make a GitHub token
 
-## For developers
+The token is what decides what the assistant can do in GitHub, so give it only what triage needs. In GitHub:
 
-To react the moment an issue opens instead of on a schedule, have a GitHub Action call the agent's endpoint shown in the **Integration** card on its **Overview** tab. See the [OpenAI-compatible API](/api-reference/openai-compatible).
+1. Click your picture (top right), **Settings**, then **Developer settings** at the bottom of the left menu.
+2. Open **Personal access tokens**, **Fine-grained tokens** and click **Generate new token**.
+3. **Token name:** `almyty issue triage`. **Resource owner:** the organization that owns the repository (`tidewater-labs`). **Expiration:** 90 days, or what your company allows.
+4. **Repository access:** **Only select repositories**, and pick the repository (`tidewater-labs/ledgerly`).
+5. **Permissions**, **Repository permissions:** set **Issues** to **Read and write**. GitHub adds **Metadata: Read-only** by itself. Leave everything else on **No access**.
+6. Click **Generate token** and copy it. It starts with `github_pat_`. GitHub shows it only once.
+
+With no access to code, pull requests or settings, the assistant cannot change any of them, whatever it is told.
+
+## 3. Connect GitHub
+
+GitHub publishes a description of its whole API, with 1,242 operations. almyty makes at most 1,000 tools from one description, so this guide uses a copy that keeps only the 12 operations for issues and pull requests, taken unchanged from GitHub's own description. [Download it here](/files/github-issues-and-pulls.openapi.json) (`github-issues-and-pulls.openapi.json`).
+
+1. Open **APIs** and click **Connect an API**. Pick **OpenAPI / Swagger**.
+2. Under **Description**, click **File** and pick the file you downloaded.
+3. Open **Advanced** and set **Name** to `GitHub`, so the tool names match this guide.
+
+![Connect an API: the GitHub file picked, named GitHub](/screenshots/examples/github-issue-triage/02-connect.png)
+
+4. Click **Connect API**. almyty reads the file and makes a tool for each operation, then opens the API's page.
+5. Under **Key**, click **Add a key**. Set **How it is sent** to **As a bearer token**, click **Create one here**, set **Name** to `GitHub token (ledgerly)`, paste the token into **Key** and click **Save**.
+
+![The GitHub token added as a bearer token](/screenshots/examples/github-issue-triage/03-key.png)
+
+The GitHub API now shows 12 operations and 12 tools. The token is kept under **Credentials** and sent only to GitHub.
+
+![GitHub connected: 12 operations, 12 tools](/screenshots/examples/github-issue-triage/04-api.png)
+
+## 4. Check that a tool works
+
+Open **Tools**, search for `issues_list_for_repo` and open **github_issues_list_for_repo**. On **Test tool**, type `tidewater-labs` into **owner** and `ledgerly` into **repo** (your own names) and click **Execute Tool**. You should see your open issues.
+
+![The tool test: the repository's open issues](/screenshots/examples/github-issue-triage/05-test-tool.png)
+
+If you get an error instead, see [If something goes wrong](#if-something-goes-wrong).
+
+## 5. Create the assistant
+
+Open **Agents**, click **Create agent** and pick **Autonomous** at the top.
+
+1. Click the name **New agent** and call it `Issue triage`.
+2. **Work mode, Model:** pick **gpt-4.1** (or another strong model you connected).
+3. **Personality & style:** `Friendly and short. Thanks people for reporting, never blames them.`
+4. **Instructions** (change the repository, labels and names to yours):
+
+```
+You triage new issues in the GitHub repository tidewater-labs/ledgerly.
+
+Every time you run:
+1. Read the repository's labels, then list the open issues created in the last 24 hours that have no labels yet.
+2. For each one, search the repository for an older issue about the same problem.
+3. Add labels: exactly one of bug, feature or question; the area label that fits (area: pdf-export, area: payments, area: invoices, area: mobile); duplicate if an older issue covers it; needs-repro for a bug report without steps to reproduce. Pass the labels as "labels", a list of label names.
+4. Comment only in two cases: on a duplicate, link the older issue; on a bug report without steps, ask for them (what they did, web or app and which version, whether it happens every time).
+5. Never close, assign or edit an issue, and never use the core-team label.
+
+Finish with a short list: each issue, the labels you added, and who should look at it:
+- area: pdf-export: @ines-duarte
+- area: payments: @tomas-reyes
+- area: invoices: @lena-fischer
+- area: mobile: @kai-nakamura
+Point out anything that looks urgent, such as something that broke in the last release.
+```
+
+Why "Pass the labels as labels": GitHub's "add labels" takes either a list or an object with a `labels` list, so the tool does not spell the input out. The sentence tells the model the name to use.
+
+![The assistant's model, personality and instructions](/screenshots/examples/github-issue-triage/06-agent.png)
+
+5. **Capabilities, Tools and APIs:** search for and tick these five tools:
+
+| Tool | What it does |
+|---|---|
+| `github_issues_list_labels_for_repo` | reads the repository's labels |
+| `github_issues_list_for_repo` | lists issues |
+| `github_search_issues_and_pull_requests` | searches issues, to find duplicates |
+| `github_issues_add_labels` | adds labels to an issue |
+| `github_issues_create_comment` | comments on an issue |
+
+The connection also has tools for pull requests; leave them unticked. The assistant can use only what is ticked here.
+
+![The five issue tools ticked](/screenshots/examples/github-issue-triage/07-tools.png)
+
+6. Click **Save**, go back with the arrow at the top left and click **Activate**.
+
+## 6. Try it
+
+On the assistant's **Overview** tab, under **Try it**, type `Triage the new issues in tidewater-labs/ledgerly.` and press Enter.
+
+![Try it: the first triage, with labels, duplicates and an urgent regression](/screenshots/examples/github-issue-triage/08-try.png)
+
+In this run it found five new issues and:
+
+- labelled "Invoice PDF missing the last row" `bug`, `area: pdf-export` and `duplicate`, and commented with a link to #431, the older report of the same bug;
+- did the same for the Swiss QR-bill request, which #447 already covers;
+- labelled "App crashes" `bug` and `needs-repro` and asked the reporter what they did, on which device and version;
+- labelled the currency question `question` and `area: invoices`;
+- flagged "Recurring invoices are created twice" as urgent: it started with the last release and hits every customer with recurring invoices.
+
+Open the **Runs** tab and click the run to see every call it made to GitHub, with what it sent and what came back.
+
+![The run step by step: labels, issues, searches, then labels and comments](/screenshots/examples/github-issue-triage/09-run.png)
+
+## 7. Run it every hour
+
+On the **Overview** tab, under **Schedule**, click **Set up a schedule**.
+
+1. **Repeat:** **Every few minutes or hours**. **Every:** `1` **hours**.
+2. **Message:** `Triage the new issues in tidewater-labs/ledgerly.`
+3. Leave **Where** on **Only the run history**, or pick a Slack or email channel if you added one to the assistant (see [Channels](/channels)).
+4. Click **Save schedule**.
+
+![The schedule: every hour](/screenshots/examples/github-issue-triage/10-schedule.png)
+
+Because it only picks up issues that have no labels yet, running it every hour never labels the same issue twice. Each run is kept under **Runs**, with its cost.
+
+## Make it yours
+
+- **Your labels and people.** Change the label names and the area list in the instructions. Labels must already exist in the repository: GitHub refuses a label it does not know.
+- **More repositories.** Add them to the token (**Repository access**) and to the instructions ("You triage new issues in tidewater-labs/ledgerly and tidewater-labs/ledgerly-mobile").
+- **Security reports stay private.** Add to the instructions: "If an issue reports a security problem, do not comment; label it `security` and say so in your report." For the report itself, add a Slack channel and pick it under **Where** on the schedule.
+- **Remember recurring reports.** Turn on **Memory**, **Remember between conversations**, so it recognises a bug reported in five different words over several weeks. See [Memory](/memory).
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| Connecting the full GitHub description says **would produce 1242 tools; the limit per schema is 1000** | Use the cut-down file from step 3. |
+| A tool says **HTTP 401** or **Bad credentials** | The token is wrong or has expired. On the GitHub API's page, under **Key**, replace it. |
+| **HTTP 403** or **Resource not accessible by personal access token** | The token does not cover this repository or lacks **Issues: Read and write**. Edit the token in GitHub. |
+| **HTTP 422 Validation Failed** when adding labels | A label in the call does not exist in the repository. Create it in GitHub, or fix its name in the instructions. |
+| **HTTP 404** on every call | The owner or repository name is misspelled, or the token's resource owner is not the organization that owns the repository. |
+| **Security check blocked tool ... command injection** | A comment the assistant wrote contains text between backticks, which almyty's security check refuses in tool inputs. Add "Never use backticks in comments" to the instructions. |
 
 ## Related
 
-- [SDK tools](/tools/sdk-tools) · [Autonomous agents](/agents/autonomous) · [Scheduling](/agents/scheduling)
+- [First pass on pull requests](/examples/pr-review-bot), which uses the same GitHub connection
+- [Autonomous agents](/agents/autonomous) · [Scheduling](/agents/scheduling) · [Credentials](/credentials)
