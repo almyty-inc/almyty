@@ -391,8 +391,7 @@ export class BudgetsService {
         level,
         periodType: budget.periodType,
         periodStart,
-        // Whole cents on the row; the alert's own text keeps the fraction.
-        spentCents: Math.round(spentCents),
+        spentCents,
         limitCents: budget.limitCents,
       });
       await this.alertRepo.save(alert);

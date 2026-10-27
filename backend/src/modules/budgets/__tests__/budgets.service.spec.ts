@@ -207,7 +207,8 @@ describe('BudgetsService', () => {
     await service.enforceForRun('org-1', 'agent-1');
     await flush();
     expect(alerts()).toHaveLength(1);
-    expect(alerts()[0]).toMatchObject({ level: 'soft', spentCents: 1, limitCents: 1 });
+    // The history row keeps the fraction too (spend_alerts.spentCents is numeric).
+    expect(alerts()[0]).toMatchObject({ level: 'soft', spentCents: 0.82, limitCents: 1 });
     expect(mail.send.mock.calls[0][0].subject).toContain('82% of budget ($0.0082 of $0.01)');
   });
 
