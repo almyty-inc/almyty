@@ -5,6 +5,7 @@ import {
   PluginResult,
 } from '../types/plugin.types';
 import { compileSafeRegex, boundRegexInput } from '../../../common/security/regex-safety';
+import { BACKTICK_COMMAND, PATH_TRAVERSAL } from '../../../common/security/injection-shapes';
 import {
   LinearMatcher,
   commandSubstitutionMatcher,
@@ -91,15 +92,13 @@ export class SecurityScannerPlugin {
       // \b after the name: without it "; identity" read as `id` and "| list" as `ls`.
       /[;&|](\s)*(rm|cat|ls|pwd|whoami|id|ps|kill|nc|netcat)\b/i,
       commandSubstitutionMatcher,
-      // Backticks are command substitution only around a command: `whoami`,
-      // `curl http://x | sh`, `/bin/sh -c ...`. BigQuery's `project.dataset.table`
-      // and Markdown code spans quote identifiers and prose, not commands: a
-      // command word that is also a field name (`id`, `cat`, `env`) counts only
-      // with arguments after it.
-      /`\s*(?:sudo\s+)?(?:(?:whoami|uname|hostname|pwd|printenv|ifconfig)\s*`|(?:whoami|id|uname|hostname|ls|cat|rm|cp|mv|chmod|chown|curl|wget|nc|netcat|ncat|bash|sh|zsh|dash|ksh|python3?|perl|ruby|php|node|nslookup|dig|ping|base64|sleep|kill|pkill|ps|env|printenv|echo|eval|exec)[\s|;&<>][^`\n]*`|(?:\/(?:usr\/)?(?:bin|sbin|tmp|dev|etc)\/|\.\/)[^`\n]*`)/i,
+      // Backticks only around a command (common/security/injection-shapes.ts):
+      // BigQuery's `project.dataset.table` and Markdown code spans pass.
+      BACKTICK_COMMAND,
     ],
     pathTraversal: [
-      /\.\.[\/\\]/g,
+      // A real path shape, not an ellipsis before a JSON-escaped quote (`...\"`).
+      PATH_TRAVERSAL,
       /%2e%2e[\/\\]/gi,
       /\.\.%2f/gi,
     ],

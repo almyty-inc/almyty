@@ -256,3 +256,28 @@ describe('security scanner: backticks are command substitution only around a com
     expect((result.error?.details as any)?.threats?.map((t: any) => t.type)).toContain('command_injection');
   });
 });
+
+/**
+ * An ellipsis before a quote, `wait..."`, is `wait...\"` in the JSON the
+ * scanner reads, and `..\` read as a Windows traversal. Review and comment
+ * text with Markdown code spans was refused the same way.
+ */
+describe('security scanner: path traversal needs a path', () => {
+  const plugin = new SecurityScannerPlugin();
+
+  it.each([
+    'He said "wait..." and left.',
+    'Looks good, but wait..." before merging',
+    'So... what next? Maybe...',
+    'Nit: rename `getUser` to `findUser`, and `id` is unused in `auth.ts`.\n\n```ts\nconst x = 1\n```',
+  ])('lets %j through', async (body) => {
+    const result = await plugin.scanToolParameters(toolCall(HTTP_TOOL, { body }), settings);
+    expect({ body, ok: result.success, threats: (result.error?.details as any)?.threats ?? [] }).toEqual({ body, ok: true, threats: [] });
+    expect(result.metadata.warnings).toEqual([]);
+  });
+
+  it.each(['../../etc/passwd', '..\\..\\windows\\win.ini', 'files/../../secrets', '....//....//etc/passwd', '%2e%2e/etc'])('flags %j', async (path) => {
+    const result = await plugin.scanRequest(request({ path }), settings);
+    expect((result.error?.details as any)?.threats?.map((t: any) => t.type)).toContain('path_traversal');
+  });
+});
