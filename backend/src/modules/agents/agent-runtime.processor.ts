@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { Workspace } from '../../entities/workspace.entity';
 import { releaseRunWorkspaces } from '../workspace/run-end-release';
 import { AgentRuntimeService } from './agent-runtime.service';
+import { writeRun } from './run-event-writer';
 import { Agent } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { runWithRequestContext } from '../../common/request-context';
@@ -287,22 +288,17 @@ export class AgentRuntimeProcessor {
       `'${job?.name ?? 'next-step'}': ${error?.message || 'unknown error'}`
     ).slice(0, 2000);
 
-    const steps = [
-      ...(Array.isArray(run.steps) ? run.steps : []),
-      {
-        type: 'error',
-        error: reason,
-        timestamp: new Date().toISOString(),
-      },
-    ];
+    const failure = { type: 'error', error: reason, timestamp: new Date().toISOString() };
 
     // Guarded on the status we read, so a step that reached a terminal
-    // state between that read and this write is not reopened.
-    const res = await this.runRepository.update(
+    // state between that read and this write is not reopened. The error
+    // step goes after the steps as locked, and on the run's log.
+    const written = await writeRun(
+      this.runRepository,
       { id: runId, status: statusBefore },
-      { status: AgentRunStatus.FAILED, error: reason, steps },
+      (row) => ({ status: AgentRunStatus.FAILED, error: reason, steps: [...(Array.isArray(row.steps) ? row.steps : []), failure] }),
     );
-    if ((res.affected ?? 0) === 0) {
+    if (!written) {
       this.logger.warn(
         `Run ${runId} changed status while recording an exhausted-retry failure; left as found`,
       );

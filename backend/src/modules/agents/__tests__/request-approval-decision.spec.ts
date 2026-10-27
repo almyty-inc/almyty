@@ -4,6 +4,7 @@ import { join } from 'path';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Message } from '../../../entities/message.entity';
 import { fakeRepository } from '../../../test/fake-repository';
+import { withRunEvents } from '../../../test/fake-run-events';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 
@@ -17,7 +18,9 @@ import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
  */
 describe('request_approval: the decision reaches the model', () => {
   function runtimeWith(messages: ReturnType<typeof fakeRepository<Message>>, run: Partial<AgentRun>) {
-    const runs = fakeRepository<AgentRun>({ seed: [run as AgentRun] });
+    const runs = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: [{ headSeq: 0, steps: [], ...run } as AgentRun] });
+    // Writes to the run land with their events (run-event-writer.ts).
+    const events = withRunEvents(runs);
     const users = { findOne: jest.fn(async () => ({ id: 'u-ana', firstName: 'Ana', lastName: 'Lind', email: 'ana@example.com' })) };
     (messages as any).manager = { getRepository: () => users };
     const svc: any = Object.create(AgentRuntimeService.prototype);
@@ -28,7 +31,7 @@ describe('request_approval: the decision reaches the model', () => {
       runtimeQueue: { add: jest.fn() },
       workspaceRepository: fakeRepository({ seed: [] }),
     });
-    return { svc, runs, users };
+    return { svc, runs, users, events };
   }
 
   const placeholder = () => {
@@ -39,10 +42,10 @@ describe('request_approval: the decision reaches the model', () => {
 
   it('replaces "Awaiting human approval" with who approved and their note, and resumes', async () => {
     const messages = fakeRepository<Message>({ make: () => new Message(), seed: [placeholder()], idPrefix: 'm' });
-    const { svc, runs } = runtimeWith(messages, { id: 'run-1', conversationId: 'conv-1', status: AgentRunStatus.WAITING_APPROVAL });
+    const { svc, runs, events } = runtimeWith(messages, { id: 'run-1', conversationId: 'conv-1', status: AgentRunStatus.WAITING_APPROVAL });
 
     await svc.handleApprovalDecided({
-      runId: 'run-1', status: 'approved', decidedBy: 'u-ana', decisionReason: 'Customer is on the gold plan', toolCallId: 'tc-1', payload: null,
+      id: 'a1', runId: 'run-1', status: 'approved', decidedBy: 'u-ana', decisionReason: 'Customer is on the gold plan', toolCallId: 'tc-1', payload: null,
     });
 
     const [result] = await messages.find({ where: { toolCallId: 'tc-1' } });
@@ -53,19 +56,43 @@ describe('request_approval: the decision reaches the model', () => {
       decision_reason: 'Customer is on the gold plan',
     });
     expect((await runs.findOne({ where: { id: 'run-1' } }))!.status).toBe(AgentRunStatus.RUNNING);
+    // The decision is on the run's log, with the resume it caused.
+    const log = events.rows('run-1');
+    expect(log.map((e) => e.type)).toEqual(['run_started', 'approval_decided', 'status_changed', 'step_committed']);
+    expect(log[1].payload).toEqual({
+      approvalId: 'a1', kind: 'run', status: 'approved', decidedBy: 'u-ana', decisionReason: 'Customer is on the gold plan', toolCallId: 'tc-1',
+    });
+    expect(runs.row('run-1')!.headSeq).toBe(4);
   });
 
   it('records a rejection on the call too, so the conversation knows', async () => {
     const messages = fakeRepository<Message>({ make: () => new Message(), seed: [placeholder()], idPrefix: 'm' });
-    const { svc, runs } = runtimeWith(messages, { id: 'run-1', conversationId: 'conv-1', status: AgentRunStatus.WAITING_APPROVAL });
+    const { svc, runs, events } = runtimeWith(messages, { id: 'run-1', conversationId: 'conv-1', status: AgentRunStatus.WAITING_APPROVAL });
 
     await svc.handleApprovalDecided({
-      runId: 'run-1', status: 'rejected', decidedBy: 'u-ana', decisionReason: 'Too large', toolCallId: 'tc-1', payload: null,
+      id: 'a1', runId: 'run-1', status: 'rejected', decidedBy: 'u-ana', decisionReason: 'Too large', toolCallId: 'tc-1', payload: null,
     });
 
     const [result] = await messages.find({ where: { toolCallId: 'tc-1' } });
     expect(JSON.parse(result.content as string)).toMatchObject({ approved: false, decided_by: 'Ana Lind', decision_reason: 'Too large' });
     expect((await runs.findOne({ where: { id: 'run-1' } }))!.status).toBe(AgentRunStatus.CANCELLED);
+    const log = events.rows('run-1');
+    expect(log.find((e) => e.type === 'approval_decided')!.payload).toMatchObject({ approvalId: 'a1', kind: 'run', status: 'rejected', decisionReason: 'Too large' });
+    expect(log.find((e) => e.type === 'step_committed')!.payload).toMatchObject({ status: AgentRunStatus.CANCELLED, error: 'approval rejected: Too large' });
+  });
+
+  it('a decision that arrives twice is written once', async () => {
+    const messages = fakeRepository<Message>({ make: () => new Message(), seed: [placeholder()], idPrefix: 'm' });
+    const { svc, runs, events } = runtimeWith(messages, { id: 'run-1', conversationId: 'conv-1', status: AgentRunStatus.WAITING_APPROVAL });
+    const decision = { id: 'a1', runId: 'run-1', status: 'approved', decidedBy: 'u-ana', decisionReason: null, toolCallId: 'tc-1', payload: null };
+
+    await svc.handleApprovalDecided(decision);
+    const once = events.rows('run-1').length;
+    await svc.handleApprovalDecided(decision);
+
+    expect(events.rows('run-1')).toHaveLength(once);
+    expect(svc.runtimeQueue.add).toHaveBeenCalledTimes(1);
+    expect(runs.row('run-1')!.headSeq).toBe(once);
   });
 
   it('leaves a held tool call alone: its result is the call itself, run after the approval', async () => {

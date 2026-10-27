@@ -7,6 +7,7 @@ import { Agent } from '../../entities/agent.entity';
 import { batchAsync } from '../../common/utils/batch-async';
 import { principalOfRun } from '../../common/authorization/execution-access.service';
 import { AgentRuntimeService } from './agent-runtime.service';
+import { notDone, runStateOf, writeRun } from './run-event-writer';
 import {
   AgentCollaboration,
   CollaborationParticipant,
@@ -113,7 +114,7 @@ export class AgentCollaborationHelper {
       run.status = AgentRunStatus.FAILED;
       run.error = error.message;
       run.executionTime += stepDuration;
-      await this.runRepository.save(run);
+      await this.persist(run);
       this.runtime.emitEvent(run.id, 'run.failed', { error: error.message });
       return 'done';
     }
@@ -273,11 +274,8 @@ export class AgentCollaborationHelper {
     for (const h of handles) {
       if (!h.runId) continue;
       try {
-        const currentRun = await this.runRepository.findOne({ where: { id: h.runId } });
-        if (currentRun && !currentRun.isDone()) {
-          currentRun.status = AgentRunStatus.CANCELLED;
-          await this.runRepository.save(currentRun);
-        }
+        // Only a loser still going: one that finished keeps its own ending.
+        await writeRun(this.runRepository, { id: h.runId, status: notDone() }, { status: AgentRunStatus.CANCELLED });
       } catch (_) { /* best effort */ }
     }
 
@@ -578,7 +576,7 @@ export class AgentCollaborationHelper {
     run.status = AgentRunStatus.FAILED;
     run.error = error;
     run.executionTime += stepDuration;
-    await this.runRepository.save(run);
+    await this.persist(run);
     this.runtime.emitEvent(run.id, 'run.failed', { error });
     return true;
   }
@@ -586,8 +584,14 @@ export class AgentCollaborationHelper {
   private async complete(run: AgentRun, stepDuration: number): Promise<'done'> {
     run.currentStep++;
     run.executionTime += stepDuration;
-    await this.runRepository.save(run);
+    await this.persist(run);
     this.runtime.emitEvent(run.id, 'run.completed', { output: run.output });
     return 'done';
+  }
+
+  /** The run as this step leaves it, written with its events (run-event-writer.ts). */
+  private async persist(run: AgentRun): Promise<void> {
+    const written = await writeRun(this.runRepository, { id: run.id }, runStateOf(run));
+    if (written) run.headSeq = written.headSeq;
   }
 }
