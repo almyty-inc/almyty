@@ -30,6 +30,7 @@ import { CHANNEL_LABELS, OWNER_ADDRESS_HINTS, agentChannelsApi, isMessagingChann
 import {
   ALWAYS_ON_VS_SCHEDULE,
   CONNECTION_EVENT_LABELS,
+  DEFAULT_REPORT,
   type AlwaysOnActMode,
   type AlwaysOnInput,
   type AlwaysOnReport,
@@ -88,7 +89,8 @@ export function formFromView(view: AlwaysOnView | undefined): AlwaysOnForm {
     askFirstToolIds: c ? c.askFirstToolIds ?? [] : (view?.tools ?? []).filter((t) => !t.readOnly).map((t) => t.id),
     reportChannelId: c?.reportTo?.channelId ?? NO_CHANNEL,
     reportTo: c?.reportTo?.to ?? '',
-    report: c?.report ?? 'when_acted',
+    // A new agent starts on the default; a stored one keeps its choice.
+    report: c ? c.report ?? 'when_acted' : DEFAULT_REPORT,
     // The agent's own setting, else the default the server worked out: 09:00 in your time zone.
     digestTime: c?.digest?.time ?? view?.digest?.time ?? '',
     digestTimezone: c?.digest?.timezone ?? view?.digest?.timezone ?? '',
@@ -457,8 +459,17 @@ function AlwaysOnPage({
             )}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          What it asks about waits in <Link className="underline" to="/approvals">Approvals</Link> until you decide.
+        <p className="text-xs text-muted-foreground" data-testid="always-on-approvals-hint">
+          {ownerChannel ? (
+            <>
+              It asks you in your chat on {ownerChannel.name}, where you approve or reject it, or you decide in{' '}
+              <Link className="underline" to="/approvals">Approvals</Link>.
+            </>
+          ) : (
+            <>
+              What it asks about waits in <Link className="underline" to="/approvals">Approvals</Link> until you decide.
+            </>
+          )}
         </p>
       </FormSection>
 

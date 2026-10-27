@@ -295,6 +295,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       type: 'telegram',
       extractTenantId: () => null,
       verifyWebhook: async () => true,
+      actionOf: () => null,
       carriesMessage: () => true,
       deliveryId: (body: any) => String(body.update_id),
       normalizeInbound: (body: any) => ({
