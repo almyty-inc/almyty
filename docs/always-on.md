@@ -50,11 +50,22 @@ the builder), then **Set up always on**. You choose:
 
   Your approval rules (for example "ask before a refund over 500") apply
   either way.
-- **Reports.** A channel to post reports to, and when it reports: after
-  every wake, only when it did something, or **once a day, a short summary
-  of what it did** (see [The daily summary](#the-daily-summary)). Reports
-  also show on the agent's page and in your notifications. When it is
-  waiting for your OK, it says so there too.
+- **Reports.** A channel to post reports to, and when it reports:
+  - **When it has something to tell you** (the default for a new agent):
+    what it found, what it did, or a question for you. A wake with nothing
+    for you posts nothing and sends no notification.
+  - **Only when it did something**: only when it used a tool that changes
+    something; something it only found out is not posted.
+  - **After every wake**: every time, "Nothing to report right now."
+    included.
+  - **Once a day, a short summary of what it did** (see
+    [The daily summary](#the-daily-summary)).
+
+  Reports also show on the agent's page and in your notifications. When it
+  is waiting for your OK, the report channel gets one line saying so, with
+  a link to **Approvals** but not what it wants to send; the details and
+  the buttons come only to your own chat (see
+  [Approving from your channel](#approving-from-your-channel)).
 
 The card then shows what wakes it, what it may do, when it reports, when it
 last woke and why, and when the timer fires next. **Wake now** wakes it
@@ -81,6 +92,36 @@ messages, and a note when it is waiting for your OK.
 
 You pick the time and the time zone next to the choice, for each agent.
 Until you change them, it goes out at 9:00 in your own time zone.
+
+## Approving from your channel
+
+When you named a channel under **Talk to it yourself**, anything the agent
+wants to do that needs your OK comes to you there, as well as to
+**Approvals**. That covers its wakes and every other run of the agent: **Try
+it**, a schedule, a chat someone else started on one of its channels. The
+message says what it wants to do in words you can check: the email it would
+send (To, Subject and the text), or the tool and what it would pass to it.
+
+- On **Telegram, Slack, Microsoft Teams and Discord** the message has
+  **Approve** and **Reject** buttons.
+- On every channel you can also answer in words: **yes** or **approve** to
+  let it go ahead, **no** or **reject** to stop it, in any case. Reply to
+  the message, or just write it when only one thing is waiting. When more
+  than one is waiting, it lists them with a short ref each; answer
+  "yes 3F9A1C" for the one you mean.
+
+Only you can decide there, from your own address on that channel. Anyone
+else who presses a button or answers "yes" to it is told, politely, that
+only you can. On an email channel this works only with **Treat email from
+my address as me** on, because an email sender can be faked.
+
+Approving in chat and in **Approvals** is the same decision: whichever you
+do first counts, and the other then says it was already approved or
+rejected. Every decision made in chat, and every refused attempt, is in the
+audit log with the channel and who answered.
+
+When it asks you a question while it works, the question comes to the same
+channel. Reply there and it carries on.
 
 ## What happens at a wake
 
@@ -156,6 +197,7 @@ source, { summary, dedupeKey, payload?, ownerMessage? })`:
 | `webhook`, `channel` | `ChannelGatewayService.handleInboundMessage` -> `AlwaysOnService.routeInbound` | the delivery id |
 | `connection` | `connections/connection-events.ts`, published where `connections.*` notifications are made (credentials governance) | connection + event + day |
 | `manual` | `POST /agents/:id/always-on/wake` | time |
+| `push` | `PushWakesService.processPushes` (`push-wake-changes` job, after a verified push and the debounce window) -> `AlwaysOnService.pushEvent` | wake source + cursor before and after + item ids |
 
 `always-on-wiring.guard.spec.ts` fails if a source loses its caller.
 
@@ -192,11 +234,75 @@ call runs once.
 **Reporting.** `onRunFinished` (called by `AgentRuntimeProcessor` for every
 finished run) posts the result to the owner's channel when they wrote, and
 to `reportTo` through `ScheduledPostService`; it notifies `agent.report`
-(in the app) or `run.failed`, and looks at the inbox again. With
-`report: 'daily_digest'` it skips the `reportTo` post and the
-`agent.report` notification; replies to the owner and `run.failed` stay. A
-pause notifies `agent.paused` (in the app and by email). An approval
-request of an always-on run is posted to the same places, digest or not.
+(in the app) or `run.failed`, and looks at the inbox again. When `reportTo`
+gets the post depends on `report`: `every_wake` always; `when_news` when
+`hasNews(run.output)` (`always-on-report.ts`: quiet only when the answer is
+empty or is just the `NOTHING_TO_REPORT` marker, give or take whitespace,
+punctuation and markdown; an object answer without a text field is news);
+`when_acted` when a tool that is not read-only ran (`acted`);
+`daily_digest` never (the digest job does). The same test decides the
+`agent.report` notification, so a quiet wake notifies nobody. The marker
+comes from the agent: `REPORT_RULE` is in the `[ALWAYS ON]` section of the
+system prompt (`agent-runtime-builders.ts`, always-on runs only) and ends
+every wake message (`wakeMessage`). Every post goes through `forPeople`: a
+marker beside real words is taken out and the words are posted, and where a
+post goes out anyway (`every_wake`, a reply to the owner) a quiet answer is
+posted as "Nothing to report right now." `defaultAlwaysOn` starts a new agent on `when_news`;
+`readAlwaysOn` reads a stored setting without `report` as `when_acted`, so
+agents set up before keep what they had. A pause notifies `agent.paused`
+(in the app and by email).
+
+**Approve in chat.** `onApprovalRequested` (on `approval.requested`) posts a
+request that has a run: to the owner's channel (`ownerDelivery`: the direct
+conversation they last wrote from there, remembered in Redis under
+`always-on:owner-conversation:<agentId>` for 90 days, else their address)
+for any run of an agent with Always on on and an owner's channel, and for an
+always-on run also to its `replyTo` and `reportTo`, digest or not. The owner's
+own chat (theirs, and `replyTo`) gets the request in full; a `reportTo`
+that is not their chat gets only `approvalNotice`, one line naming whose OK
+it waits for and on what kind of thing ("an email", the tool), with the
+Approvals link and no buttons, so a shared channel never sees the preview. The full text
+is `approvalMessage` (`channel-approval.ts`: the reason, `approvalPreview`
+of the payload, which reads a Gmail `raw` the way the Approvals page's
+`lib/email-preview.ts` does, and "Reply yes ... (ref XXXXXX)"); the post
+carries `approvalActions` as `ChannelAction`s, which `ScheduledPostService`
+hands to `ChannelGatewayService.postMessage` for the last part. A button's
+data is `apv:<a|r>:<approval id>:<tag>`, the tag an HMAC of the decision
+and id with `CHANNEL_ACTION_SECRET` (else `JWT_SECRET`), 59 characters.
+
+| Platform | Buttons sent as | Press arrives as | Answered by |
+|---|---|---|---|
+| Telegram | `reply_markup.inline_keyboard`, `callback_data` | `callback_query` update (same webhook, same secret token) | `answerCallbackQuery`; settled: `editMessageReplyMarkup` to remove them, and `sendMessage` |
+| Slack | an `actions` block, button `value` | `block_actions`, form encoded `payload=` to the app's Interactivity Request URL (the channel's webhook URL; signed like events) | `response_url` (hooks.slack.com only): settled replaces the message, a refusal is ephemeral |
+| Microsoft Teams | an Adaptive Card, `Action.Submit` with `data.almytyAction` | a message activity whose `value` is the data (same endpoint, same Bot Framework token) | a reply activity; settled also replaces the card (`PUT` on `replyToId`) |
+| Discord | an action row of buttons, `custom_id` | `INTERACTION_CREATE` type 3 on the bot's gateway socket (`discord-gateway.transport.ts`; the application must have no Interactions Endpoint URL) | the interaction callback: settled `UPDATE_MESSAGE` without components, a refusal ephemeral |
+
+`BaseAdapter.actionOf` reads a press from a verified delivery and
+`answerAction` answers it; `ChannelGatewayService.handleActionPress` claims
+the delivery like a message (one answer per redelivery) and calls
+`AlwaysOnService.decideFromChannel`, which checks the tag and that the
+presser is the owner (`sameAddress` against `ownerChannel.address` on that
+channel; an email channel only with `trustEmail`). Replies go through
+`routeInbound`: `parseDecision` takes a first line that is exactly
+yes/no/approve/reject (any case), optionally with a ref; the request is the
+one the ref names (typed, in the replied-to text the adapter puts in
+`metadata.replyToText`, or quoted below the first line), else the only
+pending request of the agent with a run. With several and no ref it lists
+them; while the standing thread waits for input, a bare yes answers the
+question instead. Everyone else's plain "yes" stays their own chat. Both
+paths end in `decideApproval`, which calls `ApprovalsService.approve` or
+`reject` as the agent's owner: its compare-and-set on `pending` makes the
+chat and the Approvals page race safely, and the loser reads "This was
+already approved/rejected". Every outcome is audited as `channel_approval`
+with `details.via` (`button`, `reply`), `outcome` (`decided`, `refused`,
+`already_decided`, `not_allowed`, `not_found`), `channelId`, `channelType`
+and `identity`.
+
+**Questions.** `AgentRuntimeProcessor` calls `onRunWaiting` when a step
+leaves a run waiting; a `WAITING_INPUT` always-on run whose last
+`waiting_input` step has a question gets `questionMessage` posted to
+`ownerDelivery`, once per run and step (`always-on:asked:<runId>:<step>`).
+The owner's reply wakes the thread and `process` passes it to the run.
 
 **Daily summary.** `report: 'daily_digest'` adds a second repeatable job
 per agent, `always-on-digest` (job id `always-on-digest-<agentId>`,
@@ -255,6 +361,31 @@ resumed automatically.
 `hostedHome` and `hostedAgentsOn`; the page names the plan's limit only when
 `hostedHome`), `POST /agents/:id/always-on/wake`,
 `GET /agents/:id/always-on/wakes`. Audit actions: `always_on_enable`,
-`always_on_disable`, `always_on_pause`, `wake_dropped`.
+`always_on_disable`, `always_on_pause`, `wake_dropped`, `channel_approval`.
+
+**Push wakes.** `push_subscriptions` and `agent_push_wakes` (migration
+`1791000600000-AgentPushWakes`). A push subscription is one subscription at a
+service: its address (`POST /push-wakes/:subscriptionId`), spec, settings,
+cursor, health and verification credential. `agent_push_wakes` is an agent's
+membership in one. The spec is data (`push-wakes/push-wake.types.ts`): a
+verification method (`shared_token`, `hmac`, `oidc_jwt`), header checks, and
+optional `subscribe`, `renew`, `stop` and `changes` steps run as calls to the
+chosen connection's own tools by operation id, as a member agent's unattended
+principal. Google Calendar and Gmail are presets (`push-wake-presets.ts`),
+nothing in the code names them. The verification value is a managed
+credential (`push_subscription`). Agents share a subscription when the
+connection, preset (or spec hash) and resource (`resourceKey` over the
+settings) match (`subscriptionKey`, unique per org), because a service may
+allow one per resource (Gmail: one watch per mailbox); only specs with a
+`subscribe` step are shared. Flow: `PushWakesService.receive` (verify,
+checks, ignore, count) -> first push of a window queues `push-wake-changes`
+after `debounceSeconds` -> `processPushes` reads what changed once from the
+subscription's cursor, as the longest-standing member that is on -> one
+`AlwaysOnService.pushEvent` per member agent that is on -> `wake(..., 'push',
+...)`, deduped per agent. The `push-wake-renew` repeatable job (every
+`PUSH_WAKE_RENEW_SWEEP_MINUTES`) subscribes again whatever is due. Leaving
+(remove, or deleting the agent: `AgentsService.deleteAgent`) stops the
+subscription only when its last member leaves. Field reference: the docs
+site, Always on, "Push wakes, for developers".
 
 **Retention.** See [retention.md](retention.md#an-always-on-agents-standing-conversation).

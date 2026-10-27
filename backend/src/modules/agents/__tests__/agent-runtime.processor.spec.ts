@@ -185,6 +185,7 @@ describe('AgentRuntimeProcessor and Always on', () => {
       tick: jest.fn().mockResolvedValue(null),
       process: jest.fn().mockResolvedValue('started'),
       onRunFinished: jest.fn().mockResolvedValue(undefined),
+      onRunWaiting: jest.fn().mockResolvedValue(undefined),
     };
     const scheduler = { deliverScheduledRun: jest.fn().mockResolvedValue(undefined) };
     const processor = new AgentRuntimeProcessor(
@@ -226,9 +227,16 @@ describe('AgentRuntimeProcessor and Always on', () => {
     expect(scheduler.deliverScheduledRun).toHaveBeenCalledWith('r1');
   });
 
-  it('a run still going is not', async () => {
+  it('a run still going is not; a waiting one is handed over for its question', async () => {
     const { processor, alwaysOn } = build('waiting');
     await processor.handleNextStep({ data: { runId: 'r1', seq: 3 } } as any);
     expect(alwaysOn.onRunFinished).not.toHaveBeenCalled();
+    expect(alwaysOn.onRunWaiting).toHaveBeenCalledWith('r1');
+  });
+
+  it('a question that cannot be posted does not fail the step', async () => {
+    const { processor, alwaysOn } = build('waiting');
+    alwaysOn.onRunWaiting.mockRejectedValueOnce(new Error('channel down'));
+    await expect(processor.handleNextStep({ data: { runId: 'r1', seq: 3 } } as any)).resolves.toBeUndefined();
   });
 });

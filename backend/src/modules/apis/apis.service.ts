@@ -1,7 +1,7 @@
 import { Inject, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In, Not } from 'typeorm';
 import axios from 'axios';
 
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
@@ -29,6 +29,8 @@ import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { connectionAuthConfig, hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
 import { generatedToolScope } from '../tools/generated-tool-scope';
 import { assertRegistryHoldsNoSecret } from '../tools/tool-auth-config';
+import { assertWithinPerSchemaCap, maxToolsPerSchema } from '../tools/tool-quota';
+import { toolDisplayName } from '../tools/tool-display-name';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -636,6 +638,52 @@ export class ApisService {
       where: { apiId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /**
+   * Every operation of an API, without the parameters and responses: what
+   * the operation picker lists. A 1,600-operation description's full rows
+   * are megabytes of JSON the picker never reads.
+   */
+  async getOperationOutline(
+    apiId: string,
+    organizationId: string,
+  ): Promise<{
+    operations: Array<Pick<Operation, 'id' | 'name' | 'method' | 'endpoint' | 'tags' | 'isActive' | 'operationId'> & { displayName: string | null }>;
+    limit: number;
+  }> {
+    await this.assertApiInOrganization(apiId, organizationId);
+    const operations = await this.operationRepository.find({
+      where: { apiId },
+      select: { id: true, name: true, method: true, endpoint: true, tags: true, isActive: true, operationId: true },
+      order: { endpoint: 'ASC', method: 'ASC' },
+    });
+    // The name the tool made from it would show (tool-display-name.ts), so
+    // the picker reads the way the tools list will.
+    return {
+      operations: operations.map((op) => ({ ...op, displayName: toolDisplayName(op) })),
+      limit: maxToolsPerSchema(),
+    };
+  }
+
+  /**
+   * Make tools from these operations only: they become the API's active
+   * operations and every other one inactive (tool generation skips an
+   * inactive operation). Refused when the selection is empty, names an
+   * operation of another API, or is over the per-schema limit.
+   */
+  async selectOperations(apiId: string, organizationId: string, operationIds: string[]): Promise<{ selected: number }> {
+    await this.assertApiInOrganization(apiId, organizationId);
+    const ids = [...new Set((operationIds ?? []).filter((id) => typeof id === 'string' && id))];
+    if (ids.length === 0) throw new BadRequestException('Pick at least one operation.');
+    assertWithinPerSchemaCap(ids.length, 'This selection');
+    const found = await this.operationRepository.count({ where: { apiId, id: In(ids) } });
+    if (found !== ids.length) throw new BadRequestException('Some of the picked operations are not part of this API.');
+    await this.dataSource.transaction(async (tx) => {
+      await tx.getRepository(Operation).update({ apiId, id: Not(In(ids)) }, { isActive: false });
+      await tx.getRepository(Operation).update({ apiId, id: In(ids) }, { isActive: true });
+    });
+    return { selected: ids.length };
   }
 
   async getApiResources(

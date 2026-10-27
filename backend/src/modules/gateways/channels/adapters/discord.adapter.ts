@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  ActionPress,
   BaseAdapter,
   NormalizedMessage,
   AdapterResponse,
@@ -71,11 +72,78 @@ export class DiscordAdapter extends BaseAdapter {
     return rawPayload?.id ? `discord:${rawPayload.id}` : undefined;
   }
 
-  /** Images go as embeds Discord shows under the text; other files stay links. */
+  /**
+   * Images go as embeds Discord shows under the text; other files stay links.
+   * Buttons (Approve, Reject) go as one action row of button components,
+   * each with its action's id as its custom_id (at most 100 characters).
+   */
   formatOutbound(response: AdapterResponse): any {
     const images = (response.attachments ?? []).filter(isImage).slice(0, DiscordAdapter.MAX_EMBEDS);
     const content = textWithMedia(response, images).substring(0, 2000); // Discord 2000 char limit
-    return images.length ? { content, embeds: images.map((image) => ({ image: { url: image.url } })) } : { content };
+    const buttons = (response.actions ?? [])
+      .filter((a) => a && typeof a.id === 'string' && a.id.length <= 100)
+      .slice(0, 5)
+      .map((a) => ({
+        type: 2,
+        // 3 is green (success), 4 red (danger), 2 grey (secondary).
+        style: a.style === 'primary' ? 3 : a.style === 'danger' ? 4 : 2,
+        label: a.label.slice(0, 80),
+        custom_id: a.id,
+      }));
+    return {
+      content,
+      ...(images.length ? { embeds: images.map((image) => ({ image: { url: image.url } })) } : {}),
+      ...(buttons.length ? { components: [{ type: 1, components: buttons }] } : {}),
+    };
+  }
+
+  /**
+   * A pressed button: an INTERACTION_CREATE of type 3 (a message
+   * component) that came down the bot's authenticated gateway socket
+   * (discord-gateway.transport.ts), with the interaction's id and token to
+   * answer it by. In a server the presser is `member.user`; in a direct
+   * message, `user`.
+   */
+  actionOf(rawPayload: any): ActionPress | null {
+    if (rawPayload?.type !== 3 || typeof rawPayload?.token !== 'string' || typeof rawPayload?.data?.custom_id !== 'string') return null;
+    const user = rawPayload.member?.user ?? rawPayload.user;
+    if (!user?.id) return null;
+    return {
+      data: rawPayload.data.custom_id,
+      userId: String(user.id),
+      userName: rawPayload.member?.nick || user.global_name || user.username || undefined,
+      group: !!rawPayload.guild_id,
+      context: {
+        interactionId: rawPayload.id,
+        interactionToken: rawPayload.token,
+        channelId: rawPayload.channel_id,
+        messageContent: rawPayload.message?.content,
+      },
+    };
+  }
+
+  /**
+   * Answer the interaction (it must be answered within three seconds).
+   * Settled, the message is updated in place: its text and the outcome,
+   * with the buttons taken off (UPDATE_MESSAGE). Not settled, the presser
+   * alone sees the answer (an ephemeral CHANNEL_MESSAGE_WITH_SOURCE).
+   */
+  async answerAction(_config: Record<string, any>, press: ActionPress, text: string, settled: boolean): Promise<void> {
+    const { interactionId, interactionToken, messageContent } = press.context ?? {};
+    if (!interactionId || !interactionToken) this.sendFailed('the button press carried no interaction to answer');
+    const original = typeof messageContent === 'string' ? messageContent : '';
+    const body = settled
+      ? { type: 7, data: { content: (original ? `${original}\n\n${text}` : text).substring(0, 2000), components: [] } }
+      : { type: 4, data: { content: text.substring(0, 2000), flags: 64 } };
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)(
+      `https://discord.com/api/v10/interactions/${encodeURIComponent(String(interactionId))}/${encodeURIComponent(String(interactionToken))}/callback`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    );
+    if (this.httpRejected(res)) {
+      const answer = await this.readJsonBody(res);
+      this.sendFailed(`the interaction callback returned HTTP ${this.httpStatus(res)}${answer?.message ? ` — ${answer.message}` : ''}`);
+    }
   }
 
   /**

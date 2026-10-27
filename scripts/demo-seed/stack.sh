@@ -29,6 +29,8 @@ export WEB_PORT="${WEB_PORT:-3210}"
 export FAKE_PORT="${FAKE_PORT:-4290}"
 export USECASE_PORT="${USECASE_PORT:-4291}"
 mkdir -p "$LOG_DIR"
+# shellcheck source=../lib/owned-processes.sh
+. "$ROOT/scripts/lib/owned-processes.sh"
 
 # Business entitlements, install-wide. Chargeback and customer-managed keys
 # are Enterprise and stay locked, which is what their locked-state captures show.
@@ -69,14 +71,12 @@ case "${1:-}" in
     sweep_off='{"reconcile":{"sweepCron":"off"}}'
     export HOSTED_RUNNERS_SETTINGS="${HOSTED_RUNNERS_SETTINGS:-$sweep_off}"
     if ! curl -sf "http://localhost:$FAKE_PORT/health" >/dev/null 2>&1; then
-      FAKE_PORT="$FAKE_PORT" nohup node "$HERE/fake-upstream.mjs" >"$LOG_DIR/fake.log" 2>&1 &
-      echo $! >"$LOG_DIR/fake.pid"
+      (cd "$HERE" && FAKE_PORT="$FAKE_PORT" nohup node fake-upstream.mjs >"$LOG_DIR/fake.log" 2>&1 & record fake $! "$HERE")
     fi
     if [ "${USECASES:-}" = "1" ]; then
       if ! curl -sf "http://localhost:$USECASE_PORT/health" >/dev/null 2>&1; then
-        USECASE_PORT="$USECASE_PORT" USECASE_LOG="$LOG_DIR/usecase-requests.log" USECASE_MODEL_LOG="$LOG_DIR/usecase-model.log" \
-          nohup node "$HERE/usecases/upstream.mjs" >"$LOG_DIR/usecase.log" 2>&1 &
-        echo $! >"$LOG_DIR/usecase.pid"
+        (cd "$HERE" && USECASE_PORT="$USECASE_PORT" USECASE_LOG="$LOG_DIR/usecase-requests.log" USECASE_MODEL_LOG="$LOG_DIR/usecase-model.log" \
+          nohup node usecases/upstream.mjs >"$LOG_DIR/usecase.log" 2>&1 & record usecase $! "$HERE")
       fi
       export USECASE_UPSTREAM_URL="http://localhost:$USECASE_PORT"
       export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import $HERE/usecases/redirect-fetch.mjs"
@@ -85,9 +85,19 @@ case "${1:-}" in
     print_env
     ;;
   down)
-    if [ -f "$LOG_DIR/fake.pid" ]; then kill "$(cat "$LOG_DIR/fake.pid")" 2>/dev/null || true; rm -f "$LOG_DIR/fake.pid"; fi
-    if [ -f "$LOG_DIR/usecase.pid" ]; then kill "$(cat "$LOG_DIR/usecase.pid")" 2>/dev/null || true; rm -f "$LOG_DIR/usecase.pid"; fi
+    # Only what this stack started: each pid file names a pid, its start
+    # time and its directory, and a pid that no longer matches is someone
+    # else's (scripts/lib/owned-processes.sh).
+    stop_recorded fake "$HERE"
+    stop_recorded usecase "$HERE"
     "$ROOT/scripts/dev-stack.sh" down
+    # A process its pid file lost track of -- the BACKEND_EE API (node
+    # dist-ee/src/main) outlived the stop -- still listens on this stack's
+    # port. Stopped only when it runs from this checkout.
+    sweep_port "$API_PORT" "$ROOT/backend"
+    sweep_port "$WEB_PORT" "$ROOT/frontend"
+    sweep_port "$FAKE_PORT" "$HERE"
+    sweep_port "$USECASE_PORT" "$HERE"
     ;;
   env) print_env ;;
   *) echo "usage: $0 up|down|env" >&2; exit 2 ;;

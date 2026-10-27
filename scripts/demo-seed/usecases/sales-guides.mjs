@@ -43,6 +43,9 @@ const SOFIA = { email: 'sofia.marques@parcelwise.example', password: 'Parcelwise
 const SLACK_SIGNING_SECRET = 'local-test-signing-secret-parcelwise-01'
 const sql = (q) => execSync(`${PSQL} -v ON_ERROR_STOP=1 -tA`, { input: q, encoding: 'utf8' }).trim()
 const upstream = async (path, init) => (await fetch(`${UP}${path}`, init)).json()
+// Sofia's organization: these checks are hers, not another walk's on the same stack
+// (the biz-dev tutorial makes a "HubSpot private app" and "HubSpot Companies" too).
+const orgOf = () => sql(`SELECT uo."organizationId" FROM user_organizations uo JOIN users u ON u.id = uo."userId" WHERE u.email = '${SOFIA.email}' LIMIT 1`)
 
 const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
@@ -286,7 +289,7 @@ async function slackChannel(page, h, agent, { keysShot, liveShot }) {
   await page.getByRole('button', { name: /^Advanced/ }).click()
   const existing = page.getByRole('combobox').filter({ hasText: 'Pick a credential' }).last()
   let created = false
-  if (sql(`SELECT count(*) FROM credentials WHERE name = 'Slack bot (Parcelwise)'`) === '0') {
+  if (sql(`SELECT count(*) FROM credentials WHERE name = 'Slack bot (Parcelwise)' AND "organizationId" = '${orgOf()}'`) === '0') {
     await page.getByRole('button', { name: 'Create one here' }).last().click()
     await page.getByRole('button', { name: 'More options' }).click()
     await page.getByRole('radio', { name: 'Bot token' }).click()
@@ -404,9 +407,9 @@ async function leads(page, h) {
   const parts = [['Contacts/Rollouts/424/v3/contacts.json', 'HubSpot Contacts'], ['Companies/Rollouts/424/v3/companies.json', 'HubSpot Companies'], ['Crm%20Owners/Rollouts/146888/v3/crmOwners.json', 'HubSpot Owners']]
   let first = true
   for (const [path, name] of parts) {
-    if (sql(`SELECT count(*) FROM apis WHERE name = '${name}'`) !== '0') continue
+    if (sql(`SELECT count(*) FROM apis WHERE name = '${name}' AND "organizationId" = '${orgOf()}'`) !== '0') continue
     await importApi(page, h, { link: HS + path, name, address: `${UP}/hubspot`, linkShot: first ? 'leads-01' : null })
-    if (first && sql(`SELECT count(*) FROM credentials WHERE name = 'HubSpot private app'`) === '0') {
+    if (first && sql(`SELECT count(*) FROM credentials WHERE name = 'HubSpot private app' AND "organizationId" = '${orgOf()}'`) === '0') {
       await page.getByRole('button', { name: 'Create one here' }).click()
       await h.wait(600)
       const paste = page.getByRole('button', { name: 'Paste an access token instead' })
@@ -489,7 +492,7 @@ async function notes(page, h) {
   await connectModel(page, h)
   const parts = [['Deals/Rollouts/424/v3/deals.json', 'HubSpot Deals'], ['Notes/Rollouts/424/v3/notes.json', 'HubSpot Notes'], ['Tasks/Rollouts/424/v3/tasks.json', 'HubSpot Tasks']]
   for (const [path, name] of parts) {
-    if (sql(`SELECT count(*) FROM apis WHERE name = '${name}'`) !== '0') continue
+    if (sql(`SELECT count(*) FROM apis WHERE name = '${name}' AND "organizationId" = '${orgOf()}'`) !== '0') continue
     await importApi(page, h, { link: HS + path, name, address: `${UP}/hubspot`, linkShot: name === 'HubSpot Notes' ? 'notes-01' : null })
     await page.getByRole('combobox', { name: 'Sign-in' }).click()
     await page.getByRole('option', { name: /HubSpot private app/ }).click()
@@ -592,7 +595,8 @@ async function driveGuide(page, h) {
   await h.wait(1200)
   await page.getByPlaceholder('Search tools...').fill('drive_files_list')
   await h.wait(1500)
-  await page.getByText('google_drive_drive_files_list', { exact: true }).first().click()
+  // The list shows the tool's display name; its machine name is the title.
+  await page.getByTitle('google_drive_drive_files_list', { exact: true }).first().click()
   await h.wait(1500)
   await page.getByRole('tab', { name: 'Test tool' }).click()
   await page.getByPlaceholder('Enter q').fill("fullText contains 'discount'")

@@ -1,4 +1,5 @@
 import { sanitizeToolParameters } from '../input-sanitizer';
+import { BACKTICK_COMMAND, PATH_TRAVERSAL } from '../injection-shapes';
 
 /**
  * Tool arguments come from an LLM or an MCP client. The shell, template
@@ -7,13 +8,18 @@ import { sanitizeToolParameters } from '../input-sanitizer';
  * to six seconds. Same verdicts, one pass.
  */
 
-/** The patterns as they were, to hold the rewrite to the same answers. */
+/**
+ * The patterns as they were, to hold the rewrite to the same answers. The
+ * backtick and path checks were narrowed on purpose since (injection-shapes.ts:
+ * Markdown code spans and an ellipsis before a quote are not attacks), so
+ * those two are compared against their current shape.
+ */
 const PREVIOUS: Array<[string, RegExp]> = [
   ['shell-command', /[;&|`$].*(?:rm|curl|wget|nc|ncat|bash|sh|python|perl|ruby|php)\b/i],
-  ['backtick-exec', /`[^`]+`/],
+  ['backtick-exec', BACKTICK_COMMAND],
   ['xxe-entity', /<!ENTITY\s/i],
   ['xxe-system', /<!DOCTYPE[^>]*SYSTEM/i],
-  ['path-traversal', /\.\.[/\\]/],
+  ['path-traversal', PATH_TRAVERSAL],
   ['ssrf-localhost', /(?:^|\s)(?:localhost|127\.0\.0\.1|0\.0\.0\.0|::1)(?::\d+)?(?:\s|$|\/)/i],
   ['ssrf-metadata', /169\.254\.169\.254/i],
   ['template-injection', /\{\{.*\}\}/],

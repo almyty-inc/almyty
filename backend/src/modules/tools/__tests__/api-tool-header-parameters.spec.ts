@@ -44,6 +44,11 @@ describe('API tools take declared header parameters', () => {
     expect(operationHeaderParams(null)).toEqual([]);
   });
 
+  it("a SOAP operation's SOAPAction header is not an input: the SOAP call sets it", () => {
+    const soapOperation = { parameters: { header: { 'Content-Type': { type: 'string' }, SOAPAction: { type: 'string' } } } } as any;
+    expect(operationHeaderParams(soapOperation)).toEqual([]);
+  });
+
   it('a generated tool has the header as an input, required when the description says so', async () => {
     const helper = new ToolsOperationHelper({} as any, {} as any, {} as any, {} as any);
     const params = await helper.generateToolParametersFromOperation(xeroGetBankTransactions);

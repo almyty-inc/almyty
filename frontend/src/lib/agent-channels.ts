@@ -382,7 +382,7 @@ export const CHANNEL_DESCRIPTIONS: Record<ChannelType, string> = {
   signal: 'Answers on Signal through a bridge you run.',
   matrix: 'Answers in a Matrix room through a bridge you run.',
   irc: 'Answers in an IRC channel through a bridge you run.',
-  webhook: 'Takes messages from, and sends replies to, an endpoint you own.',
+  webhook: 'Lets any service that can call a web address start the agent. Replies go to an address you own, if you give one.',
 }
 
 /** Channels built into a download rather than served. */

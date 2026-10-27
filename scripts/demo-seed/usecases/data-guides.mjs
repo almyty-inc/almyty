@@ -366,11 +366,8 @@ async function payouts(page, h) {
   await connectModel(page, h)
   if (sql(`SELECT count(*) FROM apis WHERE name = 'Stripe' AND "organizationId" = '${orgOf()}'`) === '0') {
     await importApi(page, h, { link: 'https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json', name: 'Stripe', address: `${UP}/stripe`, linkShot: 'pay-01' })
-    // Stripe's description offers basic auth first; a bearer token is the same key, without the empty password.
-    await page.getByRole('button', { name: 'Change', exact: true }).click()
-    await page.locator('#api-key-sent').click()
-    await page.getByRole('option', { name: 'As a bearer token' }).click()
-    await h.wait(500)
+    // Stripe's description offers a bearer token next to basic auth; almyty picks the token.
+    await page.getByTestId('api-key-sent-as').getByText('Sent as a bearer token').waitFor({ timeout: 15000 })
     await page.getByRole('button', { name: 'Create one here' }).first().click()
     await h.wait(800)
     await page.getByRole('textbox', { name: 'Name', exact: true }).last().fill('Stripe restricted key (read only)')
