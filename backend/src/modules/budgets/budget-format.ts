@@ -12,7 +12,7 @@ const SMALL_AMOUNT_DECIMALS = 4;
 export function formatSpendCents(cents: number): string {
   const dollars = (Number.isFinite(cents) ? cents : 0) / 100;
   if (Math.abs(dollars) >= 1 || dollars === 0) return `$${dollars.toFixed(2)}`;
-  const fixed = dollars.toFixed(SMALL_AMOUNT_DECIMALS).replace(/0+$/, '');
+  const fixed = dollars.toFixed(SMALL_AMOUNT_DECIMALS).replace(/(?<!0)0+$/, '');
   const [whole, frac = ''] = fixed.split('.');
   return `$${whole}.${frac.padEnd(2, '0')}`;
 }

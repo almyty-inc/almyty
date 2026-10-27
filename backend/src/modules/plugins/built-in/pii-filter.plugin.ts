@@ -76,7 +76,7 @@ export function isUnixTimeInContext(match: string, text: string, offset: number,
   if (!timeField) return false;
   if (field && text.trim() === match && timeField.test(field)) return true;
   const before = text.slice(Math.max(0, offset - KEY_LOOKBEHIND), offset);
-  const key = /["']?([A-Za-z0-9_.-]+)["']?\s*[:=]\s*["']?$/.exec(before)?.[1];
+  const key = /["']?(?<![\w.-])([\w.-]+)["']?\s*[:=]\s*["']?$/.exec(before)?.[1];
   if (key) return timeField.test(key);
   const around = text.slice(Math.max(0, offset - KEY_LOOKBEHIND), offset + match.length + KEY_LOOKBEHIND);
   return ISO_DATE.test(around);
