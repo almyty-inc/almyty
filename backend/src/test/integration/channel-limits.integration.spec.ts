@@ -296,6 +296,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       extractTenantId: () => null,
       verifyWebhook: async () => true,
       actionOf: () => null,
+      repliesTo: () => true,
       carriesMessage: () => true,
       deliveryId: (body: any) => String(body.update_id),
       normalizeInbound: (body: any) => ({
