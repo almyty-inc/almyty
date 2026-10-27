@@ -862,6 +862,8 @@ export interface CreatePolicyPayload {
 
 export const rbacApi = {
   // Custom roles
+  /** The permissions a custom role can grant, each with what it unlocks; nothing else gates a route. */
+  listPermissions: () => apiGet<Array<{ permission: string; description: string }>>('/rbac/permissions'),
   listRoles: () => apiGet<CustomRole[]>('/rbac/roles'),
   createRole: (data: CreateRolePayload) => apiPost<CustomRole>('/rbac/roles', data),
   updateRole: (id: string, data: UpdateRolePayload) =>
