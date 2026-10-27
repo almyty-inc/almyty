@@ -290,6 +290,13 @@ function pickAuth(
     // Only another OAuth sign-in replaces the fallback; a key declared next to it does not.
     if (!signInFallback) {
       if (tokenFallback && mapped.type !== 'oauth2') return tokenFallback;
+      // Basic auth offered next to a bearer token for the same key (Stripe
+      // lists basic first, with the key as the username and an empty
+      // password): the token is one secret pasted as it is, so it wins.
+      if (mapped.type === 'basic') {
+        const bearer = named.find((n) => schemes[n]?.type === 'http' && String(schemes[n].scheme ?? '').toLowerCase() === 'bearer');
+        if (bearer) return { type: 'bearer' };
+      }
       return mapped;
     }
     tokenFallback ??= mapped;
