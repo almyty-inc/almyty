@@ -139,6 +139,14 @@ export interface PushWakeSpec {
   renew?: PushRenewStep | null;
   stop?: PushToolCall | null;
   changes?: PushChangesStep | null;
+  /**
+   * What the subscribe step subscribes to, for sharing (template over
+   * settings.<key>). Agents that subscribe the same connection to the same
+   * resource with the same spec share one subscription, since a service may
+   * allow one per resource (one watch per mailbox). A constant means one per
+   * connection. Empty: all the settings.
+   */
+  resourceKey?: string | null;
   /** The wake's line (template over count, first.<field>, name). */
   summary: string;
 }
@@ -335,6 +343,7 @@ export function checkSpec(raw: unknown): PushWakeSpec {
     stop: null,
     changes: null,
     summary: str(v.summary ?? 'Something changed', 'The wake line', 300),
+    resourceKey: v.resourceKey === undefined || v.resourceKey === null || v.resourceKey === '' ? null : str(v.resourceKey, 'What it subscribes to', 300),
   };
   if (v.subscribe) {
     spec.subscribe = {

@@ -12,6 +12,7 @@ import { exportJWK, generateKeyPair, SignJWT, createLocalJWKSet, type JWK } from
 
 import { fakeRepository, FakeRepository } from '../../../../../test/fake-repository';
 import { AgentPushWake } from '../../../../../entities/agent-push-wake.entity';
+import { PushSubscription } from '../../../../../entities/push-subscription.entity';
 import { PushWakesService } from '../push-wakes.service';
 import { AGENT, ORG, OWNER, World, alwaysOnAgent, world } from '../../__tests__/always-on.harness';
 
@@ -73,7 +74,8 @@ export function fakeCredentialRefs() {
 export interface PushWorld {
   service: PushWakesService;
   alwaysOn: World;
-  rows: FakeRepository<any>;
+  subs: FakeRepository<any>;
+  members: FakeRepository<any>;
   apis: FakeRepository<any>;
   operations: FakeRepository<any>;
   tools: FakeRepository<any>;
@@ -88,10 +90,11 @@ export interface PushWorld {
 /** A world whose connection API has a tool for each operation in `handlers`. */
 export function pushWorld(handlers: Record<string, Handler>, options: { agent?: Record<string, any> } = {}): PushWorld {
   const alwaysOn = world({ agent: options.agent ?? alwaysOnAgent({}, { wakeOn: { timer: { everyMinutes: 30 }, channelIds: [], connectionEvents: [] }, ownerChannel: null }) });
-  const rows = fakeRepository<any>({ make: () => new AgentPushWake(), idPrefix: 'pw' });
+  const subs = fakeRepository<any>({ make: () => new PushSubscription(), idPrefix: 'sub' });
+  const members = fakeRepository<any>({ make: () => new AgentPushWake(), idPrefix: 'pw' });
   const apis = fakeRepository<any>([
-    { id: API, organizationId: ORG, name: 'The service' },
-    { id: OTHER_API, organizationId: ORG, name: 'Something else' },
+    { id: API, organizationId: ORG, name: 'The service', visibility: 'org', teamId: null, ownerUserId: null },
+    { id: OTHER_API, organizationId: ORG, name: 'Something else', visibility: 'org', teamId: null, ownerUserId: null },
   ]);
   const operations = fakeRepository<any>([]);
   const tools = fakeRepository<any>([]);
@@ -120,7 +123,8 @@ export function pushWorld(handlers: Record<string, Handler>, options: { agent?: 
   const redis = pushRedis();
   const credentials = fakeCredentialRefs();
   const service = new PushWakesService(
-    rows as any,
+    members as any,
+    subs as any,
     alwaysOn.agents as any,
     apis as any,
     operations as any,
@@ -131,8 +135,10 @@ export function pushWorld(handlers: Record<string, Handler>, options: { agent?: 
     alwaysOn.service,
     credentials as any,
     undefined,
+    // The real execution gate: an agent may join only a connection its owner can use.
+    alwaysOn.membership.executionAccess,
   );
-  return { service, alwaysOn, rows, apis, operations, tools, queue, redis, credentials, calls, handlers };
+  return { service, alwaysOn, subs, members, apis, operations, tools, queue, redis, credentials, calls, handlers };
 }
 
 export function hmacHex(key: string, content: string): string {

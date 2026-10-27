@@ -22,8 +22,6 @@ import { Field } from '@/components/layout/form-page'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { formatWakeTime } from '@/lib/always-on'
 import {
-  CUSTOM_SPEC_TEMPLATE,
-  VERIFY_LABELS,
   describePushWake,
   pushWakeHealth,
   pushWakesApi,
@@ -34,8 +32,11 @@ import {
 } from '@/lib/push-wakes'
 import { useNotifications } from '@/store/app'
 import { pluralized } from '@/lib/utils'
+import { CustomPushWakeForm } from './custom-push-wake-form'
+import { customCallsTools, customNeedsSecret, emptyCustomForm, specFromCustomForm, type CustomPushForm } from './custom-push-wake'
 
 const CUSTOM = '__custom__'
+const NO_API = '__none__'
 
 function SetupSteps({ steps }: { steps: PushSetupStep[] }) {
   if (!steps.length) return null
@@ -103,6 +104,11 @@ function PushWakeRow({ agentId, view }: { agentId: string; view: PushWakeView })
         <span className="text-sm font-medium">{view.name}</span>
         <ConnectionHealthBadge health={pushWakeHealth(view)} />
         {view.apiName && <span className="text-xs text-muted-foreground">through {view.apiName}</span>}
+        {view.sharedWith > 0 && (
+          <span className="text-xs text-muted-foreground" data-testid="push-wake-shared">
+            shared with {pluralized(view.sharedWith, 'other agent')}
+          </span>
+        )}
         <div className="ml-auto flex gap-2">
           {subscribes && (
             <Button type="button" variant="outline" size="sm" disabled={resubscribe.isPending} onClick={() => resubscribe.mutate()}>
@@ -159,8 +165,9 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
   const custom = kind === CUSTOM
   const [apiId, setApiId] = useState('')
   const [settings, setSettings] = useState<Record<string, string>>({})
-  const [name, setName] = useState('')
-  const [spec, setSpec] = useState(CUSTOM_SPEC_TEMPLATE)
+  const [form, setForm] = useState<CustomPushForm>(emptyCustomForm)
+  // "Edit as JSON": the spec as text, used instead of the form while it is open.
+  const [json, setJson] = useState<string | null>(null)
   const [secret, setSecret] = useState('')
   const [debounce, setDebounce] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
@@ -171,23 +178,27 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
     return preset ? all.filter((a) => a.presets.includes(preset.key)) : all
   }, [options.data, preset])
 
-  const parsedSpec = useMemo(() => {
-    if (!custom) return null
+  const parsedJson = useMemo(() => {
+    if (json === null) return null
     try {
-      return JSON.parse(spec)
+      return JSON.parse(json)
     } catch {
       return undefined
     }
-  }, [custom, spec])
-  const method = preset?.spec.verification.method ?? parsedSpec?.verification?.method
-  const needsSecret = method === 'hmac' || (method === 'shared_token' && parsedSpec?.verification?.generated === false)
-  const callsTools = custom ? !!(parsedSpec?.subscribe || parsedSpec?.changes || parsedSpec?.stop) : true
+  }, [json])
+  const method = preset?.spec.verification.method ?? (json !== null ? parsedJson?.verification?.method : form.method)
+  const needsSecret = custom
+    ? json !== null
+      ? method === 'hmac' || (method === 'shared_token' && parsedJson?.verification?.generated === false)
+      : customNeedsSecret(form)
+    : method === 'hmac'
+  const callsTools = custom ? (json !== null ? !!(parsedJson?.subscribe || parsedJson?.changes || parsedJson?.stop) : customCallsTools(form)) : true
 
   const create = useMutation({
     mutationFn: (input: PushWakeInput) => pushWakesApi.create(agentId, input),
     onSuccess: async (view: PushWakeView) => {
       if (view.health.status === 'failed') errorNotif('Saved, but subscribing failed', view.health.error ?? 'See the error under it.')
-      else success('Push wake added', view.name)
+      else success(view.sharedWith ? 'Joined the subscription another agent has' : 'Push wake added', view.name)
       await queryClient.invalidateQueries({ queryKey: ['agent-push-wakes', agentId] })
       await queryClient.invalidateQueries({ queryKey: ['agent-always-on', agentId] })
       onDone()
@@ -198,7 +209,17 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
   const submit = () => {
     setProblem(null)
     if (!kind) return setProblem('Choose what it should watch.')
-    if (custom && parsedSpec === undefined) return setProblem('The description is not valid JSON.')
+    let spec: unknown = null
+    if (custom) {
+      if (json !== null) {
+        if (parsedJson === undefined) return setProblem('The JSON is not valid.')
+        spec = parsedJson
+      } else {
+        const built = specFromCustomForm(form)
+        if (!built.spec) return setProblem(built.error ?? 'Something is missing.')
+        spec = built.spec
+      }
+    }
     if (callsTools && !apiId) return setProblem('Choose the connection it subscribes with.')
     for (const f of preset?.fields ?? []) {
       if (f.required && !(settings[f.key] ?? '').trim()) return setProblem(`Enter ${f.label.toLowerCase()}.`)
@@ -207,7 +228,7 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
     const seconds = debounce.trim() === '' ? null : Number(debounce)
     if (seconds !== null && !(Number.isInteger(seconds) && seconds >= 0 && seconds <= 3600)) return setProblem('The wait is a whole number of seconds, 0 to 3600.')
     create.mutate({
-      ...(preset ? { presetKey: preset.key, settings } : { spec: parsedSpec, name: name.trim() || null }),
+      ...(preset ? { presetKey: preset.key, settings } : { spec, name: form.name.trim() || null }),
       ...(callsTools && apiId ? { apiId } : {}),
       ...(needsSecret ? { secret: secret.trim() } : {}),
       debounceSeconds: seconds,
@@ -241,22 +262,27 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
         </Select>
       </Field>
 
-      {kind && callsTools && (
+      {kind && (preset || custom) && (
         <Field
           id="push-wake-api"
           label="Connection"
-          hint={preset ? 'Its sign-in subscribes and reads what changed. Only connections with every tool it needs are listed.' : 'The API whose tools the description calls.'}
+          hint={
+            preset
+              ? 'Its sign-in subscribes and reads what changed. Only connections with every tool it needs are listed. Agents on the same connection share one subscription.'
+              : 'The API whose tools the steps below call. Not needed when the service is set up by hand.'
+          }
         >
           {apis.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="push-wake-no-api">
               {preset?.apiHint ?? 'Connect the service under APIs first.'} <Link className="underline" to="/apis">APIs</Link>
             </p>
           ) : (
-            <Select value={apiId} onValueChange={setApiId}>
+            <Select value={custom ? apiId || NO_API : apiId} onValueChange={(v) => setApiId(v === NO_API ? '' : v)}>
               <SelectTrigger id="push-wake-api">
                 <SelectValue placeholder="Choose a connection" />
               </SelectTrigger>
               <SelectContent>
+                {custom && <SelectItem value={NO_API}>None: the service is set up by hand</SelectItem>}
                 {apis.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
                     {a.name}
@@ -284,20 +310,37 @@ function AddPushWake({ agentId, onDone }: { agentId: string; onDone: () => void 
         </>
       )}
 
+      {custom && json === null && (
+        <CustomPushWakeForm agentId={agentId} apiId={apiId} addressPrefix={options.data?.addressPrefix ?? ''} form={form} onChange={setForm} />
+      )}
       {custom && (
-        <>
-          <Field id="push-wake-name" label="Name">
-            <Input id="push-wake-name" placeholder="Orders service" value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <Field
-            id="push-wake-spec"
-            label="How it is verified, and what it calls"
-            hint="JSON: verification (shared_token, hmac or oidc_jwt), and optionally subscribe, renew, stop and changes as calls to the connection's tools. See the docs for every field."
-          >
-            <Textarea id="push-wake-spec" rows={10} className="font-mono text-xs" value={spec} onChange={(e) => setSpec(e.target.value)} />
-          </Field>
-          {method && <p className="text-xs text-muted-foreground">Verified by: {VERIFY_LABELS[method as keyof typeof VERIFY_LABELS] ?? method}</p>}
-        </>
+        <Disclosure
+          title="Edit as JSON"
+          summary={json === null ? 'For a field the form does not have' : 'The JSON is used instead of the form'}
+          defaultOpen={json !== null}
+          testId="push-wake-json"
+        >
+          {json === null ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const built = specFromCustomForm(form)
+                setJson(JSON.stringify(built.spec ?? { verification: { method: form.method, headerName: form.headerName }, summary: form.summary }, null, 2))
+              }}
+            >
+              Use JSON instead of the form
+            </Button>
+          ) : (
+            <>
+              <Textarea aria-label="Push wake JSON" rows={12} className="font-mono text-xs" value={json} onChange={(e) => setJson(e.target.value)} />
+              <Button type="button" variant="ghost" size="sm" onClick={() => setJson(null)}>
+                Back to the form (drops the JSON)
+              </Button>
+            </>
+          )}
+        </Disclosure>
       )}
 
       {kind && needsSecret && (

@@ -80,7 +80,7 @@ const NO_PRINCIPAL_SITES: Record<string, string> = {
   'modules/hosted-runners/hosted-runners.service.ts':
     'the platform runner pool\'s cluster connection, named by the operator (HOSTED_RUNNERS_CLUSTER_CONNECTION): the reconcile loop acts for the platform, not for a person, and the row is an org row of the operator\'s organization',
   'modules/agents/always-on/push-wakes/push-wakes.service.ts':
-    'an inbound push is verified before anyone is known to be behind it; the row is the push wake\'s own managed verification value (shared value or HMAC key)',
+    'an inbound push is verified before anyone is known to be behind it; the row is the push subscription\'s own managed verification value (shared value or HMAC key)',
 };
 
 interface Site {

@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   Request,
   UseGuards,
@@ -76,6 +77,19 @@ export class PushWakesController {
       return { success: true, data: await this.pushWakes.options(organizationId, req.user?.id ?? null) };
     } catch (error) {
       this.fail(error, 'PUSH_WAKES_OPTIONS_FAILED');
+    }
+  }
+
+  @Get(':id/push-wakes/operations')
+  @ApiOperation({ summary: "A connection's operations that have an active tool, for a custom push wake's steps" })
+  @ApiParam({ name: 'id', description: 'Agent ID' })
+  async operations(@Param('id', ParseUUIDPipe) id: string, @Query('apiId', ParseUUIDPipe) apiId: string, @Request() req: any) {
+    try {
+      const organizationId = this.organizationOf(req);
+      await this.agentsService.getAgent(id, organizationId);
+      return { success: true, data: await this.pushWakes.operationsOf(apiId, organizationId) };
+    } catch (error) {
+      this.fail(error, 'PUSH_WAKES_OPERATIONS_FAILED');
     }
   }
 
@@ -151,14 +165,14 @@ export class PushWakesController {
 export class PushWakeReceiverController {
   constructor(private readonly pushWakes: PushWakesService) {}
 
-  @Post(':pushWakeId')
+  @Post(':subscriptionId')
   @HttpCode(204)
   @ApiExcludeEndpoint()
-  async receive(@Param('pushWakeId') pushWakeId: string, @Req() req: any): Promise<void> {
+  async receive(@Param('subscriptionId') subscriptionId: string, @Req() req: any): Promise<void> {
     const headers: Record<string, string | undefined> = {};
     for (const [k, v] of Object.entries(req.headers ?? {})) headers[k.toLowerCase()] = Array.isArray(v) ? v[0] : (v as string | undefined);
     const rawBody = req.rawBody ? Buffer.from(req.rawBody).toString('utf8') : JSON.stringify(req.body ?? {});
-    const outcome = await this.pushWakes.receive(pushWakeId, { headers, rawBody });
+    const outcome = await this.pushWakes.receive(subscriptionId, { headers, rawBody });
     if (outcome === 'unknown') throw new HttpException('Not found', HttpStatus.NOT_FOUND);
     if (outcome === 'rejected') throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
   }

@@ -8,7 +8,7 @@ const notify = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn
 vi.mock('@/store/app', () => ({ useNotifications: () => notify }))
 vi.mock('@/lib/push-wakes', async (importOriginal) => ({
   ...(await importOriginal<any>()),
-  pushWakesApi: { list: vi.fn(), options: vi.fn(), create: vi.fn(), update: vi.fn(), resubscribe: vi.fn(), remove: vi.fn() },
+  pushWakesApi: { list: vi.fn(), options: vi.fn(), create: vi.fn(), update: vi.fn(), resubscribe: vi.fn(), remove: vi.fn(), operations: vi.fn() },
 }))
 
 import { pushWakesApi, describePushWake, pushWakeHealth, type PushWakeView } from '@/lib/push-wakes'
@@ -36,6 +36,7 @@ const CALENDAR = { ...GMAIL, key: 'google_calendar', name: 'Google Calendar', de
 
 const ROW: PushWakeView = {
   id: 'pw-1',
+  subscriptionId: 'sub-1',
   name: 'Gmail',
   presetKey: 'gmail',
   apiId: 'api-gmail',
@@ -51,6 +52,7 @@ const ROW: PushWakeView = {
   lastRenewedAt: null,
   subscriptionExpiresAt: null,
   renewAt: null,
+  sharedWith: 0,
   setup: [{ text: 'Create a push subscription.', consolePath: 'Pub/Sub → Subscriptions → Create subscription', command: 'gcloud pubsub subscriptions create x --push-endpoint="https://api.example.test/push-wakes/pw-1"' }],
   spec: { subscribe: {} },
 }
@@ -74,10 +76,12 @@ describe('push wakes on the always-on page', () => {
         { id: 'api-gmail', name: 'Gmail API', presets: ['gmail'] },
         { id: 'api-cal', name: 'Calendar API', presets: ['google_calendar'] },
       ],
+      addressPrefix: 'https://api.example.test/push-wakes/',
     })
     vi.mocked(pushWakesApi.create).mockReset().mockResolvedValue({ ...ROW, health: { status: 'valid', checkedAt: null, error: null } })
     vi.mocked(pushWakesApi.resubscribe).mockReset().mockResolvedValue(ROW)
     vi.mocked(pushWakesApi.update).mockReset().mockResolvedValue(ROW)
+    vi.mocked(pushWakesApi.operations).mockReset().mockResolvedValue([])
     notify.success.mockReset()
     if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
     if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
@@ -141,22 +145,86 @@ describe('push wakes on the always-on page', () => {
     )
   })
 
-  it('a custom service: its own description, and the signing key for HMAC', async () => {
+  it('a custom service: a form, not JSON; the address it will get, the signing key for HMAC, no connection needed', async () => {
     renderSection()
     await userEvent.click(await screen.findByRole('button', { name: 'Add a service' }))
     await userEvent.click(screen.getByLabelText('Watch'))
     await userEvent.click(await screen.findByRole('option', { name: 'Another service that pushes changes' }))
-    // The starting description only verifies; it calls no tools, so no connection is asked for.
-    expect(screen.queryByLabelText('Connection')).toBeNull()
+    expect(screen.queryByRole('textbox', { name: 'Push wake JSON' })).toBeNull()
+    expect(within(screen.getByTestId('custom-push-wake-form')).getAllByTestId('copy-field-value')[0]).toHaveTextContent('https://api.example.test/push-wakes/<made when you save>')
     await userEvent.click(screen.getByRole('button', { name: 'Save and subscribe' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Enter the signing key the service gave you.')
     await userEvent.type(screen.getByLabelText('Signing key'), 'whsec_123')
     await userEvent.type(screen.getByLabelText('Name'), 'Orders')
+    await userEvent.type(screen.getByLabelText(/Before the signature/), 'sha256=')
     await userEvent.click(screen.getByRole('button', { name: 'Save and subscribe' }))
     await waitFor(() => expect(pushWakesApi.create).toHaveBeenCalled())
     const [, input] = vi.mocked(pushWakesApi.create).mock.calls[0]
-    expect(input).toMatchObject({ name: 'Orders', secret: 'whsec_123', spec: { verification: { method: 'hmac' } } })
-    expect(input.apiId).toBeUndefined()
+    expect(input).toEqual({
+      name: 'Orders',
+      secret: 'whsec_123',
+      debounceSeconds: null,
+      spec: {
+        verification: { method: 'hmac', headerName: 'X-Signature', algorithm: 'sha256', encoding: 'hex', prefix: 'sha256=', signedContent: '{{body}}' },
+        summary: '{{name}}: something changed',
+      },
+    })
+  })
+
+  it('a custom step picks one of the connection\'s tools and takes argument rows', async () => {
+    vi.mocked(pushWakesApi.operations).mockReset().mockResolvedValue([
+      { operationId: 'hooks.create', name: 'Create a hook', method: 'POST', path: '/hooks' },
+      { operationId: 'hooks.delete', name: 'Delete a hook', method: 'DELETE', path: '/hooks/{id}' },
+    ])
+    renderSection()
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a service' }))
+    await userEvent.click(screen.getByLabelText('Watch'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Another service that pushes changes' }))
+    // A shared value almyty makes needs no key from the person.
+    await userEvent.click(screen.getByLabelText('How a push proves it came from the service'))
+    await userEvent.click(await screen.findByRole('option', { name: 'A value only the service knows, in a header' }))
+    await userEvent.click(screen.getByLabelText('Subscribe'))
+    expect(within(screen.getByTestId('custom-step-subscribe')).getByText(/Choose the connection above first/)).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Connection'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Gmail API' }))
+    await waitFor(() => expect(pushWakesApi.operations).toHaveBeenCalledWith('a1', 'api-gmail'))
+    await userEvent.click(await screen.findByTestId('custom-step-subscribe-tool-trigger'))
+    await userEvent.click(await screen.findByTestId('custom-step-subscribe-tool-option-hooks.create'))
+    const step = screen.getByTestId('custom-step-subscribe')
+    await userEvent.click(within(step).getByRole('button', { name: 'Add argument' }))
+    await userEvent.click(within(step).getByLabelText('Argument 1 goes in'))
+    await userEvent.click(await screen.findByRole('option', { name: 'body' }))
+    await userEvent.type(within(step).getByLabelText('Argument 1 name'), 'target.url')
+    await userEvent.type(within(step).getByLabelText('Argument 1 value'), '{{{{endpoint.url}}')
+    await userEvent.click(screen.getByRole('button', { name: 'Save and subscribe' }))
+    await waitFor(() => expect(pushWakesApi.create).toHaveBeenCalled())
+    const [, input] = vi.mocked(pushWakesApi.create).mock.calls[0]
+    expect(input).toMatchObject({
+      apiId: 'api-gmail',
+      spec: {
+        verification: { method: 'shared_token', headerName: 'X-Signature', generated: true },
+        subscribe: { operation: 'hooks.create', arguments: { body: { target: { url: '{{endpoint.url}}' } } } },
+      },
+    })
+    expect(input.secret).toBeUndefined()
+  })
+
+  it('Edit as JSON starts from the form and is used instead of it', async () => {
+    renderSection()
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a service' }))
+    await userEvent.click(screen.getByLabelText('Watch'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Another service that pushes changes' }))
+    await userEvent.click(screen.getByRole('button', { name: /Edit as JSON/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use JSON instead of the form' }))
+    const text = screen.getByRole('textbox', { name: 'Push wake JSON' }) as HTMLTextAreaElement
+    expect(JSON.parse(text.value).verification.method).toBe('hmac')
+    expect(screen.queryByTestId('custom-push-wake-form')).toBeNull()
+  })
+
+  it('says when a push wake is shared with other agents', async () => {
+    vi.mocked(pushWakesApi.list).mockResolvedValue([{ ...ROW, sharedWith: 2 }])
+    renderSection()
+    expect(await screen.findByTestId('push-wake-shared')).toHaveTextContent('shared with 2 other agents')
   })
 })
 

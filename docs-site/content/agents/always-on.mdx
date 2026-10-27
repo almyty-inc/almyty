@@ -85,7 +85,14 @@ Each one then shows, the way connections do:
   setup steps again.
 
 **Subscribe again** starts it over, after you fixed what the error said.
-**Remove** stops it at the service as well.
+**Remove** stops it at the service as well, unless another agent shares it (below).
+
+Some services allow one subscription per account: Gmail keeps one watch per
+mailbox. When several agents watch the same Gmail (or the same calendar)
+through the same connection, they share one subscription, and each row says
+**shared with** the others. Every agent on it that is on wakes for each
+change. **Remove** takes this agent off; the subscription is stopped at the
+service only when the last agent leaves.
 
 What the agent is told: which items changed, by their id, name and time (an
 event's title and start, an email's sender and subject), never what is in
@@ -163,11 +170,14 @@ step 3 is missing.
 ### Any other service
 
 Any service that sends a webhook when something changes can wake the agent
-the same way. Choose **Another service that pushes changes** and describe
-it: how its pushes are proven (a value in a header, an HMAC signature, or a
-signed token), and, if the service needs it, which of the connection's
-tools subscribe, renew, stop, and read what changed. The fields are listed
-under [For developers](#push-wakes-for-developers).
+the same way. Choose **Another service that pushes changes** and fill in the
+form: how its pushes are proven (a value in a header, an HMAC signature, or a
+signed token, each with its own fields), and, if the service needs it, the
+steps: **Subscribe**, **Renew**, **Stop** and **Read what changed**, each one
+of the connection's tools with its arguments. The address the service sends
+to is shown at the top. For a field the form does not have, **Edit as JSON**
+takes the same description as text; the fields are listed under
+[For developers](#push-wakes-for-developers).
 
 ## The daily summary
 
@@ -250,7 +260,7 @@ A push wake is data. Google Calendar and Gmail are presets that fill these
 fields (`backend/src/modules/agents/always-on/push-wakes/push-wake-presets.ts`);
 a custom one sends the same shape as `spec`.
 
-- Address: `POST {PUSH_WAKE_PUBLIC_URL or BASE_URL}/push-wakes/<id>`. It
+- Address: `POST {PUSH_WAKE_PUBLIC_URL or BASE_URL}/push-wakes/<subscription id>`. It
   answers `204` for a push that is taken or deliberately ignored, `401` when
   it does not verify, `404` for an unknown id.
 - `verification`, one of:
@@ -312,11 +322,23 @@ a custom one sends the same shape as `spec`.
   `page` and `item.<field>`. A string that is exactly one placeholder keeps
   the value's type, and an argument with no value is left out.
 - API: `GET /agents/:id/push-wakes`, `GET /agents/:id/push-wakes/options`
-  (presets, and the connections each can run on), `POST
-  /agents/:id/push-wakes` (`presetKey` or `spec`, `apiId`, `name`,
-  `settings`, `debounceSeconds`, `secret`), `PATCH
-  /agents/:id/push-wakes/:pushWakeId` (`name`, `debounceSeconds`,
-  `settings`; new settings subscribe again), `POST
+  (presets, the connections each can run on, and the address prefix), `GET
+  /agents/:id/push-wakes/operations?apiId=` (the connection's operations
+  with an active tool), `POST /agents/:id/push-wakes` (`presetKey` or `spec`,
+  `apiId`, `name`, `settings`, `debounceSeconds`, `secret`), `PATCH
+  /agents/:id/push-wakes/:pushWakeId` (`name`, `debounceSeconds`, `settings`;
+  new settings move the agent to that resource's subscription), `POST
   /agents/:id/push-wakes/:pushWakeId/subscribe`, `DELETE
-  /agents/:id/push-wakes/:pushWakeId` (stops it at the service). Deleting
-  the agent stops all of them.
+  /agents/:id/push-wakes/:pushWakeId` (leaves the subscription; the last
+  agent to leave stops it at the service). Deleting the agent leaves all of
+  them.
+- Sharing: a spec with a `subscribe` step is one subscription per
+  connection, preset (or spec) and resource. `resourceKey` (a template over
+  `settings`) names the resource; the Gmail preset uses a constant (one watch
+  per mailbox), the Calendar preset `{{settings.calendarId}}`; without it, all
+  the settings. A second agent on the same key joins it: one subscribe call,
+  one cursor, one "what changed" read (as the member that has been on it
+  longest and is on), and one wake per member agent that is on, each deduped
+  on its own. Joining with other settings for the same resource is refused,
+  and an agent whose principal cannot use the connection cannot join. A spec
+  without a `subscribe` step is never shared.

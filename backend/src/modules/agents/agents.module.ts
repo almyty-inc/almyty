@@ -28,6 +28,7 @@ import { AgentFile } from '../../entities/file.entity';
 import { Workspace } from '../../entities/workspace.entity';
 import { AgentWake } from '../../entities/agent-wake.entity';
 import { AgentPushWake } from '../../entities/agent-push-wake.entity';
+import { PushSubscription } from '../../entities/push-subscription.entity';
 import { Api } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
@@ -122,6 +123,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
       ConnectionGrant,
       // Push wakes, and the connection (API, operations) their steps call.
       AgentPushWake,
+      PushSubscription,
       Api,
       Operation,
     ]),

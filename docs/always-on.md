@@ -258,20 +258,29 @@ resumed automatically.
 `GET /agents/:id/always-on/wakes`. Audit actions: `always_on_enable`,
 `always_on_disable`, `always_on_pause`, `wake_dropped`.
 
-**Push wakes.** `agent_push_wakes` (migration `1791000500000-AgentPushWakes`):
-one row per service that pushes changes to an agent. The spec is data
-(`push-wakes/push-wake.types.ts`): a verification method (`shared_token`,
-`hmac`, `oidc_jwt`), header checks, and optional `subscribe`, `renew`, `stop`
-and `changes` steps run as calls to the chosen connection's own tools by
-operation id, as the agent's unattended principal. Google Calendar and Gmail
-are presets (`push-wake-presets.ts`), nothing in the code names them. The
-verification value is a managed credential (`agent_push_wake`). Flow:
-`POST /push-wakes/:id` -> `PushWakesService.receive` (verify, checks, ignore,
-count) -> first push of a window queues `push-wake-changes` after
-`debounceSeconds` -> `processPushes` reads what changed from the stored cursor
--> `AlwaysOnService.pushEvent` -> `wake(..., 'push', ...)`. The
-`push-wake-renew` repeatable job (every `PUSH_WAKE_RENEW_SWEEP_MINUTES`)
-subscribes again whatever is due. Deleting an agent stops its subscriptions
-first (`AgentsService.deleteAgent`). Field reference: the docs site, Always
-on, "Push wakes, for developers".
+**Push wakes.** `push_subscriptions` and `agent_push_wakes` (migration
+`1791000500000-AgentPushWakes`). A push subscription is one subscription at a
+service: its address (`POST /push-wakes/:subscriptionId`), spec, settings,
+cursor, health and verification credential. `agent_push_wakes` is an agent's
+membership in one. The spec is data (`push-wakes/push-wake.types.ts`): a
+verification method (`shared_token`, `hmac`, `oidc_jwt`), header checks, and
+optional `subscribe`, `renew`, `stop` and `changes` steps run as calls to the
+chosen connection's own tools by operation id, as a member agent's unattended
+principal. Google Calendar and Gmail are presets (`push-wake-presets.ts`),
+nothing in the code names them. The verification value is a managed
+credential (`push_subscription`). Agents share a subscription when the
+connection, preset (or spec hash) and resource (`resourceKey` over the
+settings) match (`subscriptionKey`, unique per org), because a service may
+allow one per resource (Gmail: one watch per mailbox); only specs with a
+`subscribe` step are shared. Flow: `PushWakesService.receive` (verify,
+checks, ignore, count) -> first push of a window queues `push-wake-changes`
+after `debounceSeconds` -> `processPushes` reads what changed once from the
+subscription's cursor, as the longest-standing member that is on -> one
+`AlwaysOnService.pushEvent` per member agent that is on -> `wake(..., 'push',
+...)`, deduped per agent. The `push-wake-renew` repeatable job (every
+`PUSH_WAKE_RENEW_SWEEP_MINUTES`) subscribes again whatever is due. Leaving
+(remove, or deleting the agent: `AgentsService.deleteAgent`) stops the
+subscription only when its last member leaves. Field reference: the docs
+site, Always on, "Push wakes, for developers".
+
 **Retention.** See [retention.md](retention.md#an-always-on-agents-standing-conversation).

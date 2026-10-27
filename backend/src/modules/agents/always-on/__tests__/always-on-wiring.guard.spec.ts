@@ -95,12 +95,13 @@ describe('Always on is wired', () => {
     const pushService = code('modules/agents/always-on/push-wakes/push-wakes.service.ts');
     const controller = code('modules/agents/always-on/push-wakes/push-wakes.controller.ts');
     // The public address hands every push to receive().
-    expect(controller).toMatch(/@Controller\('push-wakes'\)[\s\S]*?@Post\(':pushWakeId'\)[\s\S]*?this\.pushWakes\.receive\(/);
+    expect(controller).toMatch(/@Controller\('push-wakes'\)[\s\S]*?@Post\(':subscriptionId'\)[\s\S]*?this\.pushWakes\.receive\(/);
     // receive() queues the debounced job, which the processor turns into processPushes().
     expect(pushService).toMatch(/async receive\([\s\S]*?PUSH_WAKE_CHANGES_JOB/);
     expect(processor).toMatch(/@Process\(PUSH_WAKE_CHANGES_JOB\)[\s\S]*?this\.pushWakes\.processPushes\(/);
-    // ...which wakes through Always on, as push.
-    expect(pushService).toMatch(/async processPushes\([\s\S]*?this\.alwaysOn\.pushEvent\(/);
+    // ...which wakes every agent on the subscription through Always on, as push.
+    expect(pushService).toMatch(/async processPushes\([\s\S]*?this\.fanOut\(/);
+    expect(pushService).toMatch(/private async fanOut\([\s\S]*?this\.alwaysOn\.pushEvent\(/);
     // The sweep is scheduled at boot and handled by the processor.
     expect(pushService).toMatch(/async onModuleInit\(\)[\s\S]*?PUSH_WAKE_RENEW_JOB/);
     expect(processor).toMatch(/@Process\(PUSH_WAKE_RENEW_JOB\)[\s\S]*?this\.pushWakes\.renewDue\(/);

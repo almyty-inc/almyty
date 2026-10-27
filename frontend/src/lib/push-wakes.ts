@@ -43,10 +43,15 @@ export interface PushWakeOptions {
   presets: PushWakePreset[]
   /** The organization's connections (imported APIs), and the presets each has every tool for. */
   apis: Array<{ id: string; name: string; presets: string[] }>
+  /** The push address without its last part, which is made when one is saved. */
+  addressPrefix: string
 }
 
 export interface PushWakeView {
+  /** The agent's push wake; the routes take this id. */
   id: string
+  /** The subscription at the service it is part of, shared by agents on the same connection and resource. */
+  subscriptionId: string
   name: string
   presetKey: string | null
   apiId: string | null
@@ -58,9 +63,12 @@ export interface PushWakeView {
   health: { status: PushWakeHealthStatus; checkedAt: string | null; error: string | null }
   lastPushAt: string | null
   pushCount: number
+  /** When this agent was last woken by it. */
   lastWakeAt: string | null
   lastRenewedAt: string | null
   subscriptionExpiresAt: string | null
+  /** Other agents on the same subscription (a service may allow one per resource, so they share it). */
+  sharedWith: number
   renewAt: string | null
   setup: PushSetupStep[]
   spec: Record<string, unknown>
@@ -84,7 +92,10 @@ export const pushWakesApi = {
     apiPatch<PushWakeView>(`/agents/${agentId}/push-wakes/${id}`, body),
   resubscribe: (agentId: string, id: string) => apiPost<PushWakeView>(`/agents/${agentId}/push-wakes/${id}/subscribe`, {}),
   remove: (agentId: string, id: string) =>
-    apiDel<{ stopped: boolean; error: string | null }>(`/agents/${agentId}/push-wakes/${id}`),
+    apiDel<{ stopped: boolean; error: string | null; shared: boolean }>(`/agents/${agentId}/push-wakes/${id}`),
+  /** The connection's operations that have an active tool, for a custom push wake's steps. */
+  operations: (agentId: string, apiId: string) =>
+    apiGet<Array<{ operationId: string; name: string; method: string | null; path: string | null }>>(`/agents/${agentId}/push-wakes/operations`, { params: { apiId } }),
 }
 
 /** A push wake's health in the shape connections show it (ConnectionHealthBadge). */
@@ -97,16 +108,6 @@ export const VERIFY_LABELS: Record<PushVerifyMethod, string> = {
   hmac: 'An HMAC signature over each push',
   oidc_jwt: 'A signed token from the service (OIDC)',
 }
-
-/** A starting point for a custom push wake: verification only; the rest is optional. */
-export const CUSTOM_SPEC_TEMPLATE = JSON.stringify(
-  {
-    verification: { method: 'hmac', headerName: 'X-Signature', algorithm: 'sha256', encoding: 'hex', prefix: 'sha256=', signedContent: '{{body}}' },
-    summary: '{{name}}: something changed',
-  },
-  null,
-  2,
-)
 
 /** "Last push 5 minutes ago, renewed today" -- what the row says under its name. */
 export function describePushWake(view: PushWakeView, format: (iso: string) => string): string {

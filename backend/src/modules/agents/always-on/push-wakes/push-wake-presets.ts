@@ -101,6 +101,7 @@ export const PUSH_WAKE_PRESETS: PushWakePreset[] = [
         maxItems: 20,
       },
       summary: '{{count}} change(s) in Google Calendar, latest "{{last.summary}}"',
+      resourceKey: '{{settings.calendarId}}',
     },
     debounceSeconds: 10,
   },
@@ -202,6 +203,8 @@ export const PUSH_WAKE_PRESETS: PushWakePreset[] = [
         maxDetails: 10,
       },
       summary: '{{count}} new email(s) in Gmail, latest from {{last.from}}: "{{last.subject}}"',
+      // Gmail keeps one watch per mailbox: every agent on this connection shares it.
+      resourceKey: 'mailbox',
     },
     debounceSeconds: 10,
   },
