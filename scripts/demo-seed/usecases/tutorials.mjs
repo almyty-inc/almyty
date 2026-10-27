@@ -112,7 +112,7 @@ export const SHOTS = {
   'onboarding-08': ['onboarding/08-always-on-card.png', 'Onboarding agent: Always on card', AGENT],
   'onboarding-09': ['onboarding/09-first-run.png', 'The first onboarding run, step by step', AGENT],
   'onboarding-10': ['onboarding/10-welcome-email.png', 'The welcome email as the agent sent it', ['backend/src/modules/tools/executors/tool-http.executor.ts']],
-  'onboarding-11': ['onboarding/11-notifications.png', 'Onboarding reports in notifications', ['frontend/src/pages/notifications.tsx']],
+  'onboarding-11': ['onboarding/11-notifications.png', 'Onboarding reports in notifications', ['frontend/src/pages/notifications.tsx', 'frontend/src/components/notifications']],
   'onboarding-12': ['onboarding/12-handover-run.png', 'The run that booked the kickoff and handed over', AGENT],
   'onboarding-13': ['onboarding/13-what-woke-it.png', 'What woke it lately, across the onboarding', ALWAYS_ON],
   'onboarding-14': ['onboarding/14-runs.png', 'Onboarding agent: its runs', AGENT],
