@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Check, X, Clock, AlertCircle, Bot } from 'lucide-react'
@@ -19,6 +19,7 @@ import { formatRelativeTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { emailPreviewOf } from '@/lib/email-preview'
+import { actionDetailsOf, withoutInternalFields } from '@/lib/approval-summary'
 import { ChangeSetView } from '@/components/approvals/change-set-view'
 import type { ChangeSetEntry } from '@/types'
 
@@ -35,6 +36,8 @@ interface ApprovalRequest {
   toolCallId: string | null
   reason: string
   payload: Record<string, any> | null
+  /** The held tool's parameter schema, for its own parameter titles; absent when there is no tool. */
+  parameterSchema?: Record<string, any> | null
   status: 'pending' | 'approved' | 'rejected' | 'expired'
   decidedBy: string | null
   decidedAt: string | null
@@ -210,8 +213,7 @@ export function ApprovalsPage() {
                 </div>
                 {(() => {
                   const email = emailPreviewOf(row.payload)
-                  if (!email) return null
-                  return (
+                  if (email) return (
                     <div className="mt-2 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground" data-testid="approval-email-preview">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">The email it will send</p>
                       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
@@ -229,15 +231,37 @@ export function ApprovalsPage() {
                       <p className="mt-3 whitespace-pre-wrap">{email.body}</p>
                     </div>
                   )
+                  if (isChangeSet(row)) return null
+                  // Any other call: its arguments, in words, in the same panel.
+                  const details = actionDetailsOf(row.payload, row.parameterSchema)
+                  if (details.length === 0) return null
+                  return (
+                    <div className="mt-2 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground" data-testid="approval-action-preview">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What it will do</p>
+                      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                        {details.map((d) => (
+                          <Fragment key={d.label}>
+                            <dt className="text-muted-foreground">{d.label}</dt>
+                            <dd className="whitespace-pre-wrap break-words">{d.value}</dd>
+                          </Fragment>
+                        ))}
+                      </dl>
+                    </div>
+                  )
                 })()}
-                {row.payload && Object.keys(row.payload).length > 0 && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-foreground/80">Action details</summary>
-                    <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-auto max-h-64">
-                      {JSON.stringify(row.payload, null, 2)}
-                    </pre>
-                  </details>
-                )}
+                {(() => {
+                  // Internal fields (`_gate`: the rule, the fingerprint, who called) are the server's, never the approver's.
+                  const visible = withoutInternalFields(row.payload) as Record<string, unknown> | null
+                  if (!visible || Object.keys(visible).length === 0) return null
+                  return (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-foreground/80">Show details</summary>
+                      <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-auto max-h-64">
+                        {JSON.stringify(visible, null, 2)}
+                      </pre>
+                    </details>
+                  )
+                })()}
                 {decisionFor?.row.id === row.id && (
                   <form
                     className="mt-3 space-y-3 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground"
