@@ -23,6 +23,7 @@ import {
   CHANNEL_LABELS,
   agentChannelsApi,
   isBuildable,
+  notReceivingReason,
   webChatUrl,
   type AgentChannel,
 } from '@/lib/agent-channels'
@@ -102,6 +103,16 @@ export function ChannelsTab({ agentId, agentName, agentOwnerId }: ChannelsTabPro
       id: 'status',
       header: 'Status',
       cell: ({ row }) => {
+        // Published, but nothing the platform sends can arrive: said here, not only in a log.
+        const notReceiving = notReceivingReason(row.original)
+        if (notReceiving) {
+          return (
+            <span className="flex flex-col items-start gap-0.5" data-testid="channel-not-receiving">
+              <Badge variant="warning">Not receiving messages</Badge>
+              <span className="text-xs text-muted-foreground">{notReceiving}</span>
+            </span>
+          )
+        }
         const status = CHANNEL_STATUS[row.original.status] ?? CHANNEL_STATUS.draft
         return <Badge variant={status.variant}>{status.label}</Badge>
       },

@@ -250,6 +250,20 @@ describe('ApprovalsService', () => {
       const byAgent = Object.fromEntries(list.map((r) => [r.agentId, r.agentName]));
       expect(byAgent).toEqual({ named: 'Invoice helper', gone: null, elsewhere: null });
     });
+
+    it('carries the held tool\'s parameter schema, from the row or the run\'s _gate, and only from this organization', async () => {
+      const { svc, approvals } = makeService();
+      const schema = { type: 'object', properties: { summary: { type: 'string', title: 'Event title' } } };
+      approvals.tools.seed({ id: 'tool-cal', organizationId: 'o', parameters: schema } as any);
+      approvals.tools.seed({ id: 'tool-other', organizationId: 'other', parameters: { title: 'not yours' } } as any);
+      await svc.create({ organizationId: 'o', teamId: null, runId: null, agentId: null, toolId: 'tool-cal', fingerprint: 'f', reason: 'held' });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r1', agentId: 'a', reason: 'run', payload: { tool: 'x', parameters: {}, _gate: { toolId: 'tool-cal' } } });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r2', agentId: 'a', reason: 'foreign', payload: { _gate: { toolId: 'tool-other' } } });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r3', agentId: 'a', reason: 'plain' });
+      const list = await svc.listPending({ organizationId: 'o', caller: { id: 'u' } });
+      const byReason = Object.fromEntries(list.map((r) => [r.reason, r.parameterSchema]));
+      expect(byReason).toEqual({ held: schema, run: schema, foreign: null, plain: null });
+    });
   });
 });
 
