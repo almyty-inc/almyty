@@ -1,11 +1,12 @@
 import { OnQueueFailed, Process, Processor } from '@nestjs/bull';
-import { Logger, NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from 'bull';
 
 import { Api } from '../../../entities/api.entity';
 import { ApisService } from '../../apis/apis.service';
+import { ApisSdkAnalysisHelper, SDK_ANALYSIS_JOB, type SdkAnalysisJob } from '../../apis/apis-sdk-analysis.helper';
 
 export interface SchemaImportJob {
   apiId: string;
@@ -37,6 +38,7 @@ export class SchemaImportProcessor {
     private readonly apisService: ApisService,
     @InjectRepository(Api)
     private readonly apiRepository: Repository<Api>,
+    @Optional() private readonly sdkAnalysis?: ApisSdkAnalysisHelper,
   ) {}
 
   @Process('import')
@@ -92,6 +94,23 @@ export class SchemaImportProcessor {
       this.logger.error(`[JOB ${job.id}] Schema import failed: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  /**
+   * Analyse an SDK API's npm packages into `api.sdkMaps`. Same queue as
+   * schema imports: both are "read what this API offers", both are slow.
+   * The helper records progress and failure on the API row itself.
+   */
+  @Process(SDK_ANALYSIS_JOB)
+  async handleSdkAnalysis(job: Job<SdkAnalysisJob>) {
+    const { apiId, organizationId } = job.data ?? ({} as SdkAnalysisJob);
+    if (!organizationId) {
+      throw new NotFoundException(`SDK analysis job ${job.id} rejected: organizationId missing from payload`);
+    }
+    if (!this.sdkAnalysis) throw new Error('SDK analysis is not available in this process');
+    const state = await this.sdkAnalysis.analyse(apiId, organizationId, (pct) => job.progress(pct));
+    this.logger.log(`[JOB ${job.id}] SDK analysis for API ${apiId}: ${state.packages?.length ?? 0} package(s)`);
+    return { success: true, ...state };
   }
 
   /**

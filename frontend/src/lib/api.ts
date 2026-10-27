@@ -604,6 +604,8 @@ export const apisApi = {
     teamId?: string | null
   }) => apiPost('/apis/http', data),
   getSdkMaps: (apiId: string) => apiGet(`/apis/${apiId}/sdk-maps`),
+  /** Install an SDK API's packages and read what they offer again (a background job). */
+  analyseSdk: (apiId: string) => apiPost(`/apis/${apiId}/analyse-sdk`, {}),
 
   // Connect an API from its description in one call: a link, a file or
   // pasted text. The response says what was found and what is still needed.
