@@ -21,6 +21,12 @@ export interface CompactionConfig {
   /** Provider/model for the summary call. Defaults to the agent's own provider. */
   providerId?: string;
   model?: string;
+  /**
+   * Cut a tool result from an earlier run of the conversation to this many
+   * characters (this run's own results stay whole). Off unless set; an
+   * always-on standing thread uses 2000 (ALWAYS_ON_COMPACTION).
+   */
+  earlierToolResultChars?: number;
 }
 
 /**
@@ -44,7 +50,7 @@ export interface ContextSummaryCache {
   lastKey?: string;
   /** The first message after the summary. */
   nextKey?: string;
-  /** How many messages have been folded into `text` over the run. Only grows. */
+  /** How many messages have been folded into `text` over the run, and the runs of the conversation it was carried from (carriedContextSummary). Only grows. */
   foldedTotal?: number;
 }
 
@@ -58,12 +64,92 @@ export interface CompactionResult {
   folded: number;
 }
 
-/** A message's identity for finding it again: tool calls and results carry unique ids. */
+/**
+ * The stored message a history entry was built from. AgentRuntimeBuilders
+ * puts these on each entry as non-enumerable properties, so they never
+ * reach a provider, which is sent the entries as they are.
+ */
+const MESSAGE_ID = 'messageId';
+const MESSAGE_AT = 'messageAt';
+
+export function tagStoredMessage(entry: Record<string, any>, message: { id?: string; createdAt?: Date | string | null }): void {
+  if (message.id) Object.defineProperty(entry, MESSAGE_ID, { value: String(message.id), enumerable: false });
+  if (message.createdAt) {
+    Object.defineProperty(entry, MESSAGE_AT, { value: new Date(message.createdAt).toISOString(), enumerable: false });
+  }
+}
+
+/**
+ * A message's identity for finding it again: the stored message's id when
+ * the entry carries one (two messages with the same text stay apart, and a
+ * cut tool result is still the same message), else a hash of what it says
+ * (tool calls and results carry unique ids).
+ */
 function messageKey(m: any): string {
+  const id = m?.[MESSAGE_ID];
+  if (typeof id === 'string') return `id:${id}`;
   const content = typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? '');
   const calls = m?.toolCalls ? JSON.stringify(m.toolCalls) : '';
   return createHash('sha256').update(`${m?.role}\u0000${m?.toolCallId ?? ''}\u0000${calls}\u0000${content}`).digest('hex');
 }
+
+/**
+ * A tool result an earlier run of the conversation got, cut to `limit`
+ * characters. The run that called the tool read all of it and answered
+ * from it; sent whole again on every step of every later run (an always-on
+ * agent's last inbox listing, on each of the next wake's calls) it was most
+ * of what those calls cost. This run's own results are never cut.
+ */
+function clipEarlierToolResults(history: any[], runStartedAt: Date | string | undefined, limit: number | undefined): any[] {
+  if (!limit || limit <= 0 || !runStartedAt) return history;
+  const since = new Date(runStartedAt).toISOString();
+  return history.map((entry) => {
+    const at = entry?.[MESSAGE_AT];
+    if (entry?.role !== 'tool' || typeof entry.content !== 'string' || entry.content.length <= limit) return entry;
+    if (typeof at !== 'string' || at >= since) return entry;
+    const clipped = {
+      ...entry,
+      content: `${entry.content.slice(0, limit)}\n[cut: ${entry.content.length - limit} more characters of an earlier tool result]`,
+    };
+    tagStoredMessage(clipped, { id: entry[MESSAGE_ID], createdAt: at });
+    return clipped;
+  });
+}
+
+/**
+ * The summary an earlier run of the same conversation left, for a run that
+ * has none yet. A standing thread (always on) or a chat is one run per
+ * turn; each run started with no summary, so its first step summarized the
+ * whole history window again -- most of the tokens a wake that only looked
+ * at the inbox spent. Where it ends is found in the new run's window the
+ * same way a later step finds it (locate). Only a summary that names that
+ * edge is carried: a bare count means nothing in another run's window.
+ */
+export async function carriedContextSummary(
+  runs: { find(options: any): Promise<Array<Pick<AgentRun, 'id' | 'workingMemory'>>> },
+  run: Pick<AgentRun, 'id' | 'conversationId' | 'workingMemory'>,
+): Promise<ContextSummaryCache | null> {
+  if (!run.conversationId || run.workingMemory?.contextSummary) return null;
+  const earlier = await runs.find({
+    where: { conversationId: run.conversationId },
+    order: { createdAt: 'DESC' },
+    take: 5,
+    select: { id: true, workingMemory: true },
+  });
+  for (const r of earlier) {
+    if (r.id === run.id) continue;
+    const summary = r.workingMemory?.contextSummary as ContextSummaryCache | undefined;
+    if (summary?.nextKey && summary.text) return summary;
+  }
+  return null;
+}
+
+/**
+ * What an always-on standing thread is compacted with, under the agent's own
+ * `modelConfig.compaction`: a wake reads the last listing it needs again,
+ * so an earlier wake's tool results are cut (see clipEarlierToolResults).
+ */
+export const ALWAYS_ON_COMPACTION: CompactionConfig = { earlierToolResultChars: 2000 };
 
 const DEFAULTS = {
   maxContextTokens: 12000,
@@ -106,7 +192,7 @@ export class AgentContextCompactor {
     const strategy = config.strategy ?? DEFAULTS.strategy;
 
     const system = messages[0];
-    const history = messages.slice(1);
+    const history = clipEarlierToolResults(messages.slice(1), run.createdAt, config.earlierToolResultChars);
 
     let cache: ContextSummaryCache = run.workingMemory?.contextSummary ?? {
       coveredCount: 0,
@@ -139,12 +225,17 @@ export class AgentContextCompactor {
     }
 
     const toCompact = history.slice(cache.coveredCount, boundary);
-    let addedText: string;
+    const foldedTotal = (cache.foldedTotal ?? 0) + toCompact.length;
+    // Summarize returns ONE summary with the prior one merged in (its prompt
+    // says so), so it replaces the text; appending it repeated the prior
+    // summary on every compaction, and a standing thread's summary, carried
+    // from wake to wake, grew without end. Truncation keeps one running count.
+    let newText: string;
     let cost = 0;
     let tokens = 0;
 
     if (strategy === 'truncate') {
-      addedText = `[${toCompact.length} earlier message(s) omitted]`;
+      newText = `[${foldedTotal} earlier message(s) omitted]`;
     } else {
       try {
         const summary = await this.summarize(
@@ -155,23 +246,24 @@ export class AgentContextCompactor {
           userId,
           signal,
         );
-        addedText = summary.text;
+        newText = summary.text;
         cost = summary.cost;
         tokens = summary.tokens;
       } catch (err: any) {
         this.logger.warn(
           `Context summarization failed for run ${run.id}; falling back to truncation: ${err?.message}`,
         );
-        addedText = `[${toCompact.length} earlier message(s) omitted]`;
+        const note = `[${toCompact.length} earlier message(s) omitted]`;
+        newText = cache.text ? `${cache.text}\n${note}` : note;
       }
     }
 
     const newCache: ContextSummaryCache = {
       coveredCount: boundary,
-      text: cache.text ? `${cache.text}\n${addedText}` : addedText,
+      text: newText,
       lastKey: messageKey(history[boundary - 1]),
       nextKey: messageKey(history[boundary]),
-      foldedTotal: (cache.foldedTotal ?? 0) + toCompact.length,
+      foldedTotal,
     };
     run.workingMemory = { ...(run.workingMemory || {}), contextSummary: newCache };
 

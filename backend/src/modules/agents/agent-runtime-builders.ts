@@ -12,6 +12,7 @@ import { AgentConstraintsService } from '../agent-constraints/agent-constraints.
 import { buildCollaborationContext } from './collaboration-participants';
 import { messageContentForModel } from './attached-files';
 import { memorySettings, type AgentMemoryConfig } from './agent-memory-settings';
+import { tagStoredMessage } from './agent-context-compactor.helper';
 import { REPORT_RULE } from './always-on/always-on-report';
 
 /**
@@ -201,6 +202,8 @@ export class AgentRuntimeBuilders {
         if (msg.toolCallId) {
           msgObj.toolCallId = msg.toolCallId;
         }
+        // Which stored message this is, for the compactor (not sent anywhere).
+        tagStoredMessage(msgObj, msg);
         messages.push(msgObj);
       }
     }

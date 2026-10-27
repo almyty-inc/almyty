@@ -10,7 +10,7 @@ import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.servic
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
 import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
-import { AgentContextCompactor } from './agent-context-compactor.helper';
+import { ALWAYS_ON_COMPACTION, AgentContextCompactor, carriedContextSummary } from './agent-context-compactor.helper';
 import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
@@ -464,11 +464,20 @@ export class AgentStepProcessor {
       // Compact long-running context (off unless the agent opts in). Folds the
       // old prefix into a summary so per-step token cost doesn't grow unbounded.
       // An always-on standing thread lives for months, so it is always
-      // compacted, with the agent's own settings when it has them.
+      // compacted (ALWAYS_ON_COMPACTION), with the agent's own settings over
+      // the defaults when it has them.
       const compaction = run.metadata?.triggerType === 'always_on'
-        ? { ...(agent.modelConfig?.compaction ?? {}), enabled: true }
+        ? { ...ALWAYS_ON_COMPACTION, ...(agent.modelConfig?.compaction ?? {}), enabled: true }
         : agent.modelConfig?.compaction;
       if (compaction?.enabled) {
+        // A new run of the thread starts from the summary the last one left,
+        // instead of summarizing the whole history window again.
+        try {
+          const carried = await carriedContextSummary(this.s.runRepository, run);
+          if (carried) run.workingMemory = { ...(run.workingMemory || {}), contextSummary: carried };
+        } catch (err: any) {
+          this.s.logger.warn(`Could not read the thread summary for run ${runId}: ${err?.message ?? err}`);
+        }
         const compacted = await this.compactor.compact(
           messages,
           run,
