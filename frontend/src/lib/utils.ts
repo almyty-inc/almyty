@@ -88,6 +88,19 @@ export function getInitials(name: string): string {
 }
 
 /**
+ * A person's initials for an avatar: from their name, else the part of
+ * their email before the @ (dana.lind@ -> DL), never a placeholder letter.
+ */
+export function userInitials(user: { name?: string | null; email?: string | null } | null | undefined): string {
+  const name = user?.name?.trim()
+  if (name) return getInitials(name.replace(/\s+/g, ' '))
+  const local = (user?.email ?? '').split('@')[0]
+  const parts = local.split(/[._\-+]+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  return getInitials(parts.join(' '))
+}
+
+/**
  * "3h ago", or "in 3h" for a time still to come (an expiry, a next run).
  * A time a few seconds either side of now is "just now", so a clock a
  * little ahead of the server's does not read as the future.
