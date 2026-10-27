@@ -35,7 +35,7 @@ import { GrantsService } from './grants/grants.service';
 import { connectionVisibleTo, GrantPrincipal } from './grants/grant-check';
 import { RotationService, RotateOutcome } from './rotation/rotation.service';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
-import { interpolate, normalizeFormattedFields, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
+import { interpolate, normalizeFormattedFields, schemaViolations, secretFieldsFor, splitSecrets } from './connector-schema';
 import {
   ConnectMethod,
   ConnectionOwner,
@@ -970,7 +970,7 @@ export class ConnectionsService {
     const result = await this.validation.validate(connector, args.config as Record<string, any>, { organizationId });
 
     const row = args.existing ?? this.credentials.create({ organizationId });
-    const secretKeys = new Set([...secretFieldsOf(method.schema), method.secretField ?? 'apiKey', ...OAUTH_SECRET_KEYS]);
+    const secretKeys = new Set([...secretFieldsFor(method.schema, args.config), method.secretField ?? 'apiKey', ...OAUTH_SECRET_KEYS]);
     const stored: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(args.config)) {
       if (v === undefined || v === null || v === '') continue;
@@ -980,7 +980,9 @@ export class ConnectionsService {
     row.config = stored;
     await row.encryptSensitiveDataForOrg(this.envelope);
 
-    const label = result.accountLabel ?? row.accountLabel ?? null;
+    // A secret value never becomes the label shown next to the connection.
+    const fresh = result.accountLabel && ![...secretKeys].some((k) => args.config[k] === result.accountLabel) ? result.accountLabel : null;
+    const label = fresh ?? row.accountLabel ?? null;
     row.organizationId = organizationId;
     row.connectorKey = connector.key;
     row.ownerUserId = args.ownerUserId;

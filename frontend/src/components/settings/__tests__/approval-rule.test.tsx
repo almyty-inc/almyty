@@ -17,10 +17,10 @@ import { describeAmountRule, numericFields } from '../../../lib/approval-rules'
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 // Several popovers per case: slower than the default on a busy CI runner.
 vi.setConfig({ testTimeout: 20_000 })
-
+const entitlement = vi.hoisted(() => ({ on: true }))
 vi.mock('../../../hooks/use-entitlement', async () => {
   const actual = await vi.importActual<any>('../../../hooks/use-entitlement')
-  const has = (f: string) => f === 'approval_policy'
+  const has = (f: string) => entitlement.on && f === 'approval_policy'
   return {
     ...actual,
     useEntitlement: (feature?: string) =>
@@ -71,6 +71,7 @@ const EDIT = { path: '/settings/approvals/rules/:ruleId', url: '/settings/approv
 
 beforeEach(() => {
   vi.clearAllMocks()
+  entitlement.on = true
   vi.mocked(toolsApi.getAll).mockResolvedValue([REFUND, LOOKUP] as any)
   vi.mocked(organizationsApi.getTeams).mockResolvedValue([{ id: 'team-fin', name: 'Finance', isDefault: false }] as any)
   if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
@@ -128,6 +129,7 @@ describe('/settings/approvals/rules/new', () => {
       teamId: null,
       enabled: true,
       trigger: { kind: 'tool_amount', toolId: 'tool-refund', argument: 'amount', op: 'gt', amount: 500 },
+      steps: [{ name: 'Approval', approverRole: '*', minApprovals: 1 }],
     })
     expect(policies.create).not.toHaveBeenCalled()
   })
@@ -186,6 +188,58 @@ describe('/settings/approvals/rules/new', () => {
         trigger: { kind: 'tool_amount', toolId: 'tool-refund', argument: 'amount', op: 'gte', amount: 2000 },
       })),
     )
+  })
+})
+
+describe('an amount rule with its own sign-off steps (Business)', () => {
+  const fillRule = async (user: ReturnType<typeof userEvent.setup>) => {
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Big refunds' } })
+    await waitFor(() => expect(toolsApi.getAll).toHaveBeenCalled())
+    await pick(user, 'Tool', /Create refund/)
+    await pick(user, 'The number', /^amount/)
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '1000' } })
+  }
+
+  it('sets finance then an admin on the rule itself', async () => {
+    const user = userEvent.setup()
+    rules.create.mockResolvedValue({ id: 'new' })
+    renderAtRoute(<ApprovalRulePage />, NEW)
+    await fillRule(user)
+
+    fireEvent.change(screen.getByLabelText('Step 1 name'), { target: { value: 'Finance review' } })
+    fireEvent.change(screen.getByLabelText('Step 1 approver role'), { target: { value: 'finance' } })
+    await user.click(screen.getByRole('button', { name: /Add step/ }))
+    fireEvent.change(screen.getByLabelText('Step 2 name'), { target: { value: 'Admin sign-off' } })
+    fireEvent.change(screen.getByLabelText('Step 2 approver role'), { target: { value: 'admin' } })
+    await user.click(screen.getByRole('button', { name: /Create rule/i }))
+
+    await waitFor(() => expect(rules.create).toHaveBeenCalledTimes(1))
+    expect(rules.create.mock.calls[0][0].steps).toEqual([
+      { name: 'Finance review', approverRole: 'finance', minApprovals: 1 },
+      { name: 'Admin sign-off', approverRole: 'admin', minApprovals: 1 },
+    ])
+  })
+
+  it('will not save a step without its approver role', async () => {
+    const user = userEvent.setup()
+    renderAtRoute(<ApprovalRulePage />, NEW)
+    await fillRule(user)
+    fireEvent.change(screen.getByLabelText('Step 1 approver role'), { target: { value: '' } })
+    await user.click(screen.getByRole('button', { name: /Create rule/i }))
+    expect(await screen.findByText('Approver role is required')).toBeInTheDocument()
+    expect(rules.create).not.toHaveBeenCalled()
+  })
+
+  it('without the Business plan there are no steps to set, and none are sent', async () => {
+    entitlement.on = false
+    const user = userEvent.setup()
+    rules.create.mockResolvedValue({ id: 'new' })
+    renderAtRoute(<ApprovalRulePage />, NEW)
+    await fillRule(user)
+    expect(screen.queryByLabelText('Step 1 name')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Create rule/i }))
+    await waitFor(() => expect(rules.create).toHaveBeenCalledTimes(1))
+    expect(rules.create.mock.calls[0][0].steps).toBeUndefined()
   })
 })
 

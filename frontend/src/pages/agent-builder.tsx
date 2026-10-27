@@ -19,6 +19,8 @@ import { memoryProblems } from '@/components/agents/builder/memory-section'
 import { capabilityProblems } from '@/components/agents/builder/capabilities-section'
 import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
+import { Button } from '@/components/ui/button'
+import { isPrivateReferenceRefusal, privateToolsAmong, referencedToolIds } from '@/components/agents/builder/private-tools'
 
 import { agentsApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
@@ -67,6 +69,11 @@ export function AgentBuilderPage() {
   const [showTestPanel, setShowTestPanel] = useState(false)
   const [agentVisibility, setAgentVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [showVisibility, setShowVisibility] = useState(false)
+  // Set once the person picks who can use the agent; until then a new
+  // agent follows its tools (private tools make it private).
+  const [visibilityChosen, setVisibilityChosen] = useState(false)
+  // Why the last save was refused, shown next to Save with the fix.
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const orgRunLimits = useOrgRunLimits()
 
@@ -103,6 +110,19 @@ export function AgentBuilderPage() {
     enabled: !!currentOrganization?.id,
   })
   const availableTools = Array.isArray(rawTools) ? rawTools : (rawTools as any)?.tools || []
+
+  // A runner's tools (and any tool its owner kept to themselves) are
+  // private, and the server only lets a private agent of the same owner use
+  // them. So a new agent that uses one starts private instead of failing
+  // its first save as Everyone; the person can still pick otherwise.
+  const privateTools = privateToolsAmong(
+    referencedToolIds(agentMode, agentToolIds, pipeline.nodes as Array<{ type?: string; data?: Record<string, unknown> }>),
+    availableTools,
+  )
+  useEffect(() => {
+    if (isEditing || visibilityChosen || privateTools.length === 0) return
+    if (agentVisibility.visibility !== 'private') setAgentVisibility({ visibility: 'private', teamId: null })
+  }, [isEditing, visibilityChosen, privateTools.length, agentVisibility.visibility])
 
   // Fetch available agents: a panelist or teammate role can be another agent
   const { data: rawAgents } = useQuery({
@@ -345,15 +365,18 @@ export function AgentBuilderPage() {
 
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    // `override` carries a visibility chosen in the same click as the save
+    // ("Make it private and save"), before the state update has landed.
+    mutationFn: async (override: { visibility?: VisibilityValue } | void) => {
+      const visibility = override?.visibility ?? agentVisibility
       const payload: any = {
         name: agentName,
         description: agentDescription || undefined,
         mode: agentMode,
         // Sent on every save: 'private' makes the agent the saver's alone,
         // and an edit must not quietly reset an existing scope.
-        visibility: agentVisibility.visibility,
-        teamId: agentVisibility.teamId,
+        visibility: visibility.visibility,
+        teamId: visibility.teamId,
       }
 
       if (agentMode === 'workflow') {
@@ -383,6 +406,7 @@ export function AgentBuilderPage() {
       }
     },
     onSuccess: async (res) => {
+      setSaveError(null)
       success('Saved', `Agent "${agentName}" saved successfully.`)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       if (!isEditing) {
@@ -396,7 +420,13 @@ export function AgentBuilderPage() {
       }
     },
     onError: (err: any) => {
-      errorNotif('Save Failed', getApiErrorMessage(err, 'Failed to save agent'))
+      const message = getApiErrorMessage(err, 'Failed to save agent')
+      // Private tools in a shared agent: answered next to Save, with the fix.
+      if (isPrivateReferenceRefusal(message)) {
+        setSaveError(message)
+        return
+      }
+      errorNotif('Save Failed', message)
     },
   })
 
@@ -497,6 +527,37 @@ export function AgentBuilderPage() {
       )}
 
       {/*
+        A save the server refused because the agent shares private tools.
+        Said here, next to Save, with the one-click fix: the agent becomes
+        private to its owner, which is what lets it use them.
+      */}
+      {saveError && (
+        <div
+          role="alert"
+          className="px-4 py-3 border-b border-destructive/40 bg-destructive/5 text-sm flex flex-wrap items-center gap-3 shrink-0"
+        >
+          <span className="flex-1 min-w-0">{saveError}</span>
+          {agentVisibility.visibility !== 'private' && (
+            <Button
+              size="sm"
+              disabled={saveMutation.isPending}
+              onClick={() => {
+                const next: VisibilityValue = { visibility: 'private', teamId: null }
+                setVisibilityChosen(true)
+                setAgentVisibility(next)
+                saveMutation.mutate({ visibility: next })
+              }}
+            >
+              Make it private and save
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setSaveError(null)}>
+            Dismiss
+          </Button>
+        </div>
+      )}
+
+      {/*
         Who can see and use the agent, opened from the toolbar. Inline under
         the toolbar rather than in a dialog so the canvas stays in view.
       */}
@@ -510,9 +571,18 @@ export function AgentBuilderPage() {
           <VisibilityField
             organizationId={currentOrganization?.id ?? ''}
             value={agentVisibility}
-            onChange={setAgentVisibility}
+            onChange={(next) => {
+              setVisibilityChosen(true)
+              setAgentVisibility(next)
+            }}
             noun="this agent"
           />
+          {privateTools.length > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              It uses tools only you can use ({privateTools.map((t: { name: string }) => t.name).join(', ')}), so only a
+              private agent can use them.
+            </p>
+          )}
         </div>
       )}
       {/*

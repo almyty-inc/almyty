@@ -1,6 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { Version } from 'typeorm-versions';
 
 import { Agent, AgentPipelineNode } from '../../entities/agent.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
@@ -136,7 +137,48 @@ export interface AgentTechnicalDocumentation {
     changelog: string;
     nodeCount: number;
   }>;
+  /**
+   * The agent's own edit history (typeorm-versions snapshots), newest
+   * first: an edit made without "Save version" is still a change, and the
+   * section said "No saved version snapshots" right after one.
+   */
+  recordedEdits?: Array<{
+    at: string;
+    change: 'Created' | 'Edited' | 'Deleted';
+    fields: string[];
+  }>;
   disclaimer: string;
+}
+
+/**
+ * One Markdown table cell from any text: line breaks flattened, pipes
+ * escaped and HTML neutralised. A tool description with a newline or raw
+ * HTML (an imported API's `<p>...</p>`) split or swallowed the row.
+ */
+export function markdownCell(text: string): string {
+  return text
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\|/g, '\\|')
+    .trim();
+}
+
+/** Snapshot fields that change on every save and say nothing about the agent. */
+const NOISE_FIELDS = new Set([
+  'updatedAt', 'createdAt', 'version', 'metadata', 'totalExecutions', 'successfulExecutions',
+  'averageExecutionTime', 'totalCost', 'lastExecutedAt',
+]);
+
+/** The top-level fields that differ between two snapshots of the agent. */
+export function changedFields(before: Record<string, any> | null, after: Record<string, any> | null): string[] {
+  if (!before || !after) return [];
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return [...keys]
+    .filter((k) => !NOISE_FIELDS.has(k) && JSON.stringify(before[k]) !== JSON.stringify(after[k]))
+    .sort();
 }
 
 const DISCLAIMER =
@@ -360,8 +402,33 @@ export class AgentTechDocHelper {
           nodeCount: v.pipeline?.nodes?.length ?? 0,
         })),
 
+      recordedEdits: await this.recordedEdits(agent.id),
+
       disclaimer: DISCLAIMER,
     };
+  }
+
+  /**
+   * The newest edits of the agent from its entity snapshots, each with the
+   * fields it changed. Best effort: without the versions table the section
+   * falls back to the saved versions alone.
+   */
+  private async recordedEdits(agentId: string): Promise<NonNullable<AgentTechnicalDocumentation['recordedEdits']>> {
+    try {
+      const snapshots = await this.runRepository.manager.getRepository(Version).find({
+        where: { itemType: 'Agent', itemId: agentId },
+        order: { timestamp: 'DESC' },
+        take: CHANGE_HISTORY_LIMIT + 1,
+      });
+      const words = { INSERT: 'Created', UPDATE: 'Edited', REMOVE: 'Deleted' } as const;
+      return snapshots.slice(0, CHANGE_HISTORY_LIMIT).map((v, i) => ({
+        at: new Date(v.timestamp).toISOString(),
+        change: words[v.event as keyof typeof words] ?? 'Edited',
+        fields: v.event === 'UPDATE' ? changedFields(snapshots[i + 1]?.object ?? null, v.object ?? null) : [],
+      }));
+    } catch {
+      return [];
+    }
   }
 
   /** Render the structured document as human-readable Markdown. */
@@ -373,6 +440,7 @@ export class AgentTechDocHelper {
       if (v instanceof Date) return v.toISOString();
       return String(v);
     };
+    const cell = (v: unknown): string => markdownCell(fmt(v));
 
     lines.push(`# Technical Documentation: ${g.name}`);
     lines.push('');
@@ -402,7 +470,7 @@ export class AgentTechDocHelper {
       lines.push('|---|---|---|---|---|---|');
       for (const m of doc.modelAndProviders.models) {
         lines.push(
-          `| ${m.source} | ${fmt(m.providerName)} | ${fmt(m.providerType)} | ${fmt(m.model)} | ${fmt(m.temperature)} | ${fmt(m.maxTokens)} |`,
+          `| ${cell(m.source)} | ${cell(m.providerName)} | ${cell(m.providerType)} | ${cell(m.model)} | ${cell(m.temperature)} | ${cell(m.maxTokens)} |`,
         );
       }
     }
@@ -422,7 +490,7 @@ export class AgentTechDocHelper {
       lines.push('|---|---|---|---|---|');
       for (const t of c.tools) {
         lines.push(
-          `| ${fmt(t.name)} | ${fmt(t.type)} | ${fmt(t.apiSource)} | ${fmt(t.description)} | ${t.referencedBy.join('; ')} |`,
+          `| ${cell(t.name)} | ${cell(t.type)} | ${cell(t.apiSource)} | ${cell(t.description)} | ${cell(t.referencedBy.join('; '))} |`,
         );
       }
     }
@@ -510,13 +578,27 @@ export class AgentTechDocHelper {
 
     lines.push('## 7. Change History');
     lines.push('');
-    if (doc.changeHistory.length === 0) {
-      lines.push('No saved version snapshots.');
-    } else {
+    const edits = doc.recordedEdits ?? [];
+    if (doc.changeHistory.length === 0 && edits.length === 0) {
+      lines.push('No saved versions and no recorded edits.');
+    }
+    if (edits.length > 0) {
+      lines.push('Recorded edits (every save of the agent is snapshotted; who made each one is on the audit trail):');
+      lines.push('');
+      lines.push('| When | Change | Fields changed |');
+      lines.push('|---|---|---|');
+      for (const e of edits) {
+        lines.push(`| ${cell(e.at)} | ${cell(e.change)} | ${cell(e.fields.length ? e.fields.join(', ') : null)} |`);
+      }
+      lines.push('');
+    }
+    if (doc.changeHistory.length > 0) {
+      lines.push('Saved versions:');
+      lines.push('');
       lines.push('| Version | Saved at | Changelog | Pipeline nodes |');
       lines.push('|---|---|---|---|');
       for (const v of doc.changeHistory) {
-        lines.push(`| ${v.version} | ${v.savedAt} | ${fmt(v.changelog)} | ${v.nodeCount} |`);
+        lines.push(`| ${cell(v.version)} | ${cell(v.savedAt)} | ${cell(v.changelog)} | ${cell(v.nodeCount)} |`);
       }
     }
     lines.push('');

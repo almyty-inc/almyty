@@ -69,7 +69,8 @@ export const REQUIRED_CREDENTIALS: Record<string, readonly string[]> = Object.fr
   [ChannelType.IMESSAGE_SENDBLUE]: ['api_key_id', 'api_secret_key', 'phone_number', 'signing_secret'],
   [ChannelType.IMESSAGE_LOOPMESSAGE]: ['api_key', 'inbound_token'],
   [ChannelType.EMAIL]: ['resend_api_key', 'inbound_address', 'reply_from'],
-  [ChannelType.WEBHOOK]: ['callback_url', 'secret'],
+  // The callback URL is optional: without one the channel is inbound only.
+  [ChannelType.WEBHOOK]: ['secret'],
   [ChannelType.GOOGLE_CHAT]: ['webhook_url', 'verification_token'],
   [ChannelType.MICROSOFT_TEAMS]: ['bot_id', 'bot_password', 'service_url'],
   [ChannelType.SIGNAL]: ['api_url', 'phone_number'],

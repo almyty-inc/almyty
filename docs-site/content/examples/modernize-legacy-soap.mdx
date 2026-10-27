@@ -1,28 +1,126 @@
 # Give an old SOAP service a modern front door
 
-For companies with a core system that still speaks SOAP (an older way for systems to talk to each other) and no appetite to rewrite it. almyty reads the service's description file (its WSDL), turns each operation into a clean tool, and handles the old message format for you. Modern AI tools and assistants can then use the old system without anyone touching it.
+## What you'll build
 
-For example: a twenty-year-old stock system becomes "check stock level" and "reserve items" tools your assistants can call.
+Your sales team asks a plain question, "do we have 600 rolls of pallet wrap in Rotterdam? If so, reserve them for order SO-55120", and gets the answer from a stock system built in 2009 that only speaks SOAP. Nobody writes XML and nobody touches the old system: almyty reads the service's description (its WSDL), makes a tool for each thing the service can do, and turns tool calls into SOAP requests and the replies back into data. The same tools then go to an MCP gateway, so coding assistants such as Claude Code can use the old system too.
+
+![The stock assistant checked the stock in the SOAP system and reserved 600 rolls: reservation RSV-70411](/screenshots/examples/modernize-legacy-soap/00-result.png)
+
+This guide builds it for Harbor Supply, a made-up packaging wholesaler. Its `StockService` (SOAP 1.1, with three operations: `GetStockLevel`, `ReserveStock` and `ListWarehouses`) runs on its own servers and checks a user name and password on every call. The screenshots come from a test installation, so addresses in them start with `http://localhost`. It takes about 20 minutes.
 
 ## What you need
 
-- The service's WSDL (a link or a file) and its sign-in details, if it has any.
+- **An almyty account** and a key for an AI model, for example from OpenAI.
+- **The service's WSDL.** It is usually at the service's address with `?wsdl` at the end, such as `https://stock.harborsupply.example/StockService.asmx?wsdl`. If that address is only reachable inside your network, open it in a browser there and save the page as a file.
+- **A user name and password for the service**, ideally a service account just for almyty, with only the rights the assistant needs.
+- **A way for almyty to reach the service.** almyty calls the service from where it runs. If the service is only on your company network, run almyty there too (see [Self-hosting](/self-hosting)), or have your IT team open the service to almyty's address.
 
-## How to build it
+## 1. Connect an AI model
 
-1. **Connect the service.** Open **APIs**, click **Connect an API**, pick **SOAP / WSDL**, give the WSDL link or file, and click **Connect API**. almyty reads the address from it and builds each operation's inputs from the service's own types. Add the sign-in details when asked.
-2. **Check the tools.** Each operation is now a tool with named inputs and outputs. Nobody using it sees the SOAP messages.
+In the sidebar, open **Models**, click **Connect a provider**, set **Name** to `OpenAI`, pick **OpenAI**, paste your key and click **Save**.
 
-   ![An imported service, every operation turned into a tool](/screenshots/quickstart-api-imported.png)
+## 2. Connect the SOAP service
 
-3. **Keep the password in one place.** The service's user name and password go in [Credentials](/credentials), so there is one place to change them.
-4. **Open it up.** Give the tools to your own assistants under **Tools and APIs**, or create an **MCP** gateway under **Gateways**, **Create gateway**, so AI tools such as Claude Code can call the service, with keys, limits and a record of every call.
+1. Open **APIs**, click **Connect an API** and pick **SOAP / WSDL**.
+2. Under **Description**, paste the WSDL's link, or click **File** and pick the saved file.
+3. Open **Advanced** and set **Name** to `Harbor stock system`, so the tool names match this guide.
 
-## Ideas
+![Connect an API: the WSDL file, named Harbor stock system](/screenshots/examples/modernize-legacy-soap/01-connect.png)
 
-- OpenAPI, GraphQL and gRPC services connect the same way, so old and new systems end up in one place.
-- Put several old services behind one gateway.
+4. Click **Connect API**. almyty reads the WSDL: the service's address, its three operations, and the fields each one takes, from the types the WSDL declares. Each operation becomes a tool.
+
+![The stock system connected: 3 operations, 3 tools](/screenshots/examples/modernize-legacy-soap/02-api.png)
+
+## 3. Add the service account
+
+On the API's page, under **Key**, click **Add a key**. Set **How it is sent** to **As a username and password**, click **Create one here**, name it `Stock system service account` and fill in **Username** and **Password**. Click **Save**.
+
+![The service account, sent as a user name and password](/screenshots/examples/modernize-legacy-soap/03-key.png)
+
+almyty sends it with every call (as HTTP Basic authentication, which is what most older SOAP services check). It is kept under **Credentials**, so when the password changes you replace it in one place.
+
+## 4. Check a tool
+
+Open **Tools**, search for `get_stock_level` and open **harbor_stock_system_get_stock_level**. On **Test tool** you see the operation's own fields, **Sku** and **WarehouseCode**, taken from the WSDL. Type `HS-10442` into **Sku** and click **Execute Tool**.
+
+![The tool test: the SOAP reply with the stock in each warehouse](/screenshots/examples/modernize-legacy-soap/04-test-tool.png)
+
+The reply is the service's own XML: 1,840 rolls in Rotterdam (RTM), 320 in Antwerp (ANR), none in Hamburg (HAM). An assistant reads it as it is.
+
+## 5. Create the stock assistant
+
+Open **Agents**, click **Create agent** and pick **Autonomous**.
+
+1. Name it `Stock assistant`. **Model:** **gpt-4.1**. **Personality & style:** `Short and exact. Numbers first.`
+2. **Instructions:**
+
+```
+You answer the sales team's questions about stock at Harbor Supply, from the stock system.
+
+Warehouses: RTM is Rotterdam, ANR is Antwerp, HAM is Hamburg.
+Article numbers look like HS-10442.
+
+When someone asks you to reserve stock, reserve it only if that warehouse has enough on hand, and always give the order reference. Answer with the reservation number. If the stock system refuses, say why in plain words.
+```
+
+![The stock assistant's model, personality and instructions](/screenshots/examples/modernize-legacy-soap/05-agent.png)
+
+3. **Capabilities, Tools and APIs:** tick the three tools of **Harbor stock system**: `harbor_stock_system_get_stock_level`, `harbor_stock_system_reserve_stock` and `harbor_stock_system_list_warehouses`.
+
+![The three stock tools ticked](/screenshots/examples/modernize-legacy-soap/06-tools.png)
+
+4. Click **Save**, go back and click **Activate**.
+
+## 6. Try it
+
+Under **Try it**, type `Do we have 600 rolls of pallet wrap HS-10442 in Rotterdam? If yes, reserve them for order SO-55120.` and press Enter.
+
+![Try it: 1840 on hand, 600 reserved as RSV-70411, 1240 left](/screenshots/examples/modernize-legacy-soap/07-try.png)
+
+The assistant called `GetStockLevel` for Rotterdam, saw 1,840 on hand, called `ReserveStock` with 600 units and the order reference, and answered with the reservation number the stock system gave back. The **Runs** tab shows both calls, with what was sent and the SOAP reply.
+
+![The run: GetStockLevel, then ReserveStock](/screenshots/examples/modernize-legacy-soap/08-run.png)
+
+Reserving changes stock. If people should confirm each reservation, open **Settings**, **Advanced**, **Approvals** and add a rule under **Ask before large amounts**: **Tool** `harbor_stock_system_reserve_stock`, **The number** **Quantity**, **over** `500`. Larger reservations then wait for a person in **Approvals**. See [Approvals](/approvals).
+
+## 7. Open it to coding assistants
+
+An MCP gateway puts the same tools at one address that Claude Code, Cursor and other AI tools can use, with almyty checking who calls and recording every call.
+
+1. Open **Gateways** and click **Create gateway**. Pick **MCP**.
+2. Under **Tools**, click **Harbor stock system** to add all three of its tools.
+3. **Name:** `Harbor stock`.
+
+![Create gateway: MCP, the stock system's tools, named Harbor stock](/screenshots/examples/modernize-legacy-soap/09-gateway-new.png)
+
+4. Click **Create gateway**. The gateway's page shows its address and, under **Connect a client**, the command for each app. For Claude Code:
+
+```
+claude mcp add harbor-stock --transport http https://api.almyty.com/harbor-supply/harbor-stock
+```
+
+![The gateway, live, with the command for Claude Code](/screenshots/examples/modernize-legacy-soap/10-gateway.png)
+
+Run the command in a terminal. The gateway lets in only people of your organization who are signed in, so Claude Code asks you to sign in to almyty in your browser the first time (in Claude Code, type `/mcp` to see it connected). From then on you can ask Claude Code "how many HS-20817 pallets are in Antwerp?" while you work, and the answer comes from the stock system. Under **Who can use it** on the gateway's page you choose who may connect: only you, a team, your organization, or outside apps with a key.
+
+## Make it yours
+
+- **More old services.** Connect each WSDL the same way and add their tools to the same gateway, so one address serves all of them.
+- **WS-Security instead of Basic authentication.** Some services want the user name inside the SOAP message (a `UsernameToken` header) rather than in HTTP. Ask your IT team which one yours checks; almyty sends HTTP Basic.
+- **Read-only to start.** Leave `reserve_stock` unticked on the assistant until the team trusts it, and add it later.
+- **The service's address changed.** On the API's page, click **Edit** and change the address; the tools keep working.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **almyty can't open links to private or local addresses** when connecting | The WSDL is on your internal network. Open it in a browser there, save it, and pick **File**. |
+| Every call fails with **ECONNREFUSED** or a timeout | almyty cannot reach the service's address. See "A way for almyty to reach the service" above. |
+| A call returns a SOAP fault like **Access denied: unknown user or wrong password** | The user name or password is wrong, or the service expects WS-Security instead of Basic authentication. |
+| A tool has no inputs except what you see on the WSDL's types | The WSDL describes its operations without types (some older services do). Make the tool by hand with **Create tool**, **SOAP**, and add the fields; see [SOAP tools](/tools/soap-tools). |
+| Claude Code says the server needs authentication and nothing opens | Run `/mcp` in Claude Code, pick `harbor-stock` and choose to authenticate. |
 
 ## Related
 
-- [Connect an API](/tools) · [MCP gateway](/gateways/mcp) · [Give your coding assistant your own API](/examples/give-claude-your-api)
+- [SOAP tools](/tools/soap-tools) · [MCP gateway](/gateways/mcp) · [Gateway authentication](/gateways/authentication)
+- [Your API in a coding assistant](/examples/give-claude-your-api)

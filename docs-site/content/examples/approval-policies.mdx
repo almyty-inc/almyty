@@ -1,30 +1,124 @@
-# Decide who signs off, once, for every assistant
+# Decide who signs off on refunds
 
-Set the sign-off rules for your whole organization in one place, instead of repeating them in every assistant's instructions. For example: refunds over $500 need a finance lead; anything over $5,000 needs a finance lead and then an admin. Whenever any assistant asks for approval, the matching rule decides who has to say yes, and every decision is recorded.
+## What you'll build
 
-Approval rules need the Business plan. Without them, any owner or admin can approve a request on their own.
+Sign-off rules for the refunds an assistant makes in Stripe, set up for Velora Energy, a made-up energy supplier:
+
+- A refund over **€500** waits until the **lead of the Finance team** approves it.
+- A refund over **€5,000** needs the Finance lead **and then an admin**, two different people, in that order.
+- Smaller refunds go through on their own.
+
+Here a €6,240.00 refund for a customer who was charged twice went through after Joost (Finance lead) and Lotte (admin) both approved:
+
+![The run: the approval request, then the refund in Stripe after both approvals](/screenshots/examples/approval-policies/00-two-step.png)
+
+Rules with several steps, or with a particular approver, are **approval policies** and need the **Business** plan. Without it, one approval from any owner or admin decides every request. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 15 minutes.
 
 ## What you need
 
-- An assistant that asks for approval before risky steps (see [Approvals](/approvals)).
-- The Business plan, for rules with several steps or several approvers.
+- The Business plan, and **owner or admin** in your almyty organization.
+- The teams and the **Billing assistant** from [Keep each team's assistants to that team](/examples/multi-team-rbac): a **Finance** team with Joost as its **Lead**, an admin (Lotte), and a billing assistant for Finance that uses Stripe's **List all customers**, **List all charges** and **Create a refund**.
 
-## How to build it
-1. **Tell the assistant when to ask.** In the assistant's instructions, and as a rule on its **Constraints** tab, say what needs a person first, for example "Ask for approval before any refund over $500". When it asks, its run pauses. The assistant decides to ask because you told it to, so keep the rule short and clear. For an amount, add an amount rule as well (**Settings → Advanced → Approvals → Ask before large amounts**, free on every plan): almyty then checks every refund call itself before it runs, whatever the assistant was told. See [ask before a large amount](/approvals#ask-before-a-large-amount-whatever-the-assistant-was-told).
-1. **Tell the assistant when to ask.** In the assistant's instructions, and as a rule on its **Constraints** tab, say what needs a person first, for example "Ask for approval before any refund over $500". When it asks, its run pauses. The assistant decides to ask because you told it to, so keep the rule short and clear.
-2. **Write the rule.** Open **Settings**, then **Approvals** under **Advanced**, and click **New policy**. Under **Match conditions**, click **Add condition** to say which requests it covers (for example, an amount over 500). Under **Approval steps**, click **Add step** for each sign-off, in order: who approves it, and how many people must. Click **Create policy**.
-3. **Approve or reject.** Paused requests appear on the **Approvals** page with the reason and the amount. Here the demo's support assistant stopped on an $820 refund for Brightway Logistics:
+## 1. Tell the assistant when to ask
 
-   ![A refund waiting for approval](/screenshots/approval-refund-820.png)
+An approval policy decides **who** signs off. **When** to ask comes from the assistant: it asks with its built-in `request_approval` step, and the policy reads the amount from that request. So the instructions must say when to ask and how to state the amount.
 
-4. **Check the record.** The run carries on after the last approval, or stops on a rejection. Both are in the audit trail, with who decided and when (see [Stream your audit trail](/examples/audit-to-siem)).
+Open the billing assistant, click **Edit** and set **Instructions** to:
 
-## Ideas
+> You help Velora Energy's finance team with customers' bills. Find the customer in Stripe by the email address on their account, and look at their charges before you answer.
+>
+> You can refund a charge in Stripe. Before any refund over €500, ask for approval first with request_approval: in the reason, say who the customer is, which charge, how much and why. In the payload, put the amount in euros as amount_eur, and the customer, charge and invoice. Only make the refund once it is approved. Never refund more than was charged.
+>
+> Amounts in euros with two decimals.
 
-- Different amounts, different people: one approver under $5,000, two steps above.
-- Rules for one team's assistants only, so each team's own lead signs off.
-- New assistants follow the same rules as soon as they ask for approval.
+Click **Save**.
+
+`amount_eur` is a name you choose; the policies below look for exactly that name. Stripe itself counts in cents (a refund of `624000` is €6,240.00), which is why the instructions ask for euros in the request: people reading the request and the rules you write both use euros.
+
+## 2. Two steps for refunds over €5,000
+
+Open **Settings**, then **Advanced → Approvals**. Under **Approval policies**, click **New policy** and fill in:
+
+- **Name**: `Refunds over €5,000`
+- **Description**: `Large refunds: the finance lead checks the customer and the charge, then an admin signs off.`
+- **Which agents it applies to**: **One team**, **Finance**.
+- Under **Match conditions**, click **Add condition**: `payload.amount_eur`, **greater than**, `5000`.
+- Under **Approval steps**, the first step: name `Finance lead`, approver role `team_lead`, `1`. Click **Add step** for the second: `Admin`, `admin`, `1`.
+- Open **Advanced** and set **Priority** to `10`.
+
+![The policy: refunds over €5,000 need the Finance lead, then an admin](/screenshots/examples/approval-policies/01-big-refunds.png)
+
+Click **Create policy**.
+
+The approver role is typed, not picked. These work: `team_lead` (a lead of the team the assistant belongs to), `team_member`, `owner`, `admin`, `member`, and `*` for anyone who may approve.
+
+## 3. One step for refunds over €500
+
+Click **New policy** again:
+
+- **Name**: `Refunds over €500`
+- **Description**: `Every other refund that needs a person: the Finance team's lead decides.`
+- **Which agents it applies to**: **One team**, **Finance**.
+- **Match conditions**: `payload.amount_eur`, **greater than**, `500`.
+- **Approval steps**: `Finance lead`, `team_lead`, `1`.
+
+Leave **Priority** at `0` and click **Create policy**.
+
+![Both policies on the Approvals settings page](/screenshots/examples/approval-policies/02-policies.png)
+
+A €6,240 refund matches both policies. The one with the higher priority decides, so it gets the two steps. A refund of €740 only matches the second.
+
+## Try it
+
+Open the billing assistant and, under **Try it**, send:
+
+```
+Bakkerij De Zon B.V. (administratie@bakkerijdezon.example) was charged twice for their September bill. Please refund the duplicate.
+```
+
+The assistant finds the customer and both charges of €6,240.00 for invoice VE-INV-2026-09-20417, and asks for approval before refunding the second one. The run pauses:
+
+![Try it: waiting for approval](/screenshots/examples/approval-policies/03-try.png)
+
+**Joost signs first.** As the Finance lead, he is notified (the bell at the top right, and by email), and so are the owners and admins. On **Approvals** he sees the assistant's reason and, under **What it will do**, the charge, the invoice, the customer and the amount it put in the request:
+
+![The refund waiting on the Approvals page, as Joost sees it](/screenshots/examples/approval-policies/04-waiting.png)
+
+He clicks **Approve**, adds a note (`Checked in Stripe: the September invoice was collected twice.`) and clicks **Approve** again. The request stays on the page as **pending**: his step is done and the admin's is next. The page does not say which step a request is on, so tell your approvers which requests take two signatures.
+
+![After Joost approved: still pending, now for an admin](/screenshots/examples/approval-policies/05-after-first.png)
+
+**Lotte signs second.** She approves on her **Approvals** page. Now both steps are done, the run carries on, and the assistant makes the refund in Stripe:
+
+> Refunded **€6,240.00** to **Bakkerij De Zon B.V.** (VE-B-20417). It was approved first, as refunds over €500 need.
+>
+> - Stripe refund: `re_3QvD011bBakkerijSe` (succeeded)
+> - Charge: `ch_3QvC1bBakkerijSep02`, Invoice VE-INV-2026-09-20417 (September 2026)
+
+The run's steps (picture at the top) show the request for approval followed by the call to **Create a refund**.
+
+**A smaller one.** Send `Anna Kowalski (anna.kowalski@mailbox.example) was billed €1,124.00 on an estimated meter reading. Her actual reading gives €383.40. Refund €740.60.` This matches only **Refunds over €500**: Joost's approval alone lets it through.
+
+![A €740.60 refund: one approval, from the Finance lead](/screenshots/examples/approval-policies/06-small.png)
+
+If anyone clicks **Reject**, the refund is not made and the run stops. A request nobody decides expires after 24 hours.
+
+## Make it yours
+
+- **A quorum.** "Any two people from Finance": one step with role `team_member` and `2`.
+- **Other actions.** The same works for anything the assistant asks about, for example credit notes or contract changes: tell it what to put in the request, and match on that.
+- **A limit that does not depend on the instructions.** A policy only governs requests the assistant raises. To hold every **Create a refund** call over an amount whatever the assistant does, add an amount rule under **Ask before large amounts** on the same page (free on every plan; one approval decides it). See [ask before a large amount](/approvals#ask-before-a-large-amount-whatever-the-assistant-was-told).
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| A large refund needed only one approval | The assistant left `amount_eur` out of its request, or wrote it as text. On **Approvals**, **What it will do** shows what the request carries (as **Amount eur**); the instructions must name the field exactly. |
+| Joost cannot approve | `team_lead` means a lead of the team the **assistant** belongs to. Check that the billing assistant is set to **One team: Finance** and that Joost's role there is **Lead**. |
+| Lotte's approval did not finish it | One person counts once per request. Steps go in order: an approval for step two only counts once step one is done. |
+| A role name such as `finance` never matches | Approver roles are the built-in names above; custom role names are not used here. |
+| **New policy** is missing | Approval policies need the Business plan. |
 
 ## Related
 
-- [Approval policies](/enterprise/approval-policies) · [Approvals](/approvals) · [Customer support assistant](/examples/customer-support-assistant) · [Governed refund agent](/examples/governed-refund-agent)
+- [Approvals](/approvals) · [Approval policies](/enterprise/approval-policies) · [Keep each team's assistants to that team](/examples/multi-team-rbac) · [Send your audit trail to Splunk](/examples/audit-to-siem)

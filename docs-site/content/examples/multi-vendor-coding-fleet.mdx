@@ -1,42 +1,130 @@
 # Several coding assistants on one task
 
-For engineers who want more than one coding assistant on a job, each on the AI model it is best with. A planning assistant splits the task up and hands the pieces to coding tools installed on your machine (Claude Code, Codex, aider and others), all working on the same code.
+## What you'll build
 
-This builds on [Let an assistant work on one of your machines](/examples/expose-any-machine): the coding tools run on your machine through a runner.
+A "coding lead" assistant that takes a programming task, splits it, and hands the parts to the coding assistants installed on one of your machines: here Claude Code writes the code and Codex writes the tests, each with its own AI company behind it. The lead then runs the tests and reports who did what, whether the tests pass and which files changed. The coding assistants run on your machine, in a folder set aside for the job, through an almyty runner.
+
+![The coding lead's report: Claude Code wrote formatIban, Codex wrote two tests, 3 tests pass, three files changed](/screenshots/examples/multi-vendor-coding-fleet/00-result.png)
+
+This guide builds it for Tidewater Labs, a made-up company, on the laptop of one of its engineers, Ines. The task is real and so are the assistants: the run in the screenshots used Claude Code 2.1 and Codex 0.163, which wrote the code and tests shown below. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 20 minutes, plus a few minutes for each run.
 
 ## What you need
 
-- A machine with your code and the coding tools installed, with a runner started on it.
-- Keys for the AI providers those coding tools use, set up on that machine.
-- Someone comfortable with a terminal.
+- **An almyty account** and a key for an AI model, for example from OpenAI, for the coding lead itself.
+- **A machine with the code and the coding assistants**: a laptop or a build server with Node.js, and the coding assistants you want to use installed and signed in there, such as Claude Code (`claude`) and Codex (`codex`). Each one uses its own account and AI company from that machine.
+- **The code**, as a folder or a git repository the machine can reach. This guide uses a small JavaScript library, `ledgerly-utils`, in `/tmp/tidewater/ledgerly-utils`.
+- **Someone comfortable with a terminal**, to start the runner.
 
-## How to build it
+## 1. Connect an AI model
 
-1. **Start a runner** on the machine with your code (see below). Its page lists, under **Coding agents**, the coding tools it found.
+In the sidebar, open **Models**, click **Connect a provider**, set **Name** to `OpenAI`, pick **OpenAI**, paste your key and click **Save**. This is the model of the coding lead, which plans and checks; the coding assistants use their own.
 
-   ![A runner's page, with the coding tools it found](/screenshots/runner-detail.png)
+![OpenAI connected, with its models and prices](/screenshots/examples/multi-vendor-coding-fleet/01-model.png)
 
-2. **Create the planning assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. Under **Tools and APIs**, pick the runner's tools: the one that runs a command (its name ends in `shell.exec`) and the one that lists the coding tools on the machine.
-3. **Write the plan into its instructions.** For example: "Split the task into parts. For each part, run a coding tool in its non-interactive mode in the project folder (give its full path), one tool per part, then check the result." Name the command for each tool (see below).
-4. **Review the result.** Every coding tool works in the same project folder on your machine. Review the changes as you normally would.
+## 2. Start a runner on the machine
 
-The plan lives in your instructions: almyty runs the commands on your machine and returns what they print; it doesn't decide the split for you. The coding tools talk to their AI providers directly from your machine.
+Open **Runners** and click **Start a runner**. The page shows three commands. Run them in a terminal on the machine:
 
-## For developers
-
-```bash
-npm i -g @almyty/runner @almyty/auth
-almyty-auth login
-almyty-runner start --name my-laptop
+```
+npm i -g @almyty/cli
+almyty login
+almyty runner start
 ```
 
-Each coding tool has its own non-interactive command, for example `claude -p "<task>"`, `codex exec "<task>"` or `aider --message "<task>"`. For long interactive sessions driven by a script instead of an assistant, the runner API has coding sessions (`POST /runners/:id/coding/sessions`, then its `input`, `stop` and `events` endpoints), which start a coding tool unattended with its own settings and report whether it is busy, idle or waiting for input. See [Runners](/runner).
+`almyty login` opens almyty in your browser to sign in as yourself. Keep the terminal with `almyty runner start` open: the runner works as long as it runs, as your user on that machine.
 
-## Ideas
+![Start a runner: install, log in, start](/screenshots/examples/multi-vendor-coding-fleet/02-start-runner.png)
 
-- Put a different model behind each coding tool.
-- Have a [review assistant](/examples/pr-review-bot) check what they produced.
+The runner appears on **Runners**, **online**, named after the machine. To pick the name yourself, start it with `almyty runner start --name ines-macbook`, or rename it on its page.
+
+![The runner online on the Runners page](/screenshots/examples/multi-vendor-coding-fleet/03-runners.png)
+
+Open it. Under **Coding agents** it lists the coding assistants it found on the machine, with the AI company each one uses.
+
+![The coding assistants the runner found: Claude Code, Codex, Gemini CLI and more](/screenshots/examples/multi-vendor-coding-fleet/04-runner.png)
+
+The runner publishes what it can do as tools named after it: `runner.ines-macbook.agent.list` lists the coding assistants, and `runner.ines-macbook.shell.exec` runs a command. A runner is private to whoever started it, unless you change **Who can use it** on its page.
+
+## 3. Create the coding lead
+
+Open **Agents**, click **Create agent** and pick **Autonomous**.
+
+1. Name it `Coding lead`. **Model:** **gpt-4.1**.
+2. **Personality & style:** `Plans before acting, keeps each assistant to one clear job, reports plainly what changed.`
+3. **Instructions** (change the machine name and the way it gets the code):
+
+```
+You lead a small team of coding assistants on the machine ines-macbook. You plan and check; the assistants write the code.
+
+For each task:
+1. List the coding assistants on the machine.
+2. Get the code: cp -R /tmp/tidewater/ledgerly-utils app && cd app && git init -q && git add -A && git commit -qm start
+3. Split the task in two: the code, and the tests for it.
+4. Give the code to Claude Code: cd app && claude -p "<the code part>" --permission-mode acceptEdits
+5. Give the tests to Codex: cd app && codex exec --sandbox workspace-write "<the test part>" < /dev/null
+6. Run the tests: cd app && npm test
+7. Show what changed: cd app && git add -A && git diff --cached --stat
+
+Then report who did what, whether the tests pass, and which files changed. Never push or publish anything.
+```
+
+Why the commands look like this:
+
+- Each run gets its own folder on the machine (a workspace, in `~/.almyty/workspaces/`), and commands run there. Step 2 puts a copy of the code in it, so the assistants never touch your working copy. With a git repository, use `git clone <your repository> app` instead.
+- `claude -p` and `codex exec` are the two assistants' non-interactive modes: they do the job and print what they did. `--permission-mode acceptEdits` lets Claude Code change files without asking; `--sandbox workspace-write` lets Codex write only inside the folder.
+- `< /dev/null` matters: Codex reads extra input when it is given any, and without it would wait for input that never comes.
+
+![The coding lead's model, personality and instructions](/screenshots/examples/multi-vendor-coding-fleet/05-agent.png)
+
+4. **Capabilities, Tools and APIs:** search for `ines-macbook` and tick **Runner ines macbook agent list** and **Execute a one-shot shell command on the runner host** (`runner.ines-macbook.agent.list` and `runner.ines-macbook.shell.exec`).
+
+![The two runner tools ticked](/screenshots/examples/multi-vendor-coding-fleet/06-tools.png)
+
+5. At the top, click **Everyone** and pick **Only you**. Your runner is private, so only a private agent of yours may use its tools; saving an agent for everyone with them is refused.
+
+![Who can use the agent: only you](/screenshots/examples/multi-vendor-coding-fleet/07-only-you.png)
+
+6. Click **Save**, go back and click **Activate**.
+
+## 4. Try it
+
+Under **Try it**, type the task:
+
+```
+Add formatIban(iban) to ledgerly-utils: it removes spaces, makes the letters upper case, checks the IBAN checksum (mod 97) and returns the IBAN in groups of four, or throws an Error for an invalid IBAN. Export it from src/index.js.
+```
+
+It takes a few minutes: each coding assistant does its part on the machine while the lead waits.
+
+![Try it: the report after about four minutes](/screenshots/examples/multi-vendor-coding-fleet/08-try.png)
+
+In this run:
+
+- **Claude Code** wrote `src/iban.js` (29 lines: it compacts and upper-cases the IBAN, checks its shape, computes the mod 97 checksum, and returns it in groups of four) and added the export to `src/index.js`. It said it had not run the code: with `acceptEdits` it may change files but not run commands.
+- **Codex** wrote `test/iban.test.js` with two tests: an IBAN in lower case with uneven spaces (`'  de89  37040044 0532 013000  '` becomes `'DE89 3704 0044 0532 0130 00'`) and one with a wrong checksum that must throw.
+- **The tests:** 3 passed, 0 failed (the two new ones and the one the library already had). Three files changed, 44 lines added.
+
+The **Runs** tab shows each command, what it printed and how long it took, so you can follow exactly what each assistant did. The code stays in the run's folder on the machine (`~/.almyty/workspaces/coding-lead-.../app`); review it there as you would any change, and commit it yourself.
+
+![The run step by step: the copy, Claude Code, Codex, the tests and the diff](/screenshots/examples/multi-vendor-coding-fleet/09-run.png)
+
+## Make it yours
+
+- **Other assistants.** Swap in any that the runner lists, in their non-interactive mode, for example `gemini -p "<task>"` for Gemini CLI. Give each the job it is best at.
+- **A pull request at the end.** Add a step: "push the branch and open a pull request with gh pr create", with the GitHub CLI signed in on the machine. Leave it out until you trust the results.
+- **A review afterwards.** Send the pull request to the [first-pass review assistant](/examples/pr-review-bot).
+- **Another machine.** Start a runner on a build server instead of a laptop, and give it labels such as `os=linux` so the work lands there (see [Runners](/runner)).
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| Saving the agent does nothing, and the browser console says the tools **are private to their owner** | Set the agent to **Only you** (step 3.5), or open the runner to your team on its page. |
+| A step says **runner ines-macbook did not respond** | The runner stopped (its terminal was closed) or the machine is asleep. Start it again with `almyty runner start`. |
+| The Codex step runs until its time is up and prints **Reading additional input from stdin** | Add `< /dev/null` to the Codex command. |
+| Claude Code or Codex says it is not signed in | Sign it in on the machine itself (`claude`, `codex login`), as the user that runs the runner. |
+| **command not found: claude** | The runner does not see the program. Start the runner from a terminal where `claude --version` works. |
 
 ## Related
 
-- [Runners](/runner) · [Let an assistant work on one of your machines](/examples/expose-any-machine) · [CLI: the runner](/cli/runner)
+- [Runners](/runner) · [Work on one of your machines](/examples/expose-any-machine) · [CLI: the runner](/cli/runner)

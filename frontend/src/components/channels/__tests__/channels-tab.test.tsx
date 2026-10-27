@@ -83,6 +83,24 @@ describe('ChannelsTab', () => {
     expect(agentChannelsApi.list).toHaveBeenCalledWith('agent-1')
   })
 
+  it('shows a live channel this server cannot receive on as not receiving messages, and why', async () => {
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([
+      channel({
+        id: 'c-tg', type: 'telegram', status: 'live', gatewayId: 'gw-tg',
+        webhookRegistration: { action: 'register', status: 'skipped', error: 'the public address of this server is not configured (PUBLIC_API_URL)', code: 'PUBLIC_URL_NOT_CONFIGURED', at: null },
+      }),
+      channel({ id: 'c-sms', type: 'sms', status: 'live', gatewayId: 'gw-sms', webhookRegistration: { action: 'register', status: 'registered', error: null, at: null } }),
+    ])
+    render(<ChannelsTab agentId="agent-1" agentName="Support" />)
+
+    const cell = await screen.findByTestId('channel-not-receiving')
+    expect(cell).toHaveTextContent('Not receiving messages')
+    expect(cell).toHaveTextContent('Public address not configured')
+    // Only the one that cannot receive; a registered channel reads Live.
+    expect(screen.getAllByTestId('channel-not-receiving')).toHaveLength(1)
+    expect(screen.getByText('Live')).toBeInTheDocument()
+  })
+
   it('tells two channels of one kind apart by their names, with the kind beside a name of its own', async () => {
     vi.mocked(agentChannelsApi.list).mockResolvedValue([
       channel({ id: 'c-s1', type: 'slack', name: 'Slack' }),

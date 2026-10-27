@@ -66,6 +66,10 @@ export const RUNNER_CAPABILITIES: CapabilityDef[] = [
           minimum: 1,
           description: 'Hard timeout in milliseconds. The runner kills the process if exceeded.',
         },
+        input: {
+          type: 'string',
+          description: 'Text written to the command\'s standard input. Without it standard input is closed, so a command that reads it sees end-of-input instead of waiting.',
+        },
       },
       required: ['command'],
       additionalProperties: false,
@@ -76,4 +80,25 @@ export const RUNNER_CAPABILITIES: CapabilityDef[] = [
 /** The inputs of a runner method that are the command it runs (none for an unknown method). */
 export function runnerExecutableInputs(method: string | null | undefined): string[] {
   return RUNNER_CAPABILITIES.find((cap) => cap.method === method)?.executableInputs ?? [];
+}
+
+/** The longest a single runner call is waited for: a command's own timeoutMs is honoured up to this. */
+export const MAX_RUNNER_CALL_WAIT_MS = 60 * 60_000;
+/** Time for a command's answer to come back after the runner stops it at its own timeout. */
+const RUNNER_ANSWER_GRACE_MS = 10_000;
+
+/**
+ * How long to wait for a runner call. The tool's own timeout wins. Without
+ * one, a call that sets its own hard timeout (shell.exec's `timeoutMs`) is
+ * waited for that long plus time for the answer to arrive: the runner
+ * stops the command then, and the answer says so. Otherwise undefined, the
+ * dispatch default. Waiting only the 30-second default while the command
+ * was allowed ten minutes reported a coding assistant still at work as a
+ * runner that did not answer.
+ */
+export function runnerCallWait(configured: number | undefined, params: unknown): number | undefined {
+  if (typeof configured === 'number' && configured > 0) return configured;
+  const own = (params as { timeoutMs?: unknown } | null)?.timeoutMs;
+  if (typeof own !== 'number' || !Number.isFinite(own) || own <= 0) return undefined;
+  return Math.min(own, MAX_RUNNER_CALL_WAIT_MS) + RUNNER_ANSWER_GRACE_MS;
 }

@@ -427,6 +427,46 @@ describe('AgentTechDocHelper', () => {
       expect(md).toContain('request_approval');
       expect(md).toContain('Never delete production data');
     });
+
+    // An imported API's tool descriptions carry HTML and line breaks; either
+    // one broke the Markdown table it sat in.
+    it('keeps a table row whole when a description has HTML, pipes or several lines', async () => {
+      toolRepo.find.mockResolvedValue([
+        {
+          ...tools[0],
+          description: '<p>Search charges.</p>\nUse the <code>query</code> language:\n  amount>100 | status:"paid"',
+        },
+      ]);
+      agentsService.getAgent.mockResolvedValue(autonomousAgent());
+      const md = helper.renderMarkdown(await helper.build('agent-1', ORG, VIEWER));
+
+      const row = md.split('\n').find((l) => l.startsWith('| get_weather'))!;
+      expect(row).toBe(
+        '| get_weather | api | Open-Meteo | &lt;p&gt;Search charges.&lt;/p&gt; Use the &lt;code&gt;query&lt;/code&gt; language: amount&gt;100 \\| status:"paid" | ' +
+          row.split(' | ').pop(),
+      );
+      expect(row.split(/(?<!\\)\|/).length).toBe(7);
+    });
+
+    // An edit without "Save version" left the section saying "No saved
+    // version snapshots", though every save is snapshotted.
+    it('lists recorded edits from the agent snapshots, with the fields each changed', async () => {
+      const snapshots = [
+        { event: 'UPDATE', timestamp: new Date('2026-10-20T10:00:00Z'), object: { name: 'Ops Copilot', instructions: 'v2', updatedAt: 'b' } },
+        { event: 'INSERT', timestamp: new Date('2026-10-19T09:00:00Z'), object: { name: 'Ops Copilot', instructions: 'v1', updatedAt: 'a' } },
+      ];
+      (runRepo as any).manager = { getRepository: () => ({ find: jest.fn().mockResolvedValue(snapshots) }) };
+      agentsService.getAgent.mockResolvedValue({ ...autonomousAgent(), metadata: {} });
+
+      const doc = await helper.build('agent-1', ORG, VIEWER);
+      expect(doc.recordedEdits).toEqual([
+        { at: '2026-10-20T10:00:00.000Z', change: 'Edited', fields: ['instructions'] },
+        { at: '2026-10-19T09:00:00.000Z', change: 'Created', fields: [] },
+      ]);
+      const md = helper.renderMarkdown(doc);
+      expect(md).not.toContain('No saved version snapshots');
+      expect(md).toContain('| 2026-10-20T10:00:00.000Z | Edited | instructions |');
+    });
   });
 });
 

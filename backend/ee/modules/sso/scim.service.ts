@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { NotificationsService } from '../../../src/modules/notifications/notifications.service';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 
@@ -54,6 +54,7 @@ export interface ScimPatchOp {
 export interface ScimGroupInput {
   schemas?: string[];
   displayName?: string;
+  externalId?: string;
   members?: { value: string }[];
 }
 
@@ -359,21 +360,42 @@ export class ScimService {
 
   // ── Groups (mapped to Teams) ──────────────────────────────────────
 
+  /**
+   * A group becomes a team. A team someone already made by hand under the
+   * same name (case aside) is linked instead of refused: answering 409
+   * left the IdP retrying forever and the admin with two ways to say
+   * "Finance" and no way to join them. Linking keeps the team, its id and
+   * its members, and puts the group's members on it as well. The
+   * organization's "Everyone" team is never linked: a group syncing it
+   * could take people out of the team everyone is in.
+   */
   async createGroup(orgId: string, input: ScimGroupInput) {
     if (!input.displayName) {
       throw new BadRequestException('SCIM group requires displayName');
     }
-    const existing = await this.teamRepo.findOne({
-      where: { organizationId: orgId, name: input.displayName },
+    const name = input.displayName.trim();
+    // Case-insensitive, with LIKE's wildcards in the name taken literally.
+    const sameName = await this.teamRepo.findOne({
+      where: { organizationId: orgId, name: ILike(name.replace(/[\\%_]/g, (c) => `\\${c}`)) },
     });
-    if (existing) {
-      throw new ConflictException('A group with this name already exists');
+    if (sameName?.isDefault) {
+      throw new ConflictException(
+        `"${sameName.name}" is the organization's default team, which every member is on; name the group something else`,
+      );
+    }
+    const scim = { linkedAt: new Date().toISOString(), externalId: input.externalId ?? null };
+    if (sameName) {
+      sameName.settings = { ...(sameName.settings ?? {}), scim };
+      const linked = await this.teamRepo.save(sameName);
+      await this.syncGroupMembers(orgId, linked.id, input.members ?? []);
+      return this.getGroup(orgId, linked.id);
     }
     const team = await this.teamRepo.save(
       this.teamRepo.create({
         organizationId: orgId,
-        name: input.displayName,
+        name,
         description: 'Provisioned via SCIM',
+        settings: { scim },
       }),
     );
     const kept = await this.syncGroupMembers(orgId, team.id, input.members ?? []);

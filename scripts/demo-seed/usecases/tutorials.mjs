@@ -329,7 +329,8 @@ async function founder(page, h) {
   await page.getByPlaceholder('Search tools...').fill('calendar_events_list')
   await h.wait(1500)
   await h.shot('founder-09')
-  await page.getByText('google_calendar_calendar_events_list', { exact: true }).first().click()
+  // The list shows the tool's display name; its machine name is the title.
+  await page.getByTitle('google_calendar_calendar_events_list', { exact: true }).first().click()
   await h.wait(1500)
   await page.getByRole('tab', { name: 'Test tool' }).click()
   await page.getByPlaceholder('Enter calendarId').fill('primary')

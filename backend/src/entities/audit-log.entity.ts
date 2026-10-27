@@ -102,6 +102,25 @@ export enum AuditAction {
   // A tool call held for a person's approval by an approval policy's
   // amount rule (ToolApprovalGate): asked, or refused where nobody can be asked.
   APPROVAL_GATE = 'approval_gate',
+  // A person deciding an approval request: approved, rejected, one step
+  // of a multi-step sign-off (status 'step_approved'), or it expiring.
+  APPROVAL_DECIDED = 'approval_decided',
+
+  // Signing in through the organization's single sign-on (SAML or OIDC).
+  SSO_LOGIN = 'sso_login',
+
+  // People and teams: invitations, members' roles, teams and who is on them.
+  INVITE_SEND = 'invite_send',
+  INVITE_ACCEPT = 'invite_accept',
+  INVITE_REVOKE = 'invite_revoke',
+  MEMBER_ROLE_CHANGE = 'member_role_change',
+  MEMBER_REMOVE = 'member_remove',
+  TEAM_CREATE = 'team_create',
+  TEAM_UPDATE = 'team_update',
+  TEAM_DELETE = 'team_delete',
+  TEAM_MEMBER_ADD = 'team_member_add',
+  TEAM_MEMBER_ROLE_CHANGE = 'team_member_role_change',
+  TEAM_MEMBER_REMOVE = 'team_member_remove',
 
   // A person's data on an agent's channels: their copy sent to them, or
   // everything held about them erased, by the visitor themselves or by an
@@ -115,6 +134,10 @@ export enum AuditAction {
   ALWAYS_ON_DISABLE = 'always_on_disable',
   ALWAYS_ON_PAUSE = 'always_on_pause',
   WAKE_DROPPED = 'wake_dropped',
+  // An approval decided in chat, from the owner's own channel (a button or a
+  // reply), and an attempt there by anyone else, refused: details.outcome,
+  // the channel and the platform identity that pressed or wrote.
+  CHANNEL_APPROVAL = 'channel_approval',
 
   // Hosted runners (docs/hosted-runners.md): an environment's changes, every
   // move of its machines (details.from/to: provisioned, woken, suspended,
@@ -159,6 +182,9 @@ export enum AuditResource {
   RUNNER = 'runner',
   ENVIRONMENT = 'environment',
   HOSTED_RUNNER = 'hosted_runner',
+  APPROVAL = 'approval',
+  TEAM = 'team',
+  INVITATION = 'invitation',
 }
 
 @Entity('audit_logs')

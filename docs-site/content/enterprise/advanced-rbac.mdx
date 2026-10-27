@@ -1,8 +1,8 @@
 # Advanced RBAC
 
-Give each person exactly the access they need. For example, an "agent operator" role that can run and inspect agents but only look at everything else, or a rule that nobody may run an agent on an amount over $10,000 unless they are in finance.
+Give each person exactly the access they need. For example, an "agent operator" role that lets a viewer run agents, or a rule that nobody may run an agent on an amount over $10,000 unless they are in finance.
 
-RBAC (role-based access control) means deciding what people can do by the role they hold. Every organization already has the basic roles (owner, admin, member, and team leads), which are free and enough for most teams. Advanced RBAC adds two things on top:
+RBAC (role-based access control) means deciding what people can do by the role they hold. Every organization already has the basic roles (owner, admin, member, viewer, and team leads), which are free and enough for most teams. Advanced RBAC adds two things on top:
 
 - **Custom roles**: your own named roles with exactly the permissions you choose.
 - **Access policies**: rules that look at the details of a request, such as an amount, to allow or refuse it.
@@ -15,38 +15,46 @@ This needs the **Business** or **Enterprise** plan. Owners and admins manage it 
 
 1. Open **Settings → People and access → Roles**.
 2. Under **Custom roles**, click **New role**.
-3. Enter a **Name**, an optional **Description**, and the **Permissions**, one per line (see [how permissions are written](#how-permissions-are-written)).
+3. Enter a **Name**, an optional **Description**, and the **Permissions**, one per line (see [the permissions](#the-permissions)). **What each permission unlocks**, under the field, lists them.
 4. Click **Create role**.
 5. To give the role to people, use the assign action on the role's row, pick the members and click **Assign**.
 
 ![New custom role form with name, description and permissions](/screenshots/settings-rbac-new-role.png)
 
-A custom role only ever adds to what someone's basic role already allows; it never takes anything away. **Effective permissions** on the same page shows what a person can do with all their roles together.
+A custom role only ever adds to what someone's basic role already allows; it never takes anything away. A viewer given `agents:execute` can run agents; a member without it still can, because members run agents anyway. **Effective permissions** on the same page shows what a person can do with all their roles together.
 
-### How permissions are written
+### The permissions
 
-A permission is a thing and an action, such as `agents:execute` (run agents). A `*` stands for "any":
+These are the permissions the app enforces. Each one opens the actions listed, whatever the person's basic role; anything not in this list gates nothing.
 
-| Permission | Means |
+| Permission | Opens |
 |---|---|
-| `*` | everything |
-| `agents:*` | anything on agents |
-| `*:read` | look at anything |
-| `agents:execute` | run agents, and nothing more |
+| `agents:read` | See agents, their runs, versions, readiness and technical documentation |
+| `agents:create` | Create, import and duplicate agents |
+| `agents:update` | Edit, activate, deactivate and roll back agents; change their schedule, roles and API access |
+| `agents:delete` | Delete agents |
+| `agents:execute` | Run agents, answer their questions and cancel their runs |
+| `tools:read` | See tools, their versions and stats, and export them as skills, CLIs or SDKs |
+| `tools:manage` | Create, edit, delete, activate, deactivate and generate tools |
+| `tools:execute` | Run a tool directly |
+| `audit:read` | Read the audit trail |
+| `audit:export` | Export the audit trail and manage audit streaming targets |
+
+A `*` stands for "any": `agents:*` is every agent permission, `*:read` is every read, and `*` is everything. Access to connections is set per person when they are invited, not by custom roles.
 
 ## Add an access policy
 
 Use an access policy when the answer depends on the details of a request rather than on who is asking.
 
 1. Under **Access policies (ABAC)**, click **New policy**.
-2. Enter a **Name**, choose the **Effect** (allow or deny), the **Action** it covers (such as `agents:execute`), a **Priority** and a **Description**.
+2. Enter a **Name**, choose the **Effect** (allow or deny), the **Action** it covers (one of [the permissions](#the-permissions), such as `agents:execute`), a **Priority** and a **Description**.
 3. Click **Create policy**.
 
 ![New access policy form with effect, priority and action](/screenshots/settings-rbac-new-policy.png)
 
 The form does not set conditions (such as "amount over 10,000"); those are added through the API (see [For developers](#for-developers)). A policy without conditions applies to every request for its action, so check the effect and action before you create one. Policies cannot be edited: delete one and create it again to change it.
 
-**How policies decide.** If any matching policy says **deny**, the request is refused, whatever else allows it. Otherwise the matching **allow** with the highest priority wins.
+**How policies decide.** If any matching policy says **deny**, the request is refused, whatever else allows it. A policy only refuses: an **allow** never opens what someone's roles do not.
 
 ## How it all fits together
 
@@ -59,14 +67,14 @@ A custom role:
 ```json
 {
   "name": "agent-operator",
-  "description": "Run and inspect agents, read everything else",
-  "permissions": ["agents:*", "*:read"]
+  "description": "Run and inspect agents",
+  "permissions": ["agents:read", "agents:execute"]
 }
 ```
 
-Roles are assigned per user in addition to the core role. A role can be disabled without unassigning it (`active: false`). A user's effective permissions are the union across their active custom roles. Role names are unique per organization; permission lists are trimmed and deduplicated on save. All RBAC management requires organization admin or owner.
+Roles are assigned per user in addition to the core role. A role can be disabled without unassigning it (`active: false`). A user's effective permissions are the union across their active custom roles. Role names are unique per organization; permission lists are trimmed and deduplicated on save. All RBAC management requires organization admin or owner. `GET /rbac/permissions` returns the permissions above with their descriptions. A `role:<name>` permission (`role:admin`) stands in for that basic role on every route.
 
-An access (ABAC, attribute-based access control) policy with a condition:
+An access (ABAC, attribute-based access control) policy with conditions, refusing a run on more than 10,000 to anyone without the `finance` custom role:
 
 ```json
 {
@@ -74,14 +82,20 @@ An access (ABAC, attribute-based access control) policy with a condition:
   "effect": "deny",
   "action": "agents:execute",
   "conditions": [
-    { "attr": "resource.amount", "op": "gt", "value": 10000 }
+    { "attr": "resource.input.amount", "op": "gt", "value": 10000 },
+    { "attr": "subject.roles", "op": "not_contains", "value": "finance" }
   ],
   "priority": 100
 }
 ```
 
-- **Conditions** are `{attr, op, value}` triples, ANDed together. `attr` is a dot-path into the evaluation context (`subject.*`, `resource.*`, `context.*`). Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`, `contains` (for example `subject.roles contains "finance"`).
-- Evaluation is deny-overrides: any applicable `deny` wins; otherwise the highest-`priority` matching `allow`.
+- **`action`** is a permission from the table above (the route's own permission), or `METHOD:/route/path` for one route, or `*`.
+- **Conditions** are `{attr, op, value}` triples, ANDed together. `attr` is a dot-path into the evaluation context:
+  - `subject.id`, `subject.role` (the basic role) and `subject.roles` (the basic role plus the names of the person's active custom roles);
+  - `resource.*`: the request body's top-level fields and the route's parameters (`resource.id`, `resource.input`, `resource.input.amount` for a run's input);
+  - `context.organizationId`, `context.method`, `context.path`.
+- Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`, `contains` and `not_contains` (for lists, such as `subject.roles`).
+- Evaluation is deny-overrides: any applicable `deny` wins.
 - Policies are immutable.
 
 The full endpoint list is in the [API reference](/api-reference/authentication).

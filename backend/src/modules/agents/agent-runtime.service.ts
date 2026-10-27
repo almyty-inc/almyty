@@ -22,6 +22,7 @@ import { MemoryAccountsService } from '../memory/canonical/memory-accounts.servi
 import { Tier } from '../memory/canonical/canonical.types';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message, MessageContent } from '../../entities/message.entity';
+import { User } from '../../entities/user.entity';
 import { withAttachedFiles } from './attached-files';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
@@ -93,7 +94,7 @@ export const BUILT_IN_TOOLS = {
   },
   request_approval: {
     name: 'request_approval',
-    description: 'Pause execution and request human approval before proceeding. The run halts at WAITING_APPROVAL until an authorized user approves or rejects via the UI. On approval, this tool resolves with { approved: true, decision_reason }; on rejection the run terminates as cancelled.',
+    description: 'Pause execution and request human approval before proceeding. The run halts at WAITING_APPROVAL until an authorized user approves or rejects via the UI. On approval, this tool resolves with { approved: true, decided_by, decision_reason } (who approved, and their note); on rejection the run terminates as cancelled.',
     parameters: {
       type: 'object',
       properties: {
@@ -703,11 +704,17 @@ export class AgentRuntimeService implements OnModuleInit {
    * React to an approval decision. On 'approved' the run is moved
    * back to RUNNING and re-queued for the next step. On 'rejected'
    * /'expired' the run is cancelled with the decision_reason.
+   *
+   * Either way the request_approval call's result becomes the decision
+   * ({ approved, decided_by, decision_reason }), as the tool promises: the
+   * model saw "Awaiting human approval" and, resumed, had no way to tell
+   * it was approved, by whom, or what the reviewer wrote.
    */
   private async handleApprovalDecided(approval: {
     runId: string | null;
     status: 'approved' | 'rejected' | 'expired';
     decisionReason: string | null;
+    decidedBy?: string | null;
     toolCallId: string | null;
     payload?: Record<string, any> | null;
   }): Promise<void> {
@@ -716,6 +723,10 @@ export class AgentRuntimeService implements OnModuleInit {
     const run = await this.runRepository.findOne({ where: { id: approval.runId } });
     if (!run) return;
     if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
+
+    if (approval.payload?.kind !== 'change_set') {
+      await this.recordDecisionForModel(run, approval);
+    }
 
     // A script's change set (code mode) resumes the run whatever the
     // decision: rejected or expired, none of it runs, the model is told so
@@ -747,6 +758,55 @@ export class AgentRuntimeService implements OnModuleInit {
       await this.runRepository.save(run);
       await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
       this.logger.log(`run ${run.id} cancelled after approval ${approval.status}`);
+    }
+  }
+
+  /**
+   * Write the decision over the request_approval call's "Awaiting human
+   * approval" result, so the model reads it when the run resumes (and a
+   * later run in the same conversation reads a rejection). Best effort: a
+   * failure here never holds the run.
+   */
+  private async recordDecisionForModel(
+    run: AgentRun,
+    approval: { status: 'approved' | 'rejected' | 'expired'; decisionReason: string | null; decidedBy?: string | null; toolCallId: string | null },
+  ): Promise<void> {
+    if (!run.conversationId || !approval.toolCallId) return;
+    try {
+      const decision = {
+        approved: approval.status === 'approved',
+        status: approval.status,
+        decided_by: approval.status === 'expired' ? null : await this.deciderName(approval.decidedBy ?? null),
+        decision_reason: approval.decisionReason ?? null,
+      };
+      const content = JSON.stringify(decision);
+      const updated = await this.messageRepository.update(
+        { conversationId: run.conversationId, toolCallId: approval.toolCallId },
+        { content },
+      );
+      if (!updated.affected) {
+        const msg = Message.createToolResultMessage(run.conversationId, approval.toolCallId, content);
+        msg.runId = run.id;
+        await this.messageRepository.save(msg);
+      }
+    } catch (err: any) {
+      this.logger.warn(`could not record the approval decision for run ${run.id}: ${err?.message ?? err}`);
+    }
+  }
+
+  /** The reviewer by name (or email), for the model; null when unknown. */
+  private async deciderName(userId: string | null): Promise<string | null> {
+    if (!userId) return null;
+    try {
+      const user = await this.messageRepository.manager.getRepository(User).findOne({
+        where: { id: userId },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+      if (!user) return null;
+      const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+      return name || user.email || null;
+    } catch {
+      return null;
     }
   }
 }

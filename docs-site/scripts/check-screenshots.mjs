@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // No dependencies or Git history required: evidence is tied to content, not mtimes.
+// Source drift is a review prompt: a warning by default (CI), an error with --strict.
+// Missing images, hash mismatches, invalid entries and untracked images always fail.
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
@@ -10,6 +12,10 @@ export const digest = (bytes) => createHash('sha256').update(bytes).digest('hex'
 const safePath = (path) => typeof path === 'string' && path.length > 0 &&
   !path.startsWith('/') && !path.includes('\\') && !path.split('/').some((s) => s === '..' || s === '.' || !s)
 const imagePath = (path) => safePath(path) && /^screenshots\/.+\.(png|jpe?g|webp)$/i.test(path)
+// Shared by nearly every screen, so fingerprinting them marks every image stale on any UI tweak.
+// List the page's own route and components instead.
+export const SHARED_SOURCES = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
+const coversShared = (selector) => SHARED_SOURCES.some((shared) => shared === selector || shared.startsWith(`${selector}/`))
 
 export function filesBelow(dir) {
   if (!existsSync(dir)) return []
@@ -24,6 +30,7 @@ export function sourceDigest(root, selectors) {
   const files = new Set()
   for (const selector of selectors) {
     if (!safePath(selector)) throw new Error('invalid source path')
+    if (coversShared(selector)) throw new Error(`shared source ${selector} is too broad; list the page's own components`)
     const path = join(root, selector)
     if (!existsSync(path)) throw new Error(`missing source ${selector}`)
     for (const file of statSync(path).isDirectory() ? filesBelow(path) : [path]) {
@@ -35,15 +42,15 @@ export function sourceDigest(root, selectors) {
 }
 
 export function checkScreenshots(root = repoRoot, { strict = false } = {}) {
-  const errors = [], pending = []
+  const errors = [], warnings = [], pending = []
   const publicDir = join(root, 'docs-site/public')
   let manifest
   try { manifest = JSON.parse(readFileSync(join(publicDir, 'screenshots/manifest.json'), 'utf8')) }
-  catch (error) { return { errors: [`invalid screenshot manifest: ${error.message}`], pending } }
+  catch (error) { return { errors: [`invalid screenshot manifest: ${error.message}`], warnings, pending } }
   if (manifest.schemaVersion !== 2) errors.push('schemaVersion must be 2')
   if ('capturedAt' in manifest) errors.push('global capturedAt is not per-asset evidence')
   if (manifest.baseUrl !== 'https://app.almyty.com') errors.push('public baseUrl must be https://app.almyty.com')
-  if (!Array.isArray(manifest.screenshots)) return { errors: [...errors, 'screenshots must be an array'], pending }
+  if (!Array.isArray(manifest.screenshots)) return { errors: [...errors, 'screenshots must be an array'], warnings, pending }
   const ids = new Set(), paths = new Set()
   for (const entry of manifest.screenshots) {
     if (!entry || typeof entry !== 'object') { errors.push('invalid entry'); continue }
@@ -64,10 +71,13 @@ export function checkScreenshots(root = repoRoot, { strict = false } = {}) {
       // A rendered repository file must fingerprint that file, so editing it marks the image stale.
       if (entry.source?.kind === 'repo-file' && !(Array.isArray(entry.sources) && entry.sources.includes(entry.source.file))) errors.push(`${label}: repo-file source must be listed in sources`)
       try {
-        if (entry.sourceDigest !== sourceDigest(root, entry.sources)) errors.push(`${label}: source drift; review and recapture the changed UI`)
+        if (entry.sourceDigest !== sourceDigest(root, entry.sources)) {
+          (strict ? errors : warnings).push(`${label}: source drift; review and recapture the changed UI`)
+        }
       } catch (error) { errors.push(`${label}: ${error.message}`) }
     } else {
       if (!entry.reason || typeof entry.reason !== 'string') errors.push(`${label}: legacy/historical evidence needs a reason`)
+      if (Array.isArray(entry.sources) && entry.sources.some(coversShared)) errors.push(`${label}: shared sources are too broad; list the page's own components`)
       if (entry.capturedAt !== null && !Number.isFinite(Date.parse(entry.capturedAt))) errors.push(`${label}: invalid capture time`)
       if (entry.status === 'needs-recapture') {
         pending.push(entry.path)
@@ -86,12 +96,13 @@ export function checkScreenshots(root = repoRoot, { strict = false } = {}) {
       if (!paths.has(path) || !existsSync(join(publicDir, path))) errors.push(`${relative(root, file)}: broken screenshot reference ${path}`)
     }
   }
-  return { errors, pending, total: paths.size }
+  return { errors, warnings, pending, total: paths.size }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const result = checkScreenshots(repoRoot, { strict: process.argv.includes('--strict') })
+  for (const warning of result.warnings) console.warn(process.env.GITHUB_ACTIONS ? `::warning title=screenshot source drift::${warning}` : `warning: ${warning}`)
   for (const error of result.errors) console.error(error)
-  console.log(`screenshots: ${result.total ?? 0} tracked, ${result.pending.length} explicitly awaiting recapture, ${result.errors.length} errors`)
+  console.log(`screenshots: ${result.total ?? 0} tracked, ${result.pending.length} explicitly awaiting recapture, ${result.warnings.length} drift warnings, ${result.errors.length} errors`)
   process.exitCode = result.errors.length ? 1 : 0
 }

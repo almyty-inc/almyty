@@ -20,13 +20,30 @@ An export holds up to 50,000 rows. Only admins and owners can export. The **Expo
 1. Open **Settings → Advanced → Audit streaming**.
 2. Under **Add target**, pick the **Target**: **Splunk HEC** (Splunk's HTTP Event Collector), **Datadog** (its logs intake) or **Webhook** (any HTTPS address that accepts JSON).
 3. Enter the **Endpoint** your security team gives you and, if it needs one, the **Token (optional)**.
-4. Click **Add target**.
+4. To send only some events, list them under **Only these actions (optional)**, separated by commas, for example `approval_decided, sso_login, member_role_change`. Leave it blank to send everything.
+5. Click **Add target**.
 
 From then on, every audit event is sent there as it happens. This demo has no targets yet:
 
 ![Audit streaming settings with an empty Add target form](/screenshots/settings-audit-streams-enabled.png)
 
+Each target says how its deliveries are going: **Delivered 2 minutes ago**, or **Last delivery failed: HTTP 403** with the error your SIEM answered, so a stale token or a moved endpoint shows up here. To change a target (a new token, another endpoint, which actions it sends, or switching it off for a while), click its pencil: the form above fills with it, and **Save changes** keeps the target and its place. A token left blank stays as it was.
+
 **Good to know.** Streaming is best effort: events are sent one at a time, without batching or retries, and a failed delivery never blocks or fails the action behind it. Treat the stream as a live feed; the audit log in almyty (and its export) is the full record.
+
+## What is on the audit trail
+
+Besides changes to agents, tools, connections and the rest, the trail records the governance events a security team asks about:
+
+| Action | When |
+|---|---|
+| `create`, `update`, `delete`, `activate`, `deactivate`, `rollback`, `duplicate`, `import`, `export` on an agent | Someone edits an agent (the fields edited are in `details`) |
+| `approval_decided` | Someone approves or rejects an approval request, approves one step of a multi-step policy (`status: step_approved`), or it expires; with their note |
+| `sso_login` | Someone signs in through single sign-on (`status: success`), or is refused, with the reason (`status: denied`) |
+| `invite_send`, `invite_revoke`, `invite_accept` | An invitation is sent, withdrawn or accepted |
+| `member_role_change`, `member_remove` | A member's role changes, or they are removed |
+| `team_create`, `team_update`, `team_delete` | A team is made, renamed or deleted |
+| `team_member_add`, `team_member_role_change`, `team_member_remove` | Someone joins or leaves a team, or becomes its lead |
 
 ## For developers
 
@@ -39,11 +56,11 @@ From then on, every audit event is sent there as it happens. This demo has no ta
   "target": "splunk_hec",
   "endpoint": "https://splunk.example.com:8088/services/collector",
   "token": "…",
-  "actionFilter": ["credential_use", "agent_delete"]
+  "actionFilter": ["approval_decided", "sso_login"]
 }
 ```
 
-`actionFilter` is set through the API only; without it everything is streamed.
+Without `actionFilter` everything is streamed. `PATCH /audit-export/streams/:id` changes `endpoint` (checked like a new one), `token` (absent keeps it, empty clears it), `actionFilter` (empty sends everything) and `enabled`. The token is never returned; a stream says `hasToken` instead.
 
 | `target` | Auth | Payload |
 |---|---|---|
@@ -51,4 +68,4 @@ From then on, every audit event is sent there as it happens. This demo has no ta
 | `splunk_hec` | `Authorization: Splunk <token>` | HEC event, `sourcetype: almyty:audit` |
 | `datadog` | `DD-API-KEY: <token>` | Datadog Logs API format, `ddsource: almyty`, tagged `action:<action>` |
 
-Each stream records its last successful delivery (`lastDeliveredAt`) and most recent failure (`lastError`), readable through the API, so a dead endpoint is easy to spot.
+Each stream records its last successful delivery (`lastDeliveredAt`) and most recent failure (`lastError`); the settings page shows both. A changed endpoint or token starts both over.

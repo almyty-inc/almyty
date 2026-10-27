@@ -47,7 +47,7 @@ import { useAuthStore } from '@/store/auth'
 import { useOrganizationStore } from '@/store/organization'
 import { useAppStore, useNotifications } from '@/store/app'
 import { Theme, applyTheme, subscribeToSystemTheme } from '@/lib/theme'
-import { getInitials } from '@/lib/utils'
+import { getInitials, userInitials } from '@/lib/utils'
 import { CommandPalette } from '@/components/command-palette'
 import { KeyboardShortcutsListener } from '@/components/keyboard-shortcuts'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -376,7 +376,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Avatar className={cn("h-8 w-8", !sidebarCollapsed && "mr-3")}>
                     <AvatarImage src={user?.avatar} />
                     <AvatarFallback>
-                      {user?.name ? getInitials(user.name) : 'U'}
+                      {userInitials(user)}
                     </AvatarFallback>
                   </Avatar>
                   {!sidebarCollapsed && (

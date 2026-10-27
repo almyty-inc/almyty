@@ -379,13 +379,7 @@ export class OpenAPIParserService implements SchemaParser {
         const param = this.resolveReference(paramRef, document) as OpenAPIV3.ParameterObject;
         if (!param) continue;
 
-        const paramSchema = {
-          type: (param.schema && 'type' in param.schema) ? param.schema.type || 'string' : 'string',
-          description: param.description,
-          required: param.required,
-          example: param.example,
-          schema: param.schema,
-        };
+        const paramSchema = this.parameterSchema(param, document);
 
         switch (param.in) {
           case 'path':
@@ -407,6 +401,7 @@ export class OpenAPIParserService implements SchemaParser {
             break;
         }
       }
+      result.query = this.foldBracketParameters(result.query);
     }
 
     // Extract request body
@@ -517,6 +512,74 @@ export class OpenAPIParserService implements SchemaParser {
       default:
         return OperationType.RPC;
     }
+  }
+
+  /**
+   * A parameter as a tool input. An object parameter (`style: deepObject`,
+   * or a schema whose object form sits in an anyOf/oneOf, as Stripe's
+   * `created` and `arrival_date` ranges do) is an object with its
+   * properties, and keeps its `style`/`explode` so the call serialises it
+   * the way the API reads it (`created[gte]=...`).
+   */
+  private parameterSchema(param: OpenAPIV3.ParameterObject, document: OpenAPIV3.Document): Record<string, any> {
+    const schema = this.resolveReference(param.schema, document) as OpenAPIV3.SchemaObject | undefined;
+    const variants = ((schema?.anyOf ?? schema?.oneOf ?? []) as any[])
+      .map((s) => this.resolveReference(s, document) as OpenAPIV3.SchemaObject)
+      .filter(Boolean);
+    const objectForm = schema?.type === 'object' ? schema : variants.find((s) => s.type === 'object' || !!s.properties);
+    const arrayForm = schema?.type === 'array' ? schema : undefined;
+    const type = objectForm && (param.style === 'deepObject' || schema?.type === 'object')
+      ? 'object'
+      : schema?.type ?? variants.find((s) => s.type)?.type ?? 'string';
+    const out: Record<string, any> = {
+      type,
+      description: param.description,
+      required: param.required,
+      example: param.example,
+      schema: param.schema,
+    };
+    if (type === 'object' && objectForm?.properties) {
+      out.properties = Object.fromEntries(
+        Object.entries(objectForm.properties).map(([k, v]) => {
+          const prop = this.resolveReference(v, document) as OpenAPIV3.SchemaObject;
+          return [k, { type: prop?.type ?? 'string', ...(prop?.description ? { description: prop.description } : {}) }];
+        }),
+      );
+    }
+    if (type === 'array' && arrayForm?.items) {
+      const items = this.resolveReference(arrayForm.items, document) as OpenAPIV3.SchemaObject;
+      out.items = { type: items?.type ?? 'string' };
+    }
+    if (param.style) out.style = param.style;
+    if (param.explode !== undefined) out.explode = param.explode;
+    return out;
+  }
+
+  /**
+   * Query parameters named with brackets (`created[gte]`, `created[lt]`)
+   * fold into one object parameter per base name, sent back as
+   * `created[gte]=...` (deepObject). A bracketed name is not a valid tool
+   * input name for most models, and the object is what the API means.
+   */
+  private foldBracketParameters(query: Record<string, any>): Record<string, any> {
+    const out: Record<string, any> = {};
+    for (const [name, param] of Object.entries(query)) {
+      const m = /^([^[\]]+)\[([^[\]]+)\]$/.exec(name);
+      const existing = m ? out[m[1]] ?? query[m[1]] : undefined;
+      if (!m || (existing && existing.type !== 'object')) {
+        if (!(name in out)) out[name] = param;
+        continue;
+      }
+      const [, base, key] = m;
+      const folded = existing ?? { type: 'object', description: undefined, properties: {} };
+      folded.type = 'object';
+      folded.style = 'deepObject';
+      folded.properties = { ...(folded.properties ?? {}), [key]: { type: param.type ?? 'string', ...(param.description ? { description: param.description } : {}) } };
+      if (!folded.description && param.description) folded.description = param.description;
+      if (param.required) folded.required = true;
+      out[base] = folded;
+    }
+    return out;
   }
 
   private resolveReference(ref: any, document?: OpenAPIV3.Document): any {
