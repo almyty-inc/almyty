@@ -6,11 +6,14 @@ import {
   Param,
   UseGuards,
   Request,
+  Optional,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ssoSessionOrganization } from '../auth/sso-session';
 import { OrganizationsService } from './organizations.service';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 /**
  * Joining an organization is the account's decision. A session minted
@@ -30,7 +33,25 @@ function refuseSsoSession(user: any): void {
 @Controller('invites')
 @ApiTags('Invitations')
 export class InvitesController {
-  constructor(private readonly organizationsService: OrganizationsService) {}
+  constructor(
+    private readonly organizationsService: OrganizationsService,
+    @Optional() private readonly auditLog?: AuditLogService,
+  ) {}
+
+  /** An accepted invitation on the joined organization's audit trail. */
+  private auditAccepted(req: any, organizationId: string | undefined, via: string): void {
+    if (!organizationId) return;
+    void this.auditLog?.log({
+      organizationId,
+      userId: req.user?.id,
+      action: AuditAction.INVITE_ACCEPT,
+      resourceType: AuditResource.INVITATION,
+      resourceId: req.user?.id ?? 'unknown',
+      details: { via },
+      ipAddress: req.ip,
+      userAgent: req.headers?.['user-agent'],
+    });
+  }
 
   // Declared before `:token`: the in-app notification names the
   // membership row, and only its invitee may open it.
@@ -48,6 +69,7 @@ export class InvitesController {
   async acceptMembershipInvite(@Param('membershipId') membershipId: string, @Request() req: any) {
     refuseSsoSession(req.user);
     const data = await this.organizationsService.acceptInviteForMembership(membershipId, req.user.id);
+    this.auditAccepted(req, (data as any)?.organizationId, 'notification');
     return { success: true, data, message: 'Invitation accepted' };
   }
 
@@ -64,6 +86,7 @@ export class InvitesController {
   async acceptInvite(@Param('token') token: string, @Request() req: any) {
     refuseSsoSession(req.user);
     const data = await this.organizationsService.acceptInvite(token, req.user.id);
+    this.auditAccepted(req, data?.organizationId, 'email link');
     return { success: true, data, message: 'Invitation accepted' };
   }
 }
