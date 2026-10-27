@@ -697,7 +697,7 @@
         "packages/mcp-server/src",
         "packages/mcp-server/package.json"
       ],
-      "sourceDigest": "4aa0c791cf4db7cf0ea6fde0b24c99546351066f0e1a18daea2531c5d7d4fc57",
+      "sourceDigest": "3d3c4d6dc355271bcf8d9acff41615b82491ff739e7b702e21a48e059a7eca15",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
