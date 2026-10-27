@@ -209,7 +209,7 @@
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics"
       ],
-      "sourceDigest": "7ee1222a175bdc45bf820585a98298794d7a6d9b6946d39c6e6e5cdd3aeb2541",
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -228,7 +228,7 @@
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics"
       ],
-      "sourceDigest": "7ee1222a175bdc45bf820585a98298794d7a6d9b6946d39c6e6e5cdd3aeb2541",
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -247,7 +247,7 @@
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics"
       ],
-      "sourceDigest": "7ee1222a175bdc45bf820585a98298794d7a6d9b6946d39c6e6e5cdd3aeb2541",
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -266,7 +266,7 @@
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics"
       ],
-      "sourceDigest": "7ee1222a175bdc45bf820585a98298794d7a6d9b6946d39c6e6e5cdd3aeb2541",
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -285,7 +285,7 @@
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics"
       ],
-      "sourceDigest": "7ee1222a175bdc45bf820585a98298794d7a6d9b6946d39c6e6e5cdd3aeb2541",
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -304,7 +304,7 @@
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics"
       ],
-      "sourceDigest": "7ee1222a175bdc45bf820585a98298794d7a6d9b6946d39c6e6e5cdd3aeb2541",
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1326,9 +1326,9 @@
       "id": "examples-govern-ai-spend-00-budgets",
       "title": "Two budgets and the alert from the one that blocked",
       "path": "screenshots/examples/govern-ai-spend/00-budgets.png",
-      "capturedAt": "2026-10-22T15:08:45.431Z",
+      "capturedAt": "2026-10-27T11:31:06.238Z",
       "status": "current",
-      "sha256": "270719e0d037a8c0ede277a90d4961d15bd33d588223c37d2e27aa06b18bfd89",
+      "sha256": "2981146814fe0fbc321ee97339384d65f58289e2725336d21cd20a232d3f53cf",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1338,7 +1338,7 @@
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics"
       ],
-      "sourceDigest": "7ee1222a175bdc45bf820585a98298794d7a6d9b6946d39c6e6e5cdd3aeb2541",
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1357,7 +1357,7 @@
         "frontend/src/pages/analytics.tsx",
         "frontend/src/components/analytics"
       ],
-      "sourceDigest": "7ee1222a175bdc45bf820585a98298794d7a6d9b6946d39c6e6e5cdd3aeb2541",
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1376,7 +1376,7 @@
         "frontend/src/pages/analytics-budget.tsx",
         "frontend/src/components/analytics/budget-form.tsx"
       ],
-      "sourceDigest": "44196de4ec427bb5996ec2c93fee47428bb82f72e24c4e86312d1b1af7dd42a1",
+      "sourceDigest": "85218b2181cbfebc113cd6c76478a1901daa1a9066a7823ce46a2485b63365e2",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1395,7 +1395,7 @@
         "frontend/src/pages/analytics-budget.tsx",
         "frontend/src/components/analytics/budget-form.tsx"
       ],
-      "sourceDigest": "44196de4ec427bb5996ec2c93fee47428bb82f72e24c4e86312d1b1af7dd42a1",
+      "sourceDigest": "85218b2181cbfebc113cd6c76478a1901daa1a9066a7823ce46a2485b63365e2",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -2097,13 +2097,13 @@
       "id": "examples-stripe-payout-reconciliation-02-stripe-key",
       "title": "The Stripe restricted key, saved as the username",
       "path": "screenshots/examples/stripe-payout-reconciliation/02-stripe-key.png",
-      "capturedAt": "2026-10-22T15:02:48.128Z",
+      "capturedAt": "2026-10-27T11:27:14.957Z",
       "status": "current",
-      "sha256": "8a94cfd3569d78f790b759a9f64cd2815e23e8f815df9a00f6d1d4660702e9c1",
+      "sha256": "16e3156bd622a4bec3b303ee6335b1ebca90cf88dda9dd9614d42e0f7c47e5cd",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/apis/:id/setup?job=8&key=1"
+        "route": "/apis/:id/setup?job=1&key=1"
       },
       "sources": [
         "frontend/src/pages/api-setup.tsx",
@@ -2173,9 +2173,9 @@
       "id": "examples-stripe-payout-reconciliation-06-try",
       "title": "Payout check: a test run",
       "path": "screenshots/examples/stripe-payout-reconciliation/06-try.png",
-      "capturedAt": "2026-10-22T15:03:19.856Z",
+      "capturedAt": "2026-10-27T11:27:43.463Z",
       "status": "current",
-      "sha256": "02fa68c02af57b223a7f97dcff4f68d8fc9bc653ec2217eab9e2113058bd0afd",
+      "sha256": "312cf7509c55b937f9badf42d79e340a44b48ab123fe15b30a1a019330f73ae7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2192,9 +2192,9 @@
       "id": "examples-stripe-payout-reconciliation-07-run-steps",
       "title": "Payout check: the Stripe and Xero calls of the run",
       "path": "screenshots/examples/stripe-payout-reconciliation/07-run-steps.png",
-      "capturedAt": "2026-10-22T15:03:26.594Z",
+      "capturedAt": "2026-10-27T11:27:50.171Z",
       "status": "current",
-      "sha256": "3b549c3e95bc738179da997434948046a1cc314b0a9e22cf866b4afd5b7ded68",
+      "sha256": "0939907991915c166b7038e3d2ce77811ae8409687e9caa2b128b514485a071e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",

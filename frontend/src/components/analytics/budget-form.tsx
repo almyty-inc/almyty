@@ -118,7 +118,7 @@ export function BudgetForm({ budget, agents, isSaving, onSubmit }: BudgetFormPro
   const pct = Number(softThresholdPct)
   const softCents =
     limitCents !== null && Number.isInteger(pct) && pct >= SOFT_THRESHOLD_MIN && pct <= SOFT_THRESHOLD_MAX
-      ? Math.floor((limitCents * pct) / 100)
+      ? (limitCents * pct) / 100
       : null
 
   const handleSubmit = async () => {
