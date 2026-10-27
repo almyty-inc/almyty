@@ -200,7 +200,7 @@ describe('Microsoft Teams: Adaptive Card and Action.Submit', () => {
             type: 'AdaptiveCard',
             $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
             version: '1.4',
-            body: [{ type: 'TextBlock', text: 'Waiting for your OK', wrap: true }],
+            body: [{ type: 'TextBlock', text: 'Waiting for your OK', wrap: true, spacing: 'None' }],
             actions: [
               { type: 'Action.Submit', title: 'Approve', data: { almytyAction: APPROVE }, style: 'positive' },
               { type: 'Action.Submit', title: 'Reject', data: { almytyAction: REJECT }, style: 'destructive' },
@@ -210,6 +210,14 @@ describe('Microsoft Teams: Adaptive Card and Action.Submit', () => {
       ],
     });
     expect(adapter.formatOutbound({ text: 'hi' })).toEqual({ type: 'message', text: 'hi' });
+  });
+
+  it('keeps the lines of the text apart, one TextBlock each, with space where a blank line was', () => {
+    expect(MicrosoftTeamsAdapter.textBlocks('Waiting for your OK\n\nTo: ana@example.com\nSubject: Hi')).toEqual([
+      { type: 'TextBlock', text: 'Waiting for your OK', wrap: true, spacing: 'None' },
+      { type: 'TextBlock', text: 'To: ana@example.com', wrap: true, spacing: 'Medium' },
+      { type: 'TextBlock', text: 'Subject: Hi', wrap: true, spacing: 'None' },
+    ]);
   });
 
   it('reads a submit (a message activity whose value is the card data) as a press by its sender', () => {

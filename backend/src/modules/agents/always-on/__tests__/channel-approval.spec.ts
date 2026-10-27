@@ -83,6 +83,9 @@ describe('approvalPreview and approvalMessage', () => {
     expect(preview).toContain('Subject: Your refund');
     expect(preview).toContain('Your refund is on its way.');
     expect(preview).not.toContain(raw);
+    // The email's CRLF line breaks become plain ones, as chat shows them.
+    expect(preview).toContain('Hi Ana,\nYour refund is on its way.');
+    expect(preview).not.toContain('\r');
   });
 
   it('lists the tool and its arguments, leaving the gate bookkeeping out', () => {

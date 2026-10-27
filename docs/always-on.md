@@ -233,16 +233,18 @@ finished run) posts the result to the owner's channel when they wrote, and
 to `reportTo` through `ScheduledPostService`; it notifies `agent.report`
 (in the app) or `run.failed`, and looks at the inbox again. When `reportTo`
 gets the post depends on `report`: `every_wake` always; `when_news` when
-`hasNews(run.output)` (`always-on-report.ts`: not empty, and neither the
-first nor the last line is the `NOTHING_TO_REPORT` marker); `when_acted`
-when a tool that is not read-only ran (`acted`); `daily_digest` never (the
-digest job does). The same test decides the `agent.report` notification, so
-a quiet wake notifies nobody. The marker comes from the agent: `REPORT_RULE`
-is in the `[ALWAYS ON]` section of the system prompt
-(`agent-runtime-builders.ts`, always-on runs only) and ends every wake
-message (`wakeMessage`). Wherever a post goes out anyway (`every_wake`, a
-reply to the owner) the marker is posted as "Nothing to report right now."
-(`forPeople`). `defaultAlwaysOn` starts a new agent on `when_news`;
+`hasNews(run.output)` (`always-on-report.ts`: quiet only when the answer is
+empty or is just the `NOTHING_TO_REPORT` marker, give or take whitespace,
+punctuation and markdown; an object answer without a text field is news);
+`when_acted` when a tool that is not read-only ran (`acted`);
+`daily_digest` never (the digest job does). The same test decides the
+`agent.report` notification, so a quiet wake notifies nobody. The marker
+comes from the agent: `REPORT_RULE` is in the `[ALWAYS ON]` section of the
+system prompt (`agent-runtime-builders.ts`, always-on runs only) and ends
+every wake message (`wakeMessage`). Every post goes through `forPeople`: a
+marker beside real words is taken out and the words are posted, and where a
+post goes out anyway (`every_wake`, a reply to the owner) a quiet answer is
+posted as "Nothing to report right now." `defaultAlwaysOn` starts a new agent on `when_news`;
 `readAlwaysOn` reads a stored setting without `report` as `when_acted`, so
 agents set up before keep what they had. A pause notifies `agent.paused`
 (in the app and by email).

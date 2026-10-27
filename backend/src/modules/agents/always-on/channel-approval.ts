@@ -70,7 +70,8 @@ export function emailPreviewOf(payload: unknown): EmailPreview | null {
   const subject = header('Subject');
   if (!to && !subject) return null;
   const cc = header('Cc');
-  return { to, subject, body: body.trim(), ...(cc ? { cc } : {}) };
+  // A chat message has plain line breaks; an email's are CRLF.
+  return { to, subject, body: body.replace(/\r\n?/g, '\n').trim(), ...(cc ? { cc } : {}) };
 }
 
 function clip(text: string, max: number): string {

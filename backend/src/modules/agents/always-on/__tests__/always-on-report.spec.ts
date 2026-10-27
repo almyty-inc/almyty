@@ -19,8 +19,11 @@ describe('hasNews', () => {
     [`\`${NOTHING_TO_REPORT}\``, false],
     [`**${NOTHING_TO_REPORT}**.`, false],
     [`nothing_to_report`, false],
-    [`Checked the queue and the inbox.\n${NOTHING_TO_REPORT}`, false],
+    [`_${NOTHING_TO_REPORT}_`, false],
+    [`\n  ${NOTHING_TO_REPORT}!  \n`, false],
+    [`- ${NOTHING_TO_REPORT}`, false],
     [{ text: NOTHING_TO_REPORT }, false],
+    [{ status: 'done', items: [1] }, true],
     ['', false],
     ['   \n ', false],
     [null, false],
@@ -28,14 +31,20 @@ describe('hasNews', () => {
     expect(hasNews(output)).toBe(expected);
   });
 
-  it('does not take a finding that mentions the marker in passing for quiet', () => {
-    expect(hasNews(`Refund NW-7 failed.\nI did not answer ${NOTHING_TO_REPORT} because this needs you.\nPlease look.`)).toBe(true);
+  it('never silences real words beside the marker, on the first line, the last or in between', () => {
+    expect(hasNews(`Invoice 1042 is 30 days overdue.\n${NOTHING_TO_REPORT}`)).toBe(true);
+    expect(hasNews(`${NOTHING_TO_REPORT}\nBut refund NW-7 failed twice.`)).toBe(true);
+    expect(hasNews(`Refund NW-7 failed.\nI did not answer ${NOTHING_TO_REPORT} because this needs you.`)).toBe(true);
+    expect(hasNews({ text: `Found 2 new tickets. ${NOTHING_TO_REPORT}` })).toBe(true);
   });
 
-  it('reads the marker as a sentence wherever it is posted anyway', () => {
+  it('posts the words without the marker, and the marker alone as a sentence', () => {
     expect(forPeople(NOTHING_TO_REPORT)).toBe(NOTHING_TO_REPORT_WORDS);
     expect(forPeople('')).toBe(NOTHING_TO_REPORT_WORDS);
     expect(forPeople('Found one.')).toBe('Found one.');
+    expect(forPeople(`Invoice 1042 is 30 days overdue.\n\n**${NOTHING_TO_REPORT}**`)).toBe('Invoice 1042 is 30 days overdue.');
+    expect(forPeople(`${NOTHING_TO_REPORT}\nBut refund NW-7 failed twice.`)).toBe('But refund NW-7 failed twice.');
+    expect(forPeople({ text: `Found 2. ${NOTHING_TO_REPORT}.`, steps: 3 })).toEqual({ text: 'Found 2.', steps: 3 });
   });
 });
 
@@ -90,6 +99,13 @@ describe('reporting when it has something to tell you', () => {
     await wakeAndFinish(w, 'run-2', { output: '' });
     expect(w.posted).toHaveLength(0);
     expect(w.notified.filter((n) => n.type === 'agent.report')).toHaveLength(0);
+  });
+
+  it('posts a finding the agent ended with the marker, without the marker, and notifies it', async () => {
+    const w = world({ agent: alwaysOnAgent({}, reports) });
+    await wakeAndFinish(w, 'run-1', { output: `Invoice 1042 is 30 days overdue.\n${NOTHING_TO_REPORT}` });
+    expect(w.posted.map((p) => p.text)).toEqual(['Invoice 1042 is 30 days overdue.']);
+    expect(w.notified.filter((n) => n.type === 'agent.report').map((n) => n.body)).toEqual(['Invoice 1042 is 30 days overdue.']);
   });
 
   it('after every wake, posts the marker as a sentence, never the marker', async () => {

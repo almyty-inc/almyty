@@ -122,6 +122,24 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
   /** The key an Action.Submit's data carries the action under. */
   static readonly ACTION_KEY = 'almytyAction';
 
+  /**
+   * The text as TextBlocks, one per line: a card's markdown folds single
+   * line breaks, which would run an email's To, Subject and text together.
+   * A blank line becomes space above the next block.
+   */
+  static textBlocks(text: string): any[] {
+    const blocks: any[] = [];
+    let gap = false;
+    for (const line of text.split('\n')) {
+      if (!line.trim()) {
+        gap = blocks.length > 0;
+        continue;
+      }
+      blocks.push({ type: 'TextBlock', text: line, wrap: true, spacing: blocks.length === 0 ? 'None' : gap ? 'Medium' : 'None' });
+      gap = false;
+    }
+    return blocks.length ? blocks : [{ type: 'TextBlock', text: '', wrap: true }];
+  }
   /** An Adaptive Card with the text and a button per action, or null when there are no actions. */
   static actionCard(text: string, actions: AdapterResponse['actions']): any | null {
     const buttons = (actions ?? []).filter((a) => a && typeof a.id === 'string');
@@ -132,7 +150,7 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
         type: 'AdaptiveCard',
         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
         version: '1.4',
-        body: [{ type: 'TextBlock', text, wrap: true }],
+        body: MicrosoftTeamsAdapter.textBlocks(text),
         actions: buttons.map((a) => ({
           type: 'Action.Submit',
           title: a.label,
