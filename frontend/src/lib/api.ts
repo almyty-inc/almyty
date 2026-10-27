@@ -7,6 +7,7 @@ import {
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
+import type { OperationOutline } from '@/types'
 import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 import type { AgentWakeRow, AlwaysOnInput, AlwaysOnView } from '@/lib/always-on'
 
@@ -587,6 +588,14 @@ export const apisApi = {
   testConnection: (id: string) => apiPost(`/apis/${id}/test-connection`),
   
   getOperations: (id: string) => apiGet(`/apis/${id}/operations`),
+
+  /** Every operation in outline, and how many one description may make tools from. */
+  getOperationOutline: (id: string): Promise<{ operations: OperationOutline[]; limit: number }> =>
+    apiGet(`/apis/${id}/operations/outline`),
+
+  /** Make tools from these operations only; poll the returned job like an import. */
+  selectOperations: (id: string, operationIds: string[]): Promise<{ jobId: string; selected: number }> =>
+    apiPost(`/apis/${id}/operations/selection`, { operationIds }),
   
   getSchemas: (id: string) => apiGet(`/apis/${id}/schemas`),
 

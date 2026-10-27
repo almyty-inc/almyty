@@ -33,7 +33,7 @@ import { ApisService } from './apis.service';
 import { API_TYPE_WORDS, ApiConnectService, type DescriptionType } from './api-connect.service';
 import { CredentialService } from './credential.service';
 import { ApisSdkAnalysisHelper, SDK_ANALYSIS_JOB, type SdkAnalysisJob } from './apis-sdk-analysis.helper';
-import { ConnectApiDto, CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto } from './dto/api.dto';
+import { ConnectApiDto, CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto, SelectOperationsDto } from './dto/api.dto';
 import { ApiType, ApiStatus } from '../../entities/api.entity';
 
 @Controller('apis')
@@ -522,6 +522,41 @@ export class ApisController {
       req.user.currentOrganizationId,
     );
     return { success: true, data: result, message: 'Operations retrieved successfully' };
+  }
+
+  /** Every operation in outline (no parameters or responses) and the per-schema limit: the operation picker's list. */
+  @Get(':id/operations/outline')
+  @Roles('member', 'admin', 'owner')
+  async getOperationOutline(@Request() req, @Param('id') id: string) {
+    const result = await this.apisService.getOperationOutline(id, req.user.currentOrganizationId);
+    return { success: true, data: result, message: 'Operations retrieved successfully' };
+  }
+
+  /**
+   * Make tools from these operations only. For a description with more
+   * operations than one schema may make tools from: the import made none and
+   * said `selectionRequired`. Generation runs in the background like an
+   * import does; poll it with `GET :id/import-status/:jobId`.
+   */
+  @Post(':id/operations/selection')
+  @Roles('admin', 'owner')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async selectOperations(@Request() req, @Param('id') id: string, @Body() body: SelectOperationsDto) {
+    const orgId = req.user.currentOrganizationId;
+    const api = await this.apisService.findOne(id, orgId, { id: req.user.sub || req.user.id });
+    if (!api) throw new NotFoundException('API not found');
+    const { selected } = await this.apisService.selectOperations(id, api.organizationId, body.operationIds);
+    const job = await this.schemaImportQueue.add(
+      'generate',
+      { apiId: id, organizationId: api.organizationId, createdBy: req.user.id ?? null },
+      // Same bounds as an import; generation is the second half of one.
+      { timeout: 5 * 60 * 1000, attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 100, removeOnFail: 50 },
+    );
+    return {
+      success: true,
+      data: { jobId: job.id, status: 'processing', selected },
+      message: 'Making tools from the picked operations',
+    };
   }
 
   @Get(':id/resources')
