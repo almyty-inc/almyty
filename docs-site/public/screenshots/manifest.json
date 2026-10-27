@@ -3534,7 +3534,7 @@
       "id": "settings-approval-policies-enabled",
       "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
-      "capturedAt": "2026-10-21T15:15:23.817Z",
+      "capturedAt": "2026-10-27T11:06:33.481Z",
       "status": "current",
       "sha256": "19c6d6554da72535700034f542bbd531827cc2b4185ae841f9c905b1b637932f",
       "source": {
@@ -3547,14 +3547,14 @@
         "frontend/src/pages/approval-policy.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "19bf24edc5bc1afdde9805d4588359bbc7ddfea2443b80bf78af7556123076af",
+      "sourceDigest": "db12cce744aa3465b415c6de34b0bdc13d761662b07c0708a47d0cc8a9ae10d5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
-      "capturedAt": "2026-10-21T15:15:26.505Z",
+      "capturedAt": "2026-10-27T11:06:36.373Z",
       "status": "current",
       "sha256": "19da44673a231612af42f24319cd6ec9ef8cdb9892e478bcdc49a894e1b5b92e",
       "source": {
@@ -3566,14 +3566,14 @@
         "frontend/src/pages/approval-policy.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "d4369a92f5818cc3442eba1a6c62d94a8470201882aedaeee149f85cf54566ae",
+      "sourceDigest": "28385bc8dab3bea97b80acc3b1afb5a36246450132594af27b60ffdda5e1a36f",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
-      "capturedAt": "2026-10-21T15:15:31.807Z",
+      "capturedAt": "2026-10-27T11:06:39.404Z",
       "status": "current",
       "sha256": "ccacda6eceb68dba9a84170fb458167115e6ef9ee2893be0fd0f8539d2ce0d19",
       "source": {
@@ -3585,16 +3585,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "792a940da3b2b3915ae05a3260905d72833d96afd7c0f895f8ab73af15452864",
+      "sourceDigest": "693f6e7c4c8c93f9359df52b532d136ab1da5696fe6fbaf78b8aa546d2f11398",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
-      "capturedAt": "2026-10-21T15:15:29.182Z",
+      "capturedAt": "2026-10-27T11:06:17.701Z",
       "status": "current",
-      "sha256": "5c7ccc2cb4f4ccb91024e2b062b66b10ba6e23d319c57903011225526ed32f04",
+      "sha256": "8190ca5d7a68a13f1e432c8d5df1a2ca0643dc2ca58f55de38c7cd226293b4eb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3604,14 +3604,14 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "792a940da3b2b3915ae05a3260905d72833d96afd7c0f895f8ab73af15452864",
+      "sourceDigest": "693f6e7c4c8c93f9359df52b532d136ab1da5696fe6fbaf78b8aa546d2f11398",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-encryption-locked",
       "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
-      "capturedAt": "2026-10-21T15:15:34.345Z",
+      "capturedAt": "2026-10-27T11:06:20.627Z",
       "status": "current",
       "sha256": "bd5034c577d74e40f9adfa76860c8b4a79cada9dafb06943563566a040644262",
       "source": {
@@ -3623,14 +3623,14 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "792a940da3b2b3915ae05a3260905d72833d96afd7c0f895f8ab73af15452864",
+      "sourceDigest": "693f6e7c4c8c93f9359df52b532d136ab1da5696fe6fbaf78b8aa546d2f11398",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-enabled",
       "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
-      "capturedAt": "2026-10-21T15:15:10.549Z",
+      "capturedAt": "2026-10-27T11:06:23.459Z",
       "status": "current",
       "sha256": "93a80c05a9e6e82831429d5eda8f0e45bef142b4b60b303027658cce05f91262",
       "source": {
@@ -3642,14 +3642,14 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "792a940da3b2b3915ae05a3260905d72833d96afd7c0f895f8ab73af15452864",
+      "sourceDigest": "693f6e7c4c8c93f9359df52b532d136ab1da5696fe6fbaf78b8aa546d2f11398",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-policy",
       "title": "New access policy",
       "path": "screenshots/settings-rbac-new-policy.png",
-      "capturedAt": "2026-10-21T15:15:18.455Z",
+      "capturedAt": "2026-10-27T11:06:27.081Z",
       "status": "current",
       "sha256": "2091555dc921a0bd0e3110033a312b7981b47bc5c2a96479ed1b20b2c9ccd04a",
       "source": {
@@ -3661,14 +3661,14 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "792a940da3b2b3915ae05a3260905d72833d96afd7c0f895f8ab73af15452864",
+      "sourceDigest": "693f6e7c4c8c93f9359df52b532d136ab1da5696fe6fbaf78b8aa546d2f11398",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
-      "capturedAt": "2026-10-21T15:15:13.823Z",
+      "capturedAt": "2026-10-27T11:06:30.633Z",
       "status": "current",
       "sha256": "8dd11de4ac494983dd82ab13e0832406c72adb7c3c80fe96b00766f6b3f7cac2",
       "source": {
@@ -3680,16 +3680,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "792a940da3b2b3915ae05a3260905d72833d96afd7c0f895f8ab73af15452864",
+      "sourceDigest": "693f6e7c4c8c93f9359df52b532d136ab1da5696fe6fbaf78b8aa546d2f11398",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
-      "capturedAt": "2026-10-21T15:15:21.117Z",
+      "capturedAt": "2026-10-27T11:06:14.821Z",
       "status": "current",
-      "sha256": "6135240785ee70368f21c4274706a890dde703c9238e74026b3e71a54dd2e916",
+      "sha256": "b739de0125a755c1ef201a2fec56dd4c8bd2b235226c280d8f6e4018aa0f43ab",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3699,16 +3699,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "792a940da3b2b3915ae05a3260905d72833d96afd7c0f895f8ab73af15452864",
+      "sourceDigest": "693f6e7c4c8c93f9359df52b532d136ab1da5696fe6fbaf78b8aa546d2f11398",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-teams",
       "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
-      "capturedAt": "2026-10-21T15:15:07.861Z",
+      "capturedAt": "2026-10-27T11:06:11.956Z",
       "status": "current",
-      "sha256": "8c7797225d02b20cf5b42e0abd39a29d181a1007f1f6b9473c57b87b0974ecd5",
+      "sha256": "9ff601577284d1092200bc9c135f4b5866c499e4102842fe05892c506cdf696e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3719,7 +3719,7 @@
         "frontend/src/components/MembersAndTeamsTab.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "04e30af92633c3a6f085aa5080ef9651297f8ddf755d548a0414e9525b997bcd",
+      "sourceDigest": "a71e0c48387610865cdcd068cecc6e06c76f252214e24e770bccf2b2eb6afafc",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -5720,6 +5720,595 @@
       ],
       "sourceDigest": "d92271faf99cb347f6df08d1bb2d35c9164c98e830934afc2b467fcaa5d34433",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-approval-policies-00-two-step",
+      "title": "A €6,240.00 refund after the finance lead and an admin both approved",
+      "path": "screenshots/examples/approval-policies/00-two-step.png",
+      "capturedAt": "2026-10-27T10:54:10.989Z",
+      "status": "current",
+      "sha256": "9b0701e7b3358b330b1326b31c1b90d4f659b71eb7954210af544292788162ea",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-approval-policies-01-big-refunds",
+      "title": "Policy: refunds over €5,000 need the finance lead, then an admin",
+      "path": "screenshots/examples/approval-policies/01-big-refunds.png",
+      "capturedAt": "2026-10-27T10:53:27.942Z",
+      "status": "current",
+      "sha256": "68a287d78266c92b11d5454ce087f3e403a28e559d5c465c0f888767c00ac055",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/approvals/policies/new"
+      },
+      "sources": [
+        "frontend/src/pages/approval-policy.tsx",
+        "frontend/src/components/settings/approval-policy-form.tsx"
+      ],
+      "sourceDigest": "f9e659350aae24662fb5114122edde357fc22238101f983df6b68960da04a29b",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-approval-policies-02-policies",
+      "title": "Two approval policies for the Finance team",
+      "path": "screenshots/examples/approval-policies/02-policies.png",
+      "capturedAt": "2026-10-27T10:53:37.840Z",
+      "status": "current",
+      "sha256": "3061e9117cbc3b6879b586b237c5d006ee95684ac8bd5cf990490ba7e4bc192c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/approval-policies-settings.tsx",
+        "frontend/src/components/settings/amount-rules-card.tsx"
+      ],
+      "sourceDigest": "a28ddb91656398cc51d4fec08d17f2d025d108a85bfc7ef6da7331e24b2f0c9c",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-approval-policies-03-try",
+      "title": "The billing assistant stops before a €6,240.00 refund",
+      "path": "screenshots/examples/approval-policies/03-try.png",
+      "capturedAt": "2026-10-27T10:53:43.635Z",
+      "status": "current",
+      "sha256": "58060ec74a31a0255c3d053ec06c4fd2ac8619b04ac8d40583cdded6993af839",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-approval-policies-04-waiting",
+      "title": "The refund waiting on the Approvals page, as the finance lead sees it",
+      "path": "screenshots/examples/approval-policies/04-waiting.png",
+      "capturedAt": "2026-10-27T10:53:48.861Z",
+      "status": "current",
+      "sha256": "90ef8feaedfc18a594a0be4c4c61a4eca18830ff8d6460f36393205e48200f8f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx"
+      ],
+      "sourceDigest": "ecd1b9d4309b8d7ae0f389fd39cfab9679e1df7bc94868911c5a89b149eef23f",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-approval-policies-05-after-first",
+      "title": "After the finance lead approved: still waiting, for an admin",
+      "path": "screenshots/examples/approval-policies/05-after-first.png",
+      "capturedAt": "2026-10-27T10:53:55.554Z",
+      "status": "current",
+      "sha256": "90ef8feaedfc18a594a0be4c4c61a4eca18830ff8d6460f36393205e48200f8f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx"
+      ],
+      "sourceDigest": "ecd1b9d4309b8d7ae0f389fd39cfab9679e1df7bc94868911c5a89b149eef23f",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-approval-policies-06-small",
+      "title": "A €740.60 refund: one approval, from the finance lead",
+      "path": "screenshots/examples/approval-policies/06-small.png",
+      "capturedAt": "2026-10-27T10:54:21.374Z",
+      "status": "current",
+      "sha256": "f70aebd3fc39e9761f1b19f2cc3e81c8b1c692839dcf8f85401d7d108ce7382b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx"
+      ],
+      "sourceDigest": "ecd1b9d4309b8d7ae0f389fd39cfab9679e1df7bc94868911c5a89b149eef23f",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-audit-to-siem-00-splunk-events",
+      "title": "Audit events as Splunk received them: a refund and the approvals before it",
+      "path": "screenshots/examples/audit-to-siem/00-splunk-events.png",
+      "capturedAt": "2026-10-27T10:54:48.770Z",
+      "status": "current",
+      "sha256": "16430a6ed185395991f009319316e5267937c60f65d464854fafea536f3ed21a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/audit-streams"
+      },
+      "sources": [
+        "backend/ee/modules/audit-export/audit-stream.service.ts",
+        "backend/src/modules/audit-log"
+      ],
+      "sourceDigest": "dc36ba03b152cd64e4bd4e00ef62204c42178115f223a724b8a6aa63064b74cd",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page shows what the local stand-in received, laid out as a page; the real service was not used."
+    },
+    {
+      "id": "examples-audit-to-siem-01-audit-trail",
+      "title": "Analytics, Audit trail: who did what, and when",
+      "path": "screenshots/examples/audit-to-siem/01-audit-trail.png",
+      "capturedAt": "2026-10-27T10:54:46.497Z",
+      "status": "current",
+      "sha256": "473c7d372191eaf377d57c645ab920d02949d101430450c16ea6ee552c92b6ac",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/analytics/audit"
+      },
+      "sources": [
+        "frontend/src/pages/analytics.tsx",
+        "frontend/src/components/analytics"
+      ],
+      "sourceDigest": "a41e1fec1ef91e119714369732ffd15c4f27f2646603fa6f58dbfd413494767d",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-audit-to-siem-02-splunk-target",
+      "title": "Audit streaming: a Splunk HTTP Event Collector target",
+      "path": "screenshots/examples/audit-to-siem/02-splunk-target.png",
+      "capturedAt": "2026-10-27T10:54:31.984Z",
+      "status": "current",
+      "sha256": "feae3b3d42921d2c2530c311ecd48f88f85d0cbff1fd925841c696b02d98793d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/audit-streams"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/audit-streams-settings.tsx"
+      ],
+      "sourceDigest": "b89025145cc3734c1af8e41c1561530ebcd1583f92cf98533c90c19f08d1e037",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-audit-to-siem-03-streaming",
+      "title": "Audit streaming, sending to Splunk",
+      "path": "screenshots/examples/audit-to-siem/03-streaming.png",
+      "capturedAt": "2026-10-27T10:54:34.353Z",
+      "status": "current",
+      "sha256": "2a307fa2ebca58df51dfbca0e7786ee1f9f45ac153635f1e3dca04bcd9050cf0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/audit-streams"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/audit-streams-settings.tsx"
+      ],
+      "sourceDigest": "b89025145cc3734c1af8e41c1561530ebcd1583f92cf98533c90c19f08d1e037",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-eu-ai-act-compliance-00-web-chat",
+      "title": "The public web chat, with the AI notice under the message box",
+      "path": "screenshots/examples/eu-ai-act-compliance/00-web-chat.png",
+      "capturedAt": "2026-10-27T10:55:42.274Z",
+      "status": "current",
+      "sha256": "0a850089c98d688a81f9fddc3ff51eab9f3c31b75a3e62bda5b171cf8f3dc8bf",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/?__slug=velora-help"
+      },
+      "sources": [
+        "frontend/src/pages/hosted-chat.tsx",
+        "frontend/src/lib/hosted-chat.ts"
+      ],
+      "sourceDigest": "42ea2de891b2cdbb2a0ebe5fc435a7c07a5807e3781c193d29027fb51a177c37",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-eu-ai-act-compliance-01-branding",
+      "title": "Branding: the AI notice in your own words",
+      "path": "screenshots/examples/eu-ai-act-compliance/01-branding.png",
+      "capturedAt": "2026-10-27T10:55:28.052Z",
+      "status": "current",
+      "sha256": "37cb5e0eb81067659316a844ea9be245913b7c89c9eae842069fda2c48a6eac2",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/settings"
+      },
+      "sources": [
+        "frontend/src/pages/agent-public-settings.tsx",
+        "frontend/src/components/channels"
+      ],
+      "sourceDigest": "755928e97f99e6fc84e847ad75ff1c288a12cb0e2f05f18a490b8d1f7c555faa",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-eu-ai-act-compliance-02-channel-notice",
+      "title": "The web chat channel, with the AI notice switched on",
+      "path": "screenshots/examples/eu-ai-act-compliance/02-channel-notice.png",
+      "capturedAt": "2026-10-27T10:55:35.427Z",
+      "status": "current",
+      "sha256": "69fb581876ac58b06f156618cc358e47dcbdd9e8039ffc948c7b7fed775de58a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels"
+      ],
+      "sourceDigest": "252c7c1f567e1c9aff770c87bccfcb918d02c132cf5cb178916a7ebfb1d95156",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-eu-ai-act-compliance-03-tech-doc",
+      "title": "The billing assistant's technical documentation",
+      "path": "screenshots/examples/eu-ai-act-compliance/03-tech-doc.png",
+      "capturedAt": "2026-10-27T10:55:47.534Z",
+      "status": "current",
+      "sha256": "b8e6d5ebc5fadb5b62916308100920f590e8679896b318614350c915b63f11f8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "backend/src/modules/agents/agent-tech-doc.helper.ts"
+      ],
+      "sourceDigest": "21519b346ac0561b8b7a2bd32b50be09348265ef2a6445f32143cd4780e715d1",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page shows what the local stand-in received, laid out as a page; the real service was not used."
+    },
+    {
+      "id": "examples-eu-ai-act-compliance-04-compliance-policy",
+      "title": "Compliance: personal data hidden in records across the organization",
+      "path": "screenshots/examples/eu-ai-act-compliance/04-compliance-policy.png",
+      "capturedAt": "2026-10-27T10:55:51.544Z",
+      "status": "current",
+      "sha256": "30e91981cb19e80b0bab89011167020673b2701ab2bf5521f9ec49630bcc1cfc",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/compliance"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/compliance-settings.tsx"
+      ],
+      "sourceDigest": "af2af8c246a91bfa6ad2a3c96093da008d02741627c11cde2be86e6503633503",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-eu-ai-act-compliance-05-posture",
+      "title": "The compliance report",
+      "path": "screenshots/examples/eu-ai-act-compliance/05-posture.png",
+      "capturedAt": "2026-10-27T10:55:58.547Z",
+      "status": "current",
+      "sha256": "f137f111c7ddf50778429b73fa25f59d79c040ab73b169fc3ab45c43acb4fe01",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/compliance"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/compliance-settings.tsx"
+      ],
+      "sourceDigest": "af2af8c246a91bfa6ad2a3c96093da008d02741627c11cde2be86e6503633503",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-team-rbac-00-support-view",
+      "title": "Agents as a support team member sees them: only his team's assistant",
+      "path": "screenshots/examples/multi-team-rbac/00-support-view.png",
+      "capturedAt": "2026-10-27T10:53:19.125Z",
+      "status": "current",
+      "sha256": "ea98c863ae9cbfe7007b3b1cc4290e70f9c7e0124b7fa7de1faaf7183d71d66b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-team-rbac-01-teams",
+      "title": "Two teams, Finance and Customer support",
+      "path": "screenshots/examples/multi-team-rbac/01-teams.png",
+      "capturedAt": "2026-10-27T10:51:52.798Z",
+      "status": "current",
+      "sha256": "3fbc9a298c7374daf6895da62c19f3569c8fbf9c43acf7b1cb011fb43add6d9e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/members"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/MembersAndTeamsTab.tsx"
+      ],
+      "sourceDigest": "fe808e69285db87e3fdfdfb8be229a109dbbf9691abb4065fecd760f0c3e7fd8",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-team-rbac-02-invite",
+      "title": "Inviting a colleague as a member",
+      "path": "screenshots/examples/multi-team-rbac/02-invite.png",
+      "capturedAt": "2026-10-27T10:51:58.081Z",
+      "status": "current",
+      "sha256": "07554d6f14bfd2abd0131490c82aa208a7afe944d79875625666cd00eee5ce31",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/members"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/MembersAndTeamsTab.tsx"
+      ],
+      "sourceDigest": "fe808e69285db87e3fdfdfb8be229a109dbbf9691abb4065fecd760f0c3e7fd8",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-team-rbac-03-team-members",
+      "title": "Finance with Joost as lead, Customer support with Mehmet",
+      "path": "screenshots/examples/multi-team-rbac/03-team-members.png",
+      "capturedAt": "2026-10-27T10:52:18.327Z",
+      "status": "current",
+      "sha256": "216759d9cc4a54f917def4c35d2ca1058af965704580bf9456ace8791798ec88",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/members"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/MembersAndTeamsTab.tsx"
+      ],
+      "sourceDigest": "fe808e69285db87e3fdfdfb8be229a109dbbf9691abb4065fecd760f0c3e7fd8",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-team-rbac-04-stripe-finance",
+      "title": "Connecting Stripe for the Finance team only",
+      "path": "screenshots/examples/multi-team-rbac/04-stripe-finance.png",
+      "capturedAt": "2026-10-27T10:52:25.144Z",
+      "status": "current",
+      "sha256": "59d431b992328156338a4fbaa45839e8040ac8a6d3577f25015966c5c4b74818",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx"
+      ],
+      "sourceDigest": "2ac745d1fe62895d18f1965b37b193dcf581b908ff6c5e0590e82a7c986c48d0",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-team-rbac-04b-stripe-key-finance",
+      "title": "The Stripe key, usable by the Finance team only",
+      "path": "screenshots/examples/multi-team-rbac/04b-stripe-key-finance.png",
+      "capturedAt": "2026-10-27T10:52:35.577Z",
+      "status": "current",
+      "sha256": "7a86bea067cd59aa17e938bbbb7405edc0c228f3c055c9fdf2819aa5213875a1",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=7&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-team-rbac-05-agent-team",
+      "title": "The billing assistant, usable by the Finance team only",
+      "path": "screenshots/examples/multi-team-rbac/05-agent-team.png",
+      "capturedAt": "2026-10-27T10:53:02.615Z",
+      "status": "current",
+      "sha256": "006cfd472bccbb8d41756b2cbe27ab79e1f64569bea1305bd05eb36142fc76b7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-multi-team-rbac-06-support-denied",
+      "title": "A support member opening the billing assistant's link",
+      "path": "screenshots/examples/multi-team-rbac/06-support-denied.png",
+      "capturedAt": "2026-10-27T10:53:23.063Z",
+      "status": "current",
+      "sha256": "ac1bdb25841e1765688ae09dd091f6486e171b05a411b9856213f4e06bfe266e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-sso-scim-onboarding-00-signed-in",
+      "title": "Eva, a new starter, signed in with her Microsoft account",
+      "path": "screenshots/examples/sso-scim-onboarding/00-signed-in.png",
+      "capturedAt": "2026-10-27T10:55:12.534Z",
+      "status": "current",
+      "sha256": "ea8cc1a558806dcdf1d22809e22d3c8c285390f317293b605cad275806d67e79",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/dashboard"
+      },
+      "sources": [
+        "frontend/src/pages/dashboard.tsx",
+        "backend/ee/modules/sso/sso.controller.ts"
+      ],
+      "sourceDigest": "3c9e4390e12e182cf8d63c25fd1e8352b2327f4c60462bd2a284ec7caecc912c",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-sso-scim-onboarding-01-domain-record",
+      "title": "Email domains: the TXT record to add",
+      "path": "screenshots/examples/sso-scim-onboarding/01-domain-record.png",
+      "capturedAt": "2026-10-27T10:54:53.805Z",
+      "status": "current",
+      "sha256": "21c7c7fb4492eeecf1eea9183f2c4c3380217d048fc2c4b4c423e30881492f54",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/sso"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/sso-settings.tsx",
+        "frontend/src/components/settings/sso-domains.tsx"
+      ],
+      "sourceDigest": "41c61e06eb9266251d67e1cc6e7633eccc4b05290431842ce3215ea21f778b99",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-sso-scim-onboarding-02-domain-verified",
+      "title": "The domain, verified",
+      "path": "screenshots/examples/sso-scim-onboarding/02-domain-verified.png",
+      "capturedAt": "2026-10-27T10:54:57.066Z",
+      "status": "current",
+      "sha256": "c62e58e33a47ff9e7ffcd29191e1dd7d366bd901dcd2ed2c26f9273e040428ac",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/sso"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/sso-settings.tsx",
+        "frontend/src/components/settings/sso-domains.tsx"
+      ],
+      "sourceDigest": "41c61e06eb9266251d67e1cc6e7633eccc4b05290431842ce3215ea21f778b99",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-sso-scim-onboarding-03-entra-oidc",
+      "title": "Single sign-on with Microsoft Entra ID over OpenID Connect",
+      "path": "screenshots/examples/sso-scim-onboarding/03-entra-oidc.png",
+      "capturedAt": "2026-10-27T10:55:01.291Z",
+      "status": "current",
+      "sha256": "9f596702e035ce05ca83f6a013a54e3202fd3c5fd036f96ec9ce71b66363c09f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/sso"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/sso-settings.tsx",
+        "frontend/src/components/settings/sso-domains.tsx"
+      ],
+      "sourceDigest": "41c61e06eb9266251d67e1cc6e7633eccc4b05290431842ce3215ea21f778b99",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-sso-scim-onboarding-04-scim-token",
+      "title": "SCIM: the base URL and a new token for Entra",
+      "path": "screenshots/examples/sso-scim-onboarding/04-scim-token.png",
+      "capturedAt": "2026-10-27T10:55:05.984Z",
+      "status": "current",
+      "sha256": "d17a083cddaf38c9a4309fbd92dc0ba7e9281c9678e94ee590f79878108ea6ae",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/sso"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings/sso-settings.tsx",
+        "frontend/src/components/settings/sso-domains.tsx"
+      ],
+      "sourceDigest": "41c61e06eb9266251d67e1cc6e7633eccc4b05290431842ce3215ea21f778b99",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "examples-sso-scim-onboarding-05-members",
+      "title": "Members after Entra provisioned two people and removed one",
+      "path": "screenshots/examples/sso-scim-onboarding/05-members.png",
+      "capturedAt": "2026-10-27T10:55:19.169Z",
+      "status": "current",
+      "sha256": "ef8dc4ad296cbde837ec7dae646f9db14859aef95c1355abb5ec1941467e3b10",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/members"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/MembersAndTeamsTab.tsx"
+      ],
+      "sourceDigest": "fe808e69285db87e3fdfdfb8be229a109dbbf9691abb4065fecd760f0c3e7fd8",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     }
   ]
 }

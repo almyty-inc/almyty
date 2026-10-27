@@ -105,4 +105,9 @@ regexes = [
   # the demo seed's walkthrough against a local fake (scripts/demo-seed); not
   # a secret.
   '''y_NbAkKc66ryYTWUXYEu''',
+  # Made-up Splunk HEC token and Entra client id for the governance examples'
+  # fictional company, served by local fakes in the demo seed
+  # (scripts/demo-seed/usecases/gov-guides.mjs); not secrets.
+  '''7c2e9a41-5b1d-4f6a-9e03-8d4b2c1f6a70''',
+  '''b6e1f3a2-47c9-4d0e-9a18-3f5c7d2e8b41''',
 ]
