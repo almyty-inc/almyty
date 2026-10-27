@@ -49,7 +49,7 @@ const SLACK_SIGNING_SECRET = 'local-test-signing-secret-0123456789'
 const sql = (q) => execSync(`${PSQL} -v ON_ERROR_STOP=1 -tA`, { input: q, encoding: 'utf8' }).trim()
 const upstream = async (path, init) => (await fetch(`${UP}${path}`, init)).json()
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
 const BUILDER = ['frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents']
 const SETUP = ['frontend/src/pages/api-setup.tsx', 'frontend/src/components/apis/api-key-form.tsx']
@@ -124,8 +124,10 @@ async function account() {
 const HIDE = '.tsqd-parent-container, .tsqd-open-btn-container, [role=region][aria-label^="Notifications"] { display: none !important; }'
 
 async function session(browser) {
-  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'dark', timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 } })
-  await ctx.addInitScript(() => { try { localStorage.setItem('theme', 'dark') } catch {} })
+  // Light, like the other walks; THEME=dark for a dark capture.
+  const theme = process.env.THEME === 'dark' ? 'dark' : 'light'
+  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: theme, timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 } })
+  await ctx.addInitScript((t) => { try { localStorage.setItem('theme', t) } catch {} }, theme)
   // A real sign-in page is never opened.
   await ctx.route(/accounts\.google\.com|app\.hubspot\.com/, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<p>Stopped before the real sign-in page (local demo).</p>' }))
   const page = await ctx.newPage()
@@ -675,7 +677,7 @@ function register(shots) {
     const notes = 'Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.' +
       (RENDERED[shot] ? ' The page renders the message exactly as almyty handed it to the provider; that provider was not used.' : '')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/tutorials/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
-      '--notes', notes, ...[...sources, ...UI].flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
+      '--notes', notes, ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
   }
 }
 

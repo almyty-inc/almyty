@@ -63,13 +63,13 @@ async function specFiles() {
 
 // ---------- the browser ----------
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
-const src = (...paths) => [...paths, ...UI]
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
+const src = (...paths) => paths
 
 async function session(browser) {
   const state = process.env.DEMO_GUIDE_EMAIL ? null : join(OUT, 'sam-state.json')
-  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'dark', timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 }, ...(state && existsSync(state) ? { storageState: state } : {}) })
-  await ctx.addInitScript(() => { try { localStorage.setItem('theme', 'dark') } catch {} })
+  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'light', timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 }, ...(state && existsSync(state) ? { storageState: state } : {}) })
+  await ctx.addInitScript(() => { try { localStorage.setItem('theme', 'light') } catch {} })
   const page = await ctx.newPage()
   await page.goto('/dashboard')
   await page.waitForTimeout(1200)
