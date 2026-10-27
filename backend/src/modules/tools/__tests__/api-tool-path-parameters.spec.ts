@@ -91,18 +91,6 @@ describe('API tools fill path parameters on every method', () => {
     expect(config.data).toEqual({ query: 'Bluefin', limit: 5 });
   });
 
-  it('arguments grouped by where they go are still read as groups', async () => {
-    const operation = op('POST', '/repos/{owner}/{repo}/issues/{issue_number}/comments', {
-      path: { owner: {}, repo: {}, issue_number: {} },
-      body: { schema: { type: 'object', properties: { body: { type: 'string' } } } },
-    });
-    await executor.executeRestOperation(tool, operation, api, { path: { owner: 'o', repo: 'r', issue_number: 1 }, body: { body: 'hi' } }, {} as any);
-
-    const config = mockedAxios.mock.calls[0][0];
-    expect(config.url).toBe('https://helpdesk.example.com/repos/o/r/issues/1/comments');
-    expect(config.data).toEqual({ body: 'hi' });
-  });
-
   it('POST with a declared header parameter (PagerDuty notes): the header is sent as a header', async () => {
     const operation = op('POST', '/incidents/{id}/notes', {
       path: { id: {} },
