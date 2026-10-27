@@ -29,6 +29,7 @@ import {
   matchingRows,
   tableUpdates,
 } from '../../__tests__/recording-query-builder';
+import { expectRunProjectionsHold } from '../../../../test/fake-run-events';
 
 /**
  * Two things the inbound channel pipeline has to get right when more
@@ -50,6 +51,8 @@ import {
  */
 const SIGNING_SECRET = 'inbound-concurrency-secret';
 
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 describe('inbound channel pipeline under concurrency', () => {
   let fetchMock: ReturnType<typeof installFetchMock>;
   let runRepository: any;

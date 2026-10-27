@@ -4,7 +4,7 @@ import { join } from 'path';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Message } from '../../../entities/message.entity';
 import { fakeRepository } from '../../../test/fake-repository';
-import { withRunEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, withRunEvents } from '../../../test/fake-run-events';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 
@@ -16,6 +16,9 @@ import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
  * along and the decision (approved or not, by whom, the note) replaces the
  * placeholder as the call's result.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('request_approval: the decision reaches the model', () => {
   function runtimeWith(messages: ReturnType<typeof fakeRepository<Message>>, run: Partial<AgentRun>) {
     const runs = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: [{ headSeq: 0, steps: [], ...run } as AgentRun] });

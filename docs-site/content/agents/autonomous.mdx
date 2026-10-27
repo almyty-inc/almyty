@@ -134,6 +134,10 @@ Turn on **Remember between conversations** and the agent looks up what it saved 
 
 See [Memory](/memory#an-assistants-memory-settings) for what each setting does while the agent runs.
 
+## Watch a run as it goes
+
+Open a run on the agent's **Runs** tab while it is still going and it stays live: each step appears as the agent takes it, and the status, step count, cost and tokens move with it. A **Live** badge shows while it is connected. If the connection drops (a laptop going to sleep, a flaky network), the badge says it is reconnecting, and once it is back the run carries on from the last step you saw, with nothing missing and nothing shown twice. When the run finishes, the badge goes away and the run shows its final result.
+
 ## Long runs
 
 A long run can outgrow how much text a model can read at once. Context compaction keeps it within bounds: past a token budget, older parts of the conversation are folded into a summary while the most recent messages are kept word for word. It is off unless turned on, and there is no switch for it on the edit page; it is set through the API (see below).
@@ -165,4 +169,5 @@ See the [Agents CLI](/cli/agents) for the full command set. Any client can also 
 - Limits are `CODE_MODE_*` (calls 100, in flight 4, 30 s default and 120 s maximum, 128 MB, 16 KB of log and of return value, 50,000 characters of script); `organization.settings.codeMode` may lower each. `extract(value, schema)` uses `agentConfig.codeMode.extractor` (`{ providerId, model }`) or the organization's routing policy with `objective: 'cheapest'`; its cost goes to the run.
 - A script with staged calls creates one approval request with `payload.kind: 'change_set'` and `payload.changeSet`; the run waits with `workingMemory.pendingChangeSets`. Approved, the entries run in order with `approvedGate` (an amount rule accepts a change set that contains the call) and stop at the first failure; rejected or expired, none run and the run resumes.
 - Traces: `code_executions` (script, logs, result, error, status, change set, approval, call count, CPU ms, duration) and `tool_executions.codeExecutionId`. `GET /agents/:id/runs/:runId/code-executions[/:codeExecutionId]` returns a run's scripts and one script with its calls. Retention deletes them with `tool_executions`.
+- `GET /agents/:id/runs/:runId/stream` is a run's live progress as server-sent events. Send `?after=<seq>` (0 for the whole history), or the `Last-Event-ID` header an EventSource sends when it reconnects (it wins over `after`), and the stream starts with every event of the run's log after that seq as `run.log` events (`{ seq, type, step, payload, createdAt }`, SSE `id` = seq), in order and each once, then carries on live. Live progress events (`llm.chunk` and the rest) have no id and are not replayed. A stream that reaches its time limit sends `stream.timeout` with `lastSeq`; reconnect with it. Without `after` or `Last-Event-ID` the stream is live events only. The runs list returns each run's `headSeq`, the seq to resume a view of it from.
 - The tool-mode benchmark (`backend/scripts/tool-mode-benchmark/`) runs a fixed task set against three mock APIs (53 tools) in each mode, on the models you name, and reports tokens, turns, tool calls, latency, cost and success; `--self-check` verifies the task checks without a model.

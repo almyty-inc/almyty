@@ -1,7 +1,9 @@
 # Durable agent runs
 
 Status: accepted. Being built step by step (see Rollout). Done: step 1,
-the event log written alongside the run row.
+the event log written alongside the run row, and step 2, the projection
+checked against the row on every write and live run views replayed from
+the log.
 
 ## In plain words
 
@@ -30,7 +32,7 @@ from the last event, without doing a paid call or a side effect twice.
   anywhere, only the result.
 - **Live views cannot replay.** Run events go out over Redis to whoever is
   subscribed now. A viewer that reconnects gets the current row and nothing
-  in between.
+  in between. (Closed by step 2: a viewer resumes from the last seq it saw.)
 - **Waits are queue delays.** A sleeping run or one waiting on a machine
   is a delayed job; if the queue loses it, nothing wakes the run.
 
@@ -105,14 +107,16 @@ a model call already answered is not asked again, and a tool call already
 made is not made again. Each tool call carries an idempotency key, (runId,
 step, callIndex), sent to tools that accept one and checked against the
 log before any call. Live views replay from the log: a viewer sends the
-last seq it saw and gets everything after it, then the live stream.
+last seq it saw and gets everything after it, then the live stream (built
+in step 2).
 
 ## Rollout
 
 1. **Dual-write.** The commit writes the events with the row; nothing reads
    them except the projection check in tests. *Done.*
 2. **Shadow read.** Compare the projection with the row on commit in
-   staging and log any difference; serve SSE replay from the log.
+   staging and log any difference; serve SSE replay from the log. *Done*
+   (see Step 2 as built, below).
 3. **Leases.** Add the lease columns, claim runs by lease, move sleeps and
    machine waits to `nextWakeAt`. The queue only nudges.
 4. **Resume and idempotency keys.** Resume from the log after a lease
@@ -125,6 +129,83 @@ at the first write) and deleting it (its events go with it). Every other
 write of a run, anywhere in the backend, goes through `writeRun`; a guard
 spec (`run-writes-are-logged.spec.ts`) fails on an `AgentRun` repository
 write anywhere else.
+
+## Step 2 as built: shadow read
+
+**The projection check.** `writeRun` tells whoever watches run writes,
+after its transaction commits (`onRunWritten`, run-event-writer.ts), what
+it wrote: the row as locked, the row as written and the events appended.
+With `RUN_PROJECTION_CHECK` set (`true`, `1` or `on`), the check
+(`backend/src/modules/agents/run-projection-check.ts`) folds those events
+onto the run's projection and compares every field the log describes
+with the row as written. Where the fields differ it logs a warning
+(`event: run_projection_mismatch`, with the run id, the seq, the seq the
+fold started from and, per differing field, a hash of each side; for
+steps also both lengths and the first index where they part, never a
+value) and writes a `run_projection_mismatch` row to `usage_metrics` with
+the run's organization. The monitoring sample counts them over its
+window (`runs.projectionMismatches`, Prometheus
+`almyty_run_projection_mismatches`). The write has already committed: a
+check that differs, throws or is slow changes nothing about it.
+
+The flag is read, never inferred from the environment's name. It is off
+when unset and in the base Kubernetes config map, which is production's;
+the development compose file turns it on, and the staging and development
+deployments turn it on with `RUN_PROJECTION_CHECK: "true"` in their overlays
+(infra repository).
+
+The fold is incremental (`foldRunEvents`, run-events.ts). The projection
+each check ends with is kept in memory, least recently used out first,
+within `RUN_PROJECTION_CHECK_CACHE_MB` (default 32), so the next write of
+that run folds only what it appended. A run the cache does not hold at
+the previous head (first write this process sees, another pod wrote it
+last, evicted) starts from the row the write locked, which is the
+projection at the previous head when the log is sound. Nothing is read
+back from the database. A cached projection also catches a write made
+around `writeRun`: it changed the row and not the log, and the next
+write's projection no longer matches. After a difference the check starts
+again from the row, so one difference is reported once. A finished run is
+not kept.
+
+Measured on a run of 10,001 events (2,000 commits, 4,000 steps, 1.4 MB of
+steps and working memory, 12.5 MB of log): a check takes 9 ms at the
+median over the run and 17 ms (p95 20 ms) at the end, against 20 ms for
+the write's own diff and serialisation of the same state. Its cost is the
+size of the run's state, the same order as the UPDATE, and does not grow
+with the history; a full replay would read the 12.5 MB of log back on
+every commit.
+
+**Replay for live views.** Every committed write appends its new head to
+`run:<id>:log` in Redis (one small entry, the seq; the events are read
+from Postgres). `GET /agents/:id/runs/:runId/stream` takes the seq a
+viewer last saw, from `Last-Event-ID` (what an EventSource sends on
+reconnect) or `?after=<seq>`, and then
+(`AgentRuntimeEventsHelper.subscribeRunLog`):
+
+1. notes the current end of `run:<id>:log` and `run:<id>:events`,
+2. reads `agent_run_events` after the seq, 500 at a time, and sends each
+   as a `run.log` event with SSE `id:` its seq,
+3. waits on both Redis streams from the noted ends: a head past the last
+   seq sent reads the log again from there; a runtime event (tokens, step
+   progress) goes out as before, without an id.
+
+Only the next seq is ever sent, so nothing goes out twice, and a write
+that commits while the log is being read has its announcement after the
+noted end, so nothing is dropped. While nothing is announced the log is
+read again every five seconds, in case an announcement was lost. The
+stream ends on a terminal runtime event (after sending the rest of the
+log), a second after the log shows the run finished, or at its time limit
+with `stream.timeout` carrying `lastSeq`. Without a seq the endpoint is
+the live stream it was. Org and agent scoping is the endpoint's own
+(`getRun(runId, organizationId, agentId)` before anything is sent).
+
+The agent's **Runs** tab follows an open, unfinished run this way
+(`useLiveRun`, `lib/run-stream.ts`): it starts from the listed row and its
+`headSeq` (now in the list response), folds each event the way
+`projectRunEvents` does, keeps the last seq applied across connections
+and reconnects after it, reading the stream with fetch so the
+`X-Organization-Id` header goes with it. The hosted chat stream is not on
+the log: a visitor sees the answer, never the working.
 
 ## The worker-kill test
 

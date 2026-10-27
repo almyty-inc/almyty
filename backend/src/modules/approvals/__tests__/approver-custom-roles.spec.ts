@@ -1,7 +1,7 @@
 import { ApprovalsService } from '../approvals.service';
 import { fakeApprovalsRepo } from './approvals-repo.fixture';
 import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
-import { runsWithEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, runsWithEvents } from '../../../test/fake-run-events';
 
 /**
  * An approval policy step whose approver role is a custom role name
@@ -64,6 +64,9 @@ const input = {
   reason: 'refund over 1000',
   payload: { amount: 2500 },
 };
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('approval policy approver roles include custom roles', () => {
   it('records the approver custom role names next to the org role', async () => {

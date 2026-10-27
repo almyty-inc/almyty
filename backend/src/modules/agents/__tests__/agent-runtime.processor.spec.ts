@@ -1,8 +1,11 @@
 import { AgentRuntimeProcessor } from '../agent-runtime.processor';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { fakeRepository } from '../../../test/fake-repository';
-import { withRunEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, withRunEvents } from '../../../test/fake-run-events';
 import { projectRunEvents, storedRunState } from '../run-events';
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('AgentRuntimeProcessor.handleNextStep — step enqueue idempotency', () => {
   const makeProcessor = (processResult: 'continue' | 'done' | 'waiting') => {

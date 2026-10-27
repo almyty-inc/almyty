@@ -143,6 +143,8 @@ export const AGENT_RUN_LIST_COLUMNS = {
   recursionDepth: true,
   toolCallCount: true,
   metadata: true,
+  // The seq of the run's last logged event: where a live view of it resumes.
+  headSeq: true,
   limits: true,
   parentRunId: true,
   createdAt: true,
@@ -703,6 +705,14 @@ export class AgentRuntimeService implements OnModuleInit {
     timeoutMs = 300_000,
   ): Promise<void> {
     return this.events.subscribeRunEvents(runId, handler, signal, timeoutMs);
+  }
+
+  /**
+   * A live run view that resumes: the run's logged events after `afterSeq`
+   * from its event log, then the live stream (AgentRuntimeEventsHelper.subscribeRunLog).
+   */
+  async subscribeRunLog(...args: Parameters<AgentRuntimeEventsHelper['subscribeRunLog']>): Promise<void> {
+    return this.events.subscribeRunLog(...args);
   }
 
   /** Best-effort periodic sweep of orphaned run emitters. */
