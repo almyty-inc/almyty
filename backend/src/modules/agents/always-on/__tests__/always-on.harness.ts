@@ -12,6 +12,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { AgentRun, AgentRunStatus } from '../../../../entities/agent-run.entity';
 import { AgentWake } from '../../../../entities/agent-wake.entity';
 import { fakeRepository, FakeRepository } from '../../../../test/fake-repository';
+import { RunEventsTable, withRunEvents } from '../../../../test/fake-run-events';
 import { membershipFixture } from '../../../../test/execution-access.fixture';
 import { AlwaysOnService } from '../always-on.service';
 import { SCHEDULED_RESULT_POSTER } from '../../scheduled-result-poster';
@@ -71,6 +72,8 @@ export interface World {
   agents: FakeRepository<any>;
   wakes: FakeRepository<any>;
   runs: FakeRepository<any>;
+  /** agent_run_events, as every run write left it. */
+  runEvents: RunEventsTable;
   channels: FakeRepository<any>;
   organizations: FakeRepository<any>;
   tools: FakeRepository<any>;
@@ -130,6 +133,8 @@ export function world(
   const agents = fakeRepository<any>(options.agent === null ? [] : [options.agent ?? alwaysOnAgent()]);
   const wakes = fakeRepository<any>({ make: () => new AgentWake(), idPrefix: 'wake' });
   const runs = fakeRepository<any>({ make: () => new AgentRun(), idPrefix: 'run' });
+  // Every write to a run goes with its events (run-event-writer.ts).
+  const runEvents = withRunEvents(runs);
   const channels = fakeRepository<any>([
     { id: SLACK, organizationId: ORG, agentId: AGENT, type: 'slack', name: 'Support Slack', gatewayId: GW_SLACK },
     { id: HOOK, organizationId: ORG, agentId: AGENT, type: 'webhook', name: 'GitHub', gatewayId: GW_HOOK },
@@ -224,7 +229,7 @@ export function world(
     users as any,
     approvalRows as any,
   );
-  return { service, agents, wakes, runs, channels, organizations, tools, messages, grants, users, approvalRows, queue, redis, startRun, sendInput, approvals, posted, notified, audited, membership };
+  return { service, agents, wakes, runs, runEvents, channels, organizations, tools, messages, grants, users, approvalRows, queue, redis, startRun, sendInput, approvals, posted, notified, audited, membership };
 }
 
 /** Finish a run the way the step processor leaves one. */

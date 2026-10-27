@@ -17,6 +17,7 @@ import { isUniqueViolation } from '../../../common/utils/unique-violation';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
+import { mergeMetadata, writeRun } from '../../agents/run-event-writer';
 import { ChannelEvent, ChannelEventStatus, InboundMessageRecord } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { AlwaysOnService } from '../../agents/always-on/always-on.service';
@@ -897,8 +898,10 @@ export class ChannelGatewayService {
     if (!line) return text;
     if ((run.metadata as any)?.aiDisclosureSent) return text;
 
+    // The one key, merged into the row as it stands: saving the loaded run
+    // whole wrote back whatever it held over the steps committed since.
     run.metadata = { ...(run.metadata || {}), aiDisclosureSent: true };
-    await this.runRepository.save(run);
+    await writeRun(this.runRepository, { id: run.id }, mergeMetadata({ aiDisclosureSent: true }));
 
     return `${line}\n\n${text}`;
   }

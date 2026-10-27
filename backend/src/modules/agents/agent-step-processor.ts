@@ -1,7 +1,9 @@
 import { Inject, Injectable, Optional, forwardRef } from '@nestjs/common';
-import { In, Not } from 'typeorm';
+import { FindOptionsWhere, In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { RunEventDraft } from './run-events';
+import { RunChange, writeRun } from './run-event-writer';
 import { Message, MessageRole } from '../../entities/message.entity';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
@@ -255,6 +257,13 @@ export class AgentStepProcessor {
    */
   private readonly cappedStepCache = new WeakMap<object, any>();
 
+  /** Markers recorded during a step that leave no trace in the row (a compaction), written with its commit. */
+  private readonly pendingNotes = new WeakMap<AgentRun, RunEventDraft[]>();
+
+  private noteEvent(run: AgentRun, note: RunEventDraft): void {
+    this.pendingNotes.set(run, [...(this.pendingNotes.get(run) ?? []), note]);
+  }
+
   async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
     const run = await this.s.runRepository.findOne({
       where: { id: runId },
@@ -479,6 +488,22 @@ export class AgentStepProcessor {
         messages = compacted.messages;
         run.totalCost += compacted.cost;
         run.totalTokens += compacted.tokens;
+        // More of the conversation was folded this step (reusing the cached
+        // summary is not a compaction): the run's log says so, with the
+        // run-wide count and what the summarizer cost. It is written by the
+        // same commit as the step it belongs to (persistWithEvents).
+        if (compacted.folded > 0) {
+          this.noteEvent(run, {
+            type: 'compaction',
+            step: null,
+            payload: {
+              folded: compacted.folded,
+              foldedTotal: Number(run.workingMemory?.contextSummary?.foldedTotal ?? compacted.folded),
+              cost: compacted.cost,
+              tokens: compacted.tokens,
+            },
+          });
+        }
       }
 
       // Build tool definitions for the LLM (user tools + built-in tools)
@@ -1579,10 +1604,14 @@ export class AgentStepProcessor {
         const stepsBefore = run.steps.length;
         await memory.afterRun(agent, run, team);
         if (run.steps.length !== stepsBefore) {
-          await this.s.runRepository.update(
+          // Logged like a commit: the memory_save step and its cost are
+          // events too. The run is done, so nothing but its id guards it.
+          const saved = await this.persistWithEvents(
+            run,
             { id: run.id },
-            { steps: await this.stepsForPersist(run), totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata } as any,
+            { steps: await this.stepsForPersist(run), totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata },
           );
+          if (!saved) this.s.logger.warn(`Run ${run.id}: the memory step after completion was not recorded (the run is gone)`);
         }
         return 'done';
       }
@@ -1780,7 +1809,10 @@ export class AgentStepProcessor {
       select: { id: true, status: true },
     });
     if (!live || !TERMINAL_STATUSES.includes(live.status)) return null;
-    await this.s.runRepository.update(
+    // Logged like any write: the cost goes on the run's log with the status
+    // the canceller left (the row as locked), not this worker's `running`.
+    await writeRun(
+      this.s.runRepository,
       { id: run.id, currentStep: expectedStep },
       { totalCost: run.totalCost, totalTokens: run.totalTokens },
     );
@@ -2439,7 +2471,8 @@ export class AgentStepProcessor {
   }
 
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {
-    const res = await this.s.runRepository.update(
+    return this.persistWithEvents(
+      run,
       // The step number alone was not enough. Cancelling a run sets the
       // status and leaves `currentStep` where it was, so this CAS still
       // matched: `status` was written back to running, the step
@@ -2464,7 +2497,23 @@ export class AgentStepProcessor {
         metadata: run.metadata,
       },
     );
-    return (res.affected ?? 0) > 0;
+  }
+
+  /**
+   * Write the run row and append the events describing the write, in one
+   * transaction (durable runs step 1, run-event-writer.ts), together with
+   * the markers this step noted (a compaction). The events are diffed
+   * against the row as locked in that transaction, so a write another
+   * writer made during the step (a held call pausing the run, a wake's
+   * reply address) is already in the log and in the diff's starting point.
+   */
+  private async persistWithEvents(run: AgentRun, guard: FindOptionsWhere<AgentRun> & { id: any }, patch: RunChange): Promise<boolean> {
+    const notes = this.pendingNotes.get(run) ?? [];
+    const written = await writeRun(this.s.runRepository, guard, patch, notes);
+    if (!written) return false;
+    run.headSeq = written.headSeq;
+    this.pendingNotes.delete(run);
+    return true;
   }
 
   /**

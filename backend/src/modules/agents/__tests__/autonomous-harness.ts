@@ -35,6 +35,7 @@ import { AgentModels } from '../autonomous-models';
 import { LlmChatHelper } from '../../llm-providers/llm-chat.helper';
 import { HostedChatController } from '../../gateways/channels/hosted-chat.controller';
 import { fakeRepository, UnmodelledQueryError } from '../../../test/fake-repository';
+import { withRunEvents } from '../../../test/fake-run-events';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 import { gatewayPrincipal, userPrincipal } from '../../../common/authorization/execution-access.service';
 import { callLlmProviderHttpStream } from '../../llm-providers/providers/safe-request';
@@ -150,6 +151,8 @@ export async function runAgent(opts: {
   members?: string[];
   /** Collects the run's sleeps (the built-in wait); without it a sleep is an error, as in every other case. */
   sleeps?: Array<Record<string, any>>;
+  /** The context compactor (AgentContextCompactor), for a case whose agent compacts its context. */
+  compactor?: any;
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -207,6 +210,8 @@ export async function runAgent(opts: {
     totalCost: 0,
     totalTokens: 0,
     toolCallCount: 0,
+    // The column's default: no events yet.
+    headSeq: 0,
     recursionDepth: 0,
     executionTime: 0,
     workingMemory: {},
@@ -218,6 +223,8 @@ export async function runAgent(opts: {
     ...extra,
   });
   const runRepository = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: [runRow('run-1', 'conv-1', opts.run ?? {}) as any] });
+  // The step commit writes the row and its events in one transaction.
+  const runEvents = withRunEvents(runRepository);
 
   const toolExecutorService = {
     executeTool:
@@ -366,7 +373,7 @@ export async function runAgent(opts: {
     },
   };
   const verifier = new AgentVerifierHelper(llmProvidersService as any);
-  processor = new AgentStepProcessor(s, verifier, {} as any, {} as any, undefined, opts.codeMode);
+  processor = new AgentStepProcessor(s, verifier, opts.compactor ?? ({} as any), {} as any, undefined, opts.codeMode);
 
   // A visitor's view, through the hosted chat controller's own stream().
   let tokens: string[] = [];
@@ -422,6 +429,8 @@ export async function runAgent(opts: {
     runRepository,
     /** Drive the run again, after the case decided what it was waiting for (an approval). */
     drive: () => drive('run-1'),
+    /** agent_run_events, as the commits wrote it (durable runs step 1). */
+    runEvents,
   };
 }
 

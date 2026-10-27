@@ -4,6 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Workspace } from '../../entities/workspace.entity';
 import { releaseRunWorkspaces } from '../workspace/run-end-release';
+import { notDone, writeRun } from './run-event-writer';
+import type { RunEventDraft } from './run-events';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -573,8 +575,11 @@ export class AgentRuntimeService implements OnModuleInit {
     if (run.isDone()) {
       throw new BadRequestException('Run is already completed');
     }
+    // Only a run still going: one that finished in the meantime keeps its ending.
+    if (!(await writeRun(this.runRepository, { id: run.id, status: notDone() }, { status: AgentRunStatus.CANCELLED }))) {
+      throw new BadRequestException('Run is already completed');
+    }
     run.status = AgentRunStatus.CANCELLED;
-    await this.runRepository.save(run);
     await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
     this.emitEvent(runId, 'run.cancelled', {});
 
@@ -622,13 +627,22 @@ export class AgentRuntimeService implements OnModuleInit {
     }
 
     // Persist user message
+    let messageId: string | null = null;
     if (run.conversationId) {
       const userMsg = Message.createUserMessage(run.conversationId, withAttachedFiles(input, attachments));
       userMsg.runId = run.id;
-      await this.messageRepository.save(userMsg);
+      messageId = (await this.messageRepository.save(userMsg))?.id ?? null;
     }
+    // Only a run still waiting: the input goes on its log (the message by
+    // id; its words are the conversation's), with the resume.
+    const resumed = await writeRun(
+      this.runRepository,
+      { id: run.id, status: AgentRunStatus.WAITING_INPUT },
+      { status: AgentRunStatus.RUNNING },
+      [{ type: 'input_received', step: null, payload: { messageId, attachments: attachments?.length ?? 0 } }],
+    );
+    if (!resumed) throw new BadRequestException('Run is not waiting for input');
     run.status = AgentRunStatus.RUNNING;
-    await this.runRepository.save(run);
 
     // Resume execution. Seed the seq from a timestamp so the resumed
     // job's id sits outside the sequential range used before the pause,
@@ -711,6 +725,7 @@ export class AgentRuntimeService implements OnModuleInit {
    * it was approved, by whom, or what the reviewer wrote.
    */
   private async handleApprovalDecided(approval: {
+    id?: string;
     runId: string | null;
     status: 'approved' | 'rejected' | 'expired';
     decisionReason: string | null;
@@ -728,12 +743,29 @@ export class AgentRuntimeService implements OnModuleInit {
       await this.recordDecisionForModel(run, approval);
     }
 
+    // The decision on the run's log: who, what, and their note. Written
+    // with the status it moves the run to, and only while the run is still
+    // waiting (a second listener, or a cancel in between, writes nothing).
+    const decided: RunEventDraft = {
+      type: 'approval_decided',
+      step: null,
+      payload: {
+        approvalId: approval.id ?? null,
+        kind: approval.payload?.kind === 'change_set' ? 'change_set' : approval.payload?._gate ? 'tool_call' : 'run',
+        status: approval.status,
+        decidedBy: approval.status === 'expired' ? null : approval.decidedBy ?? null,
+        decisionReason: approval.decisionReason ?? null,
+        toolCallId: approval.toolCallId ?? null,
+      },
+    };
+    const waiting = { id: run.id, status: AgentRunStatus.WAITING_APPROVAL };
+
     // A script's change set (code mode) resumes the run whatever the
     // decision: rejected or expired, none of it runs, the model is told so
     // and carries on (docs/design/code-mode.md, part D).
     if (approval.status === 'approved' || approval.payload?.kind === 'change_set') {
+      if (!(await writeRun(this.runRepository, waiting, { status: AgentRunStatus.RUNNING }, [decided]))) return;
       run.status = AgentRunStatus.RUNNING;
-      await this.runRepository.save(run);
       // Same seq-from-timestamp rule as the resume path above, and for
       // the same reason. Without a seq the processor read it as 0 and
       // enqueued the next step as `step:<runId>:1` -- an id already in
@@ -751,11 +783,12 @@ export class AgentRuntimeService implements OnModuleInit {
       });
       this.logger.log(`run ${run.id} resumed after approval`);
     } else {
-      run.status = AgentRunStatus.CANCELLED;
-      run.error = approval.status === 'expired'
+      const error = approval.status === 'expired'
         ? 'approval expired'
         : `approval rejected${approval.decisionReason ? `: ${approval.decisionReason}` : ''}`;
-      await this.runRepository.save(run);
+      if (!(await writeRun(this.runRepository, waiting, { status: AgentRunStatus.CANCELLED, error }, [decided]))) return;
+      run.status = AgentRunStatus.CANCELLED;
+      run.error = error;
       await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
       this.logger.log(`run ${run.id} cancelled after approval ${approval.status}`);
     }

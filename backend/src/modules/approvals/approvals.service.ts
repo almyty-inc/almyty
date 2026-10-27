@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { writeRun } from '../agents/run-event-writer';
 import { Agent } from '../../entities/agent.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ApprovalPolicyApprovalRecord } from '../../entities/approval-policy-approval.entity';
@@ -206,9 +207,22 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       return raced;
     }
 
-    // Pause the run.
-    // Pause the run; a held tool call has none to pause.
-    if (input.runId) await this.runs.update({ id: input.runId }, { status: AgentRunStatus.WAITING_APPROVAL });
+    // Pause the run; a held tool call has none to pause. On the run's log:
+    // the pause, and for request_approval (whose request is the run itself)
+    // the request by id. A held call or a change set is announced by the
+    // step that holds it, from its working memory, with the call's detail.
+    if (input.runId) {
+      const payload = (saved.payload ?? {}) as Record<string, any>;
+      const ownRequest = !payload._gate && payload.kind !== 'change_set';
+      await writeRun(
+        this.runs,
+        { id: input.runId },
+        { status: AgentRunStatus.WAITING_APPROVAL },
+        ownRequest
+          ? [{ type: 'approval_requested', step: null, payload: { approvalId: saved.id, kind: 'run', toolCallId: saved.toolCallId ?? null } }]
+          : [],
+      );
+    }
 
     this.emit('approval.requested', saved);
     this.notifyPending(saved).catch(() => {});

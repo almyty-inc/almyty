@@ -1,6 +1,7 @@
 import { ApprovalsService } from '../approvals.service';
 import { fakeApprovalsRepo } from './approvals-repo.fixture';
 import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
+import { runsWithEvents } from '../../../test/fake-run-events';
 
 /**
  * An approval policy step whose approver role is a custom role name
@@ -45,7 +46,7 @@ function makeService(rbacHook?: any) {
   const hook = policyHook();
   const svc = new ApprovalsService(
     approvals as any,
-    { update: async () => ({ affected: 1 }) } as any,
+    runsWithEvents() as any,
     policyApprovals as any,
     new FakeAccessPolicy() as any,
     hook,

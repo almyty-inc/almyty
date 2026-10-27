@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto';
 
 import { Agent, AgentPauseReason, AgentStatus } from '../../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
+import { claimDelivery, writeRun } from '../run-event-writer';
 import { AgentWake, WakeSource } from '../../../entities/agent-wake.entity';
 import { AgentPushWake } from '../../../entities/agent-push-wake.entity';
 import { AgentChannel, ChannelType } from '../../../entities/agent-channel.entity';
@@ -986,12 +987,16 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     // The owner's words handed to a run already going are a person's words on it too.
     const words = ownerWordsOf(wakes);
     if (!replies.length && !words.length) return;
-    const existing: ChannelDelivery[] = Array.isArray(run.metadata?.replyTo) ? run.metadata.replyTo : [];
-    const merged = [...existing];
-    for (const r of replies) if (!merged.some((d) => d.channelId === r.channelId && d.to === r.to)) merged.push(r);
-    const personWords = [...(Array.isArray(run.metadata?.personWords) ? run.metadata.personWords : []), ...words];
-    run.metadata = { ...(run.metadata ?? {}), replyTo: merged, personWords };
-    await this.runs.update({ id: run.id }, { metadata: run.metadata });
+    const add = (metadata: Record<string, any> | null | undefined) => {
+      const existing: ChannelDelivery[] = Array.isArray(metadata?.replyTo) ? metadata!.replyTo : [];
+      const merged = [...existing];
+      for (const r of replies) if (!merged.some((d) => d.channelId === r.channelId && d.to === r.to)) merged.push(r);
+      const personWords = [...(Array.isArray(metadata?.personWords) ? metadata!.personWords : []), ...words];
+      return { ...(metadata ?? {}), replyTo: merged, personWords };
+    };
+    run.metadata = add(run.metadata);
+    // Added to the row as it stands (the run is mid-step), on its log.
+    await writeRun(this.runs, { id: run.id }, (row) => ({ metadata: add(row.metadata) }));
   }
 
   /**
@@ -1315,8 +1320,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     try {
       const run = await this.runs.findOne({ where: { id: runId } });
       if (!run || run.metadata?.triggerType !== 'always_on' || !run.isDone()) return;
-      const claim = await this.runs.update({ id: run.id, deliveredAt: IsNull() }, { deliveredAt: new Date() });
-      if (!claim.affected) return;
+      if (!(await claimDelivery(this.runs, run.id, 'always_on'))) return;
       const agent = await this.agents.findOne({ where: { id: run.agentId, organizationId: run.organizationId } });
       if (!agent) return;
       const config = readAlwaysOn(agent.alwaysOn);

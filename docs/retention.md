@@ -12,7 +12,7 @@ Configured in the Data retention card under Settings → Organization, or over t
 
 | Field | Table | What it holds |
 |---|---|---|
-| `agentRunsDays` | `agent_runs` | Terminal runs only. A run still going is never deleted regardless of age. |
+| `agentRunsDays` | `agent_runs` + `agent_run_events` | Terminal runs only. A run still going is never deleted regardless of age. A run's event log goes with it (ON DELETE CASCADE), here and wherever else a run is deleted. |
 | `conversationsDays` | `conversations` + `messages` | A conversation, its messages and the files people sent in it (channel and web chat attachments, stored object included) go together. |
 | `requestLogsDays` | `request_logs` | Scoped through the org's gateways. |
 | `usageMetricsDays` | `usage_metrics` | Two rows per HTTP request, so this is the highest-count table. |

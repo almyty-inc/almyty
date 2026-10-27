@@ -167,6 +167,11 @@ export class A2AMessageHandler {
       }
     }
 
+    // If the A2A message carries a contextId, the run starts with it, so we
+    // can round-trip it in ListTasks / GetTask responses and filter by it
+    // later. Part of the row as created, not a write after the run began.
+    const externalContextId = params.message?.contextId;
+
     // Start a new run -- return immediately, client polls via GetTask
     const run = await this.agentRuntimeService.startRun(
       gateway.agentId,
@@ -175,19 +180,12 @@ export class A2AMessageHandler {
       text,
       // Runs in the gateway's scope: an A2A gateway serves its agent only
       // when its own visibility covers it, re-checked on every message.
-      withChannelPolicy(policy, { principal: gatewayPrincipal(gateway) }),
+      withChannelPolicy(policy, {
+        principal: gatewayPrincipal(gateway),
+        ...(externalContextId ? { metadata: { a2aContextId: externalContextId } } : {}),
+      }),
     );
     this.recordWorkflow(gateway);
-
-    // If the A2A message carries a contextId, store it so we can round-trip
-    // it in ListTasks / GetTask responses and filter by it later.
-    const externalContextId = params.message?.contextId;
-    if (externalContextId) {
-      await this.runRepository.update(run.id, {
-        metadata: { ...run.metadata, a2aContextId: externalContextId },
-      });
-      run.metadata = { ...run.metadata, a2aContextId: externalContextId };
-    }
 
     // Hold the response only when the client asked for it (see shouldBlock).
     if (this.shouldBlock(params)) {

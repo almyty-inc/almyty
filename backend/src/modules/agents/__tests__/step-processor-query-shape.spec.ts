@@ -6,7 +6,7 @@ import {
   AGENT_STEP_COLUMNS_OMITTED,
 } from '../agent-step-processor';
 import { Agent } from '../../../entities/agent.entity';
-import { AgentRunStatus } from '../../../entities/agent-run.entity';
+import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { STEP_PAYLOAD_CAP } from '../persist-cap';
 
 /**
@@ -20,10 +20,14 @@ import { STEP_PAYLOAD_CAP } from '../persist-cap';
  */
 describe('AgentStepProcessor query and serialization shape', () => {
   const makeProcessor = (overrides: any = {}) => {
-    const runRepository = {
+    const runRepository: any = {
       findOne: jest.fn().mockResolvedValue(null),
       find: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    // The commit writes the row (this update) and its run events in one transaction.
+    runRepository.manager = {
+      transaction: async (work: any) => work({ getRepository: (entity: any) => (entity === AgentRun ? runRepository : { insert: jest.fn() }) }),
     };
     const organizationRepository = { findOne: jest.fn().mockResolvedValue({ id: 'org-1' }) };
     const toolRepository = { find: jest.fn().mockResolvedValue([{ id: 't-1', name: 'a' }]) };
