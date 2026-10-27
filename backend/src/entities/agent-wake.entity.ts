@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 /** What woke an always-on agent. */
-export const WAKE_SOURCES = ['timer', 'channel', 'webhook', 'connection', 'manual'] as const;
+export const WAKE_SOURCES = ['timer', 'channel', 'webhook', 'connection', 'manual', 'push'] as const;
 export type WakeSource = (typeof WAKE_SOURCES)[number];
 
 /**

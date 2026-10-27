@@ -2,7 +2,7 @@
  * Runs tab for the agent detail page. Lists autonomous agent runs
  * with expandable step-by-step detail, thread, output, and errors.
  */
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   CheckCircle2,
   XCircle,
@@ -40,6 +40,8 @@ interface RunsTabProps {
   runs: AgentRun[]
   /** Needed to fetch a run's route trace, which is scoped by agent. */
   agentId?: string
+  /** A run to show opened, from a link to /agents/:id/runs/:runId. */
+  openRunId?: string
 }
 
 /** Whether any of the run's calls went through routing, so there is a route to show. */
@@ -54,8 +56,12 @@ export function stepMachineError(step: { output?: unknown }): MachineProblemInfo
   return { sentence: m.sentence, detail: typeof m.detail === 'string' ? m.detail : null }
 }
 
-export function RunsTab({ runs, agentId }: RunsTabProps) {
-  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+export function RunsTab({ runs, agentId, openRunId }: RunsTabProps) {
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(openRunId ?? null)
+  // A link to another run while this tab is showing opens that one.
+  useEffect(() => {
+    if (openRunId) setExpandedRunId(openRunId)
+  }, [openRunId])
 
   return (
     <Card>

@@ -329,6 +329,11 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      '/push-wakes': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
       '/public': {
         target: apiTarget,
         changeOrigin: true,

@@ -36,7 +36,7 @@ https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
 
 Open **Advanced**, set **Name** to `Stripe` and click **Connect API**. almyty reads the description and makes a tool for every one of Stripe's 612 operations; you will tick the two you need in step 5.
 
-On **Finish connecting**, the key is sent as a username and password, the first option Stripe's description lists. Click **Change** and pick **As a bearer token** instead: it is the same key, and Stripe accepts both. Then click **Create one here**, set **Name** to `Stripe restricted key (read only)`, paste the key into **Key** and click **Save**.
+On **Finish connecting**, the key is sent as a bearer token: Stripe's description offers that next to a username and password, and the token is the same key on its own. Click **Create one here**, set **Name** to `Stripe restricted key (read only)`, paste the key into **Key** and click **Save**. (If you pick **As a username and password** instead, put the key in **Username** and leave **Password** empty.)
 
 ![The restricted key, sent as a bearer token](/screenshots/examples/stripe-payout-reconciliation/02-stripe-key.png)
 

@@ -591,6 +591,17 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
       case 'MESSAGE_CREATE':
         this.handleMessageCreate(conn, d);
         break;
+      case 'INTERACTION_CREATE':
+        // A button pressed under a message the bot posted (Approve, Reject).
+        // Delivered over the socket when the application has no
+        // Interactions Endpoint URL; the adapter reads the press
+        // (DiscordAdapter.actionOf) and answers it by its token.
+        if (d?.type === 3) {
+          this.channelGatewayService.handleInboundMessage(conn.gateway, d, {}).catch((err: any) => {
+            this.logger.error(`discord interaction dispatch failed (gateway ${conn.gateway.id}): ${err.message}`);
+          });
+        }
+        break;
       default:
         break;
     }

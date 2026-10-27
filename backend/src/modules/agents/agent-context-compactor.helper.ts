@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { AgentRun } from '../../entities/agent-run.entity';
@@ -22,10 +23,46 @@ export interface CompactionConfig {
   model?: string;
 }
 
-/** Cached, incrementally-grown summary of the conversation prefix. */
-interface ContextSummaryCache {
-  coveredCount: number; // how many leading history messages are folded into `text`
+/**
+ * Cached, incrementally-grown summary of the conversation prefix.
+ *
+ * The history handed in is the conversation's newest messages
+ * (agent-runtime-builders.ts loads the last 100), so in a long conversation it
+ * slides forward with every step. Where the summary ends is therefore found
+ * again each step from the messages either side of that edge (`lastKey`,
+ * `nextKey`), never from a count.
+ */
+export interface ContextSummaryCache {
+  /**
+   * Where the summary ended in the window of the step that last compacted:
+   * an index into THAT step's window. Not comparable across steps (the
+   * window moves under it); read `foldedTotal` to see whether more was folded.
+   */
+  coveredCount: number;
   text: string;
+  /** The last message the summary covers. */
+  lastKey?: string;
+  /** The first message after the summary. */
+  nextKey?: string;
+  /** How many messages have been folded into `text` over the run. Only grows. */
+  foldedTotal?: number;
+}
+
+export interface CompactionResult {
+  messages: any[];
+  cost: number;
+  tokens: number;
+  /** A summary is in the context (folded this step or earlier). */
+  compacted: boolean;
+  /** Messages newly folded into the summary this call; 0 when the cached summary was reused. */
+  folded: number;
+}
+
+/** A message's identity for finding it again: tool calls and results carry unique ids. */
+function messageKey(m: any): string {
+  const content = typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? '');
+  const calls = m?.toolCalls ? JSON.stringify(m.toolCalls) : '';
+  return createHash('sha256').update(`${m?.role}\u0000${m?.toolCallId ?? ''}\u0000${calls}\u0000${content}`).digest('hex');
 }
 
 const DEFAULTS = {
@@ -60,8 +97,8 @@ export class AgentContextCompactor {
     /** Who the summarizer call acts as: the run's principal (see LlmChatHelper.chat). */
     userId?: string | ExecutionPrincipal,
     signal?: AbortSignal,
-  ): Promise<{ messages: any[]; cost: number; tokens: number; compacted: boolean }> {
-    const noop = { messages, cost: 0, tokens: 0, compacted: false };
+  ): Promise<CompactionResult> {
+    const noop = { messages, cost: 0, tokens: 0, compacted: false, folded: 0 };
     if (!config?.enabled || messages.length < 2) return noop;
 
     const budget = config.maxContextTokens ?? DEFAULTS.maxContextTokens;
@@ -75,20 +112,21 @@ export class AgentContextCompactor {
       coveredCount: 0,
       text: '',
     };
+    // Where the summary ends in this step's window (locate).
+    if (cache.nextKey) cache = { ...cache, coveredCount: this.locate(history, cache) };
     // Guard against a stale cache that claims to cover more than exists.
     if (cache.coveredCount > history.length) cache = { coveredCount: 0, text: '' };
 
     const render = (c: ContextSummaryCache) => {
-      const sys =
-        c.coveredCount > 0
-          ? { ...system, content: `${system.content}\n\n[EARLIER CONVERSATION SUMMARY]\n${c.text}` }
-          : system;
+      const sys = c.text
+        ? { ...system, content: `${system.content}\n\n[EARLIER CONVERSATION SUMMARY]\n${c.text}` }
+        : system;
       return [sys, ...history.slice(c.coveredCount)];
     };
 
     let current = render(cache);
     if (this.estimateTokens(current) <= budget) {
-      return { messages: current, cost: 0, tokens: 0, compacted: cache.coveredCount > 0 };
+      return { messages: current, cost: 0, tokens: 0, compacted: !!cache.text, folded: 0 };
     }
 
     // Over budget: advance the covered boundary to a pair-safe point that keeps
@@ -97,7 +135,7 @@ export class AgentContextCompactor {
     const boundary = this.safeBoundary(history, target);
     if (boundary <= cache.coveredCount) {
       // Can't compact further (the tail alone exceeds the budget). Best effort.
-      return { messages: current, cost: 0, tokens: 0, compacted: cache.coveredCount > 0 };
+      return { messages: current, cost: 0, tokens: 0, compacted: !!cache.text, folded: 0 };
     }
 
     const toCompact = history.slice(cache.coveredCount, boundary);
@@ -131,10 +169,40 @@ export class AgentContextCompactor {
     const newCache: ContextSummaryCache = {
       coveredCount: boundary,
       text: cache.text ? `${cache.text}\n${addedText}` : addedText,
+      lastKey: messageKey(history[boundary - 1]),
+      nextKey: messageKey(history[boundary]),
+      foldedTotal: (cache.foldedTotal ?? 0) + toCompact.length,
     };
     run.workingMemory = { ...(run.workingMemory || {}), contextSummary: newCache };
 
-    return { messages: render(newCache), cost, tokens, compacted: true };
+    return { messages: render(newCache), cost, tokens, compacted: true, folded: toCompact.length };
+  }
+
+  /**
+   * Where the summary ends in this step's window: the index of the first
+   * message it does not cover. Every fallback errs toward folding a message
+   * the summary may already hold (the summarizer merges it into the prior
+   * summary) rather than skipping one that is in neither summary nor tail.
+   *
+   * 1. The message after the summary, right behind the last one it covers:
+   *    unambiguous even when the same text recurs (two "ok"s, a repeated wake).
+   * 2. The last covered message is there but its successor is not (edited or
+   *    removed since): the summary ends right after it.
+   * 3. Only the message after the summary is there: the last covered one slid
+   *    out of the front of the window (or was removed).
+   * 4. Neither: the window has moved past the whole summary, so every message
+   *    in it is new.
+   */
+  private locate(history: any[], cache: ContextSummaryCache): number {
+    const keys = history.map(messageKey);
+    if (cache.lastKey) {
+      for (let i = 1; i < keys.length; i++) {
+        if (keys[i] === cache.nextKey && keys[i - 1] === cache.lastKey) return i;
+      }
+      const last = keys.indexOf(cache.lastKey);
+      if (last >= 0) return last + 1;
+    }
+    return Math.max(0, keys.indexOf(cache.nextKey!));
   }
 
   /**

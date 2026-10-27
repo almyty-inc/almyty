@@ -1,0 +1,163 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "contact": { "email": "dev-platform@stripe.com", "name": "Stripe Dev Platform Team", "url": "https://stripe.com" },
+    "description": "The Stripe REST API. Please see https://stripe.com/docs/api for more details.",
+    "termsOfService": "https://stripe.com/us/terms/",
+    "title": "Stripe API",
+    "version": "2024-06-20"
+  },
+  "servers": [{ "url": "https://api.stripe.com/" }],
+  "security": [{ "basicAuth": [] }, { "bearerAuth": [] }],
+  "components": {
+    "securitySchemes": {
+      "basicAuth": {
+        "description": "Basic HTTP authentication. Allowed headers-- Authorization: Basic <api_key> | Authorization: Basic <base64 hash of `api_key:`>",
+        "scheme": "basic",
+        "type": "http"
+      },
+      "bearerAuth": {
+        "bearerFormat": "auth-scheme",
+        "description": "Bearer HTTP authentication. Allowed headers-- Authorization: Bearer <api_key>",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "range_query_specs": {
+        "properties": {
+          "gt": { "description": "Minimum value to filter by (exclusive)", "type": "integer" },
+          "gte": { "description": "Minimum value to filter by (inclusive)", "type": "integer" },
+          "lt": { "description": "Maximum value to filter by (exclusive)", "type": "integer" },
+          "lte": { "description": "Maximum value to filter by (inclusive)", "type": "integer" }
+        },
+        "title": "range_query_specs",
+        "type": "object"
+      }
+    }
+  },
+  "paths": {
+    "/v1/payouts": {
+      "get": {
+        "description": "<p>Returns a list of existing payouts sent to third-party bank accounts or payouts that Stripe sent to you. The payouts return in sorted order, with the most recently created payouts appearing first.</p>",
+        "operationId": "GetPayouts",
+        "parameters": [
+          {
+            "description": "Only return payouts that are expected to arrive during the given date interval.",
+            "explode": true,
+            "in": "query",
+            "name": "arrival_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "gt": { "type": "integer" },
+                    "gte": { "type": "integer" },
+                    "lt": { "type": "integer" },
+                    "lte": { "type": "integer" }
+                  },
+                  "title": "range_query_specs",
+                  "type": "object"
+                },
+                { "type": "integer" }
+              ]
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "Only return payouts that were created during the given date interval.",
+            "explode": true,
+            "in": "query",
+            "name": "created",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "$ref": "#/components/schemas/range_query_specs" },
+                { "type": "integer" }
+              ]
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "The ID of an external account - only return payouts sent to this external account.",
+            "in": "query",
+            "name": "destination",
+            "required": false,
+            "schema": { "type": "string" },
+            "style": "form"
+          },
+          {
+            "description": "Specifies which fields in the response should be expanded.",
+            "explode": true,
+            "in": "query",
+            "name": "expand",
+            "required": false,
+            "schema": { "items": { "maxLength": 5000, "type": "string" }, "type": "array" },
+            "style": "deepObject"
+          },
+          {
+            "description": "A limit on the number of objects to be returned. Limit can range between 1 and 100, and the default is 10.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": { "type": "integer" },
+            "style": "form"
+          },
+          {
+            "description": "Only return payouts that have the given status: `pending`, `paid`, `failed`, or `canceled`.",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": { "maxLength": 5000, "type": "string" },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array" }, "has_more": { "type": "boolean" } } } } },
+            "description": "Successful response."
+          }
+        },
+        "summary": "List all payouts"
+      }
+    },
+    "/v1/balance_transactions": {
+      "get": {
+        "description": "<p>Returns a list of transactions that have contributed to the Stripe account balance (e.g., charges, transfers, and so forth).</p>",
+        "operationId": "GetBalanceTransactions",
+        "parameters": [
+          {
+            "description": "Only return transactions that were created during the given date interval.",
+            "explode": true,
+            "in": "query",
+            "name": "created",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "$ref": "#/components/schemas/range_query_specs" },
+                { "type": "integer" }
+              ]
+            },
+            "style": "deepObject"
+          },
+          {
+            "description": "Only returns transactions of the given type.",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": { "maxLength": 5000, "type": "string" },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": { "application/json": { "schema": { "type": "object" } } },
+            "description": "Successful response."
+          }
+        },
+        "summary": "List all balance transactions"
+      }
+    }
+  }
+}

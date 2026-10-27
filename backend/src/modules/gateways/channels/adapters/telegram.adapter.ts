@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  ActionPress,
   BaseAdapter,
   NormalizedMessage,
   AdapterResponse,
@@ -34,7 +35,13 @@ export class TelegramAdapter extends BaseAdapter {
       ...(attachments.length ? { attachments } : {}),
       ...(from?.id !== undefined ? { sender: { id: String(from.id), name } } : {}),
       group: ['group', 'supergroup', 'channel'].includes(message.chat?.type),
-      metadata: { chatId: message.chat?.id, messageId: message.message_id, source: 'telegram' },
+      metadata: {
+        chatId: message.chat?.id,
+        messageId: message.message_id,
+        source: 'telegram',
+        // The message this one replies to, so "yes" under an approval finds it.
+        ...(message.reply_to_message ? { replyToText: message.reply_to_message.text || message.reply_to_message.caption || '' } : {}),
+      },
     };
   }
 
@@ -123,7 +130,16 @@ export class TelegramAdapter extends BaseAdapter {
       sent.push(a);
     }
     const text = textWithMedia(response, sent);
-    return media.length ? { text, media } : { text };
+    const markup = TelegramAdapter.inlineKeyboard(response.actions);
+    return { text, ...(media.length ? { media } : {}), ...(markup ? { reply_markup: markup } : {}) };
+  }
+
+  /** Buttons as an inline keyboard on one row; `callback_data` is the action's id (at most 64 bytes). */
+  static inlineKeyboard(actions: AdapterResponse['actions']): { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> } | null {
+    const buttons = (actions ?? [])
+      .filter((a) => a && typeof a.id === 'string' && Buffer.byteLength(a.id) <= 64)
+      .map((a) => ({ text: a.label, callback_data: a.id }));
+    return buttons.length ? { inline_keyboard: [buttons] } : null;
   }
 
   /**
@@ -138,12 +154,56 @@ export class TelegramAdapter extends BaseAdapter {
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
     const chatId = threadContext?.chatId;
     if (formattedResponse.text || !formattedResponse.media?.length) {
-      await this.call(config, 'sendMessage', { chat_id: chatId, text: formattedResponse.text });
+      await this.call(config, 'sendMessage', {
+        chat_id: chatId,
+        text: formattedResponse.text,
+        ...(formattedResponse.reply_markup ? { reply_markup: formattedResponse.reply_markup } : {}),
+      });
     }
     for (const item of Array.isArray(formattedResponse.media) ? formattedResponse.media : []) {
       const field = item.method === 'sendPhoto' ? 'photo' : 'document';
       await this.call(config, item.method, { chat_id: chatId, [field]: item.url });
     }
+  }
+
+  /** A pressed inline button: a callback_query, with who pressed it and the message it sat on. */
+  actionOf(rawPayload: any): ActionPress | null {
+    const query = rawPayload?.callback_query;
+    if (!query || typeof query.data !== 'string' || query.from?.id === undefined) return null;
+    const from = query.from;
+    return {
+      data: query.data,
+      userId: String(from.id),
+      userName: [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || undefined,
+      group: ['group', 'supergroup', 'channel'].includes(query.message?.chat?.type),
+      context: { callbackQueryId: query.id, chatId: query.message?.chat?.id, messageId: query.message?.message_id },
+    };
+  }
+
+  /**
+   * answerCallbackQuery stops the button spinning and shows `text` to the
+   * presser. Settled, the buttons come off the message and the outcome is
+   * said in the chat; not settled, the presser alone sees it, as an alert.
+   */
+  async answerAction(config: Record<string, any>, press: ActionPress, text: string, settled: boolean): Promise<void> {
+    const { callbackQueryId, chatId, messageId } = press.context ?? {};
+    if (callbackQueryId) {
+      await this.call(config, 'answerCallbackQuery', {
+        callback_query_id: callbackQueryId,
+        text: text.slice(0, 200),
+        ...(settled ? {} : { show_alert: true }),
+      });
+    }
+    if (!settled || chatId === undefined || chatId === null) return;
+    if (messageId !== undefined && messageId !== null) {
+      // The buttons go; a message they were already taken off is fine.
+      await this.call(config, 'editMessageReplyMarkup', {
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: { inline_keyboard: [] },
+      }).catch(() => undefined);
+    }
+    await this.call(config, 'sendMessage', { chat_id: chatId, text });
   }
 
   private async call(config: Record<string, any>, method: string, payload: Record<string, unknown>): Promise<void> {
