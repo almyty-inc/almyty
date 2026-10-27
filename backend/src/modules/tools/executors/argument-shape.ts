@@ -16,6 +16,21 @@ const GROUP_KEYS = ['path', 'query', 'header', 'body'] as const;
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 
+/** The declared input of that name, from wherever the operation declares it. */
+function declaredInput(
+  operation: { parameters?: { path?: Record<string, any>; query?: Record<string, any>; header?: Record<string, any>; body?: any } | null } | null | undefined,
+  name: string,
+): any {
+  const p = operation?.parameters;
+  return p?.path?.[name] ?? p?.query?.[name] ?? p?.header?.[name] ?? p?.body?.schema?.properties?.[name];
+}
+
+/** Whether a declared input takes an object (so an object under its name is its value, not a group). */
+function takesObject(param: any): boolean {
+  const type = param?.schema?.type ?? param?.type;
+  return type === 'object' || (!type && !!(param?.schema?.properties ?? param?.properties));
+}
+
 export function isGroupedArguments(
   parameters: Record<string, any>,
   operation: { parameters?: { path?: Record<string, any>; query?: Record<string, any>; header?: Record<string, any>; body?: any } | null } | null | undefined,
@@ -28,7 +43,19 @@ export function isGroupedArguments(
     ...Object.keys(operation?.parameters?.header ?? {}),
     ...Object.keys(operation?.parameters?.body?.schema?.properties ?? {}),
   ]);
-  return present.every(
-    (k) => !declared.has(k) && (isPlainObject(parameters[k]) || (k === 'body' && Array.isArray(parameters[k]))),
-  );
+  return present.every((k) => {
+    const value = parameters[k];
+    if (!(isPlainObject(value) || (k === 'body' && Array.isArray(value)))) return false;
+    if (!declared.has(k)) return true;
+    // A declared input that shares the group's name (Stripe Search's
+    // `query`, a string): an object under it is still the group when the
+    // input does not take an object and everything inside is a declared
+    // input, as in `{ query: { query: "email:'a@b.c'", limit: 5 } }`.
+    return (
+      isPlainObject(value) &&
+      !takesObject(declaredInput(operation, k)) &&
+      Object.keys(value).length > 0 &&
+      Object.keys(value).every((name) => declared.has(name))
+    );
+  });
 }
