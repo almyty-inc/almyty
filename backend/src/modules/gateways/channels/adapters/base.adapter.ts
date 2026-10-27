@@ -268,6 +268,20 @@ export abstract class BaseAdapter {
   }
 
   /**
+   * Whether this channel sends replies at all, under this configuration.
+   *
+   * Every platform channel answers where the message came from, so the
+   * default says yes. A generic webhook may be inbound only: a service
+   * (an alerting tool, a CI system) calls it to start the agent and
+   * expects nothing back. Without a reply address the run's result stays
+   * in the run history and nothing is sent, which is not a failed
+   * delivery. Asked once the run is done.
+   */
+  repliesTo(_config: Record<string, any>): boolean {
+    return true;
+  }
+
+  /**
    * A button press this delivery carries, or null for anything else (the
    * default: a platform without buttons). Asked only after the delivery
    * has been verified, so the platform vouches for who pressed it.

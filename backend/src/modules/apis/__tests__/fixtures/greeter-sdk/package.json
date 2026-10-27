@@ -1,0 +1,7 @@
+{
+  "name": "greeter-sdk",
+  "version": "1.0.0",
+  "description": "A tiny npm package the SDK analysis test installs and calls.",
+  "main": "index.js",
+  "types": "index.d.ts"
+}

@@ -180,7 +180,7 @@ no translation.
 | `channel-matrix` | `homeserver_url`, `access_token`, optional `room_id` and `inbound_token` | Log the bot user in on your homeserver | `GET <homeserver>/_matrix/client/v3/account/whoami`, bearer. Label: `user_id` |
 | `channel-irc` | `webhook_url` of your bridge, optional `bridge_token`, `inbound_token`, `channel`, `nick` | Your own IRC bridge | Shape only. Label: `nick` |
 | `channel-email` | `resend_api_key`, `reply_from`, optional `inbound_address` and `resend_inbound_signing_secret` | [resend.com/api-keys](https://resend.com/api-keys) | `GET https://api.resend.com/api-keys`, bearer. Nothing in the answer names the account, so the label is `reply_from` |
-| `channel-webhook` | `callback_url`, `secret` | Your own endpoint | Shape only. Label: `callback_url` |
+| `channel-webhook` | `secret`; optional `callback_url` and how the caller signs (`signature_header`, `signature_algorithm`, `signature_encoding`, `signature_prefix`, `signed_content`) | Your own endpoint | Shape only. Label: `callback_url` |
 
 ### What was verified, and what was not
 

@@ -18,7 +18,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -37,7 +37,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -56,7 +56,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -76,7 +76,7 @@
         "frontend/src/components/agents",
         "frontend/src/components/channels"
       ],
-      "sourceDigest": "34a3a6a29c4c2cf1e5529ca092f5a92039e0b1f8095fbf5f5bc74a731a3b317f",
+      "sourceDigest": "23a14b5cb910e88df378687c05b98cf5f499bc41d1b3d4872ed8a9c3e0d32610",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -95,7 +95,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -114,7 +114,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -133,7 +133,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -152,7 +152,7 @@
         "frontend/src/components/agents/builder/capabilities-section.tsx",
         "frontend/src/pages/agent-builder.tsx"
       ],
-      "sourceDigest": "95383051f41df3a0006ed893adfe2e398066a676e5ca9ec24603efe753bfe4b9",
+      "sourceDigest": "194e010d28237822f0c8ca21c4e1406e92d4700b91a2c279b9758131599fb097",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -171,7 +171,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -190,7 +190,7 @@
         "frontend/src/pages/agents.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "f0f6a6ac8c6650fa39c5ee9b8cf0b746ff2deff9e478b5804446636eff662dee",
+      "sourceDigest": "579206c4aa4578c81a984688da51442a48f8233a3d80c5dfadc682f122933a49",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -323,7 +323,7 @@
         "frontend/src/pages/apis.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "dc0ca06dff141cc59485be7c6daba0a1e1481298c6e5e78625e0a60555a91a9a",
+      "sourceDigest": "f88aeec0d2fab1b19092dc3e5242b559eb829c2b2a84e737255df5a5f8f7cf55",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -426,7 +426,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -733,7 +733,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -752,7 +752,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -771,7 +771,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -790,7 +790,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -809,7 +809,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -846,7 +846,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -958,7 +958,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -977,7 +977,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1034,7 +1034,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1053,7 +1053,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1072,7 +1072,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1110,7 +1110,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1204,7 +1204,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1223,7 +1223,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1242,7 +1242,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1261,7 +1261,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1319,7 +1319,7 @@
         "frontend/src/components/agents",
         "frontend/src/components/agents/builder/capabilities-section.tsx"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1414,7 +1414,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1433,7 +1433,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1544,7 +1544,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1563,7 +1563,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1582,7 +1582,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1601,7 +1601,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1657,7 +1657,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1676,7 +1676,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1750,7 +1750,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1769,7 +1769,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1788,7 +1788,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1826,7 +1826,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1845,7 +1845,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1864,7 +1864,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1957,7 +1957,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1976,7 +1976,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -1995,7 +1995,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -2014,7 +2014,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -2053,7 +2053,7 @@
         "frontend/src/components/agents",
         "frontend/src/components/agents/builder/capabilities-section.tsx"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -2147,7 +2147,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -2166,7 +2166,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -2185,7 +2185,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -2204,7 +2204,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/data-guides.mjs): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data."
     },
     {
@@ -2413,7 +2413,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2451,7 +2451,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2470,7 +2470,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2489,7 +2489,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2528,7 +2528,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2547,7 +2547,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2566,7 +2566,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2643,7 +2643,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2662,7 +2662,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2681,7 +2681,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2759,7 +2759,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2778,7 +2778,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2797,7 +2797,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2816,7 +2816,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -2835,7 +2835,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -3068,7 +3068,7 @@
         "frontend/src/pages/api-new-description.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "64c6e10f5a50946c4ab968a1f6abbd097f73fecc341154e9e3c3e2d2d9fcaeff",
+      "sourceDigest": "1380a1a038a95249be087aee949dfa10e8cff9c1aa9127902aef3e066bdee690",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -3087,7 +3087,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -3106,7 +3106,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -3125,7 +3125,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -3144,7 +3144,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -3163,7 +3163,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -3353,7 +3353,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3509,7 +3509,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3738,7 +3738,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3757,7 +3757,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3776,7 +3776,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3795,7 +3795,7 @@
         "frontend/src/pages/tool-detail.tsx",
         "frontend/src/components/tools"
       ],
-      "sourceDigest": "fba05097e12915a4b37f52d8835bcd42ddb547af39cd287c9a421e2be5cab1c1",
+      "sourceDigest": "4fc53404247988bc3add9e833e5eb4c3d3faeec9d6c9afdb07693c57401a5439",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3814,7 +3814,7 @@
         "frontend/src/pages/tool-detail.tsx",
         "frontend/src/components/tools"
       ],
-      "sourceDigest": "fba05097e12915a4b37f52d8835bcd42ddb547af39cd287c9a421e2be5cab1c1",
+      "sourceDigest": "4fc53404247988bc3add9e833e5eb4c3d3faeec9d6c9afdb07693c57401a5439",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3833,7 +3833,7 @@
         "frontend/src/pages/tools.tsx",
         "frontend/src/components/tools"
       ],
-      "sourceDigest": "eacde8b657f9f212fe9c0f012b6deccfd7549e22f6bdd009a1f3c1dd58025228",
+      "sourceDigest": "f6b2e072d018fd5c1e850bd0924449d5c36f6c7b5b0e77e7d1bb94379c41f5df",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -3964,7 +3964,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3983,7 +3983,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4095,7 +4095,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4394,7 +4394,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4413,7 +4413,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4432,7 +4432,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4451,7 +4451,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4470,7 +4470,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4563,7 +4563,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4582,7 +4582,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4601,7 +4601,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -4620,7 +4620,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -4658,7 +4658,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {

@@ -755,8 +755,10 @@ export class ChannelGatewayService {
   ): Promise<void> {
     const formatted = adapter.formatOutbound({ text });
     try {
+      const replyConfig = sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound'));
+      if (!adapter.repliesTo(replyConfig)) return;
       await adapter.sendResponse(
-        sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound')),
+        replyConfig,
         formatted,
         this.replyContext(gateway, normalized, null),
       );
@@ -810,6 +812,14 @@ export class ChannelGatewayService {
           const finalRun = await this.runRepository.findOne({ where: { id: runId } });
           if (!finalRun) return;
 
+          const replyConfig = sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound'));
+          // An inbound-only channel (a webhook with no reply address):
+          // the delivery is answered by the run itself, nothing is sent.
+          if (!adapter.repliesTo(replyConfig)) {
+            await this.markInboundOutcome(inbound, { status: 'processed', runId });
+            return;
+          }
+
           const rawText =
             (typeof finalRun.output === 'string'
               ? finalRun.output
@@ -829,7 +839,7 @@ export class ChannelGatewayService {
           });
           try {
             await adapter.sendResponse(
-              sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound')),
+              replyConfig,
               formatted,
               this.replyContext(gateway, normalized, runId),
             );
@@ -1577,10 +1587,15 @@ export class ChannelGatewayService {
         }
         case GatewayType.GOOGLE_CHAT:
         case GatewayType.IRC:
-        case GatewayType.GOOGLE_CHAT:
-        case GatewayType.IRC:
         case GatewayType.WEBHOOK: {
           if (!cfg.webhook_url && !cfg.callback_url) {
+            // A webhook channel without a reply address is inbound only:
+            // nothing to probe, and nothing wrong with that.
+            if (gateway.type === GatewayType.WEBHOOK) {
+              return cfg.secret
+                ? { ok: true, detail: 'inbound only: no callback URL, so replies are not sent' }
+                : { ok: false, detail: 'secret not configured' };
+            }
             return { ok: false, detail: 'webhook_url not configured' };
           }
           // For these, the only check we can perform without sending
