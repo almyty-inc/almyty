@@ -18,6 +18,11 @@ export default {
   'meeting-notes-to-crm': 'Call notes to HubSpot',
   'agent-that-remembers': 'An assistant that remembers',
   'connect-google-sharepoint': 'Answers from Google Drive',
+  'approval-policies': 'Who signs off on refunds',
+  'multi-team-rbac': 'Keep teams separate',
+  'sso-scim-onboarding': 'Sign in with Microsoft Entra ID',
+  'audit-to-siem': 'Audit trail to Splunk',
+  'eu-ai-act-compliance': 'Ready for the EU AI Act',
 
   'support-separator': { type: 'separator', title: 'Support and sales' },
   'support-ticket-triage': 'Sort tickets, draft replies',
@@ -27,11 +32,6 @@ export default {
   'scheduled-monitoring-agent': 'Checks on a schedule',
 
   'governance-separator': { type: 'separator', title: 'Control and compliance' },
-  'approval-policies': 'Who signs off',
-  'multi-team-rbac': 'Keep teams separate',
-  'sso-scim-onboarding': 'Company sign-in',
-  'audit-to-siem': 'Audit trail to your security tools',
-  'eu-ai-act-compliance': 'Ready for the EU AI Act',
   'air-gapped-self-host': 'Inside your own network',
 
   'engineering-separator': { type: 'separator', title: 'Engineering' },

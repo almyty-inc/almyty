@@ -1,27 +1,97 @@
-# Send your audit trail to your security team's tools
+# Send your audit trail to Splunk
 
-almyty records every action an assistant takes and every change anyone makes to it: who, when and what. This example sends that record to the log tools your security team already watches, so assistant activity sits next to everything else they monitor and they can set alerts on it.
+## What you'll build
 
-For example: your security team gets an alert when an assistant issues more refunds in an hour than it normally does in a day.
+Your audit trail, sent to Splunk Cloud as it happens: who ran which assistant, which tool it called with which values, which stored key it used, who signed in. Your security team searches it next to everything else they watch and sets alerts on it. Here, for Velora Energy (a made-up energy supplier), the billing assistant refunds a customer and Splunk receives the run and each Stripe call:
 
-Exports and streaming need the Business plan. Without it, you can browse the most recent entries in almyty.
+![The events as Splunk received them: a run, the Stripe lookups and the refund with its amount](/screenshots/examples/audit-to-siem/00-splunk-events.png)
+
+Sending the audit trail onward, and downloading it as CSV or JSON, needs the **Business** plan. Browsing it under **Analytics** works on every plan. The screenshots come from a test installation: web addresses start with `http://localhost`, and Splunk was stood in for by a local service that shows what it received. It takes about 15 minutes.
 
 ## What you need
 
-- The Business plan.
-- A log tool that accepts events over the web: Splunk (its HTTP Event Collector), Datadog, or any address that accepts JSON.
+- The Business plan, and **owner or admin** in your almyty organization.
+- Splunk Cloud Platform (or Splunk Enterprise) with permission to create indexes and HTTP Event Collector tokens.
+- An assistant that does something worth recording. This guide uses the **Billing assistant** from [Keep each team's assistants to that team](/examples/multi-team-rbac), which refunds customers through Stripe.
 
-## How to build it
+## 1. Look at what is recorded
 
-1. **Look at what is recorded.** Open **Analytics** and the **Audit trail** tab. Tool calls, approval decisions, configuration changes and runs are already there; there is nothing to switch on.
+Open **Analytics** and click the **Audit trail** tab. Nothing needs switching on: password sign-ins, APIs and model providers connected or changed, every run started, every tool call (with the values it was called with) and every use of a stored key are already there.
 
-   ![The audit trail: every action with who, when and what](/screenshots/analytics-audit.png)
+![Analytics, Audit trail](/screenshots/examples/audit-to-siem/01-audit-trail.png)
 
-2. **Download it when you need it.** On the **Audit trail** tab, export the record as **CSV** or **JSON**, for example for an auditor.
-3. **Stream it continuously.** Open **Settings**, then **Audit streaming** under **Advanced**. Pick the **Target** (**Webhook**, **Splunk HEC** or **Datadog**), paste the **Endpoint** and, if needed, the **Token**, and click **Add target**. New entries are sent there as they happen.
-4. **Set alerts in your own tool**: a spike in refunds, an assistant using something it shouldn't, a rejected approval.
-5. **Know who did what.** With [single sign-on](/examples/sso-scim-onboarding), the "who" in each entry is a real person from your company directory.
+**Export CSV** and **Export JSON** download what the filters show, for example for an auditor.
+
+## 2. Make an HTTP Event Collector token in Splunk
+
+In Splunk:
+
+1. **Settings → Indexes → New Index**: name it `almyty_audit` and save. A separate index lets you give it its own retention and access.
+2. **Settings → Data inputs → HTTP Event Collector → New Token**. **Name**: `almyty audit`. Click **Next**.
+3. Under **Index**, add `almyty_audit` and make it the **Default Index**. Leave the source type on **Automatic**: almyty names its own (`almyty:audit`). Click **Review**, then **Submit**.
+4. Copy the **Token Value**.
+
+The address to send to is your stack's collector, on Splunk Cloud `https://http-inputs-<your stack>.splunkcloud.com/services/collector/event`. Velora's stack is `velora-energy`.
+
+## 3. Stream to Splunk
+
+In almyty, open **Settings**, then **Advanced → Audit streaming**:
+
+- **Target**: **Splunk HEC**
+- **Endpoint**: `https://http-inputs-velora-energy.splunkcloud.com/services/collector/event`
+- **Token**: the token value from Splunk. almyty sends it as `Authorization: Splunk <token>`.
+
+![A Splunk HTTP Event Collector target](/screenshots/examples/audit-to-siem/02-splunk-target.png)
+
+Click **Add target**. From now on each new entry is sent on its own as it is recorded.
+
+![Audit streaming, sending to Splunk](/screenshots/examples/audit-to-siem/03-streaming.png)
+
+The endpoint must start with `https://`: entries say who did what, so they never travel unencrypted. A target cannot be edited; to change the address or the token, remove it and add it again.
+
+## Try it
+
+Open the billing assistant and, under **Try it**, send:
+
+```
+Maarten de Vries (maarten.devries@mailbox.example) moved out on 30 September but was charged the full October advance. Refund €136.50.
+```
+
+The assistant looks Maarten up, finds the €136.50 charge and refunds it. In Splunk, search:
+
+```
+index=almyty_audit sourcetype="almyty:audit" action IN (run_start, tool_execute)
+```
+
+You see the run (`run_start`, with who started it) and one `tool_execute` per Stripe call: `stripe_get_customers`, `stripe_get_charges` and `stripe_post_refunds` with `details.parameters.charge` `ch_3QvC3dDeVriesSep01` and `details.parameters.amount` `13650` (Stripe counts in cents). That is the picture at the top. Email addresses in the values arrive masked. Each event also carries `userEmail`, `status`, `duration`, `resourceId` and `createdAt`.
+
+## 4. Alert on unusual refunds
+
+In Splunk, run this search:
+
+```
+index=almyty_audit action=tool_execute resourceName=stripe_post_refunds
+| stats count AS refunds, sum(details.parameters.amount) AS cents BY userEmail
+| where refunds > 20 OR cents > 2000000
+```
+
+Click **Save As → Alert**. **Alert type**: **Scheduled**, **Run every hour**. **Trigger alert when**: **Number of Results** is greater than `0`. Under **Trigger Actions**, add **Send email** to your security team. Now they hear about it when anyone's assistant refunds more than 20 times, or more than €20,000, in an hour.
+
+## Make it yours
+
+- **Datadog instead.** Pick **Datadog** as the target, use your site's logs intake (for EU1 `https://http-intake.logs.datadoghq.eu/api/v2/logs`) and an API key from **Organization Settings → API Keys**. Entries arrive with `source:almyty`, `service:almyty-audit` and a tag per action.
+- **Anything else.** **Webhook** posts each entry as JSON to an address of yours, with the token as a bearer token.
+- **People, not just addresses.** With [single sign-on](/examples/sso-scim-onboarding), `userEmail` is the person's company account from your directory.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **Add target** stays greyed out | The endpoint must start with `https://`. |
+| The target is refused with `EGRESS_NOT_ALLOWED` | The address points at a private or internal network. Use your collector's public address. |
+| Nothing arrives in Splunk | Check the token belongs to an enabled HEC input and that `almyty_audit` is in its allowed indexes. almyty does not show delivery errors on this page yet; search Splunk's `_internal` index for HEC errors. |
+| Events land in the wrong index | Make `almyty_audit` the token's **Default Index**. almyty does not name an index. |
 
 ## Related
 
-- [Audit export](/enterprise/audit-export) · [Analytics](/analytics) · [Compliance](/compliance) · [Approval rules](/examples/approval-policies)
+- [Audit export](/enterprise/audit-export) · [Analytics](/analytics) · [Decide who signs off](/examples/approval-policies) · [Compliance](/compliance)
