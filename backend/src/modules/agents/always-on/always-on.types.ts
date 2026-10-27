@@ -228,7 +228,12 @@ export const MAX_BRIEF_CHARS = 8000;
  * timer floor, wakes an hour) are checked by the service, which knows the
  * plan; channels and tools are checked against the agent there too.
  */
-export function mergeAlwaysOn(current: AlwaysOnConfig | null, input: AlwaysOnInput): AlwaysOnConfig {
+export function mergeAlwaysOn(
+  current: AlwaysOnConfig | null,
+  input: AlwaysOnInput,
+  /** Wake sources kept outside these settings: its push wakes (push-wakes/). */
+  other: { pushWakes?: number } = {},
+): AlwaysOnConfig {
   const base = current ?? defaultAlwaysOn();
   const next: AlwaysOnConfig = { ...base };
   if (input.enabled !== undefined) next.enabled = input.enabled === true;
@@ -301,8 +306,8 @@ export function mergeAlwaysOn(current: AlwaysOnConfig | null, input: AlwaysOnInp
   if (next.enabled && !next.brief) {
     throw new BadRequestException('Say what it should keep doing before turning it on.');
   }
-  if (next.enabled && !next.wakeOn.timer && !(next.wakeOn.channelIds?.length) && !(next.wakeOn.connectionEvents?.length) && !next.ownerChannel) {
-    throw new BadRequestException('Choose at least one thing that wakes it: a timer, a channel or a connection event.');
+  if (next.enabled && !next.wakeOn.timer && !(next.wakeOn.channelIds?.length) && !(next.wakeOn.connectionEvents?.length) && !next.ownerChannel && !other.pushWakes) {
+    throw new BadRequestException('Choose at least one thing that wakes it: a timer, a channel, a connection event or a service that pushes changes.');
   }
   return next;
 }
