@@ -11,6 +11,8 @@ export interface NamedTool {
   description?: string | null
   api?: { name?: string | null } | null
   operation?: { name?: string | null; description?: string | null; api?: { name?: string | null } | null } | null
+  /** `displayName`: the name tool generation chose for people (backend tools/tool-display-name.ts). */
+  metadata?: { displayName?: string | null; [key: string]: unknown } | null
 }
 
 /** The API name the way tool generation prefixes it: lowercase, words joined by underscores. */
@@ -36,17 +38,28 @@ function looksLikeMachineName(value: string): boolean {
   return !/\s/.test(value) && (/[_-]|[a-z][A-Z]/.test(value) || /^[\w$]+(?:\.[\w$]+)+$/.test(value))
 }
 
+/**
+ * "GET /crm/v3/owners operation": what tool generation writes as the
+ * description of an operation the spec does not describe. It is a method
+ * and a path, not a name.
+ */
+export function isGeneratedDescription(text: string): boolean {
+  return /^[A-Z]+ \/\S* operation\.?$/.test(text.trim())
+}
+
 /** The first sentence of a description, when it is short enough to be a name. */
 function shortSentence(description: string | null | undefined): string | null {
   // Descriptions are often markdown (Google's: "in the `To`, `Cc` ... headers"); a name has none.
   const text = (description ?? '').replace(/`|\*\*/g, '').replace(/\s+/g, ' ').trim()
-  if (!text) return null
+  if (!text || isGeneratedDescription(text)) return null
   const end = text.search(/[.!?](\s|$)/)
   const sentence = (end >= 0 ? text.slice(0, end) : text).trim()
   return sentence && sentence.length <= 90 ? sentence : null
 }
 
 export function readableToolName(tool: NamedTool): string {
+  const chosen = typeof tool.metadata?.displayName === 'string' ? tool.metadata.displayName.trim() : ''
+  if (chosen) return chosen
   // A summary is a name here, so a sentence's closing full stop goes.
   const summary = tool.operation?.name?.trim().replace(/\.+$/, '')
   // An operation's name is its summary when the spec has one. A bare
@@ -61,5 +74,7 @@ export function readableToolName(tool: NamedTool): string {
   const prefix = apiName ? machinePrefix(apiName) : ''
   let rest = tool.name
   if (prefix && rest.toLowerCase().startsWith(`${prefix}_`) && rest.length > prefix.length + 1) rest = rest.slice(prefix.length + 1)
+  // A long generated name ends in a six-character hash that keeps it unique; it is not a word.
+  rest = rest.replace(/_[0-9a-f]{6}$/, '')
   return looksLikeMachineName(rest) ? humanizeIdentifier(rest) : rest
 }

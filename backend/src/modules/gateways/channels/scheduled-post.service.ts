@@ -11,6 +11,7 @@ import { GATEWAY_TYPE_FOR_CHANNEL } from '../../agent-channels/channel-publish';
 import { resourceOwnerId } from '../../../common/authorization/access-policy.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import type {
+  ChannelAction,
   ChannelDelivery,
   ChannelDeliveryOutcome,
   PostChannelOption,
@@ -281,7 +282,7 @@ export class ScheduledPostService implements ScheduledResultPoster {
     agent: Agent,
     execution: ScheduledResult,
     delivery: ChannelDelivery,
-    when: { timezone?: string } = {},
+    when: { timezone?: string; actions?: ChannelAction[] } = {},
   ): Promise<ChannelDeliveryOutcome> {
     const base = {
       channelId: delivery.channelId,
@@ -336,7 +337,7 @@ export class ScheduledPostService implements ScheduledResultPoster {
       subject: `${agent.name}, ${dayIn(when.timezone, new Date())}`,
     };
     try {
-      await this.channelGateway.postMessage(gateway!, parts, context, { destination, disclosed: disclose });
+      await this.channelGateway.postMessage(gateway!, parts, context, { destination, disclosed: disclose }, when.actions);
       outcome = { ...named, status: 'delivered', parts: parts.length, ...(truncated ? { truncated: true } : {}) };
     } catch (err: any) {
       outcome = { ...named, status: 'failed', error: String(err?.message ?? err).slice(0, 500) };

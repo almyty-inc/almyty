@@ -6,6 +6,7 @@ import { AgentAlwaysOnPage, formFromView, inputFromForm } from '../agent-always-
 import { agentsApi } from '@/lib/api'
 import { agentChannelsApi } from '@/lib/agent-channels'
 import { renderAtRoute } from '../../test/render-at-route'
+import { REPORT_LABELS, describeReport } from '@/lib/always-on'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
@@ -27,6 +28,10 @@ vi.mock('@/components/channels/channel-page-loader', () => ({
 }))
 const success = vi.fn()
 vi.mock('@/store/app', () => ({ useNotifications: () => ({ success, error: vi.fn() }) }))
+vi.mock('@/lib/push-wakes', async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  pushWakesApi: { list: vi.fn().mockResolvedValue([]), options: vi.fn().mockResolvedValue({ presets: [], apis: [] }) },
+}))
 
 const CAP = { timerFloorMinutes: 15, maxWakesPerHour: 6, includedAgents: null }
 const TOOLS = [
@@ -43,6 +48,20 @@ describe('the Always on form', () => {
     expect(form.askFirstToolIds).toEqual(['t-write'])
   })
 
+  it('reports when it has something to tell you on a new agent, and keeps what a stored one chose', () => {
+    expect(formFromView(empty as any).report).toBe('when_news')
+    expect(inputFromForm({ ...formFromView(empty as any), brief: 'x' }, 15).input!.report).toBe('when_news')
+    const stored = { enabled: false, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_acted' }
+    expect(formFromView({ ...empty, alwaysOn: stored } as any).report).toBe('when_acted')
+    expect(formFromView({ ...empty, alwaysOn: { ...stored, report: 'every_wake' } } as any).report).toBe('every_wake')
+  })
+
+  it('offers "When it has something to tell you" first among when it reports', () => {
+    expect(Object.keys(REPORT_LABELS)[0]).toBe('when_news')
+    expect(REPORT_LABELS.when_news).toBe('When it has something to tell you')
+    expect(describeReport({ report: 'when_news' } as any)).toBe('Reports when it has something to tell you')
+    expect(describeReport({ report: 'when_acted' } as any)).toBe('Reports when it did something')
+  })
   it('never offers a timer under the plan floor', () => {
     expect(formFromView({ ...empty, capacity: { ...CAP, timerFloorMinutes: 60 } } as any)).toMatchObject({ every: 1, unit: 'hours' })
     const form = { ...formFromView(empty as any), brief: 'x', every: 5 }
@@ -53,6 +72,8 @@ describe('the Always on form', () => {
     const form = { ...formFromView(empty as any), enabled: true }
     expect(inputFromForm(form, 15).error).toBe('Say what it should keep doing.')
     expect(inputFromForm({ ...form, brief: 'x', timerOn: false }, 15).error).toBe('Choose at least one thing that wakes it.')
+    // A service that pushes changes to it (saved on its own) is something that wakes it.
+    expect(inputFromForm({ ...form, brief: 'x', timerOn: false }, 15, 1).input?.wakeOn.timer).toBeNull()
   })
 
   it('saves the ask-first list only when it acts on its own', () => {
@@ -196,6 +217,21 @@ describe('/agents/:id/always-on', () => {
     expect(screen.queryByText(/@userinfobot/)).toBeNull()
   })
 
+  it('says it asks you in your chat only when you talk to it on a channel', async () => {
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([{ id: 'c-slack', type: 'slack', name: 'Support Slack' }] as any)
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      alwaysOn: { enabled: true, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_acted', ownerChannel: null },
+    } as any)
+    open()
+    await screen.findByText('Talk to it yourself')
+    expect(screen.getByTestId('always-on-approvals-hint')).toHaveTextContent('What it asks about waits in Approvals until you decide.')
+    await userEvent.click(screen.getByLabelText('Channel'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Support Slack (Slack)' }))
+    expect(screen.getByTestId('always-on-approvals-hint')).toHaveTextContent(
+      'It asks you in your chat on Support Slack, where you approve or reject it, or you decide in Approvals.',
+    )
+  })
   it('offers a daily summary in the report picker; choosing it asks when, pre-filled with the defaults, and saves them', async () => {
     vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
       ...empty,

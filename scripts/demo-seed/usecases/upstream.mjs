@@ -239,6 +239,11 @@ const server = http.createServer(async (req, res) => {
     if (p === '/oauth/userinfo') return send(res, 200, { email: ME.email, name: ME.name, sub: '1' })
 
     // google calendar  (base .../calendar/v3)
+    // push wakes: a notification channel is opened and closed, and lasts a week
+    if ((m = p.match(/\/calendars\/([^/]+)\/events\/watch$/)) && req.method === 'POST') {
+      return send(res, 200, { kind: 'api#channel', id: body.id, resourceId: 'local-resource-' + m[1], resourceUri: u.href, token: body.token, expiration: String(Date.now() + 7 * DAY) })
+    }
+    if (p.endsWith('/channels/stop') && req.method === 'POST') return send(res, 204, {})
     if (p.endsWith('/users/me/calendarList')) return send(res, 200, { kind: 'calendar#calendarList', items: calendars })
     if ((m = p.match(/\/calendars\/([^/]+)\/events$/)) && req.method === 'GET') {
       const cal = m[1] === 'primary' || m[1] === ME.email ? 'primary' : m[1]
@@ -246,7 +251,7 @@ const server = http.createServer(async (req, res) => {
       const q = (u.searchParams.get('q') || '').toLowerCase()
       const items = events.filter((e) => e.calendarId === cal && Date.parse(e.end.dateTime) > tMin && Date.parse(e.start.dateTime) < tMax && (!q || JSON.stringify(e).toLowerCase().includes(q)))
         .sort((a, b) => Date.parse(a.start.dateTime) - Date.parse(b.start.dateTime))
-      return send(res, 200, { kind: 'calendar#events', summary: calendars.find((c) => c.id === cal)?.summary, timeZone: 'UTC', items })
+      return send(res, 200, { kind: 'calendar#events', summary: calendars.find((c) => c.id === cal)?.summary, timeZone: 'UTC', items, nextSyncToken: 'local-sync-' + events.length })
     }
     if ((m = p.match(/\/calendars\/([^/]+)\/events\/([^/]+)$/))) {
       const e = events.find((x) => x.id === m[2]); return e ? send(res, 200, e) : send(res, 404, { error: { code: 404, message: 'Not Found' } })
@@ -262,6 +267,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // gmail
+    // push wakes: Gmail's watch and stop (the watch publishes nowhere; this stand-in only answers)
+    if (p.match(/\/gmail\/v1\/users\/[^/]+\/watch$/) && req.method === 'POST') return send(res, 200, { historyId: '1000', expiration: String(Date.now() + 7 * DAY) })
+    if (p.match(/\/gmail\/v1\/users\/[^/]+\/stop$/) && req.method === 'POST') return send(res, 204, {})
+    if (p.match(/\/gmail\/v1\/users\/[^/]+\/history$/)) return send(res, 200, { history: [], historyId: '1000' })
     if ((m = p.match(/\/gmail\/v1\/users\/[^/]+\/messages\/send$/)) && req.method === 'POST') {
       const raw = unb64(body.raw || '')
       const h = (n) => (raw.match(new RegExp(`^${n}:\\s*(.*)$`, 'mi')) || [])[1] || ''

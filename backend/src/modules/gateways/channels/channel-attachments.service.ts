@@ -174,6 +174,15 @@ export class ChannelAttachmentReader {
       }
     }
     if (!type) return { refused: 'Only images (PNG, JPEG, GIF, WebP), PDFs and text files can be sent.' };
+    // A PDF's text goes with it, for the models that cannot open a PDF.
+    if (type === 'application/pdf') {
+      const extracted = await this.textExtractor.extract(bytes, type, fileName);
+      if (extracted?.trim()) {
+        text = extracted.length > ChannelAttachmentReader.MAX_TEXT_CHARS
+          ? `${extracted.slice(0, ChannelAttachmentReader.MAX_TEXT_CHARS)}\n[truncated]`
+          : extracted;
+      }
+    }
     const stored = await this.files.storeBytes(owner.organizationId, bytes, { name: fileName, mimeType: type }, {
       agentId: owner.agentId,
       extractedText: text ?? null,
