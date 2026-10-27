@@ -10,6 +10,7 @@ import {
   ssrfSafeDispatcher,
 } from '../../../../common/security/safe-fetch';
 import { parseMediaType } from '../../../files/media-type';
+import type { ChannelAction } from '../../../agents/scheduled-result-poster';
 
 /** A platform's answer to a send is a status document; anything bigger is not read. */
 const MAX_REPLY_BYTES = 1024 * 1024;
@@ -77,6 +78,29 @@ export interface AdapterResponse {
    */
   textWithoutMedia?: string;
   metadata?: Record<string, any>;
+  /**
+   * Buttons under the message (Approve, Reject). The adapters whose
+   * platform has buttons (Telegram, Slack, Microsoft Teams, Discord) send
+   * them; the others send the text, which says how to answer in words.
+   */
+  actions?: ChannelAction[];
+}
+
+/**
+ * A button someone pressed on a message the agent posted, as the adapter
+ * read it from a verified delivery (a Telegram callback_query, a Slack
+ * block action, a Teams Action.Submit, a Discord component interaction).
+ */
+export interface ActionPress {
+  /** The button's data, as the message carried it (ChannelAction.id). */
+  data: string;
+  /** The platform's id for who pressed it: the same kind of id a message's `userId` is. */
+  userId: string;
+  userName?: string;
+  /** Whether the press came from a conversation with several people in it. */
+  group?: boolean;
+  /** What the adapter needs to answer the press: callback ids, a response URL, the conversation. */
+  context: Record<string, any>;
 }
 
 /** The bytes of one fetched attachment and the type the platform served them as. */
@@ -255,6 +279,26 @@ export abstract class BaseAdapter {
    */
   repliesTo(_config: Record<string, any>): boolean {
     return true;
+  }
+
+  /**
+   * A button press this delivery carries, or null for anything else (the
+   * default: a platform without buttons). Asked only after the delivery
+   * has been verified, so the platform vouches for who pressed it.
+   */
+  actionOf(_rawPayload: any): ActionPress | null {
+    return null;
+  }
+
+  /**
+   * Answer a press: `text` is what the person is told. `settled` means the
+   * request is decided (by this press or before it): the buttons go, and
+   * the outcome is shown in the conversation. Not settled (the presser may
+   * not decide), the answer goes to the presser alone where the platform
+   * allows it. Throws ChannelSendError when the platform refused.
+   */
+  async answerAction(_config: Record<string, any>, _press: ActionPress, _text: string, _settled: boolean): Promise<void> {
+    return;
   }
 
   /**

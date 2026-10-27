@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { WithAgent } from '@/components/channels/channel-page-loader'
+import { PushWakesSection } from '@/components/agents/always-on/push-wakes-section'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,6 +30,7 @@ import { CHANNEL_LABELS, OWNER_ADDRESS_HINTS, agentChannelsApi, isMessagingChann
 import {
   ALWAYS_ON_VS_SCHEDULE,
   CONNECTION_EVENT_LABELS,
+  DEFAULT_REPORT,
   type AlwaysOnActMode,
   type AlwaysOnInput,
   type AlwaysOnReport,
@@ -87,7 +89,8 @@ export function formFromView(view: AlwaysOnView | undefined): AlwaysOnForm {
     askFirstToolIds: c ? c.askFirstToolIds ?? [] : (view?.tools ?? []).filter((t) => !t.readOnly).map((t) => t.id),
     reportChannelId: c?.reportTo?.channelId ?? NO_CHANNEL,
     reportTo: c?.reportTo?.to ?? '',
-    report: c?.report ?? 'when_acted',
+    // A new agent starts on the default; a stored one keeps its choice.
+    report: c ? c.report ?? 'when_acted' : DEFAULT_REPORT,
     // The agent's own setting, else the default the server worked out: 09:00 in your time zone.
     digestTime: c?.digest?.time ?? view?.digest?.time ?? '',
     digestTimezone: c?.digest?.timezone ?? view?.digest?.timezone ?? '',
@@ -98,8 +101,8 @@ export function minutesOf(form: Pick<AlwaysOnForm, 'every' | 'unit'>): number {
   return form.unit === 'hours' ? form.every * 60 : form.every
 }
 
-/** The request a form saves as, or what is missing in words. */
-export function inputFromForm(form: AlwaysOnForm, floorMinutes: number): { input?: AlwaysOnInput; error?: string } {
+/** The request a form saves as, or what is missing in words. `pushWakes`: services that push to it (saved on their own) also wake it. */
+export function inputFromForm(form: AlwaysOnForm, floorMinutes: number, pushWakes = 0): { input?: AlwaysOnInput; error?: string } {
   if (form.enabled && !form.brief.trim()) return { error: 'Say what it should keep doing.' }
   if (form.timerOn) {
     const minutes = minutesOf(form)
@@ -108,7 +111,7 @@ export function inputFromForm(form: AlwaysOnForm, floorMinutes: number): { input
   }
   const owner = form.ownerChannelId !== NO_CHANNEL
   if (owner && !form.ownerAddress.trim()) return { error: 'Enter your own address on the channel you talk to it on.' }
-  if (form.enabled && !form.timerOn && !form.channelIds.length && !form.connectionEvents.length && !owner) {
+  if (form.enabled && !form.timerOn && !form.channelIds.length && !form.connectionEvents.length && !owner && !pushWakes) {
     return { error: 'Choose at least one thing that wakes it.' }
   }
   if (form.report === 'daily_digest' && (!form.digestTime || !form.digestTimezone)) {
@@ -221,7 +224,7 @@ function AlwaysOnPage({
   })
 
   const submit = () => {
-    const { input, error } = inputFromForm(form, floor)
+    const { input, error } = inputFromForm(form, floor, view?.pushWakes ?? 0)
     if (!input) {
       setProblem(error ?? 'Something is missing.')
       return
@@ -347,6 +350,8 @@ function AlwaysOnPage({
             </div>
           ))}
         </div>
+
+        <PushWakesSection agentId={agent.id} />
       </FormSection>
 
       <FormSection
@@ -454,8 +459,17 @@ function AlwaysOnPage({
             )}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          What it asks about waits in <Link className="underline" to="/approvals">Approvals</Link> until you decide.
+        <p className="text-xs text-muted-foreground" data-testid="always-on-approvals-hint">
+          {ownerChannel ? (
+            <>
+              It asks you in your chat on {ownerChannel.name}, where you approve or reject it, or you decide in{' '}
+              <Link className="underline" to="/approvals">Approvals</Link>.
+            </>
+          ) : (
+            <>
+              What it asks about waits in <Link className="underline" to="/approvals">Approvals</Link> until you decide.
+            </>
+          )}
         </p>
       </FormSection>
 

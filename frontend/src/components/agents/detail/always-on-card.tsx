@@ -87,7 +87,7 @@ export function AlwaysOnCard({ agentId, unsaved = false }: { agentId?: string; u
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="always-on-toggle" className="font-normal">
                 <span className="block text-sm font-medium" data-testid="always-on-card-summary">
-                  {enabled ? describeWakes(config, view.data?.effectiveTimerMinutes) : `Off: ${describeWakes(config, view.data?.effectiveTimerMinutes)}`}
+                  {enabled ? describeWakes(config, view.data?.effectiveTimerMinutes, view.data?.pushWakes) : `Off: ${describeWakes(config, view.data?.effectiveTimerMinutes, view.data?.pushWakes)}`}
                 </span>
                 <span className="block text-xs text-muted-foreground">{describeActMode(config)}</span>
                 <span className="block text-xs text-muted-foreground" data-testid="always-on-card-report">

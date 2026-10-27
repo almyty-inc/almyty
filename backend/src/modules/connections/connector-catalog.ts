@@ -398,6 +398,9 @@ export const OTHER_SERVICE_CONNECTOR: ConnectorDefinition = {
  * A username and password, for any service that signs in with basic
  * auth. Stored under a name the person gives it, like "Other service";
  * the username is the account shown next to it, the password is secret.
+ * A service that takes its API key as the username with an empty
+ * password (Stripe) saves with the password left empty: the username is
+ * then the key, kept secret and never shown as the account.
  */
 export const BASIC_AUTH_CONNECTOR: ConnectorDefinition = {
   key: 'basic-auth',
@@ -410,10 +413,10 @@ export const BASIC_AUTH_CONNECTOR: ConnectorDefinition = {
     schema: {
       type: 'object',
       properties: {
-        username: { type: 'string', title: 'Username' },
-        password: { type: 'string', title: 'Password', 'x-secret': true },
+        username: { type: 'string', title: 'Username', description: 'Or the API key, for a service that takes the key as the username.', 'x-secret-without': 'password' },
+        password: { type: 'string', title: 'Password', 'x-secret': true, description: 'Leave empty when the username is an API key.' },
       },
-      required: ['username', 'password'],
+      required: ['username'],
     },
     credentialType: CredentialType.BASIC_AUTH,
   }],

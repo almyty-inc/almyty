@@ -31,7 +31,7 @@ describe('SpendService', () => {
   /** A workflow half that contributes nothing, for the run-only cases. */
   const emptyExecRepo = () => repoOf(makeQb({ total: '0' }, []));
 
-  it('converts summed dollars to integer cents in periodToDateCents', async () => {
+  it('converts summed dollars to cents in periodToDateCents, keeping fractions of a cent', async () => {
     const qb = makeQb({ total: '1.2345' }, []);
     const service = new SpendService(repoOf(qb), emptyExecRepo());
 
@@ -39,8 +39,10 @@ describe('SpendService', () => {
       organizationId: 'org-1',
       from: new Date('2026-06-01T00:00:00Z'),
     });
-    // 1.2345 dollars → 123.45 cents → rounded 123.
-    expect(cents).toBe(123);
+    // 1.2345 dollars → 123.45 cents: a one-cent budget is measured against
+    // what a model call costs, not against zero.
+    expect(cents).toBe(123.45);
+    expect(await new SpendService(repoOf(makeQb({ total: '0.0082' }, [])), emptyExecRepo()).periodToDateCents({ organizationId: 'org-1', from: new Date() })).toBe(0.82);
     // agentId absent → the agent filter must not be applied.
     expect(qb.andWhere).toHaveBeenCalledWith('run.createdAt >= :from', expect.anything());
   });

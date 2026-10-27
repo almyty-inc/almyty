@@ -97,6 +97,17 @@ export interface ChannelDeliveryOutcome {
 }
 
 /**
+ * A button under a message the agent posts (Approve, Reject). `id` is the
+ * data the platform hands back when it is pressed; adapters without
+ * buttons leave them out, and the message says how to answer in words.
+ */
+export interface ChannelAction {
+  id: string;
+  label: string;
+  style?: 'primary' | 'danger';
+}
+
+/**
  * Posts scheduled results into channels. Implemented in the gateways
  * module (ScheduledPostService), which owns the adapters, and reached from
  * the scheduler by this token so the agents module does not import the
@@ -116,6 +127,8 @@ export interface ScheduledResultPoster {
     agent: Agent,
     result: ScheduledResult,
     delivery: ChannelDelivery,
-    when?: { timezone?: string },
+    // `timezone` dates an email subject; `actions` are buttons under the last
+    // message, on the platforms that have them (an approval asked in chat).
+    when?: { timezone?: string; actions?: ChannelAction[] },
   ): Promise<ChannelDeliveryOutcome>;
 }
