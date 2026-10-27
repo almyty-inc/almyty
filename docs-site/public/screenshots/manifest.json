@@ -4716,7 +4716,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -4791,7 +4791,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -4828,7 +4828,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -4847,7 +4847,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -4866,7 +4866,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -4885,7 +4885,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -4922,7 +4922,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -4959,7 +4959,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5015,7 +5015,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5034,7 +5034,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5053,7 +5053,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5072,7 +5072,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5131,7 +5131,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5229,7 +5229,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5248,7 +5248,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5267,7 +5267,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5286,7 +5286,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5305,7 +5305,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5419,7 +5419,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5438,7 +5438,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5531,7 +5531,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5624,7 +5624,7 @@
         "frontend/src/pages/api-detail.tsx",
         "frontend/src/components/apis"
       ],
-      "sourceDigest": "7778eba2e57af10561960db021d0a1c704607bb5dc8864addedd51051a88fd39",
+      "sourceDigest": "820db0f8f4c99815690ef09d54a3d99dc5f41576db7efeb385a1725d0b8f1bf1",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5643,7 +5643,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5662,7 +5662,7 @@
         "frontend/src/pages/agent-builder.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "7239ce08fcf5c07cc1c98270204fadb08775f9675bc0f67ca5e5ee08b2484e5c",
+      "sourceDigest": "2fea1f5c61274da122912a269447ccaf430281b4cce69b60142280ea59fcc9d9",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5681,7 +5681,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
@@ -5700,7 +5700,7 @@
         "frontend/src/pages/agent-detail.tsx",
         "frontend/src/components/agents"
       ],
-      "sourceDigest": "933054165267a3dc59da267afb31e455b13dc47a5114512119d42ee0b9a6e655",
+      "sourceDigest": "cd72f5bcc3a9b55c529b10cebad349f47e0287c024116703c26da41e8079aa7a",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
