@@ -244,6 +244,20 @@ export abstract class BaseAdapter {
   }
 
   /**
+   * Whether this channel sends replies at all, under this configuration.
+   *
+   * Every platform channel answers where the message came from, so the
+   * default says yes. A generic webhook may be inbound only: a service
+   * (an alerting tool, a CI system) calls it to start the agent and
+   * expects nothing back. Without a reply address the run's result stays
+   * in the run history and nothing is sent, which is not a failed
+   * delivery. Asked once the run is done.
+   */
+  repliesTo(_config: Record<string, any>): boolean {
+    return true;
+  }
+
+  /**
    * The sender's display name, for the "Name: text" a group conversation
    * shows the agent (channel-speaker.ts). The default is what the delivery
    * carried; an adapter whose deliveries leave the name out, and whose API
