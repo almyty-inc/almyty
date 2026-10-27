@@ -1,7 +1,7 @@
 import { getMetadataArgsStorage } from 'typeorm';
 
 import { CENTS, SpendAlert } from '../../../entities/spend-alert.entity';
-import { SpendAlertFractionalCents1791000500000 } from '../../../migrations/1791000500000-SpendAlertFractionalCents';
+import { SpendAlertFractionalCents1791000700000 } from '../../../migrations/1791000700000-SpendAlertFractionalCents';
 
 /**
  * The alert history keeps the fraction the alert's text shows: a one-cent
@@ -19,7 +19,7 @@ describe('spend_alerts.spentCents keeps fractions of a cent', () => {
   it('has a migration that changes the column, and back', async () => {
     const queries: string[] = [];
     const q = { query: async (sql: string) => void queries.push(sql) } as any;
-    const migration = new SpendAlertFractionalCents1791000500000();
+    const migration = new SpendAlertFractionalCents1791000700000();
     await migration.up(q);
     await migration.down(q);
     expect(queries[0]).toMatch(/ALTER TABLE "spend_alerts" ALTER COLUMN "spentCents" TYPE NUMERIC\(14,4\)/);
