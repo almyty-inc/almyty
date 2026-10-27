@@ -23,6 +23,11 @@ export default {
   'sso-scim-onboarding': 'Sign in with Microsoft Entra ID',
   'audit-to-siem': 'Audit trail to Splunk',
   'eu-ai-act-compliance': 'Ready for the EU AI Act',
+  'github-issue-triage': 'Sort new GitHub issues',
+  'pr-review-bot': 'First pass on pull requests',
+  'oncall-alert-triage': 'On-call summaries from PagerDuty',
+  'modernize-legacy-soap': 'An old SOAP service as tools',
+  'multi-vendor-coding-fleet': 'Several coding assistants',
 
   'support-separator': { type: 'separator', title: 'Support and sales' },
   'support-ticket-triage': 'Sort tickets, draft replies',
@@ -36,11 +41,6 @@ export default {
 
   'engineering-separator': { type: 'separator', title: 'Engineering' },
   'give-claude-your-api': 'Your API in a coding assistant',
-  'modernize-legacy-soap': 'Modernize an old SOAP service',
   'npm-package-tools': 'A code library as tools',
   'expose-any-machine': 'Work on one of your machines',
-  'github-issue-triage': 'Sort GitHub issues',
-  'pr-review-bot': 'First pass on pull requests',
-  'oncall-alert-triage': 'Summarize on-call alerts',
-  'multi-vendor-coding-fleet': 'Several coding assistants',
 }

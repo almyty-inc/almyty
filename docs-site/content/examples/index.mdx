@@ -29,6 +29,11 @@ The step-by-step guides below build a complete assistant each, with a screenshot
 - **[Sign in with Microsoft Entra ID](/examples/sso-scim-onboarding)**: your people sign in with their Microsoft account, and Entra adds new starters and removes leavers for you.
 - **[Audit trail to Splunk](/examples/audit-to-siem)**: every run and tool call sent to Splunk as it happens, with an alert on unusual refunds.
 - **[Ready for the EU AI Act](/examples/eu-ai-act-compliance)**: an AI notice in your own words on your web chat, a technical document per assistant, and personal data hidden in the records.
+- **[Sort new GitHub issues](/examples/github-issue-triage)**: every hour it labels new issues, links duplicates, asks for steps to reproduce and says who should look at what.
+- **[A first pass on pull requests](/examples/pr-review-bot)**: it reviews each new pull request and comments on the lines with likely bugs, committed keys and missing tests; people still approve.
+- **[On-call summaries from PagerDuty](/examples/oncall-alert-triage)**: when an incident opens, a summary in Slack and on the incident: what fired, the likely cause and what fixed it last time.
+- **[An old SOAP service as tools](/examples/modernize-legacy-soap)**: a 2009 stock system answers your sales team in plain words, and Claude Code can use it through a gateway.
+- **[Several coding assistants on one task](/examples/multi-vendor-coding-fleet)**: a lead assistant hands the code to Claude Code and the tests to Codex on your own machine, then runs the tests.
 
 ## How every guide works
 
@@ -58,12 +63,7 @@ Around all of it: your keys are stored safely under **Credentials**, you decide 
 **Engineering**
 
 - [Give your coding assistant your own API](/examples/give-claude-your-api)
-- [Give an old SOAP service a modern front door](/examples/modernize-legacy-soap)
 - [Turn a code library into tools](/examples/npm-package-tools)
 - [Let an assistant work on one of your machines](/examples/expose-any-machine)
-- [Sort and label GitHub issues](/examples/github-issue-triage)
-- [A first pass on pull requests](/examples/pr-review-bot)
-- [Summarize on-call alerts](/examples/oncall-alert-triage)
-- [Several coding assistants on one task](/examples/multi-vendor-coding-fleet)
 
 A name like "CRM API" in these examples means a system of yours that you connect under **APIs**, not something built in.
