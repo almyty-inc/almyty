@@ -62,8 +62,10 @@ the builder), then **Set up always on**. You choose:
     [The daily summary](#the-daily-summary)).
 
   Reports also show on the agent's page and in your notifications. When it
-  is waiting for your OK, it says so there too, and on your own channel
-  (see [Approving from your channel](#approving-from-your-channel)).
+  is waiting for your OK, the report channel gets one line saying so, with
+  a link to **Approvals** but not what it wants to send; the details and
+  the buttons come only to your own chat (see
+  [Approving from your channel](#approving-from-your-channel)).
 
 The card then shows what wakes it, what it may do, when it reports, when it
 last woke and why, and when the timer fires next. **Wake now** wakes it
@@ -254,7 +256,11 @@ request that has a run: to the owner's channel (`ownerDelivery`: the direct
 conversation they last wrote from there, remembered in Redis under
 `always-on:owner-conversation:<agentId>` for 90 days, else their address)
 for any run of an agent with Always on on and an owner's channel, and for an
-always-on run also to its `replyTo` and `reportTo`, digest or not. The text
+always-on run also to its `replyTo` and `reportTo`, digest or not. The owner's
+own chat (theirs, and `replyTo`) gets the request in full; a `reportTo`
+that is not their chat gets only `approvalNotice`, one line naming whose OK
+it waits for and on what kind of thing ("an email", the tool), with the
+Approvals link and no buttons, so a shared channel never sees the preview. The full text
 is `approvalMessage` (`channel-approval.ts`: the reason, `approvalPreview`
 of the payload, which reads a Gmail `raw` the way the Approvals page's
 `lib/email-preview.ts` does, and "Reply yes ... (ref XXXXXX)"); the post

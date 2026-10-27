@@ -60,6 +60,7 @@ import {
   ChannelDecision,
   approvalActions,
   approvalMessage,
+  approvalNotice,
   approvalRef,
   parseDecision,
   questionMessage,
@@ -1419,9 +1420,10 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
    * A run of the agent holds a tool call for a person. Posted on the
    * owner's channel, when they named one and Always on is on, for any run
    * of the agent; an always-on run's request also goes where its reports
-   * go and where the owner wrote. The post says what it would do, readably,
-   * with Approve and Reject buttons on the platforms that have them and
-   * "reply yes or no" on every one (channel-approval.ts).
+   * go and where the owner wrote. In the owner's own chat the post says
+   * what it would do, readably, with Approve and Reject buttons on the
+   * platforms that have them and "reply yes or no" on every one; a shared
+   * reports channel gets a one-line notice only (channel-approval.ts).
    */
   private async onApprovalRequested(row: {
     runId?: string | null;
@@ -1440,33 +1442,48 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     const alwaysOnRun = run.metadata?.triggerType === 'always_on';
     const owner = config?.enabled ? await this.ownerDelivery(agent, config) : null;
     if (!alwaysOnRun && !owner) return;
-    const targets: ChannelDelivery[] = [
-      ...(owner ? [owner] : []),
-      ...(alwaysOnRun && Array.isArray(run.metadata?.replyTo) ? run.metadata.replyTo : []),
-      ...(alwaysOnRun && config?.reportTo ? [config.reportTo] : []),
-    ];
-    if (!targets.length) return;
-    const text = approvalMessage(agent.name, row, this.approvalsUrl());
-    const actions = approvalActions(row.id);
     // The owner's channel is one place, whether it is named by their
     // address or by the conversation they wrote from.
     const ownerTo = new Set([config?.ownerChannel?.address, owner?.to].filter(Boolean) as string[]);
     const keyOf = (d: ChannelDelivery) =>
       d.channelId === config?.ownerChannel?.channelId && ownerTo.has(String(d.to ?? '')) ? 'owner' : `${d.channelId}:${d.to ?? ''}`;
+    // Where the owner reads it alone (their own chat, and where they wrote
+    // to the run) the request comes in full, with its buttons. A reports
+    // channel other people read gets one line and the link: what the call
+    // would send (an email's text, a payment's details) stays private.
+    const targets: Array<{ delivery: ChannelDelivery; own: boolean }> = [
+      ...(owner ? [{ delivery: owner, own: true }] : []),
+      ...(alwaysOnRun && Array.isArray(run.metadata?.replyTo) ? run.metadata.replyTo : []).map((delivery: ChannelDelivery) => ({ delivery, own: true })),
+      ...(alwaysOnRun && config?.reportTo ? [{ delivery: config.reportTo, own: keyOf(config.reportTo) === 'owner' }] : []),
+    ];
+    if (!targets.length) return;
+    const full = approvalMessage(agent.name, row, this.approvalsUrl());
+    const notice = approvalNotice(agent.name, await this.ownerFirstName(agent), row, this.approvalsUrl());
+    const actions = approvalActions(row.id);
     const seen = new Set<string>();
-    for (const delivery of targets) {
-      const key = keyOf(delivery);
-      if (seen.has(key)) continue;
+    for (const { delivery, own } of targets) {
+      const key = own ? 'owner' : keyOf(delivery);
+      if (seen.has(key) || (own && seen.has(keyOf(delivery)))) continue;
       seen.add(key);
+      seen.add(keyOf(delivery));
       await poster.post(
         agent,
         // The run's own metadata: the poster records its outcome onto the
         // run, and a stub here would wipe what the run carries (its trigger).
-        { kind: 'run', id: run.id, status: 'completed', output: text, userId: run.userId ?? null, metadata: run.metadata ?? {} },
+        { kind: 'run', id: run.id, status: 'completed', output: own ? full : notice, userId: run.userId ?? null, metadata: run.metadata ?? {} },
         delivery,
-        { actions },
+        own ? { actions } : {},
       );
     }
+  }
+
+  /** The owner's first name, for a notice others read ("waiting for Maya's OK"); null when unknown. */
+  private async ownerFirstName(agent: Agent): Promise<string | null> {
+    const id = agentOwnerUserId(agent);
+    if (!id || !this.users) return null;
+    const user = await this.users.findOne({ where: { id }, select: { id: true, firstName: true } as any }).catch(() => null);
+    const name = typeof (user as any)?.firstName === 'string' ? (user as any).firstName.trim() : '';
+    return name || null;
   }
 
   /**

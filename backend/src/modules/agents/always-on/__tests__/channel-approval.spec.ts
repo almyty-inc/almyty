@@ -2,6 +2,7 @@ import {
   approvalActionData,
   approvalActions,
   approvalMessage,
+  approvalNotice,
   approvalPreview,
   approvalRef,
   parseDecision,
@@ -115,6 +116,19 @@ describe('approvalPreview and approvalMessage', () => {
       ].join('\n'),
     );
     expect(text).not.toContain('Approve or reject it in Approvals.');
+  });
+
+  it('says in one line, for a channel others read, whose OK it waits for and on what, never the preview', () => {
+    const raw = gmailRaw('To: ana@example.com\r\nSubject: Your refund', 'Hi Ana');
+    const url = 'https://app.test/approvals';
+    expect(approvalNotice('Biz-dev assistant', 'Maya', { payload: { tool: 'Send a message', parameters: { raw } } }, url)).toBe(
+      "Biz-dev assistant is waiting for Maya's OK on an email. Approvals: https://app.test/approvals",
+    );
+    expect(approvalNotice('Support agent', null, { payload: { tool: 'Issue a refund', parameters: { amount: 820 } } }, url)).toBe(
+      "Support agent is waiting for its owner's OK on “Issue a refund”. Approvals: https://app.test/approvals",
+    );
+    expect(approvalNotice('A', 'Maya', { payload: { kind: 'change_set', changeSet: [] } }, url)).toContain('on a set of changes.');
+    expect(approvalNotice('A', 'Maya', { payload: { tool: 'x', parameters: { amount: 820 } } }, url)).not.toContain('820');
   });
 
   it('puts a question to the owner with how to answer', () => {

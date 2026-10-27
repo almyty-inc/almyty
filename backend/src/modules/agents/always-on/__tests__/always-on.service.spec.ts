@@ -313,6 +313,9 @@ describe('Always on: reporting', () => {
     // One full stop, not the reason's and the notice's both.
     expect(w.posted[0].text).toContain('(it is on the ask-first list).\n');
     expect(w.posted[0].text).not.toContain('list)..');
+    // The reports channel others read gets one line and the link, no buttons.
+    expect(w.posted[1].text).toBe('Support agent is waiting for its owner\'s OK on something it wants to do. Approvals: https://app.almyty.com/approvals');
+    expect(w.posted[1].actions).toBeUndefined();
     // The notice is recorded on the run the way a post is, and the run keeps what it carries.
     expect(w.runs.row('run-1')!.metadata).toMatchObject({ triggerType: 'always_on', channelDelivery: { status: 'delivered' } });
     w.service.onModuleDestroy();

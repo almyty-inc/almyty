@@ -111,6 +111,35 @@ describe('Approve in chat: posting the request', () => {
     w.service.onModuleDestroy();
   });
 
+  it('keeps the preview and the buttons to the owner\'s own chat; a shared reports channel gets one line', async () => {
+    const w = world({ agent: alwaysOnAgent({}, { reportTo: { kind: 'channel', channelId: SLACK, to: 'C-SALES' } }) });
+    await w.users.update({ id: OWNER }, { firstName: 'Maya' });
+    await w.service.onModuleInit();
+    seedRun(w);
+    const raw = Buffer.from('To: ana@example.com\r\nSubject: Refund\r\n\r\nYour refund of 120 is on its way.').toString('base64url');
+    w.approvals.emit('approval.requested', seedApproval(w, APPROVAL, { payload: { tool: 'Send a message', parameters: { raw } } }));
+    await settle();
+    const [mine, shared] = w.posted;
+    expect(mine.delivery.to).toBe('U-OWNER');
+    expect(mine.text).toContain('Your refund of 120 is on its way.');
+    expect(mine.actions).toHaveLength(2);
+    expect(shared.delivery.to).toBe('C-SALES');
+    expect(shared.text).toBe('Support agent is waiting for Maya\'s OK on an email. Approvals: https://app.almyty.com/approvals');
+    expect(shared.text).not.toContain('ana@example.com');
+    expect(shared.actions).toBeUndefined();
+    w.service.onModuleDestroy();
+  });
+
+  it('posts once, in full, when the reports go to the owner\'s own chat', async () => {
+    const w = world({ agent: alwaysOnAgent({}, { reportTo: { kind: 'channel', channelId: SLACK, to: 'U-OWNER' } }) });
+    await w.service.onModuleInit();
+    seedRun(w);
+    w.approvals.emit('approval.requested', seedApproval(w));
+    await settle();
+    expect(w.posted).toHaveLength(1);
+    expect(w.posted[0].actions).toHaveLength(2);
+    w.service.onModuleDestroy();
+  });
   it('goes to the direct conversation the owner last wrote from, once', async () => {
     const w = world();
     await w.service.onModuleInit();

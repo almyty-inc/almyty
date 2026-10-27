@@ -211,6 +211,21 @@ describe('/agents/:id/always-on', () => {
     expect(screen.queryByText(/@userinfobot/)).toBeNull()
   })
 
+  it('says it asks you in your chat only when you talk to it on a channel', async () => {
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([{ id: 'c-slack', type: 'slack', name: 'Support Slack' }] as any)
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      alwaysOn: { enabled: true, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_acted', ownerChannel: null },
+    } as any)
+    open()
+    await screen.findByText('Talk to it yourself')
+    expect(screen.getByTestId('always-on-approvals-hint')).toHaveTextContent('What it asks about waits in Approvals until you decide.')
+    await userEvent.click(screen.getByLabelText('Channel'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Support Slack (Slack)' }))
+    expect(screen.getByTestId('always-on-approvals-hint')).toHaveTextContent(
+      'It asks you in your chat on Support Slack, where you approve or reject it, or you decide in Approvals.',
+    )
+  })
   it('offers a daily summary in the report picker; choosing it asks when, pre-filled with the defaults, and saves them', async () => {
     vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
       ...empty,

@@ -4662,7 +4662,7 @@
       "id": "tutorials-bizdev-11-always-on",
       "title": "Always on: standing instructions and timer",
       "path": "screenshots/tutorials/bizdev/11-always-on.png",
-      "capturedAt": "2026-10-27T09:30:10.098Z",
+      "capturedAt": "2026-10-27T10:19:08.887Z",
       "status": "current",
       "sha256": "74f1225280e3f64c2d6e7f64c4f20b5b67baba2d8cffc4dffc8b45eae40a5861",
       "source": {
@@ -4676,16 +4676,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2d6c2123df67b00e4c2a2f2d3a4e94a0368196784a7e5c4694b432f39209f505",
+      "sourceDigest": "d6c657daeecd050f04a6073e442f8d2f065fc08f8b199905bcab4262d17913ab",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "tutorials-bizdev-12-ask-first",
       "title": "Always on: ask before sending email",
       "path": "screenshots/tutorials/bizdev/12-ask-first.png",
-      "capturedAt": "2026-10-27T09:30:11.191Z",
+      "capturedAt": "2026-10-27T10:19:09.977Z",
       "status": "current",
-      "sha256": "9973ec85b500efdd3db000dafc55f9785732e7168cc93a3bf756e677ef0a9af8",
+      "sha256": "aae93f4e4194c8fef68b6b59cb53a3427f471279d7c40acb5027f22f6b9f3f4e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -4697,7 +4697,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2d6c2123df67b00e4c2a2f2d3a4e94a0368196784a7e5c4694b432f39209f505",
+      "sourceDigest": "d6c657daeecd050f04a6073e442f8d2f065fc08f8b199905bcab4262d17913ab",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4770,7 +4770,7 @@
       "id": "tutorials-bizdev-16-slack-reports",
       "title": "Biz-dev reports as posted to Slack",
       "path": "screenshots/tutorials/bizdev/16-slack-reports.png",
-      "capturedAt": "2026-10-27T09:31:21.801Z",
+      "capturedAt": "2026-10-27T10:20:19.377Z",
       "status": "current",
       "sha256": "fe7b150bb96962aa5867d7ecf792ffa3ecd6cc201a32d3ec0c64cce0477d789b",
       "source": {
@@ -4786,16 +4786,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "df73ba69afc5bdc78df8677839ee0582b013d1a87cb907f78ccbd11b2b94dac8",
+      "sourceDigest": "fbc689dd4607d21abbc59eaf6f053842d82fc2451a0160041991546388207d0a",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
       "id": "tutorials-bizdev-17-what-woke-it",
       "title": "What woke it lately",
       "path": "screenshots/tutorials/bizdev/17-what-woke-it.png",
-      "capturedAt": "2026-10-27T09:31:19.660Z",
+      "capturedAt": "2026-10-27T10:20:17.154Z",
       "status": "current",
-      "sha256": "2464055e3e7aa4a36db80cbd4a43fcc7e72a49408585524632aab3ca88b53c00",
+      "sha256": "1cda9183485227b8ef6dc8bf28c6e2fc876f9b0163f56625941d41ccb1ae2bef",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -4807,7 +4807,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2d6c2123df67b00e4c2a2f2d3a4e94a0368196784a7e5c4694b432f39209f505",
+      "sourceDigest": "d6c657daeecd050f04a6073e442f8d2f065fc08f8b199905bcab4262d17913ab",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {

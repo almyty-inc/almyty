@@ -151,6 +151,28 @@ export function approvalMessage(
   ].join('\n');
 }
 
+/**
+ * The one line a channel other people read gets for a held call: who is
+ * waiting for whose OK, on what kind of thing, and the link. Never the
+ * preview: an email's text or a payment's details are the owner's to see.
+ */
+export function approvalNotice(
+  agentName: string,
+  ownerName: string | null,
+  row: { payload?: Record<string, any> | null },
+  approvalsUrl: string,
+): string {
+  const payload = row.payload ?? null;
+  const what = emailPreviewOf(payload)
+    ? 'an email'
+    : payload?.kind === 'change_set'
+      ? 'a set of changes'
+      : typeof payload?.tool === 'string' && payload.tool
+        ? `“${clip(payload.tool, 80)}”`
+        : 'something it wants to do';
+  const whose = ownerName ? `${clip(ownerName, 60)}'s` : "its owner's";
+  return `${agentName} is waiting for ${whose} OK on ${what}. Approvals: ${approvalsUrl}`;
+}
 /** A question the agent put to its owner (ask_user), as posted on their channel. */
 export function questionMessage(agentName: string, question: string): string {
   return `${agentName} has a question for you:\n\n${clip(question, 3000)}\n\nReply here and it carries on.`;

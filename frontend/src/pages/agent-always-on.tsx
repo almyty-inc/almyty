@@ -456,8 +456,17 @@ function AlwaysOnPage({
             )}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          What it asks about waits in <Link className="underline" to="/approvals">Approvals</Link> until you decide.
+        <p className="text-xs text-muted-foreground" data-testid="always-on-approvals-hint">
+          {ownerChannel ? (
+            <>
+              It asks you in your chat on {ownerChannel.name}, where you approve or reject it, or you decide in{' '}
+              <Link className="underline" to="/approvals">Approvals</Link>.
+            </>
+          ) : (
+            <>
+              What it asks about waits in <Link className="underline" to="/approvals">Approvals</Link> until you decide.
+            </>
+          )}
         </p>
       </FormSection>
 
