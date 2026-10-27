@@ -27,6 +27,7 @@ import type { GatewayToolAssociation } from '@/types'
 import { isPublishable } from '@/components/tools/publish-tool-form'
 import { gatewayClientName } from '@/lib/gateway-connect'
 import { SideEffectCard } from '@/components/tools/side-effect-card'
+import { isGeneratedDescription } from '@/lib/tool-names'
 
 export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -192,7 +193,8 @@ export function ToolDetailPage() {
               {tool.metadata?.displayName && tool.metadata.displayName !== tool.name && (
                 <code className="block text-xs text-muted-foreground break-all" data-testid="tool-machine-name">{tool.name}</code>
               )}
-              <p className="text-muted-foreground">{tool.description || 'AI-generated tool from API operation'}</p>
+              {/* "GET /path operation" is what generation writes when the spec says nothing; the Underlying Operation card shows the method and path. */}
+              {tool.description && !isGeneratedDescription(tool.description) && <p className="text-muted-foreground">{tool.description}</p>}
             </div>
           </div>
         </div>

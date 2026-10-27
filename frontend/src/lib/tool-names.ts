@@ -43,7 +43,7 @@ function looksLikeMachineName(value: string): boolean {
  * description of an operation the spec does not describe. It is a method
  * and a path, not a name.
  */
-function isGeneratedDescription(text: string): boolean {
+export function isGeneratedDescription(text: string): boolean {
   return /^[A-Z]+ \/\S* operation\.?$/.test(text.trim())
 }
 
