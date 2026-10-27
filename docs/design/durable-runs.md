@@ -149,7 +149,8 @@ window (`runs.projectionMismatches`, Prometheus
 check that differs, throws or is slow changes nothing about it.
 
 The flag is read, never inferred from the environment's name. It is off
-when unset and in the base Kubernetes config map, which is production's;
+when unset and in the base Kubernetes config map, which is production's
+(the API deployment reads it from there, `optional: true`);
 the development compose file turns it on, and the staging and development
 deployments turn it on with `RUN_PROJECTION_CHECK: "true"` in their overlays
 (infra repository).
@@ -204,8 +205,11 @@ The agent's **Runs** tab follows an open, unfinished run this way
 `headSeq` (now in the list response), folds each event the way
 `projectRunEvents` does, keeps the last seq applied across connections
 and reconnects after it, reading the stream with fetch so the
-`X-Organization-Id` header goes with it. The hosted chat stream is not on
-the log: a visitor sees the answer, never the working.
+`X-Organization-Id` header goes with it. A network error or a 5xx is
+retried with backoff; a 400, 401, 403, 404 or 410 ends it for good, and
+the run keeps its last known state with a note that it is no longer
+available. The hosted chat stream is not on the log: a visitor sees the
+answer, never the working.
 
 ## The worker-kill test
 

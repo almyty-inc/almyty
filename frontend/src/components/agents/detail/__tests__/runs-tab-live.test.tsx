@@ -183,4 +183,33 @@ describe('the runs tab, live', () => {
     expect(await screen.findByTestId('run-live')).toHaveTextContent('Live')
     expect(screen.queryByTestId('run-reconnecting')).not.toBeInTheDocument()
   })
+
+  it.each([400, 401, 403, 404, 410])('a %i ends it: no retry, the last known state stays, and a plain note says so', async (status) => {
+    const fetchMock = vi.fn(async () => new Response('{"success":false}', { status }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<RunsTab agentId="agent-1" runs={[running()]} />)
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    expect(await screen.findByTestId('run-gone')).toHaveTextContent('This run is no longer available')
+    // Longer than the first reconnect delay: nothing asked again.
+    await new Promise((r) => setTimeout(r, 800))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/first look/)).toBeInTheDocument()
+    expect(screen.queryByTestId('run-reconnecting')).not.toBeInTheDocument()
+  })
+
+  it('a 5xx or a network error is retried', async () => {
+    let call = 0
+    const fetchMock = vi.fn(async () => {
+      call++
+      if (call === 1) return new Response('', { status: 503 })
+      if (call === 2) throw new TypeError('Failed to fetch')
+      return new Response(new ReadableStream({ start() {} }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<RunsTab agentId="agent-1" runs={[running()]} />)
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    expect(await screen.findByTestId('run-live', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(screen.queryByTestId('run-gone')).not.toBeInTheDocument()
+  })
 })

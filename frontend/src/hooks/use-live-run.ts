@@ -12,10 +12,11 @@
  */
 import { useEffect, useRef, useState } from 'react'
 
-import { TERMINAL_RUN_STATUSES, applyRunLogEvent, readRunStream } from '@/lib/run-stream'
+import { TERMINAL_RUN_STATUSES, applyRunLogEvent, isPermanentStreamError, readRunStream } from '@/lib/run-stream'
 import type { AgentRun } from '@/types'
 
-export type LiveRunConnection = 'off' | 'connecting' | 'live' | 'reconnecting' | 'ended'
+/** 'gone': the server refused the stream for good (the run is gone or not ours to see); the view keeps what it last had. */
+export type LiveRunConnection = 'off' | 'connecting' | 'live' | 'reconnecting' | 'ended' | 'gone'
 
 /** Reconnect delays, in ms: quick at first, then backing off. */
 export const RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000]
@@ -100,9 +101,18 @@ export function useLiveRun(agentId: string | undefined, run: AgentRun, enabled: 
         },
         mine.signal,
       )
-        .catch(() => undefined)
-        .then(() => {
+        .then(
+          () => false,
+          // An answer that will not change on retry (gone, not allowed, a bad
+          // seq) ends it; a network error or a 5xx is retried.
+          (err) => isPermanentStreamError(err),
+        )
+        .then((permanent) => {
           if (stopped) return
+          if (permanent) {
+            setConnection('gone')
+            return
+          }
           if (finished || TERMINAL_RUN_STATUSES.includes(liveRef.current.status)) {
             setConnection('ended')
             return

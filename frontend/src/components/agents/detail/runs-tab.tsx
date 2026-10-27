@@ -326,5 +326,13 @@ export function LiveRunNote({ connection }: { connection: LiveRunConnection }) {
       </Badge>
     )
   }
+  if (connection === 'gone') {
+    // Refused for good (gone, or no longer ours to see): what is on screen is the last known state.
+    return (
+      <Badge variant="outline" className="text-xs font-normal text-muted-foreground" data-testid="run-gone">
+        This run is no longer available. Showing what was last seen.
+      </Badge>
+    )
+  }
   return null
 }

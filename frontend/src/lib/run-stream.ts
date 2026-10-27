@@ -134,6 +134,25 @@ export function applyRunLogEvent(run: AgentRun, event: RunLogEvent): AgentRun {
   }
 }
 
+/** The run stream answered with an error status. */
+export class RunStreamError extends Error {
+  constructor(readonly status: number) {
+    super(`Run stream answered ${status}`)
+    this.name = 'RunStreamError'
+  }
+}
+
+/**
+ * Answers that will not change on a retry: a bad seq (400), not signed in
+ * or not allowed (401, 403), the run is gone (404, 410). A network error
+ * or a 5xx is worth retrying.
+ */
+export const PERMANENT_STREAM_STATUSES: ReadonlyArray<number> = [400, 401, 403, 404, 410]
+
+export function isPermanentStreamError(err: unknown): boolean {
+  return err instanceof RunStreamError && PERMANENT_STREAM_STATUSES.includes(err.status)
+}
+
 /** Where a run's stream is read from, resuming after `after`. */
 export function runStreamUrl(agentId: string, runId: string, after: number): string {
   return `${getApiBaseUrl()}/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}/stream?after=${after}`
@@ -163,7 +182,7 @@ export async function readRunStream(
   const orgId = readCurrentOrgId()
   if (orgId) headers['X-Organization-Id'] = orgId
   const response = await fetch(runStreamUrl(agentId, runId, after), { credentials: 'include', headers, signal })
-  if (!response.ok || !response.body) throw new Error(`Run stream answered ${response.status}`)
+  if (!response.ok || !response.body) throw new RunStreamError(response.status)
   handlers.onOpen?.()
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
