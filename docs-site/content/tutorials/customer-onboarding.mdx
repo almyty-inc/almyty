@@ -4,7 +4,7 @@
 
 An agent that onboards each new customer over their first two weeks, without you keeping track. When a deal moves to **Closed won** in HubSpot, it creates a folder for that customer in Google Drive, shares it with their main contact, and sends them a welcome email from your Gmail asking for two files: their vehicles and their depots. Then it waits, for days if it has to. Every 12 hours it looks in the folder. Three days without the files gets a short, friendly reminder in the same email thread; after two reminders it asks you to call them instead. When both files are in, it asks you to approve the kickoff call, puts it in your calendar with the customer and your customer success colleague, emails that colleague a handover, and writes every step on the deal in HubSpot.
 
-![The kickoff call waiting for approval on the Approvals page, with Action details open](/screenshots/tutorials/onboarding/00-approve-kickoff.png)
+![The kickoff call waiting for approval on the Approvals page, showing what it will do](/screenshots/tutorials/onboarding/00-approve-kickoff.png)
 
 What makes this different from the other tutorials is time. The job takes two weeks, but the agent is not running for two weeks. Between two checks nothing runs at all: no run is open, nothing is held in memory, nothing waits on a connection. (One run does stay open: the one waiting for your OK on the kickoff. It is parked in the database, not running, until you decide.) Each time it wakes it reads where things stand from HubSpot, Drive and Gmail, does the next step, writes it down on the deal and stops. That is why you can restart almyty between two wakes and lose nothing, and why a wake never sends the welcome email a second time: it checks first.
 
@@ -154,7 +154,7 @@ Three days after the welcome email the folder is still empty, so the next wake s
 
 ## 6. Approve the kickoff
 
-Jonas uploads `Bluefin vehicles 2026.xlsx` and `Depots.csv` to the folder. At the next wake the agent sees both, and wants to book the kickoff. Creating an event is on your ask-first list, so the run stops and waits for you: your notifications say so, and **Approvals** shows the held call, like the picture at the top. Open **Action details** to check it: under `parameters` are the event's `summary`, its `start` and `end`, and the `attendees` it invites.
+Jonas uploads `Bluefin vehicles 2026.xlsx` and `Depots.csv` to the folder. At the next wake the agent sees both, and wants to book the kickoff. Creating an event is on your ask-first list, so the run stops and waits for you: your notifications say so, and **Approvals** shows the held call, like the picture at the top. The card says what it will do: the event's summary, its start and end, its description and the people it invites. **Show details** has the call exactly as the agent made it.
 
 Click **Approve**, add a note if you like, and click **Approve** again. **Reject** cancels this run instead; the next wake finds the files still there and asks you again.
 

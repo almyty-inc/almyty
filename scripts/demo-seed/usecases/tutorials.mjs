@@ -51,7 +51,7 @@ const SLACK_SIGNING_SECRET = 'local-test-signing-secret-0123456789'
 const sql = (q) => execSync(`${PSQL} -v ON_ERROR_STOP=1 -tA`, { input: q, encoding: 'utf8' }).trim()
 const upstream = async (path, init) => (await fetch(`${UP}${path}`, init)).json()
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
 const BUILDER = ['frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents']
 const SETUP = ['frontend/src/pages/api-setup.tsx', 'frontend/src/components/apis/api-key-form.tsx']
@@ -866,8 +866,8 @@ async function onboarding(page, h, { orgId }) {
   if (!/^waiting_approval/.test(kick)) throw new Error(`kickoff run ${kick}`)
   await page.goto('/approvals')
   await h.wait(3000)
-  await page.getByText('Action details').first().click()
-  await h.wait(800)
+  // The card says what it will do: the event's summary, times and attendees.
+  await page.getByTestId('approval-action-preview').first().waitFor()
   await h.shot('onboarding-00')
   await approveAll(page)
   await until('the hand-over', async () => /Handed over/.test((await deal())?.properties.description ?? '') && /^completed/.test(lastRun()), 600000)
@@ -933,7 +933,7 @@ function register(shots) {
     const notes = 'Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.' +
       (RENDERED[shot] ? ' The page renders the message exactly as almyty handed it to the provider; that provider was not used.' : '')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/tutorials/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
-      '--notes', notes, ...[...sources, ...UI].flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
+      '--notes', notes, ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
   }
 }
 
