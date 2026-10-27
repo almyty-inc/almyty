@@ -40,11 +40,13 @@ describe("Google's discovery documents", () => {
     expect(list.endpoint ?? list.path).toBe('/tasks/v1/lists/{tasklist}/tasks');
   });
 
-  it('leave out the transport parameters every Google method takes', () => {
+  it('leave out the transport parameters every Google method takes, and keep fields and quotaUser as query parameters', () => {
     const doc = discoveryToOpenApi(JSON.parse(tasks));
-    const names = doc.paths['/tasks/v1/users/@me/lists'].get.parameters.map((p: any) => p.name);
-    expect(names).not.toEqual(expect.arrayContaining(['alt', 'key', 'prettyPrint', 'quotaUser', 'oauth_token', 'fields']));
-    expect(names).toEqual(expect.arrayContaining(['maxResults', 'pageToken']));
+    const parameters = doc.paths['/tasks/v1/users/@me/lists'].get.parameters;
+    const names = parameters.map((p: any) => p.name);
+    expect(names).not.toEqual(expect.arrayContaining(['alt', 'key', 'prettyPrint', 'oauth_token', 'access_token', 'callback']));
+    expect(names).toEqual(expect.arrayContaining(['maxResults', 'pageToken', 'fields', 'quotaUser']));
+    expect(parameters.find((p: any) => p.name === 'fields')).toMatchObject({ in: 'query', required: false });
   });
 
   it('point $refs at components and keep reserved-expansion paths as plain parameters', () => {

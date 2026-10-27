@@ -249,8 +249,10 @@ describe('AgentContextCompactor', () => {
       const res = await compactor.compact(messages(chat(19).slice(10)), r, config, 'org-1');
       expect(foldedPerCall()[1]).toEqual(['m10', 'm11', 'm12', 'm13', 'm14']);
       expect(tail(res)).toEqual(['m15', 'm16', 'm17', 'm18']);
-      // The earlier summary is kept and grown, not thrown away.
-      expect(r.workingMemory.contextSummary.text).toBe('SUMMARY\nSUMMARY');
+      // The earlier summary is kept: the summarizer folds the new messages into
+      // it and returns one merged summary, which replaces it (not appended).
+      expect(llm.chat.mock.calls[1][1].messages[1].content).toContain('PRIOR SUMMARY:\nSUMMARY');
+      expect(r.workingMemory.contextSummary.text).toBe('SUMMARY');
     });
 
     it('is not misled by the same text earlier in the window', async () => {
