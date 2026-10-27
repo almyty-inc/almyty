@@ -13,6 +13,29 @@ import { connectionSecretOf } from '../credentials/inline-api-auth.helper';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { countCallables, SdkPackageMap, toSdkPackageMap } from './sdk-package-map';
 
+/**
+ * Why an analysis failed, in words a person can act on. npm's output leads
+ * with config warnings and pads its 404 with advice about tarballs, so the
+ * raw text buried "this package does not exist" in the middle of a
+ * paragraph. Kept: npm's own error lines that say something, at most two.
+ */
+export function readableAnalysisError(raw: string | undefined | null): string {
+  const text = (raw ?? '').trim();
+  if (!text) return 'The packages could not be analysed';
+  if (!/npm (error|ERR!)/.test(text)) return text;
+  const noise = /^(\d{3}\s*)?$|complete log of this run|Note that you can also install|tarball, folder, http url|^code [A-Z0-9]+$/i;
+  const lines = text
+    .split('\n')
+    .filter((l) => /^npm (error|ERR!)/.test(l.trim()))
+    .map((l) => l.trim().replace(/^npm (error|ERR!)\s*/, '').replace(/^\d{3}\s+/, '').trim())
+    .filter((l) => l && !noise.test(l));
+  const unique = [...new Set(lines)];
+  // A missing package: npm's sentence says which name and range.
+  const missing = unique.find((l) => /could not be found/i.test(l));
+  const kept = missing ? [missing] : unique.slice(0, 2);
+  return kept.length ? `npm could not install the packages: ${kept.join(' ')}` : text;
+}
+
 /** BullMQ job name on the `schema-import` queue. */
 export const SDK_ANALYSIS_JOB = 'analyse-sdk';
 
@@ -106,7 +129,7 @@ export class ApisSdkAnalysisHelper {
       await onProgress?.(100);
       return state;
     } catch (error: any) {
-      const message = (error?.message || 'The packages could not be analysed').slice(0, 4000);
+      const message = readableAnalysisError(error?.message).slice(0, 4000);
       this.logger.warn(`SDK analysis failed for API ${apiId}: ${message}`);
       const state: SdkAnalysisState = { state: 'failed', startedAt, finishedAt: new Date().toISOString() };
       await this.apiRepository
@@ -115,7 +138,9 @@ export class ApisSdkAnalysisHelper {
           { metadata: { ...(api.metadata ?? {}), sdkAnalysis: { ...state } } as Record<string, any>, lastImportError: message, lastImportFailedAt: new Date() },
         )
         .catch(() => undefined);
-      throw error;
+      // Thrown in the same words: the import worker's failure handler writes
+      // the error it catches to lastImportError too, after the last retry.
+      throw Object.assign(new Error(message), { cause: error, status: error?.status });
     }
   }
 

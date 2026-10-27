@@ -183,7 +183,11 @@ export function toSdkPackageMap(packageName: string, version: string, map: SdkMa
   return {
     packageName,
     version,
-    exports: Object.values(map).map(toPackageExport),
+    // Named by how the package exports it, not by the declaration's own
+    // name: `export default class EventEmitter` beside `export { EventEmitter }`
+    // were two exports both called EventEmitter, which the form could not
+    // tell apart, and the default one was imported as a named export.
+    exports: Object.entries(map).map(([exportName, e]) => toPackageExport({ ...e, name: exportName })),
   };
 }
 

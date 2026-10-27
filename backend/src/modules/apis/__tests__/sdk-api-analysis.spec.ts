@@ -3,7 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { createRequire } from 'module';
 
-import { ApisSdkAnalysisHelper, SDK_ANALYSIS_JOB } from '../apis-sdk-analysis.helper';
+import { ApisSdkAnalysisHelper, SDK_ANALYSIS_JOB, readableAnalysisError } from '../apis-sdk-analysis.helper';
+import { toSdkPackageMap } from '../sdk-package-map';
 import { ApisController } from '../apis.controller';
 import { SchemaImportProcessor } from '../../jobs/processors/schema-import.processor';
 import { DependencyManagerService } from '../../tools/node-sandbox/dependency-manager.service';
@@ -164,8 +165,9 @@ describe('SDK API analysis (end to end with a real package)', () => {
     const api = sdkApi();
     (deps as any).runNpmInstall.mockRejectedValue(new Error('npm ERR! 404 greeter-sdk not found'));
     const helper = new ApisSdkAnalysisHelper(fakeRepo(api) as any, deps, new SdkIntrospectorService());
-    await expect(helper.analyse('api-1', 'org-1')).rejects.toThrow('404');
-    expect(api.lastImportError).toContain('404 greeter-sdk not found');
+    // Thrown in the readable words too: the worker's failure handler records what it catches.
+    await expect(helper.analyse('api-1', 'org-1')).rejects.toThrow('npm could not install the packages: greeter-sdk not found');
+    expect(api.lastImportError).toBe('npm could not install the packages: greeter-sdk not found');
     expect((api.metadata as any).sdkAnalysis.state).toBe('failed');
   });
 
@@ -209,5 +211,32 @@ describe('SDK analysis wiring', () => {
     const job: any = { id: 1, data: { apiId: 'api-1', organizationId: 'org-1' }, progress: jest.fn() };
     await processor.handleSdkAnalysis(job);
     expect(helper.analyse).toHaveBeenCalledWith('api-1', 'org-1', expect.any(Function));
+  });
+});
+
+describe('what the SDK API page is told', () => {
+  it('says which package npm could not find, without npm\'s padding', () => {
+    // npm's own output for a package that does not exist, as the API page showed it.
+    const raw =
+      'npm install exited with code 1: npm warn config production Use `--omit=dev` instead.\n' +
+      'npm error code E404\n' +
+      'npm error 404 Not Found - GET https://registry.npmjs.org/northwind-billing-sdk - Not found\n' +
+      'npm error 404\n' +
+      "npm error 404  The requested resource 'northwind-billing-sdk@^1.0.0' could not be found or you do not have permission to access it.\n" +
+      'npm error 404\n' +
+      'npm error 404 Note that you can also install from a\n' +
+      'npm error 404 tarball, folder, http url, or git url.\n' +
+      'npm error A complete log of this run can be found in: /var/log/x.log';
+    expect(readableAnalysisError(raw)).toBe(
+      "npm could not install the packages: The requested resource 'northwind-billing-sdk@^1.0.0' could not be found or you do not have permission to access it.",
+    );
+    expect(readableAnalysisError('Invalid npm package name: "../x"')).toBe('Invalid npm package name: "../x"');
+    expect(readableAnalysisError(undefined)).toBe('The packages could not be analysed');
+  });
+
+  it('names exports by how the package exports them, so a default export is not a second EventEmitter', () => {
+    const cls = { name: 'EventEmitter', constructorParams: [], methods: [], properties: [], isClass: true, isFunction: false };
+    const map = toSdkPackageMap('eventemitter3', '5.0.4', { EventEmitter: cls, default: cls } as any);
+    expect(map.exports.map((e) => e.name)).toEqual(['EventEmitter', 'default']);
   });
 });
