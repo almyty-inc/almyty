@@ -93,6 +93,13 @@ export interface JsonSchemaProperty {
   description?: string;
   /** Encrypted at rest, never returned by the API. */
   'x-secret'?: boolean;
+  /**
+   * Encrypted at rest, like `x-secret`, when the named field is left
+   * empty: a basic-auth username that is really an API key (the key sent
+   * as the username with an empty password) is kept secret and never
+   * becomes the account label.
+   */
+  'x-secret-without'?: string;
   /** Shown under Advanced on the connect form even when secret (an optional client secret). */
   'x-advanced'?: boolean;
   /** Shown on the connect form as a textarea whose newlines are kept. */

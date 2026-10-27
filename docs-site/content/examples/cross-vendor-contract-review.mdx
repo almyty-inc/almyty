@@ -118,7 +118,7 @@ On the agent's **Runs** tab, click the run to see each model's part: what each p
 
 | What you see | What to do |
 |---|---|
-| A panelist says it cannot see a contract | Its model does not get PDFs: models from providers other than OpenAI, Anthropic and Google receive only the file name. Pick a model from one of those three for that slot, or paste the text. |
+| A panelist says it cannot see a contract | Its model does not open PDFs, so it reads the text almyty took out of the PDF. A scanned PDF has no text to take out: pick a model from OpenAI, Anthropic or Google for that slot, or paste the text. |
 | No answer in Slack | Check that **Event Subscriptions** has the Callback URL and `app_mention`, and that the bot is in the channel. |
 | It answers but ignores the PDF | The Slack app lacks `files:read`. Add it under **OAuth & Permissions**, reinstall the app, and paste the new bot token into the Slack credential under **Credentials**. |
 | **Panel needs 2 more panelists** when saving | Every panelist slot needs a model. Pick one in each. |
