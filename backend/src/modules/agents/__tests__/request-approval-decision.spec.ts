@@ -4,7 +4,7 @@ import { join } from 'path';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Message } from '../../../entities/message.entity';
 import { fakeRepository } from '../../../test/fake-repository';
-import { withRunEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, withRunEvents } from '../../../test/fake-run-events';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 
@@ -16,6 +16,9 @@ import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
  * along and the decision (approved or not, by whom, the note) replaces the
  * placeholder as the call's result.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('request_approval: the decision reaches the model', () => {
   function runtimeWith(messages: ReturnType<typeof fakeRepository<Message>>, run: Partial<AgentRun>) {
     const runs = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: [{ headSeq: 0, steps: [], ...run } as AgentRun] });
@@ -94,6 +97,23 @@ describe('request_approval: the decision reaches the model', () => {
     expect(svc.runtimeQueue.add).toHaveBeenCalledTimes(1);
     expect(runs.row('run-1')!.headSeq).toBe(once);
   });
+
+  it('leaves a held tool call alone: its result is the call itself, run after the approval', async () => {
+    // An ask-first or amount rule held the call (`_gate`); there is no
+    // placeholder, and the call runs once approved. A decision written here
+    // gave the call two results, and the model took the first for the outcome.
+    const messages = fakeRepository<Message>({ make: () => new Message(), seed: [], idPrefix: 'm' });
+    const { svc, runs } = runtimeWith(messages, { id: 'run-1', conversationId: 'conv-1', status: AgentRunStatus.WAITING_APPROVAL });
+
+    await svc.handleApprovalDecided({
+      runId: 'run-1', status: 'approved', decidedBy: 'u-ana', decisionReason: null, toolCallId: 'tc-1',
+      payload: { tool: 'Creates an event', parameters: { summary: 'Kickoff' }, _gate: { kind: 'tool_call', toolId: 't-1' } },
+    });
+
+    expect(await messages.find({ where: { toolCallId: 'tc-1' } })).toEqual([]);
+    expect((await runs.findOne({ where: { id: 'run-1' } }))!.status).toBe(AgentRunStatus.RUNNING);
+  });
+
   it('the approval carries the call id it was asked from', async () => {
     const approvals = { create: jest.fn(async () => ({ id: 'a1' })) };
     const helper = new AgentBuiltInToolsHelper({} as any, {} as any, {} as any, approvals as any);

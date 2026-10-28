@@ -6215,6 +6215,305 @@
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
+      "id": "tutorials-onboarding-00-approve-kickoff",
+      "title": "Onboarding agent: the kickoff call waiting for approval",
+      "path": "screenshots/tutorials/onboarding/00-approve-kickoff.png",
+      "capturedAt": "2026-10-27T18:48:59.726Z",
+      "status": "current",
+      "sha256": "e989d1f005b60f2c0121333d09d65225e4b956ccc8483af9cfda38840df914b9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts"
+      ],
+      "sourceDigest": "2a0330a1c7d92bb80caa246880377a86eb9cb67c5a319c8bb21dd11410cf9d07",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-01-drive-link",
+      "title": "Google Drive description link",
+      "path": "screenshots/tutorials/onboarding/01-drive-link.png",
+      "capturedAt": "2026-10-27T18:47:38.009Z",
+      "status": "current",
+      "sha256": "8a3734b86e945707ef89dc2fa437d52e85b00f79f2aed8017707503d311115dd",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new-description.tsx",
+        "frontend/src/components/apis"
+      ],
+      "sourceDigest": "f2971e4888a32f6ff5323238a752ebc1d6165f2abb549f9782c91fb4eca439ea",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-02-drive-sign-in",
+      "title": "Google Drive sign-in: drive.file and drive.readonly",
+      "path": "screenshots/tutorials/onboarding/02-drive-sign-in.png",
+      "capturedAt": "2026-10-27T18:47:43.010Z",
+      "status": "current",
+      "sha256": "4101547c1b5333a1ddb83e0f34ba34c6b4c421eea0133b99a60e28093f080890",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=5&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-03-drive-connected",
+      "title": "Google Drive signed in",
+      "path": "screenshots/tutorials/onboarding/03-drive-connected.png",
+      "capturedAt": "2026-10-27T18:47:44.268Z",
+      "status": "current",
+      "sha256": "c51c9b8a0d1125f03471db20a7b8a25fd5b78b84e82e679ea7c09372cc878288",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=5&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-04-agent-instructions",
+      "title": "Onboarding agent: model and instructions",
+      "path": "screenshots/tutorials/onboarding/04-agent-instructions.png",
+      "capturedAt": "2026-10-27T18:47:46.049Z",
+      "status": "current",
+      "sha256": "e01ecd18f630991b1612196ab2453991036ddec3f7a6aa4326a70612e6bbcd7d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "3500d3a51d954525aa5b79c9254ab46ad65594f7e1cba4e7ac95bd1c52b4adba",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-05-agent-tools",
+      "title": "Onboarding agent: tools",
+      "path": "screenshots/tutorials/onboarding/05-agent-tools.png",
+      "capturedAt": "2026-10-27T18:47:51.052Z",
+      "status": "current",
+      "sha256": "84bc05dd179e20d62a986ab4e6c02050066583693070a157e4e2d5691ee6b017",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "3500d3a51d954525aa5b79c9254ab46ad65594f7e1cba4e7ac95bd1c52b4adba",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-06-always-on",
+      "title": "Always on: standing instructions and a 12-hour timer",
+      "path": "screenshots/tutorials/onboarding/06-always-on.png",
+      "capturedAt": "2026-10-27T18:47:59.489Z",
+      "status": "current",
+      "sha256": "aff558650ece15eb23ae38c76d017c2575f0b84b1ad393bc38014bd091684bf0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx"
+      ],
+      "sourceDigest": "639cc02139669fba0158f75b8d7059afbedfb42f84304fd79ae6d4ae00de97a1",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-07-ask-first",
+      "title": "Always on: ask before booking a meeting",
+      "path": "screenshots/tutorials/onboarding/07-ask-first.png",
+      "capturedAt": "2026-10-27T18:48:00.540Z",
+      "status": "current",
+      "sha256": "35a3ea9105a107f0585093320d70b26a1d8833197a7cd7fab1a713808d263802",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx"
+      ],
+      "sourceDigest": "639cc02139669fba0158f75b8d7059afbedfb42f84304fd79ae6d4ae00de97a1",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-08-always-on-card",
+      "title": "Onboarding agent: Always on card",
+      "path": "screenshots/tutorials/onboarding/08-always-on-card.png",
+      "capturedAt": "2026-10-27T18:48:05.825Z",
+      "status": "current",
+      "sha256": "c0e298a8a8979859a0317977d73ac849dbfc8fdfcee9df0083d8c0cf7055c5ae",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "f339685fa290f8e8f05d6dc05160f15aa75d4126da811ac7092ad5f37e1dd49b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-09-first-run",
+      "title": "The first onboarding run, step by step",
+      "path": "screenshots/tutorials/onboarding/09-first-run.png",
+      "capturedAt": "2026-10-27T18:48:16.297Z",
+      "status": "current",
+      "sha256": "97479cd80755b80711ed4f2943c08bcba1e355cbf833287c1ebe7bcde8d2bd3a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/runs/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "f339685fa290f8e8f05d6dc05160f15aa75d4126da811ac7092ad5f37e1dd49b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-10-welcome-email",
+      "title": "The welcome email as the agent sent it",
+      "path": "screenshots/tutorials/onboarding/10-welcome-email.png",
+      "capturedAt": "2026-10-22T12:23:49.683Z",
+      "status": "current",
+      "sha256": "b54810b2fc46d3fb26ee1e579c18906d956011e7c531dc3da30734c8eaa6bc2f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/runs/:id"
+      },
+      "sources": [
+        "backend/src/modules/tools/executors/tool-http.executor.ts"
+      ],
+      "sourceDigest": "2183b4309fd6e13f07f5519e7ee62e49b9b267fe95139bc4efcb255f741f07f9",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
+    },
+    {
+      "id": "tutorials-onboarding-11-notifications",
+      "title": "Onboarding reports in notifications",
+      "path": "screenshots/tutorials/onboarding/11-notifications.png",
+      "capturedAt": "2026-10-27T18:48:50.452Z",
+      "status": "current",
+      "sha256": "e02a352c646e4fbbe7ff74d5d62e7e0ded4b8c3d02210e33361e44e85fa98b92",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/notifications"
+      },
+      "sources": [
+        "frontend/src/pages/notifications.tsx",
+        "frontend/src/components/notifications"
+      ],
+      "sourceDigest": "9d37bf60a53ead05e99cf1d6686b116c68ee3d1bd1a7d7ffa2e51274db4e4028",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-12-handover-run",
+      "title": "The run that booked the kickoff and handed over",
+      "path": "screenshots/tutorials/onboarding/12-handover-run.png",
+      "capturedAt": "2026-10-27T18:49:15.181Z",
+      "status": "current",
+      "sha256": "a2a7559dd3fb37377f580e09873deaff7f238c86a31ef9d4000750e72e3b6b04",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/runs/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "f339685fa290f8e8f05d6dc05160f15aa75d4126da811ac7092ad5f37e1dd49b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-13-what-woke-it",
+      "title": "What woke it lately, across the onboarding",
+      "path": "screenshots/tutorials/onboarding/13-what-woke-it.png",
+      "capturedAt": "2026-10-27T18:49:18.406Z",
+      "status": "current",
+      "sha256": "f119c9ef8321c52dd7ee1a780b3deff8113488a52caf1e828d1e0e837a3fe763",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx"
+      ],
+      "sourceDigest": "639cc02139669fba0158f75b8d7059afbedfb42f84304fd79ae6d4ae00de97a1",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-14-runs",
+      "title": "Onboarding agent: its runs",
+      "path": "screenshots/tutorials/onboarding/14-runs.png",
+      "capturedAt": "2026-10-27T18:49:22.648Z",
+      "status": "current",
+      "sha256": "512a802252ad7307e6c45a95f1fc5c92a6247b88a2aaf6f9ddb6185bf5de02fd",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "f339685fa290f8e8f05d6dc05160f15aa75d4126da811ac7092ad5f37e1dd49b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+    },
+    {
+      "id": "tutorials-onboarding-15-deal-log",
+      "title": "The onboarding log on the CRM deal",
+      "path": "screenshots/tutorials/onboarding/15-deal-log.png",
+      "capturedAt": "2026-10-27T18:49:24.515Z",
+      "status": "current",
+      "sha256": "1125939414ebbcb7c8ae65e894de5f0538a2f6ab2dc3143420175ce7ef8269a6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/runs/:id"
+      },
+      "sources": [
+        "backend/src/modules/tools/executors/tool-http.executor.ts"
+      ],
+      "sourceDigest": "2183b4309fd6e13f07f5519e7ee62e49b9b267fe95139bc4efcb255f741f07f9",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
+    },
+    {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",

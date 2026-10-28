@@ -290,9 +290,23 @@ export function commitEvents(base: RunBaseline, run: CommittedRun, steps: Step[]
  * means the log cannot stand in for the row.
  */
 export function projectRunEvents(events: RunEventRecord[]): RunProjection {
+  const state = foldRunEvents(null, events);
+  if (!state) throw new Error('run event log is empty');
+  return state;
+}
+
+/**
+ * Fold events onto a projection: `from` is the projection at its headSeq
+ * (null for a log read from its start), `events` the ones after it, which
+ * must continue from headSeq + 1. This is what lets a reader keep a
+ * projection and fold only what a write appended, instead of replaying
+ * the whole log (the projection check, run-projection-check.ts). `from`
+ * is not changed. Throws the way projectRunEvents does.
+ */
+export function foldRunEvents(from: RunProjection | null, events: RunEventRecord[]): RunProjection | null {
   const ordered = [...events].sort((a, b) => a.seq - b.seq);
-  let state: RunProjection | null = null;
-  let expected = 1;
+  let state: RunProjection | null = from ? { ...from, steps: [...from.steps] } : null;
+  let expected = (from?.headSeq ?? 0) + 1;
   for (const event of ordered) {
     if (event.seq !== expected) throw new Error(`run event log is not contiguous: expected seq ${expected}, found ${event.seq}`);
     expected++;
@@ -354,7 +368,6 @@ export function projectRunEvents(events: RunEventRecord[]): RunProjection {
         break;
     }
   }
-  if (!state) throw new Error('run event log is empty');
   return state;
 }
 

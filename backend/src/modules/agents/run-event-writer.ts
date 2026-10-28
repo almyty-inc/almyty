@@ -1,8 +1,9 @@
+import { Logger } from '@nestjs/common';
 import { FindOptionsWhere, In, IsNull, Not, Repository } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { AgentRunEvent } from '../../entities/agent-run-event.entity';
-import { RunEventDraft, baselineOf, commitEvents } from './run-events';
+import { RunEventDraft, RunEventRecord, baselineOf, commitEvents } from './run-events';
 
 /**
  * The columns of a run whose changes are logged (run-events.ts), plus
@@ -55,7 +56,8 @@ export async function writeRun(
   change: RunChange | ((row: AgentRun) => RunChange | null),
   notes: RunEventDraft[] = [],
 ): Promise<AgentRun | null> {
-  return runs.manager.transaction(async (tx) => {
+  const committed: RunWritten[] = [];
+  const result = await runs.manager.transaction(async (tx) => {
     const repo = tx.getRepository(AgentRun);
     const row = await repo.findOne({ where, lock: { mode: 'pessimistic_write' } });
     if (!row) return null;
@@ -67,12 +69,63 @@ export async function writeRun(
     const headSeq = head + events.length;
     const res = await repo.update({ id: row.id, headSeq: head }, { ...patch, headSeq } as any);
     if ((res.affected ?? 0) === 0) return null;
-    await tx.getRepository(AgentRunEvent).insert(
-      events.map((e, i) => ({ runId: row.id, seq: head + i + 1, type: e.type, step: e.step, payload: e.payload })),
-    );
+    const records = events.map((e, i) => ({ runId: row.id, seq: head + i + 1, type: e.type, step: e.step, payload: e.payload }));
+    await tx.getRepository(AgentRunEvent).insert(records.map((r) => ({ ...r })));
     next.headSeq = headSeq;
+    committed.push({ before: row, after: next, events: records });
     return next;
   });
+  // Committed: tell whoever watches run writes (the projection check, the
+  // live run views). Nothing they do can fail or slow down the write.
+  for (const written of committed) notifyRunWritten(written);
+  return result;
+}
+
+/**
+ * One committed run write: the row as it was locked, the row as written,
+ * and the events appended, in seq order.
+ */
+export interface RunWritten {
+  before: AgentRun;
+  after: AgentRun;
+  events: Array<RunEventRecord & { runId: string }>;
+}
+
+export type RunWriteListener = (written: RunWritten) => void | Promise<void>;
+
+const runWriteListeners = new Set<RunWriteListener>();
+
+/**
+ * Watch every committed run write (durable runs step 2): the projection
+ * check folds the appended events and compares them with the row, and the
+ * live run views are told the log moved. Called after the transaction
+ * commits, never inside it; a listener that throws or rejects is logged
+ * and ignored. Returns the function that stops watching.
+ *
+ * `writeRun` is a plain function its many callers hand a repository, so
+ * the services that watch it register here rather than being injected
+ * into every caller.
+ */
+export function onRunWritten(listener: RunWriteListener): () => void {
+  runWriteListeners.add(listener);
+  return () => {
+    runWriteListeners.delete(listener);
+  };
+}
+
+const listenerLogger = new Logger('RunWriteListeners');
+
+function notifyRunWritten(written: RunWritten): void {
+  for (const listener of runWriteListeners) {
+    try {
+      const out = listener(written);
+      if (out && typeof (out as Promise<void>).catch === 'function') {
+        (out as Promise<void>).catch((err) => listenerLogger.warn(`A run write listener failed for run ${written.after.id}: ${err?.message ?? err}`));
+      }
+    } catch (err: any) {
+      listenerLogger.warn(`A run write listener failed for run ${written.after.id}: ${err?.message ?? err}`);
+    }
+  }
 }
 
 /** A change that sets some metadata keys on the row as it stands, leaving the rest. */
