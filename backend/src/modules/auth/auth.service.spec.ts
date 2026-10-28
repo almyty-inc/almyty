@@ -1231,6 +1231,8 @@ describe('AuthService', () => {
       expect(columns.resetPasswordExpires).toBeNull();
       expect(columns.tokenVersion).toBe(1); // revokes existing sessions
       expect(await bcrypt.compare(newPassword, columns.passwordHash)).toBe(true);
+      // A single sign-on account that sets one through the link now has a password.
+      expect(columns.hasPassword).toBe(true);
     });
 
     it('refuses the loser of two simultaneous submissions of one link', async () => {
