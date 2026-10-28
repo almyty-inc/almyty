@@ -50,6 +50,8 @@ services:
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Durable runs: every run write is compared with its event log (docs/design/durable-runs.md).
+      - RUN_PROJECTION_CHECK=true
     depends_on:
       postgres:
         condition: service_healthy

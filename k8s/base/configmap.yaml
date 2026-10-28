@@ -32,6 +32,11 @@ data:
   # the retention sweep prunes them. Set to "0" to disable pruning.
   METRICS_RETENTION_DAYS: "90"
 
+  # Durable runs: compare every run write with its event log and warn on a
+  # difference (docs/design/durable-runs.md). Off here, which is
+  # production; the staging and development overlays set it to "true".
+  RUN_PROJECTION_CHECK: "false"
+
   # JWT Configuration
   JWT_EXPIRES_IN: "24h"
 

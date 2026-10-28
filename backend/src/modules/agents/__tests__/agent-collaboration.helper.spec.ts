@@ -3,7 +3,7 @@ import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Agent } from '../../../entities/agent.entity';
 import { principalOfRun } from '../../../common/authorization/execution-access.service';
 import { fakeRepository } from '../../../test/fake-repository';
-import { withRunEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, withRunEvents } from '../../../test/fake-run-events';
 
 /**
  * Per-strategy unit tests for the four collaboration modes the product exposes:
@@ -99,6 +99,9 @@ function agentWith(collaboration: any): Agent {
 
 const ag = (agentId: string, role?: string) => ({ kind: 'agent', agentId, ...(role ? { role } : {}) });
 const md = (providerId: string, model: string, extra: Record<string, any> = {}) => ({ kind: 'model', providerId, model, ...extra });
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('AgentCollaborationHelper', () => {
   it('sequential: pipes each agent output into the next agent input, final = last', async () => {

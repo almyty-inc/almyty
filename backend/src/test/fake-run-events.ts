@@ -7,6 +7,8 @@
  */
 import { AgentRun } from '../entities/agent-run.entity';
 import { AgentRunEvent } from '../entities/agent-run-event.entity';
+import { onRunWritten } from '../modules/agents/run-event-writer';
+import { ProjectionMismatch, RunProjectionChecker } from '../modules/agents/run-projection-check';
 import { cloneRow, fakeManager, fakeRepository, FakeRepository } from './fake-repository';
 
 /**
@@ -26,6 +28,18 @@ export function runEventsTable() {
       }
       for (const e of list) rows.push(cloneRow(e));
       return { identifiers: list.map((e) => ({ runId: e.runId, seq: e.seq })), generatedMaps: [], raw: [] };
+    }),
+    /**
+     * The read a live run view replays from: a run's events after a seq
+     * (`seq: MoreThan(n)`), in seq order, a page at a time.
+     */
+    find: jest.fn(async (options: any = {}) => {
+      const where = options.where ?? {};
+      const after = where.seq && typeof where.seq === 'object' && where.seq.type === 'moreThan' ? Number(where.seq.value) : -Infinity;
+      const found = rows
+        .filter((r) => (where.runId === undefined || r.runId === where.runId) && r.seq > after)
+        .sort((a, b) => a.seq - b.seq);
+      return (options.take ? found.slice(0, options.take) : found).map((r) => cloneRow(r));
     }),
   };
 }
@@ -71,4 +85,35 @@ export function runsWithEvents(seed: Array<Partial<AgentRun>> = []) {
   const runs = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: seed.map((r) => ({ steps: [], currentStep: 0, ...r })) });
   const events = withRunEvents(runs);
   return Object.assign(runs, { events });
+}
+
+/**
+ * The projection check (durable runs step 2, run-projection-check.ts) on
+ * every run write made until `stop`: how many it compared and every
+ * difference it found.
+ */
+export function watchRunProjection() {
+  const mismatches: ProjectionMismatch[] = [];
+  const checker = new RunProjectionChecker((m) => mismatches.push(m));
+  const stop = onRunWritten((written) => {
+    checker.check(written);
+  });
+  return { checker, mismatches, stop };
+}
+
+/**
+ * In a describe: every run write its tests make is checked against its
+ * event log, and a test fails on any difference. Returns the current
+ * test's watch.
+ */
+export function expectRunProjectionsHold(): () => ReturnType<typeof watchRunProjection> {
+  let watch: ReturnType<typeof watchRunProjection>;
+  beforeEach(() => {
+    watch = watchRunProjection();
+  });
+  afterEach(() => {
+    watch.stop();
+    expect(watch.mismatches).toEqual([]);
+  });
+  return () => watch;
 }

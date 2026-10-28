@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
 import { UsageMetric } from '../../entities/usage-metric.entity';
+import { formatPrometheusMetrics } from './monitoring-prometheus';
 
 describe('MonitoringRedisStatsHelper (Postgres-backed)', () => {
   let helper: MonitoringRedisStatsHelper;
@@ -186,6 +187,31 @@ describe('MonitoringRedisStatsHelper (Postgres-backed)', () => {
         if (prev === undefined) delete process.env.MONITORING_STATS_WINDOW_SECONDS;
         else process.env.MONITORING_STATS_WINDOW_SECONDS = prev;
       }
+    });
+  });
+
+  describe('getRunStats', () => {
+    it('counts run_projection_mismatch rows over the window', async () => {
+      query.mockResolvedValue([{ mismatches: '3' }]);
+      await expect(helper.getRunStats()).resolves.toEqual({ projectionMismatches: 3 });
+      expect(query.mock.calls[0][0]).toContain("type = 'run_projection_mismatch'");
+    });
+
+    it('a failed query reads as none, not as an error', async () => {
+      query.mockRejectedValue(new Error('db down'));
+      await expect(helper.getRunStats()).resolves.toEqual({ projectionMismatches: 0 });
+    });
+
+    it('is exposed to Prometheus when the sample has it', () => {
+      const sample: any = {
+        system: { uptime: 1, memoryUsage: { heapUsed: 1, heapTotal: 2 } },
+        application: { tools: { total: 0, active: 0 }, requests: { successful: 0, failed: 0 } },
+        performance: { averageResponseTime: 0 },
+        protocols: { mcp: { sessions: 0 }, a2a: { activeAgents: 0 } },
+        runs: { projectionMismatches: 2 },
+      };
+      expect(formatPrometheusMetrics(sample)).toContain('almyty_run_projection_mismatches 2\n');
+      expect(formatPrometheusMetrics({ ...sample, runs: undefined })).not.toContain('almyty_run_projection_mismatches');
     });
   });
 });

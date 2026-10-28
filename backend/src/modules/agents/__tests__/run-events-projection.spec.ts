@@ -16,7 +16,7 @@ import { AgentContextCompactor } from '../agent-context-compactor.helper';
 import { projectRunEvents, storedRunState } from '../run-events';
 import { mergeMetadata, writeRun } from '../run-event-writer';
 import { fakeRepository } from '../../../test/fake-repository';
-import { RunEventsTable, withRunEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, RunEventsTable, withRunEvents } from '../../../test/fake-run-events';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 import { REFUND_TOOL, gatedExecutor } from '../../tools/__tests__/gated-executor.harness';
 import { anthropicText, anthropicTool, mainModelConfig, runAgent } from './autonomous-harness';
@@ -28,6 +28,9 @@ import { anthropicText, anthropicTool, mainModelConfig, runAgent } from './auton
  * (autonomous-harness.ts); after each one the projection of its events is
  * compared with the stored row, field by field.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('the run event log folds back into the stored run', () => {
   const MODEL = 'claude-sonnet-5';
   const mockedAxios = axios as unknown as jest.Mock;

@@ -37,6 +37,8 @@ export interface AgentRun {
   totalTokens: number
   executionTime: number
   metadata?: Record<string, any>
+  /** Durable runs: the seq of the run's last logged event, where a live view of it resumes. */
+  headSeq?: number
   limits?: {
     maxSteps?: number
     maxDurationMs?: number

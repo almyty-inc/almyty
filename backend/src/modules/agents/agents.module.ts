@@ -50,6 +50,7 @@ import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
 import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
+import { RunProjectionCheckService } from './run-projection-check';
 import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
 import { AgentStepProcessor } from './agent-step-processor';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
@@ -157,6 +158,8 @@ import { BudgetsModule } from '../budgets/budgets.module';
     WorkflowApprovalResumeService,
     // Personal data hidden in the traces runs store.
     RunTracePrivacyService,
+    // Durable runs step 2: every run write compared with its event log (RUN_PROJECTION_CHECK).
+    RunProjectionCheckService,
     // Hosted pods' coding CLIs: their own calls, forwarded to an organization-wide provider.
     ModelPassThroughService],
   controllers: [AgentApiAccessController, AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
