@@ -749,7 +749,12 @@ export class AgentRuntimeService implements OnModuleInit {
     if (!run) return;
     if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
 
-    if (approval.payload?.kind !== 'change_set') {
+    // Only request_approval's own call gets the decision as its result. A
+    // held tool call (an ask-first or amount rule, `_gate` in its payload)
+    // gets its real result when it runs after the approval; writing the
+    // decision too gave that call two results, and the model read the
+    // first one, the decision, as the call's outcome.
+    if (approval.payload?.kind !== 'change_set' && !approval.payload?._gate) {
       await this.recordDecisionForModel(run, approval);
     }
 
