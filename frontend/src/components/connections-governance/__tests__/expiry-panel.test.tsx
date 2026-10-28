@@ -53,10 +53,10 @@ describe('ExpiryPanel', () => {
     expect(expired).toHaveTextContent('slack credential')
     expect(expired).toHaveTextContent('personal')
     expect(expired).toHaveTextContent('past')
-    expect(screen.getByText(/grants are revoked on expiry/)).toBeInTheDocument()
+    expect(screen.getByText(/access is taken away on expiry/)).toBeInTheDocument()
 
-    expect(screen.getByTestId('rotation-row-c1')).toHaveTextContent('provider API')
-    expect(screen.getByTestId('rotation-row-c2')).toHaveTextContent('manual')
+    expect(screen.getByTestId('rotation-row-c1')).toHaveTextContent('automatic')
+    expect(screen.getByTestId('rotation-row-c2')).toHaveTextContent('by hand')
   })
 
   it('runs the rotation now and reports the outcome', async () => {

@@ -108,7 +108,7 @@ hooked.describe('Credentials - advanced', () => {
       await expect(page).toHaveURL(/\/credentials\/policies\/new/)
       await expect(page.getByTestId('policy-form')).toBeVisible()
     } else {
-      await expect(locked).toContainText('Credentials governance')
+      await expect(locked).toContainText('Credential rules')
     }
   })
 })

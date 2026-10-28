@@ -72,7 +72,7 @@ describe('SsoSettings entitlement gating', () => {
     )
     // The real form control must not render, and the gated config endpoint
     // must not even be queried.
-    expect(screen.queryByText(/enable sso login/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/use single sign-on/i)).not.toBeInTheDocument()
     expect(mockedGetConfig).not.toHaveBeenCalled()
   })
 
@@ -81,7 +81,7 @@ describe('SsoSettings entitlement gating', () => {
 
     render(<SsoSettings />)
 
-    await waitFor(() => expect(screen.getByText(/enable sso login/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/use single sign-on/i)).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /save sso settings/i })).toBeInTheDocument()
     expect(screen.queryByText(/upgrade to unlock it/i)).not.toBeInTheDocument()
     expect(mockedGetConfig).toHaveBeenCalled()

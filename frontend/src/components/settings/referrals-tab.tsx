@@ -43,8 +43,8 @@ export function ReferralsTab() {
             Invite friends, earn free pro time
           </CardTitle>
           <CardDescription>
-            Share your link. When someone signs up they get a month of pro; when their
-            organization goes live you earn free pro days too.
+            Share your link. Anyone who signs up with it gets a month of pro, and once
+            they are up and running you earn free pro days too.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -75,7 +75,7 @@ export function ReferralsTab() {
               <StatBlock
                 label="Reward days"
                 value={stats.totalRewardDays}
-                hint={stats.accruedRewardDays > 0 ? `${stats.accruedRewardDays} banked until you upgrade to pro` : undefined}
+                hint={stats.accruedRewardDays > 0 ? `${stats.accruedRewardDays} saved until you upgrade to pro` : undefined}
               />
             </div>
           )}
@@ -86,8 +86,8 @@ export function ReferralsTab() {
         <CardHeader>
           <CardTitle>Your referrals</CardTitle>
           <CardDescription>
-            Referrals qualify when the invited organization creates a gateway and runs an agent.
-            Flagged signups stay in review and do not reward automatically.
+            A referral counts once the invited organization creates a gateway and runs an agent.
+            Sign-ups that look unusual are reviewed by hand before they earn anything.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -95,7 +95,7 @@ export function ReferralsTab() {
             <Skeleton className="h-24 w-full" />
           ) : !listQuery.data?.length ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No referrals yet — share your link to get started.
+              No referrals yet. Share your link to get started.
             </p>
           ) : (
             <Table>

@@ -306,7 +306,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             <div>
               <CardTitle>Organization members</CardTitle>
               <CardDescription>
-                Manage who has access to this organization
+                Everyone who can use this organization, and their role
               </CardDescription>
             </div>
             {!inviting && (
@@ -411,7 +411,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             <CardHeader>
               <CardTitle>Pending invites</CardTitle>
               <CardDescription>
-                Invitations waiting for the recipient to accept
+                Invitations that have not been accepted yet
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -460,7 +460,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             <div>
               <CardTitle>Teams</CardTitle>
               <CardDescription>
-                Organize members into teams for better collaboration
+                Group people who work together into teams
               </CardDescription>
             </div>
             {!creatingTeam && (
@@ -508,7 +508,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 <EmptyState
                   icon={Users}
                   title="No teams yet"
-                  description="Create teams to organize your organization members"
+                  description="Create a team to group people who work together"
                   action={
                     <Button onClick={() => setCreatingTeam(true)}>
                       <Plus className="h-4 w-4 mr-2" />

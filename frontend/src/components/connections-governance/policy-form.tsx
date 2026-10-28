@@ -153,7 +153,7 @@ export function PolicyForm({ policy, initialKind, onSaved }: PolicyFormProps) {
           {values.kind === 'scope_rule' && (
             <>
               <fieldset className="space-y-1.5">
-                <legend className="text-sm font-medium">Principal kinds</legend>
+                <legend className="text-sm font-medium">Who it applies to</legend>
                 <div className="flex flex-wrap gap-4" data-testid="policy-principal-kinds">
                   {SCOPE_PRINCIPAL_KINDS.map((kind) => {
                     const id = `policy-principal-${kind}`
@@ -177,9 +177,9 @@ export function PolicyForm({ policy, initialKind, onSaved }: PolicyFormProps) {
               </div>
               <div className="flex items-center gap-3">
                 <Switch id="policy-approved-only" checked={values.approvedConnectorsOnly} onCheckedChange={(approvedConnectorsOnly) => patch({ approvedConnectorsOnly })} disabled={busy} />
-                <Label htmlFor="policy-approved-only" className="font-normal">Approved connectors only (needs an allowed-connectors policy for organization credentials)</Label>
+                <Label htmlFor="policy-approved-only" className="font-normal">Approved connectors only (needs an allowed connectors rule for organization credentials)</Label>
               </div>
-              <p className="text-xs text-muted-foreground">Scope rules always require organization credentials; personal credentials are refused for these principals.</p>
+              <p className="text-xs text-muted-foreground">Whoever is ticked above may only use organization credentials. Their personal credentials are refused.</p>
             </>
           )}
 
@@ -197,7 +197,7 @@ export function PolicyForm({ policy, initialKind, onSaved }: PolicyFormProps) {
               </div>
               <div className="flex items-center gap-3">
                 <Switch id="policy-enforce" checked={values.enforce} onCheckedChange={(enforce) => patch({ enforce })} disabled={busy} />
-                <Label htmlFor="policy-enforce" className="font-normal">Revoke grants on expiry</Label>
+                <Label htmlFor="policy-enforce" className="font-normal">Take away access when a secret expires</Label>
               </div>
             </>
           )}

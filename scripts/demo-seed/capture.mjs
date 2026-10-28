@@ -129,7 +129,7 @@ export const SHOTS = {
   'settings-teams': ['settings-teams.png', () => '/settings/members', 2880, 1800, 'Members and teams', src('frontend/src/pages/settings.tsx', 'frontend/src/components/MembersAndTeamsTab.tsx', 'frontend/src/components/settings')],
   'settings-rbac-enabled': ['settings-rbac-enabled.png', () => '/settings/rbac', 2880, 1800, 'Roles', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings')],
   'settings-rbac-new-role': ['settings-rbac-new-role.png', () => '/settings/rbac', 2880, 2400, 'New role', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings'), click(/new role|add role|custom role/i)],
-  'settings-rbac-new-policy': ['settings-rbac-new-policy.png', () => '/settings/rbac', 2880, 2400, 'New access policy', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings'), click(/new policy|add policy|access policy/i)],
+  'settings-rbac-new-policy': ['settings-rbac-new-policy.png', () => '/settings/rbac', 2880, 2400, 'New access rule', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings'), click(/new rule|new policy|add policy|access rule/i)],
   'settings-sso-enabled': ['settings-sso-enabled.png', () => '/settings/sso', 2880, 2400, 'Single sign-on', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings')],
   'settings-approval-policies-enabled': ['settings-approval-policies-enabled.png', () => '/settings/approvals', 2880, 1800, 'Approval policies', src('frontend/src/pages/settings.tsx', 'frontend/src/pages/approval-policy.tsx', 'frontend/src/components/settings')],
   'settings-approval-policy-new': ['settings-approval-policy-new.png', () => '/settings/approvals/policies/new', 2880, 2400, 'New approval policy', src('frontend/src/pages/approval-policy.tsx', 'frontend/src/components/settings')],
@@ -208,7 +208,8 @@ function register(names) {
     const route = c.route.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
       '--notes', 'Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.',
-      ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
+      // The shared UI folders are not page evidence; check-screenshots refuses them.
+      ...sources.filter((s) => !UI.includes(s)).flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
   }
 }
 

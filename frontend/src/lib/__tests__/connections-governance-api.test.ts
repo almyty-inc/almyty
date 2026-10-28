@@ -170,7 +170,7 @@ describe('policy form <-> rule', () => {
 
   it('validates per kind like the server', () => {
     expect(validatePolicyForm(emptyPolicyForm('connector_allowlist'))).toEqual(['Pick at least one connector'])
-    expect(validatePolicyForm({ ...emptyPolicyForm('scope_rule'), principalKinds: [] })).toEqual(['Pick at least one principal kind'])
+    expect(validatePolicyForm({ ...emptyPolicyForm('scope_rule'), principalKinds: [] })).toEqual(['Pick at least one of agents, workspaces, users, teams or roles'])
     expect(validatePolicyForm({ ...emptyPolicyForm('expiry_rule'), warnDays: 90 })).toEqual(['Warning must come before the maximum age'])
     expect(validatePolicyForm({ ...emptyPolicyForm('expiry_rule'), maxAgeDays: 0 })).toEqual(['Maximum age must be a whole number of days, at least 1'])
     expect(validatePolicyForm({ ...emptyPolicyForm('rotation_rule'), everyDays: 0 })).toEqual(['Rotation interval must be a whole number of days, at least 1'])
@@ -195,10 +195,10 @@ describe('describePolicyRule', () => {
     expect(describePolicyRule({ kind: 'connector_denylist', rule: { connectorKeys: ['openrouter'] } })).toBe('All credentials may never use openrouter')
     expect(describePolicyRule({ kind: 'scope_rule', rule: { principalKinds: ['agent', 'workspace'], environments: ['production'], requireOwner: 'org', approvedConnectorsOnly: true } })).toBe('Agents, Workspaces in production may only use organization credentials from approved connectors')
     expect(describePolicyRule({ kind: 'scope_rule', rule: { principalKinds: ['agent'], requireOwner: 'org' } })).toBe('Agents may only use organization credentials')
-    expect(describePolicyRule({ kind: 'expiry_rule', rule: { maxAgeDays: 90, warnDays: 7, enforce: true } })).toBe('Secrets expire after 90 days, warning 7 days ahead, grants are revoked on expiry')
-    expect(describePolicyRule({ kind: 'expiry_rule', rule: { maxAgeDays: 30, warnDays: 1, enforce: false } })).toBe('Secrets expire after 30 days, warning 1 day ahead, owners are notified only')
-    expect(describePolicyRule({ kind: 'rotation_rule', rule: { everyDays: 30, requireProviderApi: true, connectorKeys: ['openai'] } }, names)).toBe('Rotate OpenAI every 30 days through the provider API')
-    expect(describePolicyRule({ kind: 'rotation_rule', rule: { everyDays: 90, requireProviderApi: true } })).toBe('Rotate every connector every 90 days through the provider API')
+    expect(describePolicyRule({ kind: 'expiry_rule', rule: { maxAgeDays: 90, warnDays: 7, enforce: true } })).toBe('Secrets expire after 90 days, warning 7 days ahead, access is taken away on expiry')
+    expect(describePolicyRule({ kind: 'expiry_rule', rule: { maxAgeDays: 30, warnDays: 1, enforce: false } })).toBe('Secrets expire after 30 days, warning 1 day ahead, owners are only told')
+    expect(describePolicyRule({ kind: 'rotation_rule', rule: { everyDays: 30, requireProviderApi: true, connectorKeys: ['openai'] } }, names)).toBe('Rotate OpenAI every 30 days through the service’s API')
+    expect(describePolicyRule({ kind: 'rotation_rule', rule: { everyDays: 90, requireProviderApi: true } })).toBe('Rotate every connector every 90 days through the service’s API')
   })
 
   it('truncates long connector lists', () => {
