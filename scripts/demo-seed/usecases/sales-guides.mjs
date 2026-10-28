@@ -47,7 +47,7 @@ const upstream = async (path, init) => (await fetch(`${UP}${path}`, init)).json(
 // (the biz-dev tutorial makes a "HubSpot private app" and "HubSpot Companies" too).
 const orgOf = () => sql(`SELECT uo."organizationId" FROM user_organizations uo JOIN users u ON u.id = uo."userId" WHERE u.email = '${SOFIA.email}' LIMIT 1`)
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
 const BUILDER = ['frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents']
 const NEW_API = ['frontend/src/pages/api-new.tsx']
@@ -144,6 +144,8 @@ function helpers(page) {
   const shot = async (name, opts = {}) => {
     await page.addStyleTag({ content: HIDE })
     await page.mouse.move(0, 0)
+    // An open run's view says Live once its stream answers; the dev proxy passes that on with the first byte, up to 25 s later.
+    await page.locator('[data-testid=run-reconnecting]').first().waitFor({ state: 'detached', timeout: 45000 }).catch(() => {})
     await wait()
     const file = join(OUT, `${name}.png`)
     await page.screenshot({ path: file, ...opts })
@@ -599,7 +601,7 @@ async function driveGuide(page, h) {
   await page.getByTitle('google_drive_drive_files_list', { exact: true }).first().click()
   await h.wait(1500)
   await page.getByRole('tab', { name: 'Test tool' }).click()
-  await page.getByPlaceholder('Enter q').fill("fullText contains 'discount'")
+  await page.getByPlaceholder('Enter q', { exact: true }).fill("fullText contains 'discount'")
   await page.getByRole('button', { name: 'Execute Tool' }).click()
   await page.getByText('Response Data:').waitFor({ timeout: 20000 })
   await page.getByText('Response Data:').scrollIntoViewIfNeeded()
@@ -651,7 +653,7 @@ function register(shots) {
     const notes = 'Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/sales-guides.mjs): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data.' +
       (RENDERED[shot] ? ' The page renders the message exactly as almyty handed it to Slack; Slack itself was not used.' : '')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/examples/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
-      '--notes', notes, ...[...sources, ...UI].flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
+      '--notes', notes, ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
   }
 }
 

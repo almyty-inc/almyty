@@ -24,7 +24,7 @@
 //
 //   node scripts/demo-seed/usecases/tutorials.mjs                 all three
 //   node scripts/demo-seed/usecases/tutorials.mjs founder         only this one (or bizdev, onboarding)
-//   THEME=light ...                                               light mode (the onboarding captures)
+//   THEME=dark ...                                                dark mode instead of light
 //   RESTART_API='<command>' ... onboarding                        restart the API between two wakes
 //   node scripts/demo-seed/usecases/tutorials.mjs --fresh         Maya's organization removed first
 //   node scripts/demo-seed/usecases/tutorials.mjs --register [shot...]
@@ -142,8 +142,8 @@ async function account() {
 const HIDE = '.tsqd-parent-container, .tsqd-open-btn-container, [role=region][aria-label^="Notifications"] { display: none !important; }'
 
 async function session(browser) {
-  // THEME=light for the onboarding tutorial's captures; the first two were taken in dark mode.
-  const theme = process.env.THEME === 'light' ? 'light' : 'dark'
+  // Light, like the other walks; THEME=dark for a dark capture.
+  const theme = process.env.THEME === 'dark' ? 'dark' : 'light'
   const ctx = await browser.newContext({ baseURL: WEB, colorScheme: theme, timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 } })
   await ctx.addInitScript((t) => { try { localStorage.setItem('theme', t) } catch {} }, theme)
   // A real sign-in page is never opened.
@@ -171,6 +171,8 @@ function helpers(page) {
   const shot = async (name, opts = {}) => {
     await page.addStyleTag({ content: HIDE })
     await page.mouse.move(0, 0)
+    // An open run's view says Live once its stream answers; the dev proxy passes that on with the first byte, up to 25 s later.
+    await page.locator('[data-testid=run-reconnecting]').first().waitFor({ state: 'detached', timeout: 45000 }).catch(() => {})
     await wait()
     const file = join(OUT, `${name}.png`)
     await page.screenshot({ path: file, ...opts })
