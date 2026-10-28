@@ -712,6 +712,8 @@ async function walk(names, from) {
         // The dev build's query devtools, and toasts that have said their piece, stay out of the picture.
         await page.addStyleTag({ content: '.tsqd-parent-container, .tsqd-open-btn-container, [role=region][aria-label^="Notifications"] { display: none !important; }' })
         await page.mouse.move(0, 0)
+        // An open run's view says Live once its stream answers; the dev proxy passes that on with the first byte, up to 25 s later.
+        await page.locator('[data-testid=run-reconnecting]').first().waitFor({ state: 'detached', timeout: 45000 }).catch(() => {})
         const file = join(OUT, `${shot}.png`)
         await page.screenshot({ path: file })
         results[shot] = { file, route: new URL(page.url()).pathname + new URL(page.url()).search, at: new Date().toISOString() }

@@ -144,6 +144,8 @@ function helpers(page) {
   const shot = async (name, opts = {}) => {
     await page.addStyleTag({ content: HIDE })
     await page.mouse.move(0, 0)
+    // An open run's view says Live once its stream answers; the dev proxy passes that on with the first byte, up to 25 s later.
+    await page.locator('[data-testid=run-reconnecting]').first().waitFor({ state: 'detached', timeout: 45000 }).catch(() => {})
     await wait()
     const file = join(OUT, `${name}.png`)
     await page.screenshot({ path: file, ...opts })
