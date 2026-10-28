@@ -22,6 +22,8 @@ import { isEffectiveMembership } from '../../../src/common/authorization/members
 import { DecryptedSsoConfig, SsoConfigService, provisioningRole } from './sso-config.service';
 import { SamlReplayCache, assertionReplayFacts } from './saml-replay-cache';
 import { OrgDomainService } from './org-domain.service';
+import { AuditLogService } from '../../../src/modules/audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../../src/entities/audit-log.entity';
 import {
   MemoryOidcLoginStateStore,
   OIDC_LOGIN_TTL_SECONDS,
@@ -65,6 +67,8 @@ export class SsoService {
     @Optional() @Inject(OIDC_LOGIN_STATE_STORE) loginStates?: OidcLoginStateStore,
     // Absent (a spec constructing the service bare), JIT creates nobody.
     @Optional() private readonly domains?: OrgDomainService,
+    // SSO sign-ins (and refusals) on the organization's audit trail.
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {
     this.loginStates = loginStates ?? loginStateFactory?.create() ?? new MemoryOidcLoginStateStore();
   }
@@ -204,10 +208,42 @@ export class SsoService {
     return this.profileFromSaml(profile);
   }
 
-  /** Turn a verified SSO identity into the member it signs in (resolveUser). */
+  /**
+   * Turn a verified SSO identity into the member it signs in (resolveUser).
+   * Every attempt lands on the organization's audit trail: a sign-in, or
+   * a refusal with its reason (a deactivated member, no account, ...).
+   */
   async completeSsoLogin(orgId: string, profile: SsoUserProfile, protocol: 'saml' | 'oidc' = 'saml'): Promise<User> {
-    const config = await this.loadEnabledConfig(orgId, protocol);
-    return this.resolveUser(orgId, profile, config);
+    try {
+      const config = await this.loadEnabledConfig(orgId, protocol);
+      const user = await this.resolveUser(orgId, profile, config);
+      this.auditSignIn(orgId, profile.email, protocol, 'success', user.id);
+      return user;
+    } catch (err: any) {
+      this.auditSignIn(orgId, profile.email, protocol, 'denied', undefined, err?.message);
+      throw err;
+    }
+  }
+
+  private auditSignIn(
+    orgId: string,
+    email: string,
+    protocol: 'saml' | 'oidc',
+    status: 'success' | 'denied',
+    userId?: string,
+    reason?: string,
+  ): void {
+    void this.auditLog?.log({
+      organizationId: orgId,
+      userId,
+      userEmail: email?.toLowerCase(),
+      action: AuditAction.SSO_LOGIN,
+      resourceType: AuditResource.USER,
+      resourceId: userId ?? email?.toLowerCase() ?? 'unknown',
+      resourceName: email?.toLowerCase(),
+      status,
+      details: { protocol, ...(reason ? { reason } : {}) },
+    });
   }
 
   /** Extract email + name from a validated SAML profile. */

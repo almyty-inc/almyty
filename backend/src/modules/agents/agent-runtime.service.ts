@@ -4,6 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Workspace } from '../../entities/workspace.entity';
 import { releaseRunWorkspaces } from '../workspace/run-end-release';
+import { notDone, writeRun } from './run-event-writer';
+import type { RunEventDraft } from './run-events';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -22,6 +24,7 @@ import { MemoryAccountsService } from '../memory/canonical/memory-accounts.servi
 import { Tier } from '../memory/canonical/canonical.types';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message, MessageContent } from '../../entities/message.entity';
+import { User } from '../../entities/user.entity';
 import { withAttachedFiles } from './attached-files';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
@@ -93,7 +96,7 @@ export const BUILT_IN_TOOLS = {
   },
   request_approval: {
     name: 'request_approval',
-    description: 'Pause execution and request human approval before proceeding. The run halts at WAITING_APPROVAL until an authorized user approves or rejects via the UI. On approval, this tool resolves with { approved: true, decision_reason }; on rejection the run terminates as cancelled.',
+    description: 'Pause execution and request human approval before proceeding. The run halts at WAITING_APPROVAL until an authorized user approves or rejects via the UI. On approval, this tool resolves with { approved: true, decided_by, decision_reason } (who approved, and their note); on rejection the run terminates as cancelled.',
     parameters: {
       type: 'object',
       properties: {
@@ -140,6 +143,8 @@ export const AGENT_RUN_LIST_COLUMNS = {
   recursionDepth: true,
   toolCallCount: true,
   metadata: true,
+  // The seq of the run's last logged event: where a live view of it resumes.
+  headSeq: true,
   limits: true,
   parentRunId: true,
   createdAt: true,
@@ -572,8 +577,11 @@ export class AgentRuntimeService implements OnModuleInit {
     if (run.isDone()) {
       throw new BadRequestException('Run is already completed');
     }
+    // Only a run still going: one that finished in the meantime keeps its ending.
+    if (!(await writeRun(this.runRepository, { id: run.id, status: notDone() }, { status: AgentRunStatus.CANCELLED }))) {
+      throw new BadRequestException('Run is already completed');
+    }
     run.status = AgentRunStatus.CANCELLED;
-    await this.runRepository.save(run);
     await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
     this.emitEvent(runId, 'run.cancelled', {});
 
@@ -621,13 +629,22 @@ export class AgentRuntimeService implements OnModuleInit {
     }
 
     // Persist user message
+    let messageId: string | null = null;
     if (run.conversationId) {
       const userMsg = Message.createUserMessage(run.conversationId, withAttachedFiles(input, attachments));
       userMsg.runId = run.id;
-      await this.messageRepository.save(userMsg);
+      messageId = (await this.messageRepository.save(userMsg))?.id ?? null;
     }
+    // Only a run still waiting: the input goes on its log (the message by
+    // id; its words are the conversation's), with the resume.
+    const resumed = await writeRun(
+      this.runRepository,
+      { id: run.id, status: AgentRunStatus.WAITING_INPUT },
+      { status: AgentRunStatus.RUNNING },
+      [{ type: 'input_received', step: null, payload: { messageId, attachments: attachments?.length ?? 0 } }],
+    );
+    if (!resumed) throw new BadRequestException('Run is not waiting for input');
     run.status = AgentRunStatus.RUNNING;
-    await this.runRepository.save(run);
 
     // Resume execution. Seed the seq from a timestamp so the resumed
     // job's id sits outside the sequential range used before the pause,
@@ -690,6 +707,14 @@ export class AgentRuntimeService implements OnModuleInit {
     return this.events.subscribeRunEvents(runId, handler, signal, timeoutMs);
   }
 
+  /**
+   * A live run view that resumes: the run's logged events after `afterSeq`
+   * from its event log, then the live stream (AgentRuntimeEventsHelper.subscribeRunLog).
+   */
+  async subscribeRunLog(...args: Parameters<AgentRuntimeEventsHelper['subscribeRunLog']>): Promise<void> {
+    return this.events.subscribeRunLog(...args);
+  }
+
   /** Best-effort periodic sweep of orphaned run emitters. */
   async sweepOrphanedRunEmitters(): Promise<void> {
     return this.events.sweepOrphanedRunEmitters();
@@ -703,11 +728,18 @@ export class AgentRuntimeService implements OnModuleInit {
    * React to an approval decision. On 'approved' the run is moved
    * back to RUNNING and re-queued for the next step. On 'rejected'
    * /'expired' the run is cancelled with the decision_reason.
+   *
+   * Either way the request_approval call's result becomes the decision
+   * ({ approved, decided_by, decision_reason }), as the tool promises: the
+   * model saw "Awaiting human approval" and, resumed, had no way to tell
+   * it was approved, by whom, or what the reviewer wrote.
    */
   private async handleApprovalDecided(approval: {
+    id?: string;
     runId: string | null;
     status: 'approved' | 'rejected' | 'expired';
     decisionReason: string | null;
+    decidedBy?: string | null;
     toolCallId: string | null;
     payload?: Record<string, any> | null;
   }): Promise<void> {
@@ -717,12 +749,38 @@ export class AgentRuntimeService implements OnModuleInit {
     if (!run) return;
     if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
 
+    // Only request_approval's own call gets the decision as its result. A
+    // held tool call (an ask-first or amount rule, `_gate` in its payload)
+    // gets its real result when it runs after the approval; writing the
+    // decision too gave that call two results, and the model read the
+    // first one, the decision, as the call's outcome.
+    if (approval.payload?.kind !== 'change_set' && !approval.payload?._gate) {
+      await this.recordDecisionForModel(run, approval);
+    }
+
+    // The decision on the run's log: who, what, and their note. Written
+    // with the status it moves the run to, and only while the run is still
+    // waiting (a second listener, or a cancel in between, writes nothing).
+    const decided: RunEventDraft = {
+      type: 'approval_decided',
+      step: null,
+      payload: {
+        approvalId: approval.id ?? null,
+        kind: approval.payload?.kind === 'change_set' ? 'change_set' : approval.payload?._gate ? 'tool_call' : 'run',
+        status: approval.status,
+        decidedBy: approval.status === 'expired' ? null : approval.decidedBy ?? null,
+        decisionReason: approval.decisionReason ?? null,
+        toolCallId: approval.toolCallId ?? null,
+      },
+    };
+    const waiting = { id: run.id, status: AgentRunStatus.WAITING_APPROVAL };
+
     // A script's change set (code mode) resumes the run whatever the
     // decision: rejected or expired, none of it runs, the model is told so
     // and carries on (docs/design/code-mode.md, part D).
     if (approval.status === 'approved' || approval.payload?.kind === 'change_set') {
+      if (!(await writeRun(this.runRepository, waiting, { status: AgentRunStatus.RUNNING }, [decided]))) return;
       run.status = AgentRunStatus.RUNNING;
-      await this.runRepository.save(run);
       // Same seq-from-timestamp rule as the resume path above, and for
       // the same reason. Without a seq the processor read it as 0 and
       // enqueued the next step as `step:<runId>:1` -- an id already in
@@ -740,13 +798,63 @@ export class AgentRuntimeService implements OnModuleInit {
       });
       this.logger.log(`run ${run.id} resumed after approval`);
     } else {
-      run.status = AgentRunStatus.CANCELLED;
-      run.error = approval.status === 'expired'
+      const error = approval.status === 'expired'
         ? 'approval expired'
         : `approval rejected${approval.decisionReason ? `: ${approval.decisionReason}` : ''}`;
-      await this.runRepository.save(run);
+      if (!(await writeRun(this.runRepository, waiting, { status: AgentRunStatus.CANCELLED, error }, [decided]))) return;
+      run.status = AgentRunStatus.CANCELLED;
+      run.error = error;
       await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
       this.logger.log(`run ${run.id} cancelled after approval ${approval.status}`);
+    }
+  }
+
+  /**
+   * Write the decision over the request_approval call's "Awaiting human
+   * approval" result, so the model reads it when the run resumes (and a
+   * later run in the same conversation reads a rejection). Best effort: a
+   * failure here never holds the run.
+   */
+  private async recordDecisionForModel(
+    run: AgentRun,
+    approval: { status: 'approved' | 'rejected' | 'expired'; decisionReason: string | null; decidedBy?: string | null; toolCallId: string | null },
+  ): Promise<void> {
+    if (!run.conversationId || !approval.toolCallId) return;
+    try {
+      const decision = {
+        approved: approval.status === 'approved',
+        status: approval.status,
+        decided_by: approval.status === 'expired' ? null : await this.deciderName(approval.decidedBy ?? null),
+        decision_reason: approval.decisionReason ?? null,
+      };
+      const content = JSON.stringify(decision);
+      const updated = await this.messageRepository.update(
+        { conversationId: run.conversationId, toolCallId: approval.toolCallId },
+        { content },
+      );
+      if (!updated.affected) {
+        const msg = Message.createToolResultMessage(run.conversationId, approval.toolCallId, content);
+        msg.runId = run.id;
+        await this.messageRepository.save(msg);
+      }
+    } catch (err: any) {
+      this.logger.warn(`could not record the approval decision for run ${run.id}: ${err?.message ?? err}`);
+    }
+  }
+
+  /** The reviewer by name (or email), for the model; null when unknown. */
+  private async deciderName(userId: string | null): Promise<string | null> {
+    if (!userId) return null;
+    try {
+      const user = await this.messageRepository.manager.getRepository(User).findOne({
+        where: { id: userId },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+      if (!user) return null;
+      const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+      return name || user.email || null;
+    } catch {
+      return null;
     }
   }
 }

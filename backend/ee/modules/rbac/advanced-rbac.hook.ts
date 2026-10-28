@@ -61,6 +61,11 @@ export class AdvancedRbacHookImpl implements AdvancedRbacHook {
     return this.customRoles.hasPermission(organizationId, userId, permission);
   }
 
+  async roleNames(organizationId: string, userId: string): Promise<string[]> {
+    if (!(await this.licensed(organizationId, EE_ENTITLEMENTS.ADVANCED_RBAC))) return [];
+    return this.customRoles.getActiveRoleNames(organizationId, userId);
+  }
+
   async evaluateAccess(
     organizationId: string,
     action: string,
@@ -69,7 +74,11 @@ export class AdvancedRbacHookImpl implements AdvancedRbacHook {
     if (!(await this.licensed(organizationId, EE_ENTITLEMENTS.ADVANCED_RBAC))) {
       return { effect: 'abstain' };
     }
-    const decision = await this.customRoles.evaluateAccess(organizationId, action, ctx);
+    const decision = await this.customRoles.evaluateAccess(
+      organizationId,
+      action,
+      await this.withSubjectRoles(organizationId, ctx),
+    );
     if (decision.effect === 'deny') {
       return { effect: 'deny', reason: decision.reason };
     }
@@ -78,5 +87,26 @@ export class AdvancedRbacHookImpl implements AdvancedRbacHook {
     }
     // 'default' — no applicable policy.
     return { effect: 'abstain', reason: decision.reason };
+  }
+
+  /**
+   * `subject.roles` for conditions such as `subject.roles contains
+   * "finance"`: the built-in org role plus the names of the user's active
+   * custom roles. The guard only knows the built-in role.
+   */
+  private async withSubjectRoles(
+    organizationId: string,
+    ctx: EvaluationContext,
+  ): Promise<EvaluationContext> {
+    const subject = ctx.subject ?? {};
+    if (Array.isArray(subject.roles) || typeof subject.id !== 'string') return ctx;
+    let names: string[] = [];
+    try {
+      names = await this.customRoles.getActiveRoleNames(organizationId, subject.id as string);
+    } catch {
+      names = [];
+    }
+    const builtIn = typeof subject.role === 'string' ? [subject.role] : [];
+    return { ...ctx, subject: { ...subject, roles: [...builtIn, ...names] } };
   }
 }

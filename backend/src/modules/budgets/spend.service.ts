@@ -89,8 +89,13 @@ export class SpendService {
     private readonly hostedCallRepo?: Repository<HostedModelCall>,
   ) {}
 
+  /**
+   * Dollars as cents, fractions kept (to a millionth of a dollar): a model
+   * call costs a fraction of a cent, and a one-cent budget is measured
+   * against those fractions rather than against zero.
+   */
   private toCents(dollars: string | number | null | undefined): number {
-    return Math.round(parseFloat(String(dollars ?? '0')) * 100);
+    return Math.round(parseFloat(String(dollars ?? '0')) * 1_000_000) / 10_000;
   }
 
   /**
@@ -133,7 +138,7 @@ export class SpendService {
         return this.toCents(row?.total);
       }),
     );
-    return totals.reduce((a, b) => a + b, 0);
+    return Math.round(totals.reduce((a, b) => a + b, 0) * 10_000) / 10_000;
   }
 
   /**

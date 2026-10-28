@@ -1,5 +1,11 @@
 import { AgentRuntimeProcessor } from '../agent-runtime.processor';
-import { AgentRunStatus } from '../../../entities/agent-run.entity';
+import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
+import { fakeRepository } from '../../../test/fake-repository';
+import { expectRunProjectionsHold, withRunEvents } from '../../../test/fake-run-events';
+import { projectRunEvents, storedRunState } from '../run-events';
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('AgentRuntimeProcessor.handleNextStep — step enqueue idempotency', () => {
   const makeProcessor = (processResult: 'continue' | 'done' | 'waiting') => {
@@ -59,19 +65,17 @@ describe('AgentRuntimeProcessor.handleNextStep — step enqueue idempotency', ()
  */
 describe('AgentRuntimeProcessor.onFailed — an exhausted retry is durable', () => {
   const make = (run: any) => {
-    const runRepo = {
-      findOne: jest.fn().mockResolvedValue(run),
-      update: jest.fn().mockResolvedValue({ affected: 1 }),
-    } as any;
+    const runRepo = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: run ? [{ headSeq: 0, currentStep: 0, ...run }] : [] });
+    const events = withRunEvents(runRepo);
     const processor = new AgentRuntimeProcessor(
       { processStep: jest.fn() } as any,
       { add: jest.fn() } as any,
       {} as any,
-      runRepo,
+      runRepo as any,
     );
     jest.spyOn((processor as any).logger, 'error').mockImplementation(() => undefined);
     jest.spyOn((processor as any).logger, 'warn').mockImplementation(() => undefined);
-    return { processor, runRepo };
+    return { processor, runRepo, events };
   };
 
   const job = (over: any = {}) =>
@@ -84,8 +88,8 @@ describe('AgentRuntimeProcessor.onFailed — an exhausted retry is durable', () 
       ...over,
     }) as any;
 
-  it('writes the real failure reason onto the run on the final attempt', async () => {
-    const { processor, runRepo } = make({
+  it('writes the real failure reason onto the run on the final attempt, and on its log', async () => {
+    const { processor, runRepo, events } = make({
       id: 'r1',
       status: AgentRunStatus.RUNNING,
       steps: [{ type: 'llm_call', timestamp: '2026-09-01T00:00:00.000Z' }],
@@ -93,30 +97,35 @@ describe('AgentRuntimeProcessor.onFailed — an exhausted retry is durable', () 
 
     await processor.onFailed(job(), new Error('provider returned 503 three times'));
 
-    expect(runRepo.update).toHaveBeenCalledTimes(1);
-    const [where, patch] = runRepo.update.mock.calls[0];
-    expect(where).toEqual({ id: 'r1', status: AgentRunStatus.RUNNING });
-    expect(patch.status).toBe(AgentRunStatus.FAILED);
+    const row = runRepo.row('r1')!;
+    expect(row.status).toBe(AgentRunStatus.FAILED);
     // The reason names the cause, not a generic sweep message.
-    expect(patch.error).toContain('provider returned 503 three times');
-    expect(patch.error).toContain('3 attempt(s)');
+    expect(row.error).toContain('provider returned 503 three times');
+    expect(row.error).toContain('3 attempt(s)');
     // And the run's own timeline shows where it stopped.
-    expect(patch.steps).toHaveLength(2);
-    expect(patch.steps[1]).toMatchObject({ type: 'error' });
-    expect(patch.steps[1].error).toContain('provider returned 503');
+    expect(row.steps).toHaveLength(2);
+    expect(row.steps[1]).toMatchObject({ type: 'error' });
+    expect((row.steps[1] as any).error).toContain('provider returned 503');
+    // The log has the error step and the failure, and folds into the row.
+    const log = events.rows('r1');
+    expect(log.map((e) => e.type)).toEqual(['run_started', 'step_recorded', 'status_changed', 'run_failed', 'step_committed']);
+    const { headSeq, ...state } = projectRunEvents(log);
+    expect(headSeq).toBe(row.headSeq);
+    expect(state).toEqual(storedRunState(row));
   });
 
   it('leaves the run alone while retries remain', async () => {
-    const { processor, runRepo } = make({ id: 'r1', status: AgentRunStatus.RUNNING, steps: [] });
+    const { processor, runRepo, events } = make({ id: 'r1', status: AgentRunStatus.RUNNING, steps: [] });
 
     await processor.onFailed(job({ attemptsMade: 1 }), new Error('transient'));
 
     expect(runRepo.findOne).not.toHaveBeenCalled();
-    expect(runRepo.update).not.toHaveBeenCalled();
+    expect(runRepo.row('r1')!.status).toBe(AgentRunStatus.RUNNING);
+    expect(events.rows()).toEqual([]);
   });
 
   it('never overwrites a run that already reached a terminal state', async () => {
-    const { processor, runRepo } = make({
+    const { processor, runRepo, events } = make({
       id: 'r1',
       status: AgentRunStatus.CANCELLED,
       steps: [],
@@ -124,7 +133,8 @@ describe('AgentRuntimeProcessor.onFailed — an exhausted retry is durable', () 
 
     await processor.onFailed(job(), new Error('late failure'));
 
-    expect(runRepo.update).not.toHaveBeenCalled();
+    expect(runRepo.row('r1')!.status).toBe(AgentRunStatus.CANCELLED);
+    expect(events.rows()).toEqual([]);
   });
 
   it('reaps a PENDING run too, not only a RUNNING one', async () => {
@@ -134,7 +144,7 @@ describe('AgentRuntimeProcessor.onFailed — an exhausted retry is durable', () 
 
     await processor.onFailed(job(), new Error('redis unavailable'));
 
-    expect(runRepo.update.mock.calls[0][1].status).toBe(AgentRunStatus.FAILED);
+    expect(runRepo.row('r1')!.status).toBe(AgentRunStatus.FAILED);
   });
 
   it('records nothing for a job with no run (a timer tick) and does not throw', async () => {
@@ -185,6 +195,7 @@ describe('AgentRuntimeProcessor and Always on', () => {
       tick: jest.fn().mockResolvedValue(null),
       process: jest.fn().mockResolvedValue('started'),
       onRunFinished: jest.fn().mockResolvedValue(undefined),
+      onRunWaiting: jest.fn().mockResolvedValue(undefined),
     };
     const scheduler = { deliverScheduledRun: jest.fn().mockResolvedValue(undefined) };
     const processor = new AgentRuntimeProcessor(
@@ -226,9 +237,16 @@ describe('AgentRuntimeProcessor and Always on', () => {
     expect(scheduler.deliverScheduledRun).toHaveBeenCalledWith('r1');
   });
 
-  it('a run still going is not', async () => {
+  it('a run still going is not; a waiting one is handed over for its question', async () => {
     const { processor, alwaysOn } = build('waiting');
     await processor.handleNextStep({ data: { runId: 'r1', seq: 3 } } as any);
     expect(alwaysOn.onRunFinished).not.toHaveBeenCalled();
+    expect(alwaysOn.onRunWaiting).toHaveBeenCalledWith('r1');
+  });
+
+  it('a question that cannot be posted does not fail the step', async () => {
+    const { processor, alwaysOn } = build('waiting');
+    alwaysOn.onRunWaiting.mockRejectedValueOnce(new Error('channel down'));
+    await expect(processor.handleNextStep({ data: { runId: 'r1', seq: 3 } } as any)).resolves.toBeUndefined();
   });
 });

@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, OnModuleInit, Optional, forwardRef } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { InjectQueue, Process, Processor } from '@nestjs/bull';
 import { Job, Queue } from 'bull';
 
@@ -71,6 +71,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { AgentWebhookService } from './agent-webhook.service';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { claimDelivery } from './run-event-writer';
 import { runsOnAutonomousRuntime } from './agent-invocation';
 import { ScheduledResult } from './scheduled-result-poster';
 
@@ -872,8 +873,7 @@ export class AgentSchedulerService implements OnModuleInit {
       if (!this.runRepo) return;
       const run = await this.runRepo.findOne({ where: { id: runId } });
       if (!run || run.metadata?.triggerType !== 'scheduled' || !run.isDone()) return;
-      const claim = await this.runRepo.update({ id: run.id, deliveredAt: IsNull() }, { deliveredAt: new Date() });
-      if (!claim.affected) return;
+      if (!(await claimDelivery(this.runRepo, run.id, 'schedule'))) return;
 
       const agent = await this.agentRepo.findOne({ where: { id: run.agentId, organizationId: run.organizationId } });
       if (!agent) return;

@@ -145,4 +145,145 @@ describe('AgentContextCompactor', () => {
     expect(res.compacted).toBe(true);
     expect(res.messages[0].content).toContain('earlier message(s) omitted');
   });
+
+  // The history is the conversation's newest messages (agent-runtime-builders.ts
+  // loads the last 100), so in a long always-on conversation it slides
+  // forward one step at a time. A summary that remembered only how many
+  // leading messages it covered then pointed past the messages that slid
+  // under it: they were in neither the summary nor the tail, and a run lost
+  // its own earlier tool results a few steps in.
+  it('finds where the summary ends after the window slides, and skips nothing', async () => {
+    llm.chat.mockResolvedValue({ message: { content: 'SUMMARY' }, cost: 0, usage: { totalTokens: 1 } });
+    const pair = (n: number) => [
+      { role: 'assistant', content: `a${n} ${LONG}`, toolCalls: [{ id: `c${n}`, name: 't' }] },
+      { role: 'tool', content: `t${n} ${LONG}`, toolCallId: `c${n}` },
+    ]
+    const conversation = [{ role: 'user', content: `TASK ${LONG}` }, ...[1, 2, 3, 4, 5, 6].flatMap(pair)]
+    const window = (from: number, to: number) => messages(conversation.slice(from, to))
+    const config = { enabled: true, maxContextTokens: 3000, keepRecentMessages: 4, providerId: 'p1' }
+    const r = run()
+
+    // Step 1: messages 0..8 are in the window; the prefix is summarized, 4 kept.
+    const first = await compactor.compact(window(0, 9), r, config, 'org-1')
+    const firstTail = first.messages.slice(1).map((m: any) => m.content.split(' ')[0])
+    expect(firstTail).toEqual(['a3', 't3', 'a4', 't4'])
+
+    // Step 2: two new messages arrived and the window dropped its oldest two.
+    const second = await compactor.compact(window(2, 11), r, config, 'org-1')
+    // a3 and t3 were after the summary and are no longer in the tail: they
+    // must have gone into the summary, not vanished.
+    expect(llm.chat).toHaveBeenCalledTimes(2)
+    const folded = llm.chat.mock.calls[1][1].messages[1].content as string
+    expect(folded).toContain(`assistant: a3 `)
+    expect(folded).toContain(`tool: t3 `)
+    expect(second.messages.slice(1).map((m: any) => m.content.split(' ')[0])).toEqual(['a4', 't4', 'a5', 't5'])
+  })
+
+  // Where the summary ends is found again each step from the messages either
+  // side of that edge. Each case below lost or re-folded messages before.
+  describe('finding where the summary ends in a sliding window', () => {
+    const config = { enabled: true, maxContextTokens: 3000, keepRecentMessages: 4, providerId: 'p1' };
+    const label = (m: any) => String(m.content).split(' ')[0];
+    // A plain chat: m0 (user), m1 (assistant), m2 (user), ... ~500 tokens each.
+    const chat = (n: number, rename: Record<number, string> = {}) =>
+      Array.from({ length: n }, (_, i) => ({
+        role: i % 2 ? 'assistant' : 'user',
+        content: `${rename[i] ?? `m${i}`} ${LONG}`,
+      }));
+    // The messages each summarizer call was asked to fold in, by label.
+    const foldedPerCall = (): string[][] =>
+      llm.chat.mock.calls.map((c: any[]) => {
+        const prompt = c[1].messages[1].content as string;
+        return prompt
+          .split('NEW MESSAGES TO FOLD IN:\n')[1]
+          .split('\n')
+          .map((line) => line.slice(line.indexOf(': ') + 2).split(' ')[0]);
+      });
+    const tail = (res: { messages: any[] }) => res.messages.slice(1).map(label);
+
+    beforeEach(() => {
+      llm.chat.mockResolvedValue({ message: { content: 'SUMMARY' }, cost: 0, usage: { totalTokens: 1 } });
+    });
+
+    it('folds every message exactly once as the window slides step after step', async () => {
+      const conversation = chat(31);
+      const r = run();
+      for (let from = 0; from + 9 <= conversation.length; from += 2) {
+        const res = await compactor.compact(messages(conversation.slice(from, from + 9)), r, config, 'org-1');
+        const folded = foldedPerCall().flat();
+        // Nothing folded twice, and every message up to the newest is in the
+        // summary or the tail: none fell between the two.
+        expect(new Set(folded).size).toBe(folded.length);
+        expect([...folded, ...tail(res)]).toEqual(conversation.slice(0, from + 9).map(label));
+        expect(r.workingMemory.contextSummary.foldedTotal).toBe(folded.length);
+      }
+      expect(llm.chat.mock.calls.length).toBeGreaterThan(5);
+    });
+
+    it('ends the summary after the last message it covers when the next one was edited', async () => {
+      const r = run();
+      await compactor.compact(messages(chat(9)), r, config, 'org-1');
+      expect(foldedPerCall()).toEqual([['m0', 'm1', 'm2', 'm3', 'm4']]);
+
+      // m5, the first message after the summary, now reads differently.
+      const edited = chat(11, { 5: 'm5edited' }).slice(2);
+      const res = await compactor.compact(messages(edited), r, config, 'org-1');
+      expect(foldedPerCall()[1]).toEqual(['m5edited', 'm6']);
+      expect(tail(res)).toEqual(['m7', 'm8', 'm9', 'm10']);
+    });
+
+    it('ends the summary after the last message it covers when the next one was removed', async () => {
+      const r = run();
+      await compactor.compact(messages(chat(9)), r, config, 'org-1');
+
+      const withoutM5 = chat(12).filter((_, i) => i !== 5).slice(2);
+      const res = await compactor.compact(messages(withoutM5), r, config, 'org-1');
+      expect(foldedPerCall()[1]).toEqual(['m6', 'm7']);
+      expect(tail(res)).toEqual(['m8', 'm9', 'm10', 'm11']);
+    });
+
+    it('treats every message as new once the window has moved past the whole summary', async () => {
+      const r = run();
+      await compactor.compact(messages(chat(9)), r, config, 'org-1');
+
+      const res = await compactor.compact(messages(chat(19).slice(10)), r, config, 'org-1');
+      expect(foldedPerCall()[1]).toEqual(['m10', 'm11', 'm12', 'm13', 'm14']);
+      expect(tail(res)).toEqual(['m15', 'm16', 'm17', 'm18']);
+      // The earlier summary is kept: the summarizer folds the new messages into
+      // it and returns one merged summary, which replaces it (not appended).
+      expect(llm.chat.mock.calls[1][1].messages[1].content).toContain('PRIOR SUMMARY:\nSUMMARY');
+      expect(r.workingMemory.contextSummary.text).toBe('SUMMARY');
+    });
+
+    it('is not misled by the same text earlier in the window', async () => {
+      const r = run();
+      // m3 and m5 read the same ("same"): m5 is the first message after the summary.
+      const conversation = chat(11, { 3: 'same', 5: 'same' });
+      await compactor.compact(messages(conversation.slice(0, 9)), r, config, 'org-1');
+      expect(foldedPerCall()[0]).toEqual(['m0', 'm1', 'm2', 'same', 'm4']);
+
+      const res = await compactor.compact(messages(conversation.slice(2)), r, config, 'org-1');
+      expect(foldedPerCall()[1]).toEqual(['same', 'm6']);
+      expect(res.folded).toBe(2);
+      expect(tail(res)).toEqual(['m7', 'm8', 'm9', 'm10']);
+    });
+
+    it('reports what it folded, which coveredCount cannot once the window moves', async () => {
+      const r = run();
+      const conversation = chat(11);
+      const first = await compactor.compact(messages(conversation.slice(0, 9)), r, config, 'org-1');
+      expect(first.folded).toBe(5);
+      expect(r.workingMemory.contextSummary).toMatchObject({ coveredCount: 5, foldedTotal: 5 });
+
+      const second = await compactor.compact(messages(conversation.slice(2)), r, config, 'org-1');
+      // Two more messages were folded, yet the summary ends at index 5 of
+      // this window just as it did in the last one.
+      expect(second.folded).toBe(2);
+      expect(r.workingMemory.contextSummary).toMatchObject({ coveredCount: 5, foldedTotal: 7 });
+
+      // Reusing the cached summary folds nothing.
+      const third = await compactor.compact(messages(conversation.slice(2, 8)), r, config, 'org-1');
+      expect(third).toMatchObject({ compacted: true, folded: 0 });
+    });
+  });
 });

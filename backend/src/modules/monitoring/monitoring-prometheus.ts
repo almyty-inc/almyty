@@ -41,6 +41,14 @@ export function formatPrometheusMetrics(metrics: SystemMetrics | null): string {
     `# HELP almyty_a2a_agents Active A2A agents`,
     `# TYPE almyty_a2a_agents gauge`,
     `almyty_a2a_agents ${metrics.protocols.a2a.activeAgents}`,
+    ...(metrics.runs
+      ? [
+          ``,
+          `# HELP almyty_run_projection_mismatches Run writes whose event log did not fold into the row, over the stats window`,
+          `# TYPE almyty_run_projection_mismatches gauge`,
+          `almyty_run_projection_mismatches ${metrics.runs.projectionMismatches}`,
+        ]
+      : []),
   ];
 
   return lines.join('\n') + '\n';

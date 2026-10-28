@@ -3,7 +3,7 @@ import { ApprovalsService } from './approvals.service';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
 import { FakePolicyApprovalsRepo } from './__tests__/fake-policy-approvals';
 import { fakeApprovalsRepo } from './__tests__/approvals-repo.fixture';
-import { fakeRepository } from '../../test/fake-repository';
+import { expectRunProjectionsHold, runsWithEvents } from '../../test/fake-run-events';
 
 class FakePolicy {
   decision: { allowed: boolean; reason: string } = { allowed: true, reason: 'ok' };
@@ -15,7 +15,7 @@ class FakePolicy {
 
 function makeService() {
   const approvals = fakeApprovalsRepo();
-  const runs = fakeRepository<any>([
+  const runs = runsWithEvents([
     { id: 'r1', agentId: 'a1', status: AgentRunStatus.RUNNING },
     { id: 'r-sibling', agentId: 'a1', status: AgentRunStatus.RUNNING },
   ]);
@@ -29,6 +29,9 @@ function makeService() {
   );
   return { svc, approvals, runs, policy, policyApprovals };
 }
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('ApprovalsService', () => {
   describe('create', () => {
@@ -51,6 +54,12 @@ describe('ApprovalsService', () => {
       expect(runs.row('r1')!.status).toBe(AgentRunStatus.WAITING_APPROVAL);
       expect(runs.row('r-sibling')!.status).toBe(AgentRunStatus.RUNNING);
       expect(events.length).toBe(1);
+      // The pause is on the run's log, with the request (request_approval's
+      // kind: the request is the run itself), and not on the sibling's.
+      expect(runs.events.rows('r1').map((e) => e.type)).toEqual(['run_started', 'approval_requested', 'status_changed', 'step_committed']);
+      expect(runs.events.rows('r1')[1].payload).toEqual({ approvalId: row.id, kind: 'run', toolCallId: 'tc-1' });
+      expect(runs.row('r1')!.headSeq).toBe(4);
+      expect(runs.events.rows('r-sibling')).toEqual([]);
     });
 
     it('holds a tool call no run can wait on: no run is paused, and it is scoped to the gateway it came through', async () => {
@@ -250,6 +259,20 @@ describe('ApprovalsService', () => {
       const byAgent = Object.fromEntries(list.map((r) => [r.agentId, r.agentName]));
       expect(byAgent).toEqual({ named: 'Invoice helper', gone: null, elsewhere: null });
     });
+
+    it('carries the held tool\'s parameter schema, from the row or the run\'s _gate, and only from this organization', async () => {
+      const { svc, approvals } = makeService();
+      const schema = { type: 'object', properties: { summary: { type: 'string', title: 'Event title' } } };
+      approvals.tools.seed({ id: 'tool-cal', organizationId: 'o', parameters: schema } as any);
+      approvals.tools.seed({ id: 'tool-other', organizationId: 'other', parameters: { title: 'not yours' } } as any);
+      await svc.create({ organizationId: 'o', teamId: null, runId: null, agentId: null, toolId: 'tool-cal', fingerprint: 'f', reason: 'held' });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r1', agentId: 'a', reason: 'run', payload: { tool: 'x', parameters: {}, _gate: { toolId: 'tool-cal' } } });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r2', agentId: 'a', reason: 'foreign', payload: { _gate: { toolId: 'tool-other' } } });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r3', agentId: 'a', reason: 'plain' });
+      const list = await svc.listPending({ organizationId: 'o', caller: { id: 'u' } });
+      const byReason = Object.fromEntries(list.map((r) => [r.reason, r.parameterSchema]));
+      expect(byReason).toEqual({ held: schema, run: schema, foreign: null, plain: null });
+    });
   });
 });
 
@@ -262,16 +285,7 @@ describe('ApprovalsService', () => {
 describe('ApprovalsService notifications', () => {
   function makeNotifyingService(runUserId: string | null = 'initiator-1') {
     const approvals = fakeApprovalsRepo();
-    const runs: any = {
-      updates: [] as any[],
-      async update(criteria: any, patch: any) {
-        this.updates.push({ criteria, patch });
-        return { affected: 1 };
-      },
-      async findOne() {
-        return runUserId ? { id: 'r1', userId: runUserId } : null;
-      },
-    };
+    const runs = runsWithEvents(runUserId ? [{ id: 'r1', userId: runUserId, status: AgentRunStatus.RUNNING }] : []);
     const policy = new FakePolicy();
     const notifications = { emit: jest.fn().mockResolvedValue(undefined) };
     const svc = new ApprovalsService(

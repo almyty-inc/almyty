@@ -8,7 +8,7 @@ import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/store/auth'
 
 vi.mock('@/lib/api', () => ({
-  authApi: { resendVerificationByEmail: vi.fn() },
+  authApi: { resendVerificationByEmail: vi.fn(), discoverSso: vi.fn(async () => ({ sso: false })) },
 }))
 
 const loginMock = vi.fn()
@@ -95,5 +95,33 @@ describe('LoginPage', () => {
 
     await waitFor(() => expect(screen.getByText(/invalid credentials/i)).toBeInTheDocument())
     expect(screen.queryByRole('heading', { name: /please verify your email/i })).not.toBeInTheDocument()
+  })
+
+  // The sign-in page had no way into single sign-on: a person had to be
+  // handed the /sso/<org>/<protocol>/login URL.
+  describe('single sign-on', () => {
+    it('offers "Continue with single sign-on" for an address whose organization has it', async () => {
+      ;(authApi.discoverSso as any).mockResolvedValue({ sso: true, protocol: 'oidc', loginUrl: 'https://api.example.com/sso/org-1/oidc/login' })
+      const user = userEvent.setup()
+      render(<MemoryRouter><LoginPage /></MemoryRouter>)
+
+      await user.type(screen.getByLabelText(/email/i), 'dana@acme.example')
+
+      const sso = await screen.findByTestId('sso-sign-in', {}, { timeout: 2000 })
+      expect(authApi.discoverSso).toHaveBeenLastCalledWith('dana@acme.example')
+      expect(sso).toHaveTextContent('Continue with single sign-on')
+      // The password form stays: SSO is offered, not forced.
+      expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
+    })
+
+    it('shows no SSO button for an address without it', async () => {
+      ;(authApi.discoverSso as any).mockResolvedValue({ sso: false })
+      const user = userEvent.setup()
+      render(<MemoryRouter><LoginPage /></MemoryRouter>)
+
+      await user.type(screen.getByLabelText(/email/i), 'someone@gmail.com')
+      await waitFor(() => expect(authApi.discoverSso).toHaveBeenCalledWith('someone@gmail.com'), { timeout: 2000 })
+      expect(screen.queryByTestId('sso-sign-in')).not.toBeInTheDocument()
+    })
   })
 })

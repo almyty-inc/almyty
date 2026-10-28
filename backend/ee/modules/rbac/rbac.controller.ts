@@ -32,6 +32,7 @@ import { CustomRoleService } from './custom-role.service';
 import { AbacCondition, AbacEffect } from '../../../src/entities/abac-policy.entity';
 import { OrganizationRole } from '../../../src/entities/user-organization.entity';
 import { findEffectiveMembership } from '../../../src/common/authorization/membership';
+import { RBAC_PERMISSION_CATALOG } from '../../../src/common/authorization/rbac-actions';
 
 class CreateRoleDto {
   @IsString()
@@ -127,6 +128,12 @@ export class RbacController {
   }
 
   // ── Custom roles ──
+
+  @Get('permissions')
+  @ApiOperation({ summary: 'Permissions a custom role can grant, and what each unlocks' })
+  listPermissions() {
+    return { success: true, data: RBAC_PERMISSION_CATALOG };
+  }
 
   @Get('roles')
   @ApiOperation({ summary: 'List custom roles' })

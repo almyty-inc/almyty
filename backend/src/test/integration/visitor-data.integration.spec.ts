@@ -530,6 +530,8 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
       type,
       extractTenantId: () => null,
       verifyWebhook: async () => true,
+      actionOf: () => null,
+      repliesTo: () => true,
       carriesMessage: () => true,
       deliveryId: (body: any) => String(body.update_id),
       normalizeInbound: (body: any) => ({
@@ -834,7 +836,9 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
       expect(data.unanswered.map((u) => u.text)).toEqual(['is anyone there?', 'is anyone there?']);
       expect(data.unanswered[1].attachments).toEqual(['receipt.pdf']);
       expect(JSON.stringify(data.unanswered)).not.toMatch(/workspace-T0|bot-B0|chat-\+1415/);
-      expect(JSON.stringify(data)).not.toContain('0188');
+      // The other sender's number, in every form it is stored in; a bare '0188'
+      // also matches random uuids in the export.
+      expect(JSON.stringify(data)).not.toMatch(/5550188|555-0188/);
 
       const removed = await requests.erase(orgA.id, a.agent.id, owner(), { id: '+1 (415) 555-0199' });
       expect(removed.unanswered).toBe(2);

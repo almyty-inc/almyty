@@ -37,12 +37,13 @@ export function pluralize(n: number, word: string, plural?: string): string {
 
 /**
  * The count and its noun: pluralized(1, 'member') -> '1 member',
- * pluralized(3, 'member') -> '3 members'. Every "{n} things" in the UI
- * goes through here; plural-copy.test.ts holds the source to that.
+ * pluralized(3, 'member') -> '3 members', pluralized(1872, 'operation') ->
+ * '1,872 operations'. Every "{n} things" in the UI goes through here;
+ * plural-copy.test.ts holds the source to that.
  */
 export function pluralized(n: number | null | undefined, word: string, plural?: string): string {
   const count = n ?? 0
-  return count + ' ' + pluralize(count, word, plural);
+  return count.toLocaleString('en-US') + ' ' + pluralize(count, word, plural);
 }
 
 export function formatDate(date: Date | string): string {
@@ -85,6 +86,19 @@ export function getInitials(name: string): string {
     .join('')
     .toUpperCase()
     .slice(0, 2)
+}
+
+/**
+ * A person's initials for an avatar: from their name, else the part of
+ * their email before the @ (dana.lind@ -> DL), never a placeholder letter.
+ */
+export function userInitials(user: { name?: string | null; email?: string | null } | null | undefined): string {
+  const name = user?.name?.trim()
+  if (name) return getInitials(name.replace(/\s+/g, ' '))
+  const local = (user?.email ?? '').split('@')[0]
+  const parts = local.split(/[._\-+]+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  return getInitials(parts.join(' '))
 }
 
 /**

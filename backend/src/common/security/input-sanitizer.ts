@@ -9,6 +9,7 @@
  * - Template injection
  */
 
+import { BACKTICK_COMMAND, PATH_TRAVERSAL } from './injection-shapes';
 export interface SanitizationResult {
   safe: boolean;
   warnings: string[];
@@ -71,14 +72,14 @@ const matches = (pattern: RegExp) => (value: string) => pattern.test(value);
 const INJECTION_PATTERNS: Array<{ name: string; test: (value: string) => boolean; severity: 'block' | 'warn'; command?: true }> = [
   // Command injection
   { name: 'shell-command', test: hasShellCommand, severity: 'block', command: true },
-  { name: 'backtick-exec', test: matches(/`[^`]+`/), severity: 'warn', command: true },
+  { name: 'backtick-exec', test: matches(BACKTICK_COMMAND), severity: 'warn', command: true },
 
   // XML entity injection (XXE)
   { name: 'xxe-entity', test: matches(/<!ENTITY\s/i), severity: 'block' },
   { name: 'xxe-system', test: hasDoctypeSystem, severity: 'block' },
 
   // Path traversal
-  { name: 'path-traversal', test: matches(/\.\.[/\\]/), severity: 'warn' },
+  { name: 'path-traversal', test: matches(PATH_TRAVERSAL), severity: 'warn' },
 
   // SSRF via parameter values
   { name: 'ssrf-localhost', test: matches(/(?:^|\s)(?:localhost|127\.0\.0\.1|0\.0\.0\.0|::1)(?::\d+)?(?:\s|$|\/)/i), severity: 'warn' },

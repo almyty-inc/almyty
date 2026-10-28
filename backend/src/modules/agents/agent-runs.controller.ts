@@ -1,6 +1,7 @@
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentExecution } from '../../entities/agent-execution.entity';
+import { AgentRunEvent } from '../../entities/agent-run-event.entity';
 import { traceFor, traceForRun } from './strategies/run-trace';
 import {
   Controller,
@@ -28,6 +29,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { CodeModeService } from '../code-mode/code-mode.service';
 
@@ -60,6 +62,7 @@ export class AgentRunsController {
    */
   @Get(':id/executions/:executionId/trace')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Where a run\'s requests went, hop by hop' })
   async trace(
     @Param('id', ParseUUIDPipe) id: string,
@@ -99,6 +102,7 @@ export class AgentRunsController {
 
   @Post(':id/runs')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @Throttle({ default: { ttl: 60000, limit: 20 } })
   @ApiOperation({ summary: 'Start a new autonomous agent run' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
@@ -142,6 +146,7 @@ export class AgentRunsController {
 
   @Get(':id/runs')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'List runs for an agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   async listRuns(
@@ -181,6 +186,7 @@ export class AgentRunsController {
 
   @Get(':id/runs/:runId')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get run status and steps' })
   async getRun(
     @Param('id', ParseUUIDPipe) id: string,
@@ -217,6 +223,7 @@ export class AgentRunsController {
    */
   @Get(':id/runs/:runId/code-executions')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: "A run's run_code scripts" })
   async listCodeExecutions(
     @Param('id', ParseUUIDPipe) id: string,
@@ -232,6 +239,7 @@ export class AgentRunsController {
   /** One script of a run, with its call tree: the tool executions it made, in order. */
   @Get(':id/runs/:runId/code-executions/:codeExecutionId')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'A run_code script and the calls it made' })
   async getCodeExecution(
     @Param('id', ParseUUIDPipe) id: string,
@@ -246,19 +254,38 @@ export class AgentRunsController {
     return { success: true, data: { ...found.execution, calls: found.calls } };
   }
 
+  /**
+   * Live progress of a run, as server-sent events.
+   *
+   * A viewer that says where it left off gets the run's history from its
+   * event log first: with `?after=<seq>` (0 for the whole history), or the
+   * `Last-Event-ID` header its EventSource sends when it reconnects, which
+   * wins over the query. Every logged event is a `run.log` event whose SSE
+   * id is its seq, sent in order, each once, then the live stream follows
+   * with nothing dropped or repeated in between. Without either, the
+   * stream is what it always was: the live runtime events only.
+   */
   @Get(':id/runs/:runId/stream')
   @Roles('viewer', 'member', 'admin', 'owner')
-  @ApiOperation({ summary: 'SSE stream of run progress' })
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
+  @ApiOperation({ summary: 'SSE stream of run progress, resumable from a seq' })
   async streamRun(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('runId', ParseUUIDPipe) runId: string,
     @Request() req: any,
     @Res() res: Response,
+    @Query('after') after?: string,
   ) {
     try {
       const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: 'No organization found' });
+        return;
+      }
+
+      const resumeAfter = resumeSeqOf(req.headers?.['last-event-id'], after);
+      if (resumeAfter === 'invalid') {
+        res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: 'after must be a whole number of 0 or more' });
         return;
       }
 
@@ -269,26 +296,48 @@ export class AgentRunsController {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
+      if (resumeAfter !== null) res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
 
       // Stream events via Redis Streams (cross-pod)
       const abortController = new AbortController();
       req.on('close', () => abortController.abort());
 
+      const writeEvent = (event: any) => {
+        res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      };
+
       try {
-        await this.runtimeService.subscribeRunEvents(
-          runId,
-          (event) => {
-            res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-          },
-          abortController.signal,
-        );
+        if (resumeAfter === null) {
+          await this.runtimeService.subscribeRunEvents(runId, writeEvent, abortController.signal);
+        } else {
+          // Proxies drop idle connections; a comment frame keeps it open.
+          const heartbeat = setInterval(() => {
+            if (!res.writableEnded) res.write(': keep-alive\n\n');
+          }, 25_000);
+          heartbeat.unref?.();
+          try {
+            await this.runtimeService.subscribeRunLog(
+              runId,
+              resumeAfter,
+              (event) => {
+                res.write(`id: ${event.seq}\nevent: run.log\ndata: ${JSON.stringify(runLogEventOf(event))}\n\n`);
+              },
+              writeEvent,
+              abortController.signal,
+            );
+          } finally {
+            clearInterval(heartbeat);
+          }
+        }
       } catch {
         // Stream ended or aborted
       }
 
-      res.write(`event: done\ndata: {}\n\n`);
-      if (!res.writableEnded) res.end();
+      if (!res.writableEnded) {
+        res.write(`event: done\ndata: {}\n\n`);
+        res.end();
+      }
     } catch (error) {
       if (!res.headersSent) {
         res.status(error.status || HttpStatus.BAD_REQUEST).json({ success: false, message: error.message });
@@ -298,6 +347,7 @@ export class AgentRunsController {
 
   @Post(':id/runs/:runId/input')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @ApiOperation({ summary: 'Send input to a waiting run (human-in-the-loop)' })
   async sendRunInput(
     @Param('id', ParseUUIDPipe) id: string,
@@ -326,6 +376,7 @@ export class AgentRunsController {
 
   @Post(':id/runs/:runId/cancel')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @ApiOperation({ summary: 'Cancel a running run' })
   async cancelRun(
     @Param('id', ParseUUIDPipe) id: string,
@@ -350,4 +401,29 @@ export class AgentRunsController {
       );
     }
   }
+}
+
+/**
+ * Where a run view resumes: the seq in `Last-Event-ID` (what an
+ * EventSource sends on reconnect), else `?after=`. Null when neither is
+ * given (the plain live stream). A malformed header is ignored, since a
+ * browser may send one left over from another stream; a malformed
+ * `after` is the caller's mistake.
+ */
+export function resumeSeqOf(lastEventId: unknown, after: unknown): number | null | 'invalid' {
+  const seq = (value: unknown): number | null => {
+    const text = Array.isArray(value) ? value[0] : value;
+    if (typeof text !== 'string' || !/^\d{1,10}$/.test(text.trim())) return null;
+    const n = Number(text.trim());
+    return Number.isSafeInteger(n) ? n : null;
+  };
+  const fromHeader = seq(lastEventId);
+  if (fromHeader !== null) return fromHeader;
+  if (after === undefined || after === null || after === '') return null;
+  return seq(after) ?? 'invalid';
+}
+
+/** A logged event as a run view receives it. */
+export function runLogEventOf(event: AgentRunEvent) {
+  return { seq: event.seq, type: event.type, step: event.step ?? null, payload: event.payload ?? {}, createdAt: event.createdAt };
 }

@@ -20,6 +20,7 @@ import { IrcAdapter } from '../adapters/irc.adapter';
 import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
 import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { installFetchMock } from '../adapters/__tests__/test-helpers';
+import { AgentRun } from '../../../../entities/agent-run.entity';
 import {
   BY_ID,
   ClauseModel,
@@ -28,6 +29,7 @@ import {
   matchingRows,
   tableUpdates,
 } from '../../__tests__/recording-query-builder';
+import { expectRunProjectionsHold } from '../../../../test/fake-run-events';
 
 /**
  * Two things the inbound channel pipeline has to get right when more
@@ -49,9 +51,13 @@ import {
  */
 const SIGNING_SECRET = 'inbound-concurrency-secret';
 
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 describe('inbound channel pipeline under concurrency', () => {
   let fetchMock: ReturnType<typeof installFetchMock>;
   let runRepository: any;
+  /** Events the run writes appended (the disclosure flag). */
+  let runEventInserts: any[];
   let eventRepository: any;
   let gatewayRows: Map<string, any>;
   let gatewayRepository: any;
@@ -146,6 +152,16 @@ describe('inbound channel pipeline under concurrency', () => {
       ),
       save: jest.fn(async (r: any) => r),
       findOne: jest.fn(async () => run),
+      // The disclosure flag is written through the run event writer.
+      update: jest.fn(async () => ({ affected: 1 })),
+    };
+    runEventInserts = [];
+    runRepository.manager = {
+      transaction: async (work: any) =>
+        work({
+          getRepository: (entity: any) =>
+            entity === AgentRun ? runRepository : { insert: jest.fn(async (rows: any[]) => runEventInserts.push(...rows)) },
+        }),
     };
 
     // channel_events with the real unique (gatewayId, deliveryId)

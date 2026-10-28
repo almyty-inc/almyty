@@ -54,7 +54,7 @@ describe('AdvancedRbacHookImpl', () => {
 
       expect(decision).toEqual({ effect: 'deny', reason: 'denied by policy "lockout"' });
       expect(customRoles.evaluateAccess).toHaveBeenCalledWith('org-1', 'delete', {
-        subject: { id: 'u1' },
+        subject: { id: 'u1', roles: [] },
       });
     });
 

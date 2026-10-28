@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '../../test/setup'
 import { ApprovalsPage } from '../approvals'
 import { approvalsApi } from '../../lib/api'
+import { formatDateTime } from '../../lib/utils'
 
 // Regression for #119: approvalsApi.list() goes through apiGet which
 // already extracts the {success, data} envelope, so the resolved
@@ -62,6 +63,70 @@ describe('ApprovalsPage', () => {
     expect(within(preview).getByText('Route planning at Bluefin Couriers')).toBeInTheDocument()
     expect(within(preview).getByText('Hi Jonas, would a short call next week help?')).toBeInTheDocument()
   })
+
+  it('shows a calendar event call as readable fields with its parameter titles, never the internal _gate', async () => {
+    ;(approvalsApi.list as any).mockResolvedValue([
+      {
+        id: 'a-cal', organizationId: 'org-1', teamId: null, visibility: 'org', runId: 'run-cal', agentId: 'agent-cal',
+        toolCallId: null, reason: 'Ask before "calendar.events.insert" (it is on the ask-first list).',
+        payload: {
+          tool: 'Creates an event',
+          parameters: { calendarId: 'primary', requestBody: { summary: 'Dentist', start: { dateTime: '2026-10-23T09:00:00Z' }, attendees: [{ email: 'ana@example.com' }] } },
+          _gate: { kind: 'tool_call', paramsHash: 'deadbeefhash', rule: 'Ask before calendar.events.insert' },
+        },
+        parameterSchema: { type: 'object', properties: { calendarId: { type: 'string', title: 'Calendar' } } },
+        status: 'pending', decidedBy: null, decidedAt: null, decisionReason: null, expiresAt: null, createdAt: new Date().toISOString(),
+      },
+    ])
+
+    render(<ApprovalsPage />)
+
+    const preview = await screen.findByTestId('approval-action-preview')
+    expect(within(preview).getByText('Calendar')).toBeInTheDocument()
+    expect(within(preview).getByText('primary')).toBeInTheDocument()
+    expect(within(preview).getByText('Request body › Summary')).toBeInTheDocument()
+    expect(within(preview).getByText('Dentist')).toBeInTheDocument()
+    // The time in words, under the field's own name rather than "Start › Date time".
+    expect(within(preview).getByText('Request body › Start')).toBeInTheDocument()
+    expect(within(preview).getByText(formatDateTime('2026-10-23T09:00:00Z'))).toBeInTheDocument()
+    expect(preview.textContent).not.toContain('2026-10-23T09:00')
+    expect(within(preview).getByText('ana@example.com')).toBeInTheDocument()
+    // The raw view stays behind the expander, without the server's bookkeeping.
+    expect(screen.getByText('Show details')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('_gate')
+    expect(document.body.textContent).not.toContain('deadbeefhash')
+  })
+  it('says which step of a multi-step policy a request is on, without the policy bookkeeping', async () => {
+    ;(approvalsApi.list as any).mockResolvedValue([
+      {
+        id: 'a-steps', organizationId: 'org-1', teamId: null, visibility: 'org', runId: null, agentId: null,
+        toolCallId: null, reason: 'Refund over 1000',
+        payload: {
+          parameters: { amount: 2500 },
+          _policy: {
+            policyId: 'pol-secret-id', policyName: 'Big refunds', approvals: [{ approverId: 'u-fin', roles: ['finance'] }],
+            progress: {
+              currentStep: 1, satisfied: false,
+              steps: [
+                { index: 0, name: 'Finance review', approverRole: 'finance', required: 1, satisfiedBy: 1, satisfied: true },
+                { index: 1, name: 'Admin sign-off', approverRole: 'admin', required: 1, satisfiedBy: 0, satisfied: false },
+              ],
+            },
+          },
+        },
+        status: 'pending', decidedBy: null, decidedAt: null, decisionReason: null, expiresAt: null, createdAt: new Date().toISOString(),
+      },
+    ])
+
+    render(<ApprovalsPage />)
+
+    expect(await screen.findByTestId('approval-policy-step')).toHaveTextContent(
+      'Step 2 of 2 (Admin sign-off): waiting for an admin',
+    )
+    expect(document.body.textContent).not.toContain('pol-secret-id')
+    expect(document.body.textContent).not.toContain('_policy')
+  })
+
 
   it('renders a pending approval from a flat array (post-extractData shape)', async () => {
     ;(approvalsApi.list as any).mockResolvedValue([

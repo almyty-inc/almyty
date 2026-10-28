@@ -13,9 +13,12 @@ import {
   finishRun,
   world,
 } from './always-on.harness';
+import { expectRunProjectionsHold } from '../../../../test/fake-run-events';
 
 const queued = (w: ReturnType<typeof world>) => w.wakes.rows().filter((r) => r.status === 'queued');
 
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 describe('Always on: wakes', () => {
   it('keeps one wake per dedupe key and asks the queue to look at the agent', async () => {
     const w = world();
@@ -287,6 +290,8 @@ describe('Always on: reporting', () => {
     await w.service.onRunFinished('run-1');
     await w.service.onRunFinished('run-1');
     expect(w.posted).toHaveLength(1);
+    // The claim is on the run's log, once.
+    expect(w.runEvents.rows('run-1').filter((e) => e.type === 'delivery_claimed').map((e) => e.payload)).toEqual([{ via: 'always_on' }]);
   });
 
   it('looks at the inbox again when the run ends', async () => {
@@ -307,10 +312,15 @@ describe('Always on: reporting', () => {
     await w.service.process(AGENT, ORG);
     w.approvals.emit('approval.requested', { id: 'ap-1', runId: 'run-1', reason: 'Ask before “Issue refund” (it is on the ask-first list).', organizationId: ORG });
     await new Promise((r) => setTimeout(r, 10));
-    expect(w.posted).toHaveLength(1);
+    // The owner's own channel, and where reports go.
+    expect(w.posted.map((p) => p.delivery.to)).toEqual(['U-OWNER', 'C-REPORTS']);
     expect(w.posted[0].text).toContain('waiting for your OK');
     // One full stop, not the reason's and the notice's both.
-    expect(w.posted[0].text).toContain('(it is on the ask-first list). Approve or reject it in Approvals.');
+    expect(w.posted[0].text).toContain('(it is on the ask-first list).\n');
+    expect(w.posted[0].text).not.toContain('list)..');
+    // The reports channel others read gets one line and the link, no buttons.
+    expect(w.posted[1].text).toBe('Support agent is waiting for its owner\'s OK on something it wants to do. Approvals: https://app.almyty.com/approvals');
+    expect(w.posted[1].actions).toBeUndefined();
     // The notice is recorded on the run the way a post is, and the run keeps what it carries.
     expect(w.runs.row('run-1')!.metadata).toMatchObject({ triggerType: 'always_on', channelDelivery: { status: 'delivered' } });
     w.service.onModuleDestroy();

@@ -1,27 +1,146 @@
-# Put your Google Drive or SharePoint to work
+# Answer sales questions from Google Drive
 
-If your team's knowledge lives in Google Drive or SharePoint, an assistant can use it: find the right document, read it, answer questions from it, and write a summary back into a folder. "What's in the Q3 folder?" or "draft this week's summary from these documents" then happens without anyone opening Drive.
+## What you'll build
 
-almyty has no ready-made Google or Microsoft connector. You connect their APIs the same way you connect any other system, which takes a technical person to set up once.
+An assistant that answers your sales team's questions from the documents in your shared Google Drive: pricing rules, discount limits, security answers, current proposals. An account executive asks "Can I give Kaffeewerk 15% off an annual Business plan with 8 seats?". The assistant searches the drive, reads the pricing document and the Kaffeewerk proposal, answers with the rule that applies, and links both documents. It only reads: it never creates, changes or shares a file.
+
+![The answer: not without approval, the discount rule from the pricing document, and links to both documents](/screenshots/examples/connect-google-sharepoint/00-answer.png)
+
+This guide builds it for Parcelwise, a made-up company that sells shipping software to online shops, with made-up documents. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. If your documents are in SharePoint or OneDrive, see [SharePoint and OneDrive instead](#sharepoint-and-onedrive-instead).
 
 ## What you need
 
-- Access to Google's Drive API or Microsoft Graph (the API behind SharePoint and OneDrive), with an app registered on their side.
-- Someone technical for the one-time setup below.
+- **An almyty account** with an AI model connected (**Models**, **Connect a provider**; see step 1 of [Answer product questions from your help center](/examples/docs-deflection-bot#1-connect-an-ai-model)).
+- **Your documents in a Google shared drive**, here one called "Sales". Open it in Google Drive: the last part of the address, after `/folders/`, is its ID (here `0APwSalesShared`).
+- **About 30 minutes in Google Cloud**, once, to register an app that may read Drive. Ask your IT person if your company manages Google Workspace.
 
-## How to build it
+## 1. Register a Google app for Drive
 
-1. **Connect the documents.** Open **APIs** and click **Connect an API**. Either pick **OpenAPI / Swagger** and give the API description (Microsoft publishes one for Graph), and its operations (list files, read a file, update a file) become tools. Or pick **SDK / npm**, add Google's or Microsoft's official package (`googleapis`, `@microsoft/microsoft-graph-client`), then make a tool for each method you need under **Tools**, **Create tool**, **SDK / npm package**.
-2. **Sign in once.** These services use OAuth (a "Sign in with Google/Microsoft" style approval instead of a password). Save the app's details in [Credentials](/credentials) with **Add credential**. On the Google or Microsoft side, allow only the folders or sites the assistant should see.
-3. **Create the assistant.** Open **Agents**, click **Create agent**, switch to **Autonomous**, and write the job in **Instructions**: "search the shared drive, read the relevant documents, and answer, summarize or draft". Under **Tools and APIs**, pick the Drive or Graph tools. Save.
-4. **Decide how it's used.** People can ask it on Slack (add a **Slack** channel on its **Channels** tab), or it can run on its own: on the agent's **Overview** tab, turn on **Schedule**, for example once a day for a digest of new documents.
-5. **Write back.** With an "update file" or "create file" tool, it can save its summary where the team already looks.
+Google lets an app read Drive only when the app is registered with Google. You register your own; almyty signs in through it. This happens in Google's console, so there are no almyty screenshots for it. [Connect Google](/credentials/connect-google) has every step in detail.
 
-## Ideas
+1. Open **console.cloud.google.com**, create a project (for example `almyty sales documents`).
+2. Under **APIs & Services**, **Library**, turn on the **Google Drive API**.
+3. Set up the **OAuth consent screen**. With Google Workspace, choose **Internal**: only people in your company can use it and Google does not need to review it.
+4. Under **Clients** (or **Credentials**, **Create credentials**, **OAuth client ID**), create a client of type **Web application**. Leave **Authorized redirect URIs** empty for now.
+5. Keep the **Client ID** and **Client secret**.
 
-- Keep it to one shared drive or one SharePoint site.
-- For a handful of short reference answers, you can skip the connection: add them on **Memory** with **Add memory**, as facts or as one **Document**, and set the assistant's memory to **Shared by all agents**. The assistant looks up the ones that relate to each question.
+## 2. Connect Google Drive
+
+In almyty, open **APIs**, click **Connect an API**, pick **OpenAPI / Swagger** and paste Google's own description of the Drive API under **Link to the description**:
+
+```
+https://www.googleapis.com/discovery/v1/apis/drive/v3/rest
+```
+
+![The link to Google Drive's description, pasted](/screenshots/examples/connect-google-sharepoint/01-drive-link.png)
+
+Open **Advanced**, set **Name** to `Google Drive` (so the tool names match the ones below) and click **Connect API**. almyty makes a tool for everything the Drive API can do: 64 of them. Drive signs in with Google, and almyty has already picked that.
+
+![Finish connecting Google Drive: 64 tools, and a Google sign-in needed](/screenshots/examples/connect-google-sharepoint/02-drive-setup.png)
+
+## 3. Sign in with Google, read-only
+
+Under **Sign-in**, click **Create one here**.
+
+1. Copy the redirect address almyty shows (it ends in `/credentials/oauth2/callback`). **In Google Cloud**, add it to your client under **Authorized redirect URIs** and save.
+2. Back in almyty, paste the **Client ID** and **Client secret**.
+3. Under **What it asks for**, untick everything except `https://www.googleapis.com/auth/drive.readonly`. With only this permission, even a mistake cannot change or delete a file.
+4. Click **Sign in**, pick your Google account and allow access.
+
+![The Google sign-in form: redirect address, client ID and secret, and only drive.readonly ticked](/screenshots/examples/connect-google-sharepoint/03-google-sign-in.png)
+
+The page then says **Saved. Tools send it with every call.**
+
+![Google Drive connected and signed in](/screenshots/examples/connect-google-sharepoint/04-signed-in.png)
+
+## 4. Check that it can find your documents
+
+Before building the assistant, try the search tool once. Open **Tools**, search for `drive_files_list` and open **google_drive_drive_files_list**. On **Test tool**, put `fullText contains 'discount'` under **q** and click **Execute Tool**.
+
+![The Drive search tool, tested: the files that mention "discount"](/screenshots/examples/connect-google-sharepoint/05-test-tool.png)
+
+**Success** and a list of files means the sign-in works and the documents are readable. Use one search term per query here: almyty's security check blocks queries that join conditions with `and` after a quoted word, such as `fullText contains 'discount' and trashed = false`, as a possible injection. That is why the instructions below limit the search to the shared drive with its own fields instead.
+
+## 5. Create the assistant
+
+Open **Agents**, click **Create agent**, pick **Autonomous**, name it `Sales documents` and pick a model under **Work mode** (for example **gpt-4o**).
+
+- **Personality & style**: `Direct and exact. Gives the answer first, then the rule it comes from.`
+- **Instructions** (put your shared drive's ID in place of `0APwSalesShared`):
+
+```
+You answer Parcelwise sales questions from the documents in the team's Google Drive: pricing, discounts, security, proposals and onboarding.
+
+For every question:
+1. Search the "Sales" shared drive for the documents that cover it: search the full text (q: fullText contains 'word'), newest first, with corpora "drive", driveId "0APwSalesShared", and includeItemsFromAllDrives and supportsAllDrives set to true.
+2. Read the one or two most relevant documents as plain text.
+3. Answer in a few lines, quoting the rule or number the document gives, and end with "Sources:" and a link to each document you used.
+
+If no document covers the question, say so. Never guess a price, a discount or a security claim. You only read: never create, change or share files.
+```
+
+![The Sales documents assistant with its instructions](/screenshots/examples/connect-google-sharepoint/06-agent.png)
+
+## 6. Give it two Drive tools
+
+Under **Capabilities**, **Tools and APIs**, search for and tick:
+
+| Tool | Drive endpoint | What it is for |
+|---|---|---|
+| `google_drive_drive_files_list` | `GET /drive/v3/files` | Search the shared drive |
+| `google_drive_drive_files_export` | `GET /drive/v3/files/{fileId}/export` | Read a Google Doc as plain text (`mimeType: text/plain`) |
+
+![The two Drive tools picked](/screenshots/examples/connect-google-sharepoint/07-tools.png)
+
+Click **Save**, go back to the agent and click **Activate**.
+
+## 7. Try it
+
+Under **Try it** on the **Overview** tab, type:
+
+```
+Can I give Kaffeewerk 15% off an annual Business plan with 8 seats?
+```
+
+The assistant searched the shared drive for "discount" and for "Kaffeewerk", read the two documents it found, and answered:
+
+> **Not on your own.** 8 seats is below the 10-seat minimum for an extra discount, so it needs approval from Sofia Marques.
+>
+> - The pricing document says account executives may give up to 10% extra on annual Growth or Business plans with 10 or more seats; anything above that needs Sofia Marques.
+> - Annual plans already get 15% off the monthly price, before any extra discount.
+> - The current draft, "Kaffeewerk - proposal draft", proposes 10% for 8 seats.
+>
+> Sources: Kaffeewerk - proposal draft, Pricing and discounts 2026
+
+Each source is a link that opens the Google Doc. The **Runs** tab shows the searches and the documents it read.
+
+## Make it yours
+
+- **Ask it in Slack.** Add a **Slack** channel on the **Channels** tab (steps in [Answer product questions from your help center](/examples/docs-deflection-bot#7-put-it-in-slack)). On the **Overview** tab, under **Access**, let the agent use your Google sign-in, because a Slack message is not you. Everyone who can write to the bot can then read what your sign-in can read, so sign in with an account that sees only the sales drive.
+- **Files other than Google Docs.** Export works only for Google Docs, Sheets and Slides. For uploaded files, also tick `google_drive_drive_files_get` and ask it to fetch the file with `alt` set to `media`; plain text and CSV files read well this way, PDFs and Word files less so.
+
+## SharePoint and OneDrive instead
+
+Microsoft publishes the OpenAPI descriptions of Microsoft Graph, the API behind SharePoint and OneDrive, split by area. The search area connects like Drive in step 2:
+
+- **Link to the description**: `https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Search.yml`
+- **Name**: `Microsoft Search`. almyty makes 63 tools; the one you need is `microsoft_search_search_query` (`POST /search/query`), which searches SharePoint and OneDrive at once.
+
+Sign in with an app you register in **Microsoft Entra** (**App registrations**, **New registration**, a **Web** redirect URI copied from almyty), with the delegated permissions `Files.Read.All` and `Sites.Read.All`. Tick only `microsoft_search_search_query`, and in the instructions ask it to search with `entityTypes` `["driveItem"]` and to answer from each hit's summary, linking its `webUrl`.
+
+Two limits today: each search hit carries a short summary of the matching text, not the whole document; and Microsoft's description of the files area, which has the "read a file" operation, is too large to connect (over 1,000 operations, more than almyty takes from one description). This variant was connected on a test installation but not walked end to end like the Google one above.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **Security check blocked tool "google_drive_drive_files_list": SQL injection in input "q"** | The query joins conditions with `and` after a quoted word. Search for one term per call and limit the drive with `corpora` and `driveId` instead (step 4). |
+| Google says **Error 400: redirect_uri_mismatch** | Add almyty's redirect address to your Google client under **Authorized redirect URIs** (step 3). |
+| **Request had insufficient authentication scopes** | The sign-in lacks `drive.readonly`. Sign in again on the Google Drive API page and tick it. |
+| The search finds nothing in the shared drive | Check the drive ID in the instructions, and that the Google account you signed in with is a member of that shared drive. |
+| In Slack it answers **I don't have access to Google Drive** | On the **Overview** tab, under **Access**, let the agent use your Google sign-in. |
 
 ## Related
 
-- [Connect an API](/tools) · [SDK tools](/tools/sdk-tools) · [Credentials](/credentials) · [Channels](/channels)
+- [Connect Google](/credentials/connect-google) · [Connect an API](/tools) · [Credentials](/credentials) · [Autonomous agents](/agents/autonomous)
+- [Tutorial: a founder's associate](/tutorials/founders-associate), which reads Google Calendar, Gmail and Tasks the same way

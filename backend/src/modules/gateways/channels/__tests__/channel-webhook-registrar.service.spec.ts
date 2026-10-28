@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { ChannelWebhookRegistrar } from '../channel-webhook-registrar.service';
+import { ChannelWebhookRegistrar, PUBLIC_URL_NOT_CONFIGURED } from '../channel-webhook-registrar.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
 import { installFetchMock, parseSentForm } from '../adapters/__tests__/test-helpers';
 
@@ -350,6 +350,39 @@ describe('ChannelWebhookRegistrar', () => {
         .map((call: any[]) => call[1]?.metadata?.webhookRegistration)
         .find(Boolean);
       expect(meta.status).toBe('skipped');
+      // The channel's status says it receives nothing, and why: no public address.
+      expect(meta.code).toBe(PUBLIC_URL_NOT_CONFIGURED);
+      expect(meta.error).toContain('public address');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('will not receive messages'));
+      warnSpy.mockRestore();
+    });
+
+    it('publishing (sync inactive, then active, not awaited) records the register, not the slower unregister', async () => {
+      // Publish saves the gateway while it is still inactive, then activates
+      // it, each firing a sync without waiting. With no public address the
+      // register calls nothing and was done first; the unregister's
+      // deleteWebhook finished later and its record replaced the skip.
+      configService.get.mockReturnValue(undefined);
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      let releaseDelete!: () => void;
+      (globalThis as any).fetch = jest.fn(
+        () =>
+          new Promise((resolve) => {
+            releaseDelete = () => resolve({ ok: true, status: 200, headers: new Map(), json: async () => ({ ok: true }), text: async () => '' });
+          }),
+      );
+
+      const first = registrar.sync(makeGateway({ status: GatewayStatus.INACTIVE }));
+      const second = registrar.sync(makeGateway({ status: GatewayStatus.ACTIVE }));
+      await new Promise((r) => setImmediate(r));
+      releaseDelete();
+      await Promise.all([first, second]);
+
+      const records = gatewayRepository.update.mock.calls
+        .map((call: any[]) => call[1]?.metadata?.webhookRegistration)
+        .filter(Boolean);
+      expect(records.map((r: any) => r.status)).toEqual(['unregistered', 'skipped']);
+      expect(records[records.length - 1].code).toBe(PUBLIC_URL_NOT_CONFIGURED);
       warnSpy.mockRestore();
     });
 

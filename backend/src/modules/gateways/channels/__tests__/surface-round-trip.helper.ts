@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 
 import { ChannelGatewayService } from '../channel-gateway.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
+import { AgentRun } from '../../../../entities/agent-run.entity';
 import { ChatWidgetAdapter } from '../adapters/chat-widget.adapter';
 import { SlackAdapter } from '../adapters/slack.adapter';
 import { DiscordAdapter } from '../adapters/discord.adapter';
@@ -147,6 +148,16 @@ export async function roundTrip(options: RoundTripOptions): Promise<RoundTripRes
     save: async (row: any) => {
       Object.assign(run, row);
       return run;
+    },
+    // Run writes (the disclosure flag) go through the run event writer:
+    // one transaction, the row update and its events.
+    update: async (_where: any, patch: any) => {
+      Object.assign(run, patch);
+      return { affected: 1 };
+    },
+    manager: {
+      transaction: async (work: any): Promise<any> =>
+        work({ getRepository: (entity: any) => (entity === AgentRun ? runRepository : { insert: async () => ({}) }) }),
     },
   };
 

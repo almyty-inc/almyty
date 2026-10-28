@@ -13,12 +13,22 @@
  * Pure: no I/O.
  */
 
+import { matchDelimited } from '../../common/security/linear-text';
+
 export const GOOGLE_AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
-/** Parameters every Google method accepts that are about transport, not the call (alt, fields, prettyPrint, ...). */
+/**
+ * Parameters every Google method accepts (the document's top-level
+ * `parameters`) that are about the wire, not the call: credentials, which
+ * come from the connection (key, access_token, oauth_token), and response
+ * formats the tool cannot read (alt, callback, prettyPrint, ...). The
+ * other standard ones -- `fields`, which Drive needs to return a file's
+ * link, and `quotaUser` -- are declared on every operation as query
+ * parameters, so a write sends them in the query string, not in its body.
+ */
 const TRANSPORT_PARAMETERS = new Set([
-  '$.xgafv', 'access_token', 'alt', 'callback', 'fields', 'key', 'oauth_token', 'prettyPrint', 'quotaUser', 'upload_protocol', 'uploadType', 'userIp',
+  '$.xgafv', 'access_token', 'alt', 'callback', 'key', 'oauth_token', 'prettyPrint', 'upload_protocol', 'uploadType', 'userIp',
 ]);
 
 export function isGoogleDiscoveryDocument(doc: unknown): boolean {
@@ -44,9 +54,18 @@ function schemaOf(s: any, depth = 0): any {
   return out;
 }
 
-/** `{+name}` (reserved expansion) is a plain path parameter to the importer. */
+/**
+ * The method's path, with `{+name}` (reserved expansion) as a plain path
+ * parameter. flatPath is preferred, but only when its placeholders are the
+ * method's parameters: BigQuery's jobs.query has the flatPath
+ * `projects/{projectsId}/queries` and a parameter named `projectId`, so the
+ * flatPath left `{projectsId}` in every URL and the call went nowhere.
+ */
 function pathOf(method: any): string {
-  const raw = String(method.flatPath ?? method.path ?? '');
+  const names = new Set(Object.keys(method.parameters ?? {}));
+  const placeholders = (p: string) => matchDelimited(p, '{', '}').map((m) => m.slice(1, -1).replace(/^\+/, ''));
+  const flat = typeof method.flatPath === 'string' && placeholders(method.flatPath).every((n) => names.has(n)) ? method.flatPath : null;
+  const raw = String(flat ?? method.path ?? method.flatPath ?? '');
   return `/${raw.replace(/^\/+/, '').replace(/\{\+([^}]+)\}/g, '{$1}')}`;
 }
 

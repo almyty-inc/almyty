@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { promises as fs } from 'fs';
+import { looksLikePdf, PdfTextReader, pdfTextLimits } from './pdf-text.reader';
 
 /**
  * Hard cap on how many bytes of an uploaded text file we turn
@@ -15,25 +16,30 @@ import { promises as fs } from 'fs';
  */
 const EXTRACT_MAX_BYTES = 1 * 1024 * 1024;
 const EXTRACT_TRUNCATED_SUFFIX = '\n\n…[truncated — file exceeds 1 MB extraction cap]';
+const PDF_TRUNCATED_SUFFIX = '\n\n…[truncated — only the start of this PDF was read]';
 
 @Injectable()
 export class TextExtractorService {
   private readonly logger = new Logger(TextExtractorService.name);
+  /** A PDF's text layer, read in a capped worker (pdf-text.reader.ts). */
+  readonly pdf = new PdfTextReader();
 
   /**
    * Extract text from file content based on MIME type. Bounded at
    * EXTRACT_MAX_BYTES to prevent memory-bloat DoS on very large
-   * text files.
+   * text files. A PDF's text is read too (pdf-text.reader.ts, with its
+   * own size, page and time caps), so a model that cannot open a PDF
+   * reads what it says instead of only its name.
    */
   async extract(buffer: Buffer, mimeType: string, fileName: string): Promise<string | null> {
     try {
+      if (this.isPdf(buffer, mimeType, fileName)) return await this.extractPdf(buffer, fileName);
       const isText =
         this.isTextFile(mimeType, fileName) ||
         mimeType === 'text/csv' ||
         mimeType === 'application/json';
       if (!isText) {
-        // For PDF, DOCX, etc. — return null for now.
-        // Can be extended with pdf-parse, mammoth, etc.
+        // DOCX and the rest: no extractor yet.
         this.logger.debug(`No text extractor for MIME type: ${mimeType}`);
         return null;
       }
@@ -58,16 +64,19 @@ export class TextExtractorService {
   /**
    * extract() for an upload spooled to disk (files/temp-upload.ts): reads
    * no more of the file than the extraction cap plus one byte, which is
-   * all extract() looks at, so a 50 MB upload is never held whole.
+   * all extract() looks at, so a 50 MB upload is never held whole. A PDF
+   * is read whole when it is within the PDF size cap, and not at all past it.
    */
   async extractFromFile(filePath: string, size: number, mimeType: string, fileName: string): Promise<string | null> {
-    if (!(this.isTextFile(mimeType, fileName) || mimeType === 'text/csv' || mimeType === 'application/json')) {
+    const pdf = mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
+    if (!pdf && !(this.isTextFile(mimeType, fileName) || mimeType === 'text/csv' || mimeType === 'application/json')) {
       return this.extract(Buffer.alloc(0), mimeType, fileName);
     }
+    if (pdf && size > pdfTextLimits().maxBytes) return null;
     let handle: fs.FileHandle | undefined;
     try {
       handle = await fs.open(filePath, 'r');
-      const head = Buffer.alloc(Math.min(size, EXTRACT_MAX_BYTES + 1));
+      const head = Buffer.alloc(pdf ? size : Math.min(size, EXTRACT_MAX_BYTES + 1));
       const { bytesRead } = await handle.read(head, 0, head.length, 0);
       return this.extract(head.subarray(0, bytesRead), mimeType, fileName);
     } catch (error: any) {
@@ -76,6 +85,22 @@ export class TextExtractorService {
     } finally {
       await handle?.close();
     }
+  }
+
+  private isPdf(buffer: Buffer, mimeType: string, fileName: string): boolean {
+    if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) return looksLikePdf(buffer);
+    return false;
+  }
+
+  private async extractPdf(buffer: Buffer, fileName: string): Promise<string | null> {
+    const read = await this.pdf.read(buffer, EXTRACT_MAX_BYTES);
+    if (!read) {
+      this.logger.debug(`No text read from PDF ${fileName}`);
+      return null;
+    }
+    // A text column refuses U+0000 (see decode).
+    const text = read.text.split('\u0000').join('');
+    return read.truncated ? text + PDF_TRUNCATED_SUFFIX : text;
   }
 
   /**

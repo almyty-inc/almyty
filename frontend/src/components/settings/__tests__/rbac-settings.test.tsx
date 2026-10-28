@@ -11,6 +11,7 @@ import type { EntitlementSnapshot } from '../../../hooks/use-entitlement'
 vi.mock('../../../lib/api', () => ({
   apiGet: vi.fn(),
   rbacApi: {
+    listPermissions: vi.fn(),
     listRoles: vi.fn(),
     getRole: vi.fn(),
     createRole: vi.fn(),
@@ -95,6 +96,10 @@ describe('RbacSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(rbacApi.listRoles as ReturnType<typeof vi.fn>).mockResolvedValue([sampleRole])
+    ;(rbacApi.listPermissions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { permission: 'agents:execute', description: 'Run agents, answer their questions and cancel their runs' },
+      { permission: 'audit:read', description: 'Read the audit trail' },
+    ])
     ;(rbacApi.listPolicies as ReturnType<typeof vi.fn>).mockResolvedValue([])
     ;(organizationsApi.getMembers as ReturnType<typeof vi.fn>).mockResolvedValue(sampleMembers)
   })
@@ -150,6 +155,24 @@ describe('RbacSettings', () => {
     })
   })
 
+
+  // The form took any string and the page said nothing about which ones
+  // the app enforces; `agents:execute` gated no route at all.
+  it('lists the permissions the app enforces, from the server, under the role form', async () => {
+    mockEntitlements(withRbac)
+    const user = userEvent.setup()
+    render(<RbacSettings />)
+
+    await screen.findByText('release-manager')
+    await user.click(screen.getByRole('button', { name: /new role/i }))
+    await user.click(await screen.findByRole('button', { name: /What each permission unlocks/i }))
+
+    const catalog = screen.getByTestId('rbac-permission-catalog')
+    expect(catalog).toHaveTextContent('agents:execute')
+    expect(catalog).toHaveTextContent('Run agents, answer their questions and cancel their runs')
+    expect(catalog).toHaveTextContent('Anything else gates nothing.')
+    expect(rbacApi.listPermissions).toHaveBeenCalled()
+  })
   it('deletes a role via DELETE /rbac/roles/:id', async () => {
     mockEntitlements(withRbac)
     ;(rbacApi.deleteRole as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)

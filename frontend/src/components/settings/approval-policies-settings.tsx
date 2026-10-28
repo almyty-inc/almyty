@@ -88,12 +88,16 @@ function ApprovalPoliciesManager() {
 
   const { data: policies, isLoading } = useQuery<ApprovalPolicy[]>({
     queryKey: ['approval-policies'],
-    // Amount rules have their own list above (AmountRulesCard).
-    queryFn: async () => (await approvalPoliciesApi.list()).filter((p) => !p.trigger),
+    // Amount rules are listed here too: on this plan they can carry their
+    // own steps, and a list without them hid exactly those rules.
+    queryFn: () => approvalPoliciesApi.list(),
   })
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['approval-policies'] })
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['approval-policies'] }),
+      queryClient.invalidateQueries({ queryKey: ['approval-rules'] }),
+    ])
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => approvalPoliciesApi.delete(id),
@@ -177,14 +181,21 @@ function ApprovalPoliciesManager() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" asChild>
-                          <Link to={`${APPROVAL_POLICIES_PATH}/policies/${policy.id}`} aria-label={`Edit ${policy.name}`}>
-                            <Pencil className="h-4 w-4" />
-                          </Link>
+                          {policy.trigger ? (
+                            // An amount rule: its tool, amount and steps are edited on the rule page.
+                            <Link to={`${APPROVAL_POLICIES_PATH}/rules/${policy.id}`} aria-label={`Edit sign-off for ${policy.name}`}>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          ) : (
+                            <Link to={`${APPROVAL_POLICIES_PATH}/policies/${policy.id}`} aria-label={`Edit ${policy.name}`}>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          )}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={`Delete ${policy.name}`}
+                          aria-label={policy.trigger ? `Delete rule ${policy.name}` : `Delete ${policy.name}`}
                           onClick={() => setDeleting(policy)}
                         >
                           <Trash2 className="h-4 w-4" />

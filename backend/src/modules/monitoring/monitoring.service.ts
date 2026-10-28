@@ -88,6 +88,10 @@ export interface SystemMetrics {
     cacheHitRate: number;
     errorRate: number;
   };
+  /** Autonomous runs: event logs that did not fold into their row (the projection check). */
+  runs?: {
+    projectionMismatches: number;
+  };
 }
 
 interface AlertRule {
@@ -254,6 +258,7 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     const protocolStats = await this.redisStats.getProtocolStats();
     const securityStats = await this.redisStats.getSecurityStats();
     const performanceStats = await this.redisStats.getPerformanceStats();
+    const runStats = await this.redisStats.getRunStats();
 
     const metrics: SystemMetrics = {
       timestamp: new Date().toISOString(),
@@ -290,6 +295,7 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
       protocols: protocolStats,
       security: securityStats,
       performance: performanceStats,
+      runs: runStats,
     };
 
     return metrics;

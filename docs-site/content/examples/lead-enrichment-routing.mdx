@@ -1,33 +1,166 @@
-# Score and route new leads
+# Score new HubSpot leads and route the hot ones
 
-For sales teams where good leads wait in a queue while reps chase the wrong ones. When a new lead comes in, the assistant looks up the company (size, industry), scores it against your ideal customer, writes the score and the reason back into your CRM, and tells the right rep in Slack when it's a hot one.
+## What you'll build
 
-"CRM" here means your own CRM (HubSpot, Salesforce or any other) connected through its API: almyty has no built-in CRM connector.
+An assistant that looks at every new lead in HubSpot once an hour. It reads the lead's company (industry, size, country) and what they wrote in your form, scores the fit from 0 to 100 by your rules, writes the score and the reason back onto the contact, sets the right owner for the region, and posts the hot leads to your `#sales-leads` channel in Slack. Leads that do not fit are marked Unqualified, so nobody spends time on them.
 
-For a full walk-through of a sales assistant with a CRM and Slack, see [Sales assistant in Slack](/examples/sales-assistant-slack).
+![The hourly post in #sales-leads: two hot leads with their score and owner, one marked Unqualified](/screenshots/examples/lead-enrichment-routing/00-slack-hot-leads.png)
+
+This guide builds it for Parcelwise, a made-up company that sells shipping software to online shops, with made-up leads. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 40 minutes.
 
 ## What you need
 
-- Your CRM's API, and optionally a company-data (enrichment) service with an API.
-- A Slack app token that may post messages, for the alerts.
-- A way to send new leads to the assistant: your web form or CRM calling it when a lead is created.
+- **An almyty account** with an AI model connected (**Models**, **Connect a provider**; see step 1 of [Answer product questions from your help center](/examples/docs-deflection-bot#1-connect-an-ai-model)).
+- **A HubSpot account** where you may create a private app (usually a HubSpot admin), with your reps set up as users in two teams: `Sales EMEA` and `Sales Americas` (HubSpot: **Settings**, **Users & Teams**, **Teams**).
+- **Two contact properties in HubSpot** for the result. In HubSpot, open **Settings**, **Properties**, pick **Contact properties** and click **Create property** twice:
+  - Label `Fit score`, field type **Number**. Its internal name becomes `fit_score`.
+  - Label `Fit reason`, field type **Single-line text**. Its internal name becomes `fit_reason`.
+- **A Slack workspace** where you may create an app.
 
-## How to build it
+## 1. Create a HubSpot private app
 
-1. **Connect your systems.** Open **APIs** and click **Connect an API** for your CRM and your enrichment service. For Slack alerts, create a tool under **Tools**, **Create tool** that calls Slack's "post message" with your app's token from [Credentials](/credentials).
-2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write your scoring rules: "Look up the company, score it against our ideal customer (mid-sized software companies with 50 or more staff), set an owner, and post hot leads to #sales." Pick the tools under **Tools and APIs**.
-3. **Add firm rules.** On its **Constraints** tab: "Never mark a lead with a personal email address as enterprise" and "Always fill in the reason for the score".
-4. **Send it leads.** Have your form or CRM call the assistant when a lead is created (see below).
+**In HubSpot**, open **Settings**, **Integrations**, **Private Apps** (newer accounts find it under **Development**, as a legacy app) and click **Create a private app**. Name it `almyty lead scorer`. Under **Scopes**, tick exactly these:
 
-## Ideas
+- `crm.objects.contacts.read` and `crm.objects.contacts.write`: find new leads and save the score.
+- `crm.objects.companies.read`: read each lead's company.
+- `crm.objects.owners.read`: find the reps to assign.
 
-- For borderline cases, set the **Work mode** to **Panel**: two models from different companies argue the fit and a judge decides.
-- Draft a first email as part of the run (see [Turn call notes into CRM updates](/examples/meeting-notes-to-crm)).
+Click **Create app** and copy the **access token**.
 
-## For developers
+## 2. Connect HubSpot
 
-The address to call and sample code are in the **Integration** card on the assistant's **Overview** tab. See the [OpenAI-compatible API](/api-reference/openai-compatible).
+HubSpot describes its CRM API in separate parts. You need three: contacts, companies and owners.
+
+In almyty, open **APIs**, click **Connect an API**, pick **OpenAPI / Swagger** and paste HubSpot's own description of its contacts API under **Link to the description**:
+
+```
+https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/CRM/Contacts/Rollouts/424/v3/contacts.json
+```
+
+![The link to HubSpot's contacts description, pasted](/screenshots/examples/lead-enrichment-routing/01-hubspot-link.png)
+
+Open **Advanced**, set **Name** to `HubSpot Contacts` and click **Connect API**. On **Finish connecting**, under **Sign-in**, click **Create one here**, then **Paste an access token instead**. Set **Name** to `HubSpot private app`, paste the token and click **Save**.
+
+![The HubSpot private app token, pasted](/screenshots/examples/lead-enrichment-routing/02-hubspot-token.png)
+
+Do the same for companies and owners, with the names below. This time, under **Sign-in**, pick **HubSpot private app** from the list instead of creating a new one.
+
+| Name | Link to the description |
+|---|---|
+| `HubSpot Companies` | `https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/CRM/Companies/Rollouts/424/v3/companies.json` |
+| `HubSpot Owners` | `https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/CRM/Crm%20Owners/Rollouts/146888/v3/crmOwners.json` |
+
+**APIs** now lists the three parts.
+
+![HubSpot Contacts, Companies and Owners on the APIs page](/screenshots/examples/lead-enrichment-routing/03-apis.png)
+
+## 3. Write the scoring rules
+
+Open **Agents**, click **Create agent**, pick **Autonomous**, name it `Lead scorer` and pick a model under **Work mode** (for example **gpt-4o**). Under **Instructions**, write your scoring rules as you would explain them to a new sales assistant. These are Parcelwise's:
+
+```
+You score new leads in HubSpot for Parcelwise, shipping software for online shops, and route the good ones.
+
+Find contacts whose lifecycle stage is "lead" and that have no fit score yet. For each one, read their company and score the fit from 0 to 100:
+- 30 points if the company is an online shop (industry Retail, Consumer Goods, Sporting Goods, Apparel & Fashion or Food & Beverages).
+- 25 points for 50 to 500 employees, 15 points for 20 to 49.
+- 20 points if their message mentions order volume, shipping, returns, labels or a carrier.
+- 15 points if their job title is Founder, Head of, Director or VP.
+
+Save on the contact: fit_score (the number), fit_reason (one line with the reasons) and the lead status: "Open" for 70 or more, "Unqualified" below 70.
+For 70 or more, also set the contact owner: companies in Europe go to the owner in the team "Sales EMEA", everyone else to the team "Sales Americas".
+
+Then report the hot leads first (name, title, company, city, size, score, owner, and what they wrote), then the others in one line each. Never email a lead.
+```
+
+Why points instead of "judge the fit": with fixed points, two runs score the same lead the same way, and the reason saved on the contact shows exactly which rules it met.
+
+![The Lead scorer with its scoring rules](/screenshots/examples/lead-enrichment-routing/04-agent.png)
+
+## 4. Pick its four HubSpot tools
+
+Under **Capabilities**, **Tools and APIs**, search for and tick:
+
+| Tool | HubSpot endpoint |
+|---|---|
+| **Search for contacts** (`hubspot_contacts_post_crm_v3_objects_contacts_search_do_search`) | `POST /crm/v3/objects/contacts/search` |
+| **Update a contact** (`hubspot_contacts_patch_crm_v3_objects_contacts_contact_id_update`) | `PATCH /crm/v3/objects/contacts/{contactId}` |
+| **Retrieve a company** (`hubspot_companies_get_crm_v3_objects_companies_company_id_937ca5`) | `GET /crm/v3/objects/companies/{companyId}` |
+| **GET /crm/v3/owners operation** (`hubspot_owners_get_crm_v3_owners_crm_v3_owners`) | `GET /crm/v3/owners` |
+
+It can read companies but not change them, and it has no tool that deletes or emails anything.
+
+![The four HubSpot tools picked](/screenshots/examples/lead-enrichment-routing/05-tools.png)
+
+Click **Save**, go back to the agent and click **Activate**.
+
+## 5. Try it
+
+Under **Try it** on the **Overview** tab, type `Score the new leads.` and press Enter.
+
+![The test run: two hot leads and one that does not fit](/screenshots/examples/lead-enrichment-routing/06-try.png)
+
+It found three new leads and answered:
+
+> **2 hot leads** out of 3 new
+>
+> - **Lena Fischer**, Head of E-commerce at Kaffeewerk (Hamburg, 85 people). Fit 90/100. Owner: **Daniel Kim**. They wrote: "We ship 1,200 orders a week and do return labels by hand. Do you integrate with Shopify and DHL?"
+> - **Marcus Reed**, Founder at Trailhead Supply Co. (Denver, 42 people). Fit 80/100. Owner: **Hannah Okoro**. They wrote: "Looking to replace our current label tool before Black Friday."
+>
+> **Not a fit**
+> - Amira Haddad (Brightside Dental): fit 0/100, not an online shop (hospital health care), only 12 people. Marked Unqualified.
+
+Open the **Runs** tab and click the run to see every HubSpot call it made: the contact search, one company lookup per lead, the owner list, and one contact update per lead with the exact properties it saved (`fit_score`, `fit_reason`, `hs_lead_status` and, for hot leads, `hubspot_owner_id`).
+
+![The run, step by step: the HubSpot calls and what came back](/screenshots/examples/lead-enrichment-routing/07-run-steps.png)
+
+Check one of the contacts in HubSpot: **Fit score** and **Fit reason** are filled in, and Lena Fischer's contact owner is now Daniel Kim.
+
+## 6. Connect Slack
+
+**In Slack**, go to **api.slack.com/apps**, click **Create New App**, **From scratch**, name it `Lead scorer` and pick your workspace. Under **OAuth & Permissions**, **Bot Token Scopes**, add `chat:write` and `channels:read`, click **Install to Workspace** and copy the **Bot User OAuth Token** (`xoxb-...`). Under **Basic Information**, copy the **Signing Secret**. Then, in `#sales-leads`, type `/invite @Lead scorer`.
+
+**In almyty**, on the agent's **Channels** tab, click **Add channel**, pick **Slack**, open **Advanced**, click **Create one here**, open **More options**, choose **Bot token** and paste the token and the signing secret. Click **Save**, **Save** at the bottom, then **Publish**.
+
+![The Slack channel, live](/screenshots/examples/lead-enrichment-routing/08-slack-live.png)
+
+The assistant only posts to Slack here, so you can skip Slack's **Event Subscriptions**.
+
+## 7. Run it every hour
+
+On the **Overview** tab, under **Schedule**, click **Set up a schedule**:
+
+1. **Repeat**: **Every few minutes or hours**. **Every**: `1` **hours**.
+2. **Where**: **Slack**. **Slack channel**: **#sales-leads**.
+3. **Message**: `Score the new leads.`
+4. Click **Save schedule**.
+
+![The schedule: every hour, the result posted to #sales-leads](/screenshots/examples/lead-enrichment-routing/09-schedule.png)
+
+The **Schedule** card shows when it runs next and where the result goes.
+
+![The schedule card on the Overview tab](/screenshots/examples/lead-enrichment-routing/10-schedule-card.png)
+
+Every hour it scores whatever came in since the last run and posts the result to `#sales-leads`, like the message at the top of this page. A lead it has scored has a fit score, so it is never scored twice. Scheduled runs act with your access, so nothing else needs to be given to the assistant.
+
+## Make it yours
+
+- **Your own rules.** Change the points in the instructions: other industries, other sizes, a country list, or a minus for free email addresses. The next run uses them.
+- **Rep names in Slack.** Add the reps' Slack member IDs to the instructions (`Daniel Kim is <@U04ABCD>`) and ask it to mention the owner, so the rep gets a notification.
+- **More data per lead.** Any enrichment service with an API description can be connected under **APIs** the same way; tick its lookup tool and say in the instructions what to use from it.
+- **Salesforce or Pipedrive instead of HubSpot.** Connect their published API description under **APIs**, add their key, and tick their "search", "update" and "list users" tools.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| Updates fail with **Property values were not valid** or **fit_score does not exist** | Create the two contact properties in HubSpot (What you need) and check their internal names are `fit_score` and `fit_reason`. |
+| Tools fail with **This app hasn't been granted all required scopes** | Add the missing scope to the private app in HubSpot, then copy the new token into the `HubSpot private app` credential under **Credentials**. |
+| Hot leads get no owner | The owners have no team named exactly `Sales EMEA` or `Sales Americas`. Fix the team names in HubSpot or in the instructions. |
+| **#sales-leads** is missing from the Slack channel list | Invite the bot to the channel, and check the app has the `channels:read` scope. |
+| The same leads are reported every hour | The update failed, so they still have no fit score. Open the run under **Runs** and read the error of the update step. |
 
 ## Related
 
-- [Autonomous agents](/agents/autonomous) · [Connect an API](/tools) · [HTTP tools](/tools/http-tools)
+- [Scheduling](/agents/scheduling) · [Autonomous agents](/agents/autonomous) · [Connect an API](/tools) · [Channels](/channels)
+- [Turn call notes into HubSpot updates](/examples/meeting-notes-to-crm) · [Sales assistant in Slack](/examples/sales-assistant-slack)

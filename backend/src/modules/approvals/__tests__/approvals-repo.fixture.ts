@@ -1,5 +1,6 @@
 import { ApprovalRequest } from '../../../entities/approval-request.entity';
 import { Agent } from '../../../entities/agent.entity';
+import { Tool } from '../../../entities/tool.entity';
 import {
   fakeRepository,
   FakeRepository,
@@ -22,6 +23,7 @@ import {
 export type FakeApprovalsRepo = FakeRepository<ApprovalRequest> & {
   createQueryBuilder: jest.Mock;
   agents: FakeRepository<Agent>;
+  tools: FakeRepository<Tool>;
 };
 
 const UPDATE_CLAUSES: Record<string, (p: any) => Record<string, any>> = {
@@ -98,13 +100,17 @@ export function fakeApprovalsRepo(
   // The agents table, read through the repository's manager: the service
   // takes a request's scope from the agent that asked (a private agent's
   // request is its owner's). Seeded agents only; an unknown id is absent.
+  // The tools table, likewise: the pending list labels a held call's
+  // arguments from its tool's parameter schema.
   const agents = fakeRepository<Agent>({ seed: agentSeed, idPrefix: 'ag' });
+  const tools = fakeRepository<Tool>({ idPrefix: 't' });
   const manager = {
     getRepository: (entity: unknown) => {
-      if (entity !== Agent) throw new UnmodelledQueryError('approvals manager repository other than Agent');
-      return agents;
+      if (entity === Agent) return agents;
+      if (entity === Tool) return tools;
+      throw new UnmodelledQueryError('approvals manager repository other than Agent or Tool');
     },
   };
 
-  return Object.assign(repo, { createQueryBuilder, manager, agents });
+  return Object.assign(repo, { createQueryBuilder, manager, agents, tools });
 }

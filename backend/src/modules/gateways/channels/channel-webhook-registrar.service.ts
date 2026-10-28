@@ -11,6 +11,14 @@ import { ChannelCredentialService } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 /**
+ * Why a registration was skipped, for the channel's status: this server
+ * has no public address, so no platform can deliver to it and the channel
+ * receives nothing (not merely "register it yourself").
+ */
+export const PUBLIC_URL_NOT_CONFIGURED = 'PUBLIC_URL_NOT_CONFIGURED';
+export type WebhookRegistrationCode = typeof PUBLIC_URL_NOT_CONFIGURED;
+
+/**
  * Automatic inbound-webhook registration for channel gateways whose
  * platform exposes an API for it. When an org deploys an agent to a
  * channel (gateway created/activated), the platform is pointed at the
@@ -86,34 +94,61 @@ export class ChannelWebhookRegistrar {
   }
 
   /**
+   * The syncs still running or waiting, per gateway. Publishing a channel
+   * fires two without waiting (the gateway saved while still inactive,
+   * then activated). Run side by side, the unregister, a network call,
+   * finished after a register that had nothing to call (no public
+   * address) and its record replaced the register's, so a live channel
+   * read "unregistered" and never said it was not receiving messages.
+   * One gateway's syncs therefore run in the order they were asked for.
+   */
+  private readonly queued = new Map<string, Promise<void>>();
+
+  private inOrder(gatewayId: string, work: () => Promise<void>): Promise<void> {
+    const previous = this.queued.get(gatewayId) ?? Promise.resolve();
+    const next = previous.then(work, work);
+    const settled = next.catch(() => undefined);
+    this.queued.set(gatewayId, settled);
+    void settled.then(() => {
+      if (this.queued.get(gatewayId) === settled) this.queued.delete(gatewayId);
+    });
+    return next;
+  }
+
+  /**
    * Reconcile the platform webhook with the gateway state: active ->
-   * register, anything else -> unregister. Never throws.
+   * register, anything else -> unregister. Never throws. Runs after any
+   * earlier sync of the same gateway has finished.
    */
   async sync(gateway: Gateway): Promise<void> {
     if (!ChannelWebhookRegistrar.isRegistrable(gateway.type)) return;
-    try {
-      if (gateway.status === GatewayStatus.ACTIVE) {
-        await this.register(gateway);
-      } else {
-        await this.unregister(gateway);
+    return this.inOrder(gateway.id, async () => {
+      try {
+        if (gateway.status === GatewayStatus.ACTIVE) {
+          await this.register(gateway);
+        } else {
+          await this.unregister(gateway);
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `webhook registration sync failed (gateway ${gateway.id}): ${err?.message ?? err}`,
+        );
       }
-    } catch (err: any) {
-      this.logger.warn(
-        `webhook registration sync failed (gateway ${gateway.id}): ${err?.message ?? err}`,
-      );
-    }
+    });
   }
 
   /** Remove the platform webhook registration (gateway deleted). Never throws. */
   async remove(gateway: Gateway): Promise<void> {
     if (!ChannelWebhookRegistrar.isRegistrable(gateway.type)) return;
-    try {
-      await this.unregister(gateway, /* recordOnGateway */ false);
-    } catch (err: any) {
-      this.logger.warn(
-        `webhook unregistration failed (gateway ${gateway.id}): ${err?.message ?? err}`,
-      );
-    }
+    return this.inOrder(gateway.id, async () => {
+      try {
+        await this.unregister(gateway, /* recordOnGateway */ false);
+      } catch (err: any) {
+        this.logger.warn(
+          `webhook unregistration failed (gateway ${gateway.id}): ${err?.message ?? err}`,
+        );
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -121,9 +156,18 @@ export class ChannelWebhookRegistrar {
   // ---------------------------------------------------------------------------
 
   private async register(gateway: Gateway): Promise<void> {
+    // Without a public address nothing can reach this server, so the channel
+    // receives no messages at all. Said on the channel's status, not only here.
+    if (!this.publicBase()) {
+      this.logger.warn(
+        `PUBLIC_API_URL is not set, so the ${gateway.type} channel (gateway ${gateway.id}) was not registered and will not receive messages`,
+      );
+      await this.record(gateway, 'register', 'skipped', null, 'the public address of this server is not configured (PUBLIC_API_URL)', PUBLIC_URL_NOT_CONFIGURED);
+      return;
+    }
     const publicUrl = await this.buildPublicUrl(gateway);
     if (!publicUrl) {
-      await this.record(gateway, 'register', 'skipped', null, 'PUBLIC_API_URL not configured');
+      await this.record(gateway, 'register', 'skipped', null, 'the organization has no address (slug) yet');
       return;
     }
 
@@ -356,13 +400,18 @@ export class ChannelWebhookRegistrar {
   // Helpers
   // ---------------------------------------------------------------------------
 
+  /** PUBLIC_API_URL without a trailing slash; '' when it is not set. */
+  private publicBase(): string {
+    return (this.configService.get<string>('PUBLIC_API_URL') || '').replace(/\/$/, '');
+  }
+
   /**
    * `<PUBLIC_API_URL>/<orgSlug><endpoint>` — the unified-endpoint URL
    * platforms deliver webhooks to. Null (-> skip + warning) when
    * PUBLIC_API_URL or the org slug is unavailable.
    */
   private async buildPublicUrl(gateway: Gateway): Promise<string | null> {
-    const base = (this.configService.get<string>('PUBLIC_API_URL') || '').replace(/\/$/, '');
+    const base = this.publicBase();
     if (!base) {
       this.logger.warn(
         `PUBLIC_API_URL is not set — skipping webhook registration for gateway ${gateway.id}`,
@@ -390,6 +439,7 @@ export class ChannelWebhookRegistrar {
     status: 'registered' | 'unregistered' | 'failed' | 'skipped',
     url: string | null,
     error?: string,
+    code?: WebhookRegistrationCode,
   ): Promise<void> {
     try {
       const metadata: Record<string, any> = {
@@ -399,6 +449,7 @@ export class ChannelWebhookRegistrar {
           status,
           url,
           error: error ?? null,
+          code: code ?? null,
           at: new Date().toISOString(),
         },
       };

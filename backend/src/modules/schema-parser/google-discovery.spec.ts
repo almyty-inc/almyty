@@ -40,11 +40,13 @@ describe("Google's discovery documents", () => {
     expect(list.endpoint ?? list.path).toBe('/tasks/v1/lists/{tasklist}/tasks');
   });
 
-  it('leave out the transport parameters every Google method takes', () => {
+  it('leave out the transport parameters every Google method takes, and keep fields and quotaUser as query parameters', () => {
     const doc = discoveryToOpenApi(JSON.parse(tasks));
-    const names = doc.paths['/tasks/v1/users/@me/lists'].get.parameters.map((p: any) => p.name);
-    expect(names).not.toEqual(expect.arrayContaining(['alt', 'key', 'prettyPrint', 'quotaUser', 'oauth_token', 'fields']));
-    expect(names).toEqual(expect.arrayContaining(['maxResults', 'pageToken']));
+    const parameters = doc.paths['/tasks/v1/users/@me/lists'].get.parameters;
+    const names = parameters.map((p: any) => p.name);
+    expect(names).not.toEqual(expect.arrayContaining(['alt', 'key', 'prettyPrint', 'oauth_token', 'access_token', 'callback']));
+    expect(names).toEqual(expect.arrayContaining(['maxResults', 'pageToken', 'fields', 'quotaUser']));
+    expect(parameters.find((p: any) => p.name === 'fields')).toMatchObject({ in: 'query', required: false });
   });
 
   it('point $refs at components and keep reserved-expansion paths as plain parameters', () => {
@@ -71,5 +73,29 @@ describe("Google's discovery documents", () => {
     expect(doc.paths['/gmail/v1/users/{userId}/messages/send'].post.requestBody.content['application/json'].schema).toEqual({ $ref: '#/components/schemas/Message' });
     expect(doc.paths['/v1/{name}'].get.parameters[0]).toMatchObject({ name: 'name', in: 'path', required: true });
     expect(doc.components.schemas.Message.properties.labelIds).toEqual({ type: 'array', items: { type: 'string' } });
+  });
+
+  it("use the flatPath only when its placeholders are the method's parameters", () => {
+    // BigQuery's jobs.query, as published: flatPath names `projectsId`, the parameter is `projectId`.
+    const doc = discoveryToOpenApi({
+      kind: 'discovery#restDescription',
+      rootUrl: 'https://bigquery.googleapis.com/',
+      servicePath: 'bigquery/v2/',
+      title: 'BigQuery API',
+      resources: {
+        jobs: {
+          methods: {
+            query: { id: 'bigquery.jobs.query', flatPath: 'projects/{projectsId}/queries', path: 'projects/{+projectId}/queries', httpMethod: 'POST', parameters: { projectId: { type: 'string', location: 'path', required: true } } },
+          },
+        },
+        files: {
+          methods: {
+            get: { id: 'drive.files.get', flatPath: 'files/{fileId}', path: 'files/{fileId}', httpMethod: 'GET', parameters: { fileId: { type: 'string', location: 'path', required: true } } },
+          },
+        },
+      },
+    });
+    expect(Object.keys(doc.paths)).toEqual(['/projects/{projectId}/queries', '/files/{fileId}']);
+    expect(doc.paths['/projects/{projectId}/queries'].post.parameters[0]).toMatchObject({ name: 'projectId', in: 'path' });
   });
 });

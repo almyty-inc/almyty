@@ -156,4 +156,44 @@ describe('AuditStreamService', () => {
       expect(repo.rows[0].lastError).toBe('HTTP 503');
     });
   });
+
+  // There was no way to change a target: an admin deleted and re-added it,
+  // losing its delivery history, to fix a typo or narrow what it streams.
+  describe('update', () => {
+    const add = async (svc: AuditStreamService) =>
+      svc.create({ organizationId: 'org', target: 'splunk_hec', endpoint: 'https://splunk.example.com/hec', token: 'old' });
+
+    it('narrows a target to some actions, and widens it back', async () => {
+      const { svc } = makeService();
+      const cfg = await add(svc);
+      const narrowed = await svc.update('org', cfg.id, { actionFilter: ['approval_decided', 'sso_login'] });
+      expect(narrowed.actionFilter).toEqual(['approval_decided', 'sso_login']);
+      const widened = await svc.update('org', cfg.id, { actionFilter: [] });
+      expect(widened.actionFilter).toBeNull();
+    });
+
+    it('keeps the token unless told, and clears it on an empty one', async () => {
+      const { svc } = makeService();
+      const cfg = await add(svc);
+      expect((await svc.update('org', cfg.id, { enabled: false })).token).toBe('old');
+      expect((await svc.update('org', cfg.id, { token: 'new' })).token).toBe('new');
+      expect((await svc.update('org', cfg.id, { token: '' })).token).toBeNull();
+    });
+
+    it('gates a changed endpoint like a new one and starts its history over', async () => {
+      const { svc, repo } = makeService();
+      const cfg = await add(svc);
+      repo.rows[0].lastError = 'HTTP 401';
+      await expect(svc.update('org', cfg.id, { endpoint: 'http://10.0.0.5/hec' })).rejects.toBeInstanceOf(BadRequestException);
+      const moved = await svc.update('org', cfg.id, { endpoint: 'https://splunk2.example.com/hec' });
+      expect(moved.endpoint).toBe('https://splunk2.example.com/hec');
+      expect(moved.lastError).toBeNull();
+    });
+
+    it('is scoped to the organization', async () => {
+      const { svc } = makeService();
+      const cfg = await add(svc);
+      await expect(svc.update('other-org', cfg.id, { enabled: false })).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
 });

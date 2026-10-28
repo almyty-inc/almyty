@@ -47,6 +47,17 @@ describe('migration timestamps', () => {
     expect(mismatched).toEqual([]);
   });
 
+  it('records each migration under its class name, so the `name` property carries the same timestamp', () => {
+    // TypeORM records `name` when a migration sets one; a copied file that
+    // kept another migration's `name` would be recorded as that one, and
+    // skipped as already run.
+    const wrong = migrations
+      .map(({ file, cls }) => ({ file, cls, name: readFileSync(join(MIGRATIONS, file), 'utf8').match(/^ {2}name\s*=\s*'([^']+)'/m)?.[1] }))
+      .filter(({ cls, name }) => name !== undefined && name !== cls)
+      .map(({ file, name }) => `${file}: name = '${name}'`);
+    expect(wrong).toEqual([]);
+  });
+
   it('gives every migration a timestamp of its own', () => {
     const byTs = new Map<string, string[]>();
     for (const { ts, cls } of migrations) byTs.set(ts, [...(byTs.get(ts) ?? []), cls]);

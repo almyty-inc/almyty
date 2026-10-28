@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Walks the two beginner tutorials in docs-site/content/tutorials (the
-// founder's associate and the biz-dev assistant) through the UI, step by
+// Walks the tutorials in docs-site/content/tutorials (the founder's
+// associate, the biz-dev assistant and new customer onboarding) through the UI, step by
 // step as their text says, and takes the screenshots they show into
 // $SHOT_DIR/tutorials (default /tmp/almyty-demo/shots/tutorials) for review.
 //
@@ -22,8 +22,10 @@
 // documents, HubSpot's published specs), read from their links as a user
 // would; the APIs themselves are never called.
 //
-//   node scripts/demo-seed/usecases/tutorials.mjs                 both tutorials
-//   node scripts/demo-seed/usecases/tutorials.mjs founder         only this one
+//   node scripts/demo-seed/usecases/tutorials.mjs                 all three
+//   node scripts/demo-seed/usecases/tutorials.mjs founder         only this one (or bizdev, onboarding)
+//   THEME=light ...                                               light mode (the onboarding captures)
+//   RESTART_API='<command>' ... onboarding                        restart the API between two wakes
 //   node scripts/demo-seed/usecases/tutorials.mjs --fresh         Maya's organization removed first
 //   node scripts/demo-seed/usecases/tutorials.mjs --register [shot...]
 import { createRequire } from 'node:module'
@@ -49,7 +51,7 @@ const SLACK_SIGNING_SECRET = 'local-test-signing-secret-0123456789'
 const sql = (q) => execSync(`${PSQL} -v ON_ERROR_STOP=1 -tA`, { input: q, encoding: 'utf8' }).trim()
 const upstream = async (path, init) => (await fetch(`${UP}${path}`, init)).json()
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
 const BUILDER = ['frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents']
 const SETUP = ['frontend/src/pages/api-setup.tsx', 'frontend/src/components/apis/api-key-form.tsx']
@@ -99,9 +101,25 @@ export const SHOTS = {
   'bizdev-15': ['bizdev/15-followup-approval.png', 'The follow-up waiting for approval', APPROVALS],
   'bizdev-16': ['bizdev/16-slack-reports.png', 'Biz-dev reports as posted to Slack', ['frontend/src/pages/agent-always-on.tsx', 'backend/src/modules/gateways/channels/adapters/slack.adapter.ts', 'backend/src/modules/gateways/channels/adapters/channel-markdown.ts']],
   'bizdev-17': ['bizdev/17-what-woke-it.png', 'What woke it lately', ALWAYS_ON],
+  'onboarding-00': ['onboarding/00-approve-kickoff.png', 'Onboarding agent: the kickoff call waiting for approval', APPROVALS],
+  'onboarding-01': ['onboarding/01-drive-link.png', 'Google Drive description link', ['frontend/src/pages/api-new-description.tsx', 'frontend/src/components/apis']],
+  'onboarding-02': ['onboarding/02-drive-sign-in.png', 'Google Drive sign-in: drive.file and drive.readonly', SETUP],
+  'onboarding-03': ['onboarding/03-drive-connected.png', 'Google Drive signed in', SETUP],
+  'onboarding-04': ['onboarding/04-agent-instructions.png', 'Onboarding agent: model and instructions', BUILDER],
+  'onboarding-05': ['onboarding/05-agent-tools.png', 'Onboarding agent: tools', BUILDER],
+  'onboarding-06': ['onboarding/06-always-on.png', 'Always on: standing instructions and a 12-hour timer', ALWAYS_ON],
+  'onboarding-07': ['onboarding/07-ask-first.png', 'Always on: ask before booking a meeting', ALWAYS_ON],
+  'onboarding-08': ['onboarding/08-always-on-card.png', 'Onboarding agent: Always on card', AGENT],
+  'onboarding-09': ['onboarding/09-first-run.png', 'The first onboarding run, step by step', AGENT],
+  'onboarding-10': ['onboarding/10-welcome-email.png', 'The welcome email as the agent sent it', ['backend/src/modules/tools/executors/tool-http.executor.ts']],
+  'onboarding-11': ['onboarding/11-notifications.png', 'Onboarding reports in notifications', ['frontend/src/pages/notifications.tsx', 'frontend/src/components/notifications']],
+  'onboarding-12': ['onboarding/12-handover-run.png', 'The run that booked the kickoff and handed over', AGENT],
+  'onboarding-13': ['onboarding/13-what-woke-it.png', 'What woke it lately, across the onboarding', ALWAYS_ON],
+  'onboarding-14': ['onboarding/14-runs.png', 'Onboarding agent: its runs', AGENT],
+  'onboarding-15': ['onboarding/15-deal-log.png', 'The onboarding log on the CRM deal', ['backend/src/modules/tools/executors/tool-http.executor.ts']],
 }
 // Shots of what the stand-in received, rendered as a page, and the route the message came from.
-const RENDERED = { 'founder-00': '/agents/:id/schedule', 'bizdev-16': '/agents/:id/always-on' }
+const RENDERED = { 'founder-00': '/agents/:id/schedule', 'bizdev-16': '/agents/:id/always-on', 'onboarding-10': '/agents/:id/runs/:id', 'onboarding-15': '/agents/:id/runs/:id' }
 
 // ---------- the account ----------
 
@@ -124,8 +142,10 @@ async function account() {
 const HIDE = '.tsqd-parent-container, .tsqd-open-btn-container, [role=region][aria-label^="Notifications"] { display: none !important; }'
 
 async function session(browser) {
-  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'dark', timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 } })
-  await ctx.addInitScript(() => { try { localStorage.setItem('theme', 'dark') } catch {} })
+  // THEME=light for the onboarding tutorial's captures; the first two were taken in dark mode.
+  const theme = process.env.THEME === 'light' ? 'light' : 'dark'
+  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: theme, timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: 2, viewport: { width: 1440, height: 900 } })
+  await ctx.addInitScript((t) => { try { localStorage.setItem('theme', t) } catch {} }, theme)
   // A real sign-in page is never opened.
   await ctx.route(/accounts\.google\.com|app\.hubspot\.com/, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<p>Stopped before the real sign-in page (local demo).</p>' }))
   const page = await ctx.newPage()
@@ -309,7 +329,8 @@ async function founder(page, h) {
   await page.getByPlaceholder('Search tools...').fill('calendar_events_list')
   await h.wait(1500)
   await h.shot('founder-09')
-  await page.getByText('google_calendar_calendar_events_list', { exact: true }).first().click()
+  // The list shows the tool's display name; its machine name is the title.
+  await page.getByTitle('google_calendar_calendar_events_list', { exact: true }).first().click()
   await h.wait(1500)
   await page.getByRole('tab', { name: 'Test tool' }).click()
   await page.getByPlaceholder('Enter calendarId').fill('primary')
@@ -635,6 +656,243 @@ At every wake, check for replies to your outreach:
     'The messages exactly as almyty posted them to Slack, shown the way Slack formats them (local demo; Slack itself was not used).'))
 }
 
+// ---------- the onboarding agent ----------
+
+const ONBOARDING_INSTRUCTIONS = `You onboard Lumen's new customers, from signed deal to kickoff call.
+
+A customer is new when their deal in HubSpot is in the stage "Closed won". For each one:
+1. Find their main contact in HubSpot: the COO, a VP or the Head of Operations.
+2. Create a folder in Google Drive called "<company> onboarding" and share it with the contact, so they can upload files.
+3. Email the contact from Gmail: welcome them, and ask for two files in that folder: their vehicles (plate, type, capacity) and their depots (address, opening hours). Give them the folder link.
+4. Wait for both files. Look in the folder at every wake. When they are not there 3 days after your last email, send a short, friendly reminder in the same email thread. Send at most two reminders; after that, ask Maya to call them.
+5. When both files are in, book a 45-minute kickoff call in Maya's calendar with the contact and Sam Ortiz (sam.ortiz@lumenlabs.example, customer success), two working days later at 10:00 UTC. Maya approves it first.
+6. Hand over to Sam with a short email: the contact, the files, the folder link and the kickoff time.
+7. Write every step on the deal's description in HubSpot, one line each, so anyone can see where onboarding stands.
+
+Before you create, share, send or book anything, check the deal, the Drive folder and your sent emails. Never do the same thing twice.
+When you search Google Drive, use one condition per search, such as name = 'Bluefin Couriers onboarding' or '<folder id>' in parents.`
+const ONBOARDING_STANDING = 'Keep onboarding moving. At every wake, look for deals in "Closed won" that are not handed over yet, and take each one a step further as your instructions say. Check before you act, so nothing is done twice.'
+const ONBOARDING_TOOLS = [
+  'hubspot_deals_post_crm_v3_objects_0_3_search_do_search',
+  'hubspot_deals_patch_crm_v3_objects_0_3_deal_id_update',
+  'hubspot_contacts_post_crm_v3_objects_contacts_search_do_search',
+  'google_drive_drive_files_list', 'google_drive_drive_files_create',
+  'google_drive_drive_permissions_list', 'google_drive_drive_permissions_create',
+  'gmail_gmail_users_messages_list', 'gmail_gmail_users_messages_get', 'gmail_gmail_users_messages_send',
+  'google_calendar_calendar_events_insert',
+]
+
+// What the other two tutorials connect first; done here without pictures when it is missing.
+async function prerequisites(page, h, { orgId }) {
+  const apis = sql(`SELECT string_agg(name, '|') FROM apis WHERE "organizationId" = '${orgId}'`).split('|')
+  if (sql(`SELECT count(*) FROM llm_providers WHERE "organizationId" = '${orgId}'`) === '0') {
+    await page.goto('/models/providers/new')
+    await page.getByLabel('Name', { exact: true }).fill('OpenAI')
+    await page.getByRole('combobox', { name: 'Provider' }).click()
+    await page.getByPlaceholder('Search providers').fill('OpenAI')
+    await page.getByRole('option', { name: 'OpenAI', exact: true }).click()
+    await h.wait(500)
+    await page.getByLabel(/API key/).first().fill('sk-proj-0000000000000000000000000000000000000000')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.waitForURL(/\/models\/providers\/[0-9a-f-]{36}/, { timeout: 60000 })
+  }
+  let google = sql(`SELECT count(*) FROM credentials WHERE "organizationId" = '${orgId}' AND name = 'Google account (Maya)'`) !== '0'
+  for (const [link, name, address] of [
+    ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest', 'Google Calendar', `${UP}/calendar/v3`],
+    ['https://gmail.googleapis.com/$discovery/rest?version=v1', 'Gmail', `${UP}/`],
+  ]) {
+    if (apis.includes(name)) continue
+    await connectApi(page, { link, name, address })
+    if (google) { await pickSignIn(page, /Google account \(Maya\)/); continue }
+    await page.getByRole('button', { name: 'Create one here' }).click()
+    await page.getByRole('button', { name: 'Paste an access token instead' }).click()
+    await page.getByRole('textbox', { name: 'Name', exact: true }).last().fill('Google account (Maya)')
+    await page.getByRole('textbox', { name: 'Access token' }).fill('local-test-google-token')
+    await page.getByRole('button', { name: 'Save', exact: true }).first().click()
+    await page.getByText('Saved. Tools send it with every call.').waitFor({ timeout: 15000 })
+    google = true
+  }
+  let hubspot = sql(`SELECT count(*) FROM credentials WHERE "organizationId" = '${orgId}' AND name = 'HubSpot private app'`) !== '0'
+  const R = 'https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/CRM/'
+  for (const [path, name] of [['Contacts/Rollouts/424/v3/contacts.json', 'HubSpot Contacts'], ['Deals/Rollouts/424/v3/deals.json', 'HubSpot Deals']]) {
+    if (apis.includes(name)) continue
+    await connectApi(page, { link: R + path, name, address: UP })
+    if (hubspot) { await pickSignIn(page, /HubSpot private app/); continue }
+    await page.getByRole('button', { name: 'Create one here' }).click()
+    await page.getByRole('button', { name: 'Paste an access token instead' }).click()
+    await page.getByRole('textbox', { name: 'Name', exact: true }).last().fill('HubSpot private app')
+    await page.getByRole('textbox', { name: /Access token|Key|token/ }).last().fill('local-demo-hubspot-token-0000000000000000000')
+    await page.getByRole('button', { name: 'Save', exact: true }).first().click()
+    await page.getByText('Saved. Tools send it with every call.').waitFor({ timeout: 15000 })
+    hubspot = true
+  }
+}
+
+async function onboarding(page, h, { orgId }) {
+  await prerequisites(page, h, { orgId })
+
+  // 1. Google Drive, for the folder each customer shares their files in
+  await page.goto('/apis/new/openapi')
+  await page.getByLabel('Link to the description').fill('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest')
+  await page.getByRole('button', { name: 'Advanced' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Google Drive')
+  await page.getByLabel('Address', { exact: true }).fill(`${UP}/drive/v3`) // the local stand-in
+  await page.getByRole('button', { name: 'Advanced' }).click()
+  await h.shot('onboarding-01')
+  await page.getByRole('button', { name: 'Connect API' }).click()
+  await page.waitForURL(/\/setup/, { timeout: 60000 })
+  await page.getByText(/Found \d+ operation/).waitFor({ timeout: 120000 })
+  await h.wait(800)
+  await page.getByRole('button', { name: 'Create one here' }).click()
+  await page.getByLabel('Client ID').fill('123456789012-abc123def456.apps.googleusercontent.com')
+  await page.getByLabel('Client secret').fill('GOCSPX-local-test-secret')
+  await page.getByTestId('api-oauth-redirect').waitFor({ timeout: 10000 })
+  // It creates and shares its own folders (drive.file) and reads what customers put in them (drive.readonly).
+  for (const cb of await page.getByTestId('api-oauth-scopes').getByRole('checkbox').all()) {
+    const scope = (await cb.getAttribute('aria-label')) || ''
+    if (/\/drive\.file$|\/drive\.readonly$/.test(scope)) await cb.check(); else await cb.uncheck()
+  }
+  await page.getByTestId('api-oauth-scopes').locator('.overflow-y-auto').evaluate((e) => { e.scrollTop = 0 })
+  await h.top(page.getByTestId('api-oauth-redirect'))
+  await h.shot('onboarding-02')
+  // A real sign-in goes to Google here; the local stand-in takes a pasted token.
+  await page.getByRole('button', { name: 'Paste an access token instead' }).click()
+  await page.getByRole('textbox', { name: 'Name', exact: true }).last().fill('Google Drive (Maya)')
+  await page.getByRole('textbox', { name: 'Access token' }).fill('local-test-google-drive-token')
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click()
+  await page.getByText('Saved. Tools send it with every call.').waitFor({ timeout: 15000 })
+  await page.evaluate(() => { window.scrollTo(0, 0); document.querySelector('main')?.scrollTo(0, 0) })
+  await h.shot('onboarding-03')
+
+  // 2. The agent
+  await page.goto('/agents/new')
+  await page.getByRole('button', { name: 'Autonomous' }).click()
+  await page.getByRole('textbox', { name: 'Agent name' }).fill('Onboarding agent')
+  await page.getByRole('combobox', { name: 'Model' }).first().click()
+  await page.getByRole('option', { name: /gpt-4o(?!-mini)/ }).first().click()
+  await page.getByRole('textbox', { name: 'Personality and style' }).fill(
+    'Friendly, clear and patient. Writes to customers like a helpful person, not like a system: short emails, one ask each, never pushy.')
+  await page.getByRole('textbox', { name: 'Instructions' }).fill(ONBOARDING_INSTRUCTIONS)
+  await h.shot('onboarding-04')
+  await pickTools(page, ONBOARDING_TOOLS)
+  await page.getByText('Tools and APIs').first().scrollIntoViewIfNeeded()
+  await h.shot('onboarding-05')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
+  const agent = h.id()
+  await page.goto(`/agents/${agent}`)
+  await h.wait(1500)
+  await page.getByRole('button', { name: 'Activate' }).click()
+  await h.wait(1500)
+
+  // 3. Always on
+  await page.goto(`/agents/${agent}/always-on`)
+  await h.wait(1500)
+  await page.getByRole('textbox', { name: 'Standing instructions' }).fill(ONBOARDING_STANDING)
+  await page.getByRole('spinbutton', { name: 'Every' }).fill('12')
+  await page.getByRole('combobox', { name: 'Unit' }).click()
+  await page.getByRole('option', { name: 'hours' }).click()
+  await page.getByRole('combobox', { name: 'On its own, it' }).click()
+  await page.getByRole('option', { name: /Does things/ }).click()
+  await h.wait(800)
+  // Only booking the kickoff stays on the ask-first list.
+  for (const cb of await page.getByRole('checkbox', { name: /^(hubspot_|gmail_|google_drive_)/ }).all()) if (await cb.isChecked()) await cb.uncheck()
+  const when = page.getByRole('combobox', { name: 'When' })
+  await when.click()
+  await page.getByRole('option', { name: /Only when it did something/ }).click()
+  await page.getByRole('switch', { name: 'Always on' }).click()
+  await page.getByRole('heading', { name: 'What wakes it' }).scrollIntoViewIfNeeded()
+  await h.shot('onboarding-06')
+  await h.top(page.getByText('Ask me first before', { exact: true }), 260)
+  await h.shot('onboarding-07')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await h.wait(2500)
+
+  const lastRun = () => sql(`SELECT status || '|' || id FROM agent_runs WHERE "agentId" = '${agent}' ORDER BY "createdAt" DESC LIMIT 1`)
+  const runs = () => Number(sql(`SELECT count(*) FROM agent_runs WHERE "agentId" = '${agent}'`))
+  const wake = async (what) => {
+    const before = runs()
+    await page.goto(`/agents/${agent}`)
+    await h.wait(1500)
+    await page.getByRole('button', { name: 'Wake now' }).click()
+    return until(what, async () => runs() > before && /^(completed|failed|cancelled|timeout|waiting_approval)\|/.test(lastRun()) ? lastRun() : null, 600000)
+  }
+  const deal = async () => (await upstream('/_admin/state')).deals.find((d) => /^Bluefin/.test(d.properties.dealname))
+
+  // 4. Day 0: the deal is won in HubSpot
+  await upstream('/_admin/win?company=Bluefin%20Couriers', { method: 'POST' })
+  await page.goto(`/agents/${agent}`)
+  await h.wait(1500)
+  await page.getByRole('heading', { name: 'Always on' }).scrollIntoViewIfNeeded()
+  await h.shot('onboarding-08')
+  const day0 = await wake('the first onboarding run')
+  if (!/^completed/.test(day0)) throw new Error(`day 0 run ${day0}`)
+  // "See the run" next to Last woke, as the tutorial says.
+  await page.goto(`/agents/${agent}`)
+  await h.wait(2000)
+  await page.getByRole('link', { name: 'See the run' }).click()
+  await page.waitForURL(new RegExp(`/runs/${day0.split('|')[1]}`))
+  await h.wait(2000)
+  await h.shot('onboarding-09')
+  const state0 = await upstream('/_admin/state')
+  const welcome = state0.sent.find((m) => /^Welcome to Lumen/.test(m.subject))
+  await h.render('onboarding-10', PAGE(welcome.subject, `<div class="wrap"><div class="head"><div class="subj">${escapeHtml(welcome.subject)}</div>
+<div class="meta">From: Maya Chen &lt;${escapeHtml(welcome.from)}&gt;<br>To: ${escapeHtml(welcome.to)}</div></div><div class="body" style="white-space:pre-wrap">${escapeHtml(welcome.body)}</div></div>`,
+  'The email exactly as the agent sent it through the Gmail API (local demo; the stand-in received it, nothing was sent).'))
+
+  // 5. The next day: nothing yet, nothing done
+  await wake('a waiting wake')
+  // Day 3: still nothing, so a reminder
+  await upstream('/_admin/age?days=3', { method: 'POST' })
+  await wake('the reminder wake')
+  // Between two wakes nothing is running, so restarting almyty here loses
+  // nothing: RESTART_API is a command that restarts the stack's API.
+  if (process.env.RESTART_API) {
+    const before = sql(`SELECT count(*) FROM agent_runs WHERE "agentId" = '${agent}' AND status IN ('running', 'pending', 'sleeping')`)
+    console.log('restarting the API between wakes; runs in flight:', before)
+    execSync(process.env.RESTART_API, { stdio: 'inherit' })
+  }
+  // Jonas answers the reminder; the files come a little later.
+  await upstream('/_admin/reply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: 'jonas.weber@bluefin.example', body: 'Hi, sorry for the wait, our fleet list is being updated. You will have both files on Monday.' }) })
+  await upstream('/_admin/age?days=2', { method: 'POST' })
+  await wake('a wake after the reply')
+  await page.goto('/notifications')
+  await h.wait(2000)
+  await h.shot('onboarding-11')
+
+  // 6. The files arrive: the kickoff waits for Maya
+  await upstream('/_admin/upload?company=Bluefin%20Couriers', { method: 'POST' })
+  const kick = await wake('the kickoff approval')
+  if (!/^waiting_approval/.test(kick)) throw new Error(`kickoff run ${kick}`)
+  await page.goto('/approvals')
+  await h.wait(3000)
+  // The card says what it will do: the event's summary, times and attendees.
+  await page.getByTestId('approval-action-preview').first().waitFor()
+  await h.shot('onboarding-00')
+  await approveAll(page)
+  await until('the hand-over', async () => /Handed over/.test((await deal())?.properties.description ?? '') && /^completed/.test(lastRun()), 600000)
+  await page.goto(`/agents/${agent}/runs/${lastRun().split('|')[1]}`)
+  await h.wait(2000)
+  // The end of the run: the event, the handover email, the last note on the deal.
+  await h.top(page.locator('main').getByText(/^#\d+$/).last(), 520)
+  await h.shot('onboarding-12')
+
+  // 7. Two weeks in one list
+  await page.goto(`/agents/${agent}/always-on`)
+  await h.wait(2000)
+  await page.getByRole('heading', { name: 'What woke it lately' }).scrollIntoViewIfNeeded()
+  await h.shot('onboarding-13')
+  await page.goto(`/agents/${agent}`)
+  await h.wait(1500)
+  await page.getByRole('tab', { name: 'Runs' }).click()
+  await h.wait(1500)
+  await h.shot('onboarding-14')
+  const d = await deal()
+  await h.render('onboarding-15', PAGE(d.properties.dealname, `<div class="wrap"><div class="head"><div class="subj">${escapeHtml(d.properties.dealname)}</div>
+<div class="meta">Stage: ${escapeHtml(d.properties.dealstage)}</div></div><div class="body" style="white-space:pre-wrap">${escapeHtml(d.properties.description)}</div></div>`,
+  "The deal's description exactly as the agent wrote it through the HubSpot API (local demo; HubSpot itself was not used)."))
+}
+
 // ---------- run ----------
 
 async function walk(names, { fresh }) {
@@ -644,16 +902,17 @@ async function walk(names, { fresh }) {
     sql(`DELETE FROM users WHERE email = '${MAYA.email}'`)
   }
   // The stand-in keeps what was sent; a used one would mix an earlier run into these pictures.
-  if (names.includes('founder') && (await upstream('/_admin/state')).outbox.length) {
+  if ((names.includes('founder') || names.includes('onboarding')) && (await upstream('/_admin/state')).outbox.length + (await upstream('/_admin/state')).sent.length) {
     throw new Error(`${UP} already holds messages from an earlier run: restart it (stack.sh down, then USECASES=1 stack.sh up)`)
   }
-  const { slug } = await account()
+  const { slug, orgId } = await account()
   const browser = await chromium.launch()
   const { ctx, page } = await session(browser)
   const h = helpers(page)
   try {
     if (names.includes('founder')) await founder(page, h)
     if (names.includes('bizdev')) await bizdev(page, h, { slug })
+    if (names.includes('onboarding')) await onboarding(page, h, { orgId })
   } catch (e) {
     console.log('FAILED', e.message.split('\n')[0])
     await page.screenshot({ path: join(OUT, 'FAILED.png') }).catch(() => {})
@@ -674,7 +933,7 @@ function register(shots) {
     const notes = 'Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data.' +
       (RENDERED[shot] ? ' The page renders the message exactly as almyty handed it to the provider; that provider was not used.' : '')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/tutorials/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
-      '--notes', notes, ...[...sources, ...UI].flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
+      '--notes', notes, ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
   }
 }
 
@@ -683,5 +942,5 @@ if (args[0] === '--register') register(args.slice(1))
 else {
   const fresh = args.includes('--fresh')
   const names = args.filter((a) => a !== '--fresh')
-  await walk(names.length ? names : ['founder', 'bizdev'], { fresh })
+  await walk(names.length ? names : ['founder', 'bizdev', 'onboarding'], { fresh })
 }
