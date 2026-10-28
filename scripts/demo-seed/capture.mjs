@@ -208,7 +208,8 @@ function register(names) {
     const route = c.route.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
       '--notes', 'Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.',
-      ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
+      // The shared UI folders are not page evidence; check-screenshots refuses them.
+      ...sources.filter((s) => !UI.includes(s)).flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
   }
 }
 

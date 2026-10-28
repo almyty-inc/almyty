@@ -56,7 +56,6 @@ const sql = (q) => execSync(`${PSQL} -v ON_ERROR_STOP=1 -tA`, { input: q, encodi
 const upstream = async (path, init) => (await fetch(`${UP}${path}`, init)).json()
 const orgOf = () => sql(`SELECT o.id FROM organizations o WHERE o.name = 'Velora Energy' LIMIT 1`)
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
 const BUILDER = ['frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents']
 const NEW_API = ['frontend/src/pages/api-new.tsx']
@@ -326,7 +325,7 @@ function registerShots(shots) {
     const notes = 'Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data.' +
       (RENDERED[shot] ? ' The page shows what the local stand-in received, laid out as a page; the real service was not used.' : '')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/examples/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
-      '--notes', notes, ...[...sources, ...UI].flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
+      '--notes', notes, ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
   }
 }
 
