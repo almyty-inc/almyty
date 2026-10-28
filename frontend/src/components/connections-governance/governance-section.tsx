@@ -29,8 +29,8 @@ export function ConnectionsGovernanceSection({ initialView = 'policies' }: { ini
           <div data-testid="governance-locked">
             <UpgradePrompt
               feature={CONNECTIONS_GOVERNANCE_ENTITLEMENT}
-              title="Credentials governance"
-              description="Allow and deny lists, scope rules for production agents, secret expiry and scheduled rotation, a review of personal credentials granted to agents, and an audit export."
+              title="Credential rules"
+              description="Choose which services may be used, set tighter rules for production agents, make secrets expire or change on a schedule, review personal credentials given to agents, and export the record."
             />
           </div>
         }

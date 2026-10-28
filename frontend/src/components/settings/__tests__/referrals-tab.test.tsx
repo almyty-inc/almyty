@@ -53,7 +53,7 @@ describe('ReferralsTab', () => {
     })
     expect(screen.getByText('Invited')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
-    expect(screen.getByText(/banked until you upgrade/i)).toBeInTheDocument()
+    expect(screen.getByText(/saved until you upgrade/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /copy/i }))
     expect(copyMock).toHaveBeenCalledWith(

@@ -61,7 +61,7 @@ describe('PoliciesTable', () => {
 
     const row2 = screen.getByTestId('policy-row-p2')
     expect(within(row2).getByTestId('policy-kind-badge')).toHaveTextContent('Expiry rule')
-    expect(within(row2).getByTestId('policy-summary')).toHaveTextContent('Secrets expire after 90 days, warning 7 days ahead, grants are revoked on expiry')
+    expect(within(row2).getByTestId('policy-summary')).toHaveTextContent('Secrets expire after 90 days, warning 7 days ahead, access is taken away on expiry')
     expect(within(row2).getByRole('switch', { name: 'Enable Expiry rule' })).toHaveAttribute('aria-checked', 'false')
 
     expect(within(screen.getByTestId('policy-row-p3')).getByTestId('policy-summary')).toHaveTextContent('Agents in production may only use organization credentials from approved connectors')

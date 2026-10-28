@@ -72,14 +72,14 @@ describe('custom role form', () => {
 describe('policy form', () => {
   it('asks while a policy is half written', async () => {
     const { router } = at()
-    fireEvent.click(await screen.findByRole('button', { name: /new policy/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /new rule/i }))
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'deny-exports' } })
     await expectLeaveAsks(router)
   })
 
   it('leaves an opened but empty policy form without asking', async () => {
     const { router } = at()
-    fireEvent.click(await screen.findByRole('button', { name: /new policy/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /new rule/i }))
     await screen.findByLabelText('Name')
     await expectLeavesWithoutAsking(router)
   })

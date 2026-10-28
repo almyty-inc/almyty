@@ -101,7 +101,7 @@ describe('ComplianceSettings entitlement gating', () => {
 
     render(<ComplianceSettings />)
 
-    await waitFor(() => expect(screen.getByText(/enforce pii filter/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('switch', { name: /hide personal data/i })).toBeInTheDocument())
     expect(
       screen.getByRole('button', { name: /save compliance policy/i }),
     ).toBeInTheDocument()
@@ -135,13 +135,13 @@ describe('ComplianceSettings entitlement gating', () => {
     render(<ComplianceSettings />)
 
     await waitFor(() => expect(mockedGetReport).toHaveBeenCalled())
-    await waitFor(() => expect(screen.getByText(/posture score/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/^score$/i)).toBeInTheDocument())
 
     // Score and an activity stat render from the mocked report.
     expect(screen.getByText('100')).toBeInTheDocument()
     expect(screen.getByText('42')).toBeInTheDocument()
     // Enforced-controls table lists both controls (exact cell text).
-    expect(screen.getByRole('cell', { name: 'PII filter' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Personal data filter' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Security scanner' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /download json/i })).toBeInTheDocument()
   })

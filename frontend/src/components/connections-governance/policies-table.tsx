@@ -78,7 +78,7 @@ export function PoliciesTable() {
     mutationFn: ({ policy, enabled }: { policy: ConnectionPolicy; enabled: boolean }) => connectionPoliciesApi.update(policy.id, { enabled }),
     onSuccess: (_result, { enabled }) => {
       invalidate()
-      notifications.success(enabled ? 'Policy enabled' : 'Policy disabled', enabled ? 'It is evaluated from now on.' : 'It is kept but no longer evaluated.')
+      notifications.success(enabled ? 'Policy enabled' : 'Policy disabled', enabled ? 'It applies from now on.' : 'It is kept but no longer applies.')
     },
     onError: (error: unknown) => notifications.error('Could not save', errorMessage(error, 'The policy was not changed')),
   })
@@ -101,7 +101,7 @@ export function PoliciesTable() {
   return (
     <div className="space-y-3" data-testid="policies-panel">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Org-wide rules over which services may be added and how credentials may be used. Disabled rules are kept but never evaluated.</p>
+        <p className="text-sm text-muted-foreground">Rules for the whole organization: which services may be connected and how credentials may be used. A rule that is off is kept but does not apply.</p>
         <Button size="sm" asChild className="shrink-0">
           <Link to={`${POLICIES_PAGE_PATH}/new`}>
             <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
@@ -123,7 +123,7 @@ export function PoliciesTable() {
           variant="panel"
               icon={ShieldCheck}
               title="No policies yet"
-              description="Without rules every connector may be connected and every grant is honoured as written."
+              description="Without rules, any connector may be connected and every credential can be used the way it was shared."
               action={<Button variant="outline" asChild><Link to={`${POLICIES_PAGE_PATH}/new`}>Add policy</Link></Button>}
             />
       )}
@@ -182,7 +182,7 @@ export function PoliciesTable() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {toDelete?.name || (toDelete ? POLICY_KIND_LABELS[toDelete.kind] : 'policy')}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {toDelete ? describePolicyRule(toDelete, connectorNames) : ''} The rule stops being evaluated at once. This cannot be undone.
+              {toDelete ? describePolicyRule(toDelete, connectorNames) : ''} The rule stops applying right away. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

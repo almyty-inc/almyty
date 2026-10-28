@@ -500,7 +500,7 @@ async function policyForm(page, h, { name, description, team, conditions, steps,
     await page.getByRole('button', { name: /^Advanced/ }).click()
     await page.getByLabel('Priority').fill(String(priority))
   }
-  if (shotName) { await h.top(page.getByText('Match conditions').first(), 140); await h.shot(shotName) }
+  if (shotName) { await h.top(page.getByText('When it applies').first(), 140); await h.shot(shotName) }
   await page.getByRole('button', { name: 'Create policy' }).click()
   await page.waitForURL(/\/settings\/approvals$/, { timeout: 20000 })
   await h.wait(1200)
@@ -723,8 +723,8 @@ async function sso(page, h, { orgId }) {
     const s = page.getByText(label, { exact: true }).locator('xpath=ancestor::div[contains(@class,"justify-between")][1]').getByRole('switch')
     if ((await s.getAttribute('aria-checked')) !== String(on)) await s.click()
   }
-  await sw('Just-in-time provisioning', false)
-  await sw('Enable SSO login', true)
+  await sw('Add people when they first sign in', false)
+  await sw('Use single sign-on', true)
   // Taller, so the form and the addresses for Entra are in one picture.
   await page.setViewportSize({ width: 1440, height: 1500 })
   await h.top(page.locator('#sso-protocol'), 140)
@@ -747,7 +747,7 @@ async function sso(page, h, { orgId }) {
     await page.locator('#sso-scim-new-token').waitFor()
     token = await page.locator('#sso-scim-new-token').inputValue()
     writeFileSync(join(OUT, 'scim-token.txt'), token)
-    await h.top(page.getByText('SCIM provisioning').first(), 120)
+    await h.top(page.getByText('Automatic member sync (SCIM)').first(), 120)
     await h.shot('sso-04')
   }
   await entraProvisioning(token, ['test', 'users'])
@@ -875,9 +875,9 @@ table{border-collapse:collapse;white-space:normal;font-size:12.5px;margin:4px 0}
   // The compliance pack: personal data hidden in records, organization-wide.
   await page.goto('/settings/compliance')
   await h.wait(2000)
-  const pii = page.getByRole('switch', { name: 'Enforce PII filter' })
+  const pii = page.getByRole('switch', { name: 'Hide personal data' })
   if ((await pii.getAttribute('aria-checked')) !== 'true') await pii.click()
-  const scan = page.getByRole('switch', { name: 'Enforce security scanner' })
+  const scan = page.getByRole('switch', { name: 'Scan for attacks' })
   if ((await scan.getAttribute('aria-checked')) !== 'true') await scan.click()
   await h.wait(500)
   await h.top(page.getByText('Compliance policy').first(), 120)
@@ -886,7 +886,7 @@ table{border-collapse:collapse;white-space:normal;font-size:12.5px;margin:4px 0}
   if (await submit.isEnabled()) { await submit.click(); await h.wait(2500) }
   await page.reload()
   await h.wait(3000)
-  await h.top(page.getByText('Posture score').first(), 200)
+  await h.top(page.getByText('Score', { exact: true }).first(), 200)
   await h.shot('ai-05')
 }
 WALKS.aiact = aiact

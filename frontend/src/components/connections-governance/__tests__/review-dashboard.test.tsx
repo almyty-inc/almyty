@@ -66,19 +66,19 @@ describe('ReviewDashboard', () => {
   it('revokes the grants only after confirming', async () => {
     vi.mocked(connectionsReviewApi.revokeGrants).mockResolvedValue({ revoked: 2, grantIds: ['g1', 'g2'] })
     render(<ReviewDashboard />)
-    fireEvent.click(await screen.findByRole('button', { name: "Revoke grants on Jane's OpenAI key" }))
-    expect(await screen.findByText("Revoke grants on Jane's OpenAI key?")).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: "Revoke access to Jane's OpenAI key" }))
+    expect(await screen.findByText("Revoke access to Jane's OpenAI key?")).toBeInTheDocument()
     expect(screen.getByText(/2 agent and workspace grants will be removed/)).toBeInTheDocument()
     expect(connectionsReviewApi.revokeGrants).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(screen.queryByText("Revoke grants on Jane's OpenAI key?")).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText("Revoke access to Jane's OpenAI key?")).not.toBeInTheDocument())
     expect(connectionsReviewApi.revokeGrants).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: "Revoke grants on Jane's OpenAI key" }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Revoke grants' }))
+    fireEvent.click(screen.getByRole('button', { name: "Revoke access to Jane's OpenAI key" }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke access' }))
     await waitFor(() => expect(connectionsReviewApi.revokeGrants).toHaveBeenCalledWith('c1'))
-    await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Grants revoked', "2 grants on Jane's OpenAI key removed."))
+    await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Access revoked', "2 grants on Jane's OpenAI key removed."))
   })
 
   it('shows the empty state', async () => {

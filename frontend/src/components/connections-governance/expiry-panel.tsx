@@ -125,7 +125,7 @@ export function ExpiryPanel() {
             <div>
               <CardTitle className="text-base">Expiring secrets</CardTitle>
               <CardDescription>
-                What the nightly sweep would act on under the expiry rules{expiringQuery.data ? (expiringQuery.data.enforce ? '; grants are revoked on expiry.' : '; owners are notified, grants stay.') : '.'}
+                What the nightly check would act on under your expiry rules{expiringQuery.data ? (expiringQuery.data.enforce ? '; access is taken away on expiry.' : '; owners are told, access stays.') : '.'}
               </CardDescription>
             </div>
             <Button type="button" variant="outline" size="sm" onClick={() => enforceExpiry.mutate()} disabled={enforceExpiry.isPending} className="shrink-0">
@@ -138,7 +138,7 @@ export function ExpiryPanel() {
           {expiringQuery.isError && <QueryError error={expiringQuery.error} onRetry={() => expiringQuery.refetch()} title="Expiring credentials could not be loaded" />}
           {expiringQuery.isLoading && <Skeleton className="h-12 rounded-lg" />}
           {!expiringQuery.isLoading && !expiringQuery.isError && expiryLines.length === 0 && (
-            <p className="text-sm text-muted-foreground" data-testid="expiring-empty">Nothing is inside a warning window or past its maximum age.</p>
+            <p className="text-sm text-muted-foreground" data-testid="expiring-empty">Nothing is close to expiring or past its maximum age.</p>
           )}
           {expiryLines.length > 0 && (
             <div className="overflow-x-auto rounded-lg border">
@@ -185,7 +185,7 @@ export function ExpiryPanel() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="text-base">Rotation due</CardTitle>
-              <CardDescription>Secrets older than their rotation interval. Due ones rotate through the provider API; manual ones are reported to their owners.</CardDescription>
+              <CardDescription>Secrets older than their rotation interval. Due ones are replaced automatically through the service’s API; the rest are reported to their owners to replace by hand.</CardDescription>
             </div>
             <Button type="button" size="sm" onClick={() => rotateDue.mutate()} disabled={rotateDue.isPending} className="shrink-0">
               {rotateDue.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
@@ -220,7 +220,7 @@ export function ExpiryPanel() {
                       <TableCell className="text-sm">{ownerOf(line.connectionId, line.ownerUserId)}</TableCell>
                       <TableCell className="text-sm">{line.ageDays} days, every {line.everyDays}</TableCell>
                       <TableCell>
-                        <Badge variant={line.status === 'due' ? 'default' : 'outline'} className="text-[10px]">{line.status === 'due' ? 'provider API' : 'manual'}</Badge>
+                        <Badge variant={line.status === 'due' ? 'default' : 'outline'} className="text-[10px]">{line.status === 'due' ? 'automatic' : 'by hand'}</Badge>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -234,7 +234,7 @@ export function ExpiryPanel() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Audit export</CardTitle>
-          <CardDescription>Every credential event, newest first: adds, checks, grants, rotations and policy changes, with an EU AI Act Annex IV mapping in the JSON envelope.</CardDescription>
+          <CardDescription>Every credential event, newest first: added, checked, shared, rotated, and rule changes. The JSON file also maps each event to the EU AI Act (Annex IV).</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2" data-testid="audit-export-buttons">

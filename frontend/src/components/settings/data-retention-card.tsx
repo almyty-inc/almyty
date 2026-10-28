@@ -17,11 +17,11 @@ const RETENTION_MAX_DAYS = 3650
 const DATA_CLASSES = [
   { key: 'agentRunsDays', label: 'Agent runs', hint: 'Completed, failed, cancelled and timed-out runs. Active runs are never deleted.' },
   { key: 'conversationsDays', label: 'Conversations', hint: 'Conversations and all of their messages.' },
-  { key: 'requestLogsDays', label: 'Request logs', hint: 'Gateway request/response logs.' },
-  { key: 'usageMetricsDays', label: 'Usage metrics', hint: 'Per-request usage and cost metrics.' },
-  { key: 'auditLogDays', label: 'Audit log', hint: 'The audit trail itself. Consider your compliance obligations before limiting this.' },
-  { key: 'toolExecutionsDays', label: 'Tool executions', hint: 'The largest class by bytes: every row keeps its parameters and result as untruncated json, and a tool may return up to 10MB.' },
-  { key: 'notificationsDays', label: 'Notifications', hint: 'One row per failed scheduled or webhook run, and per approval request and decision.' },
+  { key: 'requestLogsDays', label: 'Request logs', hint: 'Each request to a gateway and its answer.' },
+  { key: 'usageMetricsDays', label: 'Usage metrics', hint: 'What each request used and cost.' },
+  { key: 'auditLogDays', label: 'Audit log', hint: 'The record of who did what. Check what your compliance rules require before shortening this.' },
+  { key: 'toolExecutionsDays', label: 'Tool executions', hint: 'Each tool call with its full input and result. Usually the largest kind of data, since one result can be up to 10MB.' },
+  { key: 'notificationsDays', label: 'Notifications', hint: 'One for each failed scheduled or webhook run, and for each approval request and decision.' },
   { key: 'runnerUsageDays', label: 'Hosted machine minutes', hint: 'The record of how long each hosted machine ran. Left empty, it is kept for the default period of this server, not forever.' },
 ] as const
 
@@ -80,7 +80,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
     mutationFn: (data: Parameters<typeof organizationsApi.updateRetention>[1]) =>
       organizationsApi.updateRetention(organizationId!, data),
     onSuccess: async () => {
-      success('Retention policy saved', 'Data older than the configured limits will be deleted by the hourly sweep.')
+      success('Retention policy saved', 'Data older than these limits is deleted within the hour.')
       await queryClient.invalidateQueries({ queryKey: ['retention-policy', organizationId] })
     },
     onError: (err: any) => {
@@ -128,7 +128,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
         <div>
           <CardTitle>Data retention</CardTitle>
           <CardDescription>
-            How long each data class is kept before it is automatically deleted. Leave a field empty to keep that data forever.
+            How long each kind of data is kept before it is deleted automatically. Leave a field empty to keep that data forever.
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">

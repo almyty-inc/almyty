@@ -68,7 +68,7 @@ export function ReviewDashboard() {
       queryClient.invalidateQueries({ queryKey: ['connections', row.connection.id, 'grants'] })
       setToRevoke(null)
       const n = result?.revoked ?? 0
-      notifications.success('Grants revoked', `${pluralized(n, 'grant')} on ${row.connection.name} removed.`)
+      notifications.success('Access revoked', `${pluralized(n, 'grant')} on ${row.connection.name} removed.`)
     },
     onError: (error: unknown) => {
       setToRevoke(null)
@@ -81,7 +81,7 @@ export function ReviewDashboard() {
   return (
     <div className="space-y-3" data-testid="review-panel">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">Personal credentials that agents or workspaces can use. A production agent on a member's own key is a governance gap: move it to an organization credential, or revoke.</p>
+        <p className="text-sm text-muted-foreground">Personal credentials that agents or workspaces can use. A production agent should not run on someone's own key: switch it to an organization credential, or take its access away.</p>
         <div className="flex shrink-0 items-center gap-2">
           <Label htmlFor="review-environment" className="text-xs text-muted-foreground">Environment</Label>
           <select id="review-environment" className={SELECT_CLASS} value={environment} onChange={(e) => setEnvironment(e.target.value as ReviewEnvironment)}>
@@ -157,9 +157,9 @@ export function ReviewDashboard() {
                     ) : 'Never'}
                   </TableCell>
                   <TableCell className="align-top">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setToRevoke(row)} aria-label={`Revoke grants on ${row.connection.name}`}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setToRevoke(row)} aria-label={`Revoke access to ${row.connection.name}`}>
                       <ShieldOff className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                      Revoke grants
+                      Revoke access
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -172,15 +172,15 @@ export function ReviewDashboard() {
       <AlertDialog open={!!toRevoke} onOpenChange={(next) => !next && setToRevoke(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Revoke grants on {toRevoke?.connection.name}?</AlertDialogTitle>
+            <AlertDialogTitle>Revoke access to {toRevoke?.connection.name}?</AlertDialogTitle>
             <AlertDialogDescription>
               {toRevoke ? `${pluralized(toRevoke.grants.length, 'agent and workspace grant')} will be removed. ` : ''}
-              {toRevoke ? `${ownerLabel(toRevoke.owner)} keeps the credential; nothing else can resolve it until it is granted again.` : ''}
+              {toRevoke ? `${ownerLabel(toRevoke.owner)} keeps the credential; nothing else can use it until it is shared again.` : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => toRevoke && revoke.mutate(toRevoke)} disabled={revoke.isPending}>Revoke grants</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={() => toRevoke && revoke.mutate(toRevoke)} disabled={revoke.isPending}>Revoke access</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

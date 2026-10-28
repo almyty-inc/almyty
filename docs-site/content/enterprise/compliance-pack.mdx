@@ -17,10 +17,10 @@ Owners and admins do this under **Settings → Advanced → Compliance**.
 
 ![Compliance settings showing the default policy and posture report](/screenshots/settings-compliance-enabled.png)
 
-1. Turn **Enforce PII filter** and **Enforce security scanner** on or off.
-2. Under **PII categories to mask**, pick which kinds of personal data to hide. Picking none hides all of them.
-3. Choose the **Severity threshold** at which the security scanner acts.
-4. Turn on **Block on violation** to stop the offending call, or off to only record it.
+1. Turn **Hide personal data** and **Scan for attacks** on or off.
+2. Under **What to hide**, pick which kinds of personal data to hide. Picking none hides all of them.
+3. Choose the **Minimum severity** at which the security scanner acts.
+4. Turn on **Block what is found** to stop the offending call, or off to only record it.
 5. Click **Save compliance policy**.
 
 **Safe by default.** Until an admin saves a policy, both filters are enforced, at medium severity, and violations are blocked. Saving a policy can only relax that, and does so on purpose. The page always shows the policy in effect and whether it is the default.
@@ -32,7 +32,7 @@ The same page shows a report you can attach to a compliance file. Pick **Last 7 
 - **The policy in effect** for that period.
 - **Enforced controls**: for each filter, whether it is enforced and its settings.
 - **Activity** from the audit log: total events, events by action, how many could be scanned, and how often credentials were accessed.
-- **Posture score** (0 to 100): a blunt summary. 40 points for each enforced filter and 20 for blocking. Full marks means both filters are enforced and violations are blocked, not merely logged.
+- **Score** (0 to 100): a blunt summary. 40 points for each enforced filter and 20 for blocking. Full marks means both filters are enforced and violations are blocked, not merely logged.
 
 ## For developers
 

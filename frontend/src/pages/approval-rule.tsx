@@ -165,8 +165,8 @@ export function ApprovalRuleForm({
         description={
           canSetSteps ? (
             <>
-              Sign-off in order: each step needs its approvals before the next begins. The approver role is an org
-              role (owner, admin, member), a custom role&apos;s name, team_lead, or <code>*</code> for anyone allowed to
+              Steps run in order, and each needs its approvals before the next starts. For the approver role, enter
+              owner, admin, member, the name of a custom role, team_lead, or <code>*</code> for anyone allowed to
               decide.
             </>
           ) : undefined

@@ -44,7 +44,7 @@ export function KmsSettings() {
         <UpgradePrompt
           feature={FEATURE}
           title="Customer-managed keys"
-          description="Wrap every stored secret under a KMS key in your own AWS account, so access can be revoked by you rather than by us."
+          description="Lock every saved key and password with an encryption key in your own AWS account, so you decide who can read them."
         />
       }
     >
@@ -123,8 +123,8 @@ function Kms() {
       <CardHeader>
         <CardTitle>Customer-managed keys</CardTitle>
         <CardDescription>
-          Secrets are envelope-encrypted under a data key. Attach a KMS key in your own account to wrap that data key, and
-          revoking it in AWS makes the stored secrets unreadable to us.
+          Saved keys, passwords and tokens are locked with an encryption key. Add a key from your own AWS account (KMS) to
+          lock that one too. If you ever take it away in AWS, almyty can no longer read them.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -138,14 +138,14 @@ function Kms() {
                 <span className="ml-2 font-mono text-xs text-muted-foreground">{data.cmkArn}</span>
               </>
             ) : (
-              <span className="text-muted-foreground">No key attached. Secrets are wrapped under the platform key.</span>
+              <span className="text-muted-foreground">No key added. Secrets are locked with almyty&apos;s own key.</span>
             )}
           </div>
         )}
 
         <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
           <div>
-            <Label htmlFor="kms-arn">CMK ARN</Label>
+            <Label htmlFor="kms-arn">Key ARN</Label>
             <Input
               id="kms-arn"
               className="mt-1 font-mono text-xs"
@@ -166,7 +166,7 @@ function Kms() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          The key never leaves your account. almyty stores the ARN and a data key wrapped under it, never the key itself.
+          The key never leaves your AWS account. almyty keeps only its ARN, never the key itself.
         </p>
 
         {(attach.isError || rotate.isError) && (
@@ -192,8 +192,8 @@ function Kms() {
                 const ok = await confirm({
                   title: 'Rotate the encryption key?',
                   description: cmkArn.trim() && cmkArn.trim() !== data?.cmkArn
-                    ? `New secrets will be sealed under ${cmkArn.trim()}. Secrets stored before the rotation stay readable.`
-                    : 'A fresh data key is generated under the current key. Secrets stored before the rotation stay readable.',
+                    ? `New secrets will be locked with ${cmkArn.trim()}. Secrets saved before the rotation stay readable.`
+                    : 'A new data key is made under the key you have. Secrets saved before the rotation stay readable.',
                   confirmLabel: 'Rotate key',
                 })
                 if (ok) rotate.mutate()
@@ -202,9 +202,9 @@ function Kms() {
               {rotate.isPending ? 'Rotating...' : 'Rotate key'}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Generates a fresh data key. Give an ARN above to move to a different key, or leave it
-              blank to rotate under the one you have. Secrets stored before the rotation stay
-              readable — almyty keeps the wrapped key they were sealed with.
+              Makes a new data key. Enter an ARN above to switch to a different key, or leave it
+              blank to keep the one you have. Secrets saved before the rotation stay readable,
+              because almyty keeps the key they were locked with.
             </p>
           </div>
         ) : (
@@ -223,8 +223,8 @@ function Kms() {
                   Someone expecting this to re-encrypt history would
                   otherwise think their data moved when it did not. */}
               <p className="mt-1 text-xs text-muted-foreground">
-                Turning this off wraps new secrets under the platform key again. It does not re-encrypt what is already
-                stored, and it does not delete anything.
+                Turning this off locks new secrets with almyty&apos;s own key again. It does not change what is already
+                saved, and it does not delete anything.
               </p>
             </div>
             <Switch

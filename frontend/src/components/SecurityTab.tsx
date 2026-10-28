@@ -127,7 +127,7 @@ export function SecurityTab() {
             Active sessions
           </CardTitle>
           <CardDescription>
-            Manage your active login sessions
+            Where you are signed in
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -152,8 +152,8 @@ export function SecurityTab() {
                 does nothing is worse than an absent one, because someone
                 who suspects a compromise believes they have acted. */}
             <p className="text-xs text-muted-foreground">
-              Signing out elsewhere is not supported yet. To cut off another device, change your password: existing
-              sessions are issued against your current credentials.
+              You can&apos;t sign out other devices from here yet. To cut off another device, change your password,
+              which ends every session signed in with the old one.
             </p>
           </div>
         </CardContent>
