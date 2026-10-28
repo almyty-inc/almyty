@@ -19,10 +19,12 @@ import * as path from 'path';
 
 const SECRET_NAME = /(secret|token|password|passwd|apikey|api_key|privatekey|private_key|credential|bearer|accesskey|access_key|clientsecret)/i;
 
-/** Names that match the pattern but hold no secret: ids, hashes, counters, types, timestamps. */
+/** Names that match the pattern but hold no secret: ids, hashes, counters, types, timestamps, has-flags. */
 const NOT_A_SECRET = [
   /(Id|Ids|Hash|Prefix|Type|Method|At|Count|Cost|Version|Expires|Endpoint|Url|Location|Name|Kind|Policy|Limit|Enabled|Ttl|Scopes|Granted|Status|Path|Header)$/,
   /^credentialId$/,
+  // `hasPassword`: a yes/no about a secret, not the secret.
+  /^has[A-Z]\w*$/,
   /tokens/i,
   /^(max|total|input|output|prompt|completion|cached|reasoning)Tokens?$/i,
 ];

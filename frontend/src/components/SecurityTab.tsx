@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Shield, Lock } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +16,13 @@ export function SecurityTab() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  // The same query the Profile page reads. Only `hasPassword` is used:
+  // an account made by single sign-on or SCIM has none, and says so.
+  const { data: profile } = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: () => authApi.getProfile(),
+  })
+  const noPassword = (profile as { hasPassword?: boolean } | undefined)?.hasPassword === false
 
   // Change password mutation
   // The button under "Email verification" had no handler at all, while
@@ -201,15 +208,18 @@ export function SecurityTab() {
               </p>
             )}
 
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">Password strength</div>
+            {/* A stored password's strength and age are not known here, so
+                nothing is said about them. What is known: whether there is
+                one at all. */}
+            {noPassword && (
+              <div data-testid="no-password">
+                <div className="font-medium">Password</div>
                 <div className="text-sm text-muted-foreground">
-                  Last changed recently
+                  None set. You sign in through your organization&apos;s single sign-on. To add a password, sign
+                  out and use Forgot password? on the sign-in page.
                 </div>
               </div>
-              <div className="text-green-600 text-sm">Good</div>
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>
