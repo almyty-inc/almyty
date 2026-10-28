@@ -61,6 +61,7 @@ describe('ScimService — Users', () => {
     });
 
     expect(userRepo.save).toHaveBeenCalled();
+    expect(userRepo.save).toHaveBeenCalledWith(expect.objectContaining({ hasPassword: false }));
     expect(membershipRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ organizationId: 'org-1', role: OrganizationRole.MEMBER, isActive: true }),
     );

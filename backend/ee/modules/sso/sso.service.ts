@@ -625,6 +625,7 @@ export class SsoService {
     const user = this.userRepo.create({
       email: profile.email.toLowerCase(),
       passwordHash,
+      hasPassword: false,
       firstName: profile.firstName || profile.email.split('@')[0],
       lastName: profile.lastName || '',
       isVerified: true,
