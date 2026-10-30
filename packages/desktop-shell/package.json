@@ -13,7 +13,7 @@
   "devDependencies": {
     "electron": "41.10.6",
     "electron-builder": "26.15.3",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.12"
   },
   "files": [
     "src/main.js",
