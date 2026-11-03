@@ -216,10 +216,12 @@ describe('the run stream endpoint', () => {
     await controller.streamRun('agent-1', 'run-1', req({ 'last-event-id': '7' }), r, '2');
     expect(runtime.subscribeRunLog).toHaveBeenCalledWith('run-1', 7, expect.any(Function), expect.any(Function), expect.any(AbortSignal));
     expect(runtime.subscribeRunEvents).not.toHaveBeenCalled();
-    expect(r.chunks[0]).toBe(`id: 8\nevent: run.log\ndata: ${JSON.stringify({ seq: 8, type: 'step_committed', step: 0, payload: { status: 'running' }, createdAt: '2026-10-27T10:00:00.000Z' })}\n\n`);
-    expect(r.chunks[1]).toMatch(/^id: 9\nevent: run\.log\n/);
+    // The stream opens with a comment, before any event (see the first-byte tests below).
+    expect(r.chunks[0]).toBe(': open\n\n');
+    expect(r.chunks[1]).toBe(`id: 8\nevent: run.log\ndata: ${JSON.stringify({ seq: 8, type: 'step_committed', step: 0, payload: { status: 'running' }, createdAt: '2026-10-27T10:00:00.000Z' })}\n\n`);
+    expect(r.chunks[2]).toMatch(/^id: 9\nevent: run\.log\n/);
     // Live runtime events have no id: they are not replayed.
-    expect(r.chunks[2]).toMatch(/^event: llm\.chunk\n/);
+    expect(r.chunks[3]).toMatch(/^event: llm\.chunk\n/);
     expect(r.chunks[r.chunks.length - 1]).toBe('event: done\ndata: {}\n\n');
   });
 

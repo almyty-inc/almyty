@@ -32,6 +32,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { CodeModeService } from '../code-mode/code-mode.service';
+import { openEventStream } from '../../common/utils/event-stream';
 
 @Controller('agents')
 @ApiTags('Agents')
@@ -292,12 +293,9 @@ export class AgentRunsController {
       // Verify run exists AND belongs to this agent path segment.
       await this.runtimeService.getRun(runId, organizationId, id);
 
-      // Set SSE headers
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      if (resumeAfter !== null) res.setHeader('X-Accel-Buffering', 'no');
-      res.flushHeaders();
+      // Headers and an opening comment go out now, so no proxy holds the
+      // stream until its first event (common/utils/event-stream.ts).
+      openEventStream(res);
 
       // Stream events via Redis Streams (cross-pod)
       const abortController = new AbortController();
