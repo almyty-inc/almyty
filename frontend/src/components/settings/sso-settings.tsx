@@ -55,7 +55,7 @@ export function SsoSettings() {
         <UpgradePrompt
           feature="sso"
           title="Single sign-on"
-          description="SAML / OIDC login and SCIM provisioning let members sign in through your identity provider."
+          description="Let people sign in with their company account, and keep your member list in sync with your identity provider."
         />
       }
     >
@@ -104,7 +104,7 @@ function SsoSettingsForm() {
       return ssoApi.saveConfig(payload)
     },
     onSuccess: async () => {
-      success('SSO configuration saved', 'Identity provider settings updated.')
+      success('Single sign-on saved', 'Your identity provider settings are updated.')
       await queryClient.invalidateQueries({ queryKey: ['sso-config'] })
     },
     onError: (err: any) =>
@@ -115,7 +115,7 @@ function SsoSettingsForm() {
     mutationFn: () => ssoApi.rotateScimToken(),
     onSuccess: async (res: any) => {
       setNewToken(res.token)
-      success('SCIM token generated', 'Copy it now — it will not be shown again in full.')
+      success('SCIM token generated', 'Copy it now. You will not see it in full again.')
       await queryClient.invalidateQueries({ queryKey: ['sso-config'] })
     },
     onError: (err: any) =>
@@ -133,7 +133,7 @@ function SsoSettingsForm() {
     return (
       <Card>
         <CardContent className="py-8 text-center text-muted-foreground">
-          Loading SSO configuration...
+          Loading single sign-on settings...
         </CardContent>
       </Card>
     )
@@ -153,15 +153,15 @@ function SsoSettingsForm() {
             <ShieldCheck className="h-5 w-5 text-primary" /> Single sign-on
           </CardTitle>
           <CardDescription>
-            Let members sign in through your identity provider (SAML or OIDC).
+            Let people sign in with their company account, through your identity provider (SAML or OIDC).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <Label>Enable SSO login</Label>
+              <Label>Use single sign-on</Label>
               <p className="text-xs text-muted-foreground">
-                When on, members can sign in via your IdP.
+                When on, people can sign in with their company account.
               </p>
             </div>
             <Switch
@@ -185,11 +185,11 @@ function SsoSettingsForm() {
 
           <div className="flex items-center justify-between">
             <div>
-              <Label>Just-in-time provisioning</Label>
+              <Label>Add people when they first sign in</Label>
               <p className="text-xs text-muted-foreground">
-                Create members on their first sign-in, for addresses on a
-                verified email domain (below). Anyone else must be invited or
-                provisioned through SCIM.
+                Anyone with an address on a verified email domain (below)
+                becomes a member the first time they sign in. Everyone else
+                needs an invite, or must be added by your identity provider.
               </p>
             </div>
             <Switch
@@ -251,7 +251,7 @@ function SsoSettingsForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="oidc-secret">
-                  Client secret {form.oidcClientSecretSet && '(set — leave blank to keep)'}
+                  Client secret {form.oidcClientSecretSet && '(saved, leave blank to keep it)'}
                 </Label>
                 <Input
                   id="oidc-secret"
@@ -308,11 +308,11 @@ function SsoSettingsForm() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5 text-primary" /> SCIM provisioning
+            <KeyRound className="h-5 w-5 text-primary" /> Automatic member sync (SCIM)
           </CardTitle>
           <CardDescription>
-            Point your identity provider at this base URL and bearer token to
-            sync users and groups automatically.
+            Give your identity provider this address and token, and it adds
+            and removes people and groups here for you.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -371,8 +371,8 @@ function SsoSettingsForm() {
             </Button>
             <span className="text-xs text-muted-foreground">
               {data?.scimTokenSet
-                ? 'A token is configured. Rotating invalidates the old one.'
-                : 'No token yet — generate one to enable SCIM.'}
+                ? 'A token is set. Rotating it stops the old one from working.'
+                : 'No token yet. Generate one to turn on member sync.'}
             </span>
           </div>
         </CardContent>

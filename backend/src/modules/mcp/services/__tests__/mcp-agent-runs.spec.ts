@@ -14,6 +14,12 @@ const OTHER = '22222222-2222-4222-8222-222222222222';
 const RUN_ID = '33333333-3333-4333-8333-333333333333';
 const V = '2026-07-28';
 const asks = { version: V as any, era: 'modern' as const, clientCapabilities: { elicitation: {}, extensions: { 'io.modelcontextprotocol/tasks': {} } } };
+
+// Change the first character: it lies in the IV, every bit of it is used,
+// so the decoded bytes always differ. Editing the tail can be a no-op when
+// the value already ends that way or the last character has unused bits.
+const tamperFirstChar = (s: string) => (s[0] === 'A' ? 'B' : 'A') + s.slice(1);
+
 const cannotAsk = { version: V as any, era: 'modern' as const, clientCapabilities: { extensions: { 'io.modelcontextprotocol/tasks': {} } } };
 
 function makeRun(over: Record<string, any> = {}): any {
@@ -361,7 +367,7 @@ describe('McpAgentRuns', () => {
       await expect(
         runs.resumeFromRetry({ ...retry, arguments: { agentId: 'agent-2' } }, ORG, OWNER, elicits, 'tools/call'),
       ).rejects.toMatchObject({ code: -32602, message: expect.stringContaining('different request') });
-      await expect(runs.resumeFromRetry({ ...retry, requestState: `${asked.requestState.slice(0, -2)}AA` }, ORG, OWNER, elicits, 'tools/call')).rejects.toMatchObject({ code: -32602 });
+      await expect(runs.resumeFromRetry({ ...retry, requestState: tamperFirstChar(asked.requestState) }, ORG, OWNER, elicits, 'tools/call')).rejects.toMatchObject({ code: -32602 });
     });
   });
 
