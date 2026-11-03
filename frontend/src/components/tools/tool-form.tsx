@@ -121,7 +121,8 @@ export function ToolForm() {
   const [toolParameters, setToolParameters] = useState<any>(EMPTY_PARAMETERS)
   const [toolCode, setToolCode] = useState('')
   const [sdkConfig, setSdkConfig] = useState<any>(null)
-  const [sdkApiId, setSdkApiId] = useState<string>('')
+  // `?type=sdk&api=<id>` (the SDK API page's "Create a tool") opens on that API.
+  const [sdkApiId, setSdkApiId] = useState<string>(() => (typeParam === 'sdk' ? searchParams.get('api') ?? '' : ''))
   const [llmConfig, setLlmConfig] = useState({
     providerId: '',
     promptTemplate: '',
@@ -281,6 +282,9 @@ export function ToolForm() {
         payload.httpConfig = httpConfigPayload
       } else if (executionMethod === 'sdk') {
         payload.sdkConfig = sdkConfig
+        // Linked to its API, the tool installs the API's pinned versions
+        // from the API's registry rather than the latest from npmjs.
+        if (sdkApiId) payload.apiId = sdkApiId
       } else if (isProtocolMethod(executionMethod)) {
         // A GraphQL, SOAP or gRPC tool is stored as its protocol's config,
         // which the backend's protocol executor runs. Never as generated

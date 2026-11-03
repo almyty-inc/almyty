@@ -118,6 +118,7 @@ const SOURCE_WORDS: Record<WakeSource, string> = {
   webhook: 'by a webhook',
   connection: 'by a connection',
   manual: 'because you asked',
+  push: 'by a service telling it something changed',
 };
 
 const times = (n: number) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);

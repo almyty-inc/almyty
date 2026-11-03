@@ -282,6 +282,26 @@ describe('DiscordGatewayTransport', () => {
       sockets[0].receive({ op: 0, t: 'MESSAGE_CREATE', s: 2, d: { content: 'ghost' } });
       expect(channelService.handleInboundMessage).not.toHaveBeenCalled();
     });
+
+  describe('INTERACTION_CREATE dispatch (a button pressed)', () => {
+    it('feeds a component interaction into the channel inbound pipeline', () => {
+      const gw = gateway();
+      transport.start(gw);
+      hello(sockets[0]);
+      ready(sockets[0]);
+      const interaction = { id: 'i-1', type: 3, token: 'tok', channel_id: 'dm-1', user: { id: 'user-9' }, data: { custom_id: 'apv:a:x', component_type: 2 } };
+      sockets[0].receive({ op: 0, t: 'INTERACTION_CREATE', s: 3, d: interaction });
+      expect(channelService.handleInboundMessage).toHaveBeenCalledWith(gw, interaction, {});
+    });
+
+    it('leaves other interactions (slash commands, pings) alone', () => {
+      transport.start(gateway());
+      hello(sockets[0]);
+      ready(sockets[0]);
+      sockets[0].receive({ op: 0, t: 'INTERACTION_CREATE', s: 3, d: { id: 'i-2', type: 2, token: 'tok', data: { name: 'ask' } } });
+      expect(channelService.handleInboundMessage).not.toHaveBeenCalled();
+    });
+  });
   });
 
   describe('resume vs re-identify', () => {

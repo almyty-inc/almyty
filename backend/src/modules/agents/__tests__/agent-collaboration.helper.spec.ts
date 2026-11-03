@@ -2,6 +2,8 @@ import { AgentCollaborationHelper } from '../agent-collaboration.helper';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Agent } from '../../../entities/agent.entity';
 import { principalOfRun } from '../../../common/authorization/execution-access.service';
+import { fakeRepository } from '../../../test/fake-repository';
+import { expectRunProjectionsHold, withRunEvents } from '../../../test/fake-run-events';
 
 /**
  * Per-strategy unit tests for the four collaboration modes the product exposes:
@@ -50,18 +52,30 @@ function makeRuntime() {
   };
 }
 
-/** Repo whose findOne returns a not-done racer carrying cost (for race aggregation). */
+/**
+ * The runs table: the parent run, and child runs r1.. still going, each
+ * carrying cost (for race aggregation). Writes go through the run event
+ * log, so it has the events table beside it.
+ */
 function makeRepo(racerCost = 5) {
-  return {
-    save: jest.fn(async (r: any) => r),
-    findOne: jest.fn(async ({ where: { id } }: any) => ({
-      id,
-      status: AgentRunStatus.RUNNING,
-      totalCost: racerCost,
-      totalTokens: racerCost * 10,
-      isDone: () => false,
-    })),
-  };
+  const parent = makeRun();
+  const repo = fakeRepository<AgentRun>({
+    make: () => new AgentRun(),
+    seed: [
+      { ...parent, headSeq: 0 } as any,
+      ...Array.from({ length: 12 }, (_, i) => ({
+        id: `r${i + 1}`,
+        status: AgentRunStatus.RUNNING,
+        totalCost: racerCost,
+        totalTokens: racerCost * 10,
+        steps: [],
+        currentStep: 0,
+        headSeq: 0,
+      })),
+    ],
+  });
+  const events = withRunEvents(repo);
+  return Object.assign(repo, { events });
 }
 
 function makeRun(): AgentRun {
@@ -85,6 +99,9 @@ function agentWith(collaboration: any): Agent {
 
 const ag = (agentId: string, role?: string) => ({ kind: 'agent', agentId, ...(role ? { role } : {}) });
 const md = (providerId: string, model: string, extra: Record<string, any> = {}) => ({ kind: 'model', providerId, model, ...extra });
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('AgentCollaborationHelper', () => {
   it('sequential: pipes each agent output into the next agent input, final = last', async () => {
@@ -166,8 +183,11 @@ describe('AgentCollaborationHelper', () => {
     expect(String(run.output)).toMatch(/^out:a[123]$/); // some racer won
     // The budget-safety property: cost of ALL 3 racers, not just the winner.
     expect(run.totalCost).toBe(15);
-    // Losers were soft-cancelled.
-    expect(repo.save).toHaveBeenCalled();
+    // Racers still going were soft-cancelled, each on its own run's log
+    // (here no racer's row was ever finished, so that is all three).
+    const cancelled = ['r1', 'r2', 'r3'].filter((id) => repo.row(id)!.status === AgentRunStatus.CANCELLED);
+    expect(cancelled).toHaveLength(3);
+    for (const id of cancelled) expect(repo.events.rows(id).some((e) => e.type === 'status_changed')).toBe(true);
     expect(run.steps[0].type).toBe('collaboration_race');
   });
 
@@ -353,8 +373,8 @@ describe('AgentCollaborationHelper', () => {
       // Only the finished call is billed; the aborted one reported nothing.
       expect(run.totalCost).toBe(3);
       expect(run.totalTokens).toBe(7);
-      // No agent racer, so no run row was looked up.
-      expect(repo.findOne).not.toHaveBeenCalled();
+      // No agent racer, so no racer's run row was looked up (only the parent's, to write it).
+      expect(repo.findOne.mock.calls.every(([o]: any) => o.where.id === 'parent-run')).toBe(true);
       expect((run.steps[0] as any).output.winner).toEqual({ kind: 'model', providerId: 'p2', model: 'fast' });
     });
 
@@ -418,7 +438,8 @@ describe('AgentCollaborationHelper', () => {
       expect(stop).toBeDefined();
       expect(stop.output).toEqual({ totalCost: 3, maxTotalCost: 3 });
       expect(runtime.emitEvent).toHaveBeenCalledWith('parent-run', 'run.failed', expect.anything());
-      expect(repo.save).toHaveBeenCalledWith(run);
+      expect(repo.row('parent-run')!.status).toBe(AgentRunStatus.FAILED);
+      expect(repo.events.rows('parent-run').some((e) => e.type === 'run_failed')).toBe(true);
     });
 
     it('rules.maxTotalCost stops a debate before the next round and before the judge', async () => {

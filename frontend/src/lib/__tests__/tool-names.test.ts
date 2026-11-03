@@ -49,3 +49,24 @@ describe('tools from specs without summaries', () => {
     )
   })
 })
+
+describe('the name generation chose', () => {
+  // HubSpot's tools showed "GET /crm/v3/owners operation" and
+  // "Get crm v3 objects companies company id 937ca5".
+  it('is used when the tool has one', () => {
+    expect(readableToolName({
+      name: 'hubspot_companies_get_crm_v3_objects_companies_company_id_937ca5',
+      description: 'GET /crm/v3/objects/companies/{companyId} operation',
+      metadata: { displayName: 'Get company by id' },
+    })).toBe('Get company by id')
+  })
+
+  it('without one, a generated "METHOD /path operation" description is not a name and the hash is dropped', () => {
+    expect(readableToolName({ name: 'hubspot_owners_get_crm_v3_owners', api: { name: 'HubSpot Owners' }, description: 'GET /crm/v3/owners operation' })).toBe('Get crm v3 owners')
+    expect(readableToolName({
+      name: 'hubspot_companies_get_crm_v3_objects_companies_company_id_937ca5',
+      api: { name: 'HubSpot Companies' },
+      description: 'GET /crm/v3/objects/companies/{companyId} operation',
+    })).toBe('Get crm v3 objects companies company id')
+  })
+})

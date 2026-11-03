@@ -57,6 +57,7 @@ import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
 import { RunnerCallService, RunnerCallError } from '../runner/runner-call.service';
 import { RunWorkspaceService } from '../runner/run-workspace.service';
+import { runnerCallWait } from '../runner/runner-capabilities';
 import { getRequestContext } from '../../common/request-context';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
@@ -975,7 +976,7 @@ export class ToolExecutorService {
         // so a gateway run is judged by its gateway's scope.
         {
           signal: options.signal,
-          timeoutMs: tool.configuration?.timeout,
+          timeoutMs: runnerCallWait(tool.configuration?.timeout, callParams),
           callerUserId: options.userId ?? null,
           principal: options.principal,
           // The agent's machine requirements (gpu=yes): the call goes to an

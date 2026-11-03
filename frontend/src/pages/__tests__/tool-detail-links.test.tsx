@@ -62,4 +62,19 @@ describe('tool detail links', () => {
     await screen.findByRole('heading', { name: 'List widgets' })
     expect(screen.queryByRole('link', { name: /Publish to hub/ })).not.toBeInTheDocument()
   })
+
+  // A tool from a spec without summaries read "hubspot_companies_get_crm_v3_objects_companies_company_id_937ca5"
+  // over "GET /crm/v3/objects/companies/{companyId} operation".
+  it('a generated tool is titled by its display name, with the machine name under it and no "METHOD /path operation" line', async () => {
+    vi.mocked(toolsApi.getById).mockResolvedValue({
+      ...TOOL,
+      name: 'hubspot_companies_get_crm_v3_objects_companies_company_id_937ca5',
+      description: 'GET /crm/v3/objects/companies/{companyId} operation',
+      metadata: { displayName: 'Get company by id' },
+    } as any)
+    renderAt('/tools/tool-1')
+    expect(await screen.findByRole('heading', { name: 'Get company by id' })).toBeInTheDocument()
+    expect(screen.getByTestId('tool-machine-name')).toHaveTextContent('hubspot_companies_get_crm_v3_objects_companies_company_id_937ca5')
+    expect(screen.queryByText('GET /crm/v3/objects/companies/{companyId} operation')).not.toBeInTheDocument()
+  })
 })

@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 
 @Controller('agents')
 @ApiTags('Agents')
@@ -39,6 +40,7 @@ export class AgentManagementController {
 
   @Get(':id/executions')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get agent execution history' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Executions retrieved successfully' })
@@ -91,6 +93,7 @@ export class AgentManagementController {
 
   @Get(':id/audit-log')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get agent audit log' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Audit log retrieved successfully' })
@@ -133,6 +136,7 @@ export class AgentManagementController {
 
   @Post(':id/versions')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Save current agent state as a version' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiBody({ description: 'Optional changelog for the version' })
@@ -173,6 +177,7 @@ export class AgentManagementController {
 
   @Get(':id/versions')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get agent version history' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Version history retrieved successfully' })
@@ -210,6 +215,7 @@ export class AgentManagementController {
 
   @Post(':id/versions/:index/rollback')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Rollback agent to a specific version' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiParam({ name: 'index', description: 'Version index to rollback to' })
@@ -262,6 +268,7 @@ export class AgentManagementController {
 
   @Get(':id/export')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Export agent as JSON' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent exported successfully' })
@@ -299,6 +306,7 @@ export class AgentManagementController {
 
   @Get(':id/technical-documentation')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Export EU AI Act Annex-IV-style technical documentation for an agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Technical documentation generated successfully' })
@@ -345,6 +353,7 @@ export class AgentManagementController {
 
   @Get(':id/cost-estimate')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get cost estimate for an agent pipeline' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Cost estimate retrieved successfully' })

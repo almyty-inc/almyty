@@ -42,13 +42,14 @@ node docs-site/scripts/record-screenshot.mjs \
   --title 'Model catalog' --captured-at '2026-09-22T15:00:00Z' \
   --route /models \
   --sources frontend/src/pages/models.tsx \
-  --sources frontend/src/components/models \
-  --sources frontend/src/components/ui \
-  --sources frontend/src/index.css
+  --sources frontend/src/components/models
 ```
 
-Choose source files/directories covering the depicted page, its child components,
-and shared layout/styles. Their content fingerprint detects drift, including
+Choose source files/directories covering the depicted page and its child
+components. Do not list the shared `frontend/src/components/ui`,
+`frontend/src/components/layout` or `frontend/src/index.css` (or a directory
+containing them): nearly every screen uses them, so any tweak there would mark
+every image stale. The checker rejects them. The content fingerprint detects drift, including
 added/deleted files, without depending on checkout timestamps or rewritten Git
 history. Tests are excluded. This is a review trigger, not a claim that every
 source change changes pixels; inspect the live deployed page and register new
@@ -65,10 +66,12 @@ with `--file docker-compose.yml --command 'freeze ...'` and must list that file 
 `--sources`, so editing the file marks the image as drifted.
 
 Run `npm run test-screenshots` and `npm run check-screenshots` in `docs-site`.
-CI checks complete coverage, missing/broken references, duplicate entries,
-image hashes, per-image metadata, and source drift for refreshed images.
-`node docs-site/scripts/check-screenshots.mjs --strict` additionally fails while
-any image still needs recapture; use it before calling #675 complete.
+CI fails on incomplete coverage, missing/broken references, duplicate entries,
+image hashes and per-image metadata. Source drift is printed as a warning there,
+so a code change never blocks a PR on its own.
+`node docs-site/scripts/check-screenshots.mjs --strict` turns drift into an error
+and also fails while any image still needs recapture; run it when recapturing
+and before calling #675 complete.
 Keep historical failure evidence explicitly historical rather than replacing
 it with an unrelated successful screen.
 

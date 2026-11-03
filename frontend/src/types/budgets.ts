@@ -105,6 +105,22 @@ export function centsToDollars(cents: number): string {
   return (cents / 100).toFixed(2)
 }
 
+/**
+ * An amount in cents (fractions allowed) as dollars. Under a dollar it
+ * keeps up to four decimals, so a model call's fraction of a cent on a
+ * one-cent budget reads $0.0042, not $0.00.
+ */
 export function formatBudgetCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`
+  const dollars = (Number.isFinite(cents) ? cents : 0) / 100
+  if (Math.abs(dollars) >= 1 || dollars === 0) return `$${dollars.toFixed(2)}`
+  const [whole, frac = ''] = dollars.toFixed(4).replace(/0+$/, '').split('.')
+  return `$${whole}.${frac.padEnd(2, '0')}`
+}
+
+/** The share of a budget spent: "<1%" for any spend under one percent, never 100% below the limit. */
+export function formatBudgetShare(spentCents: number, limitCents: number): string {
+  if (!(limitCents > 0)) return '0%'
+  const share = (spentCents / limitCents) * 100
+  if (spentCents > 0 && share < 1) return '<1%'
+  return `${Math.min(999, share < 100 ? Math.floor(share) : Math.round(share))}%`
 }

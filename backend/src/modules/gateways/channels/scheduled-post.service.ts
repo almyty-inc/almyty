@@ -6,11 +6,13 @@ import { Agent } from '../../../entities/agent.entity';
 import { AgentChannel, ChannelStatus } from '../../../entities/agent-channel.entity';
 import { AgentExecution } from '../../../entities/agent-execution.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
+import { mergeMetadata, writeRun } from '../../agents/run-event-writer';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { GATEWAY_TYPE_FOR_CHANNEL } from '../../agent-channels/channel-publish';
 import { resourceOwnerId } from '../../../common/authorization/access-policy.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import type {
+  ChannelAction,
   ChannelDelivery,
   ChannelDeliveryOutcome,
   PostChannelOption,
@@ -281,7 +283,7 @@ export class ScheduledPostService implements ScheduledResultPoster {
     agent: Agent,
     execution: ScheduledResult,
     delivery: ChannelDelivery,
-    when: { timezone?: string } = {},
+    when: { timezone?: string; actions?: ChannelAction[] } = {},
   ): Promise<ChannelDeliveryOutcome> {
     const base = {
       channelId: delivery.channelId,
@@ -336,7 +338,7 @@ export class ScheduledPostService implements ScheduledResultPoster {
       subject: `${agent.name}, ${dayIn(when.timezone, new Date())}`,
     };
     try {
-      await this.channelGateway.postMessage(gateway!, parts, context, { destination, disclosed: disclose });
+      await this.channelGateway.postMessage(gateway!, parts, context, { destination, disclosed: disclose }, when.actions);
       outcome = { ...named, status: 'delivered', parts: parts.length, ...(truncated ? { truncated: true } : {}) };
     } catch (err: any) {
       outcome = { ...named, status: 'failed', error: String(err?.message ?? err).slice(0, 500) };
@@ -353,7 +355,10 @@ export class ScheduledPostService implements ScheduledResultPoster {
     // A daily summary is no row of its own.
     if (execution.kind === 'digest') return;
     try {
-      if (execution.kind === 'run') await this.runs?.update(execution.id, { metadata: execution.metadata });
+      // On a run: the one key, merged into the row as it stands, on its log.
+      if (execution.kind === 'run') {
+        if (this.runs) await writeRun(this.runs, { id: execution.id }, mergeMetadata({ channelDelivery: outcome }));
+      }
       else await this.executions.update(execution.id, { metadata: execution.metadata });
     } catch (err: any) {
       this.logger.warn(`Could not record the channel post for ${execution.id}: ${err?.message ?? err}`);

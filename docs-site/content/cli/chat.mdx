@@ -94,6 +94,6 @@ ALMYTY_TOKEN=almyty_... npx @almyty/chat research-bot
 
 **No agents found.** Your org has no agents yet, or your token is for another org. Create one under **Agents → Create agent**.
 
-**A run seems to hang.** Autonomous runs can take minutes and stream as they go. If the connection drops the run continues server-side; check it with `npx @almyty/agents runs <agent>`.
+**A run seems to hang.** Autonomous runs can take minutes and stream as they go. If the connection drops, the chat reconnects by itself and the answer carries on from where it was, with nothing missed or shown twice. If it cannot reconnect, the run still continues server-side; check it with `npx @almyty/agents runs <agent>`.
 
 **Context feels lost between messages.** Workflow agents are stateless by design. Use an autonomous agent if you need context to carry from one message to the next.

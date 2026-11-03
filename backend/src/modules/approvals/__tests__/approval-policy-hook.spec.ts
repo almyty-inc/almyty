@@ -3,6 +3,7 @@ import { ApprovalsService } from '../approvals.service';
 import { fakeApprovalsRepo } from './approvals-repo.fixture';
 import { ApprovalPolicyApproval } from '../../../common/ee-hooks/ee-hooks';
 import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
+import { expectRunProjectionsHold, runsWithEvents } from '../../../test/fake-run-events';
 
 /**
  * EE hook seam: on create the optional APPROVAL_POLICY_HOOK may attach a
@@ -10,14 +11,6 @@ import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
  * scores collected approvals and the row only flips to approved once the
  * policy is satisfied. No hook / no policy / null score → OSS single gate.
  */
-class FakeRunsRepo {
-  updates: any[] = [];
-  async update(criteria: any, patch: any) {
-    this.updates.push({ criteria, patch });
-    return { affected: 1 };
-  }
-}
-
 class FakeAccessPolicy {
   decision = { allowed: true, reason: 'ok' };
   orgRoles = new Map<string, string>();
@@ -68,7 +61,8 @@ function makeQuorumHook(required = 2) {
 
 function makeService(hook?: any) {
   const approvals = fakeApprovalsRepo();
-  const runs = new FakeRunsRepo();
+  // The runs table a request pauses, with the event log its writes go with.
+  const runs = runsWithEvents();
   const policy = new FakeAccessPolicy();
   const policyApprovals = new FakePolicyApprovalsRepo();
   const svc = new ApprovalsService(
@@ -89,6 +83,9 @@ const createInput = {
   reason: 'wire transfer over 10k',
   payload: { amount: 25000 },
 };
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('ApprovalsService — approval policy hook', () => {
   describe('community build (no hook)', () => {
@@ -125,6 +122,9 @@ describe('ApprovalsService — approval policy hook', () => {
         policyId: 'pol-1',
         policyName: 'two-approver quorum',
         approvals: [],
+        // Scored with no approvals yet, so the Approvals page can say
+        // "Step 1 of 1" before anyone has acted.
+        progress: expect.objectContaining({ currentStep: 0, satisfied: false, totalCollected: 0 }),
       });
       // Agent payload is preserved alongside the reserved key.
       expect((row.payload as any).amount).toBe(25000);
@@ -244,6 +244,8 @@ describe('ApprovalsService — approval policy hook', () => {
       const { svc } = makeService(hook);
 
       const row = await svc.create(createInput);
+      // Create scores the empty policy once, for the page's "Step 1 of N".
+      hook.scoreProgress.mockClear();
       const decided = await svc.reject(row.id, { decidedBy: 'u1', decisionReason: 'no' }, { id: 'u1' }, row.organizationId);
 
       expect(decided.status).toBe('rejected');

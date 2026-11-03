@@ -14,6 +14,7 @@ import { BUILT_IN_TOOLS } from '../../../agents/agent-runtime.service';
 import { resolveRunLimits } from '../../../agents/run-limits';
 import { LlmChatHelper } from '../../../llm-providers/llm-chat.helper';
 import { fakeRepository, UnmodelledQueryError } from '../../../../test/fake-repository';
+import { expectRunProjectionsHold, withRunEvents } from '../../../../test/fake-run-events';
 import { membershipFixture } from '../../../../test/execution-access.fixture';
 import { gatewayPrincipal } from '../../../../common/authorization/execution-access.service';
 
@@ -32,6 +33,9 @@ const { callLlmProviderHttpStream } = require('../../../llm-providers/providers/
  * Every tool step and the draft reply stay hidden; a last call with no
  * tools writes the answer, and that is what streams and what is kept.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('hosted chat: the answer is a no-tools call that streams', () => {
   // ── Provider byte streams ──────────────────────────────────────────
   const anthropicToolStep = [
@@ -165,6 +169,7 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
           totalCost: 0,
           totalTokens: 0,
           toolCallCount: 0,
+          headSeq: 0,
           recursionDepth: 0,
           executionTime: 0,
           createdAt: new Date(),
@@ -175,6 +180,8 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
         } as any,
       ],
     });
+    // The step commit writes the row and its run events in one transaction.
+    withRunEvents(runRepository);
 
     const toolExecutorService = {
       executeTool: jest.fn(async (toolId: string) => {
@@ -257,7 +264,7 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
     });
     const hostedChat = {
       findBySlug: async () => gateway,
-      resolveEndUser: async () => ({ endUser: { id: 'eu-1' }, issuedSessionKey: null }),
+      findEndUser: async () => ({ id: 'eu-1' }),
       requiresAuth: () => false,
       runBelongsToEndUser: async (runId: string) => (await runRepository.findOne({ where: { id: runId, endUserId: 'eu-1' } })) !== null,
     };
@@ -281,8 +288,14 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
       write: (frame: string) => frames.push(frame),
       end: () => undefined,
     };
-    const controller = new HostedChatController(hostedChat as any, {} as any, agentRuntime as any);
-    await controller.stream('acme', 'run-1', { headers: {}, cookies: {}, ip: '203.0.113.9', on: () => undefined } as any, res as any);
+    const limits = { checkVisitorStream: async () => ({ limited: false }) };
+    const controller = new HostedChatController(hostedChat as any, limits as any, agentRuntime as any);
+    await controller.stream(
+      'acme',
+      'run-1',
+      { headers: {}, cookies: { almyty_chat_session: 'sid-eu-1' }, ip: '203.0.113.9', on: () => undefined } as any,
+      res as any,
+    );
 
     // The replay a returning visitor gets, through the service's own filter.
     const transcriptService = Object.assign(Object.create(HostedChatService.prototype), { messageRepository });

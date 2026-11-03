@@ -187,7 +187,9 @@ async function shell(ctx: HandlerContext, req: RequestPayload): Promise<unknown>
   // (runner-capability.publisher.ts): `command`, and a `cwd` relative to
   // the workspace root. This read `cmd` and ignored `cwd`, so every call
   // through the published tool failed "cmd is required".
-  const p = req.params as { command?: string; cwd?: string; env?: Record<string, string>; timeoutMs?: number };
+  // `input`, when given, is written to the command's stdin; otherwise stdin
+  // is closed, so a command that reads it does not wait forever.
+  const p = req.params as { command?: string; cwd?: string; env?: Record<string, string>; timeoutMs?: number; input?: unknown };
   const cmd = requireString(p.command, 'command');
   const cwd = resolveShellCwd(req.workspaceCwd, p.cwd, ctx.defaultShellCwd);
   // Enforce the same execution policy as process.spawn — isolation
@@ -195,7 +197,10 @@ async function shell(ctx: HandlerContext, req: RequestPayload): Promise<unknown>
   // with the sanitized env. Without this, shell.exec was a hole straight
   // past every protection spawn honours.
   const { env } = enforceShellPolicy(ctx.config, cmd, p.env, cwd);
-  return shellExec(cmd, env, p.timeoutMs, cwd);
+  if (p.input !== undefined && typeof p.input !== 'string') {
+    throw new RunnerError('input must be a string', RUNNER_ERROR_CODES.COMMAND_DENIED);
+  }
+  return shellExec(cmd, env, p.timeoutMs, cwd, p.input);
 }
 
 /**

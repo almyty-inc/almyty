@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  ForbiddenException,
   Logger,
   NotFoundException,
   OnModuleDestroy,
@@ -20,11 +21,14 @@ import { randomUUID } from 'crypto';
 
 import { Agent, AgentPauseReason, AgentStatus } from '../../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
+import { claimDelivery, writeRun } from '../run-event-writer';
 import { AgentWake, WakeSource } from '../../../entities/agent-wake.entity';
+import { AgentPushWake } from '../../../entities/agent-push-wake.entity';
 import { AgentChannel, ChannelType } from '../../../entities/agent-channel.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { User } from '../../../entities/user.entity';
+import { ApprovalRequest } from '../../../entities/approval-request.entity';
 import { Message } from '../../../entities/message.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
@@ -53,6 +57,18 @@ import {
   mergeAlwaysOn,
   readAlwaysOn,
 } from './always-on.types';
+import { REPORT_RULE, answerText, forPeople, hasNews } from './always-on-report';
+import {
+  ChannelDecision,
+  approvalActions,
+  approvalMessage,
+  approvalNotice,
+  approvalRef,
+  parseDecision,
+  questionMessage,
+  quotedRef,
+  readApprovalAction,
+} from './channel-approval';
 
 /** Job names on the agent-runtime queue. */
 export const ALWAYS_ON_TICK_JOB = 'always-on-tick';
@@ -152,11 +168,21 @@ export interface AlwaysOnView {
   hostedHome: boolean;
   /** The organization's always-on agents with a hosted home that are on now. */
   hostedAgentsOn: number;
+  /** Its push wakes (push-wakes/): services that tell it when something changed. */
+  pushWakes: number;
 }
 
 function bounded(text: string, max: number): string {
   const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+/** What a person is told when the request they answered was decided already. */
+export function alreadyDecided(status: string): string {
+  if (status === 'approved') return 'This was already approved.';
+  if (status === 'rejected') return 'This was already rejected.';
+  if (status === 'expired') return 'This request expired before anyone decided it.';
+  return 'This was already decided.';
 }
 
 function boundedPayload(payload: Record<string, any> | null | undefined): Record<string, any> | null {
@@ -181,6 +207,14 @@ export interface InboundForAlwaysOn {
   deliveryId?: string | null;
   /** The platform says the agent's own bot sent it. */
   fromBot?: boolean;
+  /** The text of the message this one replies to, where the platform says (Telegram). */
+  replyToText?: string | null;
+  /** The message came from a conversation with several people in it. */
+  group?: boolean;
+  /** The direct conversation it came from, as a post destination (ChannelGatewayService.conversationOf). */
+  conversation?: { to: string; context?: Record<string, string> } | null;
+  /** Answer the sender in their conversation, without a run (a request decided, a refusal). */
+  reply?: (text: string) => Promise<void>;
 }
 
 /**
@@ -258,7 +292,7 @@ export function wakeMessage(brief: string, wakes: Array<Pick<AgentWake, 'source'
     'What happened since you last worked (oldest first):',
     ...(wakes.length ? wakes.map(wakeLine) : ['- nothing new']),
     '',
-    'Do what needs doing now. If nothing does, say so in one line.',
+    `Do what needs doing now. ${REPORT_RULE}`,
   ].join('\n');
 }
 
@@ -270,7 +304,21 @@ function wakeLine(w: Pick<AgentWake, 'source' | 'summary' | 'payload' | 'created
   const owner = w.payload?.ownerMessage?.text;
   if (owner) return `- ${clock(w.createdAt)}, your owner wrote: ${owner}`;
   const sent = w.source === 'webhook' && typeof w.payload?.text === 'string' ? `\n  What was sent: ${w.payload.text}` : '';
+  if (w.source === 'push' && Array.isArray(w.payload?.changes) && w.payload!.changes.length) {
+    const items = (w.payload!.changes as Array<Record<string, unknown>>).map(
+      (c) => `\n  - ${Object.entries(c).map(([k, v]) => `${k}: ${String(v)}`).join(', ')}`,
+    );
+    const more = w.payload!.more ? `\n  - and ${w.payload!.more} more` : '';
+    return `- ${clock(w.createdAt)}, ${w.summary}\n  What changed:${items.join('')}${more}`;
+  }
   return `- ${clock(w.createdAt)}, ${w.summary}${sent}`;
+}
+
+/** What the owner wrote in these wakes, oldest first: the only words a person wrote into a wake run. */
+export function ownerWordsOf(wakes: Array<Pick<AgentWake, 'payload'>>): string[] {
+  return wakes
+    .map((w) => w.payload?.ownerMessage?.text)
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
 }
 
 /** The note a live run gets when wakes arrive while it works. */
@@ -318,6 +366,10 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly identity?: AgentIdentityService,
     // The owner's time zone, for a daily summary that names none.
     @Optional() @InjectRepository(User) private readonly users?: Repository<User>,
+    // Pending requests of the agent, for a "yes" in chat (Approve in chat).
+    @Optional() @InjectRepository(ApprovalRequest) private readonly approvalRows?: Repository<ApprovalRequest>,
+    // Its push wakes count as something that wakes it (mergeAlwaysOn).
+    @Optional() @InjectRepository(AgentPushWake) private readonly pushWakes?: Repository<AgentPushWake>,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -413,6 +465,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       digest: await this.digestTimingFor(agent, config),
       hostedHome: hasHostedHome(config),
       hostedAgentsOn: (await this.hostedAgentsOn(organizationId)).length,
+      pushWakes: await this.pushWakeCount(agentId, organizationId),
     };
   }
 
@@ -434,7 +487,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Always on is for autonomous agents. Use a schedule or a webhook for a workflow.');
     }
     const before = readAlwaysOn(agent.alwaysOn);
-    const next = mergeAlwaysOn(before, input ?? {});
+    const next = mergeAlwaysOn(before, input ?? {}, { pushWakes: await this.pushWakeCount(agentId, organizationId) });
     const capacity = await this.capacityFor(organizationId);
 
     if (next.enabled && agent.status !== AgentStatus.ACTIVE) {
@@ -848,6 +901,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
             triggerType: 'always_on',
             wakeIds: claimed.map((w) => w.id),
             replyTo: this.repliesOf(claimed),
+            // The owner's own words, apart from the wake prompt the system
+            // wrote: only these are what a person said (memory reads them).
+            personWords: ownerWordsOf(claimed),
           },
         });
       } catch (err: any) {
@@ -928,12 +984,19 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
 
   private async rememberReplies(run: AgentRun, wakes: AgentWake[]): Promise<void> {
     const replies = this.repliesOf(wakes);
-    if (!replies.length) return;
-    const existing: ChannelDelivery[] = Array.isArray(run.metadata?.replyTo) ? run.metadata.replyTo : [];
-    const merged = [...existing];
-    for (const r of replies) if (!merged.some((d) => d.channelId === r.channelId && d.to === r.to)) merged.push(r);
-    run.metadata = { ...(run.metadata ?? {}), replyTo: merged };
-    await this.runs.update({ id: run.id }, { metadata: run.metadata });
+    // The owner's words handed to a run already going are a person's words on it too.
+    const words = ownerWordsOf(wakes);
+    if (!replies.length && !words.length) return;
+    const add = (metadata: Record<string, any> | null | undefined) => {
+      const existing: ChannelDelivery[] = Array.isArray(metadata?.replyTo) ? metadata!.replyTo : [];
+      const merged = [...existing];
+      for (const r of replies) if (!merged.some((d) => d.channelId === r.channelId && d.to === r.to)) merged.push(r);
+      const personWords = [...(Array.isArray(metadata?.personWords) ? metadata!.personWords : []), ...words];
+      return { ...(metadata ?? {}), replyTo: merged, personWords };
+    };
+    run.metadata = add(run.metadata);
+    // Added to the row as it stands (the run is mid-step), on its log.
+    await writeRun(this.runs, { id: run.id }, (row) => ({ metadata: add(row.metadata) }));
   }
 
   /**
@@ -1257,8 +1320,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     try {
       const run = await this.runs.findOne({ where: { id: runId } });
       if (!run || run.metadata?.triggerType !== 'always_on' || !run.isDone()) return;
-      const claim = await this.runs.update({ id: run.id, deliveredAt: IsNull() }, { deliveredAt: new Date() });
-      if (!claim.affected) return;
+      if (!(await claimDelivery(this.runs, run.id, 'always_on'))) return;
       const agent = await this.agents.findOne({ where: { id: run.agentId, organizationId: run.organizationId } });
       if (!agent) return;
       const config = readAlwaysOn(agent.alwaysOn);
@@ -1267,7 +1329,8 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         kind: 'run',
         id: run.id,
         status: run.status,
-        output: run.output,
+        // NOTHING_TO_REPORT reads as a sentence wherever it is posted anyway.
+        output: forPeople(run.output),
         userId: run.userId ?? null,
         error: run.error ?? null,
         executionTime: run.executionTime,
@@ -1281,14 +1344,19 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
         for (const delivery of replies) await poster.post(agent, result, delivery);
       }
       // A daily summary reports once a day (digest), not after each run.
+      // "When it has something to tell you" reports an answer that is not
+      // NOTHING_TO_REPORT (always-on-report.ts); a quiet wake posts nothing
+      // and notifies nobody.
       const perRun = config?.report !== 'daily_digest';
-      const wantsReport = perRun && config?.reportTo && (config.report === 'every_wake' || (await this.acted(run)));
+      const worthReporting =
+        perRun &&
+        (config?.report === 'every_wake' || (config?.report === 'when_news' ? hasNews(run.output) : await this.acted(run)));
       const alreadyThere = replies.some((r) => r.channelId === config?.reportTo?.channelId && r.to === config?.reportTo?.to);
-      if (wantsReport && poster && config?.reportTo && !alreadyThere) {
+      if (worthReporting && poster && config?.reportTo && !alreadyThere) {
         await poster.post(agent, result, config.reportTo);
       }
-      if (run.status === AgentRunStatus.COMPLETED && perRun && (config?.report === 'every_wake' || (await this.acted(run)))) {
-        const text = typeof run.output === 'string' ? run.output : (run.output as any)?.text ?? '';
+      if (run.status === AgentRunStatus.COMPLETED && worthReporting) {
+        const text = answerText(result.output);
         await this.notifyOwner(agent, 'agent.report', `${agent.name} reported`, bounded(String(text || 'It finished a wake.'), 280), `/agents/${agent.id}/runs/${run.id}`);
       } else if (run.status !== AgentRunStatus.COMPLETED) {
         await this.notifyOwner(agent, 'run.failed', `${agent.name} stopped`, bounded(run.error || `The run ended ${run.status}.`, 280), `/agents/${agent.id}/runs/${run.id}`);
@@ -1304,37 +1372,335 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** A proposal of an always-on run is waiting for the owner: say so where reports go. */
-  private async onApprovalRequested(row: { runId?: string | null; id: string; reason?: string | null; organizationId: string }): Promise<void> {
+  // ---------------------------------------------------------------------
+  // Approve in chat (docs/always-on.md, "Approving from your channel")
+  // ---------------------------------------------------------------------
+
+  private approvalsUrl(): string {
+    let base = process.env.FRONTEND_URL || 'https://app.almyty.com';
+    while (base.endsWith('/')) base = base.slice(0, -1);
+    return `${base}/approvals`;
+  }
+
+  /** How long the conversation the owner last wrote from is remembered, in seconds. */
+  static readonly OWNER_CONVERSATION_TTL_SECONDS = 90 * 24 * 60 * 60;
+
+  private ownerConversationKey(agentId: string): string {
+    return `always-on:owner-conversation:${agentId}`;
+  }
+
+  private async rememberOwnerConversation(
+    agentId: string,
+    channelId: string,
+    conversation: { to: string; context?: Record<string, string> },
+  ): Promise<void> {
+    try {
+      await this.redis.set(
+        this.ownerConversationKey(agentId),
+        JSON.stringify({ channelId, to: conversation.to, ...(conversation.context ? { context: conversation.context } : {}) }),
+        'EX',
+        AlwaysOnService.OWNER_CONVERSATION_TTL_SECONDS,
+      );
+    } catch {
+      /* their address on the channel stands in */
+    }
+  }
+
+  /**
+   * Where a message for the owner goes on their own channel: the direct
+   * conversation they last wrote from there (a Discord DM channel, a Teams
+   * chat), else their address on it. Null when they named no channel.
+   */
+  async ownerDelivery(agent: Pick<Agent, 'id'>, config: AlwaysOnConfig | null): Promise<ChannelDelivery | null> {
+    const owner = config?.ownerChannel;
+    if (!owner) return null;
+    let remembered: { channelId?: string; to?: string; context?: Record<string, string> } | null = null;
+    try {
+      const raw = await this.redis.get(this.ownerConversationKey(agent.id));
+      remembered = raw ? JSON.parse(raw) : null;
+    } catch {
+      remembered = null;
+    }
+    if (remembered?.channelId === owner.channelId && typeof remembered.to === 'string' && remembered.to) {
+      return {
+        kind: 'channel',
+        channelId: owner.channelId,
+        to: remembered.to,
+        ...(remembered.context ? { context: remembered.context } : {}),
+        label: 'you',
+      };
+    }
+    return { kind: 'channel', channelId: owner.channelId, to: owner.address, label: 'you' };
+  }
+
+  /**
+   * A run of the agent holds a tool call for a person. Posted on the
+   * owner's channel, when they named one and Always on is on, for any run
+   * of the agent; an always-on run's request also goes where its reports
+   * go and where the owner wrote. In the owner's own chat the post says
+   * what it would do, readably, with Approve and Reject buttons on the
+   * platforms that have them and "reply yes or no" on every one; a shared
+   * reports channel gets a one-line notice only (channel-approval.ts).
+   */
+  private async onApprovalRequested(row: {
+    runId?: string | null;
+    id: string;
+    reason?: string | null;
+    payload?: Record<string, any> | null;
+    organizationId: string;
+  }): Promise<void> {
     if (!row?.runId) return;
     const run = await this.runs.findOne({ where: { id: row.runId } });
-    if (!run || run.metadata?.triggerType !== 'always_on') return;
+    if (!run) return;
     const agent = await this.agents.findOne({ where: { id: run.agentId, organizationId: run.organizationId } });
     const config = readAlwaysOn(agent?.alwaysOn);
     const poster = this.poster();
     if (!agent || !poster) return;
-    const targets: ChannelDelivery[] = [
-      ...(Array.isArray(run.metadata?.replyTo) ? run.metadata.replyTo : []),
-      ...(config?.reportTo ? [config.reportTo] : []),
+    const alwaysOnRun = run.metadata?.triggerType === 'always_on';
+    const owner = config?.enabled ? await this.ownerDelivery(agent, config) : null;
+    if (!alwaysOnRun && !owner) return;
+    // The owner's channel is one place, whether it is named by their
+    // address or by the conversation they wrote from.
+    const ownerTo = new Set([config?.ownerChannel?.address, owner?.to].filter(Boolean) as string[]);
+    const keyOf = (d: ChannelDelivery) =>
+      d.channelId === config?.ownerChannel?.channelId && ownerTo.has(String(d.to ?? '')) ? 'owner' : `${d.channelId}:${d.to ?? ''}`;
+    // Where the owner reads it alone (their own chat, and where they wrote
+    // to the run) the request comes in full, with its buttons. A reports
+    // channel other people read gets one line and the link: what the call
+    // would send (an email's text, a payment's details) stays private.
+    const targets: Array<{ delivery: ChannelDelivery; own: boolean }> = [
+      ...(owner ? [{ delivery: owner, own: true }] : []),
+      ...(alwaysOnRun && Array.isArray(run.metadata?.replyTo) ? run.metadata.replyTo : []).map((delivery: ChannelDelivery) => ({ delivery, own: true })),
+      ...(alwaysOnRun && config?.reportTo ? [{ delivery: config.reportTo, own: keyOf(config.reportTo) === 'owner' }] : []),
     ];
     if (!targets.length) return;
-    // The reason is a sentence of its own; its full stop goes, or the notice reads "list)..".
-    let reason = (row.reason ?? 'see Approvals').trim();
-    while (reason.endsWith('.')) reason = reason.slice(0, -1);
-    const text = `${agent.name} wants to do something and is waiting for your OK: ${reason}. Approve or reject it in Approvals.`;
+    const full = approvalMessage(agent.name, row, this.approvalsUrl());
+    const notice = approvalNotice(agent.name, await this.ownerFirstName(agent), row, this.approvalsUrl());
+    const actions = approvalActions(row.id);
     const seen = new Set<string>();
-    for (const delivery of targets) {
-      const key = `${delivery.channelId}:${delivery.to ?? ''}`;
-      if (seen.has(key)) continue;
+    for (const { delivery, own } of targets) {
+      const key = own ? 'owner' : keyOf(delivery);
+      if (seen.has(key) || (own && seen.has(keyOf(delivery)))) continue;
       seen.add(key);
+      seen.add(keyOf(delivery));
       await poster.post(
         agent,
         // The run's own metadata: the poster records its outcome onto the
         // run, and a stub here would wipe what the run carries (its trigger).
-        { kind: 'run', id: run.id, status: 'completed', output: text, userId: run.userId ?? null, metadata: run.metadata ?? {} },
+        { kind: 'run', id: run.id, status: 'completed', output: own ? full : notice, userId: run.userId ?? null, metadata: run.metadata ?? {} },
         delivery,
+        own ? { actions } : {},
       );
     }
+  }
+
+  /** The owner's first name, for a notice others read ("waiting for Maya's OK"); null when unknown. */
+  private async ownerFirstName(agent: Agent): Promise<string | null> {
+    const id = agentOwnerUserId(agent);
+    if (!id || !this.users) return null;
+    const user = await this.users.findOne({ where: { id }, select: { id: true, firstName: true } as any }).catch(() => null);
+    const name = typeof (user as any)?.firstName === 'string' ? (user as any).firstName.trim() : '';
+    return name || null;
+  }
+
+  /**
+   * A run is waiting. An always-on run that asked its owner a question
+   * (ask_user) has the question posted on the owner's channel, once per
+   * question; their reply there is passed back into the run (process).
+   */
+  async onRunWaiting(runId: string): Promise<void> {
+    const run = await this.runs.findOne({ where: { id: runId } });
+    if (!run || run.status !== AgentRunStatus.WAITING_INPUT || run.metadata?.triggerType !== 'always_on') return;
+    const step = [...((run.steps ?? []) as any[])].reverse().find((s) => s?.output?.status === 'waiting_input');
+    const question = typeof step?.output?.question === 'string' ? step.output.question.trim() : '';
+    if (!question) return;
+    const agent = await this.agents.findOne({ where: { id: run.agentId, organizationId: run.organizationId } });
+    const config = readAlwaysOn(agent?.alwaysOn);
+    const poster = this.poster();
+    if (!agent || !poster || !config?.ownerChannel) return;
+    // Once per question, however often the queue redelivers the step.
+    const once = await this.redis
+      .set(`always-on:asked:${run.id}:${run.currentStep}`, '1', 'EX', 7 * 24 * 60 * 60, 'NX')
+      .catch(() => 'OK');
+    if (once !== 'OK') return;
+    const owner = await this.ownerDelivery(agent, config);
+    if (!owner) return;
+    await poster.post(
+      agent,
+      { kind: 'run', id: run.id, status: 'completed', output: questionMessage(agent.name, question), userId: run.userId ?? null, metadata: run.metadata ?? {} },
+      owner,
+    );
+  }
+
+  /** Whether a sender is the owner on this channel, and why not when it is their email that cannot be trusted. */
+  private ownerOn(config: AlwaysOnConfig, channel: Pick<AgentChannel, 'id' | 'type'>, senderId: string | null): { owner: boolean; untrustedEmail: boolean } {
+    const ownerAddress = config.ownerChannel?.channelId === channel.id && sameAddress(senderId, config.ownerChannel.address);
+    const untrustedEmail = channel.type === ChannelType.EMAIL && !config.ownerChannel?.trustEmail;
+    return { owner: ownerAddress && !untrustedEmail, untrustedEmail: ownerAddress && untrustedEmail };
+  }
+
+  /**
+   * A button pressed under a request it posted (ChannelGatewayService
+   * calls this with the verified press). Null when the button is not one
+   * of ours or its signature does not match.
+   */
+  async decideFromChannel(press: {
+    organizationId: string;
+    agentId: string | null;
+    gatewayId: string;
+    senderId: string | null;
+    data: string;
+  }): Promise<{ text: string; settled: boolean } | null> {
+    const action = readApprovalAction(press.data);
+    if (!action) return null;
+    const channel = await this.channels
+      .findOne({ where: { gatewayId: press.gatewayId, organizationId: press.organizationId } })
+      .catch(() => null);
+    const agent =
+      channel && channel.agentId === press.agentId
+        ? await this.agents.findOne({ where: { id: channel.agentId, organizationId: press.organizationId } })
+        : null;
+    const config = readAlwaysOn(agent?.alwaysOn);
+    if (!channel || !agent || !config) {
+      return { text: `This request is not decided here. Decide it in Approvals: ${this.approvalsUrl()}`, settled: false };
+    }
+    return this.decideApproval(agent, channel, action.approvalId, action.decision, press.senderId, 'button', this.ownerOn(config, channel, press.senderId));
+  }
+
+  /**
+   * A reply that says yes or no (parseDecision) on one of the agent's
+   * channels. Decides the request it names (its ref, typed or in the
+   * message it replies to), or the only one waiting. Null when the
+   * message is not an answer to a request: it then goes on as a message.
+   */
+  private async decisionByReply(
+    agent: Agent,
+    channel: AgentChannel,
+    msg: InboundForAlwaysOn,
+    parsed: { decision: ChannelDecision; ref?: string },
+    who: { owner: boolean; untrustedEmail: boolean },
+  ): Promise<{ reply?: string } | null> {
+    if (!this.approvalRows) return null;
+    const pending = await this.approvalRows
+      .find({
+        where: { agentId: agent.id, organizationId: agent.organizationId, status: 'pending', runId: Not(IsNull()) } as any,
+        order: { createdAt: 'ASC' },
+        take: 50,
+      })
+      .catch(() => [] as ApprovalRequest[]);
+    // The ref it quotes: in the message it replies to, or below the first
+    // line (an email reply's quote of the request).
+    const quoted = parsed.ref ? null : quotedRef(msg.replyToText, String(msg.text ?? '').split(/\r?\n/).slice(1).join('\n'));
+    const ref = parsed.ref ?? quoted;
+    let target = ref ? pending.find((p) => approvalRef(p.id) === ref) ?? null : null;
+    // "yes 3F9A1C" naming nothing waiting is a message like any other.
+    if (parsed.ref && !target) return null;
+    if (!ref) {
+      if (!pending.length) return null;
+      // The owner by an email address that proves nothing: told why, below.
+      // Anyone else's "yes" in their own chat is theirs.
+      if (!who.owner && !who.untrustedEmail) return null;
+      // Waiting for the owner's answer to a question: "yes" answers that.
+      const live = who.owner ? await this.liveRun(agent) : null;
+      if (live?.status === AgentRunStatus.WAITING_INPUT) return null;
+      if (!who.owner) {
+        const refused = await this.decideApproval(agent, channel, null, parsed.decision, msg.senderId, 'reply', who);
+        return { reply: refused.text };
+      }
+      if (pending.length > 1) {
+        const lines = pending.slice(0, 10).map((p) => `- ${approvalRef(p.id)}: ${bounded(p.reason ?? '', 140)}`);
+        return {
+          reply: [
+            `${pending.length} requests are waiting for your OK. Reply yes or no with the ref of the one you mean, like "yes ${approvalRef(pending[0].id)}":`,
+            ...lines,
+            `Or decide in Approvals: ${this.approvalsUrl()}`,
+          ].join('\n'),
+        };
+      }
+      target = pending[0];
+    }
+    if (!who.owner) {
+      const refused = await this.decideApproval(agent, channel, target?.id ?? null, parsed.decision, msg.senderId, 'reply', who);
+      return { reply: refused.text };
+    }
+    // A reply to a request that is no longer waiting.
+    if (!target) return { reply: 'That request is no longer waiting: it was decided already, or it expired.' };
+    const outcome = await this.decideApproval(agent, channel, target.id, parsed.decision, msg.senderId, 'reply', who);
+    return { reply: outcome.text };
+  }
+
+  /**
+   * Decide a request from chat, as the agent's owner. Only the owner's own
+   * address on their own channel may; anyone else is refused politely. The
+   * decision is ApprovalsService's, so a request decided on the Approvals
+   * page (or by another press) at the same moment goes to whichever came
+   * first, and the other is told it is already decided. Every outcome is in
+   * the audit log with the channel and the identity that answered.
+   */
+  private async decideApproval(
+    agent: Agent,
+    channel: Pick<AgentChannel, 'id' | 'type' | 'name'>,
+    approvalId: string | null,
+    decision: ChannelDecision,
+    senderId: string | null,
+    via: 'button' | 'reply',
+    who: { owner: boolean; untrustedEmail: boolean },
+  ): Promise<{ text: string; settled: boolean }> {
+    const url = this.approvalsUrl();
+    const ownerId = agentOwnerUserId(agent);
+    const audit = (outcome: string, userId: string | null = null) =>
+      this.recordAudit(agent, AuditAction.CHANNEL_APPROVAL, userId, {
+        approvalId,
+        decision,
+        via,
+        outcome,
+        channelId: channel.id,
+        channelType: channel.type,
+        identity: senderId ?? null,
+      });
+    if (!who.owner) {
+      await audit('refused');
+      return {
+        text: who.untrustedEmail
+          ? `An email cannot prove who sent it, so a request cannot be approved by email. Decide it in Approvals: ${url}`
+          : 'Sorry, only the person this agent works for can approve or reject what it asks.',
+        settled: false,
+      };
+    }
+    const row = approvalId
+      ? await this.approvalRows?.findOne({ where: { id: approvalId, organizationId: agent.organizationId } }).catch(() => null)
+      : null;
+    if (!row || row.agentId !== agent.id) {
+      await audit('not_found');
+      return { text: `That request was not found. Look in Approvals: ${url}`, settled: true };
+    }
+    if (row.status !== 'pending') return { text: alreadyDecided(row.status), settled: true };
+    const approvals = this.runtime.approvals;
+    if (!ownerId || !approvals) return { text: `This one cannot be decided from chat. Decide it in Approvals: ${url}`, settled: false };
+    const how = `${decision === 'approve' ? 'Approved' : 'Rejected'} on ${channel.name} by ${senderId ?? 'the owner'}`;
+    let saved: { status?: string } | null = null;
+    try {
+      saved =
+        decision === 'approve'
+          ? await approvals.approve(row.id, { decidedBy: ownerId, decisionReason: how }, { id: ownerId }, agent.organizationId)
+          : await approvals.reject(row.id, { decidedBy: ownerId, decisionReason: how }, { id: ownerId }, agent.organizationId);
+    } catch (err: any) {
+      const already = /already (approved|rejected|expired|decided)/i.exec(String(err?.message ?? ''));
+      if (already) {
+        await audit('already_decided', ownerId);
+        return { text: alreadyDecided(already[1].toLowerCase()), settled: true };
+      }
+      if (err instanceof ForbiddenException || err instanceof NotFoundException) {
+        await audit('not_allowed', ownerId);
+        return { text: `You cannot decide this one from chat. Decide it in Approvals: ${url}`, settled: false };
+      }
+      throw err;
+    }
+    await audit('decided', ownerId);
+    if (decision === 'approve' && saved?.status === 'pending') {
+      return { text: 'Your approval is recorded. It needs more approvals before it goes ahead.', settled: false };
+    }
+    return { text: decision === 'approve' ? 'Approved. It carries on.' : 'Rejected. It will not do it.', settled: true };
   }
 
   private async notifyOwner(
@@ -1420,6 +1786,33 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     if (!agentIds.length) return 0;
     return this.connectionEvent({ ...event, agentIds });
   }
+  /**
+   * A service told one of its push wakes that something changed
+   * (push-wakes/push-wakes.service.ts, after the debounce window and the
+   * "what changed" read). One wake per change set: the dedupe key carries
+   * the cursor, so a retried read is not a second wake.
+   */
+  async pushEvent(event: {
+    organizationId: string;
+    agentId: string;
+    pushWakeId: string;
+    summary: string;
+    dedupeKey: string;
+    payload: Record<string, any>;
+  }): Promise<AgentWake | null> {
+    return this.wake(event.agentId, event.organizationId, 'push', {
+      summary: event.summary,
+      dedupeKey: event.dedupeKey,
+      sourceRef: event.pushWakeId,
+      payload: event.payload,
+    });
+  }
+
+  /** How many push wakes an agent has; they count as something that wakes it. */
+  private async pushWakeCount(agentId: string, organizationId: string): Promise<number> {
+    if (!this.pushWakes) return 0;
+    return this.pushWakes.count({ where: { agentId, organizationId } }).catch(() => 0);
+  }
   /** "Wake now" on the agent page. */
   async wakeNow(agentId: string, organizationId: string, userId?: string | null): Promise<AgentWake | null> {
     const agent = await this.loadAgent(agentId, organizationId);
@@ -1493,14 +1886,38 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     // like anyone else's.
     const ownerAddress = role.ownerChannel && sameAddress(msg.senderId, role.config.ownerChannel!.address);
     const untrustedEmail = channel.type === ChannelType.EMAIL && !role.config.ownerChannel?.trustEmail;
+
+    // "yes" or "no" to a request it posted here (Approve in chat). Only the
+    // owner decides; anyone else answering one is told so, politely.
+    const decision = parseDecision(msg.text);
+    if (decision) {
+      const answered = await this.decisionByReply(role.agent, channel, msg, decision, {
+        owner: !!ownerAddress && !untrustedEmail,
+        untrustedEmail: !!ownerAddress && untrustedEmail,
+      });
+      if (answered) {
+        if (answered.reply) await msg.reply?.(answered.reply).catch(() => undefined);
+        return 'consumed';
+      }
+    }
+
     if (ownerAddress && !untrustedEmail) {
+      // Where they wrote from, when that is not their address (a Discord
+      // DM channel, a Teams chat): answers and approvals go there.
+      if (msg.conversation && !msg.group) await this.rememberOwnerConversation(role.agent.id, channel.id, msg.conversation);
       await this.wake(msg.agentId, msg.organizationId, 'channel', {
         summary: `your owner wrote on ${channel.name}`,
         dedupeKey: `owner:${key}`,
         sourceRef: channel.id,
         ownerMessage: {
           text: msg.text,
-          replyTo: { kind: 'channel', channelId: channel.id, to: role.config.ownerChannel!.address, label: 'you' },
+          replyTo: {
+            kind: 'channel',
+            channelId: channel.id,
+            to: (!msg.group && msg.conversation?.to) || role.config.ownerChannel!.address,
+            ...(!msg.group && msg.conversation?.context ? { context: msg.conversation.context } : {}),
+            label: 'you',
+          },
         },
       });
       return 'consumed';

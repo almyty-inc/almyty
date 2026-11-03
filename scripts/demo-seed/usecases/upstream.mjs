@@ -1,4 +1,4 @@
-// A local stand-in for Google Calendar, Gmail, Google Tasks, HubSpot CRM and
+// A local stand-in for Google Calendar, Gmail, Google Tasks, Google Drive, HubSpot CRM and
 // an OAuth 2.0 sign-in, so the founder and biz-dev agents can run end to end
 // without anyone's real account. Paths match the real public APIs; only the
 // host differs. Nothing here ever talks to the internet.
@@ -10,6 +10,9 @@
 //   GET  /_admin/state         everything sent/created so far
 //   POST /_admin/reply         {to, body}: the prospect at `to` answers our last mail
 //   POST /_admin/age?days=4    move every sent mail N days into the past
+//   POST /_admin/mail          {from, subject, body}: a new email arrives in the inbox
+//   POST /_admin/win?company=  the company's deal is marked won (onboarding tutorial)
+//   POST /_admin/upload        the customer's files land in their shared Drive folder
 import http from 'node:http'
 import { appendFileSync } from 'node:fs'
 
@@ -23,7 +26,9 @@ const at = (dayOffset, hh, mm = 0) => {
 }
 
 // ---------------- calendar ----------------
-const ME = { email: 'maya@lumenlabs.example', name: 'Maya Chen' }
+// USECASE_PERSONA=elena serves the personal assistant's person instead of Maya (see below).
+const PERSONA = process.env.USECASE_PERSONA || 'maya'
+const ME = PERSONA === 'elena' ? { email: 'elena.park@example.com', name: 'Elena Park' } : { email: 'maya@lumenlabs.example', name: 'Maya Chen' }
 const calendars = [
   { id: 'primary', summary: 'Maya Chen (work)', primary: true, accessRole: 'owner', timeZone: 'UTC' },
   { id: 'team@lumenlabs.example', summary: 'Lumen Labs team', accessRole: 'reader', timeZone: 'UTC' },
@@ -76,6 +81,38 @@ const tasks = {
   'list-personal': [{ id: 't5', title: 'Book flights for the offsite', status: 'needsAction', due: at(3, 0) }],
 }
 
+// ---------------- the personal assistant's person (USECASE_PERSONA=elena) ----------------
+// The personal-assistant tutorial is about one private person, Elena Park,
+// not Maya's company, so the same endpoints serve her calendars, mail and
+// tasks instead. A flight change arrives later through POST /_admin/mail.
+if (PERSONA === 'elena') {
+  calendars.splice(0, calendars.length,
+    { id: 'primary', summary: 'Elena Park', primary: true, accessRole: 'owner', timeZone: 'UTC' },
+    { id: 'family.park@example.com', summary: 'Family', accessRole: 'writer', timeZone: 'UTC' })
+  const mine = { email: ME.email, self: true, responseStatus: 'accepted' }
+  events.splice(0, events.length,
+    ev('primary', 'ev-yoga', 0, 17, 30, 18, 30, 'Yoga', { location: 'Studio Alfama' }),
+    ev('primary', 'ev-flight', 1, 6, 0, 8, 10, 'Flight AT 552 Lisbon to Berlin', { location: 'Lisbon airport (LIS)', description: 'Booking ref QX7P2L. Seat 14A.' }),
+    ev('primary', 'ev-review', 1, 9, 0, 10, 0, 'Design review with Tom', {
+      location: 'Northwind Studio, Berlin', description: 'Onboarding flow mockups, open questions on the settings page.',
+      organizer: { email: 'tom.becker@northwind-studio.example', displayName: 'Tom Becker' },
+      attendees: [mine, { email: 'tom.becker@northwind-studio.example', displayName: 'Tom Becker', responseStatus: 'accepted' }],
+    }),
+    ev('family.park@example.com', 'ev-lunch', 1, 13, 0, 14, 0, 'Lunch with Ana', { location: 'Cafe Einstein', attendees: [mine, { email: 'ana.park@example.com', displayName: 'Ana Park' }] }),
+    ev('family.park@example.com', 'ev-dinner', 3, 19, 0, 21, 0, "Dinner at Marta's"))
+  mail.splice(0, mail.length)
+  addMail({ id: 'p1', from: 'Tom Becker <tom.becker@northwind-studio.example>', to: ME.email, subject: 'Agenda for tomorrow', date: at(0, 8, 14), body: 'Hi Elena, for tomorrow at 9: the onboarding flow mockups and the open questions on the settings page. If your flight runs late just tell me, I can move us to later in the morning. Tom' })
+  addMail({ id: 'p2', from: 'Ana Park <ana.park@example.com>', to: ME.email, subject: 'Lunch in Berlin?', date: at(-1, 19, 2), body: 'So you are in Berlin tomorrow! Lunch at 1 at Cafe Einstein like last time? Ana' })
+  addMail({ id: 'p3', from: 'City Library <notices@library.example>', to: ME.email, subject: 'Your books are due on Friday', date: at(-1, 7, 0), body: 'Two items are due back on Friday.' })
+  taskLists.splice(0, taskLists.length, { kind: 'tasks#taskList', id: 'list-mine', title: 'My tasks' })
+  for (const k of Object.keys(tasks)) delete tasks[k]
+  tasks['list-mine'] = [
+    { id: 'e1', title: 'Send Tom the onboarding mockups', status: 'needsAction', due: at(1, 0) },
+    { id: 'e2', title: 'Renew passport', status: 'needsAction', due: at(9, 0), notes: 'It runs out in two months.' },
+    { id: 'e3', title: "Book a table for Ana's birthday", status: 'needsAction', due: at(4, 0) },
+  ]
+}
+
 // ---------------- hubspot ----------------
 let crmSeq = 9000
 const companies = [
@@ -96,6 +133,20 @@ const contacts = [
 const deals = []
 const outbox = []
 const notes = []
+
+// ---------------- google drive (the onboarding tutorial) ----------------
+// The shared folder a new customer uploads their data into.
+let fileSeq = 0
+const files = [] // {id, name, mimeType, parents, createdTime, owners, size}
+const permissions = [] // {fileId, id, type, role, emailAddress}
+const FOLDER = 'application/vnd.google-apps.folder'
+// Enough of Drive's query language for the agent: name = '..', mimeType = '..', '<id>' in parents, trashed = false.
+function driveQuery(q) {
+  let list = files.slice()
+  for (const [, k, v] of String(q || '').matchAll(/(name|mimeType)\s*=\s*'((?:[^'\\]|\\.)*)'/g)) list = list.filter((f) => f[k] === v.replace(/\\'/g, "'"))
+  for (const [, id] of String(q || '').matchAll(/'([^']+)'\s+in\s+parents/g)) list = list.filter((f) => (f.parents || []).includes(id))
+  return list
+}
 
 const wrap = (o) => ({ ...o, createdAt: o.createdAt || at(-30, 9), updatedAt: o.updatedAt || at(-1, 9), archived: false })
 
@@ -201,13 +252,37 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/_ext/')) {
       outbox.push({ at: new Date().toISOString(), url: p.slice(5) + u.search, body })
       if (p.startsWith('/_ext/api.resend.com')) return send(res, 200, { id: 'local-email-' + outbox.length })
+      if (p.startsWith('/_ext/api.telegram.org')) {
+        const result = p.endsWith('/getMe') ? { id: 7000001, is_bot: true, first_name: 'Elena assistant', username: 'elena_assistant_bot' }
+          : p.endsWith('/sendMessage') ? { message_id: outbox.length, date: Math.floor(Date.now() / 1000), chat: { id: body?.chat_id, type: 'private' }, text: body?.text } : true
+        return send(res, 200, { ok: true, result })
+      }
       if (p.includes('/users.info')) return send(res, 200, { ok: true, user: { id: 'U0MAYA', name: 'maya', real_name: 'Maya Chen', profile: { email: ME.email, real_name: 'Maya Chen', display_name: 'Maya' } } })
       if (p.includes('/conversations.list')) return send(res, 200, { ok: true, channels: [{ id: 'C0SALES', name: 'sales' }] })
       if (p.includes('/auth.test')) return send(res, 200, { ok: true, team: 'Lumen Labs', team_id: 'T0LUMEN', user_id: 'U0BOT', bot_id: 'B0BOT' })
       return send(res, 200, { ok: true, ts: String(Date.now() / 1000), channel: body?.channel || 'D0MAYA' })
     }
     // admin
-    if (p === '/_admin/state') return send(res, 200, { outbox, sent: mail.filter((x) => x.labels.includes('SENT')), drafts: mail.filter((x) => x.labels.includes('DRAFT')), deals, notes, contacts: contacts.slice(6), tasks })
+    if (p === '/_admin/state') return send(res, 200, { outbox, sent: mail.filter((x) => x.labels.includes('SENT')), drafts: mail.filter((x) => x.labels.includes('DRAFT')), deals, notes, contacts: contacts.slice(6), tasks, files, permissions, events })
+    // The deal for `company` is marked won in the CRM (what Maya does in HubSpot).
+    if (p === '/_admin/win' && req.method === 'POST') {
+      const company = u.searchParams.get('company') || 'Bluefin Couriers'
+      let d = deals.find((x) => String(x.properties.dealname || '').startsWith(company))
+      if (!d) { d = { id: String(++crmSeq), properties: { dealname: `${company}: Lumen Fleet`, pipeline: 'default', amount: '24000' }, createdAt: at(-20, 9) }; deals.push(d) }
+      Object.assign(d.properties, { dealstage: 'closedwon', closedate: now().toISOString(), description: `Signed on ${now().toISOString().slice(0, 10)}: Lumen Fleet, 12 months.` })
+      d.updatedAt = now().toISOString()
+      return send(res, 200, wrap(d))
+    }
+    // The customer uploads their data into the shared folder.
+    if (p === '/_admin/upload' && req.method === 'POST') {
+      const folder = files.filter((f) => f.mimeType === FOLDER && f.name.startsWith(u.searchParams.get('company') || 'Bluefin Couriers')).pop()
+      if (!folder) return send(res, 404, { error: 'no shared folder yet' })
+      const by = { emailAddress: 'jonas.weber@bluefin.example', displayName: 'Jonas Weber' }
+      for (const [name, size] of [['Bluefin vehicles 2026.xlsx', '48213'], ['Depots.csv', '412']]) {
+        files.push({ kind: 'drive#file', id: `1Bf${++fileSeq}xQ7`, name, mimeType: name.endsWith('.csv') ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parents: [folder.id], createdTime: now().toISOString(), owners: [by], lastModifyingUser: by, size })
+      }
+      return send(res, 200, { files: files.filter((f) => f.parents?.includes(folder.id)) })
+    }
     if (p === '/_admin/reply' && req.method === 'POST') {
       const last = mail.filter((x) => x.labels.includes('SENT') && x.to.toLowerCase().includes(String(body.to).toLowerCase())).pop()
       if (!last) return send(res, 404, { error: 'nothing sent to ' + body.to })
@@ -222,6 +297,9 @@ const server = http.createServer(async (req, res) => {
       const start = Date.now() + Number(u.searchParams.get('inMinutes') || 40) * 60000
       e.start.dateTime = new Date(start).toISOString(); e.end.dateTime = new Date(start + len).toISOString()
       return send(res, 200, e)
+    }
+    if (p === '/_admin/mail' && req.method === 'POST') {
+      return send(res, 200, addMail({ from: body.from, to: ME.email, subject: body.subject, body: body.body, date: now().toISOString() }))
     }
     if (p === '/_admin/age' && req.method === 'POST') {
       const days = Number(u.searchParams.get('days') || 4)
@@ -239,6 +317,11 @@ const server = http.createServer(async (req, res) => {
     if (p === '/oauth/userinfo') return send(res, 200, { email: ME.email, name: ME.name, sub: '1' })
 
     // google calendar  (base .../calendar/v3)
+    // push wakes: a notification channel is opened and closed, and lasts a week
+    if ((m = p.match(/\/calendars\/([^/]+)\/events\/watch$/)) && req.method === 'POST') {
+      return send(res, 200, { kind: 'api#channel', id: body.id, resourceId: 'local-resource-' + m[1], resourceUri: u.href, token: body.token, expiration: String(Date.now() + 7 * DAY) })
+    }
+    if (p.endsWith('/channels/stop') && req.method === 'POST') return send(res, 204, {})
     if (p.endsWith('/users/me/calendarList')) return send(res, 200, { kind: 'calendar#calendarList', items: calendars })
     if ((m = p.match(/\/calendars\/([^/]+)\/events$/)) && req.method === 'GET') {
       const cal = m[1] === 'primary' || m[1] === ME.email ? 'primary' : m[1]
@@ -246,10 +329,22 @@ const server = http.createServer(async (req, res) => {
       const q = (u.searchParams.get('q') || '').toLowerCase()
       const items = events.filter((e) => e.calendarId === cal && Date.parse(e.end.dateTime) > tMin && Date.parse(e.start.dateTime) < tMax && (!q || JSON.stringify(e).toLowerCase().includes(q)))
         .sort((a, b) => Date.parse(a.start.dateTime) - Date.parse(b.start.dateTime))
-      return send(res, 200, { kind: 'calendar#events', summary: calendars.find((c) => c.id === cal)?.summary, timeZone: 'UTC', items })
+      return send(res, 200, { kind: 'calendar#events', summary: calendars.find((c) => c.id === cal)?.summary, timeZone: 'UTC', items, nextSyncToken: 'local-sync-' + events.length })
     }
     if ((m = p.match(/\/calendars\/([^/]+)\/events\/([^/]+)$/))) {
-      const e = events.find((x) => x.id === m[2]); return e ? send(res, 200, e) : send(res, 404, { error: { code: 404, message: 'Not Found' } })
+      const e = events.find((x) => x.id === m[2])
+      if (!e) return send(res, 404, { error: { code: 404, message: 'Not Found' } })
+      // patch/update: a moved meeting keeps its id, as in Google Calendar
+      if (req.method === 'PATCH' || req.method === 'PUT') {
+        for (const k of ['summary', 'description', 'location', 'start', 'end', 'attendees']) if (body?.[k] !== undefined) e[k] = body[k]
+        e.updated = now().toISOString()
+      }
+      return send(res, 200, e)
+    }
+    if ((m = p.match(/\/calendars\/([^/]+)\/events$/)) && req.method === 'POST') {
+      const e = { kind: 'calendar#event', id: `ev-${++crmSeq}`, calendarId: m[1] === ME.email ? 'primary' : m[1], status: 'confirmed', organizer: { email: ME.email }, htmlLink: `https://calendar.google.com/event?eid=${crmSeq}`, ...body }
+      events.push(e)
+      return send(res, 200, e)
     }
     if (p.endsWith('/freeBusy') && req.method === 'POST') {
       const tMin = Date.parse(body.timeMin), tMax = Date.parse(body.timeMax)
@@ -262,6 +357,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // gmail
+    // push wakes: Gmail's watch and stop (the watch publishes nowhere; this stand-in only answers)
+    if (p.match(/\/gmail\/v1\/users\/[^/]+\/watch$/) && req.method === 'POST') return send(res, 200, { historyId: '1000', expiration: String(Date.now() + 7 * DAY) })
+    if (p.match(/\/gmail\/v1\/users\/[^/]+\/stop$/) && req.method === 'POST') return send(res, 204, {})
+    if (p.match(/\/gmail\/v1\/users\/[^/]+\/history$/)) return send(res, 200, { history: [], historyId: '1000' })
     if ((m = p.match(/\/gmail\/v1\/users\/[^/]+\/messages\/send$/)) && req.method === 'POST') {
       const raw = unb64(body.raw || '')
       const h = (n) => (raw.match(new RegExp(`^${n}:\\s*(.*)$`, 'mi')) || [])[1] || ''
@@ -318,6 +417,22 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'PATCH') { Object.assign(o.properties, body.properties || {}); o.updatedAt = now().toISOString() }
       return send(res, 200, wrap(o))
     }
+
+    // google drive  (base .../drive/v3)
+    if ((m = p.match(/\/drive\/v3\/files\/([^/]+)\/permissions$/)) && req.method === 'POST') {
+      if (!files.some((f) => f.id === m[1])) return send(res, 404, { error: { code: 404, message: `File not found: ${m[1]}.` } })
+      const perm = { kind: 'drive#permission', id: `perm${permissions.length + 1}`, fileId: m[1], type: body.type || 'user', role: body.role || 'writer', emailAddress: body.emailAddress }
+      permissions.push(perm)
+      return send(res, 200, perm)
+    }
+    if ((m = p.match(/\/drive\/v3\/files\/([^/]+)\/permissions$/))) return send(res, 200, { kind: 'drive#permissionList', permissions: permissions.filter((x) => x.fileId === m[1]) })
+    if (/\/drive\/v3\/files$/.test(p) && req.method === 'POST') {
+      const f = { kind: 'drive#file', id: `1Fo${++fileSeq}lDr`, name: body.name, mimeType: body.mimeType || 'application/octet-stream', parents: body.parents || ['root'], createdTime: now().toISOString(), owners: [{ emailAddress: ME.email, displayName: ME.name }] }
+      f.webViewLink = `https://drive.google.com/drive/folders/${f.id}`
+      files.push(f)
+      return send(res, 200, f)
+    }
+    if (/\/drive\/v3\/files$/.test(p)) return send(res, 200, { kind: 'drive#fileList', incompleteSearch: false, files: driveQuery(u.searchParams.get('q')).map(({ parents, ...f }) => ({ ...f, parents })) })
     return send(res, 404, { error: 'not found in the local fake', path: p })
   } catch (e) {
     return send(res, 500, { error: String(e) })

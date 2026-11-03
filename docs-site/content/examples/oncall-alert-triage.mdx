@@ -1,30 +1,160 @@
 # Summarize on-call alerts
 
-For on-call engineers woken by a wall of alerts with no context. When an alert fires, the assistant gathers the related metrics and recent logs, compares them with past incidents, and posts a plain-language summary with the most likely runbook to your incident channel. The person on call starts fixing instead of gathering.
+## What you'll build
+
+An assistant that watches PagerDuty for you. When an incident opens, it reads the alert, looks up earlier incidents with the same alert and what fixed them, and posts a short summary to your incident channel in Slack: what fired, the likely cause, what fixed it last time, the first thing to check, and the links. It adds the same summary to the incident as a note, so whoever picks it up on their phone sees it too. It only reads incidents and adds notes; it never acknowledges, resolves or reassigns anything.
+
+![The summary in Slack: what fired, the likely cause, what fixed it 23 days ago, and the first thing to check](/screenshots/examples/oncall-alert-triage/00-slack.png)
+
+This guide builds it for Tidewater Labs, a made-up company whose API, "Ledgerly API", is watched by Datadog monitors that open incidents in PagerDuty. The Slack message above is shown exactly as almyty posted it, laid out the way Slack shows it. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 30 minutes.
 
 ## What you need
 
-- Your monitoring and logging tools' APIs (for example Datadog, PagerDuty or Grafana Loki), and your runbooks somewhere searchable.
-- A Slack app token that may post messages, for the summary.
-- Your alerting tool able to call a web address when an alert fires.
+- **An almyty account** and a key for an AI model, for example from OpenAI.
+- **PagerDuty**, with permission to create an API key (an Admin or Account Owner can), and the ID of the service to watch. The ID is in the service's address: `https://yourcompany.pagerduty.com/service-directory/PLDG3RA` has the ID `PLDG3RA`.
+- **Your monitors' alerts going to PagerDuty**, ideally with the details in the alert (the value, the threshold, an error sample). Datadog, Grafana and most monitoring tools send these.
+- **A Slack app** you can install in your workspace, for the summaries.
 
-## How to build it
+## 1. Connect an AI model
 
-1. **Connect your signals.** Open **APIs** and click **Connect an API** for your monitoring and logging tools, and for your runbook search. For posting the summary, create a tool under **Tools**, **Create tool** that calls Slack's "post message" with your app's token from [Credentials](/credentials).
-2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Given an alert, gather the related metrics and the last 15 minutes of logs, compare with earlier incidents, and post a short summary with the likely cause and runbook to #incidents." Pick the tools under **Tools and APIs**.
-3. **Let it remember.** Turn on **Remember between conversations** with **This agent's own** memory, so a recurring incident comes with last time's fix attached.
-4. **Keep it advisory.** It summarizes and suggests; give it no tools that change your systems. If you later want it to act, have it ask for approval first (see [Approvals](/approvals)).
-5. **Trigger it.** Point your alerting tool's webhook at the assistant (see below).
+In the sidebar, open **Models**, click **Connect a provider**, set **Name** to `OpenAI`, pick **OpenAI**, paste your key and click **Save**.
 
-## Ideas
+![OpenAI connected, with its models and prices](/screenshots/examples/oncall-alert-triage/01-model.png)
 
-- Let it run a read-only check on the affected machine through a runner: see [Let an assistant work on one of your machines](/examples/expose-any-machine).
-- Add your post-incident reviews to memory, so the summaries get better over time.
+## 2. Make a PagerDuty API key
 
-## For developers
+In PagerDuty, open **Integrations**, **API Access Keys** and click **Create New API Key**. Describe it as `almyty on-call summaries`. Leave **Read-only API Key** unticked: adding notes needs write access. Click **Create Key** and copy it. PagerDuty shows it only once.
 
-The address to call and sample code are in the **Integration** card on the assistant's **Overview** tab. If your alerting tool cannot send what the endpoint expects, a small relay can sit in between. See the [OpenAI-compatible API](/api-reference/openai-compatible).
+The note is written as a PagerDuty user, whose email address you give in the instructions (step 5). Use a real user of your account, for example a service user called "On-call assistant".
+
+## 3. Connect PagerDuty
+
+1. Open **APIs**, click **Connect an API** and pick **OpenAPI / Swagger**.
+2. Under **Link to the description**, paste PagerDuty's own description of its REST API:
+
+```
+https://raw.githubusercontent.com/PagerDuty/api-schema/main/reference/REST/openapiv3.json
+```
+
+3. Open **Advanced** and set **Name** to `PagerDuty`, so the tool names match this guide.
+
+![The link to PagerDuty's description, named PagerDuty](/screenshots/examples/oncall-alert-triage/02-connect.png)
+
+4. Click **Connect API**. almyty reads the description and makes a tool for each of its 473 operations. It sees that PagerDuty wants the key in the `Authorization` header.
+
+![Finish connecting PagerDuty: 473 tools made, a key needed](/screenshots/examples/oncall-alert-triage/03-found.png)
+
+5. Click **Create one here**, set **Name** to `PagerDuty API key` and paste into **Key** the word `Token token=` followed by your key, with no space after the `=`: for example `Token token=y_NbAkKc66ryYTWUXYEu`. That is the form PagerDuty expects. Click **Save**.
+
+![The PagerDuty key, written as Token token=...](/screenshots/examples/oncall-alert-triage/04-key.png)
+
+## 4. Create the assistant
+
+Open **Agents**, click **Create agent** and pick **Autonomous**.
+
+1. Name it `On-call summaries`. **Model:** **gpt-4.1**.
+2. **Personality & style:** `Calm and to the point. Facts from the alert first, then the likely cause. Says when it is not sure.`
+3. **Instructions** (change the service ID, the email address and the names):
+
+```
+You help whoever is on call for Ledgerly. Incidents are in PagerDuty.
+
+Every time you wake:
+1. List the incidents that are triggered or acknowledged on the Ledgerly API service (PLDG3RA).
+2. Skip any incident that already has a note from you.
+3. For each new one, read its alerts: they carry the monitor's details. Then list the resolved incidents on the same service from the last 90 days, and read the notes of those with the same title: they say what fixed it last time.
+4. Add a note to the incident, written as oncall-bot@tidewater.example (the From field): what fired, the most likely cause, what fixed it last time and the first thing to check. Under 120 words.
+5. Report the same summary, with the links to the incident, the runbook and the dashboard.
+
+Only read incidents and add notes. Never acknowledge, resolve, reassign or change an incident.
+```
+
+Rule 2 is what keeps it from summarizing the same incident at every wake: its own note is the record that it already did. Rule 3 works best when your team writes down the fix as a note when resolving an incident; that is where "what fixed it last time" comes from.
+
+![The assistant's model, personality and instructions](/screenshots/examples/oncall-alert-triage/05-agent.png)
+
+4. **Capabilities, Tools and APIs:** search for and tick these four of PagerDuty's 473 tools:
+
+| Tool | What it does |
+|---|---|
+| `pagerduty_list_incidents` | lists incidents, by status and service |
+| `pagerduty_list_incident_alerts` | reads an incident's alerts, with the monitor's details |
+| `pagerduty_list_incident_notes` | reads an incident's notes |
+| `pagerduty_create_incident_note` | adds a note to an incident |
+
+![The four PagerDuty tools ticked](/screenshots/examples/oncall-alert-triage/06-tools.png)
+
+5. Click **Save**, go back and click **Activate**.
+
+## 5. Add Slack
+
+The summaries go to Slack through a Slack app of your own. At [api.slack.com/apps](https://api.slack.com/apps), click **Create New App**, **From scratch**, name it `On-call summaries` and pick your workspace. Under **OAuth & Permissions**, **Bot Token Scopes**, add `chat:write`; click **Install to Workspace** and copy the **Bot User OAuth Token** (it starts with `xoxb-`). Under **Basic Information**, copy the **Signing Secret**. In Slack, invite the app to your incident channel (`/invite @On-call summaries` in `#incidents`).
+
+Then, on the assistant's **Channels** tab, click **Add channel** and pick **Slack**. Open **Advanced**, click **Create one here**, open **More options**, choose **Bot token**, and fill in **Bot user OAuth token** and **Signing secret**.
+
+![The Slack bot token and signing secret](/screenshots/examples/oncall-alert-triage/07-slack-key.png)
+
+Click **Save**, then **Publish**. The channel shows **Live**.
+
+![The Slack channel, live](/screenshots/examples/oncall-alert-triage/08-slack-live.png)
+
+## 6. Keep it watching: always on
+
+On the **Overview** tab, find the **Always on** card and click **Set up always on**.
+
+1. **Standing instructions:** `Watch PagerDuty for new incidents on the Ledgerly API. For each one you have not seen, add your summary as a note and report it.`
+2. **What wakes it:** tick **On a timer**, **Every** `15` **minutes**. On the free plan 15 minutes is the shortest; on Pro and higher it can be 5.
+3. Switch **Always on** on at the top.
+
+![Always on: the standing instructions and a timer every 15 minutes](/screenshots/examples/oncall-alert-triage/09-always-on.png)
+
+4. **What it may do on its own:** set **On its own, it** to **Does things, and asks you first only before what you pick below**, and untick all four PagerDuty tools under **Ask me first before**. Adding a note is the only thing it changes, and waiting for your OK at 3 a.m. would defeat the purpose.
+
+![What it may do on its own: nothing waits for approval](/screenshots/examples/oncall-alert-triage/10-act.png)
+
+5. **Reports:** **Post reports to** **Slack**, **When**: **Only when it did something**, and the channel ID of `#incidents` (in Slack: open the channel, click its name, the ID is at the bottom, like `C07INCIDNTS`). With "only when it did something", a wake with no new incident posts nothing.
+6. Click **Save**.
+
+## 7. Try it
+
+On the **Overview** tab, the **Always on** card shows when it wakes next. Click **Wake now** to run it straight away.
+
+![The Always on card: wakes every 15 minutes, acts on its own, reports when it did something](/screenshots/examples/oncall-alert-triage/11-card.png)
+
+Within a few seconds the summary is in `#incidents` (the picture at the top) and on the incident as a note. In this run, incident #1187 had opened five minutes earlier: the 5xx rate on the checkout endpoint was at 7.8%. The alert's error sample showed the database connection pool running dry, 15 minutes after release 2026.10.3 went out. The assistant found incident #1149 from 23 days earlier with the same alert, and Ines Duarte's note on it: a release had opened a second database connection per request, fixed by rolling back. So its first check is whether 2026.10.3 did the same.
+
+The note it added to the incident in PagerDuty reads:
+
+```
+What fired: 7.8% (threshold 5%), POST /v1/checkout/sessions (91% of errors), POST /v1/invoices/{id}/pay.
+Likely cause: the Postgres connection pool is exhausted (TimeoutError: ResourceRequest timed out (pool: pg, max: 20, waiting: 63)), 15 minutes after 2026.10.3 was deployed.
+Last time (#1149): Cause: 2026.9.4 opened a second Postgres connection per checkout request, so the pool (max 20) ran dry under load. Fix: rolled back to 2026.9.3, then raised DB_POOL_MAX to 40 and fixed the double connection in 2026.9.5.
+First check: whether 2026.10.3 added a DB connection per request; if so roll back.
+```
+
+At the next wake, the incident already has its note, so it posts nothing.
+
+The first line, "You are chatting with an AI assistant.", is added by almyty to an assistant's messages in chat apps, so people know who they are reading.
+
+## Make it yours
+
+- **More services.** List their IDs in rule 1 of the instructions, or drop the service and let it watch every incident the key can see.
+- **Your metrics and logs too.** The alert's details are often enough. For more, connect your monitoring tool's API the same way (Datadog, for example, publishes OpenAPI descriptions of its API) and add a step: "read the last 15 minutes of the monitor's metric". Tick only tools that read.
+- **Learn from every incident.** Turn on **Memory** so it keeps what it learns about recurring incidents, beyond the 90 days of notes it reads.
+- **Ask before changing more.** If you later give it a tool that changes something, such as acknowledging an incident, leave that tool ticked under **Ask me first before**, and it waits for a person in **Approvals**.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **HTTP 401** on every PagerDuty call | The key is missing the `Token token=` in front, or was deleted in PagerDuty. Replace it on the PagerDuty API's page, under **Key**. |
+| Adding a note fails with **You must specify a user's email address in the "From" header** | The email address in rule 4 is missing or is not a user of your PagerDuty account. |
+| **HTTP 403** when adding a note | The key is read-only. Create a key with **Read-only API Key** unticked. |
+| Nothing arrives in Slack | Check that the app is in the channel (`/invite`), that the channel ID under **Reports** is right, and that **When** is not set to the daily summary. |
+| It summarizes the same incident again | Its earlier note is missing (someone deleted it) or was written as another user. Rule 2 relies on its notes. |
+| Always on was **paused because the agent woke more often in an hour than it may** | It woke in a loop. Check **What woke it lately** on its Always on page, then turn it back on. |
 
 ## Related
 
-- [Autonomous agents](/agents/autonomous) · [Memory](/memory) · [Runners](/runner)
+- [Always on](/agents/always-on) · [Channels](/channels) · [Approvals](/approvals)
+- [Checks on a schedule](/examples/scheduled-monitoring-agent)

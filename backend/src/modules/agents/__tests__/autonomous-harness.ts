@@ -34,7 +34,9 @@ import { resolveRunLimits } from '../run-limits';
 import { AgentModels } from '../autonomous-models';
 import { LlmChatHelper } from '../../llm-providers/llm-chat.helper';
 import { HostedChatController } from '../../gateways/channels/hosted-chat.controller';
+import { HostedChatService } from '../../gateways/channels/hosted-chat.service';
 import { fakeRepository, UnmodelledQueryError } from '../../../test/fake-repository';
+import { withRunEvents } from '../../../test/fake-run-events';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 import { gatewayPrincipal, userPrincipal } from '../../../common/authorization/execution-access.service';
 import { callLlmProviderHttpStream } from '../../llm-providers/providers/safe-request';
@@ -150,6 +152,8 @@ export async function runAgent(opts: {
   members?: string[];
   /** Collects the run's sleeps (the built-in wait); without it a sleep is an error, as in every other case. */
   sleeps?: Array<Record<string, any>>;
+  /** The context compactor (AgentContextCompactor), for a case whose agent compacts its context. */
+  compactor?: any;
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -207,6 +211,8 @@ export async function runAgent(opts: {
     totalCost: 0,
     totalTokens: 0,
     toolCallCount: 0,
+    // The column's default: no events yet.
+    headSeq: 0,
     recursionDepth: 0,
     executionTime: 0,
     workingMemory: {},
@@ -218,6 +224,8 @@ export async function runAgent(opts: {
     ...extra,
   });
   const runRepository = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: [runRow('run-1', 'conv-1', opts.run ?? {}) as any] });
+  // The step commit writes the row and its events in one transaction.
+  const runEvents = withRunEvents(runRepository);
 
   const toolExecutorService = {
     executeTool:
@@ -366,7 +374,7 @@ export async function runAgent(opts: {
     },
   };
   const verifier = new AgentVerifierHelper(llmProvidersService as any);
-  processor = new AgentStepProcessor(s, verifier, {} as any, {} as any, undefined, opts.codeMode);
+  processor = new AgentStepProcessor(s, verifier, opts.compactor ?? ({} as any), {} as any, undefined, opts.codeMode);
 
   // A visitor's view, through the hosted chat controller's own stream().
   let tokens: string[] = [];
@@ -384,10 +392,12 @@ export async function runAgent(opts: {
       {
         findBySlug: async () => gateway,
         resolveEndUser: async () => ({ endUser: { id: 'eu-1' }, issuedSessionKey: null }),
+        // The stream only looks a visitor up; it never creates one.
+        findEndUser: async () => ({ id: 'eu-1' }),
         requiresAuth: () => false,
         runBelongsToEndUser: async () => true,
       } as any,
-      {} as any,
+      { checkVisitorStream: async () => ({ limited: false }) } as any,
       {
         getRun: async (runId: string) => runRepository.findOne({ where: { id: runId } }),
         subscribeRunEvents: async (runId: string, handler: (event: any) => void) => {
@@ -396,7 +406,7 @@ export async function runAgent(opts: {
         },
       } as any,
     );
-    await controller.stream('acme', 'run-1', { headers: {}, cookies: {}, ip: '203.0.113.9', on: () => undefined } as any, {
+    await controller.stream('acme', 'run-1', { headers: {}, cookies: { [HostedChatService.SESSION_COOKIE]: 'visitor-1' }, ip: '203.0.113.9', on: () => undefined } as any, {
       setHeader: () => undefined,
       flushHeaders: () => undefined,
       write: (frame: string) => frames.push(frame),
@@ -422,6 +432,8 @@ export async function runAgent(opts: {
     runRepository,
     /** Drive the run again, after the case decided what it was waiting for (an approval). */
     drive: () => drive('run-1'),
+    /** agent_run_events, as the commits wrote it (durable runs step 1). */
+    runEvents,
   };
 }
 

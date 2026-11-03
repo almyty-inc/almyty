@@ -15,6 +15,8 @@ import { Gateway, GatewayStatus } from '../../entities/gateway.entity';
 import { AgentExecutionEngine, StreamEvent } from '../agents/agent-execution.engine';
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
 import { AgentExecutionCancellationService } from '../agents/agent-execution-cancellation.service';
+import { resumeSeqOf, streamPosOf } from '../agents/run-stream-position';
+import { writeRunStream } from '../agents/run-stream-writer';
 
 /**
  * Agent-side endpoint logic for the unified `/:orgSlug/:resourceSlug` controller:
@@ -460,25 +462,32 @@ export class UnifiedAgentHelper {
     }
 
     if (req.method === 'GET' && subAction === 'stream') {
+      // Resumable the same way as the dashboard's run stream
+      // (agents/run-stream-writer.ts): `Last-Event-ID` or `?after=<seq>`
+      // for the run's log, `?live=<pos>` for its runtime events.
+      const resumeAfter = resumeSeqOf(req.headers?.['last-event-id'], req.query?.after);
+      if (resumeAfter === 'invalid') {
+        throw new HttpException('after must be a whole number of 0 or more', HttpStatus.BAD_REQUEST);
+      }
+      const liveAfter = streamPosOf(req.query?.live);
+      if (liveAfter === 'invalid') {
+        throw new HttpException('live must be 0 or a stream position such as 1730000000000-0', HttpStatus.BAD_REQUEST);
+      }
+      // The run must be this organization's and this agent's before any of
+      // it is sent. This route used to stream whatever run id it was given.
+      await this.runtimeService.getRun(runId, organization.id, agent.id);
+
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
+      if (resumeAfter !== null) res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
 
       const abortController = new AbortController();
       req.on('close', () => abortController.abort());
 
       try {
-        await this.runtimeService.subscribeRunEvents(
-          runId,
-          (event) => {
-            res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-            if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) {
-              res.end();
-            }
-          },
-          abortController.signal,
-        );
+        await writeRunStream(this.runtimeService, runId, res, abortController.signal, resumeAfter, liveAfter);
       } catch {
         // stream ended or aborted
       }

@@ -72,7 +72,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
   let rateLimit: GatewayRateLimitService;
   let places: ChannelPolicyService;
   let notifications: { emit: jest.Mock };
-  let runtime: { startRun: jest.Mock; sendInput: jest.Mock; getRunEmitter: jest.Mock; getRun: jest.Mock };
+  let runtime: { startRun: jest.Mock; sendInput: jest.Mock; lastRunEventPos: jest.Mock; getRunEmitter: jest.Mock; getRun: jest.Mock };
   let hostedChat: HostedChatController;
   let channels: ChannelGatewayService;
   let widget: ChannelWidgetController;
@@ -268,6 +268,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
         );
       }),
       sendInput: jest.fn(async (runId: string) => runs.findOneByOrFail({ id: runId })),
+      lastRunEventPos: jest.fn(async () => null),
       getRunEmitter: jest.fn(() => null),
       getRun: jest.fn(),
     };
@@ -295,6 +296,8 @@ run('channel limits and visitor rights (real Postgres)', () => {
       type: 'telegram',
       extractTenantId: () => null,
       verifyWebhook: async () => true,
+      actionOf: () => null,
+      repliesTo: () => true,
       carriesMessage: () => true,
       deliveryId: (body: any) => String(body.update_id),
       normalizeInbound: (body: any) => ({

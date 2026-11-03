@@ -378,7 +378,7 @@ export class Credential {
 
       case CredentialType.BASIC_AUTH:
         const auth = Buffer.from(
-          `${decryptedConfig.username}:${decryptedConfig.password}`
+          `${decryptedConfig.username}:${decryptedConfig.password ?? ''}`
         ).toString('base64');
         return {
           Authorization: `Basic ${auth}`,

@@ -127,6 +127,12 @@ describe('AgentRuntimeService (integration)', () => {
       // visible — the mock just needs to report the row was updated.
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
+    // The commit writes the row and its run events in one transaction
+    // (run-events.ts); the row write is this same update().
+    mockRunRepo.manager = {
+      transaction: async (work: any) =>
+        work({ getRepository: (entity: any) => (entity === AgentRun ? mockRunRepo : { insert: jest.fn().mockResolvedValue({}) }) }),
+    };
 
     // bumpAgentStats uses a queryBuilder chain for an atomic
     // UPDATE. The mock's chain resolves to {affected: 1} so the
@@ -576,11 +582,20 @@ describe('AgentRuntimeService (integration)', () => {
       const run = await service.startRun('agent-1', 'org-1', 'user-1', 'cas');
       const startStep = run.currentStep;
       mockRunRepo.update.mockClear();
+      mockRunRepo.findOne.mockClear();
 
       await service.processStep(run.id);
 
+      // The commit locks the row on the CAS (run-event-writer.ts), then
+      // writes it at the head it read.
+      expect(mockRunRepo.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: run.id, currentStep: startStep }),
+          lock: { mode: 'pessimistic_write' },
+        }),
+      );
       expect(mockRunRepo.update).toHaveBeenCalledWith(
-        expect.objectContaining({ id: run.id, currentStep: startStep }),
+        expect.objectContaining({ id: run.id, headSeq: 0 }),
         expect.objectContaining({ currentStep: expect.any(Number) }),
       );
     });

@@ -2,7 +2,7 @@
 
 almyty turns the software your company already runs into AI assistants that do real work, and puts them where your staff and customers already talk. Here is what that looks like in practice.
 
-The six step-by-step guides below build a complete assistant each, with a screenshot for every step. They are written for anyone: you do not need to write code. The shorter examples after them show more ideas, in fewer words.
+The step-by-step guides below build a complete assistant each, with a screenshot for every step. They are written for anyone: you do not need to write code. The shorter examples after them show more ideas, in fewer words.
 
 ![Assistants built from these guides, on the Agents page](/screenshots/agents-list.png)
 
@@ -14,6 +14,26 @@ The six step-by-step guides below build a complete assistant each, with a screen
 - **[Nightly systems report](/examples/nightly-systems-report)**: an assistant that checks your systems every night and posts a short report to Slack.
 - **[Internal help desk](/examples/internal-help-desk)**: an assistant in Microsoft Teams or Slack that answers staff questions about HR, IT and the office.
 - **[For developers](/examples/developers-apis-and-machines)**: your company's APIs as tools in coding assistants, and agents that run jobs on your own machines.
+- **[Stripe payouts against Xero](/examples/stripe-payout-reconciliation)**: every weekday at 07:00, yesterday's Stripe payouts checked against Xero, with the ones that are missing or booked wrong posted to Slack.
+- **[Nightly data check](/examples/nightly-data-quality-digest)**: every night, freshness, volume and missing-value checks on your BigQuery tables, with the problems posted to Slack.
+- **[Ask your data in Slack](/examples/nl-query-your-database)**: colleagues ask in plain words; it runs one read-only BigQuery query and answers with the number and the query.
+- **[Contract review by several models](/examples/cross-vendor-contract-review)**: post a supplier contract in Slack and get one risk memo from models of two companies, each reading it from its own angle.
+- **[Cap AI spending](/examples/govern-ai-spend)**: a monthly ceiling for the organization, a daily limit that blocks one assistant, and a cap on every run.
+- **[Answer from your help center in Slack](/examples/docs-deflection-bot)**: colleagues mention it in Slack; it answers from your Intercom help center with a link to the article, and opens a ticket when no article covers the question.
+- **[Score and route HubSpot leads](/examples/lead-enrichment-routing)**: every hour it scores new HubSpot leads by your rules, saves the score and an owner on the contact, and posts the hot ones to Slack.
+- **[Call notes to HubSpot](/examples/meeting-notes-to-crm)**: paste your notes after a call; it updates the deal, adds a note and a task, and drafts the follow-up email.
+- **[An assistant that remembers](/examples/agent-that-remembers)**: it remembers what you tell it about your customers and uses it days later, in a new conversation.
+- **[Answers from Google Drive](/examples/connect-google-sharepoint)**: sales questions answered from the documents in your shared drive, with a link to each source.
+- **[Who signs off on refunds](/examples/approval-policies)**: refunds over €500 wait for the Finance lead, refunds over €5,000 for the Finance lead and then an admin.
+- **[Keep teams separate](/examples/multi-team-rbac)**: Finance's Stripe connection, key and billing assistant are invisible to the support team, and the other way round.
+- **[Sign in with Microsoft Entra ID](/examples/sso-scim-onboarding)**: your people sign in with their Microsoft account, and Entra adds new starters and removes leavers for you.
+- **[Audit trail to Splunk](/examples/audit-to-siem)**: every run and tool call sent to Splunk as it happens, with an alert on unusual refunds.
+- **[Ready for the EU AI Act](/examples/eu-ai-act-compliance)**: an AI notice in your own words on your web chat, a technical document per assistant, and personal data hidden in the records.
+- **[Sort new GitHub issues](/examples/github-issue-triage)**: every hour it labels new issues, links duplicates, asks for steps to reproduce and says who should look at what.
+- **[A first pass on pull requests](/examples/pr-review-bot)**: it reviews each new pull request and comments on the lines with likely bugs, committed keys and missing tests; people still approve.
+- **[On-call summaries from PagerDuty](/examples/oncall-alert-triage)**: when an incident opens, a summary in Slack and on the incident: what fired, the likely cause and what fixed it last time.
+- **[An old SOAP service as tools](/examples/modernize-legacy-soap)**: a 2009 stock system answers your sales team in plain words, and Claude Code can use it through a gateway.
+- **[Several coding assistants on one task](/examples/multi-vendor-coding-fleet)**: a lead assistant hands the code to Claude Code and the tests to Codex on your own machine, then runs the tests.
 
 ## How every guide works
 
@@ -30,40 +50,20 @@ Around all of it: your keys are stored safely under **Credentials**, you decide 
 **Support and sales**
 
 - [Sort support tickets and draft replies](/examples/support-ticket-triage)
-- [Answer common questions from your docs](/examples/docs-deflection-bot)
 - [A refund assistant with safeguards](/examples/governed-refund-agent)
-- [Score and route new leads](/examples/lead-enrichment-routing)
-- [Turn call notes into CRM updates](/examples/meeting-notes-to-crm)
-- [An assistant that remembers](/examples/agent-that-remembers)
 
 **Operations, data and finance**
 
 - [An assistant that checks and reports on a schedule](/examples/scheduled-monitoring-agent)
-- [A nightly check on your data](/examples/nightly-data-quality-digest)
-- [Ask your database questions in plain English](/examples/nl-query-your-database)
-- [Match Stripe payouts against your books](/examples/stripe-payout-reconciliation)
-- [Contract review by several AI models](/examples/cross-vendor-contract-review)
-- [Put your Google Drive or SharePoint to work](/examples/connect-google-sharepoint)
 
 **Control and compliance**
 
-- [Put a ceiling on AI spending](/examples/govern-ai-spend)
-- [Decide who signs off, once, for every assistant](/examples/approval-policies)
-- [Keep each team's assistants to that team](/examples/multi-team-rbac)
-- [Sign in with your company accounts](/examples/sso-scim-onboarding)
-- [Send your audit trail to your security team's tools](/examples/audit-to-siem)
-- [Get ready for the EU AI Act](/examples/eu-ai-act-compliance)
 - [Run everything inside your own network](/examples/air-gapped-self-host)
 
 **Engineering**
 
 - [Give your coding assistant your own API](/examples/give-claude-your-api)
-- [Give an old SOAP service a modern front door](/examples/modernize-legacy-soap)
 - [Turn a code library into tools](/examples/npm-package-tools)
 - [Let an assistant work on one of your machines](/examples/expose-any-machine)
-- [Sort and label GitHub issues](/examples/github-issue-triage)
-- [A first pass on pull requests](/examples/pr-review-bot)
-- [Summarize on-call alerts](/examples/oncall-alert-triage)
-- [Several coding assistants on one task](/examples/multi-vendor-coding-fleet)
 
 A name like "CRM API" in these examples means a system of yours that you connect under **APIs**, not something built in.

@@ -111,19 +111,30 @@ const CONNECTION_SECRET_FIELDS = [
   'password',
 ];
 
-/** The key a connection carries, or null when it has none an API call could send. */
+/**
+ * The key a connection carries, or null when it has none an API call could
+ * send. A username saved with no password is a key typed as the username
+ * (basic auth with an empty password, as Stripe takes its key), so it is
+ * the key when nothing else is.
+ */
 export function connectionSecretOf(config: Record<string, any> | null | undefined): string | null {
   for (const field of CONNECTION_SECRET_FIELDS) {
     const value = config?.[field];
     if (typeof value === 'string' && value.length > 0) return value;
   }
-  return null;
+  return isKeyAsUsername(config) ? config!.username : null;
+}
+
+/** A basic-auth username saved without a password: the key itself. */
+function isKeyAsUsername(config: Record<string, any> | null | undefined): boolean {
+  return typeof config?.username === 'string' && config.username.length > 0 && !config.password;
 }
 
 /**
  * A connection's decrypted config in the shape `inlineApiAuthView` reads,
  * whatever the API's scheme: the one key fills every slot, and a
- * username/password pair is kept for basic auth.
+ * username/password pair is kept for basic auth (a username with no
+ * password goes out with an empty one).
  */
 export function connectionAuthConfig(config: Record<string, any>): Record<string, any> {
   const secret = connectionSecretOf(config);
@@ -132,6 +143,6 @@ export function connectionAuthConfig(config: Record<string, any>): Record<string
     token: secret,
     accessToken: secret,
     username: typeof config?.username === 'string' ? config.username : undefined,
-    password: typeof config?.password === 'string' ? config.password : secret,
+    password: typeof config?.password === 'string' ? config.password : isKeyAsUsername(config) ? '' : secret,
   };
 }

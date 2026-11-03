@@ -5,6 +5,7 @@ import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
 import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { AgentChannelsService } from '../agent-channels/agent-channels.service';
+import { PushWakesService } from './always-on/push-wakes/push-wakes.service';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -940,6 +941,10 @@ export class AgentsService {
     // it. Left behind, a web chat kept its address taken and answered
     // requests for an agent that no longer exists.
     const removed = await this.channelsOf()?.removeAllOf(organizationId, id, userId ?? null);
+    // Its push wakes stop their subscriptions at the service (a calendar
+    // channel, a mail watch) and drop their secrets; the rows would go with
+    // the agent, the subscriptions would not.
+    await this.pushWakesOf()?.removeAllFor(id, organizationId);
     await this.agentRepository.remove(agent);
     this.logger.log(
       `[DELETE_AGENT] Agent deleted: id=${id}` +
@@ -955,6 +960,16 @@ export class AgentsService {
   private channelsOf(): AgentChannelsService | null {
     if (!this.moduleRef) return null;
     return this.moduleRef.get(AgentChannelsService, { strict: false });
+  }
+
+  /** The push wake service, or null in a positional unit spec built without the container. */
+  private pushWakesOf(): PushWakesService | null {
+    if (!this.moduleRef) return null;
+    try {
+      return this.moduleRef.get(PushWakesService, { strict: false });
+    } catch {
+      return null;
+    }
   }
 
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {

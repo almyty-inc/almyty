@@ -48,12 +48,20 @@ import { isUniqueViolation } from '../../common/utils/unique-violation';
  */
 
 /**
- * Hard ceiling on tools produced from one schema or one MCP server,
+ * Default ceiling on tools produced from one schema or one MCP server,
  * independent of the organization's quota. The largest real specs we
- * import (Stripe, ~600 operations) sit well under it. A request that
- * would exceed it is rejected; select a subset of operations instead.
+ * import (Stripe, ~600 operations) sit well under it; Microsoft Graph's
+ * per-area descriptions (Files: 1,600+ operations) do not, and an import
+ * over it asks which operations to make tools from (`selectionRequired`
+ * on the import result). Set `MAX_TOOLS_PER_SCHEMA` to change it.
  */
 export const MAX_TOOLS_PER_SCHEMA = 1000;
+
+/** The per-schema ceiling in force: `MAX_TOOLS_PER_SCHEMA` from the environment, else the default. */
+export function maxToolsPerSchema(): number {
+  const configured = Number.parseInt(process.env.MAX_TOOLS_PER_SCHEMA ?? '', 10);
+  return Number.isFinite(configured) && configured > 0 ? configured : MAX_TOOLS_PER_SCHEMA;
+}
 
 /**
  * Descriptions derived from a schema, a remote MCP server or a Tool Hub
@@ -248,9 +256,10 @@ export async function writeToolBatch(
 
 /** Reject a single schema / server that would produce too many tools. */
 export function assertWithinPerSchemaCap(count: number, source: string): void {
-  if (count <= MAX_TOOLS_PER_SCHEMA) return;
+  const limit = maxToolsPerSchema();
+  if (count <= limit) return;
   throw new ToolQuotaExceededException(
-    `${source} would produce ${count} tools; the limit per schema is ${MAX_TOOLS_PER_SCHEMA}. ` +
+    `${source} would produce ${count} tools; the limit per schema is ${limit}. ` +
       'Select a subset of operations.',
   );
 }

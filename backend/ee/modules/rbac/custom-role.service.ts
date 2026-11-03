@@ -153,21 +153,33 @@ export class CustomRoleService {
     await this.assignments.remove(row);
   }
 
+  /** The user's assigned custom roles in the org that are switched on. */
+  private async activeRolesOf(organizationId: string, userId: string): Promise<CustomRole[]> {
+    const rows = await this.assignments.find({ where: { organizationId, userId } });
+    if (rows.length === 0) return [];
+    const roleIds = rows.map((r) => r.customRoleId);
+    const roles = await this.roles.find({ where: { id: In(roleIds) } });
+    return roles.filter((role) => role.active);
+  }
+
   /**
    * Union of every permission granted to the user through their assigned
    * (active) custom roles within the org.
    */
   async getEffectivePermissions(organizationId: string, userId: string): Promise<string[]> {
-    const rows = await this.assignments.find({ where: { organizationId, userId } });
-    if (rows.length === 0) return [];
-    const roleIds = rows.map((r) => r.customRoleId);
-    const roles = await this.roles.find({ where: { id: In(roleIds) } });
     const set = new Set<string>();
-    for (const role of roles) {
-      if (!role.active) continue;
+    for (const role of await this.activeRolesOf(organizationId, userId)) {
       for (const perm of role.permissions ?? []) set.add(perm);
     }
     return [...set].sort();
+  }
+
+  /**
+   * Names of the user's active custom roles: what an approval policy's
+   * approver roles and an ABAC `subject.roles` condition match against.
+   */
+  async getActiveRoleNames(organizationId: string, userId: string): Promise<string[]> {
+    return (await this.activeRolesOf(organizationId, userId)).map((role) => role.name).sort();
   }
 
   /** True if the user's effective custom-role grants cover `permission`. */

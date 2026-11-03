@@ -665,8 +665,29 @@ describe('AgentChannelsService', () => {
         action: 'register',
         status: 'failed',
         error: 'Sendblue refused adding the webhook: Invalid API credentials',
+        code: null,
         at: '2026-09-30T10:00:00.000Z',
       });
+    });
+
+    it('says a Telegram channel receives nothing when this server has no public address', async () => {
+      gatewayRows.seed({
+        id: 'gw-tg',
+        organizationId: ORG,
+        metadata: {
+          webhookRegistration: {
+            action: 'register',
+            status: 'skipped',
+            url: null,
+            error: 'the public address of this server is not configured (PUBLIC_API_URL)',
+            code: 'PUBLIC_URL_NOT_CONFIGURED',
+            at: '2026-10-22T10:00:00.000Z',
+          },
+        },
+      });
+      seedLive(ChannelType.TELEGRAM, 'gw-tg');
+      const view = await build().get(ORG, 'agent-1', 'c-gw-tg', ME);
+      expect(view.webhookRegistration).toMatchObject({ status: 'skipped', code: 'PUBLIC_URL_NOT_CONFIGURED' });
     });
 
     it('is null for a channel whose webhook is pasted by hand, and for one not published yet', async () => {

@@ -1,31 +1,129 @@
-# An assistant that remembers
+# An assistant that remembers your customers
 
-A research assistant that picks up where it left off. It remembers the accounts it has already looked into, how your team likes things done, and what it concluded last week, so you don't have to explain it all again every time.
+## What you'll build
 
-For example: last week it learned that a customer's financial year starts in July. This week you ask it to "carry on with the Acme analysis", and it already knows.
+An account notes assistant for your account managers. On Monday, Daniel tells it what he learned on a check-in call: when the customer's budget is decided, who signs off on the renewal, how she likes to be written to, what they are waiting for. It remembers each fact. On Thursday, in a new conversation, he asks it to draft the renewal email, and it already knows all of that: the draft is short, has no attachments, proposes a date before the budget is set, and mentions the integration they are waiting for.
 
-![Memories the demo organization's agents keep, each with how long it is kept](/screenshots/memory.png)
+![Days later, in a new conversation: a renewal email drafted from what it remembered, and the facts it used](/screenshots/examples/agent-that-remembers/00-second-run.png)
+
+This guide builds it for Parcelwise, a made-up company that sells shipping software to online shops, and its made-up customer Kestrel Coffee Co. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 15 minutes, and you need nothing but almyty: it keeps the memory itself.
 
 ## What you need
 
-- An assistant (in almyty, an "agent": an AI model with instructions and the tools it may use).
-- Nothing else: almyty keeps the memory for you. You can connect an outside memory service instead if your company already uses one.
+- **An almyty account** with an AI model connected (**Models**, **Connect a provider**; see step 1 of [Answer product questions from your help center](/examples/docs-deflection-bot#1-connect-an-ai-model)).
 
-## How to build it
+## 1. Create the assistant
 
-1. Open **Agents**, open your agent and click **Edit**. In the **Memory** section, turn on **Remember between conversations**.
-2. Under **Whose memory**, choose who the memory belongs to:
-   - **Each person has their own**: it remembers each person it talks to separately.
-   - **This agent's own**: one memory, just for this assistant.
-   - **Shared by all agents**: your organization's memory, which every assistant set to share can read and add to.
-3. Under **What it saves**, choose **Facts it learns**, **Whole conversations** or **Only when asked**, and under **How long it keeps memories**, how long. Use **Never save** to list things it must never write down, such as card numbers or passwords.
-4. Save. From now on it writes down what is worth keeping while it works, and looks up what is relevant the next time.
-5. To see or correct what it remembers, open the agent's **Memory** tab, or **Memory** in the sidebar for everything your organization keeps. **Add memory** lets you write something down yourself, for example a company policy all assistants should know.
+Open **Agents**, click **Create agent**, pick **Autonomous**, name it `Account notes` and pick a model under **Work mode** (for example **gpt-4o**).
 
-## How memory is kept
+- **Personality & style**: `Brief and practical.`
+- **Instructions**:
 
-Every memory has a length of life: **Short-term** notes from recent work (tidied into lasting facts every hour), **This project**, **Long-term** facts and preferences, and **Shared by all agents**. When a fact changes, almyty keeps the old version too, so you can see what an assistant knew at any past moment.
+```
+You are the account notes assistant for Parcelwise account managers.
+
+When someone gives you notes about a customer, remember each lasting fact on its own: who decides, how they like to be contacted, their budget cycle, and what they are waiting for. Say back what you will remember.
+
+When someone asks you to draft something for a customer, first look up what you remember about that customer and use it. Say which remembered facts you used. If you remember nothing about them, say so and ask.
+```
+
+"Each lasting fact on its own" matters: one fact per memory is easier to find later, and easier to correct or delete when it changes.
+
+![The Account notes assistant with its instructions](/screenshots/examples/agent-that-remembers/01-instructions.png)
+
+## 2. Turn on memory
+
+Scroll to **Memory** and turn on **Remember between conversations**. Then:
+
+- **Keep memories in**: **almyty**. (**Connect account** lets you keep them in an outside memory service your company already uses instead.)
+- **Whose memory**: **Shared by all agents**. The notes become your organization's: every account manager who uses this assistant reads and adds to the same notes, your other assistants set to share (a call notes or support assistant, say) can use them too, and you can see and delete each one under **Memory** in the sidebar. (**Each person has their own** keeps a separate memory per person; **This agent's own** keeps the notes to this assistant alone, but they then do not appear under **Memory** in the sidebar, where memories are deleted.)
+- **What it saves**: **Facts it learns**. Besides what it saves on purpose, after each conversation the model picks out facts worth keeping. (**Whole conversations** keeps everything; **Only when asked** saves nothing unless someone says "remember this".)
+- **How long it keeps memories**: **Until deleted**.
+- **Never save**: one rule per line, for what must never be written down. For account notes, for example:
+
+```
+Payment details
+Personal phone numbers
+```
+
+![Memory on, shared by all agents, facts it learns, kept until deleted](/screenshots/examples/agent-that-remembers/02-memory-settings.png)
+
+Click **Save**, go back to the agent and click **Activate**.
+
+## 3. Tell it what you learned
+
+Under **Try it** on the **Overview** tab, paste your notes from the call and press Enter:
+
+```
+Notes from today's check-in with Kestrel Coffee Co.: their financial year starts in July, so next year's budget is decided in May. Priya Raman (Operations Director) signs off on renewals; she prefers short emails with no attachments. They want the DPD integration before peak season.
+```
+
+It saved three facts and said them back:
+
+> Noted. I will remember for next time:
+> - their financial year starts in July; next year's budget is decided in May.
+> - Priya Raman (Operations Director) signs off on renewals. She prefers short emails with no attachments.
+> - they want the DPD integration before peak season.
+
+![It confirms the three facts it will remember](/screenshots/examples/agent-that-remembers/03-first-run.png)
+
+## 4. See what it remembers
+
+Open the agent's **Memory** tab. Each fact is its own memory, tagged with the customer and the kind of fact (`kestrel-coffee`, `budget`, `people`, `product`).
+
+![The three memories on the agent's Memory tab, with their tags](/screenshots/examples/agent-that-remembers/04-memory-tab.png)
+
+**Add memory** writes a fact down yourself, without a conversation. When a fact stops being true, for example when Priya moves on and someone else signs off, delete the old memory under **Memory** in the sidebar (step 6) and tell the assistant the new fact.
+
+## 5. Ask for something days later
+
+Every **Try it** message is a new conversation: nothing from the first one is carried over except what was saved to memory. Type:
+
+```
+Draft the renewal email for Kestrel Coffee Co.
+```
+
+Before it answered, it looked up what it remembers about Kestrel Coffee Co. and used all three facts:
+
+> Here is a short draft for Priya, with no attachments, as she prefers:
+>
+> **Subject:** Your Parcelwise renewal
+>
+> Hi Priya,
+>
+> Your Parcelwise plan renews this summer. Since your budget for next year is set in May, could we take 20 minutes in April to agree the renewal? I will also bring the timeline for the DPD integration, which is on track for peak season.
+>
+> Best, Daniel
+>
+> What I used from earlier notes: their financial year starts in July; Priya Raman signs off on renewals and likes short emails; they want the DPD integration before peak season.
+
+Ask it about a customer it knows nothing about, and it says so instead of making something up.
+
+## 6. Everything your organization remembers
+
+**Memory** in the sidebar shows your organization's shared memories in one list, each with how long it is kept (**Long-term** here) and its tags. **Search** finds what they remember about a customer, the bin icon deletes a memory, and **Add memory** writes down facts every assistant set to **Shared by all agents** should know, such as a company policy.
+
+![Memory in the sidebar: the three shared facts, each with a delete button](/screenshots/examples/agent-that-remembers/05-org-memory.png)
+
+See [Memory](/memory) for how long each kind of memory is kept.
+
+## Make it yours
+
+- **Add your CRM.** Connect HubSpot under **APIs** (see [Turn call notes into HubSpot updates](/examples/meeting-notes-to-crm#2-connect-hubspots-deals-notes-and-tasks)) and tick its read tools, so the assistant combines what it remembers with the deal stage and contacts.
+- **One memory per person.** For a personal assistant, set **Whose memory** to **Each person has their own**, so it never mixes up what two people told it.
+- **Use it where people work.** Add a **Slack** channel on the **Channels** tab, so account managers can send their notes in a direct message right after a call.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| It does not remember anything the next time | Check that **Remember between conversations** is on and **What it saves** is not **Only when asked**, and that the instructions tell it to look up what it remembers. |
+| It remembers something wrong | Delete that memory under **Memory** in the sidebar, then tell it the right fact. |
+| It saved something it should not keep | Delete it under **Memory** in the sidebar and add a line for it under **Never save**. |
+| Two people's notes get mixed up | Set **Whose memory** to **Each person has their own**. |
+| **Memory** in the sidebar says **No memories yet** | It lists shared memories only. Set **Whose memory** to **Shared by all agents**; the agent's **Memory** tab shows its own in any case. |
 
 ## Related
 
 - [Memory](/memory) · [Autonomous agents](/agents/autonomous) · [Organizations](/organizations)
+- [Turn call notes into HubSpot updates](/examples/meeting-notes-to-crm)

@@ -70,7 +70,7 @@ describe('customer-managed keys', () => {
 
   it('asks while a key ARN is typed and not attached', async () => {
     const { router } = at(<KmsSettings />)
-    fireEvent.change(await screen.findByLabelText('CMK ARN'), {
+    fireEvent.change(await screen.findByLabelText('Key ARN'), {
       target: { value: 'arn:aws:kms:eu-central-1:111122223333:key/abc' },
     })
     await expectLeaveAsks(router)
@@ -78,7 +78,7 @@ describe('customer-managed keys', () => {
 
   it('leaves empty fields without asking', async () => {
     const { router } = at(<KmsSettings />)
-    await screen.findByLabelText('CMK ARN')
+    await screen.findByLabelText('Key ARN')
     await expectLeavesWithoutAsking(router)
   })
 })

@@ -47,6 +47,7 @@ export enum MetricType {
   UTCP_DIRECT_CALL = 'utcp_direct_call',
   A2A_MESSAGE = 'a2a_message',
   A2A_WORKFLOW = 'a2a_workflow',
+  RUN_PROJECTION_MISMATCH = 'run_projection_mismatch',
 }
 
 export enum MetricStatus {

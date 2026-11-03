@@ -2,6 +2,7 @@ import { BadRequestException, HttpException, NotFoundException } from '@nestjs/c
 import { ChannelWidgetController } from '../channel-widget.controller';
 import {
   buildWidgetScript,
+  compactScript,
   sanitizeWidgetConfig,
   WIDGET_CONFIG_DEFAULTS,
   WIDGET_DEFAULT_AI_DISCLOSURE,
@@ -107,14 +108,18 @@ describe('ChannelWidgetController', () => {
       );
     });
 
+    // The script ships without its layout (compactScript), so source is
+    // looked for in the same form.
+    const has = (script: string, source: string) => expect(script).toContain(compactScript(source));
+
     it('persists the visitor thread id in a namespaced localStorage key', () => {
       const script = buildWidgetScript(ID_A);
-      expect(script).toContain(`'almyty-widget-' + GATEWAY_ID + '-thread'`);
+      has(script, `'almyty-widget-' + GATEWAY_ID + '-thread'`);
     });
 
     it('renders message text via textContent only (XSS-safe)', () => {
       const script = buildWidgetScript(ID_A);
-      expect(script).toContain('el.textContent = text');
+      has(script, 'el.textContent = text');
       expect(script).not.toContain('innerHTML');
     });
 
@@ -127,10 +132,10 @@ describe('ChannelWidgetController', () => {
       // Fallback: defaults are applied synchronously before the fetch,
       // and the fetch failure path leaves them in place.
       expect(script).toContain('applyConfig(DEFAULTS)');
-      expect(script).toContain('/* fetch failed: defaults stay applied */');
-      expect(script).toContain(`primaryColor: '#8b5cf6'`);
+      has(script, 'applyConfig(pickConfig(out && out.data));\n}).catch(function () {});');
+      has(script, `primaryColor: '#8b5cf6'`);
       // Config-derived text is applied via textContent, not markup.
-      expect(script).toContain('header.textContent = c.title');
+      has(script, 'header.textContent = c.title');
     });
 
     it('stays comfortably under the 15KB embed budget', () => {
@@ -145,13 +150,13 @@ describe('ChannelWidgetController', () => {
       expect(script).toContain('cfg.visitorCanDelete');
       expect(script).toContain('cfg.visitorCanExport');
       // Off until the config fetch says the app allows it.
-      expect(script).toMatch(/visitorCanDelete: false,\s+visitorCanExport: false/);
+      has(script, 'visitorCanDelete: false,\nvisitorCanExport: false');
       expect(script).not.toContain('confirm(');
     });
 
     it('shows the server sentence when a message is refused (rate limit, spend limit)', () => {
       const script = buildWidgetScript(ID_A);
-      expect(script).toContain('if (!res.ok)');
+      has(script, 'if (!res.ok)');
       expect(script).toContain('res.out.message');
     });
   });
@@ -233,7 +238,7 @@ describe('ChannelWidgetController', () => {
     it('returns the persisted messages for a thread', async () => {
       const out = await controller.listMessages('gw-1', 't1', undefined);
       expect(channelGatewayService.findWidgetGateway).toHaveBeenCalledWith('gw-1');
-      expect(channelGatewayService.listWidgetMessages).toHaveBeenCalledWith('gw-1', 't1', undefined);
+      expect(channelGatewayService.listWidgetMessages).toHaveBeenCalledWith('gw-1', 't1', undefined, undefined);
       expect(out.success).toBe(true);
       expect(out.data).toHaveLength(1);
       expect(out.data[0].message).toBe('hello');
@@ -244,6 +249,17 @@ describe('ChannelWidgetController', () => {
       const after = channelGatewayService.listWidgetMessages.mock.calls[0][2];
       expect(after).toBeInstanceOf(Date);
       expect(after.toISOString()).toBe('2026-07-01T10:00:00.000Z');
+    });
+
+    it('passes the last reply the widget showed through as the cursor', async () => {
+      const last = '3e7f8f3a-4a5b-4c6d-8e9f-0a1b2c3d4e5f';
+      await controller.listMessages('gw-1', 't1', undefined, last);
+      expect(channelGatewayService.listWidgetMessages).toHaveBeenCalledWith('gw-1', 't1', undefined, last);
+    });
+
+    it('refuses an afterId that is not a reply id, before any lookup', async () => {
+      await expect(controller.listMessages('gw-1', 't1', undefined, "x' OR 1=1 --")).rejects.toThrow(BadRequestException);
+      expect(channelGatewayService.listWidgetMessages).not.toHaveBeenCalled();
     });
   });
 

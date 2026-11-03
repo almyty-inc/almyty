@@ -1,29 +1,138 @@
 # A first pass on pull requests
 
-For teams where code review is the bottleneck. The assistant reads the changes in a pull request, points out likely bugs, missing tests and broken rules (a committed password, a dependency you don't allow), and leaves comments on the lines concerned. Your reviewers start from a sorted list instead of a blank page.
+## What you'll build
+
+An assistant that reviews every new pull request in a GitHub repository before a person does. It reads the changes, and leaves one review with a summary at the top and a comment on each line that needs attention: likely bugs, money not rounded to cents, a key committed to the code, a dependency you do not allow, new code without tests. It never approves, requests changes or merges, so your reviewers still decide; they just start from a list instead of a blank page.
+
+![The review the assistant left on pull request #212: six findings, each on the line concerned](/screenshots/examples/pr-review-bot/00-review-on-github.png)
+
+This guide builds it for Tidewater Labs, a made-up company that makes the invoicing app Ledgerly (repository `tidewater-labs/ledgerly`). The picture above shows the review exactly as almyty sent it to GitHub, laid out the way GitHub shows it. The other screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 20 minutes.
 
 ## What you need
 
-- Your GitHub repository and a GitHub token that may read pull requests and comment, and nothing more. The token is what really limits the assistant: with no permission to approve or merge, it can't.
-- Two AI providers from different companies, for the double check in step 4.
+- **An almyty account** and a key for an AI model, for example from OpenAI.
+- **A GitHub repository** and permission to make a token for it.
+- **Your rules, written down**: which dependencies are allowed, what you want tests for. The assistant checks what you tell it to.
 
-## How to build it
+## 1. Connect an AI model
 
-1. **Connect GitHub.** Open **APIs**, click **Connect an API**, pick **SDK / npm** and add `@octokit/rest`. Then, under **Tools**, **Create tool**, **SDK / npm package**, make tools for "read a pull request's changes" and "comment on a pull request". Keep the token in [Credentials](/credentials).
-2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Review the changes for correctness, test coverage and our rules. Comment on the lines concerned. Never approve or merge." Pick the GitHub tools under **Tools and APIs**.
-3. **Write your rules as constraints.** On its **Constraints** tab: "Flag any committed password or key", "Flag new dependencies not on our list", "Ask for tests for every new endpoint".
-4. **Cut the false alarms.** On its **Overview** tab, click **Configure verification**, turn on **Enable verification** and add a reviewer from a different AI company. The second model checks the assistant's final summary and sends it back for revision when a finding doesn't hold up. Comments it already posted during the run are not held back, so for checked comments only, have it write the review as its final answer and post that (see For developers).
-5. **Run it.** On its **Overview** tab, turn on **Schedule** to go through open pull requests regularly.
+In the sidebar, open **Models** and click **Connect a provider**. Set **Name** to `OpenAI`, pick **OpenAI** under **Provider**, paste your key into **API key** and click **Save**.
 
-## Ideas
+![OpenAI connected, with its models and prices](/screenshots/examples/pr-review-bot/01-model.png)
 
-- Give it a tool that reads the surrounding code, so it judges more than the changed lines.
-- Have [several coding assistants](/examples/multi-vendor-coding-fleet) fix what the review finds.
+## 2. Make a GitHub token
 
-## For developers
+In GitHub, click your picture, **Settings**, **Developer settings**, **Personal access tokens**, **Fine-grained tokens**, **Generate new token**.
 
-To review each pull request as soon as it opens, have a GitHub Action call the agent's endpoint from the **Integration** card on its **Overview** tab, and post the answer it gets back as the review comment. The answer has passed verification by then. See the [OpenAI-compatible API](/api-reference/openai-compatible).
+1. **Token name:** `almyty pull request review`. **Resource owner:** the organization (`tidewater-labs`).
+2. **Repository access:** **Only select repositories**, and pick `tidewater-labs/ledgerly`.
+3. **Repository permissions:** **Pull requests: Read and write**: read pull requests and their changes, and post the review. **Metadata: Read-only** is added by itself. Leave everything else on **No access**.
+4. Click **Generate token** and copy it (it starts with `github_pat_`).
+
+Posting a review needs write access to pull requests, and with it GitHub would also let the token approve one. Two things keep that from mattering: the instructions in step 5 say never to, and in your repository's branch protection (**Settings**, **Branches**) you can require an approval from a code owner, which this token is not.
+
+## 3. Connect GitHub
+
+GitHub's own description of its API has 1,242 operations, more than the 1,000 almyty makes from one description. This guide uses a copy with the 12 operations for issues and pull requests, unchanged from GitHub's: [download it here](/files/github-issues-and-pulls.openapi.json). If you set up [Sort new GitHub issues](/examples/github-issue-triage), GitHub is already connected: skip to step 4 and give that token **Pull requests: Read and write** too.
+
+1. Open **APIs**, click **Connect an API** and pick **OpenAPI / Swagger**.
+2. Under **Description**, click **File** and pick the file. Open **Advanced** and set **Name** to `GitHub`.
+
+![Connect an API: the GitHub file, named GitHub](/screenshots/examples/pr-review-bot/02-connect.png)
+
+3. Click **Connect API**. On the API's page, under **Key**, click **Add a key**, set **How it is sent** to **As a bearer token**, click **Create one here**, name it `GitHub token (ledgerly)`, paste the token into **Key** and click **Save**.
+
+![The token added as a bearer token](/screenshots/examples/pr-review-bot/03-key.png)
+
+![GitHub connected: 12 operations, 12 tools](/screenshots/examples/pr-review-bot/04-api.png)
+
+## 4. Create the assistant
+
+Open **Agents**, click **Create agent** and pick **Autonomous**.
+
+1. Name it `Pull request review`.
+2. **Work mode, Model:** **gpt-4.1**, or the strongest model you have connected: reviews are where a better model pays off.
+3. **Personality & style:** `Direct and kind, like a senior colleague. Explains why, suggests the fix, no nitpicks.`
+4. **Instructions:**
+
+```
+You give pull requests in tidewater-labs/ledgerly a first review, before a person looks at them.
+
+For each open pull request you have not reviewed yet:
+1. Read the pull request and the files it changes.
+2. Look for: bugs in the changed lines, money amounts that are not rounded to cents, secrets or keys in the code, new dependencies that are not on our list, and new code without tests.
+3. Post one review with event COMMENT: a short summary at the top and a comment on each line concerned (path, line, side RIGHT). Say why it matters and what to do instead.
+4. Never approve or request changes, and leave style and formatting alone.
+5. Put code names in double quotes, never in backticks.
+
+Allowed dependencies: date-fns, zod, pdfkit, pg, stripe, express.
+
+Finish with the pull requests you reviewed and what you found.
+```
+
+Rule 5 is there because almyty's security check refuses tool inputs that contain text between backticks, so a review written with Markdown code would not be posted.
+
+![The assistant's model, personality and instructions](/screenshots/examples/pr-review-bot/05-agent.png)
+
+5. **Capabilities, Tools and APIs:** tick these five:
+
+| Tool | What it does |
+|---|---|
+| `github_pulls_list` | lists open pull requests |
+| `github_pulls_list_reviews` | reads the reviews a pull request has, so it skips ones it already reviewed |
+| `github_pulls_get` | reads a pull request |
+| `github_pulls_list_files` | reads the changed files, with the diff |
+| `github_pulls_create_review` | posts the review with its line comments |
+
+![The five pull request tools ticked](/screenshots/examples/pr-review-bot/06-tools.png)
+
+6. Click **Save**, go back and click **Activate**.
+
+## 5. Try it
+
+Under **Try it**, type `Review the open pull requests in tidewater-labs/ledgerly.` and press Enter.
+
+![Try it: pull request #212 reviewed, six findings, the review posted](/screenshots/examples/pr-review-bot/07-try.png)
+
+Pull request #212 adds late fees to overdue invoices. The assistant found six things, and posted each as a comment on its line (the picture at the top of this page):
+
+1. The comment says "every started month", but the code rounds the months down.
+2. The fee is not rounded to cents.
+3. The nightly job adds the full fee again every night, so the amount grows by 3% a night.
+4. A live Stripe key is committed as a fallback value in `config/payments.ts`.
+5. It adds `moment`, which is not on the allowed list (`date-fns` already does the job).
+6. There are no tests for the new code.
+
+The **Runs** tab shows each call: the list of pull requests, the files with their diff, and the review it posted.
+
+![The run step by step](/screenshots/examples/pr-review-bot/08-run.png)
+
+## 6. Review new pull requests every 30 minutes
+
+On the **Overview** tab, under **Schedule**, click **Set up a schedule**. **Repeat:** **Every few minutes or hours**, **Every** `30` **minutes**. **Message:** `Review the open pull requests in tidewater-labs/ledgerly that you have not reviewed yet.` Click **Save schedule**.
+
+![The schedule: every 30 minutes](/screenshots/examples/pr-review-bot/09-schedule.png)
+
+It reads the reviews each pull request already has and skips the ones it reviewed, so a pull request gets one first pass, not one every half hour.
+
+## Make it yours
+
+- **Your rules.** Add them as plain sentences: "Every new API endpoint needs a test in tests/api", "Flag any SQL built with string concatenation", "Migrations must be reversible". Keep the list short; a long list makes every review long.
+- **A second opinion from another AI company.** On the **Overview** tab, click **Configure verification** and add a checker that uses a model from another provider. It checks the assistant's final summary against your instructions and sends it back to revise when a claim does not hold. It checks the summary, not the review already posted.
+- **Review the moment a pull request opens.** A schedule checks every 30 minutes. To react at once, have a GitHub Action call the assistant through its OpenAI-compatible endpoint, shown under **Integration** on the **Overview** tab. See the [OpenAI-compatible API](/api-reference/openai-compatible).
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **Security check blocked tool "github_pulls_create_review": command injection** | The review contains text between backticks. Keep rule 5 in the instructions. |
+| **Security check blocked tool ... path traversal** | The review contains `..` right before a slash, backslash or quote, for example a shortened key written as `sk_live_51Nq...`. Ask for shortened values without dots. |
+| **HTTP 422** with **Pull request review thread line must be part of the diff** | A comment points at a line the pull request did not change. Comments must be on lines that are in the diff. |
+| **HTTP 403** | The token lacks **Pull requests: Read and write** or does not include the repository. |
+| It reviews the same pull request again | Check that `github_pulls_list_reviews` is ticked: it reads the existing reviews to find its own. |
 
 ## Related
 
-- [Verification](/agents/autonomous#verification) · [SDK tools](/tools/sdk-tools) · [Autonomous agents](/agents/autonomous)
+- [Sort new GitHub issues](/examples/github-issue-triage), with the same GitHub connection
+- [Several coding assistants on one task](/examples/multi-vendor-coding-fleet), to fix what the review finds
+- [Autonomous agents](/agents/autonomous) · [Verification](/agents/autonomous#verification) · [Scheduling](/agents/scheduling)

@@ -76,6 +76,8 @@ const CALL_SITES: Record<string, 'gateway' | string> = {
   'src/modules/agents/agent-node-executor.ts': 'a pipeline agent node: the agent is what was published, its tools are its own',
   'src/modules/agents/agent-step-processor.ts': 'an autonomous agent step: the agent is what was published',
   'src/modules/llm-providers/llm-chat-runner.helper.ts': 'an LLM chat turn calling the tools it was configured with',
+  'src/modules/agents/always-on/push-wakes/push-wakes.service.ts':
+    "an always-on agent's push wake starting, renewing, stopping or reading its own subscription through the agent's connection, as the agent: no gateway is involved",
   'src/modules/code-mode/code-mode.service.ts':
     "a run_code script: its scope is the caller's own tools, and each brokered call carries the outer call's gatewayId when there is one, so the executor re-checks it",
   'src/modules/tools/tool-approval-gate.service.ts':

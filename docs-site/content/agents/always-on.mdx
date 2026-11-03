@@ -30,6 +30,10 @@ the builder), then **Set up always on**. You choose:
     wake instead of waking it by itself, so a busy channel does not start a run per message.
   - *Connections that need attention*: a connection it was given is about
     to expire, has expired, or is due for a new key.
+  - *A service telling it something changed*: Google Calendar, Gmail, or
+    any service that sends a webhook when something changes. It wakes
+    within seconds instead of at its next timer (see
+    [When a service tells it something changed](#when-a-service-tells-it-something-changed)).
 - **Talk to it yourself.** Pick one of its channels and your own address
   there (your Slack member ID, your email address). Your messages on that
   channel join its conversation, and it answers you there. Nobody else's
@@ -50,15 +54,143 @@ the builder), then **Set up always on**. You choose:
 
   Your approval rules (for example "ask before a refund over 500") apply
   either way.
-- **Reports.** A channel to post reports to, and when it reports: after
-  every wake, only when it did something, or **once a day, a short summary
-  of what it did** (see [The daily summary](#the-daily-summary)). Reports
-  also show on the agent's page and in your notifications. When it is
-  waiting for your OK, it says so there too.
+- **Reports.** A channel to post reports to, and when it reports:
+  - **When it has something to tell you** (the default for a new agent):
+    what it found, what it did, or a question for you. A wake with nothing
+    for you posts nothing and sends no notification.
+  - **Only when it did something**: only when it used a tool that changes
+    something; something it only found out is not posted.
+  - **After every wake**: every time, "Nothing to report right now."
+    included.
+  - **Once a day, a short summary of what it did** (see
+    [The daily summary](#the-daily-summary)).
+
+  Reports also show on the agent's page and in your notifications. When it
+  is waiting for your OK, the report channel gets one line saying so, with
+  a link to **Approvals** but not what it wants to send; the details and
+  the buttons come only to your own chat (see
+  [Approving from your channel](#approving-from-your-channel)).
 
 The card then shows what wakes it, what it may do, when it reports, when it
 last woke and why, and when the timer fires next. **Wake now** wakes it
 straight away.
+
+## When a service tells it something changed
+
+A timer wakes the agent every so often, so it can be up to a timer's length
+late. Some services can tell almyty the moment something changes instead.
+Set one up and the agent wakes within seconds: a meeting moved in Google
+Calendar, a new email in Gmail, an order changed in a system of your own.
+
+On the always-on page, under **What wakes it**, click **Add a service**,
+choose what it watches, and the connection it uses. The steps for that
+service are shown right there, with the commands to copy. **Save and
+subscribe** saves it and asks the service to start sending.
+
+![A Google Calendar push wake on the always-on page, with its health, address and setup](/screenshots/always-on-push-wakes.png)
+
+Each one then shows, the way connections do:
+
+- whether it is working (**Valid**, **Failed** with the reason, or
+  **Expired** when the service stopped sending and could not be renewed);
+- when the last push arrived, when it last subscribed, and when it renews;
+- under **Address and setup**, the address the service sends to, and the
+  setup steps again.
+
+**Subscribe again** starts it over, after you fixed what the error said.
+**Remove** stops it at the service as well, unless another agent shares it (below).
+
+Some services allow one subscription per account: Gmail keeps one watch per
+mailbox. When several agents watch the same Gmail (or the same calendar)
+through the same connection, they share one subscription, and each row says
+**shared with** the others. Every agent on it that is on wakes for each
+change. **Remove** takes this agent off; the subscription is stopped at the
+service only when the last agent leaves.
+
+What the agent is told: which items changed, by their id, name and time (an
+event's title and start, an email's sender and subject), never what is in
+them. To read an email or an event, it uses its own tools, as it would for
+anything else. Several changes close together wake it once: it waits 10
+seconds after the first one (you can change this per service), then reads
+everything that changed since it last looked.
+
+Every push is checked before anything happens. A push that does not prove
+it came from the service is refused, and the reason shows on it.
+
+### Google Calendar
+
+You need Google Calendar connected first, with your own Google Cloud app
+(see [Connect Google](/credentials/connect-google)).
+
+1. **Add a service** → **When something changes in Google Calendar**.
+2. **Connection**: your Google Calendar connection. Only connections with
+   every tool it needs are listed.
+3. **Calendar**: `primary` is the main calendar of the account you signed
+   in with. Another calendar's ID is in Google Calendar under the
+   calendar's **Settings and sharing → Integrate calendar → Calendar ID**.
+4. **Save and subscribe**.
+
+Nothing to set up in Google Cloud: almyty asks Google Calendar to send
+changes to the agent's address, with a random value only Google and almyty
+know, and checks that value on every push. Google closes these
+subscriptions after a while; almyty opens a new one three hours before,
+and closes the old one.
+
+### Gmail
+
+Gmail sends its changes through Google Cloud Pub/Sub, in your own Google
+Cloud project (the one your Gmail sign-in uses). It takes about 10 minutes,
+once. The page shows each step with its command; in the console:
+
+1. Enable the **Cloud Pub/Sub API**: **APIs & Services → Library**, search
+   for it, **Enable**.
+2. Create a topic: **Pub/Sub → Topics → Create topic**, for example
+   `almyty-gmail`. Its full name, `projects/<your project>/topics/almyty-gmail`,
+   goes into the **Pub/Sub topic** field.
+3. Let Gmail publish to it: open the topic, **Permissions** (in the info
+   panel) → **Add principal**: `gmail-api-push@system.gserviceaccount.com`,
+   role **Pub/Sub Publisher**.
+4. Create a service account for the push calls: **IAM & Admin → Service
+   Accounts → Create service account**, for example `almyty-push`. It needs
+   no roles. Its address goes into the **Push service account** field.
+5. Create the push subscription: **Pub/Sub → Subscriptions → Create
+   subscription**. Topic: the one from step 2. **Delivery type: Push**.
+   **Endpoint URL**: the agent's address (shown under **Address and setup**
+   after you save, and in the copyable command). Tick **Enable
+   authentication**, pick the service account from step 4, and set
+   **Audience** to the same address.
+6. Back in almyty: fill in the topic and the service account and **Save and
+   subscribe**. almyty starts the Gmail watch with your Gmail sign-in and
+   renews it every day (Google ends it after 7 days otherwise).
+
+In a Google Cloud project created before April 8, 2021, Pub/Sub also needs
+permission to sign with that service account: on the service account,
+**Permissions → Grant access**, principal
+`service-<project number>@gcp-sa-pubsub.iam.gserviceaccount.com`, role
+**Service Account Token Creator**.
+
+Every push from Pub/Sub carries a token Google signs. almyty checks that
+Google signed it, that it was made for this agent's address, and that it
+comes from the service account you named; anything else is refused.
+
+By default only mail that lands in the inbox wakes it; change **Label** to
+watch another label.
+
+If the save says **Failed**: "Invalid topicName" means the topic name is
+not the full `projects/.../topics/...` name; "User not authorized" means
+step 3 is missing.
+
+### Any other service
+
+Any service that sends a webhook when something changes can wake the agent
+the same way. Choose **Another service that pushes changes** and fill in the
+form: how its pushes are proven (a value in a header, an HMAC signature, or a
+signed token, each with its own fields), and, if the service needs it, the
+steps: **Subscribe**, **Renew**, **Stop** and **Read what changed**, each one
+of the connection's tools with its arguments. The address the service sends
+to is shown at the top. For a field the form does not have, **Edit as JSON**
+takes the same description as text; the fields are listed under
+[For developers](#push-wakes-for-developers).
 
 ## The daily summary
 
@@ -66,7 +198,7 @@ With **Once a day, a short summary of what it did**, it no longer reports
 after each wake. Once a day, at the time you pick, it sends one short
 message about the last 24 hours instead:
 
-- how often it was woken, and by what: its timer, a webhook, a message, you;
+- how often it was woken, and by what: its timer, a webhook, a message, a service telling it something changed, you;
 - how its work ended: finished, stopped before finishing, or still going;
 - what it changed (the tools it used that change something), or that it
   only looked things up;
@@ -81,6 +213,36 @@ messages, and a note when it is waiting for your OK.
 
 You pick the time and the time zone next to the choice, for each agent.
 Until you change them, it goes out at 9:00 in your own time zone.
+
+## Approving from your channel
+
+When you named a channel under **Talk to it yourself**, anything the agent
+wants to do that needs your OK comes to you there, as well as to
+**Approvals**. That covers its wakes and every other run of the agent: **Try
+it**, a schedule, a chat someone else started on one of its channels. The
+message says what it wants to do in words you can check: the email it would
+send (To, Subject and the text), or the tool and what it would pass to it.
+
+- On **Telegram, Slack, Microsoft Teams and Discord** the message has
+  **Approve** and **Reject** buttons.
+- On every channel you can also answer in words: **yes** or **approve** to
+  let it go ahead, **no** or **reject** to stop it, in any case. Reply to
+  the message, or just write it when only one thing is waiting. When more
+  than one is waiting, it lists them with a short ref each; answer
+  "yes 3F9A1C" for the one you mean.
+
+Only you can decide there, from your own address on that channel. Anyone
+else who presses a button or answers "yes" to it is told, politely, that
+only you can. On an email channel this works only with **Treat email from
+my address as me** on, because an email sender can be faked.
+
+Approving in chat and in **Approvals** is the same decision: whichever you
+do first counts, and the other then says it was already approved or
+rejected. Every decision made in chat, and every refused attempt, is in the
+audit log with the channel and who answered.
+
+When it asks you a question while it works, the question comes to the same
+channel. Reply there and it carries on.
 
 ## What happens at a wake
 
@@ -134,3 +296,92 @@ itself. On machines you run yourself or with no machine at all, the number
 of always-on agents is not limited on any plan, and changing plans never
 pauses one. The included count is for almyty-hosted machines when they
 arrive.
+
+## Push wakes, for developers
+
+A push wake is data. Google Calendar and Gmail are presets that fill these
+fields (`backend/src/modules/agents/always-on/push-wakes/push-wake-presets.ts`);
+a custom one sends the same shape as `spec`.
+
+- Address: `POST {PUSH_WAKE_PUBLIC_URL, else PUBLIC_API_URL, else BASE_URL}/push-wakes/<subscription id>`. It
+  answers `204` for a push that is taken or deliberately ignored, `401` when
+  it does not verify, `404` for an unknown id.
+- `verification`, one of:
+  - `{ method: "shared_token", headerName, generated }`: the header must hold
+    the value exactly. `generated: true` makes a random value at creation and
+    hands it to the subscribe call as `{{secret}}`; `false` takes the
+    person's (`secret` on create).
+  - `{ method: "hmac", headerName, algorithm: "sha1" | "sha256" | "sha512",
+    encoding: "hex" | "base64", prefix?, signedContent, timestampHeader?,
+    toleranceSeconds? }`: `signedContent` is a template over `{{body}}` (the
+    raw body) and `{{headers.<name>}}`, for example
+    `v0:{{headers.x-request-timestamp}}:{{body}}`. With `timestampHeader`, a
+    push older than `toleranceSeconds` (default
+    `PUSH_WAKE_HMAC_TOLERANCE_SECONDS`, 300) is refused.
+  - `{ method: "oidc_jwt", issuers, jwksUrl, audience?, claims? }`: a
+    `Bearer` token signed with a key from `jwksUrl` (HTTPS), with `iss` in
+    `issuers`, `aud` equal to `audience` (default: the push address), `exp`
+    and `iat` present and not expired, and each claim in `claims` equal to
+    its value (for example `{ "email": "{{settings.pushServiceAccount}}",
+    "email_verified": "true" }`).
+
+  The shared value and the HMAC key are managed credentials
+  (`metadata.managedBy.kind = "agent_push_wake"`), never columns.
+- `checks` / `ignore`: `[{ header, oneOf }]`. A push failing a check (a
+  replaced subscription still sending) is acknowledged and not acted on; an
+  ignored one (a "sync" hello) likewise.
+- `subscribe`, `stop`: `{ operation, arguments }`. `operation` is the
+  operation id of a tool of the chosen connection (an imported API), for
+  example `calendar.events.watch`; `arguments` is a template in the grouped
+  shape `{ path, query, header, body }`. `subscribe` also takes
+  `expiresAtPath` (ms or s since 1970, or an ISO time), `keep` (values kept
+  as `{{state.subscription.<key>}}`) and `cursorPath` (a starting cursor,
+  used only when there is none). The calls run as the agent's unattended
+  principal, as an always-on run does.
+- `renew`: `{ everyMinutes?, beforeExpiryMinutes?, stopPrevious? }`. The
+  earlier of the two wins. A sweep every `PUSH_WAKE_RENEW_SWEEP_MINUTES`
+  (default 15) subscribes again what is due, for agents that are on; a
+  failed renewal is tried again at the next sweep and shows on the wake
+  source.
+- `changes`: `{ operation, arguments, itemsPath, cursorPath, item,
+  nextPagePath?, maxPages?, resetOnStatus?, prime?, detail?, maxItems?,
+  maxDetails? }`. Read from `{{state.cursor}}`, page by page with
+  `{{page}}`; `itemsPath` uses `[*]` for every element and `[key=value]` to
+  pick one (`payload.headers[name=Subject].value`). `item` and
+  `detail.fields` map field names to paths: only those fields reach the
+  agent (at most 25 items, 10 detail reads, 200 characters a value). A
+  status in `resetOnStatus` (Google: 410 for Calendar, 404 for Gmail) starts
+  again with `prime`, and the agent is told it could not tell what changed.
+  No items, no wake.
+- `summary`: the wake's line, a template over `count`, `first.<field>`,
+  `last.<field>` and `name`.
+- Debounce: the first push of a window queues the read
+  `debounceSeconds` later (per wake source, default
+  `PUSH_WAKE_DEBOUNCE_SECONDS`, 10, at most 3600); the pushes in the window
+  ride on it. The wake's dedupe key carries the cursor before and after, so
+  a retried read is one wake.
+- Templates read `endpoint.url`, `endpoint.id`, `secret`, `settings.<key>`,
+  `state.cursor`, `state.subscription.<key>`, `uuid`, `now`, `nowMs`,
+  `page` and `item.<field>`. A string that is exactly one placeholder keeps
+  the value's type, and an argument with no value is left out.
+- API: `GET /agents/:id/push-wakes`, `GET /agents/:id/push-wakes/options`
+  (presets, the connections each can run on, and the address prefix), `GET
+  /agents/:id/push-wakes/operations?apiId=` (the connection's operations
+  with an active tool), `POST /agents/:id/push-wakes` (`presetKey` or `spec`,
+  `apiId`, `name`, `settings`, `debounceSeconds`, `secret`), `PATCH
+  /agents/:id/push-wakes/:pushWakeId` (`name`, `debounceSeconds`, `settings`;
+  new settings move the agent to that resource's subscription), `POST
+  /agents/:id/push-wakes/:pushWakeId/subscribe`, `DELETE
+  /agents/:id/push-wakes/:pushWakeId` (leaves the subscription; the last
+  agent to leave stops it at the service). Deleting the agent leaves all of
+  them.
+- Sharing: a spec with a `subscribe` step is one subscription per
+  connection, preset (or spec) and resource. `resourceKey` (a template over
+  `settings`) names the resource; the Gmail preset uses a constant (one watch
+  per mailbox), the Calendar preset `{{settings.calendarId}}`; without it, all
+  the settings. A second agent on the same key joins it: one subscribe call,
+  one cursor, one "what changed" read (as the member that has been on it
+  longest and is on), and one wake per member agent that is on, each deduped
+  on its own. Joining with other settings for the same resource is refused,
+  and an agent whose principal cannot use the connection cannot join. A spec
+  without a `subscribe` step is never shared.

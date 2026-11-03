@@ -1,15 +1,27 @@
 /* An assistant's answer, rendered from its markdown: in the hosted chat,
- * and in an agent's Try it, which showed the answer's `**` and `- ` as
- * text. Raw HTML is skipped, and images become links (see `img` below). */
+ * in an agent's Try it, which showed the answer's `**` and `- ` as text,
+ * and in a notification's preview (an always-on agent's report). Raw HTML
+ * is skipped, and images become links (see `img` below). A caller that
+ * needs different elements -- a notification row is a button, so it
+ * cannot hold a link -- passes `components` to override some of them. */
 import { lazy, Suspense } from 'react'
 import type { Components } from 'react-markdown'
 
 const ReactMarkdown = lazy(() => import('react-markdown'))
 
-export function AssistantMarkdown({ children }: { children: string }) {
+export function AssistantMarkdown({
+  children,
+  components,
+}: {
+  children: string
+  components?: Components
+}) {
   return (
     <Suspense fallback={<span className="whitespace-pre-wrap">{children}</span>}>
-      <ReactMarkdown skipHtml components={assistantMarkdownComponents}>
+      <ReactMarkdown
+        skipHtml
+        components={components ? { ...assistantMarkdownComponents, ...components } : assistantMarkdownComponents}
+      >
         {children}
       </ReactMarkdown>
     </Suspense>

@@ -7,7 +7,7 @@ Approvals keep a person in charge of anything an assistant cannot undo. For exam
 ## How it works
 
 1. **The assistant asks.** When it reaches a step that needs sign-off, the assistant stops and asks for approval, with a short reason ("Refund of $820 on order NW-44120, over the $500 limit").
-2. **The right people are told.** The request appears on the **Approvals** page, and the people who may decide get a notification.
+2. **The right people are told.** The request appears on the **Approvals** page, and the people who may decide get a notification. An always-on agent also sends it to the channel you talk to it on, where you can approve it in the chat (see [Approve from your chat](#approve-from-your-chat)).
 3. **Someone decides.** They click **Approve** or **Reject**, and can add an optional note, which is saved with the decision.
 4. **The work continues or stops.** On approve, the assistant carries on exactly where it paused. On reject, the work is cancelled and the note is recorded as the reason. Whoever started the run is told the outcome.
 
@@ -49,7 +49,7 @@ What happens next:
 - A number written in words, such as "eight hundred", counts as over the amount.
 - Every call a rule holds, and every approved call that then runs, is written to the audit log.
 
-One approval from an owner or an admin (or, for a team's rule, the team's lead) decides a rule. Sign-off in several steps comes with approval policies on the Business plan.
+One approval from an owner or an admin (or, for a team's rule, the team's lead) decides a rule. Sign-off in several steps comes with approval policies on the Business plan: there, the rule's page has **Who approves**, where you set its steps (for example finance, then an admin).
 
 ## Who can approve
 
@@ -58,6 +58,15 @@ It depends on who the assistant is shared with:
 - **Shared with the whole organization**: the organization's owners and admins.
 - **Shared with a team**: owners and admins, or a lead of that team. Other team members can see the request but cannot decide it.
 - **Private to one person**: that person.
+
+## Approve from your chat
+
+An always-on agent that you talk to on one of its channels (Slack, Telegram, Teams, WhatsApp, email and the others) also sends you its requests there. The message says what it wants to do, readably: the email it would send, with To, Subject and the text, or the tool and what it would pass to it.
+
+- On **Telegram, Slack, Microsoft Teams and Discord**, press **Approve** or **Reject** under the message.
+- Anywhere, answer **yes** or **approve**, **no** or **reject**. Reply to the message, or just write it when only one request is waiting; with several, answer with the short ref the message shows ("yes 3F9A1C").
+
+Only you, from your own address on that channel, can decide there; anyone else is told that only you can. Deciding in chat and on this page is one decision: whichever comes first counts, and the other then shows it as already approved or rejected. Decisions made in chat are in the audit log with the channel and who answered. See [Always on](/agents/always-on#approving-from-your-channel).
 
 ## If nobody decides
 
@@ -75,11 +84,12 @@ The assistant asks through its built-in `request_approval` tool:
 request_approval(reason="Send a $500 wire to ACME Corp", payload={...})
 ```
 
-The runtime creates an `ApprovalRequest` row, sets the run to `waiting_approval` and emits an event. The decision is recorded with `decidedBy`, `decidedAt` and `decisionReason`. On approve, the run returns to `running` and the approval result is the tool call's return value; on reject or expiry, the run is cancelled with the reason recorded.
+The runtime creates an `ApprovalRequest` row, sets the run to `waiting_approval` and emits an event. The decision is recorded with `decidedBy`, `decidedAt` and `decisionReason`, and on the audit trail as `approval_decided`. On approve, the run returns to `running` and the tool call's result becomes the decision, `{ "approved": true, "status": "approved", "decided_by": "<reviewer's name>", "decision_reason": "<their note>" }`, so the assistant knows who approved and what they wrote; on reject or expiry, the run is cancelled with the reason recorded (and the call's result in the conversation says so).
 
 - **Authorization** is enforced on the server with `AccessPolicyService.canAccess(user, approvalRequest, 'manage')`. Org-wide agents (`visibility='org'`): org `owner` or `admin`. Team agents (`visibility='team'`): org `owner`/`admin` or the team's `team_admin` (TeamRole.LEAD). Private agents: the owner.
 - **Expiry**: the default 24 hours can be set up to 7 days when a request is created through the API. A scheduled sweep flips expired requests to `expired`.
 - **Page refresh**: the Approvals page checks for new requests every 10 seconds.
+- **Approve in chat**: an agent with Always on and an owner's channel posts each request of its runs there, with Approve and Reject buttons on Telegram, Slack, Microsoft Teams and Discord, and "reply yes or no" everywhere. Only the owner's own address on that channel decides; the decision goes through the same `approve`/`reject` as the page, so whichever is first wins. Audited as `channel_approval`. On Slack, set the app's **Interactivity Request URL** to the channel's webhook URL; on Discord, leave the application's **Interactions Endpoint URL** empty so presses arrive on the bot's connection. Details in `docs/always-on.md`.
 - **API**: list pending approvals, approve and reject over REST; responses only include approvals the caller can see. See the [API reference](/api-reference/authentication).
 
 ### Amount rules

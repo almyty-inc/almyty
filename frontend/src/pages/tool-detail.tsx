@@ -27,6 +27,7 @@ import type { GatewayToolAssociation } from '@/types'
 import { isPublishable } from '@/components/tools/publish-tool-form'
 import { gatewayClientName } from '@/lib/gateway-connect'
 import { SideEffectCard } from '@/components/tools/side-effect-card'
+import { isGeneratedDescription } from '@/lib/tool-names'
 
 export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -173,7 +174,7 @@ export function ToolDetailPage() {
       <div className="flex items-center gap-1 text-sm text-muted-foreground">
         <Link to="/tools" className="hover:text-foreground">Tools</Link>
         <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{tool.name}</span>
+        <span className="text-foreground">{tool.metadata?.displayName || tool.name}</span>
       </div>
 
       {/* Header */}
@@ -187,8 +188,13 @@ export function ToolDetailPage() {
               <Code className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className={DETAIL_TITLE_CLASSES}>{tool.name}</h1>
-              <p className="text-muted-foreground">{tool.description || 'AI-generated tool from API operation'}</p>
+              <h1 className={DETAIL_TITLE_CLASSES}>{tool.metadata?.displayName || tool.name}</h1>
+              {/* A generated tool is called by its machine name; show it under the one people read. */}
+              {tool.metadata?.displayName && tool.metadata.displayName !== tool.name && (
+                <code className="block text-xs text-muted-foreground break-all" data-testid="tool-machine-name">{tool.name}</code>
+              )}
+              {/* "GET /path operation" is what generation writes when the spec says nothing; the Underlying Operation card shows the method and path. */}
+              {tool.description && !isGeneratedDescription(tool.description) && <p className="text-muted-foreground">{tool.description}</p>}
             </div>
           </div>
         </div>

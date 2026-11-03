@@ -116,7 +116,7 @@ export class ToolAuthService {
 
       case 'basic': {
         const basicCreds = Buffer.from(
-          `${authConfig.config.username}:${authConfig.config.password}`,
+          `${authConfig.config.username}:${authConfig.config.password ?? ''}`,
         ).toString('base64');
         (config.headers as Record<string, string>).Authorization = `Basic ${basicCreds}`;
         break;

@@ -59,7 +59,7 @@ export function ApprovalPoliciesSettings() {
           <UpgradePrompt
             feature="approval_policy"
             title="Approval policies"
-            description="Require multi-step, conditional, or quorum sign-off before an agent runs a sensitive action — e.g. refunds over a threshold need finance and a manager."
+            description="Have the right people sign off before an agent does something sensitive. For example, refunds over $500 need both finance and a manager."
           />
         }
       >
@@ -88,12 +88,16 @@ function ApprovalPoliciesManager() {
 
   const { data: policies, isLoading } = useQuery<ApprovalPolicy[]>({
     queryKey: ['approval-policies'],
-    // Amount rules have their own list above (AmountRulesCard).
-    queryFn: async () => (await approvalPoliciesApi.list()).filter((p) => !p.trigger),
+    // Amount rules are listed here too: on this plan they can carry their
+    // own steps, and a list without them hid exactly those rules.
+    queryFn: () => approvalPoliciesApi.list(),
   })
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['approval-policies'] })
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['approval-policies'] }),
+      queryClient.invalidateQueries({ queryKey: ['approval-rules'] }),
+    ])
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => approvalPoliciesApi.delete(id),
@@ -114,9 +118,9 @@ function ApprovalPoliciesManager() {
               <ShieldCheck className="h-5 w-5 text-primary" /> Approval policies
             </CardTitle>
             <CardDescription>
-              Decide when an approval is required and who must sign off. Requests that
-              don&apos;t match any policy fall back to a single approval. Decide
-              pending requests in the Approvals queue.
+              Choose when an agent must ask before acting, and who signs off. Anything
+              no policy covers needs one person&apos;s approval. You answer waiting
+              requests on the Approvals page.
             </CardDescription>
           </div>
           <Button asChild className="shrink-0">
@@ -177,14 +181,21 @@ function ApprovalPoliciesManager() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" asChild>
-                          <Link to={`${APPROVAL_POLICIES_PATH}/policies/${policy.id}`} aria-label={`Edit ${policy.name}`}>
-                            <Pencil className="h-4 w-4" />
-                          </Link>
+                          {policy.trigger ? (
+                            // An amount rule: its tool, amount and steps are edited on the rule page.
+                            <Link to={`${APPROVAL_POLICIES_PATH}/rules/${policy.id}`} aria-label={`Edit sign-off for ${policy.name}`}>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          ) : (
+                            <Link to={`${APPROVAL_POLICIES_PATH}/policies/${policy.id}`} aria-label={`Edit ${policy.name}`}>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          )}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={`Delete ${policy.name}`}
+                          aria-label={policy.trigger ? `Delete rule ${policy.name}` : `Delete ${policy.name}`}
                           onClick={() => setDeleting(policy)}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -205,7 +216,7 @@ function ApprovalPoliciesManager() {
             <AlertDialogTitle>Delete approval policy?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleting
-                ? `"${deleting.name}" will be removed. Requests it governed will fall back to a single approval. This cannot be undone.`
+                ? `"${deleting.name}" will be removed. Requests it covered will need one person's approval instead. This cannot be undone.`
                 : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>

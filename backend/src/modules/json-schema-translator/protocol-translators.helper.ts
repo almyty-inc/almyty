@@ -97,7 +97,21 @@ export function translateOpenAPIOperationInput(operation: Operation): JSONSchema
     if (operation.parameters.body) {
       if (operation.parameters.body.schema) {
         if (typeof operation.parameters.body.schema === 'object') {
-          Object.assign(schema, operation.parameters.body.schema);
+          // Merged, not assigned over: the body's own `properties` used to
+          // replace the path and query inputs gathered above. Stripe gives
+          // every GET an empty form body, so Search lost its `query` input
+          // and the model had to guess how to send it.
+          const {
+            properties: bodyProperties,
+            required: bodyRequired,
+            title: _title,
+            description: _description,
+            ...bodyRest
+          } = operation.parameters.body.schema as JSONSchema7;
+          Object.assign(schema, bodyRest);
+          schema.type = 'object';
+          schema.properties = { ...(schema.properties ?? {}), ...(bodyProperties ?? {}) };
+          schema.required = [...new Set([...(schema.required ?? []), ...(Array.isArray(bodyRequired) ? bodyRequired : [])])];
         }
       } else if (Object.keys(operation.parameters.body).length > 0) {
         for (const [name, param] of Object.entries(operation.parameters.body)) {

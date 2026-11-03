@@ -8,9 +8,8 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { renderWithProviders } from '@/test/setup'
-import { MemoryTab } from '../memory-tab'
+import { MemoryTab, type AgentMemoryItem } from '../memory-tab'
 import { memoriesApi } from '@/lib/api'
-import type { Memory } from '@/types'
 
 vi.mock('@/lib/api', () => ({ memoriesApi: { put: vi.fn() } }))
 const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
@@ -30,10 +29,37 @@ beforeEach(() => {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
 })
 
-const memory = {
-  id: 'm1', content: 'Customer prefers email', type: 'preference', scope: 'workspace',
-  tags: ['crm'], accessCount: 2,
-} as unknown as Memory
+// The canonical memory API's shape (POST /memory/canonical/list), as the agent page hands it down.
+const memory: AgentMemoryItem = {
+  id: 'm1', content: 'Customer prefers email', tier: 'long', metadata: { type: 'preference' },
+  tags: ['crm'], access_count: 2, created_at: '2026-10-20T09:00:00.000Z',
+}
+
+describe('MemoryTab list', () => {
+  it("shows what kind of memory each is, as it was saved, next to how long it is kept", () => {
+    renderWithProviders(<MemoryTab agentId="agent-1" memories={[memory, { id: 'm2', content: 'No kind', tier: 'short', metadata: {} }]} />)
+    // Each memory row opens on a click, so it is a button (aria-expanded), not a plain row.
+    const rows = screen.getAllByRole('button').filter((b) => b.hasAttribute('aria-expanded'))
+    expect(rows[0]).toHaveTextContent('Preference')
+    expect(rows[0]).toHaveTextContent('Long-term')
+    expect(rows[1]).not.toHaveTextContent('Preference')
+    expect(rows[1]).toHaveTextContent('Short-term')
+  })
+
+  it('opens a row to read the whole memory, which the list cuts to one line', async () => {
+    const user = userEvent.setup()
+    const long = 'The owner moved to Lisbon in October. '.repeat(20).trim()
+    renderWithProviders(<MemoryTab agentId="agent-1" memories={[{ ...memory, content: long }]} />)
+    const row = screen.getAllByRole('button').find((b) => b.getAttribute('aria-expanded') !== null)!
+    expect(row).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('memory-full-content')).toBeNull()
+    await user.click(row)
+    expect(row).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('memory-full-content')).toHaveTextContent(long)
+    await user.click(row)
+    expect(screen.queryByTestId('memory-full-content')).toBeNull()
+  })
+})
 
 describe('MemoryTab add memory', () => {
   it('opens an inline form, not a dialog, and keeps the list in view', async () => {
@@ -84,6 +110,7 @@ describe('MemoryTab add memory', () => {
       content: 'Escalate refunds over 500 EUR',
       tier: 'short',
       tags: ['billing', 'refunds'],
+      metadata: { type: 'context' },
       scope: { scope_type: 'workspace', scope_id: 'org-1' },
       provenance: expect.objectContaining({ agent_id: 'agent-1' }),
     })

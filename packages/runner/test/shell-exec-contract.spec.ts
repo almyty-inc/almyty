@@ -94,3 +94,52 @@ describe('shell.exec with the published parameters', () => {
     expect(resp.error?.data).toMatchObject({ code: RUNNER_ERROR_CODES.PATH_DENIED });
   });
 });
+
+/**
+ * stdin. execFile left the command's standard input an open pipe nobody
+ * wrote to, so a CLI that reads stdin when it is not a terminal (`codex
+ * exec` does) hung until the timeout killed it. stdin is now closed, or
+ * carries `input` when the call passes one.
+ */
+describe('shell.exec standard input', () => {
+  it('closes stdin, so a command that reads it finishes instead of waiting', async () => {
+    const started = Date.now();
+    const resp = await dispatchHandler(ctx(), {
+      method: 'shell.exec',
+      workspaceId: 'ws-1',
+      params: { command: 'cat; echo done', timeoutMs: 10_000 },
+    });
+    expect(resp.ok).toBe(true);
+    expect(resp.result).toMatchObject({ stdout: 'done\n', exitCode: 0 });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it('writes `input` to stdin when the call passes it', async () => {
+    const resp = await dispatchHandler(ctx(), {
+      method: 'shell.exec',
+      workspaceId: 'ws-1',
+      params: { command: 'read line; echo "got $line"', input: 'hello\n', timeoutMs: 10_000 },
+    });
+    expect(resp.ok).toBe(true);
+    expect(resp.result).toMatchObject({ stdout: 'got hello\n', exitCode: 0 });
+  });
+
+  it('is not upset by a command that never reads its input', async () => {
+    const resp = await dispatchHandler(ctx(), {
+      method: 'shell.exec',
+      workspaceId: 'ws-1',
+      params: { command: 'echo quick', input: 'x'.repeat(1024 * 1024), timeoutMs: 10_000 },
+    });
+    expect(resp.ok).toBe(true);
+    expect(resp.result).toMatchObject({ stdout: 'quick\n', exitCode: 0 });
+  });
+
+  it('refuses an `input` that is not text', async () => {
+    const resp = await dispatchHandler(ctx(), {
+      method: 'shell.exec',
+      workspaceId: 'ws-1',
+      params: { command: 'cat', input: 42 },
+    });
+    expect(resp.ok).toBe(false);
+  });
+});

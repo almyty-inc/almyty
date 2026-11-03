@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Shield, Lock } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -16,8 +17,24 @@ export function SecurityTab() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  // The same query the Profile page reads. `hasPassword` is false for an
+  // account made by single sign-on or SCIM; `emailVerified` is true once
+  // the address is confirmed.
+  const { data: profile, isLoading: profileLoading } = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: () => authApi.getProfile(),
+  })
+  const known = profile as { hasPassword?: boolean; emailVerified?: boolean; email?: string } | undefined
+  const noPassword = known?.hasPassword === false
+  const emailVerified = known?.emailVerified === true
+  const email = known?.email
 
-  // Change password mutation
+  // Setting a first password goes through the same emailed link as a
+  // forgotten one; confirming it marks the account as having a password.
+  const setPasswordLink = useMutation({
+    mutationFn: () => authApi.forgotPassword(email as string),
+  })
+
   // The button under "Email verification" had no handler at all, while
   // the identical action in the top-of-page banner worked. Someone who
   // never dismissed the banner would never find the working one.
@@ -63,7 +80,45 @@ export function SecurityTab() {
 
   return (
     <div className="space-y-6">
-      {/* Change Password */}
+      {/* An account made by single sign-on or SCIM has no password, so a
+          form asking for the current one is a dead end. It gets the one way
+          to set a password the product has: the reset link, by email. */}
+      {noPassword ? (
+        <Card data-testid="no-password">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              Password
+            </CardTitle>
+            <CardDescription>
+              None set. You sign in through your organization&apos;s single sign-on.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              To sign in with a password as well, we can email you a link to set one.
+            </p>
+            <Button
+              variant="outline"
+              data-testid="set-password-link"
+              disabled={!email || setPasswordLink.isPending || setPasswordLink.isSuccess}
+              onClick={() => setPasswordLink.mutate()}
+            >
+              {setPasswordLink.isPending ? 'Sending...' : 'Email me a link to set a password'}
+            </Button>
+            {setPasswordLink.isSuccess && (
+              <p data-testid="set-password-sent" className="text-xs text-emerald-600 dark:text-emerald-400">
+                Link sent to {email}. It works for one hour.
+              </p>
+            )}
+            {setPasswordLink.isError && (
+              <p data-testid="set-password-error" className="text-xs text-red-600 dark:text-red-400">
+                {getApiErrorMessage(setPasswordLink.error, 'Could not send the link')}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : profileLoading ? null : (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -118,6 +173,7 @@ export function SecurityTab() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Session Management */}
       <Card>
@@ -127,7 +183,7 @@ export function SecurityTab() {
             Active sessions
           </CardTitle>
           <CardDescription>
-            Manage your active login sessions
+            Where you are signed in
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -151,9 +207,13 @@ export function SecurityTab() {
                 other sessions. A security control that reports nothing and
                 does nothing is worse than an absent one, because someone
                 who suspects a compromise believes they have acted. */}
-            <p className="text-xs text-muted-foreground">
-              Signing out elsewhere is not supported yet. To cut off another device, change your password: existing
-              sessions are issued against your current credentials.
+            {/* An account without a password has none to change. Setting a
+                first one through the emailed link ends every session too
+                (confirming a reset bumps tokenVersion), so that is its way. */}
+            <p className="text-xs text-muted-foreground" data-testid="sessions-note">
+              {noPassword
+                ? "You can't sign out other devices from here yet. To cut off another device, set a password with the emailed link above, which ends every session."
+                : "You can't sign out other devices from here yet. To cut off another device, change your password, which ends every session signed in with the old one."}
             </p>
           </div>
         </CardContent>
@@ -173,18 +233,25 @@ export function SecurityTab() {
               <div>
                 <div className="font-medium">Email verification</div>
                 <div className="text-sm text-muted-foreground">
-                  Verify your email for better security
+                  {emailVerified ? 'Your email address is confirmed.' : 'Verify your email for better security'}
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid="send-verification"
-                disabled={resendVerification.isPending}
-                onClick={() => resendVerification.mutate()}
-              >
-                {resendVerification.isPending ? 'Sending...' : 'Send verification'}
-              </Button>
+              {/* Offering to send a verification email for an address that
+                  is already verified invites a pointless click and reads as
+                  if something were still missing. */}
+              {emailVerified ? (
+                <Badge variant="success" data-testid="email-verified">Verified</Badge>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="send-verification"
+                  disabled={resendVerification.isPending}
+                  onClick={() => resendVerification.mutate()}
+                >
+                  {resendVerification.isPending ? 'Sending...' : 'Send verification'}
+                </Button>
+              )}
             </div>
 
             {/* Said out loud: a button that does its work silently is only
@@ -200,16 +267,6 @@ export function SecurityTab() {
                 {getApiErrorMessage(resendVerification.error, 'Could not send the verification email')}
               </p>
             )}
-
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">Password strength</div>
-                <div className="text-sm text-muted-foreground">
-                  Last changed recently
-                </div>
-              </div>
-              <div className="text-green-600 text-sm">Good</div>
-            </div>
           </div>
         </CardContent>
       </Card>

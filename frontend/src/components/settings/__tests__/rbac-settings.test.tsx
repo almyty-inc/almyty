@@ -11,6 +11,7 @@ import type { EntitlementSnapshot } from '../../../hooks/use-entitlement'
 vi.mock('../../../lib/api', () => ({
   apiGet: vi.fn(),
   rbacApi: {
+    listPermissions: vi.fn(),
     listRoles: vi.fn(),
     getRole: vi.fn(),
     createRole: vi.fn(),
@@ -95,6 +96,10 @@ describe('RbacSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(rbacApi.listRoles as ReturnType<typeof vi.fn>).mockResolvedValue([sampleRole])
+    ;(rbacApi.listPermissions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { permission: 'agents:execute', description: 'Run agents, answer their questions and cancel their runs' },
+      { permission: 'audit:read', description: 'Read the audit trail' },
+    ])
     ;(rbacApi.listPolicies as ReturnType<typeof vi.fn>).mockResolvedValue([])
     ;(organizationsApi.getMembers as ReturnType<typeof vi.fn>).mockResolvedValue(sampleMembers)
   })
@@ -104,7 +109,7 @@ describe('RbacSettings', () => {
     render(<RbacSettings />)
 
     await waitFor(() =>
-      expect(screen.getByText(/Advanced RBAC/i)).toBeInTheDocument(),
+      expect(screen.getByText(/Custom roles and access rules/i)).toBeInTheDocument(),
     )
     // Upgrade CTA present.
     expect(screen.getByText(/Upgrade to Business|View plans/i)).toBeInTheDocument()
@@ -150,6 +155,24 @@ describe('RbacSettings', () => {
     })
   })
 
+
+  // The form took any string and the page said nothing about which ones
+  // the app enforces; `agents:execute` gated no route at all.
+  it('lists the permissions the app enforces, from the server, under the role form', async () => {
+    mockEntitlements(withRbac)
+    const user = userEvent.setup()
+    render(<RbacSettings />)
+
+    await screen.findByText('release-manager')
+    await user.click(screen.getByRole('button', { name: /new role/i }))
+    await user.click(await screen.findByRole('button', { name: /What each permission unlocks/i }))
+
+    const catalog = screen.getByTestId('rbac-permission-catalog')
+    expect(catalog).toHaveTextContent('agents:execute')
+    expect(catalog).toHaveTextContent('Run agents, answer their questions and cancel their runs')
+    expect(catalog).toHaveTextContent('Anything not on this list has no effect.')
+    expect(rbacApi.listPermissions).toHaveBeenCalled()
+  })
   it('deletes a role via DELETE /rbac/roles/:id', async () => {
     mockEntitlements(withRbac)
     ;(rbacApi.deleteRole as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
@@ -193,10 +216,10 @@ describe('RbacSettings', () => {
     render(<RbacSettings />)
 
     await screen.findByText('release-manager')
-    await user.click(screen.getByRole('button', { name: /new policy/i }))
+    await user.click(screen.getByRole('button', { name: /new rule/i }))
 
     await user.type(await screen.findByLabelText('Name'), 'deny-prod')
-    await user.click(screen.getByRole('button', { name: /create policy/i }))
+    await user.click(screen.getByRole('button', { name: /create rule/i }))
 
     await waitFor(() => expect(rbacApi.createPolicy).toHaveBeenCalledTimes(1))
     const arg = (rbacApi.createPolicy as ReturnType<typeof vi.fn>).mock.calls[0][0]

@@ -10,6 +10,7 @@ import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { fakeManager, fakeRepository } from '../../test/fake-repository';
+import { withRunEvents } from '../../test/fake-run-events';
 import { AgentRuntimeProcessor } from '../agents/agent-runtime.processor';
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
 import { releaseRunWorkspaces } from './run-end-release';
@@ -90,6 +91,7 @@ describe('a run\'s workspaces are released when it ends', () => {
   it('a run the queue gave up on is failed and its workspaces released', async () => {
     const workspaces = fakeRepository<Workspace>([ws('w', { runId: RUN })]);
     const runs = fakeRepository<AgentRun>([{ id: RUN, status: AgentRunStatus.RUNNING, steps: [] } as any]);
+    withRunEvents(runs);
     const processor = new AgentRuntimeProcessor({} as any, {} as any, {} as any, runs as any, workspaces as any);
     await processor.onFailed({ name: 'next-step', id: 'j', attemptsMade: 3, opts: { attempts: 3 }, data: { runId: RUN } } as any, new Error('boom'));
     expect(runs.row(RUN)!.status).toBe(AgentRunStatus.FAILED);
@@ -98,7 +100,8 @@ describe('a run\'s workspaces are released when it ends', () => {
 
   it('cancelling a run releases its workspaces', async () => {
     const workspaces = fakeRepository<Workspace>([ws('w', { runId: RUN })]);
-    const runs = fakeRepository<AgentRun>();
+    const runs = fakeRepository<AgentRun>([{ id: RUN, status: AgentRunStatus.RUNNING, steps: [] } as any]);
+    withRunEvents(runs);
     const run = { id: RUN, status: AgentRunStatus.RUNNING, isDone: () => false } as any;
     const service = Object.create(AgentRuntimeService.prototype) as any;
     Object.assign(service, {
@@ -111,6 +114,7 @@ describe('a run\'s workspaces are released when it ends', () => {
     await service.cancelRun(RUN, ORG);
 
     expect(run.status).toBe(AgentRunStatus.CANCELLED);
+    expect(runs.row(RUN)!.status).toBe(AgentRunStatus.CANCELLED);
     expect(workspaces.row('w')!.status).toBe(WorkspaceStatus.RELEASED);
   });
 
@@ -170,6 +174,8 @@ describe('a job\'s workspace outlives the parent while a child is still going', 
       ...(statuses.grandchild ? [{ id: GRANDCHILD, organizationId: ORG, parentRunId: CHILD, status: statuses.grandchild } as any] : []),
     ]);
     const workspaces = fakeRepository<Workspace>([ws('job', { runId: PARENT }), ws('job-gpu', { runId: PARENT, runnerId: 'runner-2' })]);
+    // Run writes (a cancel, a failure) go with their events.
+    withRunEvents(runs, [[Workspace, workspaces]]);
     const processor = (result: 'done') =>
       new AgentRuntimeProcessor({ processStep: jest.fn(async () => result) } as any, { add: jest.fn() } as any, {} as any, runs as any, workspaces as any);
     return { runs, workspaces, processor };
@@ -219,7 +225,7 @@ describe('a job\'s workspace outlives the parent while a child is still going', 
 
   it('the tick applies the same rule: an ended parent with a live child keeps the workspace until the child ends', async () => {
     const { runs, workspaces } = job({ parent: AgentRunStatus.TIMEOUT, child: AgentRunStatus.WAITING_APPROVAL });
-    fakeManager([[Workspace, workspaces], [AgentRun, runs], [AgentExecution, fakeRepository<AgentExecution>()]]);
+    withRunEvents(runs, [[Workspace, workspaces], [AgentExecution, fakeRepository<AgentExecution>()]]);
     const service = new WorkspaceService(workspaces as any, fakeRepository() as any);
 
     await service.releaseForEndedRuns();

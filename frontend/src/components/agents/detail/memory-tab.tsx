@@ -8,6 +8,8 @@ import {
   Plus,
   Tag,
   Brain,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -34,19 +36,32 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-import { memoriesApi, type MemoryScopeType } from '@/lib/api'
+import { memoriesApi, type MemoryScopeType, type MemoryTier } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
-import type { Memory } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { formatDateTime } from '@/lib/utils'
+import { MEMORY_TIER_LABELS, MEMORY_TYPE_LABELS, memoryTypeLabel } from '@/components/memory/memory-words'
+
+/** A memory item as the canonical memory API lists it (POST /memory/canonical/list). */
+export interface AgentMemoryItem {
+  id: string
+  content: string
+  tier?: MemoryTier | null
+  tags?: string[]
+  /** `type` is what kind of memory it is (fact, preference, ...), when it was saved with one. */
+  metadata?: Record<string, unknown> | null
+  access_count?: number
+  created_at?: string
+}
 
 interface MemoryTabProps {
   agentId: string
   /** The memory the agent's runs use (agentMemoryScope); the organization's shared memory when absent. */
   scope?: { scope_type: MemoryScopeType; scope_id: string }
-  memories: Memory[]
+  memories: AgentMemoryItem[]
   /**
    * The memories query lives on the agent detail page, so the failure has to
    * be handed down: without it a fetch that failed rendered the same "no
@@ -65,6 +80,8 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
   const [newMemoryContent, setNewMemoryContent] = useState('')
   const [newMemoryType, setNewMemoryType] = useState<string>('fact')
   const [newMemoryTags, setNewMemoryTags] = useState('')
+  // The row whose whole content is open; the list cuts each to one line.
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   // A half-written memory asks before a navigation throws it away. Cancel
   // and a successful add both reset the fields, so neither asks.
   const guard = useLeaveGuard(
@@ -92,6 +109,8 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
         content: newMemoryContent,
         tier: tierForLegacyType(newMemoryType),
         tags: newMemoryTags.split(',').map(t => t.trim()).filter(Boolean),
+        // The tier keeps how long; the type keeps what it is, shown in the list.
+        metadata: { type: newMemoryType },
         provenance: {
           agent_id: agentId,
           session_id: null, collab_id: null,
@@ -185,11 +204,9 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="fact">Fact</SelectItem>
-                      <SelectItem value="preference">Preference</SelectItem>
-                      <SelectItem value="context">Context</SelectItem>
-                      <SelectItem value="episode">Episode</SelectItem>
-                      <SelectItem value="instruction">Instruction</SelectItem>
+                      {Object.entries(MEMORY_TYPE_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -229,41 +246,82 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8" />
                     <TableHead>Content</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Scope</TableHead>
+                    <TableHead>Kept</TableHead>
                     <TableHead>Tags</TableHead>
                     <TableHead>Access count</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {memories.map((mem) => (
-                    <TableRow key={mem.id}>
-                      <TableCell className="text-sm max-w-[300px] truncate">
-                        {mem.content}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">{mem.type}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-xs">{mem.scope}</Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {mem.tags && mem.tags.length > 0 ? (
-                          <div className="flex gap-1 flex-wrap">
-                            {mem.tags.map((tag, idx) => (
-                              <span key={idx} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-[10px]">
-                                <Tag className="h-2.5 w-2.5" />{tag}
-                              </span>
-                            ))}
-                          </div>
-                        ) : '--'}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {mem.accessCount}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {memories.map((mem) => {
+                    const open = expandedId === mem.id
+                    const toggle = () => setExpandedId(open ? null : mem.id)
+                    return (
+                      <React.Fragment key={mem.id}>
+                        <TableRow
+                          className="cursor-pointer hover:bg-muted/50"
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={open}
+                          onClick={toggle}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              toggle()
+                            }
+                          }}
+                        >
+                          <TableCell className="px-2">
+                            {open
+                              ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                              : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                          </TableCell>
+                          <TableCell className="text-sm max-w-[300px] truncate">
+                            {mem.content}
+                          </TableCell>
+                          <TableCell>
+                            {memoryTypeLabel(mem.metadata) ? (
+                              <Badge variant="outline" className="text-xs">{memoryTypeLabel(mem.metadata)}</Badge>
+                            ) : '--'}
+                          </TableCell>
+                          <TableCell>
+                            {mem.tier ? (
+                              <Badge variant="secondary" className="text-xs">{MEMORY_TIER_LABELS[mem.tier] ?? mem.tier}</Badge>
+                            ) : '--'}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {mem.tags && mem.tags.length > 0 ? (
+                              <div className="flex gap-1 flex-wrap">
+                                {mem.tags.map((tag, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-[10px]">
+                                    <Tag className="h-2.5 w-2.5" />{tag}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : '--'}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {mem.access_count ?? 0}
+                          </TableCell>
+                        </TableRow>
+                        {open && (
+                          <TableRow>
+                            <TableCell colSpan={6} className="bg-muted/30 p-4">
+                              {/* w-0 min-w-full: the text fills the row without widening the table. */}
+                              <div className="w-0 min-w-full space-y-2" data-testid="memory-full-content">
+                                <p className="text-sm whitespace-pre-wrap break-words">{mem.content}</p>
+                                {mem.created_at && (
+                                  <p className="text-xs text-muted-foreground">Saved {formatDateTime(mem.created_at)}</p>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

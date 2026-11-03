@@ -14,9 +14,10 @@ import { SdkIntrospectorService } from '../sdk-introspector.service';
  * called `introspect()` on a user's package it would have been remote
  * code execution on the host.
  *
- * Nothing outside its own spec calls it today, which is the only reason
- * it was not exploitable. These tests pin both halves: the method never
- * loads package code, and no production file starts calling it.
+ * Nothing outside its own spec called it then, which is the only reason
+ * it was not exploitable. Now an SDK API's analysis calls it, so these
+ * tests pin both halves: the method never loads package code, and no
+ * production file but that one calls it.
  */
 const SRC = path.join(__dirname, '..', '..', '..', '..');
 const BACKEND = path.join(SRC, '..');
@@ -66,11 +67,17 @@ describe('SDK introspection never loads package code in the host process', () =>
     },
   );
 
-  it('no production file calls .introspect(', () => {
-    const offenders = [...walk(SRC), ...walk(path.join(BACKEND, 'ee'))]
+  // One caller, on purpose: an SDK API's analysis (apis-sdk-analysis.helper.ts)
+  // reads the declarations of the packages it installed with --ignore-scripts.
+  // That is safe only because introspect() never loads package code, which
+  // the tests above and below pin. Any other caller is a new review.
+  const SANCTIONED_CALLERS = [path.join(SRC, 'modules', 'apis', 'apis-sdk-analysis.helper.ts')];
+
+  it('no production file but the sanctioned one calls .introspect(', () => {
+    const callers = [...walk(SRC), ...walk(path.join(BACKEND, 'ee'))]
       .filter((f) => !isSpec(f))
       .filter((f) => /\.introspect\s*\(/.test(fs.readFileSync(f, 'utf8')));
-    expect(offenders).toEqual([]);
+    expect(callers).toEqual(SANCTIONED_CALLERS);
   });
 
   describe('a package with no type declarations', () => {

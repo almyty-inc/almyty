@@ -39,13 +39,13 @@ describe('customer-managed key settings', () => {
 
   it('says secrets use the platform key until one is attached', async () => {
     render(<KmsSettings />)
-    expect(await screen.findByTestId('kms-status')).toHaveTextContent(/platform key/i)
+    expect(await screen.findByTestId('kms-status')).toHaveTextContent(/almyty's own key/i)
   })
 
   it('attaches a key by reference, never by material', async () => {
     render(<KmsSettings />)
 
-    fireEvent.change(await screen.findByLabelText('CMK ARN'), {
+    fireEvent.change(await screen.findByLabelText('Key ARN'), {
       target: { value: 'arn:aws:kms:eu-central-1:111122223333:key/abc' },
     })
     fireEvent.change(screen.getByLabelText('Region'), { target: { value: 'eu-central-1' } })
@@ -60,13 +60,13 @@ describe('customer-managed key settings', () => {
     )
     // The page says so too, because "where does my key go" is the first
     // question anyone asks of this screen.
-    expect(screen.getByText(/never leaves your account/i)).toBeInTheDocument()
+    expect(screen.getByText(/never leaves your AWS account/i)).toBeInTheDocument()
   })
 
   it('catches something that is not an ARN before it becomes a failed wrap', async () => {
     render(<KmsSettings />)
 
-    fireEvent.change(await screen.findByLabelText('CMK ARN'), { target: { value: 'my-key-id' } })
+    fireEvent.change(await screen.findByLabelText('Key ARN'), { target: { value: 'my-key-id' } })
 
     expect(screen.getByTestId('kms-arn-invalid')).toBeInTheDocument()
     expect(screen.getByTestId('attach-cmk')).toBeDisabled()
@@ -79,7 +79,7 @@ describe('customer-managed key settings', () => {
     })
     render(<KmsSettings />)
 
-    expect(await screen.findByText(/does not re-encrypt what is already/i)).toBeInTheDocument()
+    expect(await screen.findByText(/does not change what is already/i)).toBeInTheDocument()
   })
 
   it('switches the key off without detaching it', async () => {
@@ -152,7 +152,7 @@ describe('customer-managed key settings', () => {
       // the config query settles, so awaiting it proves nothing about
       // whether the provisioned branch is on screen yet.
       const button = await screen.findByTestId('rotate-cmk')
-      fireEvent.change(screen.getByLabelText('CMK ARN'), { target: { value: '' } })
+      fireEvent.change(screen.getByLabelText('Key ARN'), { target: { value: '' } })
       fireEvent.click(button)
       await waitFor(() =>
         expect(api.post).toHaveBeenCalledWith('/kms/rotate', { cmkArn: undefined, awsRegion: undefined }),

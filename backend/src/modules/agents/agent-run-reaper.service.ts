@@ -5,8 +5,9 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, In } from 'typeorm';
+import { Repository, LessThan } from 'typeorm';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { writeRun } from './run-event-writer';
 
 /**
  * Reaps stuck agent runs.
@@ -89,19 +90,15 @@ export class AgentRunReaperService implements OnModuleInit, OnModuleDestroy {
     if (stuck.length === 0) return 0;
 
     const ids = stuck.map((r) => r.id);
-    // Guard the UPDATE on status so we never clobber a run that just
-    // transitioned to a terminal/non-terminal state between the read and
-    // the write.
-    await this.runRepository.update(
-      { id: In(ids), status: AgentRunStatus.RUNNING },
-      {
-        status: AgentRunStatus.TIMEOUT,
-        error: `Run timed out: no progress for over ${Math.round(STALE_RUN_MS / 60_000)} minutes (worker likely terminated).`,
-      },
-    );
+    // Guarded on status so we never clobber a run that just transitioned
+    // to a terminal/non-terminal state between the read and the write.
+    const reaped = await this.reap(ids, AgentRunStatus.RUNNING, {
+      status: AgentRunStatus.TIMEOUT,
+      error: `Run timed out: no progress for over ${Math.round(STALE_RUN_MS / 60_000)} minutes (worker likely terminated).`,
+    });
 
-    this.logger.warn(`Reaped ${ids.length} stuck run(s) to TIMEOUT`);
-    return ids.length;
+    this.logger.warn(`Reaped ${reaped} stuck run(s) to TIMEOUT`);
+    return reaped;
   }
 
   /**
@@ -126,17 +123,31 @@ export class AgentRunReaperService implements OnModuleInit, OnModuleDestroy {
     if (stuck.length === 0) return 0;
 
     const ids = stuck.map((r) => r.id);
-    await this.runRepository.update(
-      { id: In(ids), status: AgentRunStatus.PENDING },
-      {
-        status: AgentRunStatus.FAILED,
-        error:
-          `Run never started: still pending ${Math.round(STALE_RUN_MS / 60_000)} minutes after it was ` +
-          'created, so its first step was never queued (the enqueue failed, or the queue is unreachable).',
-      },
-    );
+    const reaped = await this.reap(ids, AgentRunStatus.PENDING, {
+      status: AgentRunStatus.FAILED,
+      error:
+        `Run never started: still pending ${Math.round(STALE_RUN_MS / 60_000)} minutes after it was ` +
+        'created, so its first step was never queued (the enqueue failed, or the queue is unreachable).',
+    });
 
-    this.logger.warn(`Reaped ${ids.length} never-started run(s) to FAILED`);
-    return ids.length;
+    this.logger.warn(`Reaped ${reaped} never-started run(s) to FAILED`);
+    return reaped;
+  }
+
+  /**
+   * End each run still in `from`, one write per run so each lands on its
+   * own event log (run-event-writer.ts). Guarded on `from`, so a run that
+   * moved on between the read and the write is not clobbered.
+   */
+  private async reap(ids: string[], from: AgentRunStatus, change: { status: AgentRunStatus; error: string }): Promise<number> {
+    let reaped = 0;
+    for (const id of ids) {
+      try {
+        if (await writeRun(this.runRepository, { id, status: from }, change)) reaped++;
+      } catch (err: any) {
+        this.logger.warn(`Could not reap run ${id}: ${err?.message ?? err}`);
+      }
+    }
+    return reaped;
   }
 }

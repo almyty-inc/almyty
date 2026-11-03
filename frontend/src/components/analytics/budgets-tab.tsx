@@ -43,6 +43,7 @@ import {
   BEHAVIOR_LABELS,
   PERIOD_LABELS,
   formatBudgetCents,
+  formatBudgetShare,
   type SpendAlert,
   type SpendBudget,
   type SpendBudgetPeriod,
@@ -215,8 +216,7 @@ export function BudgetsTab() {
               <tbody>
                 {budgets.map((b) => {
                   const spent = spentForBudget(b, summaries)
-                  const pctUsed =
-                    spent === null ? null : Math.min(999, Math.round((spent / b.limitCents) * 100))
+                  const pctUsed = spent === null ? null : (spent / b.limitCents) * 100
                   const overLimit = spent !== null && spent >= b.limitCents
                   const overSoft =
                     spent !== null && !overLimit && pctUsed !== null && pctUsed >= b.softThresholdPct
@@ -275,7 +275,7 @@ export function BudgetsTab() {
                               className="text-xs text-muted-foreground"
                             >
                               {formatBudgetCents(spent)} of {formatBudgetCents(b.limitCents)}
-                              {' '}({pctUsed}%)
+                              {' '}({formatBudgetShare(spent, b.limitCents)})
                             </span>
                           </div>
                         )}

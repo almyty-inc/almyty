@@ -1,6 +1,9 @@
-import { BUILTIN_CONNECTORS, OTHER_SERVICE_CONNECTOR } from '../connector-catalog';
-import { secretFieldsOf } from '../connector-schema';
+import { BASIC_AUTH_CONNECTOR, BUILTIN_CONNECTORS, OTHER_SERVICE_CONNECTOR } from '../connector-catalog';
+import { schemaViolations, secretFieldsFor, secretFieldsOf } from '../connector-schema';
 import { buildHarness, fakeEnvelope, principal } from './test-support';
+import { connectionAuthConfig, connectionSecretOf } from '../../credentials/inline-api-auth.helper';
+import { ToolAuthService } from '../../tools/services/tool-auth.service';
+import { Credential, CredentialType } from '../../../entities/credential.entity';
 
 /**
  * "Other service" on the Connections page: a name and one secret box, for
@@ -57,5 +60,47 @@ describe('other service connector', () => {
     const h = buildHarness({ routes: [] });
     await expect(h.service.connect(admin, ORG, 'other', { input: {}, name: 'Acme CRM' })).rejects.toMatchObject({ response: { code: 'CONNECT_INPUT_INVALID' } });
     expect(h.credentials.rows).toHaveLength(0);
+  });
+
+  // Stripe and others take the API key as the basic-auth username with an
+  // empty password. Saving one must not need a made-up password, and the
+  // key typed as the username is a secret like any other.
+  it('saves an API key as the username with the password left empty, kept secret', async () => {
+    const h = buildHarness({ routes: [] });
+    const done = await h.service.connect(admin, ORG, 'basic-auth', { input: { username: 'sk_test_51Hx', password: '' }, name: 'Stripe' });
+    if (done.pending !== false) throw new Error('expected a connection');
+    expect(done.connection).toMatchObject({ name: 'Stripe', connectorKey: 'basic-auth', accountLabel: null, health: { status: 'valid' } });
+    expect(JSON.stringify(done.connection)).not.toContain('sk_test_51Hx');
+    const row = h.credentials.rows[0];
+    expect(row.config.username).toMatch(/^encrypted:/);
+    expect(await fakeEnvelope.decryptForOrg(ORG, row.config.username)).toBe('sk_test_51Hx');
+    expect(row.config.password).toBeUndefined();
+  });
+
+  it('asks only for the username: the password is optional, and secret when given', () => {
+    const schema = BASIC_AUTH_CONNECTOR.connect[0].schema!;
+    expect(schema.required).toEqual(['username']);
+    expect(schemaViolations({ username: 'sk_test_51Hx' }, schema)).toEqual([]);
+    expect(schemaViolations({ password: 'pw' }, schema)).toEqual(['username is required']);
+    expect(secretFieldsFor(schema, { username: 'sk_test_51Hx' }).sort()).toEqual(['password', 'username']);
+    expect(secretFieldsFor(schema, { username: 'ops', password: 'pw-123456' })).toEqual(['password']);
+  });
+
+  it('sends a key-as-username credential as "key:" basic auth, with nothing after the colon', async () => {
+    const resolved = connectionAuthConfig({ username: 'sk_test_51Hx' });
+    expect(resolved).toMatchObject({ username: 'sk_test_51Hx', password: '' });
+    // The key is what an API reading "the connection's key" gets.
+    expect(connectionSecretOf({ username: 'sk_test_51Hx' })).toBe('sk_test_51Hx');
+    expect(connectionAuthConfig({ username: 'ops', password: 'pw' })).toMatchObject({ username: 'ops', password: 'pw' });
+
+    // An API pointed at the connection, called by a tool.
+    const refs = { resolve: jest.fn(async () => ({ config: { username: 'sk_test_51Hx' }, credential: { id: 'c-1', type: CredentialType.BASIC_AUTH } })) };
+    const auth = new ToolAuthService({} as any, {} as any, {} as any, refs as any);
+    const request: any = {};
+    await auth.applyApiAuth(request, { id: 'api-1', authentication: { type: 'basic', config: { connectionId: 'c-1' } } } as any, { organizationId: ORG, userId: 'u-admin' } as any);
+    expect(request.headers.Authorization).toBe(`Basic ${Buffer.from('sk_test_51Hx:').toString('base64')}`);
+
+    const credential = Object.assign(new Credential(), { type: CredentialType.BASIC_AUTH, isActive: true, config: { username: 'sk_test_51Hx' } });
+    expect(credential.getAuthHeaders()).toEqual({ Authorization: `Basic ${Buffer.from('sk_test_51Hx:').toString('base64')}` });
   });
 });

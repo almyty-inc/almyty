@@ -20,6 +20,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SpendService } from './spend.service';
 import { startOfPeriod } from './spend-period.util';
 import { BudgetExceededException } from './budget-exceeded.exception';
+import { formatSpendCents, formatSpendShare } from './budget-format';
 
 export interface CreateBudgetDto {
   agentId?: string | null;
@@ -337,7 +338,9 @@ export class BudgetsService {
         from: periodStart,
       });
 
-      const softLimit = Math.floor((budget.limitCents * budget.softThresholdPct) / 100);
+      // Exact, not floored: on a one-cent budget the 80% warning is at
+      // 0.8 cents, never at zero spend. Nothing spent warns of nothing.
+      const softLimit = (budget.limitCents * budget.softThresholdPct) / 100;
 
       if (spentCents >= budget.limitCents) {
         await this.recordAlert(budget, 'hard', periodStart, spentCents);
@@ -351,7 +354,7 @@ export class BudgetsService {
             periodType: budget.periodType,
           });
         }
-      } else if (spentCents >= softLimit) {
+      } else if (spentCents > 0 && spentCents >= softLimit) {
         await this.recordAlert(budget, 'soft', periodStart, spentCents);
       }
     }
@@ -423,9 +426,9 @@ export class BudgetsService {
     const recipients = await this.resolveRecipients(budget);
     if (recipients.length === 0) return;
 
-    const spent = `$${(spentCents / 100).toFixed(2)}`;
-    const limit = `$${(budget.limitCents / 100).toFixed(2)}`;
-    const pct = Math.round((spentCents / budget.limitCents) * 100);
+    const spent = formatSpendCents(spentCents);
+    const limit = formatSpendCents(budget.limitCents);
+    const pct = formatSpendShare(spentCents, budget.limitCents);
     const scope = budget.agentId ? 'this agent' : 'your organization';
     const params = {
       level,

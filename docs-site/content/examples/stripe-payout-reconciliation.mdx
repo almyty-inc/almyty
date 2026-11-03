@@ -1,28 +1,164 @@
-# Match Stripe payouts against your books
+# Check Stripe payouts against Xero every morning
 
-For finance teams who check Stripe against the ledger by hand every morning. Each day the assistant pulls yesterday's Stripe payouts and charges, matches them against your accounting records, and reports only the exceptions: amounts that don't match, missing entries, unexpected refunds. A person looks at the three that matter, not the three thousand that match.
+## What you'll build
+
+An assistant that checks yesterday's Stripe payouts against your books in Xero before you start work. For every payout it adds up what was inside it (charges, refunds, Stripe's fees), looks for the matching deposit in Xero, and posts one message to `#finance-ops` in Slack: the payouts that are missing in Xero or booked with a different amount first, then the ones that match, then every large refund. It only reads: it cannot change anything in Stripe or Xero.
+
+![The 07:00 message in #finance-ops: two payouts need a look, one matches, one large refund](/screenshots/examples/stripe-payout-reconciliation/00-slack-report.png)
+
+This guide builds it for Larkspur Home, a made-up online homeware shop in Amsterdam. Stripe pays Larkspur out once a day in each currency it sells in (EUR, GBP and USD), and their bookkeeper books each payout in Xero as a **Receive Money** transaction from the contact `Stripe`, with the payout ID as the reference. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 40 minutes.
 
 ## What you need
 
-- A Stripe restricted key that may only read (payouts, charges, refunds).
-- Read access to your ledger through an API: for example a small read-only query service in front of your accounting database.
-- Somewhere for the report to go: a Slack or email tool, or an address of yours that receives it.
+- **An almyty account** with an AI model connected (**Models**, **Connect a provider**; see step 1 of [Customer support assistant](/examples/customer-support-assistant#1-connect-an-ai-model)).
+- **A Stripe account** where you may create API keys (the Administrator or Developer role).
+- **A Xero organisation** and a Xero login that can see its bank transactions, plus a free Xero developer account at developer.xero.com.
+- **A Slack workspace** where you may create an app.
 
-## How to build it
+## 1. Create a read-only Stripe key
 
-1. **Add Stripe.** Open **APIs**, click **Connect an API**, pick **SDK / npm** and add the `stripe` package. Then, under **Tools**, **Create tool**, **SDK / npm package**, make tools for listing payouts, charges and refunds (see [Turn a code library into tools](/examples/npm-package-tools)).
-2. **Keep the key safe.** Save the Stripe key in [Credentials](/credentials); the tools read it when they run, never in a prompt.
-3. **Connect the ledger.** Open **APIs**, click **Connect an API**, pick **OpenAPI / Swagger**, give its description link and click **Connect API**. If it is a single call, create an [HTTP tool](/tools/http-tools) instead.
-4. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Get yesterday's payouts and charges, match them to the ledger by amount and reference, and report only what doesn't match." Pick the tools under **Tools and APIs**.
-5. **Keep it read-only.** On its **Constraints** tab, add "Never create or change a charge or refund". The read-only Stripe key is what makes sure of it.
-6. **Run it daily.** On its **Overview** tab, turn on **Schedule** with an interval of 1440 minutes, and have it send the report with a Slack or email tool, or to your own address through the **Webhook** card.
+**In Stripe**, open **Developers**, **API keys** and click **Create restricted key**. Name it `almyty payout check`, and set exactly two permissions to **Read**:
 
-## Ideas
+- **Balance**: covers balance transactions, which is what each payout is made of.
+- **Payouts**.
 
-- Let it propose a correcting ledger entry and ask a person to approve it first (see [Approvals](/approvals)).
-- Turn on verification so a second model checks each flagged exception.
-- The same works for other payment providers with an API or an npm package.
+Leave everything else on **None** and click **Create key**. Copy the key (it starts with `rk_live_`). A restricted key is the safest choice here: even if the assistant were told to issue a refund, Stripe would refuse it.
+
+## 2. Connect Stripe
+
+In almyty, open **APIs**, click **Connect an API**, pick **OpenAPI / Swagger** and paste Stripe's own API description under **Link to the description**:
+
+```
+https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
+```
+
+![Stripe's API description link, pasted](/screenshots/examples/stripe-payout-reconciliation/01-stripe-link.png)
+
+Open **Advanced**, set **Name** to `Stripe` and click **Connect API**. almyty reads the description and makes a tool for every one of Stripe's 612 operations; you will tick the two you need in step 5.
+
+On **Finish connecting**, the key is sent as a bearer token: Stripe's description offers that next to a username and password, and the token is the same key on its own. Click **Create one here**, set **Name** to `Stripe restricted key (read only)`, paste the key into **Key** and click **Save**. (If you pick **As a username and password** instead, put the key in **Username** and leave **Password** empty.)
+
+![The restricted key, sent as a bearer token](/screenshots/examples/stripe-payout-reconciliation/02-stripe-key.png)
+
+## 3. Connect Xero
+
+**In Xero's developer portal** (developer.xero.com), open **My Apps**, click **New app**, pick **Web app** and name it `almyty payout check`. Leave the redirect URI empty for a moment.
+
+**In almyty**, open **APIs**, **Connect an API**, **OpenAPI / Swagger**, and paste Xero's own description of its Accounting API:
+
+```
+https://raw.githubusercontent.com/XeroAPI/Xero-OpenAPI/master/xero_accounting.yaml
+```
+
+Open **Advanced**, set **Name** to `Xero Accounting` and click **Connect API**. On **Finish connecting**, click **Create one here**. almyty shows a **redirect address**: copy it into the Xero app's **Redirect URIs** and save the app there. Then copy the app's **Client id** and a new **Client secret** from Xero into **Client ID** and **Client secret** here.
+
+Under **What it asks for**, untick everything and tick only `accounting.transactions.read`. almyty adds `offline_access` itself, which is what lets the sign-in renew overnight.
+
+![Xero sign-in: client ID, secret and the one scope it needs](/screenshots/examples/stripe-payout-reconciliation/03-xero-sign-in.png)
+
+Click **Sign in**, log in to Xero and pick your organisation.
+
+**Find your organisation's ID.** Every Xero call names the organisation it is for. Xero's API Explorer (api-explorer.xero.com) shows it: log in, pick the organisation, and copy the tenant ID it lists for it. Larkspur's is `7a3c51e2-0d4b-4c7e-9a52-6f1e8b2d4c90`; you will put yours into the instructions in the next step.
+
+## 4. Write what it checks
+
+Open **Agents**, click **Create agent**, pick **Autonomous**, name it `Payout check` and pick a model under **Work mode** (for example **gpt-4o**). Under **Personality & style**, write `Precise and brief, like a good bookkeeper. Amounts always with currency and two decimals.` Under **Instructions**, write the check step by step, with your own Xero organisation ID:
+
+```
+You check Larkspur Home's Stripe payouts against Xero every morning and report only what needs a person.
+
+1. List yesterday's Stripe payouts: status "paid", arrival_date set to yesterday 00:00 UTC as a Unix timestamp. Stripe pays out once a day per currency (EUR, GBP and USD).
+2. For each payout, list its balance transactions (payout set to the payout id, limit 100) and add up the charges, refunds and fees.
+3. In Xero, list the bank transactions with xero-tenant-id 7a3c51e2-0d4b-4c7e-9a52-6f1e8b2d4c90 and where set to: Type=="RECEIVE" AND Contact.Name=="Stripe" AND Date>=DateTime(yesterday's year, month, day).
+4. Match each payout to the Xero transaction whose Reference is the payout id. It matches when the Xero total equals the payout amount to the cent.
+5. Report the payouts that need a look first: not in Xero, or a different amount (give the difference and the breakdown from step 2). Then the ones that match, one line each. Then every refund of 500 or more in any currency, with the order number.
+
+You only read. Never create, change or delete anything in Stripe or Xero.
+```
+
+Why so specific: Stripe's `arrival_date` and Xero's `where` filter are exact formats. Spelling them out means the assistant asks both systems the same question every morning, instead of working it out again.
+
+![Payout check with its instructions](/screenshots/examples/stripe-payout-reconciliation/04-agent.png)
+
+## 5. Pick its three tools
+
+Under **Capabilities**, **Tools and APIs**, search for and tick:
+
+| Tool | Call |
+|---|---|
+| `stripe_get_payouts` | `GET /v1/payouts` (List all payouts) |
+| `stripe_get_balance_transactions` | `GET /v1/balance_transactions` (List all balance transactions) |
+| `xero_accounting_get_bank_transactions` | `GET /BankTransactions` (Retrieves any spent or received money transactions) |
+
+All three only read. Of Stripe's 612 tools and Xero's 235 it has these three and nothing else.
+
+![The three read-only tools picked](/screenshots/examples/stripe-payout-reconciliation/05-tools.png)
+
+Click **Save**, go back to the agent and click **Activate**.
+
+## 6. Try it
+
+Under **Try it** on the **Overview** tab, type `Check yesterday's payouts.` and press Enter.
+
+![The test run: two payouts need a look](/screenshots/examples/stripe-payout-reconciliation/06-try.png)
+
+It answered:
+
+> **Stripe payouts for Wed 21 Oct: 3 payouts, 1 match Xero, 2 need a look**
+>
+> **Needs a look**
+> - **GBP £6,912.10** (`po_1QLk7nF4aRhG2xYzGBP0921`): **Xero has £6,921.10** in Wise Business (GBP), £9.00 more than Stripe paid. Stripe: 19 charges £7,023.74, fees £111.64, no refunds.
+> - **USD $2,310.00** (`po_1QLk7oF4aRhG2xYzUSD0921`): **not in Xero.** Stripe: 8 charges $2,347.73, fees $37.73, no refunds. Book it as a Receive Money from Stripe with this payout id as the reference.
+>
+> **Matches**
+> - EUR €18,240.55 matches Xero (ING Business (EUR)).
+>
+> **Refunds over 500**
+> - €1,480.00: Refund for order LH-20931 (requested by customer), in the EUR payout.
+>
+> I only read Stripe and Xero; nothing was changed.
+
+The GBP payout was typed into Xero with two digits swapped (6,921.10 instead of 6,912.10), and nobody had booked the USD one yet. Open the **Runs** tab and click the run to see each call: the payout list, one balance-transaction list per payout, and the one Xero query, with what each returned.
+
+![The run, step by step](/screenshots/examples/stripe-payout-reconciliation/07-run-steps.png)
+
+## 7. Connect Slack
+
+**In Slack**, go to api.slack.com/apps, click **Create New App**, **From scratch**, name it `Payout check` and pick your workspace. Under **OAuth & Permissions**, **Bot Token Scopes**, add `chat:write` and `channels:read`, click **Install to Workspace** and copy the **Bot User OAuth Token** (`xoxb-...`). Under **Basic Information**, copy the **Signing Secret**. In `#finance-ops`, type `/invite @Payout check`.
+
+**In almyty**, on the agent's **Channels** tab, click **Add channel**, pick **Slack**, open **Advanced**, click **Create one here**, open **More options**, choose **Bot token** and paste the token and the signing secret. Click **Save**, **Save** at the bottom, then **Publish**. The assistant only posts here, so you can skip Slack's **Event Subscriptions**.
+
+## 8. Run it every weekday at 07:00
+
+On the **Overview** tab, under **Schedule**, click **Set up a schedule**:
+
+1. **Repeat**: **At a time of day**. **Days**: **Weekdays (Monday to Friday)**.
+2. **Time**: `07:00`. **Time zone**: **Europe/Amsterdam** (yours).
+3. **Where**: **Slack**. **Slack channel**: **#finance-ops**.
+4. **Message**: `Check yesterday's payouts.`
+5. Click **Save schedule**.
+
+![The schedule: weekdays at 07:00, posted to #finance-ops](/screenshots/examples/stripe-payout-reconciliation/08-schedule.png)
+
+From then on, the message at the top of this page is waiting in `#finance-ops` when the team starts. Scheduled runs act with your access, so the Stripe key and the Xero sign-in need nothing more.
+
+## Make it yours
+
+- **Booked differently in Xero.** If your bookkeeper uses a Stripe clearing account or a bank feed, change step 3 and 4 to the account and the fields you use, for example `BankAccount.Code=="090"` in the filter and "matches when the amount and the date are the same".
+- **A different refund threshold.** Change "500 or more" in step 5.
+- **Another accounting system.** Any system with a published API description can be connected under **APIs** the same way. Tick its "list bank transactions" tool and describe its filter in step 3.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| Stripe calls fail with **401** or **The provided key does not have the required permissions** | The restricted key lacks **Balance: Read** or **Payouts: Read**. Edit the key in Stripe, or make a new one and paste it into the `Stripe restricted key (read only)` credential under **Credentials**. |
+| Xero answers **403 AuthenticationUnsuccessful** | The `xero-tenant-id` in the instructions is wrong, or that organisation was not picked at sign-in. Check it in Xero's API Explorer. |
+| Xero answers **401** the morning after | The sign-in expired. Sign in again under **Credentials**; check the Xero app still lists almyty's redirect address. |
+| Every payout is reported as **not in Xero** | Your payouts are booked with another contact, reference or type. Look at one in Xero and change the filter in step 3 and the match rule in step 4 to how they are booked. |
+| No message in Slack at 07:00 | Invite the bot to `#finance-ops`, and check the schedule card on the **Overview** tab for the last run and its error. |
 
 ## Related
 
-- [SDK tools](/tools/sdk-tools) · [Credentials](/credentials) · [Approvals](/approvals) · [Scheduling](/agents/scheduling)
+- [Scheduling](/agents/scheduling) · [Autonomous agents](/agents/autonomous) · [Connect an API](/tools) · [Channels](/channels) · [Credentials](/credentials)
+- [Nightly data check](/examples/nightly-data-quality-digest) · [Cap AI spending](/examples/govern-ai-spend)

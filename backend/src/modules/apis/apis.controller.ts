@@ -18,6 +18,7 @@ import {
   HttpStatus,
   UploadedFile,
   UseInterceptors,
+  Optional,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { readFile } from 'fs/promises';
@@ -31,7 +32,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ApisService } from './apis.service';
 import { API_TYPE_WORDS, ApiConnectService, type DescriptionType } from './api-connect.service';
 import { CredentialService } from './credential.service';
-import { ConnectApiDto, CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto } from './dto/api.dto';
+import { ApisSdkAnalysisHelper, SDK_ANALYSIS_JOB, type SdkAnalysisJob } from './apis-sdk-analysis.helper';
+import { ConnectApiDto, CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto, SelectOperationsDto } from './dto/api.dto';
 import { ApiType, ApiStatus } from '../../entities/api.entity';
 
 @Controller('apis')
@@ -42,6 +44,7 @@ export class ApisController {
     private readonly credentialService: CredentialService,
     @InjectQueue('schema-import') private readonly schemaImportQueue: Queue,
     private readonly apiConnect: ApiConnectService,
+    @Optional() private readonly sdkAnalysis?: ApisSdkAnalysisHelper,
   ) {}
 
   @Get()
@@ -148,19 +151,36 @@ export class ApisController {
   @Roles('member', 'admin', 'owner')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async createSdkApi(@Body() body: CreateSdkApiDto, @Request() req: any) {
+    let api;
     try {
       const organizationId = req.user.currentOrganizationId;
       if (!organizationId) {
         throw new HttpException({ success: false, message: 'No organization found' }, HttpStatus.BAD_REQUEST);
       }
-      const api = await this.apisService.createSdkApi(body, organizationId, req.user.sub || req.user.id);
-      return { success: true, data: api, message: 'SDK API created. Installing packages...' };
+      api = await this.apisService.createSdkApi(body, organizationId, req.user.sub || req.user.id);
     } catch (error) {
       throw new HttpException(
         { success: false, message: error.message, error: 'SDK_API_CREATE_FAILED' },
         error.status || HttpStatus.BAD_REQUEST,
       );
     }
+    // Installing and reading the packages takes seconds to minutes, so it
+    // runs as a background job; the API page follows api.metadata.sdkAnalysis.
+    const jobId = await this.enqueueSdkAnalysis(api.id, api.organizationId);
+    return { success: true, data: { ...api, sdkAnalysisJobId: jobId }, message: 'SDK API created. Analysing its packages...' };
+  }
+
+  /** Analyse an SDK API's packages again (after a failure, or a new version). */
+  @Post(':id/analyse-sdk')
+  @Roles('member', 'admin', 'owner')
+  async analyseSdk(@Param('id') id: string, @Request() req: any) {
+    const orgId = req.user?.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    const api = await this.apisService.findOne(id, orgId, { id: req.user.sub || req.user.id });
+    if (!api) throw new NotFoundException('API not found');
+    if (api.type !== ApiType.SDK) throw new BadRequestException(`${api.name} is not an SDK API`);
+    const jobId = await this.enqueueSdkAnalysis(api.id, api.organizationId);
+    return { success: true, data: { jobId, status: 'processing' }, message: 'Analysing its packages' };
   }
 
   @Get(':id/sdk-maps')
@@ -504,6 +524,41 @@ export class ApisController {
     return { success: true, data: result, message: 'Operations retrieved successfully' };
   }
 
+  /** Every operation in outline (no parameters or responses) and the per-schema limit: the operation picker's list. */
+  @Get(':id/operations/outline')
+  @Roles('member', 'admin', 'owner')
+  async getOperationOutline(@Request() req, @Param('id') id: string) {
+    const result = await this.apisService.getOperationOutline(id, req.user.currentOrganizationId);
+    return { success: true, data: result, message: 'Operations retrieved successfully' };
+  }
+
+  /**
+   * Make tools from these operations only. For a description with more
+   * operations than one schema may make tools from: the import made none and
+   * said `selectionRequired`. Generation runs in the background like an
+   * import does; poll it with `GET :id/import-status/:jobId`.
+   */
+  @Post(':id/operations/selection')
+  @Roles('admin', 'owner')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async selectOperations(@Request() req, @Param('id') id: string, @Body() body: SelectOperationsDto) {
+    const orgId = req.user.currentOrganizationId;
+    const api = await this.apisService.findOne(id, orgId, { id: req.user.sub || req.user.id });
+    if (!api) throw new NotFoundException('API not found');
+    const { selected } = await this.apisService.selectOperations(id, api.organizationId, body.operationIds);
+    const job = await this.schemaImportQueue.add(
+      'generate',
+      { apiId: id, organizationId: api.organizationId, createdBy: req.user.id ?? null },
+      // Same bounds as an import; generation is the second half of one.
+      { timeout: 5 * 60 * 1000, attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 100, removeOnFail: 50 },
+    );
+    return {
+      success: true,
+      data: { jobId: job.id, status: 'processing', selected },
+      message: 'Making tools from the picked operations',
+    };
+  }
+
   @Get(':id/resources')
   @Roles('member', 'admin', 'owner')
   async getResources(@Request() req, @Param('id') id: string) {
@@ -573,6 +628,24 @@ export class ApisController {
     return { success: true, data: result, message: 'API status updated successfully' };
   }
 
+
+  /**
+   * Queue the analysis of an SDK API's packages on the import queue and
+   * mark the API as being analysed, so its page shows progress at once.
+   */
+  private async enqueueSdkAnalysis(apiId: string, organizationId: string): Promise<string | number> {
+    await this.sdkAnalysis?.markQueued(apiId, organizationId);
+    const payload: SdkAnalysisJob = { apiId, organizationId };
+    const job = await this.schemaImportQueue.add(SDK_ANALYSIS_JOB, payload, {
+      // npm install of a large SDK plus reading its declarations.
+      timeout: 5 * 60 * 1000,
+      attempts: 2,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: 100,
+      removeOnFail: 50,
+    });
+    return job.id;
+  }
 
   /**
    * Queue a schema import. The organizationId is included so the worker

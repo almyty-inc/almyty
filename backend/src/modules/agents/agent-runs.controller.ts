@@ -28,8 +28,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { CodeModeService } from '../code-mode/code-mode.service';
+import { resumeSeqOf, streamPosOf } from './run-stream-position';
+import { writeRunStream } from './run-stream-writer';
+import { openEventStream } from '../../common/utils/event-stream';
 
 @Controller('agents')
 @ApiTags('Agents')
@@ -60,6 +64,7 @@ export class AgentRunsController {
    */
   @Get(':id/executions/:executionId/trace')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Where a run\'s requests went, hop by hop' })
   async trace(
     @Param('id', ParseUUIDPipe) id: string,
@@ -99,6 +104,7 @@ export class AgentRunsController {
 
   @Post(':id/runs')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @Throttle({ default: { ttl: 60000, limit: 20 } })
   @ApiOperation({ summary: 'Start a new autonomous agent run' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
@@ -142,6 +148,7 @@ export class AgentRunsController {
 
   @Get(':id/runs')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'List runs for an agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   async listRuns(
@@ -181,6 +188,7 @@ export class AgentRunsController {
 
   @Get(':id/runs/:runId')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get run status and steps' })
   async getRun(
     @Param('id', ParseUUIDPipe) id: string,
@@ -217,6 +225,7 @@ export class AgentRunsController {
    */
   @Get(':id/runs/:runId/code-executions')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: "A run's run_code scripts" })
   async listCodeExecutions(
     @Param('id', ParseUUIDPipe) id: string,
@@ -232,6 +241,7 @@ export class AgentRunsController {
   /** One script of a run, with its call tree: the tool executions it made, in order. */
   @Get(':id/runs/:runId/code-executions/:codeExecutionId')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'A run_code script and the calls it made' })
   async getCodeExecution(
     @Param('id', ParseUUIDPipe) id: string,
@@ -246,14 +256,31 @@ export class AgentRunsController {
     return { success: true, data: { ...found.execution, calls: found.calls } };
   }
 
+  /**
+   * Live progress of a run, as server-sent events.
+   *
+   * A viewer that says where it left off gets the run's history from its
+   * event log first: with `?after=<seq>` (0 for the whole history), or the
+   * `Last-Event-ID` header its EventSource sends when it reconnects, which
+   * wins over the query. Every logged event is a `run.log` event whose SSE
+   * id is its seq, sent in order, each once, then the live stream follows
+   * with nothing dropped or repeated in between. Each live runtime event
+   * then carries `pos`, its place on the run's event stream; `?live=<pos>`
+   * (or `0`, the run's start) has them start after that one rather than
+   * from now, for a client that shows tokens as they come. Without a seq,
+   * the stream is what it always was: the live runtime events only.
+   */
   @Get(':id/runs/:runId/stream')
   @Roles('viewer', 'member', 'admin', 'owner')
-  @ApiOperation({ summary: 'SSE stream of run progress' })
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
+  @ApiOperation({ summary: 'SSE stream of run progress, resumable from a seq' })
   async streamRun(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('runId', ParseUUIDPipe) runId: string,
     @Request() req: any,
     @Res() res: Response,
+    @Query('after') after?: string,
+    @Query('live') live?: string,
   ) {
     try {
       const organizationId = req.user.currentOrganizationId;
@@ -262,33 +289,38 @@ export class AgentRunsController {
         return;
       }
 
+      const resumeAfter = resumeSeqOf(req.headers?.['last-event-id'], after);
+      if (resumeAfter === 'invalid') {
+        res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: 'after must be a whole number of 0 or more' });
+        return;
+      }
+      const liveAfter = streamPosOf(live);
+      if (liveAfter === 'invalid') {
+        res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: 'live must be 0 or a stream position such as 1730000000000-0' });
+        return;
+      }
+
       // Verify run exists AND belongs to this agent path segment.
       await this.runtimeService.getRun(runId, organizationId, id);
 
-      // Set SSE headers
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders();
+      // Headers and an opening comment go out now, so no proxy holds the
+      // stream until its first event (common/utils/event-stream.ts).
+      openEventStream(res);
 
       // Stream events via Redis Streams (cross-pod)
       const abortController = new AbortController();
       req.on('close', () => abortController.abort());
 
       try {
-        await this.runtimeService.subscribeRunEvents(
-          runId,
-          (event) => {
-            res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-          },
-          abortController.signal,
-        );
+        await writeRunStream(this.runtimeService, runId, res, abortController.signal, resumeAfter, liveAfter);
       } catch {
         // Stream ended or aborted
       }
 
-      res.write(`event: done\ndata: {}\n\n`);
-      if (!res.writableEnded) res.end();
+      if (!res.writableEnded) {
+        res.write(`event: done\ndata: {}\n\n`);
+        res.end();
+      }
     } catch (error) {
       if (!res.headersSent) {
         res.status(error.status || HttpStatus.BAD_REQUEST).json({ success: false, message: error.message });
@@ -298,6 +330,7 @@ export class AgentRunsController {
 
   @Post(':id/runs/:runId/input')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @ApiOperation({ summary: 'Send input to a waiting run (human-in-the-loop)' })
   async sendRunInput(
     @Param('id', ParseUUIDPipe) id: string,
@@ -326,6 +359,7 @@ export class AgentRunsController {
 
   @Post(':id/runs/:runId/cancel')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @ApiOperation({ summary: 'Cancel a running run' })
   async cancelRun(
     @Param('id', ParseUUIDPipe) id: string,
@@ -351,3 +385,6 @@ export class AgentRunsController {
     }
   }
 }
+
+// Kept importable from here, where they started (run-stream-position.ts).
+export { resumeSeqOf, runLogEventOf } from './run-stream-position';

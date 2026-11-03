@@ -37,6 +37,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateToolGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 
@@ -57,6 +58,7 @@ export class ToolsController {
 
   @Post()
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_MANAGE)
   @ApiOperation({ summary: 'Create a new tool' })
   @ApiResponse({ status: 201, description: 'Tool created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
@@ -92,6 +94,7 @@ export class ToolsController {
 
   @Get()
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Get all tools for organization' })
   @ApiResponse({ status: 200, description: 'Tools retrieved successfully' })
   async getTools(
@@ -132,6 +135,7 @@ export class ToolsController {
    */
   @Post('search')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Search tools (keywords and meaning)' })
   @ApiResponse({ status: 200, description: 'Ranked tools: name, summary, side-effect class, score' })
   async searchTools(
@@ -152,6 +156,7 @@ export class ToolsController {
    */
   @Get(':toolId/signature')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: "A tool's code signature and full description" })
   @ApiResponse({ status: 200, description: 'Signature, schemas, side-effect class and example call' })
   @ApiResponse({ status: 404, description: 'Tool not found' })
@@ -177,6 +182,7 @@ export class ToolsController {
 
   @Get(':toolId')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Get tool by ID' })
   @ApiResponse({ status: 200, description: 'Tool retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Tool not found' })
@@ -207,6 +213,7 @@ export class ToolsController {
 
   @Put(':toolId')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_MANAGE)
   @ApiOperation({ summary: 'Update tool' })
   @ApiResponse({ status: 200, description: 'Tool updated successfully' })
   @ApiResponse({ status: 404, description: 'Tool not found' })
@@ -244,6 +251,7 @@ export class ToolsController {
 
   @Delete(':toolId')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_MANAGE)
   @ApiOperation({ summary: 'Delete tool' })
   @ApiResponse({ status: 200, description: 'Tool deleted successfully' })
   @ApiResponse({ status: 404, description: 'Tool not found' })
@@ -274,6 +282,7 @@ export class ToolsController {
 
   @Post(':toolId/activate')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_MANAGE)
   @ApiOperation({ summary: 'Activate tool' })
   @ApiResponse({ status: 200, description: 'Tool activated successfully' })
   async activateTool(
@@ -303,6 +312,7 @@ export class ToolsController {
 
   @Post(':toolId/deactivate')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_MANAGE)
   @ApiOperation({ summary: 'Deactivate tool' })
   @ApiResponse({ status: 200, description: 'Tool deactivated successfully' })
   async deactivateTool(
@@ -332,6 +342,7 @@ export class ToolsController {
 
   @Post(':toolId/execute')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_EXECUTE)
   @ApiOperation({ summary: 'Execute tool' })
   @ApiResponse({ status: 200, description: 'Tool executed successfully' })
   @ApiResponse({ status: 400, description: 'Invalid parameters or tool execution failed' })
@@ -392,6 +403,7 @@ export class ToolsController {
 
   @Get(':toolId/versions')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Get tool versions' })
   @ApiResponse({ status: 200, description: 'Tool versions retrieved successfully' })
   async getToolVersions(
@@ -421,6 +433,7 @@ export class ToolsController {
 
   @Get(':toolId/stats')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Get tool usage statistics' })
   @ApiQuery({ name: 'timeframe', enum: ['hour', 'day', 'week', 'month'], required: false })
   @ApiResponse({ status: 200, description: 'Tool statistics retrieved successfully' })
@@ -452,6 +465,7 @@ export class ToolsController {
 
   @Post('generate-from-api/:apiId')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_MANAGE)
   @ApiOperation({ summary: 'Generate tools from API operations' })
   @ApiResponse({ status: 201, description: 'Tools generated successfully' })
   @ApiResponse({ status: 404, description: 'API not found' })
@@ -509,6 +523,7 @@ export class ToolsController {
 
   @Post(':toolId/regenerate')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_MANAGE)
   @ApiOperation({ summary: 'Regenerate tool from operation' })
   @ApiResponse({ status: 200, description: 'Tool regenerated successfully' })
   async regenerateTool(
@@ -538,6 +553,7 @@ export class ToolsController {
 
   @Get('stats/overview')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Get organization tool overview statistics' })
   @ApiResponse({ status: 200, description: 'Organization tool statistics retrieved successfully' })
   async getOrganizationStats(

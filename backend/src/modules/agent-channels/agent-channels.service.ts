@@ -20,7 +20,7 @@ import {
   isChannelType,
 } from '../../entities/agent-channel.entity';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
-import { ChannelWebhookRegistrar } from '../gateways/channels/channel-webhook-registrar.service';
+import { ChannelWebhookRegistrar, PUBLIC_URL_NOT_CONFIGURED, type WebhookRegistrationCode } from '../gateways/channels/channel-webhook-registrar.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
 import { GatewaysService } from '../gateways/gateways.service';
@@ -106,6 +106,8 @@ export interface WebhookRegistrationView {
   status: 'registered' | 'unregistered' | 'failed' | 'skipped';
   /** The platform's own wording, or why it was skipped. Never a key. */
   error: string | null;
+  /** PUBLIC_URL_NOT_CONFIGURED: this server has no public address, so the channel receives no messages. */
+  code: WebhookRegistrationCode | null;
   at: string | null;
 }
 
@@ -311,6 +313,7 @@ export class AgentChannelsService {
           action: r.action === 'unregister' ? 'unregister' : 'register',
           status: r.status,
           error: typeof r.error === 'string' ? r.error : null,
+          code: r.code === PUBLIC_URL_NOT_CONFIGURED ? PUBLIC_URL_NOT_CONFIGURED : null,
           at: typeof r.at === 'string' ? r.at : null,
         });
       }

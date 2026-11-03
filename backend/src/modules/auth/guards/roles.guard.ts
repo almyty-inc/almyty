@@ -7,6 +7,7 @@ import {
   RbacHookDecision,
 } from '../../../common/ee-hooks/ee-hooks';
 import { findEffectiveMembership } from '../../../common/authorization/membership';
+import { RBAC_ACTION_KEY } from '../../../common/authorization/rbac-actions';
 
 export const ROLES_KEY = 'roles';
 export const PERMISSIONS_KEY = 'permissions';
@@ -32,6 +33,14 @@ export class RolesGuard implements CanActivate {
     ]);
 
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    // The `resource:action` permission the route performs (@RbacAction).
+    // Only the EE path reads it: a custom role granting it stands in for
+    // the required built-in role, and ABAC policies on it apply.
+    const routeAction = this.reflector.getAllAndOverride<string | undefined>(RBAC_ACTION_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
@@ -91,6 +100,7 @@ export class RolesGuard implements CanActivate {
       requiredPermissions,
       roleOk,
       missingPermissions,
+      routeAction,
     );
   }
 
@@ -100,10 +110,12 @@ export class RolesGuard implements CanActivate {
    * outcome):
    *
    * 1. Additive grants — a custom role can cover a missing permission
-   *    directly, or satisfy a required org role via the `role:<name>`
-   *    pseudo-permission (the EE evaluator's wildcards apply, so `role:*`
-   *    or `*` also match). Grants can only ALLOW what the built-ins would
-   *    deny, never revoke a built-in pass.
+   *    directly, satisfy a required org role via the `role:<name>`
+   *    pseudo-permission, or grant the route's own `@RbacAction`
+   *    permission (`agents:execute` on the invoke route). The EE
+   *    evaluator's wildcards apply, so `agents:*`, `*:read` or `*` also
+   *    match. Grants can only ALLOW what the built-ins would deny, never
+   *    revoke a built-in pass.
    * 2. ABAC deny-overrides — an applicable `deny` policy rejects the
    *    request even when role/permission checks passed. 'allow'/'abstain'
    *    leave the built-in outcome unchanged.
@@ -117,10 +129,16 @@ export class RolesGuard implements CanActivate {
     requiredPermissions: string[] | undefined,
     builtInRoleOk: boolean,
     missingPermissions: string[],
+    routeAction?: string,
   ): Promise<boolean> {
     let roleOk = builtInRoleOk;
     let missing = missingPermissions;
 
+    if (!roleOk && routeAction) {
+      if (await this.hookHasPermission(organizationId, user.id, routeAction)) {
+        roleOk = true;
+      }
+    }
     if (!roleOk && requiredRoles?.length) {
       const grants = await Promise.all(
         requiredRoles.map((role) =>
@@ -141,20 +159,26 @@ export class RolesGuard implements CanActivate {
     }
 
     if (!roleOk) {
-      throw new ForbiddenException('Insufficient role privileges');
+      throw new ForbiddenException(
+        routeAction
+          ? `Insufficient role privileges (needs ${routeAction})`
+          : 'Insufficient role privileges',
+      );
     }
     if (missing.length > 0) {
       throw new ForbiddenException('Insufficient permissions');
     }
 
-    // ABAC deny-override: evaluated per required permission (those are the
-    // action vocabulary), or once against the route when only roles are
-    // required.
-    const actions = requiredPermissions?.length
-      ? requiredPermissions
-      : [`${request.method ?? 'ANY'}:${request.route?.path ?? request.url ?? '*'}`];
+    // ABAC deny-override: evaluated per action the route performs: its
+    // required permissions, its @RbacAction, and the METHOD:path form
+    // (kept so a policy written against a raw route still applies).
+    const routeKey = `${request.method ?? 'ANY'}:${request.route?.path ?? request.url ?? '*'}`;
+    const actions = [
+      ...new Set([...(requiredPermissions ?? []), ...(routeAction ? [routeAction] : []), routeKey]),
+    ];
     const evaluationCtx = {
       subject: { id: user.id, role: membership.role },
+      resource: this.resourceAttributes(request),
       context: {
         organizationId,
         method: request.method,
@@ -175,6 +199,19 @@ export class RolesGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  /**
+   * What an ABAC condition on `resource.*` sees: the request body's
+   * top-level fields and the route params (`id`, `toolId`, ...), so a
+   * policy can test `resource.input.amount` on an agent run.
+   */
+  private resourceAttributes(request: any): Record<string, unknown> {
+    const body =
+      request.body && typeof request.body === 'object' && !Array.isArray(request.body)
+        ? request.body
+        : {};
+    return { ...body, ...(request.params ?? {}) };
   }
 
   private async hookHasPermission(
