@@ -264,7 +264,7 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
     });
     const hostedChat = {
       findBySlug: async () => gateway,
-      resolveEndUser: async () => ({ endUser: { id: 'eu-1' }, issuedSessionKey: null }),
+      findEndUser: async () => ({ id: 'eu-1' }),
       requiresAuth: () => false,
       runBelongsToEndUser: async (runId: string) => (await runRepository.findOne({ where: { id: runId, endUserId: 'eu-1' } })) !== null,
     };
@@ -288,8 +288,14 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
       write: (frame: string) => frames.push(frame),
       end: () => undefined,
     };
-    const controller = new HostedChatController(hostedChat as any, {} as any, agentRuntime as any);
-    await controller.stream('acme', 'run-1', { headers: {}, cookies: {}, ip: '203.0.113.9', on: () => undefined } as any, res as any);
+    const limits = { checkVisitorStream: async () => ({ limited: false }) };
+    const controller = new HostedChatController(hostedChat as any, limits as any, agentRuntime as any);
+    await controller.stream(
+      'acme',
+      'run-1',
+      { headers: {}, cookies: { almyty_chat_session: 'sid-eu-1' }, ip: '203.0.113.9', on: () => undefined } as any,
+      res as any,
+    );
 
     // The replay a returning visitor gets, through the service's own filter.
     const transcriptService = Object.assign(Object.create(HostedChatService.prototype), { messageRepository });

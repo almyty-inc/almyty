@@ -34,6 +34,7 @@ import { resolveRunLimits } from '../run-limits';
 import { AgentModels } from '../autonomous-models';
 import { LlmChatHelper } from '../../llm-providers/llm-chat.helper';
 import { HostedChatController } from '../../gateways/channels/hosted-chat.controller';
+import { HostedChatService } from '../../gateways/channels/hosted-chat.service';
 import { fakeRepository, UnmodelledQueryError } from '../../../test/fake-repository';
 import { withRunEvents } from '../../../test/fake-run-events';
 import { membershipFixture } from '../../../test/execution-access.fixture';
@@ -391,10 +392,12 @@ export async function runAgent(opts: {
       {
         findBySlug: async () => gateway,
         resolveEndUser: async () => ({ endUser: { id: 'eu-1' }, issuedSessionKey: null }),
+        // The stream only looks a visitor up; it never creates one.
+        findEndUser: async () => ({ id: 'eu-1' }),
         requiresAuth: () => false,
         runBelongsToEndUser: async () => true,
       } as any,
-      {} as any,
+      { checkVisitorStream: async () => ({ limited: false }) } as any,
       {
         getRun: async (runId: string) => runRepository.findOne({ where: { id: runId } }),
         subscribeRunEvents: async (runId: string, handler: (event: any) => void) => {
@@ -403,7 +406,7 @@ export async function runAgent(opts: {
         },
       } as any,
     );
-    await controller.stream('acme', 'run-1', { headers: {}, cookies: {}, ip: '203.0.113.9', on: () => undefined } as any, {
+    await controller.stream('acme', 'run-1', { headers: {}, cookies: { [HostedChatService.SESSION_COOKIE]: 'visitor-1' }, ip: '203.0.113.9', on: () => undefined } as any, {
       setHeader: () => undefined,
       flushHeaders: () => undefined,
       write: (frame: string) => frames.push(frame),

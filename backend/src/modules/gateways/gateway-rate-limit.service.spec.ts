@@ -1,4 +1,10 @@
-import { GatewayRateLimitService, burstPerMinute, DEFAULT_PUBLIC_PER_IP_PER_HOUR } from './gateway-rate-limit.service';
+import {
+  GatewayRateLimitService,
+  burstPerMinute,
+  DEFAULT_PUBLIC_PER_IP_PER_HOUR,
+  STREAM_OPENS_PER_IP,
+  STREAM_OPENS_PER_VISITOR,
+} from './gateway-rate-limit.service';
 
 describe('GatewayRateLimitService', () => {
   // The counter is one atomic INCR+EXPIRE script, so the seam under
@@ -197,6 +203,67 @@ describe('GatewayRateLimitService', () => {
       expect(burstPerMinute(60)).toBe(12);
       expect(burstPerMinute(600)).toBe(120);
       expect(burstPerMinute(5)).toBe(3);
+    });
+  });
+
+  describe('checkVisitorStream: how often a visitor may open a reply stream', () => {
+    /** A Redis that really counts, so buckets can be told apart. */
+    const counting = () => {
+      const counts = new Map<string, number>();
+      redis.eval.mockImplementation(async (_script: string, _n: number, key: string) => {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+        return counts.get(key);
+      });
+      return counts;
+    };
+
+    it('lets a visitor reconnect up to the minute’s allowance, then 429s with a wait', async () => {
+      counting();
+      const gw = gateway(null);
+      for (let i = 0; i < STREAM_OPENS_PER_VISITOR[0].limit; i++) {
+        expect((await service.checkVisitorStream(gw, { endUserId: 'v1', clientHash: 'ip1' })).limited).toBe(false);
+      }
+      const over = await service.checkVisitorStream(gw, { endUserId: 'v1', clientHash: 'ip1' });
+      expect(over).toMatchObject({ limited: true, code: 'VISITOR_RATE_LIMITED', bucket: { window: 'minute', limit: 30, scope: 'user' } });
+      expect(over.retryAfterSeconds).toBeGreaterThanOrEqual(1);
+      expect(over.retryAfterSeconds).toBeLessThanOrEqual(60);
+      expect(over.message).toContain('Reconnecting too often');
+    });
+
+    it('is per visitor, never one bucket for the whole surface: another visitor is not held up', async () => {
+      counting();
+      const gw = gateway(null);
+      for (let i = 0; i <= STREAM_OPENS_PER_VISITOR[0].limit; i++) await service.checkVisitorStream(gw, { endUserId: 'v1', clientHash: 'ip1' });
+      expect((await service.checkVisitorStream(gw, { endUserId: 'v1', clientHash: 'ip1' })).limited).toBe(true);
+      expect((await service.checkVisitorStream(gw, { endUserId: 'v2', clientHash: 'ip2' })).limited).toBe(false);
+    });
+
+    it('a caller who drops their cookie is still held by their address', async () => {
+      counting();
+      const gw = gateway(null);
+      for (let i = 0; i < STREAM_OPENS_PER_IP[0].limit; i++) {
+        expect((await service.checkVisitorStream(gw, { endUserId: null, clientHash: 'ip1' })).limited).toBe(false);
+      }
+      expect(await service.checkVisitorStream(gw, { endUserId: null, clientHash: 'ip1' })).toMatchObject({
+        limited: true,
+        bucket: { scope: 'ip', window: 'minute', limit: 120 },
+      });
+    });
+
+    it('counts apart from the message limits: reconnects cost no messages, and messages cost no reconnects', async () => {
+      const counts = counting();
+      const gw = gateway({ perVisitorPerHour: 60 });
+      await service.checkVisitorStream(gw, { endUserId: 'v1', clientHash: 'ip1' });
+      await service.checkVisitor(gw, { endUserId: 'v1', clientHash: 'ip1' });
+      const keys = [...counts.keys()];
+      expect(keys.filter((k) => k.includes(':stream:'))).toHaveLength(4);
+      expect(keys.filter((k) => !k.includes(':stream:'))).toHaveLength(4);
+      for (const count of counts.values()) expect(count).toBe(1);
+    });
+
+    it('fails open when Redis is down, like the message limits', async () => {
+      redis.eval.mockRejectedValue(new Error('ECONNREFUSED'));
+      expect(await service.checkVisitorStream(gateway(null), { endUserId: 'v1', clientHash: 'ip1' })).toEqual({ limited: false });
     });
   });
 });

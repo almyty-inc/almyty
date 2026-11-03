@@ -332,6 +332,11 @@ export class AuthController {
         // Non-blocking email verification state — the UI shows a
         // "verify your email" banner while false.
         emailVerified: !!(user.verifiedAt || user.isVerified),
+        // Whether Settings offers to change a password or to set a first
+        // one. Spelled out rather than left to the spread: a row loaded
+        // without the column would otherwise answer nothing, and the client
+        // treats only an explicit false as "no password".
+        hasPassword: user.hasPassword !== false,
         // Only the rows that actually grant access. This list is not
         // decoration: the web client turns it into its organization
         // switcher, picks one as the current organization, and stamps
@@ -384,6 +389,7 @@ export class AuthController {
         ...profile,
         name: profileName(updatedUser),
         emailVerified: !!(updatedUser.verifiedAt || updatedUser.isVerified),
+        hasPassword: updatedUser.hasPassword !== false,
       },
       message: 'Profile updated successfully',
     };

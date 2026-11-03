@@ -45,6 +45,13 @@ const RUN_LOG_END_GRACE_MS = 1_000;
 
 export const runLogKey = (runId: string) => `run:${runId}:log`;
 
+/** A runtime event as it is written to `run:<id>:events` (tokens, step progress, the run's end). */
+export interface RunRuntimeEvent {
+  type: string;
+  data: any;
+  timestamp: string;
+}
+
 /**
  * Owns run-event emission for AgentRuntimeService:
  *  - per-run EventEmitter map (same-pod fast path)
@@ -169,6 +176,22 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Where a run's runtime event stream ends right now (`<ms>-<n>`), or null
+   * when it has none. A widget message that carries on a run waiting for
+   * input is answered on the same stream as that run's earlier replies; the
+   * widget starts its stream after this point, so they do not show again.
+   */
+  async lastRunEventPos(runId: string): Promise<string | null> {
+    try {
+      const latest = (await (this.redis as any).xrevrange(`run:${runId}:events`, '+', '-', 'COUNT', 1)) as Array<[string, string[]]> | null;
+      return latest?.[0]?.[0] ?? null;
+    } catch (err: any) {
+      this.logger.warn(`Could not read the end of run ${runId}'s event stream: ${err?.message}`);
+      return null;
+    }
+  }
+
+  /**
    * Subscribe to run events via Redis Streams (cross-pod). Calls
    * `handler` for each event. Resolves when a terminal event arrives,
    * the abort signal fires, or the timeout expires.
@@ -182,7 +205,10 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
    */
   async subscribeRunEvents(
     runId: string,
-    handler: (event: { type: string; data: any; timestamp: string }) => void,
+    // `id` is the event's position on `run:<id>:events`, which a resuming
+    // consumer (the hosted chat stream) keeps as its own; absent on the
+    // synthetic `stream.timeout`.
+    handler: (event: RunRuntimeEvent, id?: string) => void,
     signal?: AbortSignal,
     timeoutMs = 300_000,
   ): Promise<void> {
@@ -222,7 +248,7 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
             const raw = fields[1];
             try {
               const event = JSON.parse(raw);
-              handler(event);
+              handler(event, id);
               if (TERMINAL_EVENT_TYPES.includes(event.type)) {
                 sawTerminal = true;
                 return;
@@ -284,20 +310,26 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
    * stream is idle).
    *
    * `onLog` gets the logged events, `onEvent` the live runtime events
-   * (tokens, step progress) from now on; those have no seq and are not
-   * replayed. Ends on a terminal runtime event (after sending the rest of
-   * the log), shortly after the log shows the run finished (a run that
-   * ended before the viewer came has no terminal event left to wait for),
-   * on abort, or at the timeout, with a `stream.timeout` event carrying the
-   * last seq sent, from which a viewer reconnects.
+   * (tokens, step progress) with their position on `run:<id>:events`;
+   * those have no seq. By default they start from now and are not
+   * replayed; a viewer that names the position of the last one it had
+   * (`eventsAfter`, `'0'` for the run's start) gets every one after it
+   * still in the stream's window, so a client that renders tokens loses
+   * none across a reconnect and sees none twice. Ends on a terminal
+   * runtime event (after sending the rest of the log), shortly after the
+   * log shows the run finished (a run that ended before the viewer came
+   * has no terminal event left to wait for), on abort, or at the timeout,
+   * with a `stream.timeout` event carrying the last seq sent, from which a
+   * viewer reconnects.
    */
   async subscribeRunLog(
     runId: string,
     afterSeq: number,
     onLog: (event: AgentRunEvent) => void,
-    onEvent: (event: { type: string; data: any; timestamp: string }) => void,
+    onEvent: (event: RunRuntimeEvent, id?: string) => void,
     signal?: AbortSignal,
     timeoutMs = 300_000,
+    eventsAfter?: string,
   ): Promise<void> {
     const logKey = runLogKey(runId);
     const eventsKey = `run:${runId}:events`;
@@ -334,7 +366,7 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
 
     try {
       let logPos = await lastId(logKey);
-      let eventsPos = await lastId(eventsKey);
+      let eventsPos = eventsAfter ?? (await lastId(eventsKey));
       await drain();
       let drainedAt = Date.now();
 
@@ -373,7 +405,7 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
             eventsPos = id;
             try {
               const event = JSON.parse(fields[1]);
-              onEvent(event);
+              onEvent(event, id);
               if (TERMINAL_EVENT_TYPES.includes(event.type)) ended = true;
             } catch {
               /* skip malformed */

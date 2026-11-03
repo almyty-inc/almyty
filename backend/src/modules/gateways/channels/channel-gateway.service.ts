@@ -54,6 +54,7 @@ import { ChannelAttachmentReader, type ReadAttachments } from './channel-attachm
 import { withSpeaker } from './channel-speaker';
 import { extractReplyMedia, replyMedia } from './reply-media';
 import type { MessageContent } from '../../../entities/message.entity';
+import { visitorPosPastEvent } from '../../agents/run-stream-position';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -71,6 +72,17 @@ interface ChannelEventRef {
 
 /** A thread run in one of these takes the next message itself (threadOnGateway). */
 const THREAD_ACTIVE_STATUSES: string[] = [AgentRunStatus.RUNNING, AgentRunStatus.WAITING_INPUT, AgentRunStatus.SLEEPING];
+
+/**
+ * The widget's poll cursor: the replies after the one it last showed, by
+ * that reply's own (createdAt, id), compared in the database at full
+ * precision. Exported so the unit spec models the exact SQL.
+ */
+export const WIDGET_AFTER_REPLY =
+  'NOT EXISTS (SELECT 1 FROM channel_events ref WHERE ref."id" = :afterId AND ref."gatewayId" = "event"."gatewayId" ' +
+  'AND (ref."createdAt", ref."id") >= ("event"."createdAt", "event"."id"))';
+/** An older widget's cursor, a timestamp, compared at the millisecond it came back at. */
+export const WIDGET_AFTER_TIME = "date_trunc('milliseconds', event.createdAt) > :after";
 
 @Injectable()
 export class ChannelGatewayService {
@@ -1031,7 +1043,7 @@ export class ChannelGatewayService {
     policy?: ChannelPolicy | null,
     /** Files the visitor uploaded for this message (channel-widget.controller.ts). */
     sent?: ReadAttachments,
-  ): Promise<{ runId: string; threadId: string }> {
+  ): Promise<{ runId: string; threadId: string; after?: string }> {
     if (!gateway.isActive()) {
       throw new BadRequestException('Gateway is not active');
     }
@@ -1063,7 +1075,12 @@ export class ChannelGatewayService {
     // What the agent reads: the text and a line per uploaded file, with the
     // files themselves by reference (channel-attachments.service.ts).
     const input = ChannelAttachmentReader.textWith(normalized.text, sent?.lines ?? []);
+    let after: string | undefined;
     if (run) {
+      // The run is waiting for this input, so nothing is being added to its
+      // stream: where it ends now is where this reply begins.
+      const end = await this.agentRuntimeService.lastRunEventPos(run.id);
+      if (end) after = visitorPosPastEvent(end);
       run = await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, input, undefined, sent?.parts);
     } else {
       const channelMetadata = {
@@ -1108,7 +1125,10 @@ export class ChannelGatewayService {
 
     await this.incrementRequestCount(gateway.id);
 
-    return { runId: run.id, threadId };
+    // `after`: where the widget starts this reply's stream, for a message
+    // that carried on a run. The run's stream already holds its earlier
+    // replies, which the widget has shown; it starts past them.
+    return { runId: run.id, threadId, ...(after ? { after } : {}) };
   }
 
   /**
@@ -1138,6 +1158,26 @@ export class ChannelGatewayService {
   }
 
   /**
+   * One run of a widget thread, for the widget's reply stream: the run
+   * only when it was started on this gateway, for this agent, under this
+   * thread. The thread id is the widget visitor (it has no session of
+   * ours), so this is the same check the poll makes by filtering on it:
+   * a run id from another thread, another widget or another channel of the
+   * same agent is not found.
+   */
+  async widgetRunOnThread(gateway: Gateway, threadId: string, runId: string): Promise<AgentRun | null> {
+    return this.runRepository
+      .createQueryBuilder('run')
+      .where('run.id = :runId', { runId })
+      .andWhere('run.organizationId = :organizationId', { organizationId: gateway.organizationId })
+      .andWhere('run.agentId = :agentId', { agentId: gateway.agentId })
+      .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
+      .andWhere("run.metadata->>'threadId' = :threadId", { threadId })
+      .leftJoinAndSelect('run.agent', 'agent')
+      .getOne();
+  }
+
+  /**
    * Resolve a gateway for the public widget surface: must exist, be an
    * active chat_widget gateway. 404s otherwise (no auth on this path —
    * don't leak whether an id exists as a different type).
@@ -1155,13 +1195,20 @@ export class ChannelGatewayService {
   /**
    * Poll surface for the widget: outbound widget messages persisted by
    * ChatWidgetAdapter.sendResponse for a given thread, oldest first.
-   * `after` restricts to messages newer than the given timestamp so the
-   * widget can poll incrementally.
+   *
+   * Where the widget left off: `afterId`, the last reply it showed, which
+   * places the next page exactly (by that reply's own time and id, compared
+   * in the database), else `after`, a timestamp. A timestamp comes back
+   * through JSON at millisecond precision while the column keeps
+   * microseconds, so the last reply read as newer than its own rounded
+   * time and came back on every poll; it is compared at milliseconds now.
+   * An `afterId` that names no reply of this gateway places nothing.
    */
   async listWidgetMessages(
     gatewayId: string,
     threadId: string,
     after?: Date,
+    afterId?: string,
   ): Promise<Array<{ id: string; runId: string | null; message: string; attachments: any; createdAt: Date }>> {
     const qb = this.eventRepository
       .createQueryBuilder('event')
@@ -1171,9 +1218,12 @@ export class ChannelGatewayService {
       .andWhere("event.payload->>'kind' = 'widget_message'")
       .andWhere("event.payload->>'threadId' = :threadId", { threadId })
       .orderBy('event.createdAt', 'ASC')
+      .addOrderBy('event.id', 'ASC')
       .limit(100);
-    if (after) {
-      qb.andWhere('event.createdAt > :after', { after });
+    if (afterId) {
+      qb.andWhere(WIDGET_AFTER_REPLY, { afterId });
+    } else if (after) {
+      qb.andWhere(WIDGET_AFTER_TIME, { after });
     }
     const events = await qb.getMany();
     return events.map((e) => ({

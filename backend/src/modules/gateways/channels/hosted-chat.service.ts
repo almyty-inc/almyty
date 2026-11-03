@@ -8,7 +8,7 @@ import { EndUser } from '../../../entities/end-user.entity';
 import { Conversation, ConversationStatus } from '../../../entities/conversation.entity';
 import { conversationTitle } from '../../agents/conversation-title';
 import { Message } from '../../../entities/message.entity';
-import { AgentRun } from '../../../entities/agent-run.entity';
+import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import {
   HostedChatConfig,
   hostedChatConfigFrom,
@@ -47,6 +47,8 @@ const EXPORT_CONVERSATION_LIMIT = 500;
  * a public endpoint's answer bounded in heap.
  */
 const EXPORT_MESSAGE_LIMIT = 25_000;
+/** A run whose reply is still being written: queued, or running now. */
+const OPEN_RUN_STATUSES: string[] = [AgentRunStatus.PENDING, AgentRunStatus.RUNNING];
 @Injectable()
 export class HostedChatService {
   /** Cookie holding the per-surface session key. */
@@ -252,6 +254,20 @@ export class HostedChatService {
       }),
     );
     return { endUser, issuedSessionKey: issued };
+  }
+
+  /**
+   * The visitor behind a session cookie, if there is one; never a new row.
+   *
+   * For the routes that only ever read what a visitor already has (the
+   * reply stream). resolveEndUser above makes a visitor out of any request,
+   * which is right for the first page load and wrong for a stream: a caller
+   * with no cookie, or a made-up one, opening streams in a loop would have
+   * written a visitor row each time.
+   */
+  async findEndUser(gateway: Gateway, sessionKey: string | undefined): Promise<EndUser | null> {
+    if (!sessionKey) return null;
+    return this.endUserRepository.findOne({ where: { gatewayId: gateway.id, sessionKey } });
   }
 
   // ── Visitor authentication ──────────────────────────────────────────
@@ -532,6 +548,20 @@ export class HostedChatService {
     });
 
     return messages.filter((m) => HostedChatService.isPublicTurn(m)).map((m) => HostedChatService.toTranscript(m));
+  }
+
+  /**
+   * The reply still being written in a conversation, if any: its latest
+   * run, when that run has not finished yet. A page that opens the
+   * conversation (after a reload, or from the list) picks the reply up live
+   * from its stream instead of showing the visitor's turn unanswered.
+   */
+  async openRunOf(conversation: Conversation): Promise<string | null> {
+    const latest = await this.runRepository.findOne({
+      where: { conversationId: conversation.id },
+      order: { createdAt: 'DESC' },
+    });
+    return latest && OPEN_RUN_STATUSES.includes(latest.status) ? latest.id : null;
   }
 
   /**

@@ -28,14 +28,14 @@ import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 import { trustedClientIp } from '../../../common/security/client-ip';
-import { withholdsCandidateAnswers } from '../../agents/final-answer';
-import { answerStreamFilter } from '../../agents/answer-stream.filter';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 import { ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
 import { ChannelAttachmentReader, attachmentIdsFrom, type ReadAttachments } from './channel-attachments.service';
 import { FilesService } from '../../files/files.service';
 import { TempFileInterceptor } from '../../files/temp-upload';
 import { readFile } from 'fs/promises';
+import { visitorResumeOf } from '../../agents/run-stream-position';
+import { FINISHED_RUN, refuseVisitorStream, streamVisitorReply } from './visitor-reply-stream';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -52,6 +52,9 @@ import { readFile } from 'fs/promises';
 export class HostedChatController {
   /** Anonymous sessions outlive a browser restart but not forever. */
   static readonly SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+
+  /** A run that has ended, and the reason its stream gives (visitor-reply-stream.ts). */
+  static readonly FINISHED = FINISHED_RUN;
 
   constructor(
     private readonly hostedChat: HostedChatService,
@@ -463,22 +466,63 @@ export class HostedChatController {
     };
   }
 
+  /**
+   * The reply to one of the visitor's messages, as it is written.
+   *
+   * Resumable: a visitor whose connection drops mid-answer reconnects
+   * naming the last frame they had, by the `Last-Event-ID` their browser
+   * sends or by `?after=`, and gets the reply text from there on, then the
+   * live stream. With no position (the first look, or the page opened again
+   * while the reply is still being written) the reply comes from its start.
+   * How, and what a visitor can never see on it: visitor-reply-stream.ts.
+   *
+   * Who may watch is the visitor who sent the message: the same cookie,
+   * the same sign-in gate, the run theirs and this surface's. This route
+   * only ever reads, so it never makes a visitor: a request with no cookie,
+   * or one we do not know, is refused the way a stranger is (401 where the
+   * surface requires sign-in, 404 otherwise), and no row is written.
+   *
+   * Each visitor, and each address, may open only so many streams a minute
+   * and an hour (GatewayRateLimitService.checkVisitorStream). Over that it
+   * is 429 with Retry-After; the page's EventSource, which can read neither,
+   * gets an `event: retry` frame with the wait instead and waits that long
+   * (refuseVisitorStream).
+   */
   @Get(':slug/stream')
-  @ApiOperation({ summary: 'Stream an in-flight reply' })
+  @ApiOperation({ summary: 'Stream an in-flight reply, resumable from the last frame seen' })
   async stream(
     @Param('slug') slug: string,
     @Query('runId') runId: string,
     @Req() req: Request,
     @Res() res: Response,
+    @Query('after') after?: string,
   ) {
     if (!runId) throw new BadRequestException('runId is required');
+    const resumeFrom = visitorResumeOf(req.headers?.['last-event-id'], after);
+    if (resumeFrom === 'invalid') throw new BadRequestException('after must be the id of a frame this stream sent');
 
     const gateway = await this.hostedChat.findBySlug(slug);
-    const { endUser } = await this.hostedChat.resolveEndUser(
-      gateway,
-      this.sessionFrom(req),
-      this.clientIp(req),
-    );
+    const endUser = await this.hostedChat.findEndUser(gateway, this.sessionFrom(req));
+
+    // Counted before anything else is looked at: a caller with no cookie
+    // still has an address.
+    const own = await this.gatewayRateLimit.checkVisitorStream(gateway, {
+      endUserId: endUser?.id ?? null,
+      clientHash: HostedChatService.hashClient(this.clientIp(req)),
+    });
+    if (own.limited) {
+      // A 429 for most callers; the page's EventSource gets the wait as a
+      // frame it can read (visitor-reply-stream.ts).
+      refuseVisitorStream(req, res, own);
+      return undefined;
+    }
+
+    if (!endUser) {
+      // Exactly what a visitor we have never seen gets: the sign-in gate
+      // first, then nothing of theirs to show.
+      await this.requireVisitor(gateway, { authProvider: null } as EndUser);
+      throw new HttpException('Not found', HttpStatus.NOT_FOUND);
+    }
     await this.requireVisitor(gateway, endUser);
 
     // A run id is a UUID, but it is still a caller-supplied identifier
@@ -494,77 +538,7 @@ export class HostedChatController {
       gateway.organizationId,
       gateway.agentId,
     );
-    const withholdCandidateChunks = withholdsCandidateAnswers(run.agent);
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // nginx would otherwise buffer the stream
-    res.flushHeaders?.();
-
-    let closed = false;
-    const abortController = new AbortController();
-    const close = () => {
-      if (closed) return;
-      closed = true;
-      abortController.abort();
-      clearInterval(heartbeat);
-      try {
-        res.end();
-      } catch {
-        /* socket already gone */
-      }
-    };
-
-    // A visitor sees the answer, never the working: the run's events are
-    // reduced to the answer as it is written (agents/answer-stream.filter.ts,
-    // shared with the /v1 compat APIs). A token that turns out not to be the
-    // answer is retracted with `reset`; with a verify panel or a strategy
-    // that judges candidates nothing is sent before the answer is chosen, and
-    // the page reconciles from the transcript on `done`.
-    const filter = answerStreamFilter(
-      {
-        token: (content) => res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`),
-        reset: () => res.write(`event: reset\ndata: {}\n\n`),
-        done: (reason) => {
-          res.write(`event: done\ndata: ${JSON.stringify({ reason })}\n\n`);
-          close();
-        },
-      },
-      { withholdCandidates: withholdCandidateChunks },
-    );
-    const onEvent = (event: any) => {
-      if (closed) return;
-      filter(event);
-    };
-
-    // Proxies drop idle connections; a comment frame keeps it warm
-    // without being visible to the EventSource consumer.
-    const heartbeat = setInterval(() => {
-      if (!closed) res.write(': keep-alive\n\n');
-    }, 25_000);
-    heartbeat.unref?.();
-
-    req.on('close', close);
-
-    try {
-      // Redis Streams are the cross-pod source of truth. A hosted request and
-      // its worker frequently land on different API pods, so a process-local
-      // EventEmitter cannot reliably deliver completion.
-      await this.agentRuntimeService.subscribeRunEvents(
-        runId,
-        onEvent,
-        abortController.signal,
-      );
-    } catch {
-      // The done event below tells the browser to reconcile from the persisted
-      // transcript even if Redis disconnected after the run had completed.
-    }
-
-    if (!closed) {
-      res.write(`event: done\ndata: ${JSON.stringify({ reason: 'stream_ended' })}\n\n`);
-      close();
-    }
+    await streamVisitorReply({ req, res, runtime: this.agentRuntimeService, run, resumeFrom });
     return undefined;
   }
 
@@ -587,6 +561,10 @@ export class HostedChatController {
 
     const conversation = await this.hostedChat.findConversation(endUser, conversationId);
     const messages = await this.hostedChat.listMessages(conversation);
+    // A reply still being written: the page opens its stream (from the
+    // start, replies only) and shows it arriving, instead of the visitor's
+    // turn sitting there unanswered until they send another.
+    const openRunId = await this.hostedChat.openRunOf(conversation);
 
     const config = hostedChatConfigFrom(gateway.configuration);
     return {
@@ -596,6 +574,7 @@ export class HostedChatController {
         title: conversation.title,
         aiDisclosure: config.aiDisclosure,
         messages,
+        openRunId,
       },
     };
   }

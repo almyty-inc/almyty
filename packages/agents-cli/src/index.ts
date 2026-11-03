@@ -37,6 +37,7 @@ import {
   runSucceeded,
   type AgentSummary,
 } from './format.js';
+import { watchRun } from './watch.js';
 
 /** Flags that are switches, so they never swallow the next token. */
 const BOOLEAN_FLAGS = ['watch', 'steps'] as const;
@@ -64,7 +65,7 @@ Run options:
   --max-steps <n>               Autonomous: step ceiling
   --max-cost-cents <n>          Autonomous: cost ceiling, in cents
   --max-duration-ms <ms>        Autonomous: wall-clock ceiling
-  --watch                       Autonomous: stream steps until the run ends
+  --watch                       Autonomous: print each step as it lands until the run ends (reconnects if the connection drops)
   --timeout <s>                 Autonomous --watch: give up waiting after this long (default 300)
 
 List options (runs, executions):
@@ -251,20 +252,25 @@ async function cmdRun(args: ParsedArgs): Promise<void> {
       return;
     }
 
-    let printed = 0;
     const timeoutSeconds = flagNumber(args.flags, 'timeout') ?? 300;
-    const final = await client.pollRun(agent.id, runStub.id, {
-      timeoutMs: timeoutSeconds * 1000,
-      onStep: (run: AgentRun) => {
-        if (args.flags.json) return;
-        const steps = (run.steps ?? []) as any[];
-        for (let i = printed; i < steps.length; i++) {
-          const line = formatStep(steps[i], i);
+    // Followed from the run's log, picking up where it left off when the
+    // connection drops (watch.ts); a run that is gone ends it at once.
+    let final: AgentRun;
+    try {
+      final = await watchRun(client, agent.id, runStub.id, {
+        timeoutMs: timeoutSeconds * 1000,
+        onStep: (step, index) => {
+          if (args.flags.json) return;
+          const line = formatStep(step as any, index);
           if (line) console.log(line);
-        }
-        printed = steps.length;
-      },
-    });
+        },
+      });
+    } catch (err: any) {
+      if (err?.status === 404 || err?.status === 410) {
+        fail(`Run ${runStub.id} is no longer there to watch.`, EXIT.NOT_FOUND);
+      }
+      throw err;
+    }
 
     // A failed run is a failed command.
     //

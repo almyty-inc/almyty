@@ -700,11 +700,16 @@ export class AgentRuntimeService implements OnModuleInit {
   /** Subscribe to run events via Redis Streams (cross-pod). */
   async subscribeRunEvents(
     runId: string,
-    handler: (event: { type: string; data: any; timestamp: string }) => void,
+    handler: (event: { type: string; data: any; timestamp: string }, id?: string) => void,
     signal?: AbortSignal,
     timeoutMs = 300_000,
   ): Promise<void> {
     return this.events.subscribeRunEvents(runId, handler, signal, timeoutMs);
+  }
+
+  /** Where a run's runtime event stream ends right now (AgentRuntimeEventsHelper.lastRunEventPos). */
+  async lastRunEventPos(runId: string): Promise<string | null> {
+    return this.events.lastRunEventPos(runId);
   }
 
   /**
