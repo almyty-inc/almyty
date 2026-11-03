@@ -111,7 +111,7 @@ describe('PolicyForm', () => {
     expect(connectionPoliciesApi.create).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByLabelText('Warn ahead (days)'), { target: { value: '14' } })
-    fireEvent.click(screen.getByRole('switch', { name: 'Revoke grants on expiry' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Take away access when a secret expires' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add policy' }))
     await waitFor(() => expect(connectionPoliciesApi.create).toHaveBeenCalledWith({ kind: 'expiry_rule', name: null, rule: { maxAgeDays: 90, warnDays: 14, enforce: false }, enabled: true }))
   })

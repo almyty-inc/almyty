@@ -284,7 +284,7 @@ function OrganizationTab({ organization }: { organization: any }) {
     mutationFn: (agentDefaults: any) =>
       organizationsApi.update(organization.id, { agentDefaults }),
     onSuccess: async () => {
-      success('Agent defaults saved', 'Default agent configuration has been updated.')
+      success('Agent defaults saved', 'Every agent now follows the new defaults.')
       await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
     },
     onError: (err: any) => {
@@ -336,7 +336,7 @@ function OrganizationTab({ organization }: { organization: any }) {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Organization details</CardTitle>
-            <CardDescription>Manage your organization settings</CardDescription>
+            <CardDescription>Your organization's name and description</CardDescription>
           </div>
           {!isEditing ? (
             <div className="flex gap-2">
@@ -412,7 +412,7 @@ function OrganizationTab({ organization }: { organization: any }) {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Agent defaults</CardTitle>
-            <CardDescription>Default configuration applied to all agents in this organization</CardDescription>
+            <CardDescription>Instructions and limits every agent in this organization follows</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -425,7 +425,7 @@ function OrganizationTab({ organization }: { organization: any }) {
               placeholder="e.g. Be professional and concise. Always respond in the user's language."
               rows={3}
             />
-            <p className="text-xs text-muted-foreground">Prepended to every agent's personality prompt.</p>
+            <p className="text-xs text-muted-foreground">Added before each agent's own personality.</p>
           </div>
 
           <div className="space-y-2">
@@ -437,7 +437,7 @@ function OrganizationTab({ organization }: { organization: any }) {
               placeholder="e.g. Never share internal data. Always cite sources. Escalate if unsure."
               rows={3}
             />
-            <p className="text-xs text-muted-foreground">Organization-wide rules injected into every agent's system prompt.</p>
+            <p className="text-xs text-muted-foreground">Rules every agent in the organization follows, on top of its own.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -595,7 +595,7 @@ export function ProfileTab() {
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Profile information</CardTitle>
-          <CardDescription>Your account details and information</CardDescription>
+          <CardDescription>Your name, email address and time zone</CardDescription>
         </div>
         {!isEditing ? (
           <Button variant="outline" onClick={() => setIsEditing(true)}>

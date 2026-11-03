@@ -104,7 +104,7 @@ export function ComplianceSettings() {
         <UpgradePrompt
           feature="compliance_pack"
           title="Compliance pack"
-          description="Enforce PII filtering and security scanning org-wide, and pull a scored compliance report over your audit activity."
+          description="Hide personal data and check for attacks across the whole organization, and get a report on how well you are covered."
         />
       }
     >
@@ -166,7 +166,7 @@ function CompliancePolicyForm() {
       })
     },
     onSuccess: async () => {
-      success('Compliance policy saved', 'Enforced controls updated for your organization.')
+      success('Compliance policy saved', 'These controls now apply to the whole organization.')
       await queryClient.invalidateQueries({ queryKey: ['compliance-policy'] })
       await queryClient.invalidateQueries({ queryKey: ['compliance-report'] })
     },
@@ -215,9 +215,9 @@ function CompliancePolicyForm() {
           )}
         </CardTitle>
         <CardDescription>
-          Enforce the built-in PII filter and security scanner across every
-          gateway and agent in this organization. Saving makes these controls
-          mandatory — members can no longer disable them per gateway.
+          Turn on personal-data hiding and the security scanner for every
+          gateway and agent in this organization. Once you save, members can
+          no longer switch them off for a single gateway.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -225,26 +225,26 @@ function CompliancePolicyForm() {
           <div className="flex items-center justify-between">
             <div>
               <Label className="flex items-center gap-2">
-                <EyeOff className="h-4 w-4 text-muted-foreground" /> Enforce PII filter
+                <EyeOff className="h-4 w-4 text-muted-foreground" /> Hide personal data
               </Label>
               <p className="text-xs text-muted-foreground">
                 Hide personal data in tool call records, run steps, the audit
-                log and answers to outside callers, org-wide. Tools still get the
+                log and answers to outside callers, everywhere. Tools still get the
                 real values they are called with.
               </p>
             </div>
             <Switch
               checked={piiFilter}
               onCheckedChange={(v) => setValue('piiFilter', v, { shouldDirty: true })}
-              aria-label="Enforce PII filter"
+              aria-label="Hide personal data"
             />
           </div>
 
           {piiFilter && (
             <div className="space-y-2 rounded-md border p-4">
-              <Label>PII categories to mask</Label>
+              <Label>What to hide</Label>
               <p className="text-xs text-muted-foreground">
-                Leave all unchecked to mask every built-in category.
+                Leave all unchecked to hide every kind listed here.
               </p>
               <div className="grid grid-cols-2 gap-3 pt-1">
                 {PII_CATEGORIES.map((cat) => (
@@ -264,22 +264,22 @@ function CompliancePolicyForm() {
           <div className="flex items-center justify-between">
             <div>
               <Label className="flex items-center gap-2">
-                <ScanLine className="h-4 w-4 text-muted-foreground" /> Enforce security scanner
+                <ScanLine className="h-4 w-4 text-muted-foreground" /> Scan for attacks
               </Label>
               <p className="text-xs text-muted-foreground">
-                Scan traffic for prompt-injection and threat patterns org-wide.
+                Check requests for attempts to trick an agent (prompt injection) and other known attacks.
               </p>
             </div>
             <Switch
               checked={securityScanner}
               onCheckedChange={(v) => setValue('securityScanner', v, { shouldDirty: true })}
-              aria-label="Enforce security scanner"
+              aria-label="Scan for attacks"
             />
           </div>
 
           {securityScanner && (
             <div className="space-y-2">
-              <Label htmlFor="security-threshold">Severity threshold</Label>
+              <Label htmlFor="security-threshold">Minimum severity</Label>
               <Select
                 value={securityThreshold}
                 onValueChange={(v) =>
@@ -298,23 +298,23 @@ function CompliancePolicyForm() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Findings at or above this severity are acted on.
+                Findings this serious or worse are acted on.
               </p>
             </div>
           )}
 
           <div className="flex items-center justify-between">
             <div>
-              <Label>Block on violation</Label>
+              <Label>Block what is found</Label>
               <p className="text-xs text-muted-foreground">
-                When on, a violation aborts the request. When off, it is only
-                recorded — monitor mode for onboarding.
+                When on, the request is stopped. When off, it is only recorded,
+                which helps while you try this out.
               </p>
             </div>
             <Switch
               checked={blockOnViolation}
               onCheckedChange={(v) => setValue('blockOnViolation', v, { shouldDirty: true })}
-              aria-label="Block on violation"
+              aria-label="Block what is found"
             />
           </div>
 
@@ -332,7 +332,7 @@ function CompliancePolicyForm() {
 }
 
 const PLUGIN_LABEL: Record<EnforceablePlugin, string> = {
-  'pii-filter': 'PII filter',
+  'pii-filter': 'Personal data filter',
   'security-scanner': 'Security scanner',
 }
 
@@ -374,7 +374,7 @@ function ComplianceReportCard() {
             <FileBarChart className="h-5 w-5 text-primary" /> Compliance report
           </CardTitle>
           <CardDescription>
-            Posture scored from your enforced controls over audit activity.
+            A score for how well your controls cover what happened in your organization.
           </CardDescription>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -404,7 +404,7 @@ function ComplianceReportCard() {
           <>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Posture score</Label>
+                <Label>Score</Label>
                 <span className="text-2xl font-heading font-bold tabular-nums">
                   {data.postureScore}
                   <span className="text-sm font-normal text-muted-foreground">/100</span>
@@ -415,7 +415,7 @@ function ComplianceReportCard() {
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <Stat label="Total events" value={data.activity.totalEvents} />
-              <Stat label="Scannable" value={data.activity.scannableEvents} />
+              <Stat label="Could be scanned" value={data.activity.scannableEvents} />
               <Stat label="Credential access" value={data.activity.credentialAccessEvents} />
               <Stat
                 label="Controls enforced"
@@ -467,7 +467,7 @@ function ComplianceReportCard() {
 
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Window: {formatDate(data.window.from)} –{' '}
+                Period: {formatDate(data.window.from)} –{' '}
                 {formatDate(data.window.to)}
               </p>
               <div className="flex items-center gap-2">

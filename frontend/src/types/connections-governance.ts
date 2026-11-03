@@ -27,18 +27,18 @@ export const CONNECTION_POLICY_KINDS: ConnectionPolicyKind[] = [
 
 export const POLICY_KIND_LABELS: Record<ConnectionPolicyKind, string> = {
   connector_allowlist: 'Allowed connectors',
-  connector_denylist: 'Deny list',
-  scope_rule: 'Scope rule',
+  connector_denylist: 'Blocked connectors',
+  scope_rule: 'Organization credentials only',
   expiry_rule: 'Expiry rule',
   rotation_rule: 'Rotation rule',
 }
 
 export const POLICY_KIND_DESCRIPTIONS: Record<ConnectionPolicyKind, string> = {
-  connector_allowlist: 'Only these connectors may be connected. Several allow lists are unioned.',
-  connector_denylist: 'These connectors may never be connected, whatever the allow lists say.',
-  scope_rule: 'What a kind of principal may resolve, for example: production agents only use organization credentials from approved connectors.',
-  expiry_rule: 'A secret older than the maximum age is expired. Owners are warned ahead; with enforcement, expiry also revokes the grants.',
-  rotation_rule: 'Rotate secrets on a schedule through the provider API. Connectors without API rotation are reported to their owners.',
+  connector_allowlist: 'Only these connectors may be connected. With several of these rules, a connector on any of them is allowed.',
+  connector_denylist: 'These connectors may never be connected, even when another rule allows them.',
+  scope_rule: 'Make agents, people or teams use only credentials the organization owns, for example: production agents only use organization credentials from approved connectors.',
+  expiry_rule: 'A secret older than the maximum age expires. Owners are warned ahead, and if you choose, access to it is taken away when it expires.',
+  rotation_rule: 'Replace secrets on a schedule, through each service’s own API. Owners are told about connectors that cannot do this.',
 }
 
 /** Who a scope rule applies to: the principal kind the connection is resolved for. */

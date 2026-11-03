@@ -42,7 +42,7 @@ Open **Settings**, then **Advanced → Approvals**. Under **Approval policies**,
 - **Name**: `Refunds over €5,000`
 - **Description**: `Large refunds: the finance lead checks the customer and the charge, then an admin signs off.`
 - **Which agents it applies to**: **One team**, **Finance**.
-- Under **Match conditions**, click **Add condition**: `payload.amount_eur`, **greater than**, `5000`.
+- Under **When it applies**, click **Add condition**: `payload.amount_eur`, **greater than**, `5000`.
 - Under **Approval steps**, the first step: name `Finance lead`, approver role `team_lead`, `1`. Click **Add step** for the second: `Admin`, `admin`, `1`.
 - Open **Advanced** and set **Priority** to `10`.
 
@@ -59,7 +59,7 @@ Click **New policy** again:
 - **Name**: `Refunds over €500`
 - **Description**: `Every other refund that needs a person: the Finance team's lead decides.`
 - **Which agents it applies to**: **One team**, **Finance**.
-- **Match conditions**: `payload.amount_eur`, **greater than**, `500`.
+- **When it applies**: `payload.amount_eur`, **greater than**, `500`.
 - **Approval steps**: `Finance lead`, `team_lead`, `1`.
 
 Leave **Priority** at `0` and click **Create policy**.
