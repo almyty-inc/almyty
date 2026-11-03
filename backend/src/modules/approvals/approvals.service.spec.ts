@@ -3,7 +3,7 @@ import { ApprovalsService } from './approvals.service';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
 import { FakePolicyApprovalsRepo } from './__tests__/fake-policy-approvals';
 import { fakeApprovalsRepo } from './__tests__/approvals-repo.fixture';
-import { runsWithEvents } from '../../test/fake-run-events';
+import { expectRunProjectionsHold, runsWithEvents } from '../../test/fake-run-events';
 
 class FakePolicy {
   decision: { allowed: boolean; reason: string } = { allowed: true, reason: 'ok' };
@@ -29,6 +29,9 @@ function makeService() {
   );
   return { svc, approvals, runs, policy, policyApprovals };
 }
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('ApprovalsService', () => {
   describe('create', () => {

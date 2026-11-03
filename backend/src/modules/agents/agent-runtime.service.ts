@@ -143,6 +143,8 @@ export const AGENT_RUN_LIST_COLUMNS = {
   recursionDepth: true,
   toolCallCount: true,
   metadata: true,
+  // The seq of the run's last logged event: where a live view of it resumes.
+  headSeq: true,
   limits: true,
   parentRunId: true,
   createdAt: true,
@@ -705,6 +707,14 @@ export class AgentRuntimeService implements OnModuleInit {
     return this.events.subscribeRunEvents(runId, handler, signal, timeoutMs);
   }
 
+  /**
+   * A live run view that resumes: the run's logged events after `afterSeq`
+   * from its event log, then the live stream (AgentRuntimeEventsHelper.subscribeRunLog).
+   */
+  async subscribeRunLog(...args: Parameters<AgentRuntimeEventsHelper['subscribeRunLog']>): Promise<void> {
+    return this.events.subscribeRunLog(...args);
+  }
+
   /** Best-effort periodic sweep of orphaned run emitters. */
   async sweepOrphanedRunEmitters(): Promise<void> {
     return this.events.sweepOrphanedRunEmitters();
@@ -739,7 +749,12 @@ export class AgentRuntimeService implements OnModuleInit {
     if (!run) return;
     if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
 
-    if (approval.payload?.kind !== 'change_set') {
+    // Only request_approval's own call gets the decision as its result. A
+    // held tool call (an ask-first or amount rule, `_gate` in its payload)
+    // gets its real result when it runs after the approval; writing the
+    // decision too gave that call two results, and the model read the
+    // first one, the decision, as the call's outcome.
+    if (approval.payload?.kind !== 'change_set' && !approval.payload?._gate) {
       await this.recordDecisionForModel(run, approval);
     }
 

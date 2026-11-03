@@ -742,6 +742,7 @@ export class AuthService {
       { id: user.id, resetPasswordToken: tokenHash },
       {
         passwordHash,
+        hasPassword: true,
         resetPasswordToken: null,
         resetPasswordExpires: null,
         // Revoke all outstanding access/refresh tokens for this user.

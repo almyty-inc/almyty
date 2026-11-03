@@ -18,7 +18,7 @@ import { IrcAdapter } from '../adapters/irc.adapter';
 import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
 import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { installFetchMock } from '../adapters/__tests__/test-helpers';
-import { runsWithEvents } from '../../../../test/fake-run-events';
+import { expectRunProjectionsHold, runsWithEvents } from '../../../../test/fake-run-events';
 import {
   ClauseModel,
   ExecutedQuery,
@@ -37,6 +37,9 @@ import {
  * getAdapter() is exercised indirectly (testConnection resolves the adapter
  * before probing), so this doubles as a registry-completeness check.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('ChannelGatewayService.testConnection', () => {
   let service: ChannelGatewayService;
   let fetchMock: ReturnType<typeof installFetchMock>;

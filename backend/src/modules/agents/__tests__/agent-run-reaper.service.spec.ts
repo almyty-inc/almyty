@@ -1,8 +1,11 @@
 import { AgentRunReaperService } from '../agent-run-reaper.service';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { fakeRepository, FakeRepository } from '../../../test/fake-repository';
-import { RunEventsTable, withRunEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, RunEventsTable, withRunEvents } from '../../../test/fake-run-events';
 import { projectRunEvents, storedRunState } from '../run-events';
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('AgentRunReaperService', () => {
   const HOUR = 3_600_000;

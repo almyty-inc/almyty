@@ -1,7 +1,7 @@
 import { AgentStepProcessor } from '../agent-step-processor';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { fakeRepository } from '../../../test/fake-repository';
-import { withRunEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, withRunEvents } from '../../../test/fake-run-events';
 
 /**
  * Cancelling a run has to stick.
@@ -15,6 +15,9 @@ import { withRunEvents } from '../../../test/fake-run-events';
  * CANCELLED, the step advanced, step 4 was enqueued, and the run went
  * on spending money nobody was watching.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('a cancelled run is not revived by the step it was cancelled during', () => {
   /**
    * The table holds `row`; the fake evaluates the commit's predicate for

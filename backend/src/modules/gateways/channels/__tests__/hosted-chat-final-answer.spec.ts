@@ -14,7 +14,7 @@ import { BUILT_IN_TOOLS } from '../../../agents/agent-runtime.service';
 import { resolveRunLimits } from '../../../agents/run-limits';
 import { LlmChatHelper } from '../../../llm-providers/llm-chat.helper';
 import { fakeRepository, UnmodelledQueryError } from '../../../../test/fake-repository';
-import { withRunEvents } from '../../../../test/fake-run-events';
+import { expectRunProjectionsHold, withRunEvents } from '../../../../test/fake-run-events';
 import { membershipFixture } from '../../../../test/execution-access.fixture';
 import { gatewayPrincipal } from '../../../../common/authorization/execution-access.service';
 
@@ -33,6 +33,9 @@ const { callLlmProviderHttpStream } = require('../../../llm-providers/providers/
  * Every tool step and the draft reply stay hidden; a last call with no
  * tools writes the answer, and that is what streams and what is kept.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('hosted chat: the answer is a no-tools call that streams', () => {
   // ── Provider byte streams ──────────────────────────────────────────
   const anthropicToolStep = [

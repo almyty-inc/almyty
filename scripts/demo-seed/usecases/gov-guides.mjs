@@ -56,6 +56,7 @@ const sql = (q) => execSync(`${PSQL} -v ON_ERROR_STOP=1 -tA`, { input: q, encodi
 const upstream = async (path, init) => (await fetch(`${UP}${path}`, init)).json()
 const orgOf = () => sql(`SELECT o.id FROM organizations o WHERE o.name = 'Velora Energy' LIMIT 1`)
 
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
 const BUILDER = ['frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents']
 const NEW_API = ['frontend/src/pages/api-new.tsx']
@@ -182,6 +183,8 @@ function helpers(page) {
   const shot = async (name, opts = {}) => {
     await page.addStyleTag({ content: HIDE }).catch(() => {})
     await page.mouse.move(0, 0)
+    // An open run's view says Live once its stream answers; the dev proxy passes that on with the first byte, up to 25 s later.
+    await page.locator('[data-testid=run-reconnecting]').first().waitFor({ state: 'detached', timeout: 45000 }).catch(() => {})
     await wait()
     const file = join(OUT, `${name}.png`)
     await page.screenshot({ path: file, ...opts })
@@ -857,9 +860,10 @@ async function aiact(page, h) {
     const rows = block.trim().split('\n').filter((l) => !/^\|[-| ]+\|$/.test(l)).map((l) => l.replace(/^\||\|$/g, '').split('|').map((c) => c.trim()))
     return `<table>${rows.map((r, i) => `<tr>${r.map((c) => (i ? `<td>${c}</td>` : `<th>${c}</th>`)).join('')}</tr>`).join('')}</table>`
   }
-  const mdHtml = escapeHtml(shown)
+  // As a Markdown viewer shows it: the file's entities (&lt;p&gt; in an imported API's description) read as the characters they stand for.
+  const viewed = shown.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+  const mdHtml = escapeHtml(viewed)
     .replace(/(?:^\|.*\|$\n?)+/gm, (b) => table(b))
-    .replace(/&lt;\/?p&gt;/g, '')
     .replace(/^### (.*)$/gm, '<h3>$1</h3>').replace(/^## (.*)$/gm, '<h2>$1</h2>').replace(/^# (.*)$/gm, '<h1>$1</h1>')
     .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/^_(.*)_$/gm, '<i>$1</i>')
     .replace(/^- (.*)$/gm, '<li>$1</li>').replace(/\n{2,}/g, '\n')

@@ -13,9 +13,12 @@ import {
   finishRun,
   world,
 } from './always-on.harness';
+import { expectRunProjectionsHold } from '../../../../test/fake-run-events';
 
 const queued = (w: ReturnType<typeof world>) => w.wakes.rows().filter((r) => r.status === 'queued');
 
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 describe('Always on: wakes', () => {
   it('keeps one wake per dedupe key and asks the queue to look at the agent', async () => {
     const w = world();

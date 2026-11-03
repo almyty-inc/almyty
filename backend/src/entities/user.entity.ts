@@ -37,6 +37,14 @@ export class User {
   @Exclude()
   passwordHash: string;
 
+  /**
+   * Whether the person chose a password. Accounts made by single sign-on
+   * or SCIM get a random hash nobody knows, so they have none until they
+   * set one through a reset link. Settings says which it is.
+   */
+  @Column({ default: true })
+  hasPassword: boolean;
+
   @Column()
   firstName: string;
 

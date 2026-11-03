@@ -3,7 +3,7 @@ import { ApprovalsService } from '../approvals.service';
 import { fakeApprovalsRepo } from './approvals-repo.fixture';
 import { ApprovalPolicyApproval } from '../../../common/ee-hooks/ee-hooks';
 import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
-import { runsWithEvents } from '../../../test/fake-run-events';
+import { expectRunProjectionsHold, runsWithEvents } from '../../../test/fake-run-events';
 
 /**
  * EE hook seam: on create the optional APPROVAL_POLICY_HOOK may attach a
@@ -83,6 +83,9 @@ const createInput = {
   reason: 'wire transfer over 10k',
   payload: { amount: 25000 },
 };
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('ApprovalsService — approval policy hook', () => {
   describe('community build (no hook)', () => {

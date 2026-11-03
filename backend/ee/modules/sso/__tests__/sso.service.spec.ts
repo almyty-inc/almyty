@@ -178,6 +178,8 @@ describe('SsoService — resolveUser JIT provisioning', () => {
     );
 
     expect(userRepo.save).toHaveBeenCalled();
+    // Its hash is random and known to nobody: Settings says there is no password.
+    expect(userRepo.save).toHaveBeenCalledWith(expect.objectContaining({ hasPassword: false }));
     expect(membershipRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({
         organizationId: 'org-1',

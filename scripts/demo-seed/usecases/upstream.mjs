@@ -1,4 +1,4 @@
-// A local stand-in for Google Calendar, Gmail, Google Tasks, HubSpot CRM and
+// A local stand-in for Google Calendar, Gmail, Google Tasks, Google Drive, HubSpot CRM and
 // an OAuth 2.0 sign-in, so the founder and biz-dev agents can run end to end
 // without anyone's real account. Paths match the real public APIs; only the
 // host differs. Nothing here ever talks to the internet.
@@ -10,6 +10,8 @@
 //   GET  /_admin/state         everything sent/created so far
 //   POST /_admin/reply         {to, body}: the prospect at `to` answers our last mail
 //   POST /_admin/age?days=4    move every sent mail N days into the past
+//   POST /_admin/win?company=  the company's deal is marked won (onboarding tutorial)
+//   POST /_admin/upload        the customer's files land in their shared Drive folder
 import http from 'node:http'
 import { appendFileSync } from 'node:fs'
 
@@ -96,6 +98,20 @@ const contacts = [
 const deals = []
 const outbox = []
 const notes = []
+
+// ---------------- google drive (the onboarding tutorial) ----------------
+// The shared folder a new customer uploads their data into.
+let fileSeq = 0
+const files = [] // {id, name, mimeType, parents, createdTime, owners, size}
+const permissions = [] // {fileId, id, type, role, emailAddress}
+const FOLDER = 'application/vnd.google-apps.folder'
+// Enough of Drive's query language for the agent: name = '..', mimeType = '..', '<id>' in parents, trashed = false.
+function driveQuery(q) {
+  let list = files.slice()
+  for (const [, k, v] of String(q || '').matchAll(/(name|mimeType)\s*=\s*'((?:[^'\\]|\\.)*)'/g)) list = list.filter((f) => f[k] === v.replace(/\\'/g, "'"))
+  for (const [, id] of String(q || '').matchAll(/'([^']+)'\s+in\s+parents/g)) list = list.filter((f) => (f.parents || []).includes(id))
+  return list
+}
 
 const wrap = (o) => ({ ...o, createdAt: o.createdAt || at(-30, 9), updatedAt: o.updatedAt || at(-1, 9), archived: false })
 
@@ -207,7 +223,26 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, ts: String(Date.now() / 1000), channel: body?.channel || 'D0MAYA' })
     }
     // admin
-    if (p === '/_admin/state') return send(res, 200, { outbox, sent: mail.filter((x) => x.labels.includes('SENT')), drafts: mail.filter((x) => x.labels.includes('DRAFT')), deals, notes, contacts: contacts.slice(6), tasks })
+    if (p === '/_admin/state') return send(res, 200, { outbox, sent: mail.filter((x) => x.labels.includes('SENT')), drafts: mail.filter((x) => x.labels.includes('DRAFT')), deals, notes, contacts: contacts.slice(6), tasks, files, permissions, events })
+    // The deal for `company` is marked won in the CRM (what Maya does in HubSpot).
+    if (p === '/_admin/win' && req.method === 'POST') {
+      const company = u.searchParams.get('company') || 'Bluefin Couriers'
+      let d = deals.find((x) => String(x.properties.dealname || '').startsWith(company))
+      if (!d) { d = { id: String(++crmSeq), properties: { dealname: `${company}: Lumen Fleet`, pipeline: 'default', amount: '24000' }, createdAt: at(-20, 9) }; deals.push(d) }
+      Object.assign(d.properties, { dealstage: 'closedwon', closedate: now().toISOString(), description: `Signed on ${now().toISOString().slice(0, 10)}: Lumen Fleet, 12 months.` })
+      d.updatedAt = now().toISOString()
+      return send(res, 200, wrap(d))
+    }
+    // The customer uploads their data into the shared folder.
+    if (p === '/_admin/upload' && req.method === 'POST') {
+      const folder = files.filter((f) => f.mimeType === FOLDER && f.name.startsWith(u.searchParams.get('company') || 'Bluefin Couriers')).pop()
+      if (!folder) return send(res, 404, { error: 'no shared folder yet' })
+      const by = { emailAddress: 'jonas.weber@bluefin.example', displayName: 'Jonas Weber' }
+      for (const [name, size] of [['Bluefin vehicles 2026.xlsx', '48213'], ['Depots.csv', '412']]) {
+        files.push({ kind: 'drive#file', id: `1Bf${++fileSeq}xQ7`, name, mimeType: name.endsWith('.csv') ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', parents: [folder.id], createdTime: now().toISOString(), owners: [by], lastModifyingUser: by, size })
+      }
+      return send(res, 200, { files: files.filter((f) => f.parents?.includes(folder.id)) })
+    }
     if (p === '/_admin/reply' && req.method === 'POST') {
       const last = mail.filter((x) => x.labels.includes('SENT') && x.to.toLowerCase().includes(String(body.to).toLowerCase())).pop()
       if (!last) return send(res, 404, { error: 'nothing sent to ' + body.to })
@@ -255,6 +290,11 @@ const server = http.createServer(async (req, res) => {
     }
     if ((m = p.match(/\/calendars\/([^/]+)\/events\/([^/]+)$/))) {
       const e = events.find((x) => x.id === m[2]); return e ? send(res, 200, e) : send(res, 404, { error: { code: 404, message: 'Not Found' } })
+    }
+    if ((m = p.match(/\/calendars\/([^/]+)\/events$/)) && req.method === 'POST') {
+      const e = { kind: 'calendar#event', id: `ev-${++crmSeq}`, calendarId: m[1] === ME.email ? 'primary' : m[1], status: 'confirmed', organizer: { email: ME.email }, htmlLink: `https://calendar.google.com/event?eid=${crmSeq}`, ...body }
+      events.push(e)
+      return send(res, 200, e)
     }
     if (p.endsWith('/freeBusy') && req.method === 'POST') {
       const tMin = Date.parse(body.timeMin), tMax = Date.parse(body.timeMax)
@@ -327,6 +367,22 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'PATCH') { Object.assign(o.properties, body.properties || {}); o.updatedAt = now().toISOString() }
       return send(res, 200, wrap(o))
     }
+
+    // google drive  (base .../drive/v3)
+    if ((m = p.match(/\/drive\/v3\/files\/([^/]+)\/permissions$/)) && req.method === 'POST') {
+      if (!files.some((f) => f.id === m[1])) return send(res, 404, { error: { code: 404, message: `File not found: ${m[1]}.` } })
+      const perm = { kind: 'drive#permission', id: `perm${permissions.length + 1}`, fileId: m[1], type: body.type || 'user', role: body.role || 'writer', emailAddress: body.emailAddress }
+      permissions.push(perm)
+      return send(res, 200, perm)
+    }
+    if ((m = p.match(/\/drive\/v3\/files\/([^/]+)\/permissions$/))) return send(res, 200, { kind: 'drive#permissionList', permissions: permissions.filter((x) => x.fileId === m[1]) })
+    if (/\/drive\/v3\/files$/.test(p) && req.method === 'POST') {
+      const f = { kind: 'drive#file', id: `1Fo${++fileSeq}lDr`, name: body.name, mimeType: body.mimeType || 'application/octet-stream', parents: body.parents || ['root'], createdTime: now().toISOString(), owners: [{ emailAddress: ME.email, displayName: ME.name }] }
+      f.webViewLink = `https://drive.google.com/drive/folders/${f.id}`
+      files.push(f)
+      return send(res, 200, f)
+    }
+    if (/\/drive\/v3\/files$/.test(p)) return send(res, 200, { kind: 'drive#fileList', incompleteSearch: false, files: driveQuery(u.searchParams.get('q')).map(({ parents, ...f }) => ({ ...f, parents })) })
     return send(res, 404, { error: 'not found in the local fake', path: p })
   } catch (e) {
     return send(res, 500, { error: String(e) })
