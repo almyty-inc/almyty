@@ -559,7 +559,7 @@
         "packages/agents-cli/src",
         "packages/agents-cli/package.json"
       ],
-      "sourceDigest": "ab996b7c1be11f7674830a23c365c6618420d7d0cdd851c2f32a1bd5269acf21",
+      "sourceDigest": "07848c7723adf4d0f347aa829a720e437fd4457a1ca06a1524aa48485dc30b78",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -578,7 +578,7 @@
         "packages/almyty-cli/src",
         "packages/almyty-cli/package.json"
       ],
-      "sourceDigest": "6dde7e5995f0885e7237fb732b3c95cbfabc17c219a154a7f3c9790e05604dee",
+      "sourceDigest": "7a76716204caa5cc045a18746e7c3f8d89672b1dc6958c1d29045e82ed1f3581",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -597,7 +597,7 @@
         "packages/auth-cli/src",
         "packages/auth-cli/package.json"
       ],
-      "sourceDigest": "3c2d9f7b5cced6411a1debce5e9009648c3f3c24ea6de3a2edd632bdd5bbd658",
+      "sourceDigest": "809ac6d8f5f827b5664076f9cf3d4c074cd6e8688fcdb4205942f0932cdd661d",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -616,7 +616,7 @@
         "packages/chat-cli/src",
         "packages/chat-cli/package.json"
       ],
-      "sourceDigest": "4f3520f84de53269e8d5be1c022ff17c279599fa7c343820074698f158e26d56",
+      "sourceDigest": "4d075037f4eeb7598b8a9fe76874db2f1b98339868fda50030f5dba93f49b8d0",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -635,7 +635,7 @@
         "packages/mcp-server/src",
         "packages/mcp-server/package.json"
       ],
-      "sourceDigest": "db70673d54fceb3cade7237d598177e01844d5c18c29a6eb65d268867313f175",
+      "sourceDigest": "b08f7f6abb6ea39c56eaace712ad3a8370dc51d89676bbea37014555bdf33927",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -654,7 +654,7 @@
         "packages/skills-cli/src",
         "packages/skills-cli/package.json"
       ],
-      "sourceDigest": "f081743429159b7fff2212df8356869cf8b5d41f9d71737b6c9a09e0323b04a7",
+      "sourceDigest": "12cab9d843a8cf2c0a02681f7375de490aa131c7e3c5f45969ec7694aff5ea8d",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
