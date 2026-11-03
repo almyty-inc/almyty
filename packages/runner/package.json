@@ -1,6 +1,6 @@
 {
   "name": "@almyty/runner",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "publishConfig": {
     "access": "public"
   },
