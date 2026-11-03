@@ -26,7 +26,7 @@
  *   GET  /gateways/:id/widget-config              sanitized presentation config
  *   POST /gateways/:id/widget/messages            { message, threadId?, attachmentIds? }
  *   POST /gateways/:id/widget/attachments         multipart: file, threadId (a file to send next)
- *   GET  /gateways/:id/widget/messages?threadId=&after=
+ *   GET  /gateways/:id/widget/messages?threadId=&afterId=
  *   GET  /gateways/:id/widget/threads/:threadId/export   the visitor's own copy
  *   DELETE /gateways/:id/widget/threads/:threadId        erase the conversation
  */
@@ -218,7 +218,7 @@ export function buildWidgetScript(gatewayId: string): string {
 
   var threadId = null;
   try { threadId = window.localStorage.getItem(LS_KEY); } catch (e) {}
-  var lastAt = null;
+  var lastId = null;
   var pollTimer = null;
   var open = false;
   var greeted = false;
@@ -437,17 +437,22 @@ export function buildWidgetScript(gatewayId: string): string {
     applyConfig(pickConfig(out && out.data));
   }).catch(function () { /* fetch failed: defaults stay applied */ });
 
+  // Where the widget left off: the last reply it showed. The next poll asks
+  // for what came after that one, so a reply is shown once, and one poll
+  // runs at a time, so two in flight never both show the same reply.
+  var polling = false;
   function poll() {
-    if (!threadId) return;
+    if (!threadId || polling) return;
     var url = API + '?threadId=' + encodeURIComponent(threadId);
-    if (lastAt) url += '&after=' + encodeURIComponent(lastAt);
+    if (lastId) url += '&afterId=' + encodeURIComponent(lastId);
+    polling = true;
     fetch(url).then(function (r) { return r.json(); }).then(function (out) {
       var items = (out && out.data) || [];
       for (var i = 0; i < items.length; i++) {
         addMessage(String(items[i].message || ''), 'agent');
-        lastAt = items[i].createdAt;
+        lastId = items[i].id;
       }
-    }).catch(function () {});
+    }).catch(function () {}).then(function () { polling = false; });
   }
 
   function startPolling() {
@@ -606,7 +611,7 @@ export function buildWidgetScript(gatewayId: string): string {
     fetch(threadUrl(), { method: 'DELETE' }).then(function (r) {
       if (!r.ok) throw new Error('delete ' + r.status);
       threadId = null;
-      lastAt = null;
+      lastId = null;
       try { window.localStorage.removeItem(LS_KEY); } catch (e) {}
       while (messages.firstChild) messages.removeChild(messages.firstChild);
       stopPolling();

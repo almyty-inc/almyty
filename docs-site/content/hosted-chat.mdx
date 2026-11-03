@@ -35,6 +35,8 @@ Who can use the chat (anyone with the link, email verification, sign-in with a p
 
 A visitor can start a chat, watch the answer appear, and reopen earlier conversations. Visitors on a public link need no almyty account. Each visitor is still kept apart, so nobody can read someone else's conversations.
 
+If the connection drops while an answer is arriving (a tunnel, a laptop waking up, a switch from wifi to mobile data), the chat reconnects by itself and carries on from the last word on the screen: nothing is missed and nothing shows twice. Only that visitor can pick their answer up again, and they still see only the answer, never the assistant's working. An answer that finished while they were away appears from the conversation. The widget on your website picks up the replies that arrived since the last one it showed.
+
 **Unpublish** turns the chat off without losing its address or settings. Publishing again brings it back as it was.
 
 ### Teach the assistant about your product
@@ -133,6 +135,8 @@ Public links, email verification and sign-in with a provider are included in eve
 ## For developers
 
 **Visitor identity.** The web chat's visitor record is keyed by a random session key in a cookie scoped to that chat's host; the IP is stored only as a truncated hash. The widget keeps a random conversation id in the browser storage of your site. Rate-limit counters and the live event stream of a reply are held in Redis. The web chat download is a JSON file; the widget's is the conversation as JSON. A switched-off visitor right returns the stable code `VISITOR_RIGHT_DISABLED`; an A2A caller over the spend limit gets `CHANNEL_SPEND_CAP_REACHED`.
+
+**Reconnecting mid-answer.** Every frame of a reply that carries text (`token`, `reset`) has an SSE id: the place on the run's event stream of the event it came from, and which of that event's frames it is. A page that loses the connection opens `GET /public/chat/<slug>/stream?runId=<run>&after=<last id>` (a browser reconnecting on its own sends the same as `Last-Event-ID`) and gets the reply from the frame after that one, then live. The visitor is checked exactly as on the first connection: their own cookie, the chat's sign-in rule, and the run must belong to one of their conversations on this chat, or the answer is `404`. Only the answer is ever numbered or sent, never the assistant's working. A run that has already finished answers `done` at once and the page reads the reply from the conversation; at its five-minute limit the stream ends without `done` and the page reconnects. The widget polls `GET /gateways/<id>/widget/messages?threadId=<thread>&afterId=<last reply id>` and gets the replies after that one.
 
 **Sign-in provider.** **Other** asks for a discovery URL; hand-entered endpoints, keys and scopes wait under **Advanced**.
 

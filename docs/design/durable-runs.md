@@ -200,6 +200,31 @@ with `stream.timeout` carrying `lastSeq`. Without a seq the endpoint is
 the live stream it was. Org and agent scoping is the endpoint's own
 (`getRun(runId, organizationId, agentId)` before anything is sent).
 
+**Live events resume too.** Runtime events have no seq, but each has a
+place on `run:<id>:events` (the Redis entry id, `<ms>-<n>`). In the
+resumable stream each one carries it as `pos`, and `?live=<pos>` (or `0`,
+the run's start) makes the runtime events start after that one instead of
+from now (`subscribeRunLog`'s `eventsAfter`). A client that shows tokens
+keeps both positions and reconnects with `?after=<seq>&live=<pos>`: no
+token lost, none twice, as long as the entry is still in the stream's
+window (5,000 entries, six hours). Without `live` nothing changes.
+`stream.timeout` and the server's closing `done` are not the run's end.
+The API-key route `GET /:org/:agent/runs/:runId/stream` is resumable the
+same way and now checks the run is the key's organization's and this
+agent's before sending anything (it used to stream any run id it was
+given). `run-stream-writer.ts` serves both.
+
+The clients follow this contract. `@almyty/client`'s
+`followRunStream` (behind `AlmytyClient.followRun` and
+`GatewayClient.streamRun`, so the chat CLI too), the ACP server's
+`streamRun`, and `agents run --watch`, which now prints each step from the
+log as its commit lands instead of polling the row: each starts at
+`after=0&live=0`, hands each event on once, reconnects from where it was
+when the connection drops or the server ends it at its time limit, retries
+a network error or a 5xx with backoff, and stops on a 400, 401, 403, 404
+or 410. A server that sends neither a seq nor a `pos` (one without this
+contract) is read once, as before.
+
 The agent's **Runs** tab follows an open, unfinished run this way
 (`useLiveRun`, `lib/run-stream.ts`): it starts from the listed row and its
 `headSeq` (now in the list response), folds each event the way
@@ -208,8 +233,32 @@ and reconnects after it, reading the stream with fetch so the
 `X-Organization-Id` header goes with it. A network error or a 5xx is
 retried with backoff; a 400, 401, 403, 404 or 410 ends it for good, and
 the run keeps its last known state with a note that it is no longer
-available. The hosted chat stream is not on the log: a visitor sees the
-answer, never the working.
+available.
+
+**The hosted chat: the answer resumes, the working never shows.** The
+visitor stream (`GET /public/chat/:slug/stream`) is not on the log: a
+visitor sees the answer, never the working. It resumes from its own
+position: every frame that carries reply text (`token`, `reset`) has the
+SSE id `<pos>.<n>`, the place of the runtime event it came from and which
+of that event's frames it is (one event can send a `reset` and then the
+answer). A visitor reconnects with `Last-Event-ID` or `?after=` and the
+server works the reply out again: it reads the run's events from the start
+through a fresh answer filter, which reaches the same state in the same
+order, and does not send the frames up to the named one. Replay and live
+are one read of the stream, so there is no handover to lose a token in.
+Only what the filter lets out is numbered, so a position cannot name or
+bring back anything of the working. Who may resume is who may watch: the
+visitor's own cookie, the chat's sign-in rule, the run in one of their
+conversations on this chat (`runBelongsToEndUser`) and the gateway's
+organization and agent; anyone else gets 404. No rate limit is added: a
+reconnect starts nothing and costs one read of the run's runtime events.
+A finished run is not replayed (`done` at once, the page reads the
+transcript); at the time limit the stream ends without `done`, so the page
+reconnects. The page keeps the id of the last frame it showed and opens
+the stream again with `?after=` after a drop, with backoff, reading the
+transcript after a few failed attempts. The widget has no reply stream; it
+polls the stored replies with `afterId`, the last one it showed, compared
+by (createdAt, id) in the database, one poll at a time.
 
 ## The worker-kill test
 

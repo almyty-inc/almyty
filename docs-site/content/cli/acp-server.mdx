@@ -21,6 +21,8 @@ The server speaks ACP over stdio (standard input and output: the editor starts t
 
 Point your editor's ACP agent config at the command. For Zed, add an entry that runs `npx @almyty/acp-server <agent>`; the editor starts the process and connects over stdio. JetBrains and other ACP clients follow the same pattern: the client owns the process, the server bridges it to your almyty agent.
 
+While an autonomous agent works on a prompt, the server follows the run as it goes. If the connection to almyty drops, it reconnects by itself and carries on where it left off, so the editor sees each tool call once. If the run no longer exists, it stops and the next prompt starts a new one.
+
 ## Authentication
 
 Reads the shared `~/.almyty/credentials.json`. Log in first, or set the environment directly:

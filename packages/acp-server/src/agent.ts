@@ -6,7 +6,7 @@
  * and streams SessionUpdate notifications back to the client.
  */
 
-import type { AlmytyProxy, AgentInfo, AgentRun } from './proxy.js';
+import { isPermanentStatus, type AlmytyProxy, type AgentInfo, type AgentRun } from './proxy.js';
 import { SessionManager, type Session } from './session.js';
 import {
   mapStreamEvent,
@@ -477,6 +477,12 @@ export class AlmytyAcpAgent {
           }
         }
       } catch (streamErr) {
+        // The run is gone, or not this token's: polling it would only say so
+        // again. The session lets go of it so the next prompt starts afresh.
+        if (isPermanentStatus(streamErr)) {
+          this.sessions.update(session.id, { activeRunId: undefined });
+          throw streamErr;
+        }
         // If streaming fails, fall back to polling the run status
         process.stderr.write(`[acp] Run streaming failed, polling: ${streamErr}\n`);
         const finalRun = await this.pollRunToCompletion(session.agentId, run.id, signal);

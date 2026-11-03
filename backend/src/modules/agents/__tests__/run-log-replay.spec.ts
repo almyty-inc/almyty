@@ -172,6 +172,34 @@ describe('a live run view replays the log, then goes live', () => {
     expect(announced).toHaveLength(2);
     expect(announced[1]).toBe(head());
   });
+
+  it('eventsAfter: the runtime events after a named position, each with its position, so a client showing tokens loses none', async () => {
+    await step();
+    helper.emitEvent('run-1', 'llm.chunk', { content: 'one' });
+    helper.emitEvent('run-1', 'llm.chunk', { content: 'two' });
+    const got: Array<[string, string | undefined]> = [];
+    const ended = helper.subscribeRunLog(
+      'run-1',
+      head(),
+      () => undefined,
+      (e, id) => got.push([e.data?.content ?? e.type, id]),
+      undefined,
+      5_000,
+      '0',
+    );
+    await until(() => got.length === 2, 'the events from before the viewer came');
+    helper.emitEvent('run-1', 'llm.chunk', { content: 'three' });
+    await finish();
+    helper.emitEvent('run-1', 'run.completed', { output: 'done' });
+    await ended;
+    expect(got.map(([what]) => what)).toEqual(['one', 'two', 'three', 'run.completed']);
+    expect(got.every(([, id]) => /^\d+-\d+$/.test(id ?? ''))).toBe(true);
+
+    // A reconnect naming the first one gets the rest, once each.
+    const rest: string[] = [];
+    await helper.subscribeRunLog('run-1', head(), () => undefined, (e) => rest.push(e.data?.content ?? e.type), undefined, 5_000, got[0][1]);
+    expect(rest).toEqual(['two', 'three', 'run.completed']);
+  });
 });
 
 describe('the run stream endpoint', () => {
@@ -198,13 +226,13 @@ describe('the run stream endpoint', () => {
         if (org !== 'org-1' || agentId !== 'agent-1') throw new NotFoundException('Run not found');
         return { id: runId };
       }),
-      subscribeRunLog: jest.fn(async (_runId: string, after: number, onLog: (e: any) => void, onEvent: (e: any) => void) => {
+      subscribeRunLog: jest.fn(async (_runId: string, after: number, onLog: (e: any) => void, onEvent: (e: any, id?: string) => void) => {
         onLog(logged(after + 1));
         onLog(logged(after + 2));
-        onEvent({ type: 'llm.chunk', data: { content: 'x' }, timestamp: 't' });
+        onEvent({ type: 'llm.chunk', data: { content: 'x' }, timestamp: 't' }, '10-0');
       }),
-      subscribeRunEvents: jest.fn(async (_runId: string, handler: (e: any) => void) => {
-        handler({ type: 'llm.chunk', data: { content: 'x' }, timestamp: 't' });
+      subscribeRunEvents: jest.fn(async (_runId: string, handler: (e: any, id?: string) => void) => {
+        handler({ type: 'llm.chunk', data: { content: 'x' }, timestamp: 't' }, '10-0');
       }),
     };
     return { runtime, controller: new AgentRunsController(runtime as any) };
@@ -218,9 +246,27 @@ describe('the run stream endpoint', () => {
     expect(runtime.subscribeRunEvents).not.toHaveBeenCalled();
     expect(r.chunks[0]).toBe(`id: 8\nevent: run.log\ndata: ${JSON.stringify({ seq: 8, type: 'step_committed', step: 0, payload: { status: 'running' }, createdAt: '2026-10-27T10:00:00.000Z' })}\n\n`);
     expect(r.chunks[1]).toMatch(/^id: 9\nevent: run\.log\n/);
-    // Live runtime events have no id: they are not replayed.
+    // Live runtime events have no SSE id (they have no seq); `pos` says
+    // where they are, for a client that shows tokens to resume from.
     expect(r.chunks[2]).toMatch(/^event: llm\.chunk\n/);
+    expect(JSON.parse(r.chunks[2].split('data: ')[1])).toEqual({ type: 'llm.chunk', data: { content: 'x' }, timestamp: 't', pos: '10-0' });
     expect(r.chunks[r.chunks.length - 1]).toBe('event: done\ndata: {}\n\n');
+  });
+
+  it('?live=<pos> has the runtime events start after that one instead of from now', async () => {
+    const { runtime, controller } = build();
+    await controller.streamRun('agent-1', 'run-1', req(), res(), '3', '9-0');
+    expect(runtime.subscribeRunLog).toHaveBeenCalledWith('run-1', 3, expect.any(Function), expect.any(Function), expect.any(AbortSignal), 300_000, '9-0');
+    await controller.streamRun('agent-1', 'run-1', req(), res(), '0', '0');
+    expect(runtime.subscribeRunLog).toHaveBeenLastCalledWith('run-1', 0, expect.any(Function), expect.any(Function), expect.any(AbortSignal), 300_000, '0');
+  });
+
+  it('a malformed ?live is refused before anything streams', async () => {
+    const { runtime, controller } = build();
+    const r = res();
+    await controller.streamRun('agent-1', 'run-1', req(), r, '0', 'soon');
+    expect(r.statusCode).toBe(HttpStatus.BAD_REQUEST);
+    expect(runtime.getRun).not.toHaveBeenCalled();
   });
 
   it('?after=0 replays the whole history', async () => {

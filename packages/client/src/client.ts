@@ -160,6 +160,106 @@ export function parseSseFrame(lines: string[]): StreamEvent | null {
   };
 }
 
+// ── Resuming a run's stream ─────────────────────────────────────
+
+/** One event of a run's log, as the run stream sends it (`run.log`). */
+export interface RunLogEvent {
+  seq: number;
+  type: string;
+  step: number | null;
+  payload: Record<string, any>;
+  createdAt?: string;
+}
+
+/** Where a run stream got to: the last logged event's seq, the last runtime event's place. */
+export interface RunStreamPosition {
+  afterSeq: number;
+  livePos: string;
+}
+
+export interface RunStreamOptions {
+  /** Resume after this logged event. Default 0: the run's whole log. */
+  afterSeq?: number;
+  /** Resume after this runtime event's place (`pos`). Default `0`: every one from the run's start. */
+  livePos?: string;
+  /** Each logged event, once, in seq order. */
+  onLog?: (event: RunLogEvent) => void;
+  /** Stop once the log shows the run waiting on a person, as pollRun does. */
+  stopOnWaitingInput?: boolean;
+  /** Waits before each retry after a failed connection, in ms; one entry per retry. */
+  retryDelaysMs?: number[];
+  /** Before each reconnect: where from, after how long, and what failed, if anything did. */
+  onReconnect?: (info: RunStreamPosition & { delayMs: number; error?: unknown }) => void;
+}
+
+/** Waits before each retry of a run stream that failed, in ms. */
+export const RUN_STREAM_RETRY_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000];
+
+/**
+ * Answers that will not change on a retry: a bad position (400), not
+ * signed in or not allowed (401, 403), the run is gone (404, 410). A
+ * network error or a 5xx is worth retrying.
+ */
+export const PERMANENT_STREAM_STATUSES: ReadonlyArray<number> = [400, 401, 403, 404, 410];
+
+export function isPermanentStreamError(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null)?.status;
+  return typeof status === 'number' && PERMANENT_STREAM_STATUSES.includes(status);
+}
+
+const RUN_ENDED_EVENTS = new Set(['run.completed', 'run.failed', 'run.cancelled']);
+
+/** The `event:` name of one SSE frame. */
+function sseEventName(lines: string[]): string {
+  for (const line of lines) if (line.startsWith('event:')) return line.slice(6).trim();
+  return 'message';
+}
+
+/** A `run.log` frame's event, or null when it is not one. */
+function parseRunLogFrame(lines: string[]): RunLogEvent | null {
+  const data = lines
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).replace(/^ /, ''))
+    .join('\n');
+  try {
+    const parsed = JSON.parse(data);
+    return parsed && typeof parsed.seq === 'number' && typeof parsed.type === 'string' ? (parsed as RunLogEvent) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Order two places on a run's event stream (`0`, or `<ms>-<n>`). */
+function compareStreamPos(a: string, b: string): number {
+  const parts = (pos: string) => {
+    const m = /^(\d+)-(\d+)$/.exec(pos);
+    return m ? [Number(m[1]), Number(m[2])] : [0, 0];
+  };
+  const [am, an] = parts(a);
+  const [bm, bn] = parts(b);
+  return am !== bm ? am - bm : an - bn;
+}
+
+function abortError(): Error {
+  return Object.assign(new Error('Aborted'), { name: 'AbortError' });
+}
+
+/** Wait, unless the caller gives up first. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(abortError());
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortError());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export class AlmytyClient {
   private readonly baseUrl: string;
   private readonly token: string;
@@ -227,6 +327,30 @@ export class AlmytyClient {
     signal?: AbortSignal,
     init: RequestInit = {},
   ): Promise<void> {
+    await this.readSseFrames(
+      path,
+      (frame) => {
+        const event = parseSseFrame(frame);
+        if (!event) return false;
+        handler(event);
+        return TERMINAL_EVENT_TYPES.has(event.type);
+      },
+      signal,
+      init,
+    );
+  }
+
+  /**
+   * Read an SSE endpoint a frame (its lines) at a time until the server
+   * ends it or `onFrame` returns true. A non-2xx answer throws with its
+   * `status`.
+   */
+  private async readSseFrames(
+    path: string,
+    onFrame: (lines: string[]) => boolean | void,
+    signal?: AbortSignal,
+    init: RequestInit = {},
+  ): Promise<void> {
     const url = `${this.baseUrl}${path}`;
     const res = await fetch(url, {
       ...init,
@@ -267,12 +391,9 @@ export class AlmytyClient {
           const line = buffer.slice(0, nl).replace(/\r$/, '');
           buffer = buffer.slice(nl + 1);
           if (line === '') {
-            const event = parseSseFrame(frame);
+            const lines = frame;
             frame = [];
-            if (event) {
-              handler(event);
-              if (TERMINAL_EVENT_TYPES.has(event.type)) return;
-            }
+            if (lines.length && onFrame(lines)) return;
           } else {
             frame.push(line);
           }
@@ -282,8 +403,7 @@ export class AlmytyClient {
       // A server that closes without a trailing blank line still sent a
       // frame worth reading.
       if (buffer) frame.push(buffer.replace(/\r$/, ''));
-      const tail = parseSseFrame(frame);
-      if (tail) handler(tail);
+      if (frame.length) onFrame(frame);
     } finally {
       // Releasing the lock does not close the connection. A terminal
       // event returns from the loop above with the body unread and the
@@ -293,6 +413,126 @@ export class AlmytyClient {
       // per answer. Cancelling the body is what actually closes it.
       await reader.cancel().catch(() => undefined);
       reader.releaseLock();
+    }
+  }
+
+  /**
+   * Follow a run's stream until the run ends, picking up where it left
+   * off whenever the connection drops or the server ends it at its time
+   * limit. `path` is the run's stream: `/agents/:id/runs/:runId/stream`,
+   * or the gateway's `/:org/:agent/runs/:runId/stream`.
+   *
+   * Every connection names where the last one got to: the seq of the last
+   * logged event (`?after=`) and the place of the last runtime event
+   * (`?live=`). The server sends what came after both, so `handler` sees
+   * each runtime event (tokens, tool progress, the run's end) once and in
+   * order, and `onLog` each logged event once, in seq order. A logged
+   * event that skips ahead means one was missed: the connection is opened
+   * again from the last one applied.
+   *
+   * A network error or a 5xx is retried with backoff (`retryDelaysMs`); a
+   * 400, 401, 403, 404 or 410 will not change on a retry and is thrown
+   * (isPermanentStreamError). Resolves with the position reached once the
+   * run has ended (or, with `stopOnWaitingInput`, waits on a person).
+   */
+  async followRunStream(
+    path: string,
+    handler: StreamEventHandler,
+    signal?: AbortSignal,
+    options: RunStreamOptions = {},
+  ): Promise<RunStreamPosition> {
+    const delays = options.retryDelaysMs ?? RUN_STREAM_RETRY_DELAYS_MS;
+    let afterSeq = Math.max(0, Math.floor(options.afterSeq ?? 0));
+    let livePos = options.livePos ?? '0';
+    // Whether this server resumes at all: it sent a logged event or a
+    // runtime event's place. One that does not replays its live events
+    // from the start on every connection, so once anything has been
+    // handed on it is not connected to again.
+    let resumable = false;
+    let delivered = false;
+    let ended = false;
+    let failures = 0;
+
+    for (;;) {
+      let gap = false;
+      let waiting = false;
+      let progressed = false;
+      const connection = new AbortController();
+      const onAbort = () => connection.abort();
+      signal?.addEventListener('abort', onAbort, { once: true });
+      let failure: unknown = null;
+      try {
+        await this.readSseFrames(
+          `${path}?after=${afterSeq}&live=${encodeURIComponent(livePos)}`,
+          (lines) => {
+            if (sseEventName(lines) === 'run.log') {
+              const log = parseRunLogFrame(lines);
+              if (!log) return false;
+              resumable = true;
+              if (log.seq <= afterSeq) return false;
+              if (log.seq !== afterSeq + 1) {
+                gap = true;
+                return true;
+              }
+              afterSeq = log.seq;
+              progressed = true;
+              options.onLog?.(log);
+              const status = log.type === 'step_committed' ? String(log.payload?.status ?? '') : '';
+              // The server sends the rest of the log and closes; read on to it.
+              if (TERMINAL_STATUSES.has(status)) ended = true;
+              if (options.stopOnWaitingInput && (status === 'waiting_input' || log.type === 'waiting_input')) {
+                waiting = true;
+                return true;
+              }
+              return false;
+            }
+            const event = parseSseFrame(lines);
+            if (!event) return false;
+            const pos = typeof event.data.pos === 'string' ? event.data.pos : undefined;
+            if (pos) {
+              resumable = true;
+              if (compareStreamPos(pos, livePos) <= 0) return false;
+              livePos = pos;
+            }
+            // The server closing this connection, not the run ending.
+            if (event.type === 'done' || event.type === 'stream.timeout') return false;
+            progressed = true;
+            delivered = true;
+            handler(event);
+            if (RUN_ENDED_EVENTS.has(event.type)) ended = true;
+            // A server that cannot resume ends here, as it always did.
+            return ended && !resumable;
+          },
+          connection.signal,
+        );
+      } catch (err) {
+        failure = err;
+      } finally {
+        signal?.removeEventListener('abort', onAbort);
+        connection.abort();
+      }
+
+      if (signal?.aborted) throw failure ?? abortError();
+      if (waiting || (ended && !gap)) return { afterSeq, livePos };
+      if (progressed) failures = 0;
+      if (gap) continue;
+      if (failure) {
+        if (isPermanentStreamError(failure)) throw failure;
+        if (delivered && !resumable) throw failure;
+      } else if (delivered && !resumable) {
+        // A server that cannot resume ended the stream: that was all of it.
+        return { afterSeq, livePos };
+      } else if (progressed) {
+        // Ended at its time limit with the run still going: straight back.
+        options.onReconnect?.({ afterSeq, livePos, delayMs: 0 });
+        continue;
+      }
+      if (failures >= delays.length) {
+        throw failure ?? Object.assign(new Error('The run stream kept ending without anything new.'), { streamEnded: true });
+      }
+      const delayMs = delays[failures++];
+      options.onReconnect?.({ afterSeq, livePos, delayMs, error: failure ?? undefined });
+      await sleep(delayMs, signal);
     }
   }
 
@@ -424,6 +664,29 @@ export class AlmytyClient {
       `/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}/cancel`,
       { method: 'POST' },
     );
+  }
+
+  /**
+   * Follow a run as it goes: its logged events (`options.onLog`, each
+   * once, in seq order) and its live events (`handler`), until it ends,
+   * reconnecting where it left off when the connection drops. Resolves
+   * with the run as it ended. Throws on an answer a retry would not change
+   * (isPermanentStreamError: the run is gone, or not yours to see).
+   */
+  async followRun(
+    agentId: string,
+    runId: string,
+    handler: StreamEventHandler,
+    signal?: AbortSignal,
+    options: RunStreamOptions = {},
+  ): Promise<AgentRun> {
+    await this.followRunStream(
+      `/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}/stream`,
+      handler,
+      signal,
+      options,
+    );
+    return this.getRun(agentId, runId);
   }
 
   /**
@@ -623,16 +886,27 @@ export class GatewayClient {
   /**
    * Stream run events via SSE. Calls handler for each event
    * (llm.started, llm.chunk, llm.response, tool.started, tool.result,
-   * step.completed, run.completed, run.failed).
+   * step.completed, run.completed, run.failed), each once and in order.
    * Returns when the run completes or fails.
-   * Falls back to polling if SSE fails.
+   *
+   * A dropped connection is picked up where it left off
+   * (AlmytyClient.followRunStream); `options` can start from a position a
+   * caller already has. An answer that will not change on a retry (the run
+   * is gone, or not this key's to see: 400, 401, 403, 404, 410) is thrown.
+   * Falls back to polling if the stream keeps failing otherwise.
    */
-  async streamRun(runId: string, handler: StreamEventHandler, signal?: AbortSignal): Promise<AgentRun> {
+  async streamRun(
+    runId: string,
+    handler: StreamEventHandler,
+    signal?: AbortSignal,
+    options: RunStreamOptions = {},
+  ): Promise<AgentRun> {
     try {
-      await this.client.streamSSE(
+      await this.client.followRunStream(
         `${this.prefix}/runs/${encodeURIComponent(runId)}/stream`,
         handler,
         signal,
+        options,
       );
       // Stream ended — get final state
       return this.getRun(runId);
@@ -641,6 +915,8 @@ export class GatewayClient {
       // Falling back to polling here kept a cancelled run under watch
       // for the full five-minute poll window.
       if (signal?.aborted || isAbortError(err)) throw err;
+      // Polling a run that is gone, or not ours, only says so again.
+      if (isPermanentStreamError(err)) throw err;
       // SSE failed — fall back to polling until completion
       return this.pollRun(runId, { signal });
     }

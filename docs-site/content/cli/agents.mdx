@@ -110,6 +110,8 @@ Final output:
 }
 ```
 
+Each step is printed once, as soon as the agent finishes it. If your connection drops while you watch, the command reconnects by itself and carries on from the last step it printed, so nothing is skipped or printed twice. If the run no longer exists, it stops at once with exit code `4`.
+
 ### Safety limits for autonomous runs
 
 Autonomous agents can run indefinitely if unchecked. Use these flags to set guardrails:

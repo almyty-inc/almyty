@@ -36,6 +36,7 @@ import { ChannelAttachmentReader, attachmentIdsFrom, type ReadAttachments } from
 import { FilesService } from '../../files/files.service';
 import { TempFileInterceptor } from '../../files/temp-upload';
 import { readFile } from 'fs/promises';
+import { visitorPosAfter, visitorPosText, visitorResumeOf } from '../../agents/run-stream-position';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -52,6 +53,14 @@ import { readFile } from 'fs/promises';
 export class HostedChatController {
   /** Anonymous sessions outlive a browser restart but not forever. */
   static readonly SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+
+  /** A run that has ended, and the reason its stream gives: the page reads the reply from the transcript. */
+  static readonly FINISHED: Record<string, string | undefined> = {
+    completed: 'run.completed',
+    failed: 'run.failed',
+    timeout: 'run.failed',
+    cancelled: 'run.cancelled',
+  };
 
   constructor(
     private readonly hostedChat: HostedChatService,
@@ -463,15 +472,44 @@ export class HostedChatController {
     };
   }
 
+  /**
+   * The reply to one of the visitor's messages, as it is written.
+   *
+   * Resumable. Every frame that carries reply text (`token`, `reset`) has
+   * an SSE id: where on the run's event stream the event it came from is,
+   * and which of that event's frames it is (run-stream-position.ts). A
+   * visitor whose connection drops mid-answer reconnects naming the last
+   * frame they had, by the `Last-Event-ID` their browser sends or by
+   * `?after=`, and gets the reply text from there on, then the live
+   * stream: nothing they missed is left out and nothing they had comes
+   * twice.
+   *
+   * A resume works the reply out again rather than looking it up: the
+   * run's events are read from the start through a fresh answer filter, the
+   * same one, in the same order, so it reaches the same state, and the
+   * frames up to the named one are not sent. Replay and live are one read
+   * of the same stream, so there is no handover to lose an event in. Only
+   * what the filter lets out is numbered, so a position can never name the
+   * agent's working, or bring any of it back.
+   *
+   * Who may resume is who may watch: the same cookie visitor, the same
+   * sign-in gate, the run theirs and this surface's. A finished run is not
+   * replayed: `done` at once, and the page reads the reply from the
+   * transcript. At its time limit the stream ends without `done`, so the
+   * browser reconnects from its last frame.
+   */
   @Get(':slug/stream')
-  @ApiOperation({ summary: 'Stream an in-flight reply' })
+  @ApiOperation({ summary: 'Stream an in-flight reply, resumable from the last frame seen' })
   async stream(
     @Param('slug') slug: string,
     @Query('runId') runId: string,
     @Req() req: Request,
     @Res() res: Response,
+    @Query('after') after?: string,
   ) {
     if (!runId) throw new BadRequestException('runId is required');
+    const resumeFrom = visitorResumeOf(req.headers?.['last-event-id'], after);
+    if (resumeFrom === 'invalid') throw new BadRequestException('after must be the id of a frame this stream sent');
 
     const gateway = await this.hostedChat.findBySlug(slug);
     const { endUser } = await this.hostedChat.resolveEndUser(
@@ -502,7 +540,15 @@ export class HostedChatController {
     res.setHeader('X-Accel-Buffering', 'no'); // nginx would otherwise buffer the stream
     res.flushHeaders?.();
 
+    const ended = HostedChatController.FINISHED[run.status as string];
+    if (ended) {
+      res.write(`event: done\ndata: ${JSON.stringify({ reason: ended })}\n\n`);
+      res.end();
+      return undefined;
+    }
+
     let closed = false;
+    let timedOut = false;
     const abortController = new AbortController();
     const close = () => {
       if (closed) return;
@@ -516,6 +562,17 @@ export class HostedChatController {
       }
     };
 
+    // The event being filtered, and how many frames it has sent so far.
+    let source: string | undefined;
+    let frame = 0;
+    const send = (name: 'token' | 'reset', data: unknown) => {
+      const at = source === undefined ? null : { event: source, frame: frame++ };
+      // The visitor already has this one.
+      if (at && resumeFrom && !visitorPosAfter(at, resumeFrom)) return;
+      const id = at ? `id: ${visitorPosText(at)}\n` : '';
+      res.write(`${id}event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
     // A visitor sees the answer, never the working: the run's events are
     // reduced to the answer as it is written (agents/answer-stream.filter.ts,
     // shared with the /v1 compat APIs). A token that turns out not to be the
@@ -524,8 +581,8 @@ export class HostedChatController {
     // the page reconciles from the transcript on `done`.
     const filter = answerStreamFilter(
       {
-        token: (content) => res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`),
-        reset: () => res.write(`event: reset\ndata: {}\n\n`),
+        token: (content) => send('token', { content }),
+        reset: () => send('reset', {}),
         done: (reason) => {
           res.write(`event: done\ndata: ${JSON.stringify({ reason })}\n\n`);
           close();
@@ -533,8 +590,14 @@ export class HostedChatController {
       },
       { withholdCandidates: withholdCandidateChunks },
     );
-    const onEvent = (event: any) => {
+    const onEvent = (event: any, id?: string) => {
       if (closed) return;
+      if (event?.type === 'stream.timeout') {
+        timedOut = true;
+        return;
+      }
+      source = id;
+      frame = 0;
       filter(event);
     };
 
@@ -550,7 +613,8 @@ export class HostedChatController {
     try {
       // Redis Streams are the cross-pod source of truth. A hosted request and
       // its worker frequently land on different API pods, so a process-local
-      // EventEmitter cannot reliably deliver completion.
+      // EventEmitter cannot reliably deliver completion. Read from the start
+      // every time: a resume rebuilds the filter's state from it.
       await this.agentRuntimeService.subscribeRunEvents(
         runId,
         onEvent,
@@ -562,7 +626,9 @@ export class HostedChatController {
     }
 
     if (!closed) {
-      res.write(`event: done\ndata: ${JSON.stringify({ reason: 'stream_ended' })}\n\n`);
+      // Still going at the time limit: end without `done`, and the page
+      // reconnects from the last frame it had.
+      if (!timedOut) res.write(`event: done\ndata: ${JSON.stringify({ reason: 'stream_ended' })}\n\n`);
       close();
     }
     return undefined;

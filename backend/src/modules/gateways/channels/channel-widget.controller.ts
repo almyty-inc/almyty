@@ -36,6 +36,8 @@ import { FilesService } from '../../files/files.service';
 import { TempFileInterceptor } from '../../files/temp-upload';
 import { readFile } from 'fs/promises';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Public (unauthenticated) surface for the embedded chat widget — the
  * widget runs on third-party pages with no almyty session.
@@ -47,7 +49,7 @@ import { readFile } from 'fs/promises';
  *   1. POST /gateways/:id/widget/messages  { message, threadId? }
  *      -> { runId, threadId }  (threadId is a server-minted run UUID on
  *         the first message; the widget echoes it back afterwards)
- *   2. GET /gateways/:id/widget/messages?threadId=...&after=
+ *   2. GET /gateways/:id/widget/messages?threadId=...&afterId=  (or &after=<time>)
  *      -> agent replies persisted by ChatWidgetAdapter, oldest first
  *   3. GET /gateways/:id/widget/threads/:threadId/export
  *      DELETE /gateways/:id/widget/threads/:threadId
@@ -302,6 +304,8 @@ export class ChannelWidgetController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('threadId') threadId?: string,
     @Query('after') after?: string,
+    // The last reply the widget showed: the next page starts exactly after it.
+    @Query('afterId') afterId?: string,
   ) {
     if (!threadId) throw new BadRequestException('threadId is required');
 
@@ -312,12 +316,14 @@ export class ChannelWidgetController {
         throw new BadRequestException('after must be an ISO-8601 timestamp');
       }
     }
+    if (afterId && !UUID.test(afterId)) throw new BadRequestException('afterId must be the id of a reply');
 
     const gateway = await this.channelGatewayService.findWidgetGateway(id);
     const messages = await this.channelGatewayService.listWidgetMessages(
       gateway.id,
       threadId,
       afterDate,
+      afterId || undefined,
     );
     return { success: true, data: messages };
   }

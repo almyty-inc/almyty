@@ -46,6 +46,58 @@ export interface StreamEvent {
   data: Record<string, unknown>;
 }
 
+/** Where to pick a run's stream up, and how hard to try. */
+export interface RunStreamResume {
+  /** Resume after this logged event. Default 0: the run's whole log. */
+  afterSeq?: number;
+  /** Resume after this live event's place (`pos`). Default `0`: every one from the run's start. */
+  livePos?: string;
+  /** Waits before each retry after a failed connection, in ms; one entry per retry. */
+  retryDelaysMs?: number[];
+}
+
+/** Waits before each retry of a run stream that failed, in ms. */
+export const RUN_STREAM_RETRY_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000];
+
+/** Answers a retry would not change: a bad position, not signed in, not allowed, gone. */
+const PERMANENT_STATUSES = [400, 401, 403, 404, 410];
+const RUN_FINISHED = ['completed', 'failed', 'cancelled', 'timeout'];
+const RUN_ENDED = ['run.completed', 'run.failed', 'run.cancelled'];
+
+/** Whether a stream error is one a retry would not change. */
+export function isPermanentStatus(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null)?.status;
+  return typeof status === 'number' && PERMANENT_STATUSES.includes(status);
+}
+
+/** Order two places on a run's event stream (`0`, or `<ms>-<n>`). */
+function comparePos(a: string, b: string): number {
+  const parts = (pos: string) => {
+    const m = /^(\d+)-(\d+)$/.exec(pos);
+    return m ? [Number(m[1]), Number(m[2])] : [0, 0];
+  };
+  const [am, an] = parts(a);
+  const [bm, bn] = parts(b);
+  return am !== bm ? am - bm : an - bn;
+}
+
+/** Wait, unless the caller gives up first. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const aborted = () => Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    if (signal?.aborted) return reject(aborted());
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(aborted());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export class AlmytyProxy {
   private readonly baseUrl: string;
   private readonly token: string;
@@ -126,18 +178,100 @@ export class AlmytyProxy {
   }
 
   /**
-   * Stream an autonomous run via SSE. Similar to streamAgent but uses the
-   * run-specific SSE endpoint.
+   * Stream an autonomous run via SSE, each event once and in order, until
+   * the run ends; then a final `done`.
+   *
+   * A dropped connection, or the server ending one at its time limit, is
+   * picked up where it left off: every connection names the seq of the
+   * last logged event (`?after=`) and the place of the last live event
+   * (`?live=`), and the server sends what came after both. The log itself
+   * is how this keeps its place and is not yielded. A network error or a
+   * 5xx is retried with backoff; an answer a retry would not change (400,
+   * 401, 403, 404, 410: the run is gone, or not this token's) is thrown,
+   * with its `status`.
    */
   async *streamRun(
     agentId: string,
     runId: string,
     signal?: AbortSignal,
+    options: RunStreamResume = {},
   ): AsyncGenerator<StreamEvent> {
-    yield* this.sseGet(
-      `/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}/stream`,
-      signal,
-    );
+    const path = `/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}/stream`;
+    const delays = options.retryDelaysMs ?? RUN_STREAM_RETRY_DELAYS_MS;
+    let afterSeq = Math.max(0, Math.floor(options.afterSeq ?? 0));
+    let livePos = options.livePos ?? '0';
+    // A server that sends neither a seq nor a place cannot resume: it
+    // replays its live events on every connection, so once anything has
+    // been yielded it is not connected to again.
+    let resumable = false;
+    let delivered = false;
+    let ended = false;
+    let failures = 0;
+
+    for (;;) {
+      let gap = false;
+      let progressed = false;
+      let failure: unknown = null;
+      const connection = new AbortController();
+      const linked = signal ? AbortSignal.any([signal, connection.signal]) : connection.signal;
+      try {
+        for await (const event of this.sseGet(`${path}?after=${afterSeq}&live=${encodeURIComponent(livePos)}`, linked)) {
+          if (event.event === 'run.log') {
+            const seq = event.data.seq;
+            if (typeof seq !== 'number') continue;
+            resumable = true;
+            if (seq <= afterSeq) continue;
+            if (seq !== afterSeq + 1) {
+              gap = true;
+              break;
+            }
+            afterSeq = seq;
+            progressed = true;
+            const payload = event.data.payload as { status?: string } | undefined;
+            if (event.data.type === 'step_committed' && RUN_FINISHED.includes(String(payload?.status))) ended = true;
+            continue;
+          }
+          const pos = typeof event.data.pos === 'string' ? event.data.pos : undefined;
+          if (pos) {
+            resumable = true;
+            if (comparePos(pos, livePos) <= 0) continue;
+            livePos = pos;
+          }
+          // The server closing this connection, not the run ending.
+          if (event.event === 'done' || event.event === 'stream.timeout') continue;
+          progressed = true;
+          delivered = true;
+          yield event;
+          if (RUN_ENDED.includes(event.event)) {
+            ended = true;
+            if (!resumable) break;
+          }
+        }
+      } catch (err) {
+        failure = err;
+      } finally {
+        connection.abort();
+      }
+
+      if (signal?.aborted) throw failure ?? Object.assign(new Error('Aborted'), { name: 'AbortError' });
+      if (ended && !gap) break;
+      if (progressed) failures = 0;
+      if (gap) continue;
+      if (failure) {
+        if (isPermanentStatus(failure)) throw failure;
+        if (delivered && !resumable) throw failure;
+      } else if (delivered && !resumable) {
+        break;
+      } else if (progressed) {
+        continue;
+      }
+      if (failures >= delays.length) {
+        if (failure) throw failure;
+        break;
+      }
+      await sleep(delays[failures++], signal);
+    }
+    yield { event: 'done', data: {} };
   }
 
   // ── Internal HTTP helpers ──────────────────────────────────────
@@ -253,7 +387,9 @@ export class AlmytyProxy {
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`SSE GET ${path} failed (${resp.status}): ${text}`);
+      // The status rides on the error, so a caller can tell a run that is
+      // gone (404) from a network that is down.
+      throw Object.assign(new Error(`SSE GET ${path} failed (${resp.status}): ${text}`), { status: resp.status });
     }
 
     yield* this.consumeSse(resp);

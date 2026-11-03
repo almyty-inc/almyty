@@ -72,6 +72,17 @@ interface ChannelEventRef {
 /** A thread run in one of these takes the next message itself (threadOnGateway). */
 const THREAD_ACTIVE_STATUSES: string[] = [AgentRunStatus.RUNNING, AgentRunStatus.WAITING_INPUT, AgentRunStatus.SLEEPING];
 
+/**
+ * The widget's poll cursor: the replies after the one it last showed, by
+ * that reply's own (createdAt, id), compared in the database at full
+ * precision. Exported so the unit spec models the exact SQL.
+ */
+export const WIDGET_AFTER_REPLY =
+  'NOT EXISTS (SELECT 1 FROM channel_events ref WHERE ref."id" = :afterId AND ref."gatewayId" = "event"."gatewayId" ' +
+  'AND (ref."createdAt", ref."id") >= ("event"."createdAt", "event"."id"))';
+/** An older widget's cursor, a timestamp, compared at the millisecond it came back at. */
+export const WIDGET_AFTER_TIME = "date_trunc('milliseconds', event.createdAt) > :after";
+
 @Injectable()
 export class ChannelGatewayService {
   private readonly logger = new Logger(ChannelGatewayService.name);
@@ -1155,13 +1166,20 @@ export class ChannelGatewayService {
   /**
    * Poll surface for the widget: outbound widget messages persisted by
    * ChatWidgetAdapter.sendResponse for a given thread, oldest first.
-   * `after` restricts to messages newer than the given timestamp so the
-   * widget can poll incrementally.
+   *
+   * Where the widget left off: `afterId`, the last reply it showed, which
+   * places the next page exactly (by that reply's own time and id, compared
+   * in the database), else `after`, a timestamp. A timestamp comes back
+   * through JSON at millisecond precision while the column keeps
+   * microseconds, so the last reply read as newer than its own rounded
+   * time and came back on every poll; it is compared at milliseconds now.
+   * An `afterId` that names no reply of this gateway places nothing.
    */
   async listWidgetMessages(
     gatewayId: string,
     threadId: string,
     after?: Date,
+    afterId?: string,
   ): Promise<Array<{ id: string; runId: string | null; message: string; attachments: any; createdAt: Date }>> {
     const qb = this.eventRepository
       .createQueryBuilder('event')
@@ -1171,9 +1189,12 @@ export class ChannelGatewayService {
       .andWhere("event.payload->>'kind' = 'widget_message'")
       .andWhere("event.payload->>'threadId' = :threadId", { threadId })
       .orderBy('event.createdAt', 'ASC')
+      .addOrderBy('event.id', 'ASC')
       .limit(100);
-    if (after) {
-      qb.andWhere('event.createdAt > :after', { after });
+    if (afterId) {
+      qb.andWhere(WIDGET_AFTER_REPLY, { afterId });
+    } else if (after) {
+      qb.andWhere(WIDGET_AFTER_TIME, { after });
     }
     const events = await qb.getMany();
     return events.map((e) => ({

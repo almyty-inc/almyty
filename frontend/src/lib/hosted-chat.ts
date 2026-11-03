@@ -236,8 +236,11 @@ export const hostedChatApi = {
       .post(`/public/chat/${slug}/auth/email/verify`, { email, code })
       .then((r) => unwrap<{ authenticated: boolean; email: string }>(r.data)),
 
-  /** SSE endpoint for an in-flight reply. Same origin, see above. */
-
-  streamUrl: (slug: string, runId: string) =>
-    `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/stream?runId=${encodeURIComponent(runId)}`,
+  /**
+   * SSE endpoint for an in-flight reply. Same origin, see above. `after`,
+   * the id of the last frame shown, picks the reply up from there.
+   */
+  streamUrl: (slug: string, runId: string, after?: string) =>
+    `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/stream?runId=${encodeURIComponent(runId)}` +
+    (after ? `&after=${encodeURIComponent(after)}` : ''),
 }

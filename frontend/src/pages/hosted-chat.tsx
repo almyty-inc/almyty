@@ -26,6 +26,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { AttachButton, AttachmentChips, useChatAttachments } from '@/components/hosted-chat/chat-attachments'
+import { STREAM_RECONNECT_DELAYS_MS } from '@/lib/reconnect'
 import {
   disclosureLine,
   downloadBlob,
@@ -317,7 +318,8 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
   const [confirmDelete, setConfirmDelete] = useState<'conversation' | 'visitor' | null>(null)
   const [visitorAction, setVisitorAction] = useState<VisitorAction | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
-  const streamRef = useRef<EventSource | null>(null)
+  // The open reply stream, if any; closing it also stops it reconnecting.
+  const streamRef = useRef<{ close: () => void } | null>(null)
   // Files the visitor attaches to the next message, uploaded as picked.
   const uploadAttachment = useCallback((file: File) => hostedChatApi.uploadAttachment(slug, file), [slug])
   const attachments = useChatAttachments(uploadAttachment)
@@ -515,34 +517,25 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         },
       ])
 
+      // The reply's stream. A connection that drops mid-answer is opened
+      // again from the last frame it showed (`after`): the server sends the
+      // reply text from there on, then live, so nothing is missed and
+      // nothing shows twice. A connection that will not open is tried again
+      // with backoff, a few times, and then the page reads the transcript.
       streamRef.current?.close()
-      const source = new EventSource(hostedChatApi.streamUrl(slug, runId), {
-        withCredentials: true,
-      })
-      streamRef.current = source
-
-      source.addEventListener('token', (event) => {
-        // Only if the visitor is still looking at the thread this run
-        // belongs to. Switching conversations mid-stream used to append
-        // the old reply's tokens into whatever was now on screen.
-        if (activeThreadRef.current !== threadId) return
-        const payload = JSON.parse((event as MessageEvent).data || '{}')
-        const chunk = payload.token ?? payload.text ?? payload.content ?? ''
-        if (!chunk) return
-        setMessages((current) =>
-          current.map((m) => (m.id === `run-${runId}` ? { ...m, content: m.content + chunk } : m)),
-        )
-      })
-
-      // The server took back what it streamed for this reply: the step
-      // it came from turned out not to be the answer. Clear it so none of
-      // it stays on screen; the answer, if there is one, streams in after.
-      source.addEventListener('reset', () => {
-        if (activeThreadRef.current !== threadId) return
-        setMessages((current) =>
-          current.map((m) => (m.id === `run-${runId}` ? { ...m, content: '' } : m)),
-        )
-      })
+      let lastId: string | undefined
+      let failures = 0
+      let stopped = false
+      let source: EventSource | null = null
+      let retry: ReturnType<typeof setTimeout> | null = null
+      const stream = {
+        close: () => {
+          stopped = true
+          if (retry) clearTimeout(retry)
+          source?.close()
+        },
+      }
+      streamRef.current = stream
 
       // Both the done event and onerror route here, and a closed
       // EventSource can still fire onerror after done; reconcile once.
@@ -550,7 +543,7 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       const finish = async (reason?: string) => {
         if (finished) return
         finished = true
-        source.close()
+        stream.close()
         setSending(false)
 
         // The visitor moved to another conversation while this was in
@@ -565,8 +558,8 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
 
         // The stream carries progress; the transcript is the source of
         // truth, so reconcile once rather than trusting accumulated
-        // chunks (a reconnect or a non-streaming run would otherwise
-        // leave the reply empty).
+        // chunks (a non-streaming run would otherwise leave the reply
+        // empty).
         let thread: Awaited<ReturnType<typeof hostedChatApi.messages>>
         try {
           thread = await hostedChatApi.messages(slug, threadId)
@@ -591,18 +584,70 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         }
       }
 
-      source.addEventListener('done', (event) => {
-        let reason: string | undefined
-        try {
-          reason = JSON.parse((event as MessageEvent).data || '{}').reason
-        } catch {
-          /* malformed payload: fall through to the transcript check */
+      const open = () => {
+        if (stopped) return
+        const es = new EventSource(hostedChatApi.streamUrl(slug, runId, lastId), {
+          withCredentials: true,
+        })
+        source = es
+        // Where the visitor is in the reply: the id of the last frame shown.
+        const seen = (event: Event) => {
+          const id = (event as MessageEvent).lastEventId
+          if (id) lastId = id
+          failures = 0
         }
-        void finish(reason)
-      })
-      source.onerror = () => {
-        void finish()
+        es.addEventListener('open', () => {
+          failures = 0
+        })
+
+        es.addEventListener('token', (event) => {
+          seen(event)
+          // Only if the visitor is still looking at the thread this run
+          // belongs to. Switching conversations mid-stream used to append
+          // the old reply's tokens into whatever was now on screen.
+          if (activeThreadRef.current !== threadId) return
+          const payload = JSON.parse((event as MessageEvent).data || '{}')
+          const chunk = payload.token ?? payload.text ?? payload.content ?? ''
+          if (!chunk) return
+          setMessages((current) =>
+            current.map((m) => (m.id === `run-${runId}` ? { ...m, content: m.content + chunk } : m)),
+          )
+        })
+
+        // The server took back what it streamed for this reply: the step
+        // it came from turned out not to be the answer. Clear it so none of
+        // it stays on screen; the answer, if there is one, streams in after.
+        es.addEventListener('reset', (event) => {
+          seen(event)
+          if (activeThreadRef.current !== threadId) return
+          setMessages((current) =>
+            current.map((m) => (m.id === `run-${runId}` ? { ...m, content: '' } : m)),
+          )
+        })
+
+        es.addEventListener('done', (event) => {
+          let reason: string | undefined
+          try {
+            reason = JSON.parse((event as MessageEvent).data || '{}').reason
+          } catch {
+            /* malformed payload: fall through to the transcript check */
+          }
+          void finish(reason)
+        })
+
+        // The connection dropped, the server ended it at its time limit, or
+        // it could not be opened: open it again from the last frame shown.
+        es.onerror = () => {
+          if (finished || stopped || source !== es) return
+          es.close()
+          if (failures >= STREAM_RECONNECT_DELAYS_MS.length) {
+            void finish()
+            return
+          }
+          retry = setTimeout(open, STREAM_RECONNECT_DELAYS_MS[failures++])
+        }
       }
+      open()
     } catch (err: any) {
       setSending(false)
       const status = err?.response?.status

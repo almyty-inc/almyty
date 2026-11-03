@@ -233,7 +233,7 @@ describe('ChannelWidgetController', () => {
     it('returns the persisted messages for a thread', async () => {
       const out = await controller.listMessages('gw-1', 't1', undefined);
       expect(channelGatewayService.findWidgetGateway).toHaveBeenCalledWith('gw-1');
-      expect(channelGatewayService.listWidgetMessages).toHaveBeenCalledWith('gw-1', 't1', undefined);
+      expect(channelGatewayService.listWidgetMessages).toHaveBeenCalledWith('gw-1', 't1', undefined, undefined);
       expect(out.success).toBe(true);
       expect(out.data).toHaveLength(1);
       expect(out.data[0].message).toBe('hello');
@@ -244,6 +244,17 @@ describe('ChannelWidgetController', () => {
       const after = channelGatewayService.listWidgetMessages.mock.calls[0][2];
       expect(after).toBeInstanceOf(Date);
       expect(after.toISOString()).toBe('2026-07-01T10:00:00.000Z');
+    });
+
+    it('passes the last reply the widget showed through as the cursor', async () => {
+      const last = '3e7f8f3a-4a5b-4c6d-8e9f-0a1b2c3d4e5f';
+      await controller.listMessages('gw-1', 't1', undefined, last);
+      expect(channelGatewayService.listWidgetMessages).toHaveBeenCalledWith('gw-1', 't1', undefined, last);
+    });
+
+    it('refuses an afterId that is not a reply id, before any lookup', async () => {
+      await expect(controller.listMessages('gw-1', 't1', undefined, "x' OR 1=1 --")).rejects.toThrow(BadRequestException);
+      expect(channelGatewayService.listWidgetMessages).not.toHaveBeenCalled();
     });
   });
 
