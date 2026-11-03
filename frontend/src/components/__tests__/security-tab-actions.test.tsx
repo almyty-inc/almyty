@@ -120,4 +120,15 @@ describe('the Security tab', () => {
     expect(await screen.findByTestId('email-verified')).toHaveTextContent('Verified')
     expect(screen.queryByTestId('send-verification')).not.toBeInTheDocument()
   })
+
+  // Telling someone with no password to change it, to sign out other
+  // devices, sends them looking for a form that is not there.
+  it('does not tell an account without a password to change it', async () => {
+    ;(authApi.getProfile as any).mockResolvedValue({ id: 'u1', email: 'dana@example.com', hasPassword: false })
+    render(<SecurityTab />)
+    await screen.findByTestId('no-password')
+
+    expect(screen.queryByText(/change your password/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/set a password with the emailed link/i)).toBeInTheDocument()
+  })
 })

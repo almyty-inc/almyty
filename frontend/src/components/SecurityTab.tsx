@@ -207,9 +207,13 @@ export function SecurityTab() {
                 other sessions. A security control that reports nothing and
                 does nothing is worse than an absent one, because someone
                 who suspects a compromise believes they have acted. */}
-            <p className="text-xs text-muted-foreground">
-              Signing out elsewhere is not supported yet. To cut off another device, change your password: existing
-              sessions are issued against your current credentials.
+            {/* An account without a password has none to change. Setting a
+                first one through the emailed link ends every session too
+                (confirming a reset bumps tokenVersion), so that is its way. */}
+            <p className="text-xs text-muted-foreground" data-testid="sessions-note">
+              {noPassword
+                ? 'Signing out elsewhere is not supported yet. To cut off another device, set a password with the emailed link above: setting one signs you out everywhere.'
+                : 'Signing out elsewhere is not supported yet. To cut off another device, change your password: existing sessions are issued against your current credentials.'}
             </p>
           </div>
         </CardContent>
