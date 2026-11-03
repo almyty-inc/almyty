@@ -559,7 +559,7 @@
         "packages/agents-cli/src",
         "packages/agents-cli/package.json"
       ],
-      "sourceDigest": "ab996b7c1be11f7674830a23c365c6618420d7d0cdd851c2f32a1bd5269acf21",
+      "sourceDigest": "07848c7723adf4d0f347aa829a720e437fd4457a1ca06a1524aa48485dc30b78",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -578,7 +578,7 @@
         "packages/almyty-cli/src",
         "packages/almyty-cli/package.json"
       ],
-      "sourceDigest": "6dde7e5995f0885e7237fb732b3c95cbfabc17c219a154a7f3c9790e05604dee",
+      "sourceDigest": "7a76716204caa5cc045a18746e7c3f8d89672b1dc6958c1d29045e82ed1f3581",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -597,7 +597,7 @@
         "packages/auth-cli/src",
         "packages/auth-cli/package.json"
       ],
-      "sourceDigest": "3c2d9f7b5cced6411a1debce5e9009648c3f3c24ea6de3a2edd632bdd5bbd658",
+      "sourceDigest": "809ac6d8f5f827b5664076f9cf3d4c074cd6e8688fcdb4205942f0932cdd661d",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -616,7 +616,7 @@
         "packages/chat-cli/src",
         "packages/chat-cli/package.json"
       ],
-      "sourceDigest": "4f3520f84de53269e8d5be1c022ff17c279599fa7c343820074698f158e26d56",
+      "sourceDigest": "4d075037f4eeb7598b8a9fe76874db2f1b98339868fda50030f5dba93f49b8d0",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -635,7 +635,7 @@
         "packages/mcp-server/src",
         "packages/mcp-server/package.json"
       ],
-      "sourceDigest": "db70673d54fceb3cade7237d598177e01844d5c18c29a6eb65d268867313f175",
+      "sourceDigest": "b08f7f6abb6ea39c56eaace712ad3a8370dc51d89676bbea37014555bdf33927",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -654,7 +654,7 @@
         "packages/skills-cli/src",
         "packages/skills-cli/package.json"
       ],
-      "sourceDigest": "f081743429159b7fff2212df8356869cf8b5d41f9d71737b6c9a09e0323b04a7",
+      "sourceDigest": "12cab9d843a8cf2c0a02681f7375de490aa131c7e3c5f45969ec7694aff5ea8d",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -872,9 +872,9 @@
       "id": "examples-approval-policies-01-big-refunds",
       "title": "Policy: refunds over €5,000 need the finance lead, then an admin",
       "path": "screenshots/examples/approval-policies/01-big-refunds.png",
-      "capturedAt": "2026-10-27T20:13:50.183Z",
+      "capturedAt": "2026-11-03T10:44:35.589Z",
       "status": "current",
-      "sha256": "f93e241b9fcebfd1987695e16403ac7acf5e920c962a5ef2afc36358c0eecd25",
+      "sha256": "7cfc772f56fb7972ed231e966453d76e26e4d8486e732ddcae4cfd93c550c36d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -884,16 +884,16 @@
         "frontend/src/pages/approval-policy.tsx",
         "frontend/src/components/settings/approval-policy-form.tsx"
       ],
-      "sourceDigest": "77ecb417ee1718ca0a188d035253633e9d8a922970b9a5fb3a4ada619ca499a6",
+      "sourceDigest": "ad6a85b702a00be8ecdf8de05d36d427195edc72865fb179dd4b73476a4688af",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-approval-policies-02-policies",
       "title": "Two approval policies for the Finance team",
       "path": "screenshots/examples/approval-policies/02-policies.png",
-      "capturedAt": "2026-10-27T20:13:59.225Z",
+      "capturedAt": "2026-11-03T10:44:44.848Z",
       "status": "current",
-      "sha256": "46f747b125f21a4c1fbafab29c78258d3b2fd4a0a72f00db488cf3a7891abed9",
+      "sha256": "89e283022deffe5764160e0466eeeeb8b60701b50165b013d0cf1718ec99e975",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -904,7 +904,7 @@
         "frontend/src/components/settings/approval-policies-settings.tsx",
         "frontend/src/components/settings/amount-rules-card.tsx"
       ],
-      "sourceDigest": "51dc3e82602ac285cab4dcf4507f3fc615f31208f45060791cb606c38c2d9236",
+      "sourceDigest": "27b79d6c9643b062a2aced00f9993afdea383ed35daa9e740c70e1fea7b9208d",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1022,9 +1022,9 @@
       "id": "examples-audit-to-siem-02-splunk-target",
       "title": "Audit streaming: a Splunk HTTP Event Collector target",
       "path": "screenshots/examples/audit-to-siem/02-splunk-target.png",
-      "capturedAt": "2026-10-27T20:14:47.702Z",
+      "capturedAt": "2026-11-03T10:45:35.356Z",
       "status": "current",
-      "sha256": "75f7ef2351a512ac74a8bbc79101718ad3bdc704aeab724aaef778460f252ed3",
+      "sha256": "9265feaacfd65a6d76b29d58044d39430790cf9c4148f191065fbb304ea86e69",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1034,16 +1034,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings/audit-streams-settings.tsx"
       ],
-      "sourceDigest": "b0246b91c32e4fdde3d0f62a21526a2c2c0df469959fc91fe0272cac0c5da4b0",
+      "sourceDigest": "a5eaad59261b6f0766a6ca13b242cc6db427d22fb101bdafbcbd00585acbb5a1",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-audit-to-siem-03-streaming",
       "title": "Audit streaming, sending to Splunk",
       "path": "screenshots/examples/audit-to-siem/03-streaming.png",
-      "capturedAt": "2026-10-27T20:14:50.042Z",
+      "capturedAt": "2026-11-03T10:45:37.709Z",
       "status": "current",
-      "sha256": "713cb19d4f5d6be10cbf9142fab9e8dafe10b768e073af6d565198b8b2db990e",
+      "sha256": "9061d9d46071dc50bf40300d6b50b4366415ed961e2dc4d123e49b61674ccf99",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1053,7 +1053,7 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings/audit-streams-settings.tsx"
       ],
-      "sourceDigest": "b0246b91c32e4fdde3d0f62a21526a2c2c0df469959fc91fe0272cac0c5da4b0",
+      "sourceDigest": "a5eaad59261b6f0766a6ca13b242cc6db427d22fb101bdafbcbd00585acbb5a1",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -1627,9 +1627,9 @@
       "id": "examples-eu-ai-act-compliance-04-compliance-policy",
       "title": "Compliance: personal data hidden in records across the organization",
       "path": "screenshots/examples/eu-ai-act-compliance/04-compliance-policy.png",
-      "capturedAt": "2026-10-27T20:19:20.727Z",
+      "capturedAt": "2026-11-03T10:46:47.346Z",
       "status": "current",
-      "sha256": "c195fbcdfdd55dbf2de34dd3830986f1033500a41040742d179eda74e51fb204",
+      "sha256": "88d4425ae32c6298e3e0274ef334ce50ced220361e185d28342cdfb431f8267b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1639,16 +1639,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings/compliance-settings.tsx"
       ],
-      "sourceDigest": "af2af8c246a91bfa6ad2a3c96093da008d02741627c11cde2be86e6503633503",
+      "sourceDigest": "da66db743f0a63bd686cd6537756647c3baf41eeabd415e0ca92402b5df8aa0e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-eu-ai-act-compliance-05-posture",
       "title": "The compliance report",
       "path": "screenshots/examples/eu-ai-act-compliance/05-posture.png",
-      "capturedAt": "2026-10-27T20:19:27.580Z",
+      "capturedAt": "2026-11-03T10:46:54.190Z",
       "status": "current",
-      "sha256": "90a4b3a2b66f40a7f959ea0cd69e2e9d6b9c2841f33363710dfbd2dbbba545e6",
+      "sha256": "00c47af88832427315dc65b849c9d7fb3e1970ca0fd59e91594392feed6d8323",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1658,7 +1658,7 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings/compliance-settings.tsx"
       ],
-      "sourceDigest": "af2af8c246a91bfa6ad2a3c96093da008d02741627c11cde2be86e6503633503",
+      "sourceDigest": "da66db743f0a63bd686cd6537756647c3baf41eeabd415e0ca92402b5df8aa0e",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -2568,9 +2568,9 @@
       "id": "examples-multi-team-rbac-01-teams",
       "title": "Two teams, Finance and Customer support",
       "path": "screenshots/examples/multi-team-rbac/01-teams.png",
-      "capturedAt": "2026-10-27T20:12:30.713Z",
+      "capturedAt": "2026-11-03T10:43:06.141Z",
       "status": "current",
-      "sha256": "599f35d5ad60f0ae537e8704f2ec7fd3645dd317cfd38c242e52fe3fd62997fc",
+      "sha256": "65f18d08d618164cdb312f941f3b2df0feff894a42a076a89464b952f1bda7e1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2580,16 +2580,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/MembersAndTeamsTab.tsx"
       ],
-      "sourceDigest": "fe808e69285db87e3fdfdfb8be229a109dbbf9691abb4065fecd760f0c3e7fd8",
+      "sourceDigest": "cf1f4746979905815350751c1a93ff8510e86c36e76ef0e2f3f208b425603412",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-multi-team-rbac-02-invite",
       "title": "Inviting a colleague as a member",
       "path": "screenshots/examples/multi-team-rbac/02-invite.png",
-      "capturedAt": "2026-10-27T20:12:35.190Z",
+      "capturedAt": "2026-11-03T10:43:11.025Z",
       "status": "current",
-      "sha256": "109aaef1071c4d3cf22b03b601f0f9057de13a81291dd41a0faef37933473b13",
+      "sha256": "61c94039e63d632445a88ac4602a5a959a97001767a8f1c61d89a9ae388ae9b0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2599,16 +2599,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/MembersAndTeamsTab.tsx"
       ],
-      "sourceDigest": "fe808e69285db87e3fdfdfb8be229a109dbbf9691abb4065fecd760f0c3e7fd8",
+      "sourceDigest": "cf1f4746979905815350751c1a93ff8510e86c36e76ef0e2f3f208b425603412",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-multi-team-rbac-03-team-members",
       "title": "Finance with Joost as lead, Customer support with Mehmet",
       "path": "screenshots/examples/multi-team-rbac/03-team-members.png",
-      "capturedAt": "2026-10-27T20:12:52.013Z",
+      "capturedAt": "2026-11-03T10:43:29.543Z",
       "status": "current",
-      "sha256": "5f39840ab32017b00b8a185c462a8916d3b93995616b81e97a38cce721618cca",
+      "sha256": "6e42ea401e0fbdb8b4eb8f6f70af71e17b883db90ebb80730c458758f3c14f26",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2618,7 +2618,7 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/MembersAndTeamsTab.tsx"
       ],
-      "sourceDigest": "fe808e69285db87e3fdfdfb8be229a109dbbf9691abb4065fecd760f0c3e7fd8",
+      "sourceDigest": "cf1f4746979905815350751c1a93ff8510e86c36e76ef0e2f3f208b425603412",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -3590,9 +3590,9 @@
       "id": "examples-sso-scim-onboarding-01-domain-record",
       "title": "Email domains: the TXT record to add",
       "path": "screenshots/examples/sso-scim-onboarding/01-domain-record.png",
-      "capturedAt": "2026-10-27T20:15:06.050Z",
+      "capturedAt": "2026-11-03T10:45:54.245Z",
       "status": "current",
-      "sha256": "572242610dd804dcf4adf705ea0d5a05de419a49f176c8bf454663bc2eea1f11",
+      "sha256": "c84c1353ddd8e91537f0d2c9bc56ed86142c428e65bd4eabbd29b1eaa51dee9a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3603,16 +3603,16 @@
         "frontend/src/components/settings/sso-settings.tsx",
         "frontend/src/components/settings/sso-domains.tsx"
       ],
-      "sourceDigest": "41c61e06eb9266251d67e1cc6e7633eccc4b05290431842ce3215ea21f778b99",
+      "sourceDigest": "0cc3fc5eab758c581cab620c6c773251e4443fe163919abe6003bf2ade7cb379",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-sso-scim-onboarding-02-domain-verified",
       "title": "The domain, verified",
       "path": "screenshots/examples/sso-scim-onboarding/02-domain-verified.png",
-      "capturedAt": "2026-10-27T20:15:08.529Z",
+      "capturedAt": "2026-11-03T10:45:56.914Z",
       "status": "current",
-      "sha256": "4dd73644941881da8581aa6088f0c12515696e2be65709e4d47c1497c8335f98",
+      "sha256": "32fa365f84ea356daf89e355aa42c50d0924cd3d6f1b9f0d5d638808201adf36",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3623,16 +3623,16 @@
         "frontend/src/components/settings/sso-settings.tsx",
         "frontend/src/components/settings/sso-domains.tsx"
       ],
-      "sourceDigest": "41c61e06eb9266251d67e1cc6e7633eccc4b05290431842ce3215ea21f778b99",
+      "sourceDigest": "0cc3fc5eab758c581cab620c6c773251e4443fe163919abe6003bf2ade7cb379",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-sso-scim-onboarding-03-entra-oidc",
       "title": "Single sign-on with Microsoft Entra ID over OpenID Connect",
       "path": "screenshots/examples/sso-scim-onboarding/03-entra-oidc.png",
-      "capturedAt": "2026-10-27T20:15:12.365Z",
+      "capturedAt": "2026-11-03T10:46:00.832Z",
       "status": "current",
-      "sha256": "5210d2879923aa3ee07346d082c583c1361189fc32a9781b45d66ce1fbd6b200",
+      "sha256": "71a8f5229b18cb64140b8f4b3d98f6e31571042de5c3f6db0d39021a73fbe5c0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3643,16 +3643,16 @@
         "frontend/src/components/settings/sso-settings.tsx",
         "frontend/src/components/settings/sso-domains.tsx"
       ],
-      "sourceDigest": "41c61e06eb9266251d67e1cc6e7633eccc4b05290431842ce3215ea21f778b99",
+      "sourceDigest": "0cc3fc5eab758c581cab620c6c773251e4443fe163919abe6003bf2ade7cb379",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-sso-scim-onboarding-04-scim-token",
       "title": "SCIM: the base URL and a new token for Entra",
       "path": "screenshots/examples/sso-scim-onboarding/04-scim-token.png",
-      "capturedAt": "2026-10-27T20:15:16.755Z",
+      "capturedAt": "2026-11-03T10:46:05.465Z",
       "status": "current",
-      "sha256": "8d85371d059358e55cfa86731ad18f024fb1517c17d201ef3c9ec9fa33431094",
+      "sha256": "e5be3d9ba8b13051939febaaeec16425834e86a52ac86fafe16e4436ad8c7c44",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3663,16 +3663,16 @@
         "frontend/src/components/settings/sso-settings.tsx",
         "frontend/src/components/settings/sso-domains.tsx"
       ],
-      "sourceDigest": "41c61e06eb9266251d67e1cc6e7633eccc4b05290431842ce3215ea21f778b99",
+      "sourceDigest": "0cc3fc5eab758c581cab620c6c773251e4443fe163919abe6003bf2ade7cb379",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-sso-scim-onboarding-05-members",
       "title": "Members after Entra provisioned two people and removed one",
       "path": "screenshots/examples/sso-scim-onboarding/05-members.png",
-      "capturedAt": "2026-10-27T20:15:28.326Z",
+      "capturedAt": "2026-11-03T10:46:18.161Z",
       "status": "current",
-      "sha256": "0074ae1210297f12fd071f0a4126e35ed9929fd37b42adf2af07f62b9d5928c6",
+      "sha256": "6f09b3de570873882973f80f289c5d3771542a77773dbe9a8051ec8db04afe3c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -3682,7 +3682,7 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/MembersAndTeamsTab.tsx"
       ],
-      "sourceDigest": "fe808e69285db87e3fdfdfb8be229a109dbbf9691abb4065fecd760f0c3e7fd8",
+      "sourceDigest": "cf1f4746979905815350751c1a93ff8510e86c36e76ef0e2f3f208b425603412",
       "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
@@ -4799,9 +4799,9 @@
       "id": "guides-support-8-amount-rule",
       "title": "Ask before refunds over 500",
       "path": "screenshots/guides/support-8-amount-rule.png",
-      "capturedAt": "2026-10-27T19:16:12.487Z",
+      "capturedAt": "2026-11-03T10:37:58.637Z",
       "status": "current",
-      "sha256": "973ecaff25f0634e504fc36331c0cb1b87ec864b6b8a64023cfe5509f7eba9aa",
+      "sha256": "82f3971c07f35cfb5939f9977233ca5c9f0e097c3219c233c8c10cddad312be5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -4812,7 +4812,7 @@
         "frontend/src/components/settings/approval-amount-rule.tsx",
         "frontend/src/lib/approval-rules.ts"
       ],
-      "sourceDigest": "e9ed9f5e99c32346f1f871555470a0d8cc912cc9912508a3c23320c93d583760",
+      "sourceDigest": "5607728386f6fd7932e02b5451111555db3365925104e64bcc4abc584386cc02",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
@@ -5163,9 +5163,9 @@
       "id": "settings-approval-policies-enabled",
       "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
-      "capturedAt": "2026-10-27T19:10:24.389Z",
+      "capturedAt": "2026-11-03T10:36:33.943Z",
       "status": "current",
-      "sha256": "46355e42197697ce109385443ac66c5a2fe19f5dbbd17342eaf6c30121f9bf9f",
+      "sha256": "a97e4cec2ea899c1dddb7aa45d3f0d0783a56ffc40c0f413a78bb2178d37b8cf",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5176,16 +5176,16 @@
         "frontend/src/pages/approval-policy.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "14c7d7133a014f8556e4d2b1f9d3758a3c8a73989257fcd97e6b9c2d97081b9d",
+      "sourceDigest": "6a583236f2021d0664cdc142af922029ec27ddbb1e7df1d994e77cfe7fe72962",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
-      "capturedAt": "2026-10-27T19:10:26.999Z",
+      "capturedAt": "2026-11-03T10:36:36.708Z",
       "status": "current",
-      "sha256": "77ed8a71555fde8fb1c915330d20234a3bd2600ea93fe9a69dee3121bd1bba76",
+      "sha256": "69370eb466dc0b3956b0a6366566585a5cb35f2cd31a188bd9ecd9caa03048de",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5195,14 +5195,14 @@
         "frontend/src/pages/approval-policy.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "1bb4fcf7cf9ce1beb6eeb3528c33ac94187de3dfd457bde94ffc49d577f84643",
+      "sourceDigest": "f5f44d4a661aa0af542fcbe1c50ecf02caf887916ccc2edc1ed72b364b9b06c8",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
-      "capturedAt": "2026-10-27T19:10:32.228Z",
+      "capturedAt": "2026-11-03T10:36:42.164Z",
       "status": "current",
       "sha256": "146c3ac217930a3f8a464d987abc8eb961e2d3afb78bb46cb2c14828575626e1",
       "source": {
@@ -5214,16 +5214,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "bf3733e5cdedc507cf326163a046c981c6b33b7797799162053e8492cab77599",
+      "sourceDigest": "8d83c3c4ea70605a4e77cb090dce6fe4ac0ff9144bfbb7b842ac0655fac9e574",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
-      "capturedAt": "2026-10-27T19:10:29.623Z",
+      "capturedAt": "2026-11-03T10:36:39.451Z",
       "status": "current",
-      "sha256": "9a210b05ec69a0eee49b743d448ec6997183ad0891962ee43277cbf469505f18",
+      "sha256": "7b3bd747c07599e0d388bc33197ed78c34b375d4ae6b40eebe909ca668277fba",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5233,16 +5233,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "bf3733e5cdedc507cf326163a046c981c6b33b7797799162053e8492cab77599",
+      "sourceDigest": "8d83c3c4ea70605a4e77cb090dce6fe4ac0ff9144bfbb7b842ac0655fac9e574",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-encryption-locked",
       "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
-      "capturedAt": "2026-10-27T19:10:34.762Z",
+      "capturedAt": "2026-11-03T10:36:44.807Z",
       "status": "current",
-      "sha256": "24fa645579dbe848cc58d8874470443f09f3ffa8ad15e3a17c4fa764f41bd8f9",
+      "sha256": "7b672c07ed3a5033721b3db29b308226cc8bf6fb7a01ade151538449bb3bdb4c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5252,16 +5252,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "bf3733e5cdedc507cf326163a046c981c6b33b7797799162053e8492cab77599",
+      "sourceDigest": "8d83c3c4ea70605a4e77cb090dce6fe4ac0ff9144bfbb7b842ac0655fac9e574",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-enabled",
       "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
-      "capturedAt": "2026-10-27T19:10:12.551Z",
+      "capturedAt": "2026-11-03T10:36:21.574Z",
       "status": "current",
-      "sha256": "682dc75aa26685cfebf682c93b29ea9910ddc23be2c4c258aa8294fde2f1eb33",
+      "sha256": "b910857765f570d4d879843adcb0e640d7c29148ce60c7214dce2ab3397d64cc",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5271,16 +5271,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "bf3733e5cdedc507cf326163a046c981c6b33b7797799162053e8492cab77599",
+      "sourceDigest": "8d83c3c4ea70605a4e77cb090dce6fe4ac0ff9144bfbb7b842ac0655fac9e574",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-policy",
-      "title": "New access policy",
+      "title": "New access rule",
       "path": "screenshots/settings-rbac-new-policy.png",
-      "capturedAt": "2026-10-27T19:10:19.158Z",
+      "capturedAt": "2026-11-03T10:36:28.310Z",
       "status": "current",
-      "sha256": "54b5541e155c92198298b99b955142d035c3b123897ec930ddab436071fc772c",
+      "sha256": "9790d3041c3ef099c39835308576bfa94bde15514531251d58186d50d9f64057",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5290,16 +5290,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "bf3733e5cdedc507cf326163a046c981c6b33b7797799162053e8492cab77599",
+      "sourceDigest": "8d83c3c4ea70605a4e77cb090dce6fe4ac0ff9144bfbb7b842ac0655fac9e574",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
-      "capturedAt": "2026-10-27T19:10:15.845Z",
+      "capturedAt": "2026-11-03T10:36:24.868Z",
       "status": "current",
-      "sha256": "be64eaac71cece688baf1d8f423583faf4634434afcd8849d0089e7195134573",
+      "sha256": "d102b1b244e805423528d19136b35bc3881489c35c8c9c60b4da49acd0d24bd0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5309,16 +5309,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "bf3733e5cdedc507cf326163a046c981c6b33b7797799162053e8492cab77599",
+      "sourceDigest": "8d83c3c4ea70605a4e77cb090dce6fe4ac0ff9144bfbb7b842ac0655fac9e574",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
-      "capturedAt": "2026-10-27T19:10:21.793Z",
+      "capturedAt": "2026-11-03T10:36:31.034Z",
       "status": "current",
-      "sha256": "382828240956e35a665a156b47c4ff4d1e3b242b6dba40c66f1f0a1284464348",
+      "sha256": "0bb22fe8eb53abacfb836d460cb8e41019ca9e91b77bcde7e25955a0f2b4f66c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5328,16 +5328,16 @@
         "frontend/src/pages/settings.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "bf3733e5cdedc507cf326163a046c981c6b33b7797799162053e8492cab77599",
+      "sourceDigest": "8d83c3c4ea70605a4e77cb090dce6fe4ac0ff9144bfbb7b842ac0655fac9e574",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-teams",
       "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
-      "capturedAt": "2026-10-27T19:10:09.940Z",
+      "capturedAt": "2026-11-03T10:36:18.814Z",
       "status": "current",
-      "sha256": "557e4455a094bec6a4631f7f8d7c01bd181fc019cbbc2aba68507df509094ce3",
+      "sha256": "e972694dd532d68447c4fd79e377c76944b23a34f01497f7299f968e5dc2d6cf",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -5348,7 +5348,7 @@
         "frontend/src/components/MembersAndTeamsTab.tsx",
         "frontend/src/components/settings"
       ],
-      "sourceDigest": "4ce5fbdd93a191114a0c0a4e081515abf2b6f6a7ccad66e876dde2f63876dded",
+      "sourceDigest": "32205c10fb0d27fa253b5ca744b94f32fd6b1c7a213ab86a0e10e07189bb8c08",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -6512,6 +6512,368 @@
       ],
       "sourceDigest": "2183b4309fd6e13f07f5519e7ee62e49b9b267fe95139bc4efcb255f741f07f9",
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
+    },
+    {
+      "id": "tutorials-personal-00-telegram-flight",
+      "title": "Personal assistant: the flight change in Telegram",
+      "path": "screenshots/tutorials/personal/00-telegram-flight.png",
+      "capturedAt": "2026-11-03T11:35:51.322Z",
+      "status": "current",
+      "sha256": "20bd2b6bccd9bc2caad799181398e7fc3df4a12539f8cd0d5d133b0eb31be090",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "backend/src/modules/gateways/channels/adapters/telegram.adapter.ts",
+        "backend/src/modules/agents/always-on/always-on.service.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
+      ],
+      "sourceDigest": "83f01429e8497d85022fe3d0318b08276a243ec469d8425d6191073552ecbaa2",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data. The page lays out the messages exactly as almyty sent them to Telegram; Telegram was not used."
+    },
+    {
+      "id": "tutorials-personal-01-calendar-scopes",
+      "title": "Google Calendar sign-in: permission to change events",
+      "path": "screenshots/tutorials/personal/01-calendar-scopes.png",
+      "capturedAt": "2026-11-03T11:34:00.515Z",
+      "status": "current",
+      "sha256": "4d5e65c45c99d75c5215e708ea2478e9a1a876a8b01971eacd1395b027246f3a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=4&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-02-apis",
+      "title": "Google Calendar, Gmail and Google Tasks connected",
+      "path": "screenshots/tutorials/personal/02-apis.png",
+      "capturedAt": "2026-11-03T11:34:11.727Z",
+      "status": "current",
+      "sha256": "281e0c2fcdfa781854d4bf764c9ff8a3865c739683b130eaf4f25f282c745bf4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx"
+      ],
+      "sourceDigest": "62f5ec5d1788013a70ad4a08ad9e73cd4d141b63f60fa3c1976168c56a12549b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-03-agent-instructions",
+      "title": "Personal assistant: model, personality and instructions",
+      "path": "screenshots/tutorials/personal/03-agent-instructions.png",
+      "capturedAt": "2026-11-03T11:34:13.706Z",
+      "status": "current",
+      "sha256": "4fa33b7772aa54c53890de78f0f54723c87e36128f089697bf217617826a26bf",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "db9e90d309f05bc238c2c24412fe330163d684a5e1167183cce3bb18deb46cb7",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-04-agent-memory",
+      "title": "Personal assistant: memory",
+      "path": "screenshots/tutorials/personal/04-agent-memory.png",
+      "capturedAt": "2026-11-03T11:34:15.904Z",
+      "status": "current",
+      "sha256": "c13c06275295490999b3093b57e66a73cdca46e3600554521e0b75a3d53a113e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "db9e90d309f05bc238c2c24412fe330163d684a5e1167183cce3bb18deb46cb7",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-05-agent-tools",
+      "title": "Personal assistant: tools",
+      "path": "screenshots/tutorials/personal/05-agent-tools.png",
+      "capturedAt": "2026-11-03T11:34:19.662Z",
+      "status": "current",
+      "sha256": "00dd479746ff460616614fd4dc38b13159139396eaab37aaa101d19b475d0300",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "db9e90d309f05bc238c2c24412fe330163d684a5e1167183cce3bb18deb46cb7",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-06-telegram-token",
+      "title": "Telegram channel: the bot token",
+      "path": "screenshots/tutorials/personal/06-telegram-token.png",
+      "capturedAt": "2026-11-03T11:34:28.732Z",
+      "status": "current",
+      "sha256": "f1309d2b0733297ef345f3cea215cd9499ed069eb951c1b5ceba05357991ab24",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels"
+      ],
+      "sourceDigest": "252c7c1f567e1c9aff770c87bccfcb918d02c132cf5cb178916a7ebfb1d95156",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-07-telegram-live",
+      "title": "Telegram channel, live and registered with Telegram",
+      "path": "screenshots/tutorials/personal/07-telegram-live.png",
+      "capturedAt": "2026-11-03T11:34:40.246Z",
+      "status": "current",
+      "sha256": "8b708e7818ac55b791159ca05c2ec59e5bb40117bcf531d5b7444d8a8808bf75",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels"
+      ],
+      "sourceDigest": "252c7c1f567e1c9aff770c87bccfcb918d02c132cf5cb178916a7ebfb1d95156",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-08-always-on",
+      "title": "Always on: standing instructions and what wakes it",
+      "path": "screenshots/tutorials/personal/08-always-on.png",
+      "capturedAt": "2026-11-03T11:34:43.764Z",
+      "status": "current",
+      "sha256": "ec48c24731f1caec6699090306c1c12265e956d48e1413140956dd33d84cffbe",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts"
+      ],
+      "sourceDigest": "687101deb4aee56ef5fcec6e2a3b5abb084227868c7a1eb609801eeb11a2f042",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-09-talk-and-ask-first",
+      "title": "Always on: talk to it in Telegram, ask first before every change",
+      "path": "screenshots/tutorials/personal/09-talk-and-ask-first.png",
+      "capturedAt": "2026-11-03T11:34:46.817Z",
+      "status": "current",
+      "sha256": "ef6d9cbd3e40199a75789afd5e454330881d778340307b2526351bacabd843d7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts"
+      ],
+      "sourceDigest": "687101deb4aee56ef5fcec6e2a3b5abb084227868c7a1eb609801eeb11a2f042",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-10-reports",
+      "title": "Always on: reports to Telegram",
+      "path": "screenshots/tutorials/personal/10-reports.png",
+      "capturedAt": "2026-11-03T11:34:49.365Z",
+      "status": "current",
+      "sha256": "38cb05e4a76cdea8a0b9795600998c4b3f5284473f689fd5560336c538dd2abb",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts"
+      ],
+      "sourceDigest": "687101deb4aee56ef5fcec6e2a3b5abb084227868c7a1eb609801eeb11a2f042",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-11-always-on-card",
+      "title": "Always on, on the agent page",
+      "path": "screenshots/tutorials/personal/11-always-on-card.png",
+      "capturedAt": "2026-11-03T11:34:54.757Z",
+      "status": "current",
+      "sha256": "eb911d0ec574fcb3dc42fff83cc812fc0d727a8098721500fe07b37a021163ab",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-12-privacy",
+      "title": "Settings, Compliance: hide personal data",
+      "path": "screenshots/tutorials/personal/12-privacy.png",
+      "capturedAt": "2026-11-03T11:34:59.941Z",
+      "status": "current",
+      "sha256": "8cb26871e61d2ce60058235989e446883cd137738448445252720de9d14d3318",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/compliance"
+      },
+      "sources": [
+        "frontend/src/components/settings/compliance-settings.tsx",
+        "frontend/src/pages/settings.tsx"
+      ],
+      "sourceDigest": "af2af8c246a91bfa6ad2a3c96093da008d02741627c11cde2be86e6503633503",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-13-telegram-intro",
+      "title": "Telling the assistant about yourself in Telegram",
+      "path": "screenshots/tutorials/personal/13-telegram-intro.png",
+      "capturedAt": "2026-11-03T11:35:07.099Z",
+      "status": "current",
+      "sha256": "508b23f4dce6a3c296ead7aeb9db09ddad997a45bda3e78e19a82294d4db74c4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "backend/src/modules/gateways/channels/adapters/telegram.adapter.ts",
+        "backend/src/modules/agents/always-on/always-on.service.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
+      ],
+      "sourceDigest": "83f01429e8497d85022fe3d0318b08276a243ec469d8425d6191073552ecbaa2",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data. The page lays out the messages exactly as almyty sent them to Telegram; Telegram was not used."
+    },
+    {
+      "id": "tutorials-personal-14-memory",
+      "title": "What the assistant remembers about Elena",
+      "path": "screenshots/tutorials/personal/14-memory.png",
+      "capturedAt": "2026-11-03T11:35:12.044Z",
+      "status": "current",
+      "sha256": "ae736e21b27cb3fc7a66c588f12f719e7f065849baea5d6227a9e1ae24f7754e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-15-approve-move",
+      "title": "Approving the moved meeting",
+      "path": "screenshots/tutorials/personal/15-approve-move.png",
+      "capturedAt": "2026-11-03T11:35:30.982Z",
+      "status": "current",
+      "sha256": "29882e0c9284fa2e9e8e5483b93b5fc55a729a346b3ba67d5fb2e5eac454365d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts"
+      ],
+      "sourceDigest": "2a0330a1c7d92bb80caa246880377a86eb9cb67c5a319c8bb21dd11410cf9d07",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-16-approve-email",
+      "title": "Approving the email to Tom",
+      "path": "screenshots/tutorials/personal/16-approve-email.png",
+      "capturedAt": "2026-11-03T11:35:43.234Z",
+      "status": "current",
+      "sha256": "603a5574fd3ac9d5a82e65b8a8d5e3049057d362b96f56b6013a9b499729c005",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts"
+      ],
+      "sourceDigest": "2a0330a1c7d92bb80caa246880377a86eb9cb67c5a319c8bb21dd11410cf9d07",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-17-what-woke-it",
+      "title": "What woke it lately",
+      "path": "screenshots/tutorials/personal/17-what-woke-it.png",
+      "capturedAt": "2026-11-03T11:35:55.198Z",
+      "status": "current",
+      "sha256": "839fcf8574da58d150046d8fab2d69256989559ebe696d7fa01bfa295873088e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts"
+      ],
+      "sourceDigest": "687101deb4aee56ef5fcec6e2a3b5abb084227868c7a1eb609801eeb11a2f042",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-18-memory-after",
+      "title": "The assistant remembers what Elena said yes to",
+      "path": "screenshots/tutorials/personal/18-memory-after.png",
+      "capturedAt": "2026-11-03T11:36:00.051Z",
+      "status": "current",
+      "sha256": "2519c6cfa165d4d3e5218bfc4aa362d40fcc1ee2b53487498869243b479bc838",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
     },
     {
       "id": "versioning-history",

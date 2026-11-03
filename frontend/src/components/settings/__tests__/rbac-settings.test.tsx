@@ -109,7 +109,7 @@ describe('RbacSettings', () => {
     render(<RbacSettings />)
 
     await waitFor(() =>
-      expect(screen.getByText(/Advanced RBAC/i)).toBeInTheDocument(),
+      expect(screen.getByText(/Custom roles and access rules/i)).toBeInTheDocument(),
     )
     // Upgrade CTA present.
     expect(screen.getByText(/Upgrade to Business|View plans/i)).toBeInTheDocument()
@@ -170,7 +170,7 @@ describe('RbacSettings', () => {
     const catalog = screen.getByTestId('rbac-permission-catalog')
     expect(catalog).toHaveTextContent('agents:execute')
     expect(catalog).toHaveTextContent('Run agents, answer their questions and cancel their runs')
-    expect(catalog).toHaveTextContent('Anything else gates nothing.')
+    expect(catalog).toHaveTextContent('Anything not on this list has no effect.')
     expect(rbacApi.listPermissions).toHaveBeenCalled()
   })
   it('deletes a role via DELETE /rbac/roles/:id', async () => {
@@ -216,10 +216,10 @@ describe('RbacSettings', () => {
     render(<RbacSettings />)
 
     await screen.findByText('release-manager')
-    await user.click(screen.getByRole('button', { name: /new policy/i }))
+    await user.click(screen.getByRole('button', { name: /new rule/i }))
 
     await user.type(await screen.findByLabelText('Name'), 'deny-prod')
-    await user.click(screen.getByRole('button', { name: /create policy/i }))
+    await user.click(screen.getByRole('button', { name: /create rule/i }))
 
     await waitFor(() => expect(rbacApi.createPolicy).toHaveBeenCalledTimes(1))
     const arg = (rbacApi.createPolicy as ReturnType<typeof vi.fn>).mock.calls[0][0]

@@ -91,7 +91,7 @@ describe('BillingTab', () => {
 
     // Annual shows the per-seat annual price ($200/yr, 2 months free vs $240).
     await waitFor(() => expect(screen.getByText('$200')).toBeInTheDocument())
-    expect(screen.getByText(/\$200\/yr vs \$240 — 2 months free/)).toBeInTheDocument()
+    expect(screen.getByText(/\$200\/yr instead of \$240, 2 months free/)).toBeInTheDocument()
     // Monthly $20 headline price is gone once annual is selected.
     expect(screen.queryByText('$20')).not.toBeInTheDocument()
   })
@@ -124,11 +124,11 @@ describe('BillingTab', () => {
     )
     // Comparison matrix is always shown so the user sees every tier.
     expect(screen.getByText('Compare plans')).toBeInTheDocument()
-    expect(screen.getByText('SSO / SAML + SCIM')).toBeInTheDocument()
+    expect(screen.getByText('Single sign-on and automatic member sync')).toBeInTheDocument()
     // No self-serve checkout cards when Stripe is not configured.
     expect(screen.queryByText('Upgrade to Pro')).not.toBeInTheDocument()
     expect(
-      screen.getByText(/Hosted billing is not configured for this deployment/),
+      screen.getByText(/Paying online is not set up on this server/),
     ).toBeInTheDocument()
   })
 
@@ -137,8 +137,8 @@ describe('BillingTab', () => {
     const { unmount } = render(<BillingTab organizationId={ORG} />)
 
     // Free org: the SSO row's Business column shows a lock, not a check.
-    await waitFor(() => expect(screen.getByText('SSO / SAML + SCIM')).toBeInTheDocument())
-    const freeRow = screen.getByText('SSO / SAML + SCIM').closest('tr')!
+    await waitFor(() => expect(screen.getByText('Single sign-on and automatic member sync')).toBeInTheDocument())
+    const freeRow = screen.getByText('Single sign-on and automatic member sync').closest('tr')!
     expect(freeRow.querySelector('[data-testid="lock-free"]')).toBeTruthy()
     expect(freeRow.querySelector('[data-testid="lock-business"]')).toBeNull()
     expect(freeRow.querySelector('[data-testid="incl-business"]')).toBeTruthy()
@@ -150,7 +150,7 @@ describe('BillingTab', () => {
     render(<BillingTab organizationId={ORG} />)
     await waitFor(() => expect(screen.getAllByText('Business').length).toBeGreaterThan(0))
     // Business column includes SSO.
-    const bizRow = screen.getByText('SSO / SAML + SCIM').closest('tr')!
+    const bizRow = screen.getByText('Single sign-on and automatic member sync').closest('tr')!
     expect(bizRow.querySelector('[data-testid="incl-business"]')).toBeTruthy()
   })
 
@@ -196,7 +196,7 @@ describe('BillingTab', () => {
     )
     expect(screen.queryByText(/You're on the Free plan/)).not.toBeInTheDocument()
     expect(
-      screen.queryByText(/Hosted billing is not configured for this deployment/),
+      screen.queryByText(/Paying online is not set up on this server/),
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Upgrade to Pro')).not.toBeInTheDocument()
     // A 403 will not resolve on retry, so no retry affordance is offered.

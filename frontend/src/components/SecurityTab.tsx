@@ -183,7 +183,7 @@ export function SecurityTab() {
             Active sessions
           </CardTitle>
           <CardDescription>
-            Manage your active login sessions
+            Where you are signed in
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -212,8 +212,8 @@ export function SecurityTab() {
                 (confirming a reset bumps tokenVersion), so that is its way. */}
             <p className="text-xs text-muted-foreground" data-testid="sessions-note">
               {noPassword
-                ? 'Signing out elsewhere is not supported yet. To cut off another device, set a password with the emailed link above: setting one signs you out everywhere.'
-                : 'Signing out elsewhere is not supported yet. To cut off another device, change your password: existing sessions are issued against your current credentials.'}
+                ? "You can't sign out other devices from here yet. To cut off another device, set a password with the emailed link above, which ends every session."
+                : "You can't sign out other devices from here yet. To cut off another device, change your password, which ends every session signed in with the old one."}
             </p>
           </div>
         </CardContent>

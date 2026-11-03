@@ -51,8 +51,8 @@ Back in almyty, fill in:
 - **Client ID**: the Application (client) ID
 - **Client secret**: the secret's Value
 - **Redirect URI**: the same redirect URI you registered in Entra
-- Leave **Just-in-time provisioning** off: Entra will create the accounts (next step), so nobody gets in who IT has not added.
-- Turn on **Enable SSO login**.
+- Leave **Add people when they first sign in** off: Entra will create the accounts (next step), so nobody gets in who IT has not added.
+- Turn on **Use single sign-on**.
 
 ![Single sign-on with Entra ID over OpenID Connect](/screenshots/examples/sso-scim-onboarding/03-entra-oidc.png)
 
@@ -60,7 +60,7 @@ Click **Save SSO settings**.
 
 ## 4. Let Entra add and remove people
 
-In almyty, under **SCIM provisioning**, click **Generate SCIM token**. Copy the token now (it is shown once) and the **SCIM base URL**:
+In almyty, under **Automatic member sync (SCIM)**, click **Generate SCIM token**. Copy the token now (it is shown once) and the **SCIM base URL**:
 
 ![The SCIM base URL and a new token](/screenshots/examples/sso-scim-onboarding/04-scim-token.png)
 

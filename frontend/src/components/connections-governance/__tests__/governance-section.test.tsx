@@ -60,7 +60,7 @@ describe('ConnectionsGovernanceSection', () => {
     render(<ConnectionsGovernanceSection />)
     expect(screen.getByRole('region', { name: 'Credential rules' })).toBeInTheDocument()
     const locked = screen.getByTestId('governance-locked')
-    expect(locked).toHaveTextContent('Credentials governance')
+    expect(locked).toHaveTextContent('Credential rules')
     expect(locked).toHaveTextContent(/Upgrade to unlock it for your organization/)
     expect(screen.getByRole('link', { name: /upgrade|view plans/i })).toHaveAttribute('href', '/settings/billing')
     expect(screen.queryByTestId('governance-unlocked')).not.toBeInTheDocument()

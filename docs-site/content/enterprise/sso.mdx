@@ -18,8 +18,8 @@ Owners and admins do this once for the organization.
 3. Fill in what your identity provider gives you:
    - **SAML 2.0**: **IdP SSO URL (entry point)**, **SP entity ID (issuer)** and **IdP signing certificate (PEM)**.
    - **OpenID Connect**: **Issuer URL**, **Client ID** and client secret. Give your identity provider the **Redirect URI** shown on the page.
-4. Turn on **Just-in-time provisioning** if people who sign in for the first time should get an account automatically (see below).
-5. Turn on **Enable SSO login** and click **Save SSO settings**.
+4. Turn on **Add people when they first sign in** if people who sign in for the first time should get an account automatically (see below).
+5. Turn on **Use single sign-on** and click **Save SSO settings**.
 
 Signing in with SSO gives the same session as signing in with a password, so roles, teams and the audit log work exactly the same.
 
@@ -43,7 +43,7 @@ When someone signs in through SSO, almyty looks them up by email:
 
 - **A member of your organization**: signed in.
 - **A member whose access was switched off**: refused, on a page that says their access was turned off and to ask an admin.
-- **Someone new**: gets an account with the default role, but only if **Just-in-time provisioning** is on and their address is on one of your verified domains. Otherwise refused, and they join through SCIM or an invitation.
+- **Someone new**: gets an account with the default role, but only if **Add people when they first sign in** is on and their address is on one of your verified domains. Otherwise refused, and they join through SCIM or an invitation.
 - **Someone with an almyty account who is not in your organization**: refused. SSO never adds an existing account to an organization; invite them instead.
 
 Every refusal lands on a sign-in page that says why and what to do, and every sign-in and refusal is on the [audit trail](/enterprise/audit-export).
