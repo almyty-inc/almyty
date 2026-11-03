@@ -46,13 +46,13 @@ const SELF_SERVE_PLANS = [
   {
     key: 'pro',
     label: 'Pro',
-    blurb: 'Unlimited resources, managed credits, email support.',
+    blurb: 'No limits on what you create, managed credits and email support.',
     monthly: 20,
   },
   {
     key: 'business',
     label: 'Business',
-    blurb: 'SSO, advanced RBAC, approvals, PII filtering, audit export.',
+    blurb: 'Single sign-on, custom roles, approvals, personal-data hiding and audit export.',
     monthly: 60,
   },
 ] as const
@@ -240,7 +240,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
 
               {!status?.stripeConfigured && (
                 <p className="text-sm text-muted-foreground italic">
-                  Hosted billing is not configured for this deployment.
+                  Paying online is not set up on this server.
                 </p>
               )}
             </>
@@ -316,7 +316,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                       </div>
                       {annual ? (
                         <p className="text-sm text-cyan-600 dark:text-cyan-400">
-                          {formatUsd(annualPrice)}/yr vs {formatUsd(fullYear)} — 2 months free
+                          {formatUsd(annualPrice)}/yr instead of {formatUsd(fullYear)}, 2 months free
                         </p>
                       ) : (
                         <p className="text-sm text-muted-foreground">
@@ -341,7 +341,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
               <CardHeader>
                 <CardTitle>Enterprise</CardTitle>
                 <CardDescription>
-                  SSO/SAML, SCIM, compliance pack, BYO-KMS, cost attribution, custom SLAs.
+                  Everything in Business, plus your own encryption keys, costs by team and support terms agreed with you.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

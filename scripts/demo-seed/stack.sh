@@ -9,10 +9,14 @@
 #   scripts/demo-seed/stack.sh env     print the variables seed.mjs/capture read
 #
 # USECASES=1 also starts usecases/upstream.mjs, the stand-in for Google,
-# HubSpot, Slack, Resend and a scripted model that the tutorials'
+# HubSpot, Slack, Resend, Telegram and a scripted model that the tutorials'
 # screenshots are captured against (usecases/tutorials.mjs), and loads
-# usecases/redirect-fetch.mjs into the API so its email and Slack traffic
-# goes there instead of the real services.
+# usecases/redirect-fetch.mjs into the API so its email, Slack and Telegram
+# traffic goes there instead of the real services. For the personal-assistant
+# tutorial (usecases/personal-assistant.mjs) add USECASE_PERSONA=elena (the
+# stand-in serves Elena's calendars, mail and tasks) and
+# PUBLIC_API_URL=http://localhost:$API_PORT (publishing a Telegram channel
+# registers its webhook only when the public address is known).
 #
 # Ports default to ones the usual stacks leave alone; override any of them.
 set -euo pipefail

@@ -21,7 +21,7 @@ This needs the **Business** or **Enterprise** plan. Owners and admins manage it 
 
 ![New custom role form with name, description and permissions](/screenshots/settings-rbac-new-role.png)
 
-A custom role only ever adds to what someone's basic role already allows; it never takes anything away. A viewer given `agents:execute` can run agents; a member without it still can, because members run agents anyway. **Effective permissions** on the same page shows what a person can do with all their roles together.
+A custom role only ever adds to what someone's basic role already allows; it never takes anything away. A viewer given `agents:execute` can run agents; a member without it still can, because members run agents anyway. **What someone can do** on the same page shows what a person can do with all their roles together.
 
 ### The permissions
 
@@ -46,9 +46,9 @@ A `*` stands for "any": `agents:*` is every agent permission, `*:read` is every 
 
 Use an access policy when the answer depends on the details of a request rather than on who is asking.
 
-1. Under **Access policies (ABAC)**, click **New policy**.
+1. Under **Access rules**, click **New rule**.
 2. Enter a **Name**, choose the **Effect** (allow or deny), the **Action** it covers (one of [the permissions](#the-permissions), such as `agents:execute`), a **Priority** and a **Description**.
-3. Click **Create policy**.
+3. Click **Create rule**.
 
 ![New access policy form with effect, priority and action](/screenshots/settings-rbac-new-policy.png)
 
