@@ -38,6 +38,7 @@ import { ChannelGatewayService } from '../../modules/gateways/channels/channel-g
 import { HostedChatController } from '../../modules/gateways/channels/hosted-chat.controller';
 import { HostedChatService } from '../../modules/gateways/channels/hosted-chat.service';
 import { GatewayRateLimitService, STREAM_OPENS_PER_VISITOR } from '../../modules/gateways/gateway-rate-limit.service';
+import { visitorPosPastEvent } from '../../modules/agents/run-stream-position';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
@@ -381,6 +382,26 @@ describeIfDb('visitor resume (real Postgres and Redis)', () => {
       } as Partial<AgentRun>),
     );
     expect(await service.openRunOf(conversation)).toBe(next.id);
+  });
+
+  it('a run carried on after waiting for input: from where its stream ended, only the new reply', async () => {
+    const { sessionKey, run } = await visitorWithRun();
+    helper.emitEvent(run.id, 'llm.started', { step: 0, answer: true });
+    helper.emitEvent(run.id, 'llm.chunk', { step: 0, content: 'Which colour would you like?' });
+    helper.emitEvent(run.id, 'llm.response', { step: 0, content: 'Which colour would you like?' });
+    // The writes above are not awaited by the runtime; wait until Redis has them.
+    for (let i = 0; i < 200 && (await redis.xlen(`run:${run.id}:events`)) < 3; i++) await new Promise((r) => setTimeout(r, 5));
+    const end = await helper.lastRunEventPos(run.id);
+    expect(end).toMatch(/^\d+-\d+$/);
+    helper.emitEvent(run.id, 'llm.started', { step: 1, answer: true });
+    helper.emitEvent(run.id, 'llm.chunk', { step: 1, content: 'Blue it is.' });
+    helper.emitEvent(run.id, 'run.completed', { output: 'Blue it is.' });
+
+    const c = connect(run.id, sessionKey, visitorPosPastEvent(end!));
+    await c.ended;
+    expect(c.tokens()).toEqual(['Blue it is.']);
+    expect(c.raw()).not.toContain('Which colour');
+    expect(await helper.lastRunEventPos('no-such-run')).toBeNull();
   });
 
   it('the widget streams a run only to the thread, widget and agent it was started under', async () => {

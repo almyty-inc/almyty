@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { AlmytyAcpAgent } from '../agent.js';
-import { autonomousTextStream, type SessionUpdatePayload } from '../events.js';
+import { autonomousTextStream, isTerminalEvent, mapStreamEvent, type SessionUpdatePayload } from '../events.js';
 import type { StreamEvent } from '../proxy.js';
 
 /** A runtime event as the run stream sends it: the event whole, with its place. */
@@ -124,5 +124,46 @@ describe('ACP: an autonomous answer streams as it is written', () => {
       'agent_message_chunk| ships Monday.',
     ]);
     expect(reply.result.content).toEqual([{ type: 'text', text: 'Your order ships Monday.' }]);
+  });
+});
+
+describe('ACP: an autonomous run’s tool calls reach the editor', () => {
+  it('reads each event’s own fields from under `data`, as the run stream sends them', () => {
+    expect(mapStreamEvent(ev('tool.started', { step: 0, toolCallId: 't1', tool: 'search_orders' }))).toEqual([
+      { type: 'tool_call', toolCallId: 't1', title: 'search_orders', kind: 'search', status: 'running', rawInput: undefined },
+    ]);
+    expect(mapStreamEvent(ev('tool.result', { step: 0, toolCallId: 't1', tool: 'search_orders', success: true, executionTime: 40 }))).toEqual([
+      { type: 'tool_call_update', toolCallId: 't1', status: 'completed', content: undefined },
+    ]);
+    expect(mapStreamEvent(ev('tool.result', { step: 0, toolCallId: 't2', tool: 'refund', success: false, error: 'Card declined' }))).toEqual([
+      { type: 'tool_call_update', toolCallId: 't2', status: 'error', error: 'Card declined' },
+    ]);
+  });
+
+  it('a failed run says why, and ends the turn', () => {
+    const failed = ev('run.failed', { error: 'Provider unavailable' });
+    expect(mapStreamEvent(failed)).toEqual([{ type: 'agent_message_chunk', text: 'Error: Provider unavailable' }]);
+    expect(isTerminalEvent(failed)).toBe(true);
+  });
+
+  it('an event with no envelope (a workflow stream) is read as it is', () => {
+    const plain: StreamEvent = { event: 'node.started', data: { nodeId: 'n1', nodeType: 'llm_call', label: 'Draft', data: { nested: true } } };
+    expect(mapStreamEvent(plain)).toEqual([
+      { type: 'tool_call', toolCallId: 'n1', title: 'Draft', kind: 'think', status: 'running', rawInput: undefined },
+    ]);
+  });
+
+  it('the editor sees the tool call start and finish during a prompt', async () => {
+    const h = harness([
+      ev('tool.started', { step: 0, toolCallId: 't1', tool: 'search_orders' }),
+      ev('tool.result', { step: 0, toolCallId: 't1', tool: 'search_orders', success: true }),
+      ...RUN_EVENTS.slice(4),
+    ]);
+    await h.call(1, 'initialize', { protocolVersion: 1, clientCapabilities: {} });
+    const session = await h.call(2, 'session/new', { cwd: '/tmp' });
+    await h.call(3, 'session/prompt', { sessionId: session.result.sessionId, prompt: [{ type: 'text', text: 'Where is my order?' }] });
+    const updates = h.sent.map((m) => m?.params?.update).filter(Boolean);
+    expect(updates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call', toolCallId: 't1', title: 'search_orders', status: 'running' }));
+    expect(updates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'completed' }));
   });
 });

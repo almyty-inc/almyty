@@ -176,6 +176,22 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Where a run's runtime event stream ends right now (`<ms>-<n>`), or null
+   * when it has none. A widget message that carries on a run waiting for
+   * input is answered on the same stream as that run's earlier replies; the
+   * widget starts its stream after this point, so they do not show again.
+   */
+  async lastRunEventPos(runId: string): Promise<string | null> {
+    try {
+      const latest = (await (this.redis as any).xrevrange(`run:${runId}:events`, '+', '-', 'COUNT', 1)) as Array<[string, string[]]> | null;
+      return latest?.[0]?.[0] ?? null;
+    } catch (err: any) {
+      this.logger.warn(`Could not read the end of run ${runId}'s event stream: ${err?.message}`);
+      return null;
+    }
+  }
+
+  /**
    * Subscribe to run events via Redis Streams (cross-pod). Calls
    * `handler` for each event. Resolves when a terminal event arrives,
    * the abort signal fires, or the timeout expires.

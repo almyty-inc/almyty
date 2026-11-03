@@ -98,7 +98,7 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
   let delegation: UnifiedGatewayDelegation;
   let requests: VisitorDataRequestsService;
   let auditLog: AuditLogService;
-  let runtime: { startRun: jest.Mock; sendInput: jest.Mock; getRunEmitter: jest.Mock; getRun: jest.Mock };
+  let runtime: { startRun: jest.Mock; sendInput: jest.Mock; lastRunEventPos: jest.Mock; getRunEmitter: jest.Mock; getRun: jest.Mock };
 
   let orgA: Organization;
   let orgB: Organization;
@@ -508,6 +508,7 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
         );
       }),
       sendInput: jest.fn(async (runId: string) => runs.findOneByOrFail({ id: runId })),
+      lastRunEventPos: jest.fn(async () => null),
       getRunEmitter: jest.fn(() => null),
       getRun: jest.fn(),
     };

@@ -461,6 +461,30 @@ describe('HostedChatController', () => {
       expect(agentRuntimeService.subscribeRunEvents).not.toHaveBeenCalled();
     });
 
+    it('over the limit, a browser EventSource gets the wait as a frame it can read, then the end', async () => {
+      gatewayRateLimit.checkVisitorStream.mockResolvedValueOnce({
+        limited: true,
+        code: 'VISITOR_RATE_LIMITED',
+        message: 'Reconnecting too often from you (30 per minute). Please wait 12 seconds.',
+        retryAfterSeconds: 12,
+      });
+      await controller.stream('acme', 'run-1', req({ headers: { accept: 'text/event-stream' } }), res);
+      const written = res.write.mock.calls.map((c: any[]) => c[0]).join('');
+      expect(written).toBe(
+        'retry: 12000\nevent: retry\ndata: ' +
+          JSON.stringify({
+            code: 'VISITOR_RATE_LIMITED',
+            message: 'Reconnecting too often from you (30 per minute). Please wait 12 seconds.',
+            retryAfterMs: 12000,
+          }) +
+          '\n\n',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '12');
+      expect(res.end).toHaveBeenCalled();
+      expect(hostedChat.runBelongsToEndUser).not.toHaveBeenCalled();
+      expect(agentRuntimeService.subscribeRunEvents).not.toHaveBeenCalled();
+    });
+
     it('a caller with no cookie is still counted by address', async () => {
       hostedChat.findEndUser.mockResolvedValueOnce(null);
       gatewayRateLimit.checkVisitorStream.mockResolvedValueOnce({ limited: true, code: 'VISITOR_RATE_LIMITED', retryAfterSeconds: 5 });

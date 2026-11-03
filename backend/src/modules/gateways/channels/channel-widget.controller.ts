@@ -37,7 +37,7 @@ import { TempFileInterceptor } from '../../files/temp-upload';
 import { readFile } from 'fs/promises';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { visitorResumeOf } from '../../agents/run-stream-position';
-import { streamVisitorReply } from './visitor-reply-stream';
+import { refuseVisitorStream, streamVisitorReply } from './visitor-reply-stream';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -348,9 +348,13 @@ export class ChannelWidgetController {
    * widget has no session of ours, so the visitor is the thread, and the
    * run must be one started on this widget under that thread. Anything
    * else is 404, so a run id cannot be used to read another thread's reply.
-   * The same per-visitor and per-address limit on opening streams applies
-   * (429 with Retry-After). When the widget cannot hold a stream open it
-   * falls back to polling `widget/messages`.
+   * The same per-visitor and per-address limit on opening streams applies:
+   * 429 with Retry-After, or for the widget's EventSource an `event: retry`
+   * frame with the wait (refuseVisitorStream). A message that carried on a
+   * run names where its reply starts on the run's stream (`after` on the
+   * POST answer), so that run's earlier replies are not sent again. When the
+   * widget cannot hold a stream open it falls back to polling
+   * `widget/messages`.
    */
   @Get(':id/widget/stream')
   @ApiOperation({ summary: 'Stream a widget reply as it is written, resumable from the last frame seen' })
@@ -374,11 +378,10 @@ export class ChannelWidgetController {
       clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
     });
     if (own.limited) {
-      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
-      throw new HttpException(
-        { code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message ?? 'Reconnecting too often. Please wait a moment.' },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      // A 429 for most callers; the widget's EventSource gets the wait as
+      // a frame it can read (visitor-reply-stream.ts).
+      refuseVisitorStream(req, res, own);
+      return undefined;
     }
 
     const run = await this.channelGatewayService.widgetRunOnThread(gateway, threadId, runId);

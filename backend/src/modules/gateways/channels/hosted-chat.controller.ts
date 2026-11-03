@@ -35,7 +35,7 @@ import { FilesService } from '../../files/files.service';
 import { TempFileInterceptor } from '../../files/temp-upload';
 import { readFile } from 'fs/promises';
 import { visitorResumeOf } from '../../agents/run-stream-position';
-import { FINISHED_RUN, streamVisitorReply } from './visitor-reply-stream';
+import { FINISHED_RUN, refuseVisitorStream, streamVisitorReply } from './visitor-reply-stream';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -483,8 +483,10 @@ export class HostedChatController {
    * surface requires sign-in, 404 otherwise), and no row is written.
    *
    * Each visitor, and each address, may open only so many streams a minute
-   * and an hour (GatewayRateLimitService.checkVisitorStream); over that it
-   * is 429 with Retry-After, and the page backs off.
+   * and an hour (GatewayRateLimitService.checkVisitorStream). Over that it
+   * is 429 with Retry-After; the page's EventSource, which can read neither,
+   * gets an `event: retry` frame with the wait instead and waits that long
+   * (refuseVisitorStream).
    */
   @Get(':slug/stream')
   @ApiOperation({ summary: 'Stream an in-flight reply, resumable from the last frame seen' })
@@ -509,11 +511,10 @@ export class HostedChatController {
       clientHash: HostedChatService.hashClient(this.clientIp(req)),
     });
     if (own.limited) {
-      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
-      throw new HttpException(
-        { code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message ?? 'Reconnecting too often. Please wait a moment.' },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      // A 429 for most callers; the page's EventSource gets the wait as a
+      // frame it can read (visitor-reply-stream.ts).
+      refuseVisitorStream(req, res, own);
+      return undefined;
     }
 
     if (!endUser) {

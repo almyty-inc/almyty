@@ -257,8 +257,14 @@ the chat requires sign-in, 404 otherwise) with no row written. Opening a
 stream is limited per visitor and per address
 (`GatewayRateLimitService.checkVisitorStream`: 30 a minute and 600 an hour
 for a visitor, 120 and 2,400 for an address), counted apart from the
-message limits and never as one bucket for the whole chat; over it is 429
-with `Retry-After`, and the page's backoff takes it as a failed attempt.
+message limits and never as one bucket for the whole chat. Over it, a
+caller gets 429 with `Retry-After`. A browser's EventSource can read
+neither (any status but 200 is just a failed connection to it), so a
+request that accepts `text/event-stream` gets a 200 stream holding one
+frame, `event: retry` with `{ code, message, retryAfterMs }` (also the
+stream's own `retry:` field), and then the end (`refuseVisitorStream`).
+The page and the widget wait exactly that long and reconnect from where
+they were; a wait is not counted as a failed attempt.
 A finished run is not replayed (`done` at once, the page reads the
 transcript); at the time limit the stream ends without `done`, so the page
 reconnects. The page keeps the id of the last frame it showed and opens
@@ -285,16 +291,23 @@ attempts) is given up on and the widget polls the stored replies with
 `afterId`, the last one it showed, compared by (createdAt, id) in the
 database, one poll at a time; after two such streams in a row it only
 polls. A widget thread can carry on in a run waiting for input, whose
-stream then also holds the earlier replies of that run: the widget shows
-them in the new reply's bubble until the stored copy replaces it (left as
-is; replies in the widget are mostly one run each).
+stream already holds that run's earlier replies. Before the input goes in,
+`handleWidgetMessage` reads where the run's stream ends
+(`lastRunEventPos`, one XREVRANGE; nothing is written to it while the run
+waits) and answers with `after`, a position past every frame of that last
+event (`<pos>.999999`). The widget opens the stream from there, so only
+the new reply shows.
 
 **The ACP server.** It reads an autonomous run's `llm.*` events the same
 way the answer filter does: the answering call's `llm.chunk`s go to the
 editor as `agent_message_chunk` as they arrive, a working step's as
 `agent_thought_chunk`, a step its provider never classifies goes out whole
 when its `llm.response` lands, and whatever of the run's final output did
-not stream goes out at the end, so the answer is never sent twice.
+not stream goes out at the end, so the answer is never sent twice. The run
+stream sends each runtime event whole (`{ type, data, timestamp, pos }`),
+so every mapping reads the event's own fields from under `data`
+(`runEventData`): `tool.started` and `tool.result` reach the editor as a
+tool call and its update, and `run.failed` ends the turn with its error.
 
 ## The worker-kill test
 

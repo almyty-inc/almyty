@@ -5,6 +5,7 @@ import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gatewa
 import { AgentRuntimeEventsHelper } from '../../../agents/agent-runtime-events.helper';
 import { fakeRedisStreams } from '../../../../test/fake-redis-streams';
 import { publicSurfaceFor } from '../surface-cors';
+import { visitorPosPastEvent } from '../../../agents/run-stream-position';
 
 /**
  * The widget's reply stream: the hosted chat's resumable stream, behind the
@@ -161,6 +162,17 @@ describe('widget: a reply streams as it is written', () => {
     await expect(connect({ after: 'garbage' }).ended).rejects.toThrow(BadRequestException);
   });
 
+  it('over the limit, the widget’s EventSource gets an `event: retry` with the wait, and nothing of the run', async () => {
+    limits.checkVisitorStream.mockResolvedValueOnce({ limited: true, code: 'VISITOR_RATE_LIMITED', message: 'slow down', retryAfterSeconds: 9 });
+    const chunks: string[] = [];
+    const res: any = { setHeader: jest.fn(), write: jest.fn((c: string) => chunks.push(c)), end: jest.fn() };
+    const req: any = { headers: { accept: 'text/event-stream' }, ip: '203.0.113.9', socket: { remoteAddress: '203.0.113.9' }, on: () => undefined };
+    await controller.streamReply(GW, THREAD, RUN, req, res);
+    expect(chunks.join('')).toContain('event: retry\ndata: {"code":"VISITOR_RATE_LIMITED","message":"slow down","retryAfterMs":9000}');
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '9');
+    expect(widget.widgetRunOnThread).not.toHaveBeenCalled();
+  });
+
   it('counts each open against the thread and the address; over the limit is 429 with Retry-After', async () => {
     limits.checkVisitorStream.mockResolvedValueOnce({ limited: true, code: 'VISITOR_RATE_LIMITED', message: 'slow down', retryAfterSeconds: 9 });
     const c = connect();
@@ -172,6 +184,24 @@ describe('widget: a reply streams as it is written', () => {
       clientHash: expect.stringMatching(/^[0-9a-f]{32}$/),
     });
     expect(widget.widgetRunOnThread).not.toHaveBeenCalled();
+  });
+
+  it('a run carried on after waiting for input: from where the message said, only the new reply', async () => {
+    // The first reply, already shown and stored, then the run waits.
+    emit('llm.started', { step: 0, answer: true });
+    emit('llm.chunk', { step: 0, content: 'Which colour would you like?' });
+    emit('llm.response', { step: 0, content: 'Which colour would you like?' });
+    // Where the stream ended when the visitor answered (handleWidgetMessage).
+    const end = await helper.lastRunEventPos(RUN);
+    expect(end).toMatch(/^\d+-\d+$/);
+    emit('llm.started', { step: 1, answer: true });
+    emit('llm.chunk', { step: 1, content: 'Blue it is.' });
+    emit('run.completed', { output: 'Blue it is.' });
+
+    const c = connect({ after: visitorPosPastEvent(end!) });
+    await c.ended;
+    expect(c.tokens()).toEqual(['Blue it is.']);
+    expect(c.raw()).not.toContain('Which colour');
   });
 
   it('a finished reply is `done` at once: the widget reads the stored copy', async () => {

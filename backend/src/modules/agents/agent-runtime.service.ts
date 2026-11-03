@@ -707,6 +707,11 @@ export class AgentRuntimeService implements OnModuleInit {
     return this.events.subscribeRunEvents(runId, handler, signal, timeoutMs);
   }
 
+  /** Where a run's runtime event stream ends right now (AgentRuntimeEventsHelper.lastRunEventPos). */
+  async lastRunEventPos(runId: string): Promise<string | null> {
+    return this.events.lastRunEventPos(runId);
+  }
+
   /**
    * A live run view that resumes: the run's logged events after `afterSeq`
    * from its event log, then the live stream (AgentRuntimeEventsHelper.subscribeRunLog).

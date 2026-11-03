@@ -585,10 +585,28 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
           void finish(reason)
         })
 
+        // The server asks the page to wait: this visitor has been opening
+        // the stream too often. An EventSource cannot read a 429 or its
+        // Retry-After, so the wait comes as a frame; the page waits exactly
+        // that long, and it is not counted as a failed attempt.
+        let held = false
+        es.addEventListener('retry', (event) => {
+          let wait = 5_000
+          try {
+            wait = Number(JSON.parse((event as MessageEvent).data || '{}').retryAfterMs) || wait
+          } catch {
+            /* malformed payload: the default wait */
+          }
+          held = true
+          es.close()
+          if (finished || stopped) return
+          retry = setTimeout(open, wait)
+        })
+
         // The connection dropped, the server ended it at its time limit, or
         // it could not be opened: open it again from the last frame shown.
         es.onerror = () => {
-          if (finished || stopped || source !== es) return
+          if (finished || stopped || held || source !== es) return
           es.close()
           if (failures >= STREAM_RECONNECT_DELAYS_MS.length) {
             void finish()

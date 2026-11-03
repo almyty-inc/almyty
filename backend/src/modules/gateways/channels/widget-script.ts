@@ -487,13 +487,19 @@ export function buildWidgetScript(gatewayId: string): string {
   // One reply, as it is written. The server sends the answer and nothing
   // of the agent's working; each frame carries an id, so a dropped
   // connection opens again from the last frame shown (backing off: 0.5, 1,
-  // 2, 4 seconds) and nothing is missed or shown twice. A reset clears what
-  // was shown. When the reply is done its stored copy is read (the server
-  // may still be filing it, so a few times). A stream that will not stay
-  // open is given up on, and the widget polls instead.
-  function streamReply(runId) {
+  // 2, 4 seconds) and nothing is missed or shown twice. A message that
+  // carried on a run names where its reply starts (from), so that run's
+  // earlier replies are not shown again. A reset clears what was shown. A
+  // server asking the widget to wait (retry, while it reconnects too often)
+  // is waited for. When the reply is done its stored copy is read (the
+  // server may still be filing it, so a few times). A stream that will not
+  // stay open is given up on, and the widget polls instead.
+  function parsed(ev) {
+    try { return JSON.parse(ev.data) || {}; } catch (e) { return {}; }
+  }
+  function streamReply(runId, from) {
     if (!canStream()) return startPolling();
-    var el = addMessage('\\u2026', 'agent'), after = '', tries = 0, over = false, got = false;
+    var el = addMessage('\\u2026', 'agent'), after = from || '', tries = 0, over = false, got = false;
     live[runId] = el;
     function settle(n) {
       poll();
@@ -509,17 +515,22 @@ export function buildWidgetScript(gatewayId: string): string {
     }
     (function connect() {
       if (over) return;
+      var held = false;
       var es = new window.EventSource(STREAM + '?threadId=' + encodeURIComponent(threadId) + '&runId=' + encodeURIComponent(runId) + (after ? '&after=' + encodeURIComponent(after) : ''));
       es.addEventListener('token', function (ev) {
-        var d = {};
-        try { d = JSON.parse(ev.data); } catch (e) {}
+        var d = parsed(ev);
         if (d.content) show(ev, d.content);
       });
       es.addEventListener('reset', function (ev) { got = false; show(ev, ''); });
       es.addEventListener('done', function () { over = true; fails = 0; es.close(); settle(0); });
+      es.addEventListener('retry', function (ev) {
+        held = true;
+        es.close();
+        window.setTimeout(connect, parsed(ev).retryAfterMs || 5000);
+      });
       es.onerror = function () {
         es.close();
-        if (over) return;
+        if (over || held) return;
         if (tries > 3) { over = true; fails++; return startPolling(); }
         window.setTimeout(connect, 500 * Math.pow(2, tries++));
       };
@@ -626,7 +637,7 @@ export function buildWidgetScript(gatewayId: string): string {
       updatePrivacy();
       // The reply streams in as it is written; without a run to follow,
       // the widget polls for it.
-      if (data && data.runId) streamReply(data.runId); else startPolling();
+      if (data && data.runId) streamReply(data.runId, data.after); else startPolling();
     }).catch(function () {
       addMessage('Message could not be sent. Please try again.', 'agent');
     });

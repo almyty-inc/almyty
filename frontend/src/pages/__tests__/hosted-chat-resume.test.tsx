@@ -104,7 +104,7 @@ describe('HostedChatPage: picking a reply up again after the connection drops', 
       first.emit('token', { content: 'Your ' }, '1730000000000-0.0')
       first.emit('token', { content: 'order ' }, '1730000000000-1.0')
     })
-    expect(await screen.findByText('Your order')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Your order')).toBeInTheDocument())
 
     // The connection drops.
     await act(async () => {
@@ -120,7 +120,7 @@ describe('HostedChatPage: picking a reply up again after the connection drops', 
     await act(async () => {
       latest().emit('token', { content: 'ships Monday.' }, '1730000000000-2.0')
     })
-    expect(await screen.findByText('Your order ships Monday.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Your order ships Monday.')).toBeInTheDocument())
 
     await act(async () => {
       latest().emit('done', { reason: 'run.completed' })
@@ -169,6 +169,42 @@ describe('HostedChatPage: picking a reply up again after the connection drops', 
     }
     expect(hostedChatApi.messages).not.toHaveBeenCalled()
     expect(hostedChatApi.streamUrl).toHaveBeenLastCalledWith('acme', 'run-1', '1730000000000-6.0')
+  })
+
+  it('the server asking it to wait: the page waits exactly that long, then resumes, and never counts it as a failure', async () => {
+    render(<HostedChatPage slug="acme" />)
+    await sendMessage('Where is my order?')
+    await waitFor(() => expect(streams()).toHaveLength(1))
+    await act(async () => {
+      streams()[0].emit('token', { content: 'Your ' }, '1730000000000-0.0')
+    })
+
+    const timeout = vi.spyOn(globalThis, 'setTimeout')
+    try {
+      // More waits than the page has reconnect attempts: none of them is a failure.
+      for (let wait = 1; wait <= 6; wait++) {
+        const limited = latest()
+        timeout.mockClear()
+        await act(async () => {
+          limited.emit('retry', { code: 'VISITOR_RATE_LIMITED', retryAfterMs: 12_000 })
+          // The server then ends the stream: no second reconnect on top.
+          limited.onerror?.({})
+        })
+        expect(limited.closed).toBe(true)
+        const waits = timeout.mock.calls.filter(([, ms]) => ms === 12_000)
+        expect(waits).toHaveLength(1)
+        expect(streams()).toHaveLength(wait)
+        await act(async () => {
+          ;(waits[0][0] as () => void)()
+        })
+        expect(streams()).toHaveLength(wait + 1)
+      }
+    } finally {
+      timeout.mockRestore()
+    }
+    // From where it was, and the reply is not given up on.
+    expect(hostedChatApi.streamUrl).toHaveBeenLastCalledWith('acme', 'run-1', '1730000000000-0.0')
+    expect(hostedChatApi.messages).not.toHaveBeenCalled()
   })
 
   it('starting a new chat stops the stream: no reconnect after it', async () => {

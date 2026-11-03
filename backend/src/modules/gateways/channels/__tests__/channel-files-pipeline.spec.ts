@@ -165,6 +165,7 @@ describe('files and names through the channel pipeline', () => {
         return run;
       }),
       sendInput: jest.fn(async (runId: string) => runs.find((r) => r.id === runId)),
+      lastRunEventPos: jest.fn(async () => null),
       getRunEmitter: jest.fn(() => emitter),
     };
   });
@@ -230,6 +231,40 @@ describe('files and names through the channel pipeline', () => {
     expect(input).toBe('Refund this?\n\n[Attachment: receipt.pdf (application/pdf, 2 KB)]');
     expect(options.attachments).toEqual([{ type: 'file', fileId: 'up-1', mimeType: 'application/pdf', name: 'receipt.pdf', size: 2048 }]);
     expect(files.attachToConversation).toHaveBeenCalledWith('org-1', ['up-1'], 'conv-1', 'run-1');
+  });
+
+  it('a widget message that carries on a run waiting for input says where its reply starts on the run stream', async () => {
+    runs.push({
+      id: 'run-waiting',
+      agentId: widgetGateway().agentId,
+      organizationId: 'org-1',
+      status: 'waiting_input',
+      conversationId: 'conv-w',
+      metadata: { gatewayId: 'gw-widget', threadId: 'wt-2' },
+    });
+    const order: string[] = [];
+    agentRuntimeService.lastRunEventPos.mockImplementation(async () => {
+      order.push('end read');
+      return '1730000000000-7';
+    });
+    agentRuntimeService.sendInput.mockImplementation(async (runId: string) => {
+      order.push('input sent');
+      return runs.find((r) => r.id === runId);
+    });
+    const service = build();
+    const out = await service.handleWidgetMessage(widgetGateway(), { message: 'Yes, the blue one', threadId: 'wt-2' });
+
+    // Past every frame of the last event before this message: the earlier
+    // replies on the run's stream are not sent again.
+    expect(out).toEqual({ runId: 'run-waiting', threadId: 'wt-2', after: '1730000000000-7.999999' });
+    expect(order).toEqual(['end read', 'input sent']);
+  });
+
+  it('a widget message that starts a run streams it from the start', async () => {
+    const service = build();
+    const out = await service.handleWidgetMessage(widgetGateway(), { message: 'Hello', threadId: 'wt-3' });
+    expect(out).toEqual({ runId: 'run-1', threadId: 'wt-3' });
+    expect(agentRuntimeService.lastRunEventPos).not.toHaveBeenCalled();
   });
 
   it('erasing a widget thread goes through the shared visitor-data scope, found by that thread', async () => {

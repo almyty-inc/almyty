@@ -1,3 +1,4 @@
+import { HttpException, HttpStatus } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
 import type { AgentRuntimeService } from '../../agents/agent-runtime.service';
@@ -12,6 +13,37 @@ export const FINISHED_RUN: Record<string, string | undefined> = {
   timeout: 'run.failed',
   cancelled: 'run.cancelled',
 };
+
+/**
+ * Refuse a reply stream to a visitor opening them too often.
+ *
+ * Anything but a browser's EventSource gets a plain 429 with Retry-After.
+ * An EventSource cannot read either: a status other than 200 only tells it
+ * the connection failed, so it would guess when to come back. It asks for
+ * `text/event-stream`, and gets the wait as a frame it can read: an
+ * `event: retry` with `retryAfterMs` (and the same as the stream's own
+ * `retry:` field), then the end of the stream. Nothing of the run is read.
+ */
+export function refuseVisitorStream(
+  req: Request,
+  res: Response,
+  limit: { code?: string; message?: string; retryAfterSeconds?: number },
+): void {
+  const seconds = limit.retryAfterSeconds ?? 5;
+  res.setHeader('Retry-After', String(seconds));
+  const body = {
+    code: limit.code ?? 'VISITOR_RATE_LIMITED',
+    message: limit.message ?? 'Reconnecting too often. Please wait a moment.',
+  };
+  const accept = String(req.headers?.accept ?? '');
+  if (!accept.includes('text/event-stream')) throw new HttpException(body, HttpStatus.TOO_MANY_REQUESTS);
+  const retryAfterMs = seconds * 1000;
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.write(`retry: ${retryAfterMs}\nevent: retry\ndata: ${JSON.stringify({ ...body, retryAfterMs })}\n\n`);
+  res.end();
+}
 
 /**
  * A visitor's reply, as it is written, over SSE. Shared by the hosted chat

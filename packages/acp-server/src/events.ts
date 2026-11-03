@@ -95,11 +95,12 @@ function inferKind(nodeType?: string, toolName?: string): ToolCall['kind'] {
 /**
  * Convert a single almyty StreamEvent into zero or more ACP SessionUpdate
  * payloads. Most events map 1:1, but some (like node.completed with output)
- * may produce both a tool_call_update and an agent_message_chunk.
+ * may produce both a tool_call_update and an agent_message_chunk. An
+ * autonomous run's events carry their fields under `data` (runEventData).
  */
 export function mapStreamEvent(event: StreamEvent): SessionUpdatePayload[] {
   const updates: SessionUpdatePayload[] = [];
-  const data = event.data;
+  const data = runEventData(event);
 
   switch (event.event) {
     // ── Node lifecycle events (workflow agents) ──────────────────
@@ -222,6 +223,25 @@ export function mapStreamEvent(event: StreamEvent): SessionUpdatePayload[] {
       break;
     }
 
+    // An autonomous run's tool call ended: `success` says how, and a
+    // failure carries its `error`.
+    case 'tool.result': {
+      const toolCallId = String(data.toolCallId ?? data.id ?? data.callId ?? '');
+      const failed = data.success === false || !!data.error;
+      const result = data.result ?? data.output;
+      updates.push(
+        failed
+          ? { type: 'tool_call_update', toolCallId, status: 'error', error: String(data.error ?? 'Tool execution failed') }
+          : {
+              type: 'tool_call_update',
+              toolCallId,
+              status: 'completed',
+              content: result != null ? (typeof result === 'string' ? result : JSON.stringify(result)) : undefined,
+            },
+      );
+      break;
+    }
+
     case 'tool.error': {
       const toolCallId = String(data.toolCallId ?? data.id ?? data.callId ?? '');
       updates.push({
@@ -240,6 +260,7 @@ export function mapStreamEvent(event: StreamEvent): SessionUpdatePayload[] {
     case 'execution.error':
     case 'run.completed':
     case 'run.error':
+    case 'run.failed':
     case 'done':
       // Terminal events — the caller handles these to finalize the
       // PromptResponse. We optionally surface errors as message chunks.
@@ -267,13 +288,15 @@ export function mapStreamEvent(event: StreamEvent): SessionUpdatePayload[] {
 }
 
 /**
- * An autonomous run event's own fields. The run stream sends each runtime
- * event whole, `{ type, data, timestamp, pos }`, so what the event says is
- * under `data`; an event without that envelope is read as it is.
+ * An event's own fields. The run stream of an autonomous run sends each
+ * runtime event whole, `{ type, data, timestamp, pos }`, so what the event
+ * says is under `data`; an event without that envelope (a workflow's
+ * stream) is read as it is.
  */
 export function runEventData(event: StreamEvent): Record<string, any> {
   const raw = (event.data ?? {}) as Record<string, any>;
-  return raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? raw.data : raw;
+  const enveloped = raw.type === event.event && raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data);
+  return enveloped ? raw.data : raw;
 }
 
 /** A run's output as text: a string, or the `text` of an output object. */
@@ -430,6 +453,8 @@ export function isTerminalEvent(event: StreamEvent): boolean {
     'execution.error',
     'run.completed',
     'run.error',
+    'run.failed',
+    'run.cancelled',
     'done',
   ].includes(event.event);
 }

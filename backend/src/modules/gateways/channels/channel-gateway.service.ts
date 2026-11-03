@@ -54,6 +54,7 @@ import { ChannelAttachmentReader, type ReadAttachments } from './channel-attachm
 import { withSpeaker } from './channel-speaker';
 import { extractReplyMedia, replyMedia } from './reply-media';
 import type { MessageContent } from '../../../entities/message.entity';
+import { visitorPosPastEvent } from '../../agents/run-stream-position';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -1042,7 +1043,7 @@ export class ChannelGatewayService {
     policy?: ChannelPolicy | null,
     /** Files the visitor uploaded for this message (channel-widget.controller.ts). */
     sent?: ReadAttachments,
-  ): Promise<{ runId: string; threadId: string }> {
+  ): Promise<{ runId: string; threadId: string; after?: string }> {
     if (!gateway.isActive()) {
       throw new BadRequestException('Gateway is not active');
     }
@@ -1074,7 +1075,12 @@ export class ChannelGatewayService {
     // What the agent reads: the text and a line per uploaded file, with the
     // files themselves by reference (channel-attachments.service.ts).
     const input = ChannelAttachmentReader.textWith(normalized.text, sent?.lines ?? []);
+    let after: string | undefined;
     if (run) {
+      // The run is waiting for this input, so nothing is being added to its
+      // stream: where it ends now is where this reply begins.
+      const end = await this.agentRuntimeService.lastRunEventPos(run.id);
+      if (end) after = visitorPosPastEvent(end);
       run = await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, input, undefined, sent?.parts);
     } else {
       const channelMetadata = {
@@ -1119,7 +1125,10 @@ export class ChannelGatewayService {
 
     await this.incrementRequestCount(gateway.id);
 
-    return { runId: run.id, threadId };
+    // `after`: where the widget starts this reply's stream, for a message
+    // that carried on a run. The run's stream already holds its earlier
+    // replies, which the widget has shown; it starts past them.
+    return { runId: run.id, threadId, ...(after ? { after } : {}) };
   }
 
   /**

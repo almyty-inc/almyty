@@ -83,6 +83,17 @@ export function visitorPosText(pos: VisitorStreamPos): string {
   return pos.event + '.' + pos.frame;
 }
 
+/** The highest frame number a position can carry. */
+export const VISITOR_LAST_FRAME = 999_999;
+
+/**
+ * A position past every frame of the event at `event`: a stream resumed
+ * from it sends only what events after that one bring.
+ */
+export function visitorPosPastEvent(event: string): string {
+  return visitorPosText({ event, frame: VISITOR_LAST_FRAME });
+}
+
 /** Whether frame `a` comes after frame `b` in the stream. */
 export function visitorPosAfter(a: VisitorStreamPos, b: VisitorStreamPos): boolean {
   const order = compareStreamPos(a.event, b.event);

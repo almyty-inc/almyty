@@ -84,11 +84,11 @@ class FakeSource {
 
 type Reply = { id: string; runId: string | null; message: string; createdAt: string };
 
-function runWidget(opts: { eventSource?: boolean } = {}) {
+function runWidget(opts: { eventSource?: boolean; postAfter?: string } = {}) {
   FakeSource.opened = [];
   const polls: string[] = [];
   let stored: Reply[] = [];
-  const timers: Array<() => void> = [];
+  const timers: Array<{ fn: () => void; ms: number }> = [];
   let interval: (() => void) | null = null;
   const store = new Map<string, string>([[`almyty-widget-${GATEWAY}-thread`, THREAD]]);
   const body = new FakeElement('body');
@@ -111,8 +111,8 @@ function runWidget(opts: { eventSource?: boolean } = {}) {
     clearInterval: () => {
       interval = null;
     },
-    setTimeout: (fn: () => void) => {
-      timers.push(fn);
+    setTimeout: (fn: () => void, ms: number) => {
+      timers.push({ fn, ms });
       return timers.length;
     },
   };
@@ -128,7 +128,7 @@ function runWidget(opts: { eventSource?: boolean } = {}) {
     if (url.endsWith('/widget/messages') && init?.method === 'POST') {
       const runId = nextRun[0];
       nextRun = nextRun.slice(1);
-      return { ok: true, json: async () => ({ data: { runId, threadId: THREAD } }) };
+      return { ok: true, json: async () => ({ data: { runId, threadId: THREAD, ...(opts.postAfter ? { after: opts.postAfter } : {}) } }) };
     }
     return { ok: true, json: async () => ({ data: {} }) };
   });
@@ -154,10 +154,12 @@ function runWidget(opts: { eventSource?: boolean } = {}) {
     /** Run the timers the widget set, the ones set meanwhile included. */
     runTimers: async () => {
       while (timers.length) {
-        timers.shift()!();
+        timers.shift()!.fn();
         await settle();
       }
     },
+    /** How long each timer still pending was set for. */
+    delays: () => timers.map((t) => t.ms),
     polling: () => interval !== null,
     settle,
   };
@@ -259,6 +261,35 @@ describe('the widget script: replies stream as they are written', () => {
     await w.send('Anyone there?');
     expect(FakeSource.opened).toHaveLength(10);
     expect(w.polling()).toBe(true);
+  });
+
+  it('a message that carried on a run starts its stream where the server said: earlier replies do not flash', async () => {
+    const w = runWidget({ postAfter: '1730000000000-7.999999' });
+    await w.send('Yes, the blue one');
+    expect(FakeSource.opened[0].url).toBe(
+      `https://api.example/gateways/${GATEWAY}/widget/stream?threadId=${THREAD}&runId=${RUN_1}&after=1730000000000-7.999999`,
+    );
+    // A drop before the first frame resumes from the same place, not the start.
+    FakeSource.opened[0].fail();
+    await w.runTimers();
+    expect(FakeSource.opened[1].url).toContain('&after=1730000000000-7.999999');
+  });
+
+  it('a server asking it to wait (reconnecting too often) is waited for, and not counted as a failure', async () => {
+    const w = runWidget();
+    await w.send('Where is my order?');
+    for (let i = 0; i < 8; i++) {
+      const s = FakeSource.opened[FakeSource.opened.length - 1];
+      s.emit('retry', { retryAfterMs: 12_000, code: 'VISITOR_RATE_LIMITED' });
+      // The server then closes the stream; that is not a failure on top.
+      s.fail();
+      expect(s.closed).toBe(true);
+      expect(w.delays()).toEqual([12_000]);
+      await w.runTimers();
+    }
+    // Still streaming: eight waits did not give up on it.
+    expect(FakeSource.opened).toHaveLength(9);
+    expect(w.polling()).toBe(false);
   });
 
   it('without EventSource the widget polls, as before', async () => {
