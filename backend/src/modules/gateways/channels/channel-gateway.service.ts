@@ -1149,6 +1149,26 @@ export class ChannelGatewayService {
   }
 
   /**
+   * One run of a widget thread, for the widget's reply stream: the run
+   * only when it was started on this gateway, for this agent, under this
+   * thread. The thread id is the widget visitor (it has no session of
+   * ours), so this is the same check the poll makes by filtering on it:
+   * a run id from another thread, another widget or another channel of the
+   * same agent is not found.
+   */
+  async widgetRunOnThread(gateway: Gateway, threadId: string, runId: string): Promise<AgentRun | null> {
+    return this.runRepository
+      .createQueryBuilder('run')
+      .where('run.id = :runId', { runId })
+      .andWhere('run.organizationId = :organizationId', { organizationId: gateway.organizationId })
+      .andWhere('run.agentId = :agentId', { agentId: gateway.agentId })
+      .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
+      .andWhere("run.metadata->>'threadId' = :threadId", { threadId })
+      .leftJoinAndSelect('run.agent', 'agent')
+      .getOne();
+  }
+
+  /**
    * Resolve a gateway for the public widget surface: must exist, be an
    * active chat_widget gateway. 404s otherwise (no auth on this path —
    * don't leak whether an id exists as a different type).

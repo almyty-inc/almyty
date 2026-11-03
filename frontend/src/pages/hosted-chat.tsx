@@ -379,33 +379,6 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
   // not leave an EventSource retrying forever in the background.
   useEffect(() => () => streamRef.current?.close(), [])
 
-  const openConversation = useCallback(
-    async (id: string) => {
-      setSidebarOpen(false)
-      setConversationId(id)
-      setError(null)
-      // Clear the old thread and flag the fetch: without a pending flag the
-      // visitor stared at the greeting for the whole round trip, as if the
-      // conversation they clicked were empty.
-      setMessages([])
-      setLoadingThread(true)
-      try {
-        const thread = await hostedChatApi.messages(slug, id)
-        setMessages(thread.messages)
-      } catch (err: any) {
-        // Previously uncaught: the rejection went unhandled, setMessages never
-        // ran, and the next message the visitor sent was posted into a thread
-        // whose history was invisible to them. Drop back to a new conversation
-        // and say what happened instead.
-        setConversationId(null)
-        setError(getApiErrorMessage(err, 'That conversation could not be opened. Please try again.'))
-      } finally {
-        setLoadingThread(false)
-      }
-    },
-    [slug],
-  )
-
   const startNew = useCallback(() => {
     // Closing the EventSource fires nothing -- no `done`, no `onerror` --
     // and `finish()` is the only place that clears `sending`. Without the
@@ -467,47 +440,29 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
     activeThreadRef.current = conversationId
   }, [conversationId])
 
-  const send = useCallback(async () => {
-    const text = draft.trim()
-    // A message can be files alone; it waits for an upload still running.
-    const attachmentIds = attachments.readyIds
-    if ((!text && !attachmentIds.length) || sending || attachments.uploading) return
-
-    setError(null)
-    setDraft('')
-    setSending(true)
-    setMessages((current) => [
-      ...current,
-      {
-        id: `local-${current.length}`,
-        role: 'user',
-        // The files as the transcript names them once the message is stored.
-        content: [text, ...attachments.readyNames.map((name) => `[Attachment: ${name}]`)].filter(Boolean).join('\n\n'),
-        createdAt: new Date().toISOString(),
-      },
-    ])
-
-    try {
-      const { runId, conversationId: threadId } = await hostedChatApi.send(
-        slug,
-        text,
-        conversationId ?? undefined,
-        attachmentIds,
-      )
-      // Sent: the files belong to the message now.
-      attachments.clear()
-      setConversationId(threadId)
-      // Synchronously too: the effect that mirrors state into this ref
-      // runs after render, and the stream handlers below are registered
-      // in this same tick. Without this a brand-new conversation would
-      // compare against the previous (or null) thread and drop its own
-      // tokens.
-      activeThreadRef.current = threadId
-
+  /**
+   * Follow one reply as it is written, into the thread it belongs to.
+   *
+   * Used right after the visitor sends a message, and when the page opens a
+   * conversation whose reply is still being written (after a reload, or
+   * from the list): then the stream is opened with no position, so the
+   * server sends the reply from its start, then live. Only the reply ever
+   * comes over it, never the agent's steps.
+   *
+   * A connection that drops mid-answer is opened again from the last frame
+   * it showed (`after`): the server sends the reply text from there on, then
+   * live, so nothing is missed and nothing shows twice. A connection that
+   * will not open (dropped, or refused because this visitor is reconnecting
+   * too often) is tried again with backoff, a few times, and then the page
+   * reads the transcript.
+   */
+  const followReply = useCallback(
+    (runId: string, threadId: string) => {
+      setSending(true)
       // Placeholder the reply streams into, so the page shows progress
       // rather than a frozen input.
       setMessages((current) => [
-        ...current,
+        ...current.filter((m) => m.id !== `run-${runId}`),
         {
           id: `run-${runId}`,
           role: 'assistant',
@@ -517,11 +472,6 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         },
       ])
 
-      // The reply's stream. A connection that drops mid-answer is opened
-      // again from the last frame it showed (`after`): the server sends the
-      // reply text from there on, then live, so nothing is missed and
-      // nothing shows twice. A connection that will not open is tried again
-      // with backoff, a few times, and then the page reads the transcript.
       streamRef.current?.close()
       let lastId: string | undefined
       let failures = 0
@@ -552,8 +502,8 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         // true forever, because only these handlers clear it -- but it
         // must not write the finished thread over the one now on screen.
         if (activeThreadRef.current !== threadId) {
-          refetchConversations();
-          return;
+          refetchConversations()
+          return
         }
 
         // The stream carries progress; the transcript is the source of
@@ -648,6 +598,47 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         }
       }
       open()
+    },
+    [refetchConversations, slug],
+  )
+
+  const send = useCallback(async () => {
+    const text = draft.trim()
+    // A message can be files alone; it waits for an upload still running.
+    const attachmentIds = attachments.readyIds
+    if ((!text && !attachmentIds.length) || sending || attachments.uploading) return
+
+    setError(null)
+    setDraft('')
+    setSending(true)
+    setMessages((current) => [
+      ...current,
+      {
+        id: `local-${current.length}`,
+        role: 'user',
+        // The files as the transcript names them once the message is stored.
+        content: [text, ...attachments.readyNames.map((name) => `[Attachment: ${name}]`)].filter(Boolean).join('\n\n'),
+        createdAt: new Date().toISOString(),
+      },
+    ])
+
+    try {
+      const { runId, conversationId: threadId } = await hostedChatApi.send(
+        slug,
+        text,
+        conversationId ?? undefined,
+        attachmentIds,
+      )
+      // Sent: the files belong to the message now.
+      attachments.clear()
+      setConversationId(threadId)
+      // Synchronously too: the effect that mirrors state into this ref
+      // runs after render, and the stream handlers below are registered
+      // in this same tick. Without this a brand-new conversation would
+      // compare against the previous (or null) thread and drop its own
+      // tokens.
+      activeThreadRef.current = threadId
+      followReply(runId, threadId)
     } catch (err: any) {
       setSending(false)
       const status = err?.response?.status
@@ -671,7 +662,76 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       // Drop the optimistic user turn: leaving it implies it was sent.
       setMessages((current) => current.filter((m) => !m.id.startsWith('local-')))
     }
-  }, [attachments, conversationId, draft, refetchConversations, sending, slug])
+  }, [attachments, conversationId, draft, followReply, sending, slug])
+
+  /**
+   * Open one of the visitor's conversations. When its reply is still being
+   * written (`openRunId`), the page follows it live from its start, the
+   * same way it does right after a message, instead of showing the
+   * visitor's turn unanswered. `quiet` is the page coming back to the
+   * conversation it had open before a reload: if that one is gone, the
+   * page simply starts fresh.
+   */
+  const openConversation = useCallback(
+    async (id: string, opts: { quiet?: boolean } = {}) => {
+      setSidebarOpen(false)
+      setConversationId(id)
+      // Synchronously, as in send(): the reply followed below checks it.
+      activeThreadRef.current = id
+      setError(null)
+      // Clear the old thread and flag the fetch: without a pending flag the
+      // visitor stared at the greeting for the whole round trip, as if the
+      // conversation they clicked were empty.
+      setMessages([])
+      setLoadingThread(true)
+      try {
+        const thread = await hostedChatApi.messages(slug, id)
+        // The visitor opened something else meanwhile.
+        if (activeThreadRef.current !== id) return
+        setMessages(thread.messages)
+        if (thread.openRunId) followReply(thread.openRunId, id)
+      } catch (err: any) {
+        // Previously uncaught: the rejection went unhandled, setMessages never
+        // ran, and the next message the visitor sent was posted into a thread
+        // whose history was invisible to them. Drop back to a new conversation
+        // and say what happened instead.
+        if (activeThreadRef.current !== id) return
+        setConversationId(null)
+        activeThreadRef.current = null
+        if (!opts.quiet) setError(getApiErrorMessage(err, 'That conversation could not be opened. Please try again.'))
+      } finally {
+        setLoadingThread(false)
+      }
+    },
+    [followReply, slug],
+  )
+
+  // The conversation this tab has open, kept for the tab only, so a reload
+  // comes back to it (and to its reply, if that is still being written)
+  // rather than to an empty page. Nothing else is kept: the conversation
+  // id is not a credential, the cookie is.
+  const openKey = `almyty-chat-open-${slug}`
+  const restored = useRef(false)
+  useEffect(() => {
+    if (!admitted || restored.current) return
+    restored.current = true
+    let saved: string | null = null
+    try {
+      saved = window.sessionStorage.getItem(openKey)
+    } catch {
+      /* storage unavailable: nothing to come back to */
+    }
+    if (saved && !activeThreadRef.current) void openConversation(saved, { quiet: true })
+  }, [admitted, openConversation, openKey])
+  useEffect(() => {
+    if (!restored.current) return
+    try {
+      if (conversationId) window.sessionStorage.setItem(openKey, conversationId)
+      else window.sessionStorage.removeItem(openKey)
+    } catch {
+      /* storage unavailable: a reload starts fresh */
+    }
+  }, [conversationId, openKey])
 
   if (isLoading) {
     return (

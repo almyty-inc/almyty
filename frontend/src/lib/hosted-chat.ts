@@ -162,11 +162,15 @@ export const hostedChatApi = {
       .get(`/public/chat/${slug}/conversations`)
       .then((r) => unwrap<HostedChatConversation[]>(r.data)),
 
+  /**
+   * A conversation's transcript. `openRunId` names a reply still being
+   * written, if there is one: the page opens its stream and shows it arrive.
+   */
   messages: (slug: string, conversationId: string) =>
     client()
       .get(`/public/chat/${slug}/conversations/${conversationId}/messages`)
       .then((r) =>
-        unwrap<{ conversationId: string; title: string; messages: HostedChatMessage[] }>(r.data),
+        unwrap<{ conversationId: string; title: string; messages: HostedChatMessage[]; openRunId?: string | null }>(r.data),
       ),
 
   deleteConversation: (slug: string, conversationId: string) =>

@@ -72,6 +72,26 @@ const WINDOWS = [
   { field: 'requestsPerDay', label: 'day', seconds: 86400 },
 ] as const;
 
+type VisitorWindow = { label: string; seconds: number; limit: number };
+type ScopeWindows = { scope: 'user' | 'ip'; id: string; what: string; windows: VisitorWindow[] };
+
+/**
+ * Reply streams one visitor may open: a minute's and an hour's worth.
+ * Loose on purpose. Each message opens one, a dropped connection or a
+ * reload opens another, and a long reply reconnects every five minutes;
+ * a browser stuck reconnecting in a loop opens several a second.
+ */
+export const STREAM_OPENS_PER_VISITOR: VisitorWindow[] = [
+  { label: 'minute', seconds: 60, limit: 30 },
+  { label: 'hour', seconds: 3600, limit: 600 },
+];
+
+/** The same for one address: several visitors can share one behind a NAT. */
+export const STREAM_OPENS_PER_IP: VisitorWindow[] = [
+  { label: 'minute', seconds: 60, limit: 120 },
+  { label: 'hour', seconds: 3600, limit: 2400 },
+];
+
 @Injectable()
 export class GatewayRateLimitService {
   private readonly logger = new Logger(GatewayRateLimitService.name);
@@ -103,7 +123,7 @@ export class GatewayRateLimitService {
     who: { endUserId?: string | null; clientHash?: string | null },
   ): Promise<GatewayRateLimitResult> {
     const config = gateway.rateLimitConfig;
-    const scopes: Array<{ scope: string; id: string; perHour: number; what: string }> = [];
+    const scopes: Array<{ scope: 'user' | 'ip'; id: string; perHour: number; what: string }> = [];
     if (config?.perVisitorPerHour && config.perVisitorPerHour > 0 && who.endUserId) {
       scopes.push({ scope: 'user', id: who.endUserId, perHour: config.perVisitorPerHour, what: 'you' });
     }
@@ -115,16 +135,79 @@ export class GatewayRateLimitService {
       scopes.push({ scope: 'ip', id: who.clientHash, perHour: perIp, what: 'your network' });
     }
     if (scopes.length === 0) return { limited: false };
-
-    try {
-      for (const { scope, id, perHour, what } of scopes) {
-        const windows = [
+    return this.countScopes(
+      gateway,
+      scopes.map(({ scope, id, perHour, what }) => ({
+        scope,
+        id,
+        what,
+        windows: [
           { label: 'hour', seconds: 3600, limit: perHour },
           { label: 'minute', seconds: 60, limit: burstPerMinute(perHour) },
-        ];
+        ],
+      })),
+      '',
+      (what, window, retryAfterSeconds) =>
+        `Too many messages from ${what} (${window.limit} per ${window.label}). ` +
+        `Please wait ${retryAfterSeconds} seconds.`,
+    );
+  }
+
+  /**
+   * How often one visitor (and one address) may open a reply stream on a
+   * public chat: the first look at a reply, and every reconnect after a
+   * dropped connection or a page reload.
+   *
+   * The same per-visitor and per-address buckets as the message limits
+   * above, counted on their own: a visitor who reconnects a lot is not
+   * charged messages for it, and one who sends a lot can still watch the
+   * replies. The visitor scope always applies here (a stream is only ever
+   * opened by a visitor we already know), and the address scope catches a
+   * caller who discards their cookie between attempts. Never a bucket for
+   * the whole surface: one visitor reconnecting in a loop must not stop
+   * everybody else from seeing their replies.
+   *
+   * Fails open, like the message limits: the stream itself reads Redis, so
+   * an outage there is not something refusing here would protect against.
+   */
+  async checkVisitorStream(
+    gateway: Gateway,
+    who: { endUserId?: string | null; clientHash?: string | null },
+  ): Promise<GatewayRateLimitResult> {
+    const scopes: ScopeWindows[] = [];
+    if (who.endUserId) {
+      scopes.push({ scope: 'user', id: who.endUserId, what: 'you', windows: STREAM_OPENS_PER_VISITOR });
+    }
+    if (who.clientHash) {
+      scopes.push({ scope: 'ip', id: who.clientHash, what: 'your network', windows: STREAM_OPENS_PER_IP });
+    }
+    if (scopes.length === 0) return { limited: false };
+    return this.countScopes(
+      gateway,
+      scopes,
+      'stream:',
+      (what, window, retryAfterSeconds) =>
+        `Reconnecting too often from ${what} (${window.limit} per ${window.label}). ` +
+        `Please wait ${retryAfterSeconds} seconds.`,
+    );
+  }
+
+  /**
+   * Bump every window of every scope, and answer with the first one over
+   * its limit. `kind` keeps one kind of count apart from another
+   * (`stream:` for reply streams, nothing for messages).
+   */
+  private async countScopes(
+    gateway: Gateway,
+    scopes: ScopeWindows[],
+    kind: string,
+    say: (what: string, window: VisitorWindow, retryAfterSeconds: number) => string,
+  ): Promise<GatewayRateLimitResult> {
+    try {
+      for (const { scope, id, what, windows } of scopes) {
         for (const window of windows) {
           const bucket = Math.floor(Date.now() / (window.seconds * 1000));
-          const key = `gw_rate:${gateway.id}:${scope}:${id}:${window.label}:${bucket}`;
+          const key = `gw_rate:${gateway.id}:${kind}${scope}:${id}:${window.label}:${bucket}`;
           const count = await this.bumpWindow(key, window.seconds);
           if (count > window.limit) {
             const windowEnd = (bucket + 1) * window.seconds * 1000;
@@ -132,11 +215,9 @@ export class GatewayRateLimitService {
             return {
               limited: true,
               code: 'VISITOR_RATE_LIMITED',
-              message:
-                `Too many messages from ${what} (${window.limit} per ${window.label}). ` +
-                `Please wait ${retryAfterSeconds} seconds.`,
+              message: say(what, window, retryAfterSeconds),
               retryAfterSeconds,
-              bucket: { window: window.label, limit: window.limit, scope: scope as 'user' | 'ip' },
+              bucket: { window: window.label, limit: window.limit, scope },
             };
           }
         }

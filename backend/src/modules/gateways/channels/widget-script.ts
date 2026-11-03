@@ -26,7 +26,8 @@
  *   GET  /gateways/:id/widget-config              sanitized presentation config
  *   POST /gateways/:id/widget/messages            { message, threadId?, attachmentIds? }
  *   POST /gateways/:id/widget/attachments         multipart: file, threadId (a file to send next)
- *   GET  /gateways/:id/widget/messages?threadId=&afterId=
+ *   GET  /gateways/:id/widget/stream?threadId=&runId=&after=   a reply as it is written (SSE)
+ *   GET  /gateways/:id/widget/messages?threadId=&afterId=      stored replies; the fallback
  *   GET  /gateways/:id/widget/threads/:threadId/export   the visitor's own copy
  *   DELETE /gateways/:id/widget/threads/:threadId        erase the conversation
  */
@@ -210,16 +211,24 @@ export function buildWidgetScript(gatewayId: string): string {
     var src = (script && script.src) || '';
     base = src.split('/gateways/')[0];
   } catch (e) { base = ''; }
-  var API = base + '/gateways/' + GATEWAY_ID + '/widget/messages';
-  var THREADS = base + '/gateways/' + GATEWAY_ID + '/widget/threads';
-  var CONFIG_URL = base + '/gateways/' + GATEWAY_ID + '/widget-config';
+  var GW = base + '/gateways/' + GATEWAY_ID;
+  var API = GW + '/widget/messages';
+  var THREADS = GW + '/widget/threads';
+  var CONFIG_URL = GW + '/widget-config';
   var LS_KEY = 'almyty-widget-' + GATEWAY_ID + '-thread';
-  var ATTACH = base + '/gateways/' + GATEWAY_ID + '/widget/attachments';
+  var ATTACH = GW + '/widget/attachments';
 
   var threadId = null;
   try { threadId = window.localStorage.getItem(LS_KEY); } catch (e) {}
   var lastId = null;
   var pollTimer = null;
+  var STREAM = GW + '/widget/stream';
+  // Replies on screen that are streaming, or streamed and waiting for
+  // their stored copy, by run id: the element each one is written into.
+  var live = {};
+  // Streams that gave up in a row. After two the widget stops trying and
+  // polls for replies instead.
+  var fails = 0;
   var open = false;
   var greeted = false;
 
@@ -243,36 +252,38 @@ export function buildWidgetScript(gatewayId: string): string {
   var cfg = DEFAULTS;
 
   var css = [
-    '.almyty-widget-root{--aw-primary:#8b5cf6;--aw-panel-bg:#fff;--aw-msgs-bg:#fafafa;--aw-agent-bg:#ececf1;',
+    '.~root{--aw-primary:#8b5cf6;--aw-panel-bg:#fff;--aw-msgs-bg:#fafafa;--aw-agent-bg:#ececf1;',
     '--aw-agent-fg:#1a1a1a;--aw-border:#e5e5e5;--aw-text:#1a1a1a;--aw-muted:#8a8a93}',
-    '.almyty-widget-root.almyty-widget-dark{--aw-panel-bg:#18181b;--aw-msgs-bg:#101012;--aw-agent-bg:#27272a;',
+    '.~root.~dark{--aw-panel-bg:#18181b;--aw-msgs-bg:#101012;--aw-agent-bg:#27272a;',
     '--aw-agent-fg:#e4e4e7;--aw-border:#27272a;--aw-text:#e4e4e7}',
-    '.almyty-widget-bubble{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;',
+    '.~bubble{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;',
     'background:linear-gradient(135deg,var(--aw-primary),#0891B2);color:#fff;border:none;cursor:pointer;z-index:2147483000;',
     'box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:24px;line-height:56px;text-align:center;padding:0}',
-    '.almyty-widget-root.almyty-widget-left .almyty-widget-bubble{right:auto;left:20px}',
-    '.almyty-widget-bubble svg{vertical-align:middle}',
-    '.almyty-widget-panel{position:fixed;bottom:88px;right:20px;width:340px;max-width:calc(100vw - 40px);height:440px;',
+    '.~root.~left .~bubble{right:auto;left:20px}',
+    '.~bubble svg{vertical-align:middle}',
+    '.~panel{position:fixed;bottom:88px;right:20px;width:340px;max-width:calc(100vw - 40px);height:440px;',
     'max-height:calc(100vh - 120px);background:var(--aw-panel-bg);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);',
     'display:none;flex-direction:column;overflow:hidden;z-index:2147483000;font-family:system-ui,-apple-system,sans-serif}',
-    '.almyty-widget-root.almyty-widget-left .almyty-widget-panel{right:auto;left:20px}',
-    '.almyty-widget-panel.almyty-widget-open{display:flex}',
-    '.almyty-widget-header{background:var(--aw-primary);color:#fff;padding:12px 16px;font-size:14px;font-weight:600}',
-    '.almyty-widget-note{font-size:11px;color:var(--aw-muted);padding:6px 12px 0;background:var(--aw-msgs-bg)}',
-    '.almyty-widget-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--aw-msgs-bg)}',
-    '.almyty-widget-msg{max-width:85%;padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.45;',
+    '.~root.~left .~panel{right:auto;left:20px}',
+    '.~panel.~open{display:flex}',
+    '.~header{background:var(--aw-primary);color:#fff;padding:12px 16px;font-size:14px;font-weight:600}',
+    '.~note{font-size:11px;color:var(--aw-muted);padding:6px 12px 0;background:var(--aw-msgs-bg)}',
+    '.~messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--aw-msgs-bg)}',
+    '.~msg{max-width:85%;padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.45;',
     'white-space:pre-wrap;word-break:break-word}',
-    '.almyty-widget-msg-user{align-self:flex-end;background:var(--aw-primary);color:#fff}',
-    '.almyty-widget-msg-agent{align-self:flex-start;background:var(--aw-agent-bg);color:var(--aw-agent-fg)}',
-    '.almyty-widget-form{display:flex;border-top:1px solid var(--aw-border);background:var(--aw-panel-bg)}',
-    '.almyty-widget-input{flex:1;border:none;outline:none;padding:12px;font-size:13px;font-family:inherit;background:transparent;color:var(--aw-text)}',
-    '.almyty-widget-send{border:none;background:none;color:var(--aw-primary);font-weight:600;font-size:13px;cursor:pointer;padding:0 14px}',
-    '.almyty-widget-footer{font-size:10px;text-align:center;color:var(--aw-muted);padding:4px 0 6px;background:var(--aw-panel-bg)}',
-    '.almyty-widget-privacy{text-align:center;padding:4px 0 0;background:var(--aw-panel-bg)}',
-    '.almyty-widget-privacy button{border:none;background:none;color:var(--aw-muted);cursor:pointer;text-decoration:underline;font-size:10px;padding:0 6px}',
-    '.almyty-widget-files{flex-wrap:wrap;gap:4px;padding:6px 8px 0;background:var(--aw-panel-bg)}',
-    '.almyty-widget-file{font-size:11px;border:1px solid var(--aw-border);border-radius:6px;background:none;color:var(--aw-text)}'
-  ].join('');
+    '.~msg-user{align-self:flex-end;background:var(--aw-primary);color:#fff}',
+    '.~msg-agent{align-self:flex-start;background:var(--aw-agent-bg);color:var(--aw-agent-fg)}',
+    '.~form{display:flex;border-top:1px solid var(--aw-border);background:var(--aw-panel-bg)}',
+    '.~input{flex:1;border:none;outline:none;padding:12px;font-size:13px;font-family:inherit;background:transparent;color:var(--aw-text)}',
+    '.~send{border:none;background:none;color:var(--aw-primary);font-weight:600;font-size:13px;cursor:pointer;padding:0 14px}',
+    '.~footer{font-size:10px;text-align:center;color:var(--aw-muted);padding:4px 0 6px;background:var(--aw-panel-bg)}',
+    '.~privacy{text-align:center;padding:4px 0 0;background:var(--aw-panel-bg)}',
+    '.~privacy button{border:none;background:none;color:var(--aw-muted);cursor:pointer;text-decoration:underline;font-size:10px;padding:0 6px}',
+    '.~files{flex-wrap:wrap;gap:4px;padding:6px 8px 0;background:var(--aw-panel-bg)}',
+    '.~file{font-size:11px;border:1px solid var(--aw-border);border-radius:6px;background:none;color:var(--aw-text)}'
+  // A tilde stands for the class prefix: written once here rather than on
+  // every rule, which keeps the script inside its budget.
+  ].join('').replace(/~/g, 'almyty-widget-');
 
   var style = document.createElement('style');
   style.textContent = css;
@@ -361,6 +372,7 @@ export function buildWidgetScript(gatewayId: string): string {
     el.textContent = text; // textContent only — never inject HTML
     messages.appendChild(el);
     messages.scrollTop = messages.scrollHeight;
+    return el;
   }
 
   function setIcon(kind) {
@@ -439,7 +451,9 @@ export function buildWidgetScript(gatewayId: string): string {
 
   // Where the widget left off: the last reply it showed. The next poll asks
   // for what came after that one, so a reply is shown once, and one poll
-  // runs at a time, so two in flight never both show the same reply.
+  // runs at a time, so two in flight never both show the same reply. A
+  // reply the widget streamed is already on screen: its stored copy takes
+  // that place (the stored text is the reply as sent) instead of a second.
   var polling = false;
   function poll() {
     if (!threadId || polling) return;
@@ -449,12 +463,16 @@ export function buildWidgetScript(gatewayId: string): string {
     fetch(url).then(function (r) { return r.json(); }).then(function (out) {
       var items = (out && out.data) || [];
       for (var i = 0; i < items.length; i++) {
-        addMessage(String(items[i].message || ''), 'agent');
-        lastId = items[i].id;
+        var m = items[i], el = m.runId && live[m.runId];
+        if (el) { el.textContent = m.message || ''; delete live[m.runId]; } else addMessage(String(m.message || ''), 'agent');
+        lastId = m.id;
       }
     }).catch(function () {}).then(function () { polling = false; });
   }
 
+  // Polling is the fallback: for a widget whose replies cannot stream
+  // (no EventSource, or streams that keep failing), it asks every few
+  // seconds while the panel is open.
   function startPolling() {
     if (pollTimer) return;
     pollTimer = window.setInterval(poll, 2500);
@@ -462,12 +480,57 @@ export function buildWidgetScript(gatewayId: string): string {
   function stopPolling() {
     if (pollTimer) { window.clearInterval(pollTimer); pollTimer = null; }
   }
+  function canStream() {
+    return typeof window.EventSource === 'function' && fails < 2;
+  }
+
+  // One reply, as it is written. The server sends the answer and nothing
+  // of the agent's working; each frame carries an id, so a dropped
+  // connection opens again from the last frame shown (backing off: 0.5, 1,
+  // 2, 4 seconds) and nothing is missed or shown twice. A reset clears what
+  // was shown. When the reply is done its stored copy is read (the server
+  // may still be filing it, so a few times). A stream that will not stay
+  // open is given up on, and the widget polls instead.
+  function streamReply(runId) {
+    if (!canStream()) return startPolling();
+    var el = addMessage('\\u2026', 'agent'), after = '', tries = 0, over = false, got = false;
+    live[runId] = el;
+    function settle(n) {
+      poll();
+      if (live[runId] === el && n < 8) window.setTimeout(function () { settle(n + 1); }, 1000);
+    }
+    function show(ev, add) {
+      if (ev.lastEventId) after = ev.lastEventId;
+      tries = fails = 0;
+      if (live[runId] !== el) return;
+      el.textContent = (got ? el.textContent : '') + add;
+      got = true;
+      messages.scrollTop = messages.scrollHeight;
+    }
+    (function connect() {
+      if (over) return;
+      var es = new window.EventSource(STREAM + '?threadId=' + encodeURIComponent(threadId) + '&runId=' + encodeURIComponent(runId) + (after ? '&after=' + encodeURIComponent(after) : ''));
+      es.addEventListener('token', function (ev) {
+        var d = {};
+        try { d = JSON.parse(ev.data); } catch (e) {}
+        if (d.content) show(ev, d.content);
+      });
+      es.addEventListener('reset', function (ev) { got = false; show(ev, ''); });
+      es.addEventListener('done', function () { over = true; fails = 0; es.close(); settle(0); });
+      es.onerror = function () {
+        es.close();
+        if (over) return;
+        if (tries > 3) { over = true; fails++; return startPolling(); }
+        window.setTimeout(connect, 500 * Math.pow(2, tries++));
+      };
+    })();
+  }
 
   bubble.addEventListener('click', function () {
     open = !open;
     panel.className = 'almyty-widget-panel' + (open ? ' almyty-widget-open' : '');
     bubble.setAttribute('aria-label', open ? 'Close chat' : 'Open chat');
-    if (open) { input.focus(); poll(); startPolling(); } else { stopPolling(); }
+    if (open) { input.focus(); poll(); if (!canStream()) startPolling(); } else { stopPolling(); }
   });
 
   // Files the visitor attaches to the next message, uploaded as picked
@@ -561,7 +624,9 @@ export function buildWidgetScript(gatewayId: string): string {
         try { window.localStorage.setItem(LS_KEY, threadId); } catch (e) {}
       }
       updatePrivacy();
-      startPolling();
+      // The reply streams in as it is written; without a run to follow,
+      // the widget polls for it.
+      if (data && data.runId) streamReply(data.runId); else startPolling();
     }).catch(function () {
       addMessage('Message could not be sent. Please try again.', 'agent');
     });
@@ -612,6 +677,8 @@ export function buildWidgetScript(gatewayId: string): string {
       if (!r.ok) throw new Error('delete ' + r.status);
       threadId = null;
       lastId = null;
+      // A reply still streaming writes nowhere once its place is gone.
+      live = {};
       try { window.localStorage.removeItem(LS_KEY); } catch (e) {}
       while (messages.firstChild) messages.removeChild(messages.firstChild);
       stopPolling();
@@ -625,12 +692,75 @@ export function buildWidgetScript(gatewayId: string): string {
 })();
 `;
   // The comments and layout above are for whoever maintains this file, not
-  // for every page it is embedded in: whole-line // comments, indentation
-  // and blank lines are not shipped, which is what keeps the script inside
-  // its budget. No string in it spans a line, so none of this touches one;
-  // a // inside a line (a URL, a trailing note) is left alone.
-  return source
-    .replace(/^[ \t]*\/\/.*\n/gm, '')
-    .replace(/^[ \t]+/gm, '')
-    .replace(/\n{2,}/g, '\n');
+  // for every page it is embedded in (compactScript below).
+  return compactScript(source);
+}
+
+const WORD = /[A-Za-z0-9_$]/;
+
+/**
+ * The widget script without what only its maintainers read: comments, and
+ * the whitespace that is layout rather than syntax. That is what keeps it
+ * inside its embed budget.
+ *
+ * A small scanner, not a minifier. Strings ('...' and "...") are copied as
+ * they are, so text and URLs in them are never touched; a `//` or `/*`
+ * outside a string starts a comment. Outside strings, whitespace goes
+ * except where it separates two words (`var x`, `else if`) or two of the
+ * same sign (`a + +b`), and a line break stays unless the line plainly
+ * ended (`;`, `{`, `,`, a block's closing brace) or the next one closes a
+ * block, so automatic semicolon insertion reads the script as it was
+ * written. The script's one regular expression holds no quote, slash pair
+ * or space, which is what lets the scanner skip telling it apart from
+ * division; a test runs the result.
+ */
+export function compactScript(source: string): string {
+  let out = '';
+  let i = 0;
+  const n = source.length;
+  const commentAt = (k: number) => source[k] === '/' && (source[k + 1] === '/' || source[k + 1] === '*');
+  while (i < n) {
+    const c = source[i];
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      while (j < n && source[j] !== c) j += source[j] === '\\' ? 2 : 1;
+      out += source.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    if (commentAt(i) || /\s/.test(c)) {
+      // A run of whitespace and comments: what it stands between decides
+      // what, if anything, it becomes.
+      let j = i;
+      let lineBreak = false;
+      for (;;) {
+        if (j < n && /\s/.test(source[j])) {
+          if (source[j] === '\n') lineBreak = true;
+          j++;
+        } else if (source[j] === '/' && source[j + 1] === '/') {
+          while (j < n && source[j] !== '\n') j++;
+        } else if (source[j] === '/' && source[j + 1] === '*') {
+          const end = source.indexOf('*/', j + 2);
+          j = end < 0 ? n : end + 2;
+        } else {
+          break;
+        }
+      }
+      const prev = out[out.length - 1] ?? '';
+      const next = source[j] ?? '';
+      // A line that plainly ended (`;`, `{`, `,`, or a block's `}`) runs on
+      // into the next, unless the next could carry the last one on (`(`,
+      // `[`, `+`, `-`, `/`). Any other line break stays, for automatic
+      // semicolon insertion to read as it was written.
+      const ended = ';{,'.includes(prev) || (prev === '}' && !'([+-/'.includes(next));
+      if (lineBreak && prev && next && !ended && next !== '}') out += '\n';
+      else if (WORD.test(prev) && WORD.test(next)) out += ' ';
+      else if ((prev === '+' || prev === '-') && prev === next) out += ' ';
+      i = j;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
 }

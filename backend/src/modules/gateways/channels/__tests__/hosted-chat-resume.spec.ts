@@ -43,10 +43,7 @@ describe('hosted chat: a visitor resumes a reply', () => {
     const hostedChat = {
       findBySlug: jest.fn(async () => gateway()),
       // The cookie is the visitor: `sid-<id>` stands for theirs.
-      resolveEndUser: jest.fn(async (_gw: Gateway, session?: string) => ({
-        endUser: { id: session?.replace('sid-', '') ?? 'someone-new' },
-        issuedSessionKey: null,
-      })),
+      findEndUser: jest.fn(async (_gw: Gateway, session?: string) => (session ? { id: session.replace('sid-', '') } : null)),
       requiresAuth: () => false,
       runBelongsToEndUser: jest.fn(async (_runId: string, endUser: { id: string }) => endUser.id === owner),
     };
@@ -57,7 +54,8 @@ describe('hosted chat: a visitor resumes a reply', () => {
         return helper.subscribeRunEvents(runId, handler, signal, 3_000);
       }),
     };
-    controller = new HostedChatController(hostedChat as any, {} as any, runtime as any);
+    const limits = { checkVisitorStream: jest.fn(async () => ({ limited: false })) };
+    controller = new HostedChatController(hostedChat as any, limits as any, runtime as any);
   });
 
   const emit = (type: string, data: any) => helper.emitEvent(RUN, type, data);

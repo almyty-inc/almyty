@@ -58,9 +58,11 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
   }
 }
 
-// Cleanup after each test
+// Cleanup after each test. Per-tab storage goes too: a page that remembers
+// what the tab had open (the hosted chat) must not carry it into the next test.
 afterEach(() => {
   cleanup()
+  globalThis.sessionStorage?.clear()
 })
 
 // Mock IntersectionObserver / ResizeObserver.

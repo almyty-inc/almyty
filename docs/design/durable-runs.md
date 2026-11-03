@@ -250,15 +250,51 @@ Only what the filter lets out is numbered, so a position cannot name or
 bring back anything of the working. Who may resume is who may watch: the
 visitor's own cookie, the chat's sign-in rule, the run in one of their
 conversations on this chat (`runBelongsToEndUser`) and the gateway's
-organization and agent; anyone else gets 404. No rate limit is added: a
-reconnect starts nothing and costs one read of the run's runtime events.
+organization and agent; anyone else gets 404. The stream only reads, so it
+never makes a visitor: it looks the cookie up (`findEndUser`) and a request
+with no cookie, or one nobody holds, gets what a stranger gets (401 where
+the chat requires sign-in, 404 otherwise) with no row written. Opening a
+stream is limited per visitor and per address
+(`GatewayRateLimitService.checkVisitorStream`: 30 a minute and 600 an hour
+for a visitor, 120 and 2,400 for an address), counted apart from the
+message limits and never as one bucket for the whole chat; over it is 429
+with `Retry-After`, and the page's backoff takes it as a failed attempt.
 A finished run is not replayed (`done` at once, the page reads the
 transcript); at the time limit the stream ends without `done`, so the page
 reconnects. The page keeps the id of the last frame it showed and opens
 the stream again with `?after=` after a drop, with backoff, reading the
-transcript after a few failed attempts. The widget has no reply stream; it
-polls the stored replies with `afterId`, the last one it showed, compared
-by (createdAt, id) in the database, one poll at a time.
+transcript after a few failed attempts. The streaming itself is one
+function (`gateways/channels/visitor-reply-stream.ts`) the hosted chat and
+the widget share.
+
+**Reattaching on load.** A conversation's transcript names the reply still
+being written, if any (`openRunId`: its latest run, while pending or
+running). The page that opens it, from the list or after a reload (the tab
+keeps the open conversation's id in `sessionStorage`), opens that run's
+stream with no position: the reply from its start, then live, replies only.
+A finished conversation opens from its transcript as before.
+
+**The widget.** It streams each reply over the same stream at
+`GET /gateways/:id/widget/stream?threadId=&runId=&after=`. Its visitor is
+the thread (it has no session of ours), so a run is streamed only to the
+thread, widget and agent it was started under (`widgetRunOnThread`);
+anything else is 404. The same per-visitor (the thread) and per-address
+limit applies. When a reply is done the widget reads its stored copy, which
+takes the streamed bubble's place. A stream that will not stay open (five
+attempts) is given up on and the widget polls the stored replies with
+`afterId`, the last one it showed, compared by (createdAt, id) in the
+database, one poll at a time; after two such streams in a row it only
+polls. A widget thread can carry on in a run waiting for input, whose
+stream then also holds the earlier replies of that run: the widget shows
+them in the new reply's bubble until the stored copy replaces it (left as
+is; replies in the widget are mostly one run each).
+
+**The ACP server.** It reads an autonomous run's `llm.*` events the same
+way the answer filter does: the answering call's `llm.chunk`s go to the
+editor as `agent_message_chunk` as they arrive, a working step's as
+`agent_thought_chunk`, a step its provider never classifies goes out whole
+when its `llm.response` lands, and whatever of the run's final output did
+not stream goes out at the end, so the answer is never sent twice.
 
 ## The worker-kill test
 

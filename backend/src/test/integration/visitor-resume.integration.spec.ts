@@ -9,7 +9,12 @@
  *    drives the same controller over an in-memory stream; here the stream
  *    is Redis, with its own ids and a real blocking XREAD.
  *  - Who may resume is decided by the real HostedChatService against real
- *    rows: the cookie's visitor, the run's conversation theirs.
+ *    rows: the cookie's visitor, the run's conversation theirs. A request
+ *    without a visitor writes no visitor row.
+ *  - Opening streams too often is refused by the real limiter on Redis,
+ *    for that visitor only.
+ *  - A conversation names the reply still being written, so a reopened
+ *    page can follow it; the widget streams a run only to its own thread.
  *  - The widget's poll cursor against a real `timestamptz`, which keeps
  *    microseconds that a JSON timestamp loses.
  *
@@ -32,6 +37,7 @@ import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-eve
 import { ChannelGatewayService } from '../../modules/gateways/channels/channel-gateway.service';
 import { HostedChatController } from '../../modules/gateways/channels/hosted-chat.controller';
 import { HostedChatService } from '../../modules/gateways/channels/hosted-chat.service';
+import { GatewayRateLimitService, STREAM_OPENS_PER_VISITOR } from '../../modules/gateways/gateway-rate-limit.service';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
@@ -45,6 +51,7 @@ describeIfDb('visitor resume (real Postgres and Redis)', () => {
   let runs: Repository<AgentRun>;
   let helper: AgentRuntimeEventsHelper;
   let controller: HostedChatController;
+  let limited: HostedChatController;
   let orgId: string;
   let agentId: string;
   let gateway: Gateway;
@@ -111,12 +118,14 @@ describeIfDb('visitor resume (real Postgres and Redis)', () => {
       },
       subscribeRunEvents: (runId: string, handler: any, signal?: AbortSignal) => helper.subscribeRunEvents(runId, handler, signal, 30_000),
     };
-    controller = new HostedChatController(hostedChat, {} as any, runtime as any);
+    // The stream limiter, out of the way here: the real one has its own test below.
+    controller = new HostedChatController(hostedChat, { checkVisitorStream: async () => ({ limited: false }) } as any, runtime as any);
+    limited = new HostedChatController(hostedChat, new GatewayRateLimitService(redis as any), runtime as any);
   });
 
   afterAll(async () => {
-    const keys = await redis?.keys('run:*:events');
-    if (keys?.length) await redis.del(...keys);
+    const keys = [...((await redis?.keys('run:*:events')) ?? []), ...((await redis?.keys(`gw_rate:${gateway?.id}:*`)) ?? [])];
+    if (keys.length) await redis.del(...keys);
     await redis?.quit();
     if (ds?.isInitialized) await ds.destroy();
   });
@@ -289,6 +298,128 @@ describeIfDb('visitor resume (real Postgres and Redis)', () => {
     }
     expect([...first.tokens(), ...second.tokens()].join('')).toBe('Your order ships Monday.');
     expect(fresh.tokens().join('')).toBe('Your order ships Monday.');
+  });
+
+  it('a request with no cookie, or one nobody holds, writes no visitor row and gets what a stranger gets', async () => {
+    const { run } = await visitorWithRun();
+    const visitors = ds.getRepository(EndUser);
+    const before = await visitors.count({ where: { gatewayId: gateway.id } });
+
+    for (const session of [null, 'not-a-session-anyone-holds', null, HostedChatService.newSessionKey()]) {
+      const c = connect(run.id, session);
+      await expect(c.ended).rejects.toMatchObject({ status: 404 });
+      expect(c.chunks).toEqual([]);
+    }
+    expect(await visitors.count({ where: { gatewayId: gateway.id } })).toBe(before);
+  });
+
+  it('reconnecting too often: the real limiter on real Redis answers 429 for that visitor only', async () => {
+    const mine = await visitorWithRun();
+    const theirs = await visitorWithRun();
+    // Finished: each open answers `done` at once, so the loop is quick.
+    await runs.update({ id: mine.run.id }, { status: AgentRunStatus.COMPLETED });
+    await runs.update({ id: theirs.run.id }, { status: AgentRunStatus.COMPLETED });
+
+    // A fresh address per visitor, so only the visitor bucket is in play.
+    const open = async (runId: string, sessionKey: string, ip: string) => {
+      const res: any = { setHeader: jest.fn(), flushHeaders: () => undefined, write: () => undefined, end: () => undefined };
+      const req: any = {
+        headers: {},
+        cookies: { [HostedChatService.SESSION_COOKIE]: sessionKey },
+        ip,
+        socket: { remoteAddress: ip },
+        on: () => undefined,
+      };
+      try {
+        await limited.stream(slug, runId, req, res);
+        return { status: 200, res };
+      } catch (err: any) {
+        return { status: err.status as number, res };
+      }
+    };
+
+    const ipA = `198.51.100.${(Date.now() % 200) + 1}`;
+    for (let i = 0; i < STREAM_OPENS_PER_VISITOR[0].limit; i++) {
+      expect((await open(mine.run.id, mine.sessionKey, ipA)).status).toBe(200);
+    }
+    const over = await open(mine.run.id, mine.sessionKey, ipA);
+    expect(over.status).toBe(429);
+    expect(over.res.setHeader).toHaveBeenCalledWith('Retry-After', expect.stringMatching(/^\d+$/));
+
+    // Somebody else on the same chat is not held up.
+    expect((await open(theirs.run.id, theirs.sessionKey, '192.0.2.77')).status).toBe(200);
+  });
+
+  it('a conversation names the reply still being written, and none once it is finished', async () => {
+    const { run } = await visitorWithRun();
+    const service = new HostedChatService(
+      ds.getRepository(Gateway),
+      ds.getRepository(EndUser),
+      ds.getRepository(Conversation),
+      ds.getRepository(Message),
+      runs,
+    );
+    const conversation = (await ds.getRepository(Conversation).findOneByOrFail({ id: run.conversationId })) as Conversation;
+    expect(await service.openRunOf(conversation)).toBe(run.id);
+
+    await runs.update({ id: run.id }, { status: AgentRunStatus.COMPLETED });
+    expect(await service.openRunOf(conversation)).toBeNull();
+
+    // A newer reply in the same conversation, still being written.
+    const next = await runs.save(
+      runs.create({
+        agentId,
+        organizationId: orgId,
+        conversationId: conversation.id,
+        endUserId: run.endUserId,
+        mode: AgentMode.AUTONOMOUS,
+        status: AgentRunStatus.PENDING,
+        input: { text: 'And the invoice?' },
+        steps: [],
+        currentStep: 0,
+        workingMemory: {},
+      } as Partial<AgentRun>),
+    );
+    expect(await service.openRunOf(conversation)).toBe(next.id);
+  });
+
+  it('the widget streams a run only to the thread, widget and agent it was started under', async () => {
+    const widgetGateway = await ds.getRepository(Gateway).save({
+      name: 'Acme widget',
+      type: GatewayType.CHAT_WIDGET,
+      status: GatewayStatus.ACTIVE,
+      organizationId: orgId,
+      agentId,
+      endpoint: `/widget/${Date.now()}`,
+      configuration: {},
+    } as any);
+    const thread = `w-${Date.now()}`;
+    const widgetRun = (metadata: Record<string, unknown>) =>
+      runs.save(
+        runs.create({
+          agentId,
+          organizationId: orgId,
+          mode: AgentMode.AUTONOMOUS,
+          status: AgentRunStatus.RUNNING,
+          input: { text: 'Hi' },
+          steps: [],
+          currentStep: 0,
+          workingMemory: {},
+          metadata,
+        } as Partial<AgentRun>),
+      );
+    const mine = await widgetRun({ gatewayId: widgetGateway.id, threadId: thread, source: 'chat_widget' });
+    const otherThread = await widgetRun({ gatewayId: widgetGateway.id, threadId: `${thread}-other`, source: 'chat_widget' });
+    const otherSurface = await widgetRun({ gatewayId: gateway.id, threadId: thread });
+    const service = Object.assign(Object.create(ChannelGatewayService.prototype), { runRepository: runs }) as ChannelGatewayService;
+
+    const found = await service.widgetRunOnThread(widgetGateway, thread, mine.id);
+    expect(found?.id).toBe(mine.id);
+    // The agent comes with it: the stream needs to know whether it withholds candidates.
+    expect(found?.agent?.id).toBe(agentId);
+    expect(await service.widgetRunOnThread(widgetGateway, thread, otherThread.id)).toBeNull();
+    expect(await service.widgetRunOnThread(widgetGateway, thread, otherSurface.id)).toBeNull();
+    expect(await service.widgetRunOnThread({ ...widgetGateway, agentId: '00000000-0000-4000-8000-000000000000' } as Gateway, thread, mine.id)).toBeNull();
   });
 
   it('the widget: each reply once, though the column keeps microseconds a JSON time loses', async () => {
