@@ -2,7 +2,7 @@
 
 ## What you'll build
 
-An assistant you talk to in Telegram, like a person who works for you. It gets to know you: when you tell it how you like things done, who the people in your life are, or say yes to something it offered, it remembers, and uses it next time. It also keeps an eye on things without being asked. Every 30 minutes it looks at your Google Calendar, your Gmail and your Google Tasks, and when something needs you, it writes to you first: "Your flight now lands at 09:20, so the 9:00 with Tom no longer works. Shall I move it to 10:30 and tell Tom you will be late?" It never changes anything on its own. Every change (moving a meeting, sending an email) waits until you approve it on the **Approvals** page.
+An assistant you talk to in Telegram, like a person who works for you. It gets to know you: when you tell it how you like things done, who the people in your life are, or say yes to something it offered, it remembers, and uses it next time. It also keeps an eye on things without being asked. Every 30 minutes it looks at your Google Calendar, your Gmail and your Google Tasks, and when something needs you, it writes to you first: "Your flight now lands at 09:20, so the 9:00 with Tom no longer works. Shall I move it to 10:30 and tell Tom you will be late?" It never changes anything on its own. Every change (moving a meeting, sending an email) waits until you approve it, in Telegram or on the **Approvals** page.
 
 ![The assistant in Telegram: it notices the moved flight, offers a fix, waits for the OK on each change and reports back](/screenshots/tutorials/personal/00-telegram-flight.png)
 
@@ -107,7 +107,7 @@ almyty tells Telegram where to send your messages: the page says **Registered wi
 
 ## 4. Find your Telegram user ID
 
-almyty needs to know which Telegram account is you, so that only your messages count as yours. That is your **user ID**, a number such as `581234907`, not your @name. Telegram does not show it by default: in **Telegram Desktop**, open **Settings → Advanced → Experimental settings** and turn on **Show Peer IDs in Profile**; your ID then shows on your own profile. Copy it.
+almyty needs to know which Telegram account is you, so that only your messages count as yours. That is your **user ID**, a number such as `581234907`, not your @name. The quickest way to get it: in Telegram, send any message to **@userinfobot**; it replies with your ID. Copy it.
 
 ## 5. Keep it awake: Always on
 
@@ -191,11 +191,11 @@ Answer in Telegram:
 Yes please, do that.
 ```
 
-Your yes tells it what to do; it does not let it act. Each change it now makes waits for your OK, and it says so in Telegram: "Elena's assistant wants to do something and is waiting for your OK: Ask before "Updates an event" (it is on the ask-first list). Approve or reject it in Approvals."
+Your yes tells it what to do; it does not let it act. Each change it now makes waits for your OK, and it says so in Telegram: "Elena's assistant wants to do something and is waiting for your OK", followed by exactly what it will change. You can answer yes or no right there in Telegram, or decide on the **Approvals** page. This tutorial uses the page:
 
-1. Open **Approvals**. The first request is the calendar change. Open **Action details** to see which event it moves and to when (`"eventId": "ev-review"`, `"start": {"dateTime": "...T10:30:00Z"}`).
+1. Open **Approvals**. The first request is the calendar change. Under **What it will do** you see which event it moves and to when: **Event id** `ev-review`, a new **Start** of 10:30 and **End** of 11:30.
 
-![The calendar change waiting for approval, with its details open](/screenshots/tutorials/personal/15-approve-move.png)
+![The calendar change waiting for approval, with what it will change](/screenshots/tutorials/personal/15-approve-move.png)
 
 2. Click **Approve**, then **Approve** again. The meeting moves.
 3. The next request is the email to Tom, shown as it will be sent: **To**, **Subject** and the full text.

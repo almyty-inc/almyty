@@ -44,7 +44,7 @@ const STATE = join(OUT, 'state.json')
 const state = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : {}
 const keep = () => writeFileSync(STATE, JSON.stringify(state, null, 2))
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
 const BUILDER = ['frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents']
 const SETUP = ['frontend/src/pages/api-setup.tsx', 'frontend/src/components/apis/api-key-form.tsx']
@@ -413,9 +413,7 @@ const STAGES = {
     await h.wait(2000)
     await page.goto('/approvals')
     await h.wait(3000)
-    // A calendar change has no preview of its own: what it changes is under Action details.
-    await page.getByText('Action details').first().click()
-    await h.wait(800)
+    // The request lists what it will change (the event, its new start and end) without opening anything.
     await h.shot('pa-15')
     await approveOne(page)
     await until('the email to Tom waiting for approval', async () => pending() > 0, 180000)
@@ -506,7 +504,7 @@ function register(shots) {
     const notes = 'Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data.' +
       (RENDERED[shot] ? ' The page lays out the messages exactly as almyty sent them to Telegram; Telegram was not used.' : '')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/tutorials/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
-      '--notes', notes, ...[...sources, ...UI].flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
+      '--notes', notes, ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit' })
   }
 }
 
