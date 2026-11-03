@@ -35,6 +35,11 @@ import { ChannelAttachmentReader, attachmentIdsFrom, type ReadAttachments } from
 import { FilesService } from '../../files/files.service';
 import { TempFileInterceptor } from '../../files/temp-upload';
 import { readFile } from 'fs/promises';
+import { AgentRuntimeService } from '../../agents/agent-runtime.service';
+import { visitorResumeOf } from '../../agents/run-stream-position';
+import { refuseVisitorStream, streamVisitorReply } from './visitor-reply-stream';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Public (unauthenticated) surface for the embedded chat widget — the
@@ -47,8 +52,11 @@ import { readFile } from 'fs/promises';
  *   1. POST /gateways/:id/widget/messages  { message, threadId? }
  *      -> { runId, threadId }  (threadId is a server-minted run UUID on
  *         the first message; the widget echoes it back afterwards)
- *   2. GET /gateways/:id/widget/messages?threadId=...&after=
- *      -> agent replies persisted by ChatWidgetAdapter, oldest first
+ *   2. GET /gateways/:id/widget/stream?threadId=...&runId=...&after=
+ *      -> the reply as it is written (SSE, resumable; see streamReply)
+ *      GET /gateways/:id/widget/messages?threadId=...&afterId=  (or &after=<time>)
+ *      -> agent replies persisted by ChatWidgetAdapter, oldest first: the
+ *         stored copy of each reply, and the fallback when streaming fails
  *   3. GET /gateways/:id/widget/threads/:threadId/export
  *      DELETE /gateways/:id/widget/threads/:threadId
  *      -> the visitor's own copy of the conversation, or its erasure,
@@ -74,6 +82,9 @@ export class ChannelWidgetController {
     // the agent by reference. Optional for the same reason.
     @Optional() private readonly attachments?: ChannelAttachmentReader,
     @Optional() private readonly files?: FilesService,
+    // The run's events, for the reply stream. Optional for positional unit
+    // tests; Nest always injects it.
+    @Optional() private readonly runtime?: AgentRuntimeService,
   ) {}
 
   @Get(':id/widget.js')
@@ -302,6 +313,8 @@ export class ChannelWidgetController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('threadId') threadId?: string,
     @Query('after') after?: string,
+    // The last reply the widget showed: the next page starts exactly after it.
+    @Query('afterId') afterId?: string,
   ) {
     if (!threadId) throw new BadRequestException('threadId is required');
 
@@ -312,14 +325,69 @@ export class ChannelWidgetController {
         throw new BadRequestException('after must be an ISO-8601 timestamp');
       }
     }
+    if (afterId && !UUID.test(afterId)) throw new BadRequestException('afterId must be the id of a reply');
 
     const gateway = await this.channelGatewayService.findWidgetGateway(id);
     const messages = await this.channelGatewayService.listWidgetMessages(
       gateway.id,
       threadId,
       afterDate,
+      afterId || undefined,
     );
     return { success: true, data: messages };
+  }
+
+  /**
+   * A widget reply as it is written: the same resumable stream the hosted
+   * chat uses (visitor-reply-stream.ts), so the visitor sees the answer
+   * word by word and never the agent's working. `after`, the id of the last
+   * frame the widget showed, picks the reply up from there after a dropped
+   * connection.
+   *
+   * The same visitor checks as the hosted chat, in the widget's terms: the
+   * widget has no session of ours, so the visitor is the thread, and the
+   * run must be one started on this widget under that thread. Anything
+   * else is 404, so a run id cannot be used to read another thread's reply.
+   * The same per-visitor and per-address limit on opening streams applies:
+   * 429 with Retry-After, or for the widget's EventSource an `event: retry`
+   * frame with the wait (refuseVisitorStream). A message that carried on a
+   * run names where its reply starts on the run's stream (`after` on the
+   * POST answer), so that run's earlier replies are not sent again. When the
+   * widget cannot hold a stream open it falls back to polling
+   * `widget/messages`.
+   */
+  @Get(':id/widget/stream')
+  @ApiOperation({ summary: 'Stream a widget reply as it is written, resumable from the last frame seen' })
+  async streamReply(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('threadId') threadId: string,
+    @Query('runId') runId: string,
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('after') after?: string,
+  ) {
+    if (!threadId || threadId.length > 200) throw new BadRequestException('threadId is required');
+    if (!runId || !UUID.test(runId)) throw new BadRequestException('runId must be the id of a reply');
+    const resumeFrom = visitorResumeOf(req.headers?.['last-event-id'], after);
+    if (resumeFrom === 'invalid') throw new BadRequestException('after must be the id of a frame this stream sent');
+    if (!this.runtime) throw new NotFoundException('Streaming is not available here.');
+
+    const gateway = await this.channelGatewayService.findWidgetGateway(id);
+    const own = await this.gatewayRateLimit.checkVisitorStream(gateway, {
+      endUserId: threadId,
+      clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
+    });
+    if (own.limited) {
+      // A 429 for most callers; the widget's EventSource gets the wait as
+      // a frame it can read (visitor-reply-stream.ts).
+      refuseVisitorStream(req, res, own);
+      return undefined;
+    }
+
+    const run = await this.channelGatewayService.widgetRunOnThread(gateway, threadId, runId);
+    if (!run) throw new NotFoundException('Not found');
+    await streamVisitorReply({ req, res, runtime: this.runtime, run, resumeFrom });
+    return undefined;
   }
 
   /**

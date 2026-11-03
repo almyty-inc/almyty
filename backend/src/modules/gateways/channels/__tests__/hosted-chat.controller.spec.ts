@@ -77,10 +77,15 @@ describe('HostedChatController', () => {
       deleteConversation: jest.fn(async () => undefined),
       deleteVisitor: jest.fn(async () => undefined),
       exportVisitor: jest.fn(async () => ({ exportedAt: 'now', conversations: [] })),
-
-
+      // The reply stream only ever finds a visitor; it never makes one.
+      findEndUser: jest.fn(async () => endUser),
+      openRunOf: jest.fn(async () => null),
     };
-    gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })), checkVisitor: jest.fn(async () => ({ limited: false })) };
+    gatewayRateLimit = {
+      check: jest.fn(async () => ({ limited: false })),
+      checkVisitor: jest.fn(async () => ({ limited: false })),
+      checkVisitorStream: jest.fn(async () => ({ limited: false })),
+    };
     agentRuntimeService = {
       startRun: jest.fn(async () => ({ id: 'run-1' })),
       getRun: jest.fn(async () => ({
@@ -401,6 +406,95 @@ describe('HostedChatController', () => {
       await expect(controller.stream('acme', '', req(), res)).rejects.toThrow(BadRequestException);
     });
 
+    it('never makes a visitor: no cookie is a stranger, 404, and no row is written', async () => {
+      hostedChat.findEndUser.mockResolvedValueOnce(null);
+      await expect(controller.stream('acme', 'run-1', req(), res)).rejects.toMatchObject({ status: 404 });
+      expect(hostedChat.findEndUser).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), undefined);
+      expect(hostedChat.resolveEndUser).not.toHaveBeenCalled();
+      expect(hostedChat.runBelongsToEndUser).not.toHaveBeenCalled();
+      expect(res.setHeader).not.toHaveBeenCalledWith('Content-Type', 'text/event-stream');
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
+
+    it('a cookie nobody holds is refused the same way', async () => {
+      hostedChat.findEndUser.mockResolvedValueOnce(null);
+      await expect(
+        controller.stream('acme', 'run-1', req({ cookies: { almyty_chat_session: 'forged' } }), res),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(hostedChat.findEndUser).toHaveBeenCalledWith(expect.anything(), 'forged');
+      expect(hostedChat.resolveEndUser).not.toHaveBeenCalled();
+    });
+
+    it('on a surface that requires sign-in, a stranger gets the sign-in answer (401), as a new visitor would', async () => {
+      hostedChat.findEndUser.mockResolvedValueOnce(null);
+      hostedChat.requiresAuth.mockReturnValue(true);
+      hostedChat.authMode.mockReturnValue('email_otp');
+      hostedChat.isAuthorized.mockImplementation((_gw: any, eu: any) => !!eu.authProvider);
+      await expect(controller.stream('acme', 'run-1', req(), res)).rejects.toMatchObject({ status: 401 });
+      expect(hostedChat.resolveEndUser).not.toHaveBeenCalled();
+    });
+
+    it('counts each open against this visitor and this address, on the stream buckets', async () => {
+      await controller.stream('acme', 'run-1', req({ cookies: { almyty_chat_session: 'abc' } }), res);
+      expect(gatewayRateLimit.checkVisitorStream).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), {
+        endUserId: 'eu-1',
+        clientHash: expect.stringMatching(/^[0-9a-f]{32}$/),
+      });
+      // Watching replies is not charged as messages.
+      expect(gatewayRateLimit.checkVisitor).not.toHaveBeenCalled();
+      expect(gatewayRateLimit.check).not.toHaveBeenCalled();
+    });
+
+    it('over the limit: 429 with Retry-After, and nothing is streamed', async () => {
+      gatewayRateLimit.checkVisitorStream.mockResolvedValueOnce({
+        limited: true,
+        code: 'VISITOR_RATE_LIMITED',
+        message: 'Reconnecting too often from you (30 per minute). Please wait 12 seconds.',
+        retryAfterSeconds: 12,
+      });
+      await expect(controller.stream('acme', 'run-1', req(), res)).rejects.toMatchObject({
+        status: 429,
+        response: { code: 'VISITOR_RATE_LIMITED' },
+      });
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '12');
+      expect(res.setHeader).not.toHaveBeenCalledWith('Content-Type', 'text/event-stream');
+      expect(agentRuntimeService.subscribeRunEvents).not.toHaveBeenCalled();
+    });
+
+    it('over the limit, a browser EventSource gets the wait as a frame it can read, then the end', async () => {
+      gatewayRateLimit.checkVisitorStream.mockResolvedValueOnce({
+        limited: true,
+        code: 'VISITOR_RATE_LIMITED',
+        message: 'Reconnecting too often from you (30 per minute). Please wait 12 seconds.',
+        retryAfterSeconds: 12,
+      });
+      await controller.stream('acme', 'run-1', req({ headers: { accept: 'text/event-stream' } }), res);
+      const written = res.write.mock.calls.map((c: any[]) => c[0]).join('');
+      expect(written).toBe(
+        'retry: 12000\nevent: retry\ndata: ' +
+          JSON.stringify({
+            code: 'VISITOR_RATE_LIMITED',
+            message: 'Reconnecting too often from you (30 per minute). Please wait 12 seconds.',
+            retryAfterMs: 12000,
+          }) +
+          '\n\n',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '12');
+      expect(res.end).toHaveBeenCalled();
+      expect(hostedChat.runBelongsToEndUser).not.toHaveBeenCalled();
+      expect(agentRuntimeService.subscribeRunEvents).not.toHaveBeenCalled();
+    });
+
+    it('a caller with no cookie is still counted by address', async () => {
+      hostedChat.findEndUser.mockResolvedValueOnce(null);
+      gatewayRateLimit.checkVisitorStream.mockResolvedValueOnce({ limited: true, code: 'VISITOR_RATE_LIMITED', retryAfterSeconds: 5 });
+      await expect(controller.stream('acme', 'run-1', req(), res)).rejects.toMatchObject({ status: 429 });
+      expect(gatewayRateLimit.checkVisitorStream).toHaveBeenCalledWith(expect.anything(), {
+        endUserId: null,
+        clientHash: expect.stringMatching(/^[0-9a-f]{32}$/),
+      });
+    });
+
     it('refuses to stream a run the visitor does not own', async () => {
       // A run id is a UUID, but it still arrives from the caller.
       hostedChat.runBelongsToEndUser.mockResolvedValueOnce(false);
@@ -634,6 +728,18 @@ describe('HostedChatController', () => {
       await expect(controller.messages('acme', 'nope', req(), res)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('names the reply still being written, so a reopened page can follow it live', async () => {
+      hostedChat.openRunOf.mockResolvedValueOnce('run-7');
+      const result = await controller.messages('acme', 'conv-1', req(), res);
+      expect(hostedChat.openRunOf).toHaveBeenCalledWith(expect.objectContaining({ id: 'conv-1' }));
+      expect(result.data.openRunId).toBe('run-7');
+    });
+
+    it('names none when every reply in it is finished', async () => {
+      const result = await controller.messages('acme', 'conv-1', req(), res);
+      expect(result.data.openRunId).toBeNull();
     });
   });
 

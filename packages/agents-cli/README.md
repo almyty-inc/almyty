@@ -38,7 +38,7 @@ other one when you ask the wrong pair.
 |------|-------------|
 | `--input '<json>'` | Input payload. Parsed as JSON; a plain string is passed through as-is, which is what an autonomous agent usually wants. |
 | `--resume <conversation-id>` | Autonomous: continue a previous conversation |
-| `--watch` | Autonomous: stream steps until the run reaches a terminal state |
+| `--watch` | Autonomous: print each step as it finishes until the run reaches a terminal state; reconnects from the last step printed if the connection drops, and stops with exit code 4 if the run is gone |
 | `--timeout <s>` | Autonomous `--watch`: stop waiting after this long (default `300`) |
 | `--max-steps <n>` | Autonomous: step ceiling |
 | `--max-cost-cents <n>` | Autonomous: cost ceiling, in cents |

@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { ChannelGatewayService } from '../channel-gateway.service';
+import { ChannelGatewayService, WIDGET_AFTER_REPLY, WIDGET_AFTER_TIME } from '../channel-gateway.service';
 import { Gateway, GatewayType } from '../../../../entities/gateway.entity';
 import { ChatWidgetAdapter } from '../adapters/chat-widget.adapter';
 import { SlackAdapter } from '../adapters/slack.adapter';
@@ -409,7 +409,15 @@ describe('ChannelGatewayService.testConnection', () => {
       "event.direction = 'outbound'": (row) => row.direction === 'outbound',
       "event.payload->>'kind' = 'widget_message'": (row) => row.payload?.kind === 'widget_message',
       "event.payload->>'threadId' = :threadId": (row, p) => row.payload?.threadId === p.threadId,
-      'event.createdAt > :after': (row, p) => row.createdAt.getTime() > p.after.getTime(),
+      // Rows here carry createdAt in whole milliseconds, so the truncation is a no-op.
+      [WIDGET_AFTER_TIME]: (row, p) => row.createdAt.getTime() > p.after.getTime(),
+      // After the named reply of this gateway, by (createdAt, id); every row when it names none.
+      [WIDGET_AFTER_REPLY]: (row, p) => {
+        const ref = events.find((e) => e.id === p.afterId && e.gatewayId === row.gatewayId);
+        if (!ref) return true;
+        const t = row.createdAt.getTime() - ref.createdAt.getTime();
+        return t > 0 || (t === 0 && row.id > ref.id);
+      },
     };
 
     const widgetGateway = () =>
@@ -509,9 +517,11 @@ describe('ChannelGatewayService.testConnection', () => {
         { id: 'e1', runId: 'run-e1', message: 'says e1', attachments: null, createdAt: T0 },
       ]);
       expect(qb.argsOf('orderBy')).toEqual([['event.createdAt', 'ASC']]);
+      expect(qb.argsOf('addOrderBy')).toEqual([['event.id', 'ASC']]);
       expect(qb.argsOf('limit')).toEqual([[100]]);
-      // no `after` — the time filter must not be applied
-      expect(clause(qb.executed[0], 'event.createdAt > :after')).toBeUndefined();
+      // no cursor: neither filter is applied
+      expect(clause(qb.executed[0], WIDGET_AFTER_TIME)).toBeUndefined();
+      expect(clause(qb.executed[0], WIDGET_AFTER_REPLY)).toBeUndefined();
     });
 
     it('listWidgetMessages applies the incremental `after` filter', async () => {
@@ -522,6 +532,20 @@ describe('ChannelGatewayService.testConnection', () => {
       );
       const rows = await svc.listWidgetMessages('gw-1', 't1', T0);
       expect(rows.map((r) => r.id)).toEqual(['e-new']);
+    });
+
+    it('listWidgetMessages picks up exactly after the reply named by afterId, over `after`', async () => {
+      events.push(
+        widgetEvent('e1', { createdAt: T0 }),
+        widgetEvent('e2', { createdAt: T0 }),
+        widgetEvent('e3', { createdAt: new Date('2026-07-01T11:00:00Z') }),
+      );
+      const rows = await svc.listWidgetMessages('gw-1', 't1', new Date('2026-07-01T12:00:00Z'), 'e1');
+      // e2 shares e1's time and comes after it by id: shown, and e1 is not shown again.
+      expect(rows.map((r) => r.id)).toEqual(['e2', 'e3']);
+      expect(clause(qb.executed[0], WIDGET_AFTER_REPLY)).toBeDefined();
+      expect(clause(qb.executed[0], WIDGET_AFTER_TIME)).toBeUndefined();
+      expect(qb.executed[0].parameters.afterId).toBe('e1');
     });
   });
 });

@@ -172,6 +172,8 @@ describe('ChannelGatewayService installation resolution', () => {
     agentRuntimeService = {
       startRun: jest.fn(async () => run),
       sendInput: jest.fn(async () => run),
+      // Where a run's stream ends, for a widget message that carries on a run.
+      lastRunEventPos: jest.fn(async () => null),
       getRunEmitter: jest.fn(() => emitter),
     };
     installationService = {

@@ -113,7 +113,7 @@ describe('hosted chat streaming, provider to visitor', () => {
     });
     const hostedChat = {
       findBySlug: async () => gateway,
-      resolveEndUser: async () => ({ endUser: { id: 'eu-1' }, issuedSessionKey: null }),
+      findEndUser: async () => ({ id: 'eu-1' }),
       requiresAuth: () => false,
       runBelongsToEndUser: async () => true,
     };
@@ -132,8 +132,14 @@ describe('hosted chat streaming, provider to visitor', () => {
       write: (frame: string) => frames.push(frame),
       end: () => undefined,
     };
-    const controller = new HostedChatController(hostedChat as any, {} as any, agentRuntime as any);
-    await controller.stream('acme', 'run-1', { headers: {}, cookies: {}, ip: '203.0.113.9', on: () => undefined } as any, res as any);
+    const limits = { checkVisitorStream: async () => ({ limited: false }) };
+    const controller = new HostedChatController(hostedChat as any, limits as any, agentRuntime as any);
+    await controller.stream(
+      'acme',
+      'run-1',
+      { headers: {}, cookies: { almyty_chat_session: 'sid-eu-1' }, ip: '203.0.113.9', on: () => undefined } as any,
+      res as any,
+    );
     return {
       raw: frames.join(''),
       tokens: frames.filter((f) => f.startsWith('event: token')).map((f) => JSON.parse(f.split('data: ')[1]).content),

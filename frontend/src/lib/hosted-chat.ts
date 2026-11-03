@@ -162,11 +162,15 @@ export const hostedChatApi = {
       .get(`/public/chat/${slug}/conversations`)
       .then((r) => unwrap<HostedChatConversation[]>(r.data)),
 
+  /**
+   * A conversation's transcript. `openRunId` names a reply still being
+   * written, if there is one: the page opens its stream and shows it arrive.
+   */
   messages: (slug: string, conversationId: string) =>
     client()
       .get(`/public/chat/${slug}/conversations/${conversationId}/messages`)
       .then((r) =>
-        unwrap<{ conversationId: string; title: string; messages: HostedChatMessage[] }>(r.data),
+        unwrap<{ conversationId: string; title: string; messages: HostedChatMessage[]; openRunId?: string | null }>(r.data),
       ),
 
   deleteConversation: (slug: string, conversationId: string) =>
@@ -236,8 +240,11 @@ export const hostedChatApi = {
       .post(`/public/chat/${slug}/auth/email/verify`, { email, code })
       .then((r) => unwrap<{ authenticated: boolean; email: string }>(r.data)),
 
-  /** SSE endpoint for an in-flight reply. Same origin, see above. */
-
-  streamUrl: (slug: string, runId: string) =>
-    `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/stream?runId=${encodeURIComponent(runId)}`,
+  /**
+   * SSE endpoint for an in-flight reply. Same origin, see above. `after`,
+   * the id of the last frame shown, picks the reply up from there.
+   */
+  streamUrl: (slug: string, runId: string, after?: string) =>
+    `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/stream?runId=${encodeURIComponent(runId)}` +
+    (after ? `&after=${encodeURIComponent(after)}` : ''),
 }

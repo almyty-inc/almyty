@@ -6,10 +6,13 @@
  * and streams SessionUpdate notifications back to the client.
  */
 
-import type { AlmytyProxy, AgentInfo, AgentRun } from './proxy.js';
+import { isPermanentStatus, type AlmytyProxy, type AgentInfo, type AgentRun } from './proxy.js';
 import { SessionManager, type Session } from './session.js';
 import {
   mapStreamEvent,
+  autonomousTextStream,
+  runEventData,
+  runOutputText,
   buildPlanFromPipeline,
   isTerminalEvent,
   extractFinalOutput,
@@ -432,6 +435,7 @@ export class AlmytyAcpAgent {
     signal: AbortSignal,
   ): Promise<PromptResponse> {
     const collectedText: string[] = [];
+    const text = autonomousTextStream();
 
     try {
       let run: AgentRun;
@@ -459,7 +463,9 @@ export class AlmytyAcpAgent {
             return { stopReason: 'cancelled' };
           }
 
-          const updates = mapStreamEvent(event);
+          // Model output streams as it is written: the answer as message
+          // chunks, the working as thought (events.ts autonomousTextStream).
+          const updates = text.map(event) ?? mapStreamEvent(event);
           for (const update of updates) {
             this.sendSessionUpdate(session.id, update);
 
@@ -469,14 +475,36 @@ export class AlmytyAcpAgent {
           }
 
           if (isTerminalEvent(event)) {
-            const finalOutput = extractFinalOutput(event);
-            if (finalOutput && !collectedText.includes(finalOutput)) {
+            const streamed = text.answer();
+            const finalOutput = streamed
+              ? runOutputText(runEventData(event).output) ?? extractFinalOutput(event)
+              : extractFinalOutput(event);
+            if (finalOutput && streamed) {
+              // The answer already streamed. Whatever of the final text it
+              // did not carry goes out now; a final text that differs from
+              // what streamed is what the turn answers with.
+              if (finalOutput.startsWith(streamed)) {
+                const rest = finalOutput.slice(streamed.length);
+                if (rest) {
+                  this.sendSessionUpdate(session.id, { type: 'agent_message_chunk', text: rest });
+                  collectedText.push(rest);
+                }
+              } else {
+                collectedText.splice(0, collectedText.length, finalOutput);
+              }
+            } else if (finalOutput && !collectedText.includes(finalOutput)) {
               collectedText.push(finalOutput);
             }
             break;
           }
         }
       } catch (streamErr) {
+        // The run is gone, or not this token's: polling it would only say so
+        // again. The session lets go of it so the next prompt starts afresh.
+        if (isPermanentStatus(streamErr)) {
+          this.sessions.update(session.id, { activeRunId: undefined });
+          throw streamErr;
+        }
         // If streaming fails, fall back to polling the run status
         process.stderr.write(`[acp] Run streaming failed, polling: ${streamErr}\n`);
         const finalRun = await this.pollRunToCompletion(session.agentId, run.id, signal);

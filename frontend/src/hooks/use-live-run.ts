@@ -12,14 +12,15 @@
  */
 import { useEffect, useRef, useState } from 'react'
 
+import { STREAM_RECONNECT_DELAYS_MS } from '@/lib/reconnect'
 import { TERMINAL_RUN_STATUSES, applyRunLogEvent, isPermanentStreamError, readRunStream } from '@/lib/run-stream'
 import type { AgentRun } from '@/types'
 
 /** 'gone': the server refused the stream for good (the run is gone or not ours to see); the view keeps what it last had. */
 export type LiveRunConnection = 'off' | 'connecting' | 'live' | 'reconnecting' | 'ended' | 'gone'
 
-/** Reconnect delays, in ms: quick at first, then backing off. */
-export const RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000]
+/** Reconnect delays, in ms: quick at first, then backing off (lib/reconnect.ts). */
+export const RECONNECT_DELAYS_MS = STREAM_RECONNECT_DELAYS_MS
 
 export interface LiveRunOptions {
   /** Read a run's stream; the real one unless a test hands its own. */
