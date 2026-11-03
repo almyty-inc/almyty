@@ -8,7 +8,7 @@ import { SecurityTab } from '../SecurityTab'
 import { authApi } from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({
-  authApi: { resendVerification: vi.fn(), changePassword: vi.fn(), getProfile: vi.fn() },
+  authApi: { resendVerification: vi.fn(), changePassword: vi.fn(), getProfile: vi.fn(), forgotPassword: vi.fn() },
 }))
 
 /**
@@ -81,5 +81,54 @@ describe('the Security tab', () => {
     render(<SecurityTab />)
 
     expect(await screen.findByTestId('no-password')).toHaveTextContent(/None set/)
+  })
+
+  // An account made by single sign-on has no current password to type, so
+  // the change-password form is a dead end there. It is offered the emailed
+  // link that sets a first password instead.
+  it('does not ask an account without a password for its current password', async () => {
+    ;(authApi.getProfile as any).mockResolvedValue({ id: 'u1', email: 'dana@example.com', hasPassword: false })
+    render(<SecurityTab />)
+
+    expect(await screen.findByTestId('no-password')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /update password/i })).not.toBeInTheDocument()
+  })
+
+  it('emails an account without a password a link to set one', async () => {
+    ;(authApi.getProfile as any).mockResolvedValue({ id: 'u1', email: 'dana@example.com', hasPassword: false })
+    ;(authApi.forgotPassword as any).mockResolvedValue({})
+    render(<SecurityTab />)
+
+    fireEvent.click(await screen.findByTestId('set-password-link'))
+
+    await waitFor(() => expect(authApi.forgotPassword).toHaveBeenCalledWith('dana@example.com'))
+    expect(await screen.findByTestId('set-password-sent')).toHaveTextContent('dana@example.com')
+  })
+
+  it('keeps the change-password form for an account that has a password', async () => {
+    render(<SecurityTab />)
+
+    expect(await screen.findByLabelText(/current password/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /update password/i })).toBeInTheDocument()
+  })
+
+  it('shows Verified, not a send button, once the email is verified', async () => {
+    ;(authApi.getProfile as any).mockResolvedValue({ id: 'u1', hasPassword: true, emailVerified: true })
+    render(<SecurityTab />)
+
+    expect(await screen.findByTestId('email-verified')).toHaveTextContent('Verified')
+    expect(screen.queryByTestId('send-verification')).not.toBeInTheDocument()
+  })
+
+  // Telling someone with no password to change it, to sign out other
+  // devices, sends them looking for a form that is not there.
+  it('does not tell an account without a password to change it', async () => {
+    ;(authApi.getProfile as any).mockResolvedValue({ id: 'u1', email: 'dana@example.com', hasPassword: false })
+    render(<SecurityTab />)
+    await screen.findByTestId('no-password')
+
+    expect(screen.queryByText(/change your password/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/set a password with the emailed link/i)).toBeInTheDocument()
   })
 })

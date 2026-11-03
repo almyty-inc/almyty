@@ -407,6 +407,29 @@ describe('AuthController', () => {
       expect(result.data.id).toBe('user-1');
       expect(result.data.organizationMemberships).toEqual([]);
     });
+
+    // Settings reads `hasPassword` to choose between "change your password"
+    // and "set one": an account made by single sign-on or SCIM has none.
+    it('says whether the account has a password, as a plain yes or no', async () => {
+      const base = { id: 'user-1', email: 'test@example.com', firstName: 'T', lastName: 'U', passwordHash: 'hash' };
+
+      const sso = await controller.getProfile({ ...base, hasPassword: false } as any);
+      expect(sso.data.hasPassword).toBe(false);
+
+      const withPassword = await controller.getProfile({ ...base, hasPassword: true } as any);
+      expect(withPassword.data.hasPassword).toBe(true);
+
+      // A row loaded without the column still answers, and answers the default.
+      const unloaded = await controller.getProfile(base as any);
+      expect(unloaded.data.hasPassword).toBe(true);
+    });
+
+    it('says whether the email is verified', async () => {
+      const base = { id: 'user-1', email: 'test@example.com', firstName: 'T', lastName: 'U', passwordHash: 'hash' };
+
+      expect((await controller.getProfile({ ...base, isVerified: true } as any)).data.emailVerified).toBe(true);
+      expect((await controller.getProfile({ ...base, isVerified: false } as any)).data.emailVerified).toBe(false);
+    });
   });
 
   describe('createApiKey', () => {
