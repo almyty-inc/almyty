@@ -3,4 +3,5 @@ export default {
   'founders-associate': "A founder's associate",
   'biz-dev-assistant': 'A business development assistant',
   'customer-onboarding': 'New customer onboarding',
+  'personal-assistant': 'A personal assistant that gets to know you',
 }

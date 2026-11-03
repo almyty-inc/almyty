@@ -6514,6 +6514,368 @@
       "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. The page renders the message exactly as almyty handed it to the provider; that provider was not used."
     },
     {
+      "id": "tutorials-personal-00-telegram-flight",
+      "title": "Personal assistant: the flight change in Telegram",
+      "path": "screenshots/tutorials/personal/00-telegram-flight.png",
+      "capturedAt": "2026-11-03T11:35:51.322Z",
+      "status": "current",
+      "sha256": "20bd2b6bccd9bc2caad799181398e7fc3df4a12539f8cd0d5d133b0eb31be090",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "backend/src/modules/gateways/channels/adapters/telegram.adapter.ts",
+        "backend/src/modules/agents/always-on/always-on.service.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
+      ],
+      "sourceDigest": "83f01429e8497d85022fe3d0318b08276a243ec469d8425d6191073552ecbaa2",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data. The page lays out the messages exactly as almyty sent them to Telegram; Telegram was not used."
+    },
+    {
+      "id": "tutorials-personal-01-calendar-scopes",
+      "title": "Google Calendar sign-in: permission to change events",
+      "path": "screenshots/tutorials/personal/01-calendar-scopes.png",
+      "capturedAt": "2026-11-03T11:34:00.515Z",
+      "status": "current",
+      "sha256": "4d5e65c45c99d75c5215e708ea2478e9a1a876a8b01971eacd1395b027246f3a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id/setup?job=4&key=1"
+      },
+      "sources": [
+        "frontend/src/pages/api-setup.tsx",
+        "frontend/src/components/apis/api-key-form.tsx"
+      ],
+      "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-02-apis",
+      "title": "Google Calendar, Gmail and Google Tasks connected",
+      "path": "screenshots/tutorials/personal/02-apis.png",
+      "capturedAt": "2026-11-03T11:34:11.727Z",
+      "status": "current",
+      "sha256": "281e0c2fcdfa781854d4bf764c9ff8a3865c739683b130eaf4f25f282c745bf4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx"
+      ],
+      "sourceDigest": "62f5ec5d1788013a70ad4a08ad9e73cd4d141b63f60fa3c1976168c56a12549b",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-03-agent-instructions",
+      "title": "Personal assistant: model, personality and instructions",
+      "path": "screenshots/tutorials/personal/03-agent-instructions.png",
+      "capturedAt": "2026-11-03T11:34:13.706Z",
+      "status": "current",
+      "sha256": "4fa33b7772aa54c53890de78f0f54723c87e36128f089697bf217617826a26bf",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "db9e90d309f05bc238c2c24412fe330163d684a5e1167183cce3bb18deb46cb7",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-04-agent-memory",
+      "title": "Personal assistant: memory",
+      "path": "screenshots/tutorials/personal/04-agent-memory.png",
+      "capturedAt": "2026-11-03T11:34:15.904Z",
+      "status": "current",
+      "sha256": "c13c06275295490999b3093b57e66a73cdca46e3600554521e0b75a3d53a113e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "db9e90d309f05bc238c2c24412fe330163d684a5e1167183cce3bb18deb46cb7",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-05-agent-tools",
+      "title": "Personal assistant: tools",
+      "path": "screenshots/tutorials/personal/05-agent-tools.png",
+      "capturedAt": "2026-11-03T11:34:19.662Z",
+      "status": "current",
+      "sha256": "00dd479746ff460616614fd4dc38b13159139396eaab37aaa101d19b475d0300",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "db9e90d309f05bc238c2c24412fe330163d684a5e1167183cce3bb18deb46cb7",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-06-telegram-token",
+      "title": "Telegram channel: the bot token",
+      "path": "screenshots/tutorials/personal/06-telegram-token.png",
+      "capturedAt": "2026-11-03T11:34:28.732Z",
+      "status": "current",
+      "sha256": "f1309d2b0733297ef345f3cea215cd9499ed069eb951c1b5ceba05357991ab24",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels"
+      ],
+      "sourceDigest": "252c7c1f567e1c9aff770c87bccfcb918d02c132cf5cb178916a7ebfb1d95156",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-07-telegram-live",
+      "title": "Telegram channel, live and registered with Telegram",
+      "path": "screenshots/tutorials/personal/07-telegram-live.png",
+      "capturedAt": "2026-11-03T11:34:40.246Z",
+      "status": "current",
+      "sha256": "8b708e7818ac55b791159ca05c2ec59e5bb40117bcf531d5b7444d8a8808bf75",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels"
+      ],
+      "sourceDigest": "252c7c1f567e1c9aff770c87bccfcb918d02c132cf5cb178916a7ebfb1d95156",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-08-always-on",
+      "title": "Always on: standing instructions and what wakes it",
+      "path": "screenshots/tutorials/personal/08-always-on.png",
+      "capturedAt": "2026-11-03T11:34:43.764Z",
+      "status": "current",
+      "sha256": "ec48c24731f1caec6699090306c1c12265e956d48e1413140956dd33d84cffbe",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts"
+      ],
+      "sourceDigest": "687101deb4aee56ef5fcec6e2a3b5abb084227868c7a1eb609801eeb11a2f042",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-09-talk-and-ask-first",
+      "title": "Always on: talk to it in Telegram, ask first before every change",
+      "path": "screenshots/tutorials/personal/09-talk-and-ask-first.png",
+      "capturedAt": "2026-11-03T11:34:46.817Z",
+      "status": "current",
+      "sha256": "ef6d9cbd3e40199a75789afd5e454330881d778340307b2526351bacabd843d7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts"
+      ],
+      "sourceDigest": "687101deb4aee56ef5fcec6e2a3b5abb084227868c7a1eb609801eeb11a2f042",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-10-reports",
+      "title": "Always on: reports to Telegram",
+      "path": "screenshots/tutorials/personal/10-reports.png",
+      "capturedAt": "2026-11-03T11:34:49.365Z",
+      "status": "current",
+      "sha256": "38cb05e4a76cdea8a0b9795600998c4b3f5284473f689fd5560336c538dd2abb",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts"
+      ],
+      "sourceDigest": "687101deb4aee56ef5fcec6e2a3b5abb084227868c7a1eb609801eeb11a2f042",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-11-always-on-card",
+      "title": "Always on, on the agent page",
+      "path": "screenshots/tutorials/personal/11-always-on-card.png",
+      "capturedAt": "2026-11-03T11:34:54.757Z",
+      "status": "current",
+      "sha256": "eb911d0ec574fcb3dc42fff83cc812fc0d727a8098721500fe07b37a021163ab",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-12-privacy",
+      "title": "Settings, Compliance: hide personal data",
+      "path": "screenshots/tutorials/personal/12-privacy.png",
+      "capturedAt": "2026-11-03T11:34:59.941Z",
+      "status": "current",
+      "sha256": "8cb26871e61d2ce60058235989e446883cd137738448445252720de9d14d3318",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/compliance"
+      },
+      "sources": [
+        "frontend/src/components/settings/compliance-settings.tsx",
+        "frontend/src/pages/settings.tsx"
+      ],
+      "sourceDigest": "af2af8c246a91bfa6ad2a3c96093da008d02741627c11cde2be86e6503633503",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-13-telegram-intro",
+      "title": "Telling the assistant about yourself in Telegram",
+      "path": "screenshots/tutorials/personal/13-telegram-intro.png",
+      "capturedAt": "2026-11-03T11:35:07.099Z",
+      "status": "current",
+      "sha256": "508b23f4dce6a3c296ead7aeb9db09ddad997a45bda3e78e19a82294d4db74c4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "backend/src/modules/gateways/channels/adapters/telegram.adapter.ts",
+        "backend/src/modules/agents/always-on/always-on.service.ts",
+        "backend/src/modules/gateways/channels/adapters/channel-markdown.ts"
+      ],
+      "sourceDigest": "83f01429e8497d85022fe3d0318b08276a243ec469d8425d6191073552ecbaa2",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data. The page lays out the messages exactly as almyty sent them to Telegram; Telegram was not used."
+    },
+    {
+      "id": "tutorials-personal-14-memory",
+      "title": "What the assistant remembers about Elena",
+      "path": "screenshots/tutorials/personal/14-memory.png",
+      "capturedAt": "2026-11-03T11:35:12.044Z",
+      "status": "current",
+      "sha256": "ae736e21b27cb3fc7a66c588f12f719e7f065849baea5d6227a9e1ae24f7754e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-15-approve-move",
+      "title": "Approving the moved meeting",
+      "path": "screenshots/tutorials/personal/15-approve-move.png",
+      "capturedAt": "2026-11-03T11:35:30.982Z",
+      "status": "current",
+      "sha256": "29882e0c9284fa2e9e8e5483b93b5fc55a729a346b3ba67d5fb2e5eac454365d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts"
+      ],
+      "sourceDigest": "2a0330a1c7d92bb80caa246880377a86eb9cb67c5a319c8bb21dd11410cf9d07",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-16-approve-email",
+      "title": "Approving the email to Tom",
+      "path": "screenshots/tutorials/personal/16-approve-email.png",
+      "capturedAt": "2026-11-03T11:35:43.234Z",
+      "status": "current",
+      "sha256": "603a5574fd3ac9d5a82e65b8a8d5e3049057d362b96f56b6013a9b499729c005",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/lib/email-preview.ts"
+      ],
+      "sourceDigest": "2a0330a1c7d92bb80caa246880377a86eb9cb67c5a319c8bb21dd11410cf9d07",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-17-what-woke-it",
+      "title": "What woke it lately",
+      "path": "screenshots/tutorials/personal/17-what-woke-it.png",
+      "capturedAt": "2026-11-03T11:35:55.198Z",
+      "status": "current",
+      "sha256": "839fcf8574da58d150046d8fab2d69256989559ebe696d7fa01bfa295873088e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/always-on"
+      },
+      "sources": [
+        "frontend/src/pages/agent-always-on.tsx",
+        "frontend/src/lib/always-on.ts"
+      ],
+      "sourceDigest": "687101deb4aee56ef5fcec6e2a3b5abb084227868c7a1eb609801eeb11a2f042",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
+      "id": "tutorials-personal-18-memory-after",
+      "title": "The assistant remembers what Elena said yes to",
+      "path": "screenshots/tutorials/personal/18-memory-after.png",
+      "capturedAt": "2026-11-03T11:36:00.051Z",
+      "status": "current",
+      "sha256": "2519c6cfa165d4d3e5218bfc4aa362d40fcc1ee2b53487498869243b479bc838",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents"
+      ],
+      "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+    },
+    {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
