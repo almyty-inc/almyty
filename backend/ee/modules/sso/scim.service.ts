@@ -139,6 +139,7 @@ export class ScimService {
         this.userRepo.create({
           email,
           passwordHash,
+          hasPassword: false,
           firstName: input.name?.givenName || email.split('@')[0],
           lastName: input.name?.familyName || '',
           isVerified: true,

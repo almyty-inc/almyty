@@ -88,8 +88,8 @@ export function RbacSettings() {
       fallback={
         <UpgradePrompt
           feature={RBAC_FEATURE}
-          title="Advanced RBAC"
-          description="Define custom roles with granular permission sets, assign them to members, and layer attribute-based access policies on top of the built-in roles."
+          title="Custom roles and access rules"
+          description="Make your own roles with exactly the abilities you choose, give them to people, and add rules that block specific actions."
         />
       }
     >
@@ -275,9 +275,8 @@ function RolesCard({
             Custom roles
           </CardTitle>
           <CardDescription>
-            Org-defined roles carrying an explicit set of{' '}
-            <code className="font-mono text-xs">resource:action</code> permissions on top of
-            the built-in owner / admin / member / viewer roles.
+            Give people extra abilities beyond their role (owner, admin, member or viewer), like
+            running agents or reading the audit log.
           </CardDescription>
         </div>
         {!formOpen && (
@@ -308,7 +307,7 @@ function RolesCard({
             <EmptyState
               icon={Shield}
               title="No custom roles yet"
-              description="Create a role to grant members a curated slice of permissions."
+              description="Create a role to give people a few extra abilities."
             />
           }
         />
@@ -319,7 +318,7 @@ function RolesCard({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete role “{deleting?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the role and unassigns it from every member. This cannot be undone.
+              This deletes the role and takes it away from everyone who has it. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -389,9 +388,7 @@ function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDon
       <div>
         <h3 className="text-sm font-semibold">{editing ? `Edit role “${editing.name}”` : 'New custom role'}</h3>
         <p className="text-xs text-muted-foreground">
-          Grant a curated set of permissions. Use{' '}
-          <code className="font-mono">resource:action</code> strings; wildcards like{' '}
-          <code className="font-mono">agents:*</code> or <code className="font-mono">*:read</code> are supported.
+          Pick the abilities this role gives. They add to what someone can already do.
         </p>
       </div>
       <Field id="rbac-role-name" label="Name" error={form.formState.errors.name?.message}>
@@ -403,7 +400,7 @@ function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDon
       <Field
         id="rbac-role-permissions"
         label="Permissions"
-        hint="One permission per line (or comma-separated). A role adds to what someone's own role allows; it never takes anything away."
+        hint={<>One per line, or separated by commas. <code className="font-mono">agents:*</code> means everything for agents, <code className="font-mono">*:read</code> means read access to everything. A role only adds abilities, it never takes any away.</>}
       >
         <Textarea
           placeholder={'agents:execute\ntools:read\naudit:read'}
@@ -415,7 +412,7 @@ function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDon
       {permissionCatalog.data && permissionCatalog.data.length > 0 && (
         <Disclosure title="What each permission unlocks" testId="rbac-permission-catalog">
           <p className="mb-2 text-xs text-muted-foreground">
-            These are the permissions the app enforces. Anything else gates nothing.
+            These are all the abilities you can give. Anything not on this list has no effect.
           </p>
           <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
             {permissionCatalog.data.map((p) => (
@@ -471,7 +468,7 @@ function AssignUsersPanel({
       <div>
         <h3 className="text-sm font-semibold">Assign “{role.name}”</h3>
         <p className="text-xs text-muted-foreground">
-          Grant this role to a member. Members can hold several custom roles at once.
+          Give this role to someone. A person can have several roles at once.
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -528,10 +525,10 @@ function EffectivePermissionsCard({ members }: { members: OrgMember[] }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <KeyRound className="h-5 w-5 text-primary" />
-          Effective permissions
+          What someone can do
         </CardTitle>
         <CardDescription>
-          The union of every permission a member gains through their assigned custom roles.
+          Every extra ability a person has from the custom roles you gave them.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -554,10 +551,10 @@ function EffectivePermissionsCard({ members }: { members: OrgMember[] }) {
         {userId && (
           <div>
             {permsQuery.isLoading ? (
-              <p className="text-sm text-muted-foreground">Resolving…</p>
+              <p className="text-sm text-muted-foreground">Loading…</p>
             ) : perms.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                This member has no custom-role permissions.
+                This person has no extra abilities from custom roles.
               </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
@@ -596,11 +593,11 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => rbacApi.deletePolicy(id),
     onSuccess: async () => {
-      success('Policy deleted')
+      success('Rule deleted')
       setDeleting(null)
       await queryClient.invalidateQueries({ queryKey: ['rbac', 'policies'] })
     },
-    onError: (err) => error('Failed to delete policy', getApiErrorMessage(err)),
+    onError: (err) => error('Failed to delete rule', getApiErrorMessage(err)),
   })
 
   const columns: ColumnDef<AbacPolicy>[] = useMemo(
@@ -664,17 +661,17 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
         <div>
           <CardTitle className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-primary" />
-            Access policies (ABAC)
+            Access rules
           </CardTitle>
           <CardDescription>
-            Attribute-based rules layered on top of roles. An applicable{' '}
-            <span className="font-medium">deny</span> always wins; higher priority breaks ties.
+            Extra rules that can block an action, whatever someone&apos;s role allows. When rules
+            disagree, <span className="font-medium">deny</span> wins; otherwise the higher priority wins.
           </CardDescription>
         </div>
         {!creating && (
           <Button onClick={() => setCreating(true)} className="shrink-0">
             <Plus className="mr-1.5 h-4 w-4" />
-            New policy
+            New rule
           </Button>
         )}
       </CardHeader>
@@ -685,12 +682,12 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
           data={policies}
           loading={loading}
           searchKey="name"
-          searchPlaceholder="Search policies..."
+          searchPlaceholder="Search rules..."
           emptyState={
             <EmptyState
               icon={KeyRound}
-              title="No policies yet"
-              description="Add an ABAC policy to express rules over request attributes."
+              title="No rules yet"
+              description="Add a rule to block an action across the organization."
             />
           }
         />
@@ -699,7 +696,7 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete policy “{deleting?.name}”?</AlertDialogTitle>
+            <AlertDialogTitle>Delete rule “{deleting?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -739,11 +736,11 @@ function PolicyInlineForm({ onDone }: { onDone: () => void }) {
         conditions: [],
       }),
     onSuccess: async () => {
-      success('Policy created')
+      success('Rule created')
       onDone()
       await queryClient.invalidateQueries({ queryKey: ['rbac', 'policies'] })
     },
-    onError: (err) => error('Failed to create policy', getApiErrorMessage(err)),
+    onError: (err) => error('Failed to create rule', getApiErrorMessage(err)),
   })
   // Cancel and a successful create both close the form, so neither asks.
   const guard = useLeaveGuard(form.formState.isDirty && !saveMutation.isPending)
@@ -752,14 +749,13 @@ function PolicyInlineForm({ onDone }: { onDone: () => void }) {
     <form
       onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))}
       className="space-y-4 rounded-lg border bg-muted/30 p-4"
-      aria-label="New access policy"
+      aria-label="New access rule"
       noValidate
     >
       <div>
-        <h3 className="text-sm font-semibold">New access policy</h3>
+        <h3 className="text-sm font-semibold">New access rule</h3>
         <p className="text-xs text-muted-foreground">
-          A rule over request attributes. Set the governed action (or{' '}
-          <code className="font-mono">*</code> for any) and whether it allows or denies.
+          Choose an action and whether this rule allows or blocks it.
         </p>
       </div>
       <Field id="rbac-policy-name" label="Name" error={form.formState.errors.name?.message}>
@@ -787,14 +783,14 @@ function PolicyInlineForm({ onDone }: { onDone: () => void }) {
       <Field
         id="rbac-policy-action"
         label="Action"
-        hint={<>The action this policy governs. Use <code className="font-mono">*</code> for any.</>}
+        hint={<>The action this rule covers, like <code className="font-mono">tools:execute</code>. Use <code className="font-mono">*</code> for every action.</>}
       >
         <Input placeholder="tools:execute" {...form.register('action')} />
       </Field>
       <Field id="rbac-policy-description" label="Description">
-        <Textarea placeholder="What this policy enforces" rows={2} {...form.register('description')} />
+        <Textarea placeholder="What this rule is for" rows={2} {...form.register('description')} />
       </Field>
-      <InlineFormActions onCancel={onDone} submitLabel="Create policy" submitting={saveMutation.isPending} />
+      <InlineFormActions onCancel={onDone} submitLabel="Create rule" submitting={saveMutation.isPending} />
       {guard.element}
     </form>
   )

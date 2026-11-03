@@ -59,7 +59,7 @@ export function ApprovalPoliciesSettings() {
           <UpgradePrompt
             feature="approval_policy"
             title="Approval policies"
-            description="Require multi-step, conditional, or quorum sign-off before an agent runs a sensitive action — e.g. refunds over a threshold need finance and a manager."
+            description="Have the right people sign off before an agent does something sensitive. For example, refunds over $500 need both finance and a manager."
           />
         }
       >
@@ -118,9 +118,9 @@ function ApprovalPoliciesManager() {
               <ShieldCheck className="h-5 w-5 text-primary" /> Approval policies
             </CardTitle>
             <CardDescription>
-              Decide when an approval is required and who must sign off. Requests that
-              don&apos;t match any policy fall back to a single approval. Decide
-              pending requests in the Approvals queue.
+              Choose when an agent must ask before acting, and who signs off. Anything
+              no policy covers needs one person&apos;s approval. You answer waiting
+              requests on the Approvals page.
             </CardDescription>
           </div>
           <Button asChild className="shrink-0">
@@ -216,7 +216,7 @@ function ApprovalPoliciesManager() {
             <AlertDialogTitle>Delete approval policy?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleting
-                ? `"${deleting.name}" will be removed. Requests it governed will fall back to a single approval. This cannot be undone.`
+                ? `"${deleting.name}" will be removed. Requests it covered will need one person's approval instead. This cannot be undone.`
                 : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>

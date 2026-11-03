@@ -24,8 +24,8 @@ const WEB = process.env.DEMO_WEB_URL || 'http://localhost:3210'
 const OUT = process.env.SHOT_DIR || '/tmp/almyty-demo/shots'
 mkdirSync(OUT, { recursive: true })
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
-const src = (...paths) => [...paths, ...UI]
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
+const src = (...paths) => paths
 
 // ids by name, read through the signed-in page
 async function ids(page) {
@@ -129,7 +129,7 @@ export const SHOTS = {
   'settings-teams': ['settings-teams.png', () => '/settings/members', 2880, 1800, 'Members and teams', src('frontend/src/pages/settings.tsx', 'frontend/src/components/MembersAndTeamsTab.tsx', 'frontend/src/components/settings')],
   'settings-rbac-enabled': ['settings-rbac-enabled.png', () => '/settings/rbac', 2880, 1800, 'Roles', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings')],
   'settings-rbac-new-role': ['settings-rbac-new-role.png', () => '/settings/rbac', 2880, 2400, 'New role', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings'), click(/new role|add role|custom role/i)],
-  'settings-rbac-new-policy': ['settings-rbac-new-policy.png', () => '/settings/rbac', 2880, 2400, 'New access policy', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings'), click(/new policy|add policy|access policy/i)],
+  'settings-rbac-new-policy': ['settings-rbac-new-policy.png', () => '/settings/rbac', 2880, 2400, 'New access rule', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings'), click(/new rule|new policy|add policy|access rule/i)],
   'settings-sso-enabled': ['settings-sso-enabled.png', () => '/settings/sso', 2880, 2400, 'Single sign-on', src('frontend/src/pages/settings.tsx', 'frontend/src/components/settings')],
   'settings-approval-policies-enabled': ['settings-approval-policies-enabled.png', () => '/settings/approvals', 2880, 1800, 'Approval policies', src('frontend/src/pages/settings.tsx', 'frontend/src/pages/approval-policy.tsx', 'frontend/src/components/settings')],
   'settings-approval-policy-new': ['settings-approval-policy-new.png', () => '/settings/approvals/policies/new', 2880, 2400, 'New approval policy', src('frontend/src/pages/approval-policy.tsx', 'frontend/src/components/settings')],
@@ -148,7 +148,7 @@ export const SHOTS = {
 }
 
 async function login(browser) {
-  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'dark', viewport: { width: 1440, height: 900 } })
+  const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'light', viewport: { width: 1440, height: 900 } })
   const page = await ctx.newPage()
   await page.goto('/auth/login')
   await page.locator('#email').fill(USER.email)
@@ -172,8 +172,8 @@ async function capture(names) {
   const results = {}
   for (const name of names) {
     const [, route, w, h, , , prepare, dpr = 2, anonymous] = SHOTS[name]
-    const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'dark', timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: dpr, viewport: { width: Math.round(w / dpr), height: Math.round(h / dpr) }, ...(anonymous ? {} : { storageState: state }) })
-    await ctx.addInitScript(() => { try { localStorage.setItem('theme', 'dark') } catch {} })
+    const ctx = await browser.newContext({ baseURL: WEB, colorScheme: 'light', timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: dpr, viewport: { width: Math.round(w / dpr), height: Math.round(h / dpr) }, ...(anonymous ? {} : { storageState: state }) })
+    await ctx.addInitScript(() => { try { localStorage.setItem('theme', 'light') } catch {} })
     const page = await ctx.newPage()
     try {
       const path = route(found)

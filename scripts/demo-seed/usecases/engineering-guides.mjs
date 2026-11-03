@@ -47,7 +47,7 @@ const upstream = async (path, init) => (await fetch(`${UP}${path}`, init)).json(
 
 // ---------- screenshots: key -> [published path under screenshots/examples, title, sources] ----------
 
-const UI = ['frontend/src/components/ui', 'frontend/src/components/layout', 'frontend/src/index.css']
+// The shared UI (components/ui, components/layout, index.css) is never a source: check-screenshots rejects it as too broad.
 const AGENT = ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents']
 const BUILDER = ['frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents']
 const MODELS = ['frontend/src/pages/models-connect.tsx', 'frontend/src/components/llm-providers']
@@ -400,7 +400,8 @@ async function issueTriage(page, h) {
   await h.wait(1200)
   await page.getByPlaceholder('Search tools...').fill('issues_list_for_repo')
   await h.wait(1500)
-  await page.getByText('github_issues_list_for_repo', { exact: true }).first().click()
+  // The list shows the tool by its title; the search finds it by its machine name.
+  await page.getByText('List repository issues', { exact: true }).first().click()
   await h.wait(1500)
   await page.getByRole('tab', { name: 'Test tool' }).click()
   await page.getByPlaceholder('Enter owner').fill('tidewater-labs')
@@ -599,7 +600,7 @@ async function soapStock(page, h) {
   await h.wait(1200)
   await page.getByPlaceholder('Search tools...').fill('get_stock_level')
   await h.wait(1500)
-  await page.getByText('harbor_stock_system_get_stock_level', { exact: true }).first().click()
+  await page.getByText('Get stock level', { exact: true }).first().click()
   await h.wait(1500)
   await page.getByRole('tab', { name: 'Test tool' }).click()
   await h.wait(800)
@@ -705,12 +706,12 @@ async function fleet(page, h) {
   await page.getByRole('heading', { name: 'Tools and APIs' }).scrollIntoViewIfNeeded()
   await h.shot('fleet-06-tools')
   await search.fill('')
-  // The runner is private to Ines, so the agent that uses it must be too.
-  await page.getByRole('button', { name: 'Everyone' }).first().click()
+  // The runner is private to Ines; picking its tools makes the agent private to her too.
+  await page.getByRole('button', { name: 'Only you' }).first().click()
   await h.wait(800)
   await h.shot('fleet-07-only-you')
-  await page.getByText('Only you', { exact: true }).first().click()
-  await h.wait(800)
+  await page.keyboard.press('Escape')
+  await h.wait(500)
   const agent = await saveAndActivate(page, h)
   // Real coding assistants at work: minutes, not seconds.
   await tryIt(page, h, FLEET_TASK, /Changed files/, 'fleet-08-try', 'fleet-00-result', 1500000)
@@ -728,7 +729,7 @@ function register(keys) {
     const notes = 'Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data.' +
       (RENDERED[key] ? ' The page renders the message exactly as almyty handed it to the provider; that provider was not used.' : '')
     execFileSync(process.execPath, [join(ROOT, 'docs-site/scripts/record-screenshot.mjs'), '--image', c.file, '--path', `screenshots/examples/${path}`, '--title', title, '--captured-at', c.at, '--route', route, '--environment', 'local-demo',
-      '--notes', notes, ...[...sources, ...UI].flatMap((s) => ['--sources', s])], { stdio: 'inherit', cwd: ROOT })
+      '--notes', notes, ...sources.flatMap((s) => ['--sources', s])], { stdio: 'inherit', cwd: ROOT })
   }
 }
 
