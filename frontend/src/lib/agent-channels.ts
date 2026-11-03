@@ -157,7 +157,21 @@ export interface WebhookRegistration {
   status: 'registered' | 'unregistered' | 'failed' | 'skipped'
   /** The platform's own wording, or why it was skipped. */
   error: string | null
+  /** PUBLIC_URL_NOT_CONFIGURED: this server has no public address, so nothing reaches the channel. */
+  code?: 'PUBLIC_URL_NOT_CONFIGURED' | null
   at: string | null
+}
+
+/**
+ * Why a published channel receives no messages, in a few words, or null.
+ * Publishing a Telegram, Twilio or Sendblue channel registers its webhook;
+ * on a server with no public address that is skipped, and nothing the
+ * platform sends can arrive, so the channel's status says so.
+ */
+export function notReceivingReason(channel: Pick<AgentChannel, 'status' | 'webhookRegistration'>): string | null {
+  const r = channel.webhookRegistration
+  if (channel.status !== 'live' || !r || r.action !== 'register') return null
+  return r.status === 'skipped' && r.code === 'PUBLIC_URL_NOT_CONFIGURED' ? 'Public address not configured' : null
 }
 
 export interface AgentChannel {
@@ -258,6 +272,95 @@ export const CHANNEL_HINTS: Record<ChannelType, string> = {
   webhook: 'To your own endpoint',
 }
 
+/**
+ * What "your address there" is on each kind of channel, and where to find
+ * it. The owner is recognised by comparing this with the sender id the
+ * channel's adapter takes from each message (backend
+ * gateways/channels/adapters), so the hint names exactly that id.
+ */
+export const OWNER_ADDRESS_HINTS: Record<ChannelType, { hint: string; placeholder: string }> = {
+  slack: {
+    hint: 'Your Slack member ID: in Slack, open your profile, then the ⋯ menu, then Copy member ID.',
+    placeholder: 'U012ABCDEF',
+  },
+  discord: {
+    hint: 'Your numeric Discord user ID: turn on Developer Mode (Settings › Advanced), then right-click your name and Copy User ID.',
+    placeholder: '123456789012345678',
+  },
+  telegram: {
+    hint: 'Your numeric Telegram user ID, not your @username. Message @userinfobot on Telegram and it replies with your ID.',
+    placeholder: '123456789',
+  },
+  whatsapp: {
+    hint: 'Your WhatsApp number the way Twilio sends it: whatsapp: then the number with country code.',
+    placeholder: 'whatsapp:+4915123456789',
+  },
+  whatsapp_cloud: {
+    hint: 'Your WhatsApp number with country code, digits only, no + (the way Meta sends it).',
+    placeholder: '4915123456789',
+  },
+  sms: {
+    hint: 'Your phone number with country code, starting with +.',
+    placeholder: '+4915123456789',
+  },
+  imessage_sendblue: {
+    hint: 'The phone number you send iMessages from, with country code, starting with +.',
+    placeholder: '+4915123456789',
+  },
+  imessage_loopmessage: {
+    hint: 'The phone number (with +country code) or Apple ID email you send iMessages from.',
+    placeholder: '+4915123456789 or you@icloud.com',
+  },
+  microsoft_teams: {
+    hint: 'Your Teams user ID as Teams sends it to bots (it starts with 29:), not your email. Your Teams admin can look it up.',
+    placeholder: '29:1a2b3c…',
+  },
+  google_chat: {
+    hint: 'users/ then your numeric Google account ID, as Google Chat sends it. Your Workspace admin can look it up.',
+    placeholder: 'users/123456789012345678901',
+  },
+  email: {
+    hint: 'The email address you write from.',
+    placeholder: 'you@example.com',
+  },
+  signal: {
+    hint: 'Your Signal phone number with country code, starting with +.',
+    placeholder: '+4915123456789',
+  },
+  matrix: {
+    hint: 'Your full Matrix user ID: @name:server.',
+    placeholder: '@you:matrix.org',
+  },
+  irc: {
+    hint: 'Your IRC nick on that network.',
+    placeholder: 'yournick',
+  },
+  webhook: {
+    hint: 'The userId your system puts in the webhook body.',
+    placeholder: 'your-user-id',
+  },
+  web: {
+    hint: 'This channel gives no fixed address to anyone, so it cannot tell you from other people here. Pick a messaging channel, or talk to it on the agent page.',
+    placeholder: '',
+  },
+  widget: {
+    hint: 'This channel gives no fixed address to anyone, so it cannot tell you from other people here. Pick a messaging channel, or talk to it on the agent page.',
+    placeholder: '',
+  },
+  a2a: {
+    hint: 'The user id the calling agent sends with its messages.',
+    placeholder: 'user-id',
+  },
+  tui: {
+    hint: 'This channel gives no fixed address to anyone, so it cannot tell you from other people here. Pick a messaging channel, or talk to it on the agent page.',
+    placeholder: '',
+  },
+  desktop: {
+    hint: 'This channel gives no fixed address to anyone, so it cannot tell you from other people here. Pick a messaging channel, or talk to it on the agent page.',
+    placeholder: '',
+  },
+}
+
 /** One sentence under a channel's title: what it does, said once. */
 export const CHANNEL_DESCRIPTIONS: Record<ChannelType, string> = {
   web: 'A chat page on its own link, hosted by almyty.',
@@ -279,7 +382,7 @@ export const CHANNEL_DESCRIPTIONS: Record<ChannelType, string> = {
   signal: 'Answers on Signal through a bridge you run.',
   matrix: 'Answers in a Matrix room through a bridge you run.',
   irc: 'Answers in an IRC channel through a bridge you run.',
-  webhook: 'Takes messages from, and sends replies to, an endpoint you own.',
+  webhook: 'Lets any service that can call a web address start the agent. Replies go to an address you own, if you give one.',
 }
 
 /** Channels built into a download rather than served. */

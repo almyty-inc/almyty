@@ -9,9 +9,9 @@ Every organization already has simple [approvals](/approvals) for free: an agent
 - **A quorum**: any two reviewers must approve.
 
 When no policy matches a request, the simple one-person approval applies as usual.
-When no policy matches a request, the simple one-person approval applies as usual.
 
-To ask before a tool call over an amount whatever the agent was told, use an amount rule: it is free on every plan. See [ask before a large amount](/approvals#ask-before-a-large-amount-whatever-the-assistant-was-told). On these plans a rule can also be given its own steps.
+To ask before a tool call over an amount whatever the agent was told, use an amount rule: it is free on every plan. See [ask before a large amount](/approvals#ask-before-a-large-amount-whatever-the-assistant-was-told). On these plans a rule can also be given its own steps: open the rule and set them under **Who approves**.
+
 ![A refund over the limit paused for human approval, with Approve and Reject](/screenshots/approval-refund-820.png)
 
 ## Create a policy
@@ -24,13 +24,15 @@ Owners and admins manage policies.
 
 2. Give it a **Name** (for example "Refunds over $1,000") and optionally a **Description**.
 3. Under **Match conditions**, click **Add condition** for each thing that must be true, for example `amount`, greater than, `1000`. All conditions must match. With no conditions, the policy matches every approval request.
+4. Under **Approval steps**, add the steps in the order they sign off. Each step has a name, the **approver role** that may approve it, and how many approvals it needs.
 5. Under **Which agents it applies to**, choose **Everyone** or **One team** and pick the team. If two of your policies could fit the same request, open **Advanced** and give the one that should decide a higher **Priority**; otherwise leave it at 0.
-5. Set the **Priority**: if several policies match, the one with the highest priority decides. Optionally scope it to one team with **Team ID (optional)**.
 6. Leave **Enabled** on and click **Create policy**.
 
 ![New approval policy editor with match conditions and steps](/screenshots/settings-approval-policy-new.png)
 
-A plain "any two reviewers" quorum is one step with approver role `*` and two approvals.
+The approver role is a basic role (`owner`, `admin`, `member`), the name of a [custom role](/enterprise/advanced-rbac) (for example `finance`), `team_lead` or `team_member` for a team's request, or `*` for anyone allowed to decide. A plain "any two reviewers" quorum is one step with approver role `*` and two approvals.
+
+The policies list shows your amount rules too, with their steps; editing one opens the rule.
 
 ## How reviewers see it
 
@@ -38,7 +40,9 @@ Reviewers keep using **Approve** and **Reject** on the [Approvals](/approvals) p
 
 - **Steps go in order.** Step 2 takes no approvals until step 1 is complete. An admin clicking early does not fill a later step in advance.
 - **One approval counts once.** Someone who is both in finance and an admin cannot complete both steps with one click. Two steps means two separate approvals.
-- **Progress is visible.** Each waiting request shows which step it is on and how many approvals each step has, for example "1 of 2 stages complete".
+- **Progress is visible.** Each waiting request says which step it is on and who it waits for, for example "Step 2 of 2 (Admin sign-off): waiting for an admin".
+
+Every decision, including each step's approval, is on the [audit trail](/enterprise/audit-export).
 
 ## For developers
 
@@ -60,10 +64,12 @@ A policy is a match condition, ordered steps and a priority:
 }
 ```
 
-- **`match`**: conditions over the approval request's context (`agentId`, `toolName`, `amount`, and whatever the requesting agent put in the payload), ANDed. Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`. An empty `match` matches every request.
-- **`steps`**: ordered sign-off stages, each with an `approverRole` (an org role or custom role name; `"*"` accepts anyone authorized to approve) and `minApprovals` (at least 1).
+- **`match`**: conditions over the approval request, ANDed. The request carries `reason`, `agentId`, `runId`, `teamId`, `toolName` (the tool, for a call held by an amount rule or a gateway) and `payload` (whatever the requesting agent sent). A name the request does not carry is read from the payload, so `amount` and `payload.amount` both mean the agent's `amount`. Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`. An empty `match` matches every request.
+- **`steps`**: ordered sign-off stages, each with an `approverRole` (a basic role, a custom role name, `team_lead`, `team_member`, or `"*"` for anyone authorized to approve) and `minApprovals` (at least 1).
 - **`priority`**: exactly one policy governs a request, the highest-priority enabled match.
 - **`teamId`**: optional, scopes the policy to one team's agents.
-- **`trigger`**: set on an amount rule (see [Approvals](/approvals#amount-rules)); such a policy asks on its own at the tool call and governs only the requests it raises. Amount rules are managed at `/approval-rules` on every plan; this editor manages the rest.
+- **`trigger`**: set on an amount rule (see [Approvals](/approvals#amount-rules)); such a policy asks on its own at the tool call and governs only the requests it raises. Amount rules are managed at `/approval-rules` on every plan, where an organization on these plans may also send `steps`.
 
-A quorum is a single step: `{ "approverRole": "*", "minApprovals": 2 }`. Each pending request under a policy reports per-step state (required, collected, satisfied) and the current step. Policy management (list, read, enable or disable, delete) is admin or owner only; endpoints are in the [API reference](/api-reference/authentication).
+A quorum is a single step: `{ "approverRole": "*", "minApprovals": 2 }`. Each pending request under a policy reports per-step state (required, collected, satisfied) and the current step, from the moment it is raised. Policy management (list, read, enable or disable, delete) is admin or owner only; endpoints are in the [API reference](/api-reference/authentication).
+
+An agent that asked with `request_approval` gets the decision as the tool's result when it resumes: `{ "approved": true, "decided_by": "Ana Lind", "decision_reason": "..." }`.

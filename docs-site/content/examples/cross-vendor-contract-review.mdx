@@ -1,32 +1,130 @@
 # Contract review by several AI models
 
-For legal, purchasing and due-diligence teams, where one AI model's reading isn't enough. Several models from different companies each read the contract from their own angle, and a final "judge" model writes one risk memo from what they found. A missed auto-renewal or indemnity clause gets caught by the model that was looking for it.
+## What you'll build
 
-For example: one model reads as your company, one as the other side, one checks the governing law. The memo lists the risks all of them agreed on.
+A contract reviewer in Slack. Someone posts a supplier's draft as a PDF in `#legal-review` and mentions it; three models from two companies read the contract, each from its own angle, and a fourth writes one risk memo from what they found. The memo arrives in the thread: whether to sign as drafted, the clauses that must change first, the ones worth negotiating, and where the readers disagreed.
+
+![The risk memo for a warehousing contract, in a Slack thread](/screenshots/examples/cross-vendor-contract-review/00-slack-memo.png)
+
+Why several models: one reader tends to miss what it was not looking for. Here one model reads the contract for Larkspur's risks, one reads it as the supplier's lawyer would, and one checks it against Dutch and EU law. A judge then combines what they found into one memo and says where they disagree.
+
+This guide builds it for Larkspur Home, a made-up online homeware shop in Amsterdam, reviewing a made-up draft from a warehouse company, Northgate Fulfilment. You can [download the same draft](/downloads/northgate-fulfilment-agreement.pdf) to try it. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 30 minutes.
 
 ## What you need
 
-- At least two AI providers connected (for example one from OpenAI and one from Mistral), under **Models**, **Connect a provider**.
-- Optionally, a search tool over your clause library or past contracts.
+- **Two AI providers connected**: here OpenAI and Anthropic, each with its own key. Pick models that read PDFs: OpenAI, Anthropic and Google models get the PDF itself; other providers get only its file name.
+- **A Slack workspace** where you may create an app.
 
-## How to build it
+## 1. Connect a second provider
 
-1. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Review the contract and write a risk memo."
-2. **Set the work mode to Panel.** In the **Work mode** section, pick **Panel**. You then fill in the main model, two or more panelists and, if you like, a judge. Give each panelist a different provider, and under its **Advanced**, an angle in its extra instructions: "your company's risk", "the other side's leverage", "compliance with the governing law". A panelist can also be one of your other assistants, with its own tools.
+If OpenAI is already connected (**Models**), connect Anthropic too: open **Models**, click **Connect a provider**, set **Name** to `Anthropic`, pick **Anthropic** under **Provider**, paste your key (from console.anthropic.com, **API keys**) and click **Save**.
 
-   ![Work mode set to Panel, with panelists on different providers and a judge](/screenshots/agent-work-mode-panel.png)
+![Connecting Anthropic](/screenshots/examples/cross-vendor-contract-review/01-connect-anthropic.png)
 
-3. **Add a judge.** The judge reads what the panelists said and writes the one answer they agree on. Without a judge, the main model does it.
-4. **Optionally give it a search tool** under **Tools and APIs**, so its reading can point to earlier contracts, not just the text in front of it.
-5. **Send it the contract.** Add a **Web chat** channel on its **Channels** tab, publish it, and attach the contract as a PDF, or have your document system call it.
-6. **Read the memo.** Each run shows every panelist's answer, which model gave it, and how far they agreed.
+## 2. Write what the memo must say
 
-## Ideas
+Open **Agents**, click **Create agent**, pick **Autonomous** and name it `Contract review`. Under **Personality & style**, write `Plain English, no legalese. Short sentences. Numbers exactly as the contract has them.` Under **Instructions**:
 
-- The same setup works for research summaries, due diligence or incident reviews: anywhere one model isn't enough.
-- For large volumes of low-stakes work, use **Cascade** instead: a cheaper model answers first, and the main model steps in only when a checker rejects the draft.
-- Have it ask a person before anything above a risk level goes out (see [Approvals](/approvals)).
+```
+You review supplier contracts for Larkspur Home B.V., an online homeware shop in Amsterdam, before anyone signs them.
+
+When someone attaches a contract, write a risk memo:
+1. One line: sign as drafted, or not yet.
+2. "Must change before signing": the clauses that put real money or data at risk.
+3. "Worth negotiating": the rest.
+For each clause give its number, what it says in one sentence, why it matters to us, and what to ask for instead. Use the contract's own numbers and dates.
+Then say where the readers disagreed.
+
+This memo prepares the conversation with our lawyer. It is not legal advice, and you never say a contract is safe to sign.
+```
+
+![Contract review with its instructions](/screenshots/examples/cross-vendor-contract-review/02-agent.png)
+
+## 3. Set up the panel
+
+Under **Work mode**, open **Work mode** and pick **Panel**. Fill in the slots:
+
+| Slot | Model | Its angle (under **Advanced**, **Extra instructions**) |
+|---|---|---|
+| **Main** | OpenAI **gpt-4o** | none: it follows the agent's instructions, so it reads for Larkspur's own risks |
+| **Panelist 1** | Anthropic **claude-sonnet-4-5** | `Read the contract as Northgate's lawyer: which clauses they will defend hardest, and where they can give way.` |
+| **Panelist 2** | OpenAI **gpt-4.1** | `Check the contract against Dutch and EU law: GDPR (a data processing agreement, sub-processors), governing law and courts, and clauses a Dutch court may not enforce.` |
+| **Judge** (click **Add a judge**) | Anthropic **claude-sonnet-4-5** | `Do not pick one reading. Combine every clause the readers raised into one risk memo: one line (sign as drafted, or not yet), then "Must change before signing", then "Worth negotiating", each with the clause number, what it says, why it matters and what to ask for. End with where the readers disagreed.` |
+
+Under each panelist's **Advanced**, also give it a **Name** (`Northgate side`, `Dutch and EU law`), so the run shows who said what.
+
+Why the judge needs its own instructions: by default a panel's judge looks for the answer most panelists agree on and returns that one. Here every panelist reads for something different on purpose, so the judge is told to combine them instead. It sees only the panel's answers, not the agent's instructions, which is why the memo format is repeated there.
+
+![Work mode Panel: main model, two panelists, a judge](/screenshots/examples/cross-vendor-contract-review/03-panel.png)
+
+![A panelist's extra instructions](/screenshots/examples/cross-vendor-contract-review/04-panelist-angle.png)
+
+Click **Save**, go back to the agent and click **Activate**.
+
+## 4. Put it in Slack
+
+**In Slack**, go to api.slack.com/apps, click **Create New App**, **From scratch**, name it `Contract review` and pick your workspace. Under **OAuth & Permissions**, **Bot Token Scopes**, add `app_mentions:read`, `chat:write`, `files:read` and `users:read`. `files:read` is what lets it download the PDF someone posts. Click **Install to Workspace** and copy the **Bot User OAuth Token** (`xoxb-...`). Under **Basic Information**, copy the **Signing Secret**.
+
+**In almyty**, on the agent's **Channels** tab, click **Add channel**, pick **Slack**, open **Advanced**, click **Create one here**, open **More options**, choose **Bot token** and paste the token and the signing secret. Click **Save**, **Save** at the bottom, then **Publish**. The page shows a **Callback URL**.
+
+![The Slack channel, live](/screenshots/examples/cross-vendor-contract-review/05-slack-live.png)
+
+**Back in Slack**, open **Event Subscriptions**, turn it on, paste the **Callback URL** as the **Request URL**, add the bot event `app_mention` and click **Save Changes**. In `#legal-review`, type `/invite @Contract review`.
+
+## 5. Try it
+
+In `#legal-review`, upload the contract PDF and write in the same message:
+
+```
+@Contract review Northgate sent their draft for the Venlo warehouse. Can you review it before my call with them on Friday?
+```
+
+A minute later the memo is in the thread:
+
+> **Risk memo: Northgate Fulfilment, warehousing and fulfilment agreement (draft NGF-2026-0412)**
+>
+> **Not yet.** Four clauses need changing before signing; the rest are worth asking for.
+>
+> **Must change before signing**
+> - **Clause 5.3.** Uncapped indemnity from us for anything arising from the products, packaging or labelling. Ask for a cap (12 months of fees) and carve out claims caused by Northgate.
+> - **Clause 5.1.** Northgate's liability is capped at 3 months of fees, about EUR 22,000 at our volumes, while it holds roughly EUR 1.4 million of our stock. Ask for 12 months of fees and a separate cap for stock loss.
+> - **Clause 4.2.** Northgate is liable for lost or damaged stock only for gross negligence. Ask for ordinary negligence, with a per-pallet value.
+> - **Clause 6.1.** No data processing agreement, and sub-processors "at its discretion". Under GDPR Article 28 we must approve sub-processors and have a written processing agreement. Add a DPA as a schedule before signing.
+>
+> **Worth negotiating**
+> - Clause 2.2. Renews for 12 months unless we give notice 120 days before the end. Put 1 September 2028 in the calendar or ask for 60 days.
+> - Clause 3.3. Fees can rise up to 9% a year on 30 days notice. Ask for a cap tied to Dutch CPI and 90 days notice.
+> - Clause 3.2. Minimum of 6,000 orders a month at EUR 1.10 per missing order. Our January to February average was 5,200 orders, so expect about EUR 880 a month in shortfall fees then.
+> - Clause 8.1. English law and London courts for a Dutch company and a warehouse in the Netherlands. Any dispute would be run abroad. Ask for Dutch law and the Amsterdam court.
+> - Clause 4.1. A general lien with a right to sell our stock 30 days after notice. Limit it to stock related to overdue undisputed invoices, and remove the right to sell.
+> - Clause 7.2. Leaving early costs 6 months of minimum fees, about EUR 34,200.
+>
+> **Where to expect push-back** (the reading as Northgate): the order minimum in 3.2 and the lien in 4.1. Offer a seasonal minimum rather than asking to drop the minimum.
+>
+> **Where the readers disagreed:** the reading for Larkspur ranks the fee increase in 3.3 as medium; the reading as Northgate expects them to accept a CPI link easily. Only the Dutch-law reading flags the missing data processing agreement (6.1), and that one cannot be negotiated away: GDPR requires it.
+
+On the agent's **Runs** tab, click the run to see each model's part: what each panelist answered, what the judge made of it, and what every model cost.
+
+![The run: each model's part and its cost](/screenshots/examples/cross-vendor-contract-review/06-run-roles.png)
+
+## Make it yours
+
+- **Your angles.** Change the panelists' extra instructions to what matters to you: "read it as our finance team: every payment term, fee and penalty", or "compare it with our standard terms" (paste them into the instructions).
+- **Another vendor.** Add a third provider under **Models** and give one panelist a model from it. Pick one that reads PDFs (OpenAI, Anthropic or Google), or paste the contract text into the message instead of attaching it.
+- **Cost.** A panel calls four models for every contract. For drafts that do not need it, a second agent with **Work mode** **Single** costs a quarter. The run's cost per model is on the **Runs** tab; see [Cap AI spending](/examples/govern-ai-spend) for limits.
+- **A sign-off before anything goes out.** If you later give it tools that send email or change records, add an approval rule (**Settings**, **Advanced**, **Approvals**) so a person signs off first.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| A panelist says it cannot see a contract | Its model does not open PDFs, so it reads the text almyty took out of the PDF. A scanned PDF has no text to take out: pick a model from OpenAI, Anthropic or Google for that slot, or paste the text. |
+| No answer in Slack | Check that **Event Subscriptions** has the Callback URL and `app_mention`, and that the bot is in the channel. |
+| It answers but ignores the PDF | The Slack app lacks `files:read`. Add it under **OAuth & Permissions**, reinstall the app, and paste the new bot token into the Slack credential under **Credentials**. |
+| **Panel needs 2 more panelists** when saving | Every panelist slot needs a model. Pick one in each. |
+| The run stopped with **BUDGET_EXCEEDED** | Four models on a long contract can cross the default $1 per run. Raise **Spending cap ($)** under **Run limits** on the edit page. |
 
 ## Related
 
-- [Work mode](/agents/autonomous#work-mode-how-it-works-and-which-models-do-it) · [Connect a provider](/llm-providers) · [Autonomous agents](/agents/autonomous)
+- [Work mode](/agents/autonomous#work-mode-how-it-works-and-which-models-do-it) · [Connect a provider](/llm-providers) · [Channels](/channels) · [Run limits](/run-limits)
+- [Cap AI spending](/examples/govern-ai-spend) · [Check Stripe payouts against Xero](/examples/stripe-payout-reconciliation)

@@ -52,6 +52,8 @@ export class MessageAttachmentResolver {
   static readonly MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
   /** Every file one request carries, together; the rest go as text. */
   static readonly MAX_REQUEST_BYTES = 20 * 1024 * 1024;
+  /** The most extracted text one file adds in place of itself (FILES_MODEL_TEXT_MAX_CHARS overrides). */
+  static readonly MAX_TEXT_CHARS = 20_000;
 
   constructor(
     @InjectRepository(Model) private readonly models: Repository<Model>,
@@ -139,23 +141,57 @@ export class MessageAttachmentResolver {
     inputs: ModelInputs,
     budget: { left: number },
   ): Promise<MessageContent> {
-    const fallback: MessageContent = { type: 'text', text: fileFallbackText(part) };
+    return (await this.resolveMedia(organizationId, part, inputs, budget)) ?? { type: 'text', text: fileFallbackText(await this.withStoredText(organizationId, part)) };
+  }
+
+  /**
+   * The part with the file's extracted text (a PDF's text layer, a text
+   * file's contents) when the reference itself carries none: a file
+   * uploaded to /files and attached to a run by id. Capped at
+   * FILES_MODEL_TEXT_MAX_CHARS (default 20,000) characters per file.
+   */
+  private async withStoredText(organizationId: string | undefined, part: MessageContent): Promise<MessageContent> {
+    if (part.text?.trim() || !organizationId || !part.fileId) return part;
+    try {
+      const file = await this.files.findOne({ where: { id: part.fileId, organizationId }, select: { id: true, extractedText: true } });
+      const text = file?.extractedText?.trim();
+      if (!text) return part;
+      const max = MessageAttachmentResolver.maxTextChars();
+      return { ...part, text: text.length > max ? `${text.slice(0, max)}\n[truncated]` : text };
+    } catch (err: any) {
+      this.logger.warn(`attachment ${part.fileId} text not read: ${err?.message ?? err}`);
+      return part;
+    }
+  }
+
+  private static maxTextChars(): number {
+    const n = Number(process.env.FILES_MODEL_TEXT_MAX_CHARS);
+    return Number.isInteger(n) && n > 0 ? n : MessageAttachmentResolver.MAX_TEXT_CHARS;
+  }
+
+  /** The file as an image or document part the model takes, or null for the text fallback. */
+  private async resolveMedia(
+    organizationId: string | undefined,
+    part: MessageContent,
+    inputs: ModelInputs,
+    budget: { left: number },
+  ): Promise<MessageContent | null> {
     const declared = part.mimeType ?? '';
     const wantsImage = inputs.image && MODEL_IMAGE_TYPES.has(declared);
     const wantsPdf = inputs.pdf && declared === 'application/pdf';
-    if (!organizationId || !part.fileId || !this.storage || (!wantsImage && !wantsPdf)) return fallback;
+    if (!organizationId || !part.fileId || !this.storage || (!wantsImage && !wantsPdf)) return null;
 
     const cap = wantsImage ? MessageAttachmentResolver.MAX_IMAGE_BYTES : MessageAttachmentResolver.MAX_DOCUMENT_BYTES;
     try {
       const file = await this.files.findOne({ where: { id: part.fileId, organizationId } });
       if (!file) return { type: 'text', text: `(${part.name ?? 'An attachment'} is no longer available.)` };
-      if (file.size > cap || file.size > budget.left) return fallback;
+      if (file.size > cap || file.size > budget.left) return null;
       const bytes = await this.storage.download(file.storageKey);
-      if (bytes.length > cap || bytes.length > budget.left) return fallback;
+      if (bytes.length > cap || bytes.length > budget.left) return null;
       // The bytes decide, not the stored type: a vendor refuses an image
       // whose declared type does not match what it is.
       const actual = sniffMediaType(bytes);
-      if (!actual || (wantsImage ? !MODEL_IMAGE_TYPES.has(actual) : actual !== 'application/pdf')) return fallback;
+      if (!actual || (wantsImage ? !MODEL_IMAGE_TYPES.has(actual) : actual !== 'application/pdf')) return null;
       budget.left -= bytes.length;
       return {
         type: wantsImage ? 'image' : 'document',
@@ -166,7 +202,7 @@ export class MessageAttachmentResolver {
     } catch (err: any) {
       // The file id is logged, never its storage key or a link to it.
       this.logger.warn(`attachment ${part.fileId} not sent to the model: ${err?.message ?? err}`);
-      return fallback;
+      return null;
     }
   }
 }

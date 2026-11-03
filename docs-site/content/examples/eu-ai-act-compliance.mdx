@@ -1,27 +1,103 @@
 # Get ready for the EU AI Act
 
-If people in the EU talk to your assistants, the EU AI Act asks you to tell them they are talking to an AI, to keep people in charge of risky decisions, and to document how each assistant works. almyty covers the practical parts: an AI notice on every channel, a technical document per assistant you can download, and a record of every action.
+## What you'll build
 
-The download follows the structure of the Act's Annex IV (its list of what technical documentation should cover). It is a starting point for your own documentation, not a legal assessment: whether you comply is still for you and your advisers to decide.
+The practical pieces the EU AI Act asks of a company whose customers and staff talk to AI assistants, set up for Velora Energy, a made-up energy supplier in Amsterdam:
+
+- **Tell people it is an AI** (Article 50): Velora's public web chat says so under every message box, in Velora's own words.
+- **Document each assistant**: a technical document per assistant, downloaded with one click, covering its purpose, models, tools, human oversight, data and logs.
+- **Keep people in charge**: refunds wait for a person (from [Decide who signs off](/examples/approval-policies)), and the document shows it.
+- **Keep records without extra personal data**: personal data hidden in the records almyty keeps, across the whole organization.
+
+![Velora's web chat: the answer, and the AI notice under the message box](/screenshots/examples/eu-ai-act-compliance/00-web-chat.png)
+
+The AI notice and the technical document are on every plan. Making personal-data hiding mandatory for the whole organization (the compliance pack, step 5) needs the **Business** plan. This guide helps you collect evidence; whether you comply is for you and your advisers to decide. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 20 minutes.
 
 ## What you need
 
-- The assistants you already run.
-- Someone who owns compliance in your company, to review the result.
+- **Owner or admin** in your almyty organization, and a connected AI model.
+- The **Billing assistant** and the approval policies from [Decide who signs off](/examples/approval-policies), for step 4.
+- Someone who owns compliance in your company, to read the result.
 
-## How to build it
+## 1. A public assistant
 
-1. **Keep the AI notice on.** Every channel people talk to (web chat, website widget, Slack, email and the rest) has an **AI disclosure** switch, on by default. People are told they are talking to an AI, with the line set in the assistant's branding. Turning it off needs the Enterprise plan.
-2. **Download the technical document.** Open the assistant and click **Tech doc** at the top. You get a document covering its purpose, the models it uses, its tools, human oversight, data handling, logging and change history.
-3. **Show that people stay in charge.** Use [verification](/agents/autonomous#verification) (a second model checks answers), [approvals](/examples/approval-policies) for risky steps, and the [audit trail](/examples/audit-to-siem) as your record.
-4. **Check the rest.** The [Compliance](/compliance) page goes through the Act and other rules (such as the GDPR) and says what almyty covers and what stays your responsibility.
-5. **Keep it current.** Download the document again whenever an assistant's models or tools change.
+Open **Agents**, click **Create agent** and pick **Autonomous**. Name it `Velora help`, pick a **Model**, and set:
 
-## Ideas
+- **Personality & style**: `Warm, plain and short. Use the customer's words, not energy jargon.`
+- **Instructions**:
 
-- Run almyty inside your own network if data has to stay in one region: see [Run everything inside your own network](/examples/air-gapped-self-host).
-- Send the audit trail to your security team's tools for record keeping.
+> You answer Velora Energy's customers on our website about tariffs, meter readings, moving house and paying bills. Velora has two tariffs: Fixed (one price per kWh for 12 months) and Dynamic (the hourly market price plus €0.021 per kWh). A customer can switch tariff once a month; the switch starts on the first day of the next month.
+>
+> You cannot see anyone's account. For a question about a particular bill, a refund or a change to a contract, ask for the customer's email address and tell them our billing team will reply by email within one working day. Never promise a refund.
+
+It gets no tools: it cannot see or change customer accounts, which keeps what it can do small and easy to describe. Click **Save**, then **Activate**.
+
+## 2. Say it is an AI, in your own words
+
+On the assistant, open the **Channels** tab and click **Branding and visitor rules**. Set **Name people see** to `Velora Energy help`, the **Greeting** to `Hi! Ask me about tariffs, meter readings, moving house or paying your bill.`, and **AI disclosure** to:
+
+```
+You're chatting with Velora's AI assistant. Ask for a person at any time.
+```
+
+![Branding, with the AI notice in Velora's words](/screenshots/examples/eu-ai-act-compliance/01-branding.png)
+
+Click **Save**. Left blank, the notice uses almyty's default wording. It applies to every channel of the assistant.
+
+## 3. Publish the web chat
+
+On **Channels**, click **Add channel**, pick **Web chat** and click **Publish**. The channel page shows the AI notice switch, on:
+
+![The web chat channel: Tell people they are talking to an AI, switched on](/screenshots/examples/eu-ai-act-compliance/02-channel-notice.png)
+
+The switch is on for every new channel, web chat, website widget, Slack, WhatsApp, email and the rest. On a web chat the notice sits under the message box; on messaging channels it comes before the first reply of each conversation. It can only be switched off with the white-label option of the Enterprise plan.
+
+## 4. Download the technical document
+
+Open the **Billing assistant** and click **Tech doc** at the top. You get a Markdown file, `billing-assistant-technical-documentation.md`, laid out along the Act's Annex IV:
+
+![The billing assistant's technical document](/screenshots/examples/eu-ai-act-compliance/03-tech-doc.png)
+
+It is written from the assistant's real configuration and history: **1. General description**, **2. Models and providers**, **3. Capabilities and tools** (here the three Stripe tools), **4. Human oversight** (that it can ask for approval, and how many requests were approved, rejected or left to expire), **5. Data governance** (memory, files, schedules), **6. Logging and traceability** (runs, cost, where the audit log is) and **7. Change history**. Add your own text around it, such as the assistant's purpose and the risks you considered, and keep each version. Download it again when the assistant's models or tools change.
+
+## 5. Hide personal data in the records, for everyone
+
+Open **Settings**, then **Advanced → Compliance**. Turn on **Enforce PII filter**. Leave all categories unticked to hide every built-in kind (email addresses, phone numbers, card numbers and so on), or tick only the ones you want hidden. Turn on **Enforce security scanner** too, which checks what comes in for prompt-injection attempts.
+
+![Compliance: personal data hidden in records across the organization](/screenshots/examples/eu-ai-act-compliance/04-compliance-policy.png)
+
+Click **Save**. From now on, tool call records, run steps, the audit log and answers to outside callers hide personal data, for every assistant and gateway; nobody can switch it off for one of them. Tools still receive the real values, so the billing assistant can still look customers up by email.
+
+Below the policy, the compliance report scores what is enforced and lists each control. **Download JSON** saves it for your records.
+
+![The compliance report](/screenshots/examples/eu-ai-act-compliance/05-posture.png)
+
+## Try it
+
+Open the web chat's address (on the web chat channel, **Open it**) as a customer would and ask:
+
+```
+Can I switch to the dynamic tariff from next month?
+```
+
+The assistant answers from its instructions, and the line under the message box says it is an AI (the picture at the top). Every conversation is under the assistant's **Runs** tab.
+
+## Make it yours
+
+- **Records your security team keeps.** Stream the audit trail to Splunk or Datadog: [Send your audit trail to Splunk](/examples/audit-to-siem).
+- **A second opinion.** Turn on verification, so a second model checks answers before they go out (see [Autonomous agents](/agents/autonomous#verification)).
+- **How long chats are kept.** Under **Branding and visitor rules → Advanced → Visitor data**, set how many days visitors' chats are kept and whether they may download or delete them (see [Visitor data requests](/channels/visitor-data)).
+- **Data in one region.** Run almyty in your own network: [Run everything inside your own network](/examples/air-gapped-self-host).
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| The notice switch cannot be turned off | That is on purpose: turning it off needs the Enterprise plan's white-label option. |
+| The notice shows the default wording | The text is set under **Branding and visitor rules**, not on the channel. Save there. |
+| Personal data still shows in a run | The filter applies to what is recorded from the moment you save; older runs keep what they had. |
+| **Compliance** shows an upgrade prompt | The compliance pack needs the Business plan. |
 
 ## Related
 
-- [Compliance pack](/enterprise/compliance-pack) · [Compliance](/compliance) · [Channels](/channels) · [Approvals](/approvals)
+- [Compliance](/compliance) · [Compliance pack](/enterprise/compliance-pack) · [Channels](/channels) · [Decide who signs off](/examples/approval-policies)

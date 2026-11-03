@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateToolGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 
 @Controller('organizations/:organizationId/tools')
 @ApiBearerAuth()
@@ -31,6 +32,7 @@ export class ToolsExportController {
 
   @Get(':toolId/skill')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Generate skill file for a tool' })
   @ApiResponse({ status: 200, description: 'Skill generated successfully' })
   async getToolSkill(
@@ -60,6 +62,7 @@ export class ToolsExportController {
 
   @Get(':toolId/cli')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Generate CLI script for a tool' })
   @ApiQuery({ name: 'format', enum: ['bash', 'node'], required: false })
   @ApiResponse({ status: 200, description: 'CLI script generated successfully' })
@@ -91,6 +94,7 @@ export class ToolsExportController {
 
   @Get(':toolId/sdk')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.TOOLS_READ)
   @ApiOperation({ summary: 'Generate TypeScript SDK for a tool' })
   @ApiResponse({ status: 200, description: 'SDK generated successfully' })
   async getToolSdk(

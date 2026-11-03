@@ -18,6 +18,7 @@ import { IrcAdapter } from '../adapters/irc.adapter';
 import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
 import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { installFetchMock } from '../adapters/__tests__/test-helpers';
+import { expectRunProjectionsHold, runsWithEvents } from '../../../../test/fake-run-events';
 import {
   ClauseModel,
   ExecutedQuery,
@@ -36,6 +37,9 @@ import {
  * getAdapter() is exercised indirectly (testConnection resolves the adapter
  * before probing), so this doubles as a registry-completeness check.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('ChannelGatewayService.testConnection', () => {
   let service: ChannelGatewayService;
   let fetchMock: ReturnType<typeof installFetchMock>;
@@ -296,13 +300,16 @@ describe('ChannelGatewayService.testConnection', () => {
   });
 
   describe('applyAiDisclosure (EU AI Act Art. 50)', () => {
-    let runRepository: { save: jest.Mock };
+    let runRepository: ReturnType<typeof runsWithEvents>;
     let svc: ChannelGatewayService;
     const makeGateway = (configuration: Record<string, any>): Gateway =>
       ({ configuration } as unknown as Gateway);
 
     beforeEach(() => {
-      runRepository = { save: jest.fn(async (r) => r) };
+      runRepository = runsWithEvents([
+        { id: 'run-a', status: 'running' as any, metadata: {} },
+        { id: 'run-b', status: 'running' as any, metadata: {} },
+      ]);
       svc = new ChannelGatewayService(
         null as any,
         runRepository as any,
@@ -325,26 +332,37 @@ describe('ChannelGatewayService.testConnection', () => {
       );
     });
 
-    it('prefixes the default disclosure on the first message of a conversation', async () => {
-      const run: any = { metadata: {} };
+    it('prefixes the default disclosure on the first message of a conversation, and records it on the run and its log', async () => {
+      const run: any = { id: 'run-a', metadata: {} };
       const out = await svc.applyAiDisclosure(makeGateway({ aiDisclosure: true }), run, 'Hi!');
       expect(out).toBe('You are chatting with an AI assistant.\n\nHi!');
       expect(run.metadata.aiDisclosureSent).toBe(true);
-      expect(runRepository.save).toHaveBeenCalledWith(run);
+      expect(runRepository.row('run-a')!.metadata).toEqual({ aiDisclosureSent: true });
+      expect(runRepository.events.rows('run-a').find((e) => e.type === 'metadata_changed')!.payload).toEqual({ set: { aiDisclosureSent: true } });
+    });
+
+    it('merges the one key into the run as stored, never writing back a stale copy of the rest', async () => {
+      // The run object was loaded before the step that answered committed.
+      runRepository.seed({ id: 'run-s', status: 'running', metadata: { replyTo: ['x'] }, steps: [{ type: 'llm_call', output: 'answer' }] } as any);
+      const stale: any = { id: 'run-s', metadata: {}, steps: [] };
+      await svc.applyAiDisclosure(makeGateway({ aiDisclosure: true }), stale, 'Hi!');
+      const row = runRepository.row('run-s')!;
+      expect(row.metadata).toEqual({ replyTo: ['x'], aiDisclosureSent: true });
+      expect(row.steps).toHaveLength(1);
     });
 
     it('does not prefix subsequent messages of the same conversation', async () => {
-      const run: any = { metadata: {} };
+      const run: any = { id: 'run-a', metadata: {} };
       const gw = makeGateway({ aiDisclosure: true });
       const first = await svc.applyAiDisclosure(gw, run, 'first');
       const second = await svc.applyAiDisclosure(gw, run, 'second');
       expect(first).toContain('AI assistant');
       expect(second).toBe('second');
-      expect(runRepository.save).toHaveBeenCalledTimes(1);
+      expect(runRepository.events.rows('run-a').filter((e) => e.type === 'metadata_changed')).toHaveLength(1);
     });
 
     it('uses a custom disclosure string when configured', async () => {
-      const run: any = { metadata: {} };
+      const run: any = { id: 'run-a', metadata: {} };
       const out = await svc.applyAiDisclosure(
         makeGateway({ aiDisclosure: 'Du chattest mit einem KI-Assistenten.' }),
         run,
@@ -354,17 +372,17 @@ describe('ChannelGatewayService.testConnection', () => {
     });
 
     it('never prefixes when disabled or unset', async () => {
-      const run: any = { metadata: {} };
+      const run: any = { id: 'run-a', metadata: {} };
       expect(await svc.applyAiDisclosure(makeGateway({}), run, 'x')).toBe('x');
       expect(await svc.applyAiDisclosure(makeGateway({ aiDisclosure: false }), run, 'x')).toBe('x');
-      expect(runRepository.save).not.toHaveBeenCalled();
+      expect(runRepository.events.rows()).toEqual([]);
       expect(run.metadata.aiDisclosureSent).toBeUndefined();
     });
 
     it('starts a new conversation (new run) with the disclosure again', async () => {
       const gw = makeGateway({ aiDisclosure: true });
-      const run1: any = { metadata: {} };
-      const run2: any = { metadata: {} };
+      const run1: any = { id: 'run-a', metadata: {} };
+      const run2: any = { id: 'run-b', metadata: {} };
       await svc.applyAiDisclosure(gw, run1, 'a');
       const out = await svc.applyAiDisclosure(gw, run2, 'b');
       expect(out).toBe('You are chatting with an AI assistant.\n\nb');

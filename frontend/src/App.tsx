@@ -19,6 +19,7 @@ import { Toaster } from '@/components/ui/toaster'
 // Auth pages (kept eager — first thing users see)
 import { ForgotPasswordPage } from '@/pages/auth/forgot-password'
 import { LoginPage } from '@/pages/auth/login'
+import { SsoErrorPage } from '@/pages/auth/sso-error'
 import { OAuthConsentPage } from '@/pages/oauth/consent'
 import { RegisterPage } from '@/pages/auth/register'
 import { ResetPasswordPage } from '@/pages/auth/reset-password'
@@ -200,6 +201,7 @@ export function createAppRoutes() {
           <Route path="/agents/new" element={<AgentBuilderPage />} />
           <Route path="/agents/import" element={<AgentImportPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
+          <Route path="/agents/:id/runs/:runId" element={<AgentDetailPage />} />
           <Route path="/agents/:id/channels/new" element={<AgentChannelNewPage />} />
           <Route path="/agents/:id/schedule" element={<AgentSchedulePage />} />
           <Route path="/agents/:id/always-on" element={<AgentAlwaysOnPage />} />
@@ -273,6 +275,7 @@ export function createAppRoutes() {
             <Route path="verify-email" element={<VerifyEmailPage />} />
             <Route path="forgot-password" element={<ForgotPasswordPage />} />
             <Route path="reset-password" element={<ResetPasswordPage />} />
+            <Route path="sso-error" element={<SsoErrorPage />} />
             <Route path="*" element={<Navigate to="/auth/login" replace />} />
           </Routes>
         </AuthLayout>

@@ -14,6 +14,7 @@ import { BUILT_IN_TOOLS } from '../../../agents/agent-runtime.service';
 import { resolveRunLimits } from '../../../agents/run-limits';
 import { LlmChatHelper } from '../../../llm-providers/llm-chat.helper';
 import { fakeRepository, UnmodelledQueryError } from '../../../../test/fake-repository';
+import { expectRunProjectionsHold, withRunEvents } from '../../../../test/fake-run-events';
 import { membershipFixture } from '../../../../test/execution-access.fixture';
 import { gatewayPrincipal } from '../../../../common/authorization/execution-access.service';
 
@@ -32,6 +33,9 @@ const { callLlmProviderHttpStream } = require('../../../llm-providers/providers/
  * Every tool step and the draft reply stay hidden; a last call with no
  * tools writes the answer, and that is what streams and what is kept.
  */
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
+
 describe('hosted chat: the answer is a no-tools call that streams', () => {
   // ── Provider byte streams ──────────────────────────────────────────
   const anthropicToolStep = [
@@ -165,6 +169,7 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
           totalCost: 0,
           totalTokens: 0,
           toolCallCount: 0,
+          headSeq: 0,
           recursionDepth: 0,
           executionTime: 0,
           createdAt: new Date(),
@@ -175,6 +180,8 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
         } as any,
       ],
     });
+    // The step commit writes the row and its run events in one transaction.
+    withRunEvents(runRepository);
 
     const toolExecutorService = {
       executeTool: jest.fn(async (toolId: string) => {

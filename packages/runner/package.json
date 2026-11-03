@@ -24,14 +24,14 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@almyty/client": "^1.5.6",
+    "@almyty/client": "^1.5.7",
     "node-pty": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^25.4.0",
+    "@types/node": "^26.6.5",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
-    "vitest": "^4.1.0"
+    "vitest": "^5.0.5"
   },
   "overrides": {
     "esbuild": "^0.28.1",

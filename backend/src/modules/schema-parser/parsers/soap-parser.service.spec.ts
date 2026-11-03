@@ -776,4 +776,58 @@ describe('SOAPParserService', () => {
       expect(result.resources).toBeDefined();
     });
   });
+
+  describe('operation inputs from the WSDL types', () => {
+    const wsdl = `<?xml version="1.0" encoding="utf-8"?>
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:s="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://harborsupply.example/stock" targetNamespace="http://harborsupply.example/stock">
+  <wsdl:types>
+    <s:schema targetNamespace="http://harborsupply.example/stock" elementFormDefault="qualified">
+      <s:element name="ReserveStock"><s:complexType><s:sequence>
+        <s:element name="Sku" type="s:string"/>
+        <s:element name="WarehouseCode" type="s:string" minOccurs="0"/>
+        <s:element name="Quantity" type="s:int"/>
+        <s:element name="Tags" type="s:string" minOccurs="0" maxOccurs="unbounded"/>
+      </s:sequence></s:complexType></s:element>
+      <s:element name="GetPrice" type="tns:PriceQuery"/>
+      <s:complexType name="PriceQuery"><s:sequence><s:element name="Sku" type="s:string"/><s:element name="Discount" type="s:decimal" minOccurs="0"/></s:sequence></s:complexType>
+    </s:schema>
+  </wsdl:types>
+  <wsdl:message name="ReserveStockSoapIn"><wsdl:part name="parameters" element="tns:ReserveStock"/></wsdl:message>
+  <wsdl:message name="GetPriceSoapIn"><wsdl:part name="parameters" element="tns:GetPrice"/></wsdl:message>
+  <wsdl:message name="PingIn"><wsdl:part name="Message" type="s:string"/></wsdl:message>
+  <wsdl:portType name="StockServiceSoap">
+    <wsdl:operation name="ReserveStock"><wsdl:input message="tns:ReserveStockSoapIn"/></wsdl:operation>
+    <wsdl:operation name="GetPrice"><wsdl:input message="tns:GetPriceSoapIn"/></wsdl:operation>
+    <wsdl:operation name="Ping"><wsdl:input message="tns:PingIn"/></wsdl:operation>
+  </wsdl:portType>
+</wsdl:definitions>`
+
+    const inputs = async (name: string) => (await service.parseSchema(wsdl)).operations.find((o) => o.name === name)!.parameters.body.schema
+
+    it('a document/literal operation takes the fields of its element', async () => {
+      expect(await inputs('ReserveStock')).toEqual({
+        type: 'object',
+        properties: {
+          Sku: { type: 'string' },
+          WarehouseCode: { type: 'string' },
+          Quantity: { type: 'integer' },
+          Tags: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['Sku', 'Quantity'],
+      })
+    })
+
+    it('an element typed by a named complexType takes that type\'s fields', async () => {
+      expect(await inputs('GetPrice')).toEqual({
+        type: 'object',
+        properties: { Sku: { type: 'string' }, Discount: { type: 'number' } },
+        required: ['Sku'],
+      })
+    })
+
+    it('an rpc-style part is an input of its own', async () => {
+      expect(await inputs('Ping')).toEqual({ type: 'object', properties: { Message: { type: 'string' } }, required: ['Message'] })
+    })
+  });
 });

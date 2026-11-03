@@ -95,6 +95,7 @@ describe("an agent's memory settings at run time", () => {
         content: 'Order 4411 belongs to Dana',
         tier: 'long',
         tags: ['auto-saved', 'fact'],
+        metadata: expect.objectContaining({ type: 'fact' }),
         actor: { user_id: 'u-1' },
         opts: { agentId: 'agent-1', runId: 'run-1', expiresInSeconds: 30 * 86400 },
       }),
@@ -160,7 +161,8 @@ describe("an agent's memory settings at run time", () => {
     );
     expect(bodyText(seen.bodies[1])).toContain('card numbers');
     expect(saves(seen.memoryAccounts)).toEqual([
-      expect.objectContaining({ content: 'Prefers email.', tier: 'long', scope: { scope_type: 'user', scope_id: 'org-1:user:u-1' } }),
+      // The kind it asked for is kept next to the tier it maps to.
+      expect.objectContaining({ content: 'Prefers email.', tier: 'long', metadata: expect.objectContaining({ type: 'preference' }), scope: { scope_type: 'user', scope_id: 'org-1:user:u-1' } }),
     ]);
   });
 

@@ -6,7 +6,7 @@
  * `EntitlementGate mode="lock"` so an org without the entitlement sees the
  * Business-tier upgrade prompt instead of a 402. Mirrors sso-settings.tsx.
  */
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { Disclosure } from '@/components/ui/disclosure'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import {
   AlertDialog,
@@ -340,6 +341,12 @@ function RolesCard({
 /** "New custom role" / "Edit role", inline above the roles table. */
 function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDone: () => void }) {
   const queryClient = useQueryClient()
+  // What the app enforces, from the server's own list (GET /rbac/permissions).
+  const permissionCatalog = useQuery({
+    queryKey: ['rbac', 'permissions'],
+    queryFn: () => rbacApi.listPermissions(),
+    staleTime: Infinity,
+  })
   const { success, error } = useNotifications()
 
   const form = useForm<RoleFormData>({
@@ -393,14 +400,33 @@ function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDon
       <Field id="rbac-role-description" label="Description">
         <Textarea placeholder="What this role is for" rows={2} {...form.register('description')} />
       </Field>
-      <Field id="rbac-role-permissions" label="Permissions" hint="One permission per line (or comma-separated).">
+      <Field
+        id="rbac-role-permissions"
+        label="Permissions"
+        hint="One permission per line (or comma-separated). A role adds to what someone's own role allows; it never takes anything away."
+      >
         <Textarea
-          placeholder={'agents:read\ntools:manage\naudit:export'}
+          placeholder={'agents:execute\ntools:read\naudit:read'}
           rows={4}
           className="font-mono text-sm"
           {...form.register('permissions')}
         />
       </Field>
+      {permissionCatalog.data && permissionCatalog.data.length > 0 && (
+        <Disclosure title="What each permission unlocks" testId="rbac-permission-catalog">
+          <p className="mb-2 text-xs text-muted-foreground">
+            These are the permissions the app enforces. Anything else gates nothing.
+          </p>
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
+            {permissionCatalog.data.map((p) => (
+              <Fragment key={p.permission}>
+                <dt className="font-mono text-foreground">{p.permission}</dt>
+                <dd className="text-muted-foreground">{p.description}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </Disclosure>
+      )}
       <InlineFormActions
         onCancel={onDone}
         submitLabel={editing ? 'Save changes' : 'Create role'}

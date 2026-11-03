@@ -25,6 +25,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
@@ -46,6 +47,7 @@ export class AgentExecutionController {
 
   @Post(':id/invoke')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @Throttle({ default: { ttl: 60000, limit: 30 } })
   @ApiOperation({ summary: 'Invoke/execute an agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
@@ -136,6 +138,7 @@ export class AgentExecutionController {
 
   @Post(':id/stream')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_EXECUTE)
   @Throttle({ default: { ttl: 60000, limit: 30 } })
   @ApiOperation({ summary: 'Stream agent execution via SSE' })
   @ApiParam({ name: 'id', description: 'Agent ID' })

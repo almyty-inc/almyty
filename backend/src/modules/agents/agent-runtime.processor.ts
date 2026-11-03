@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { Workspace } from '../../entities/workspace.entity';
 import { releaseRunWorkspaces } from '../workspace/run-end-release';
 import { AgentRuntimeService } from './agent-runtime.service';
+import { writeRun } from './run-event-writer';
 import { Agent } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { runWithRequestContext } from '../../common/request-context';
@@ -19,6 +20,7 @@ import {
   AlwaysOnService,
   LEGACY_HEARTBEAT_JOB,
 } from './always-on/always-on.service';
+import { PUSH_WAKE_CHANGES_JOB, PUSH_WAKE_RENEW_JOB, PushWakesService } from './always-on/push-wakes/push-wakes.service';
 
 /**
  * A run in one of these is finished; a late queue failure must not
@@ -55,6 +57,9 @@ export class AgentRuntimeProcessor {
     // standing thread reports through it. Optional for the positional tests.
     @Optional()
     private readonly alwaysOn?: AlwaysOnService,
+    // Push wakes: the debounced "what changed" job and the renewal sweep.
+    @Optional()
+    private readonly pushWakes?: PushWakesService,
   ) {}
 
   @Process('next-step')
@@ -102,6 +107,10 @@ export class AgentRuntimeProcessor {
             // Run is either sleeping (delayed resume enqueued by runtime) or waiting for user input.
             // Do NOT enqueue the next step — it will be resumed by the runtime when appropriate.
             this.logger.log(`Run ${runId} is waiting (sleeping or awaiting user input)`);
+            // An always-on run that asked its owner a question has it posted on their channel.
+            await this.alwaysOn?.onRunWaiting(runId).catch((err: any) =>
+              this.logger.warn(`Could not post the question of run ${runId}: ${err?.message ?? err}`),
+            );
           } else {
             this.logger.log(`Run ${runId} completed`);
             // Finished (completed, failed, cancelled or timed out): its
@@ -166,6 +175,24 @@ export class AgentRuntimeProcessor {
     if (resumed) this.logger.log(`Always on: ${resumed} agent(s) back on, their plans have room again`);
   }
 
+  /**
+   * A push wake's debounce window closed: read what changed and wake the
+   * agent (push-wakes.service.ts). Queued by the first push of a window.
+   */
+  @Process(PUSH_WAKE_CHANGES_JOB)
+  async handlePushWakeChanges(job: Job<{ pushWakeId: string }>) {
+    if (!this.pushWakes) return;
+    const outcome = await this.pushWakes.processPushes(job.data.pushWakeId);
+    this.logger.debug(`Push wake ${job.data.pushWakeId}: ${outcome}`);
+  }
+
+  /** Subscribe again the push wakes whose subscriptions are about to end. */
+  @Process(PUSH_WAKE_RENEW_JOB)
+  async handlePushWakeRenewals() {
+    if (!this.pushWakes) return;
+    const { renewed, failed } = await this.pushWakes.renewDue();
+    if (renewed || failed) this.logger.log(`Push wakes: ${renewed} renewed, ${failed} failed`);
+  }
   /** Everything a finished run hands on: its scheduled result, its always-on report. */
   private async finished(runId: string): Promise<void> {
     await this.scheduler?.deliverScheduledRun(runId);
@@ -261,22 +288,17 @@ export class AgentRuntimeProcessor {
       `'${job?.name ?? 'next-step'}': ${error?.message || 'unknown error'}`
     ).slice(0, 2000);
 
-    const steps = [
-      ...(Array.isArray(run.steps) ? run.steps : []),
-      {
-        type: 'error',
-        error: reason,
-        timestamp: new Date().toISOString(),
-      },
-    ];
+    const failure = { type: 'error', error: reason, timestamp: new Date().toISOString() };
 
     // Guarded on the status we read, so a step that reached a terminal
-    // state between that read and this write is not reopened.
-    const res = await this.runRepository.update(
+    // state between that read and this write is not reopened. The error
+    // step goes after the steps as locked, and on the run's log.
+    const written = await writeRun(
+      this.runRepository,
       { id: runId, status: statusBefore },
-      { status: AgentRunStatus.FAILED, error: reason, steps },
+      (row) => ({ status: AgentRunStatus.FAILED, error: reason, steps: [...(Array.isArray(row.steps) ? row.steps : []), failure] }),
     );
-    if ((res.affected ?? 0) === 0) {
+    if (!written) {
       this.logger.warn(
         `Run ${runId} changed status while recording an exhausted-retry failure; left as found`,
       );

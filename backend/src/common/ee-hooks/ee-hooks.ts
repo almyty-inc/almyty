@@ -126,6 +126,13 @@ export interface AdvancedRbacHook {
       context?: Record<string, unknown>;
     },
   ): Promise<RbacHookDecision>;
+
+  /**
+   * Names of the user's active custom roles in the org (empty when
+   * unlicensed): what an approval policy's approver role matches besides
+   * the built-in and team roles.
+   */
+  roleNames?(organizationId: string, userId: string): Promise<string[]>;
 }
 
 // ── Compliance enforcement (entitlement: compliance_pack) ──

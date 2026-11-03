@@ -12,6 +12,7 @@ import {
   ValidationPipe,
   Request,
   ParseUUIDPipe,
+  Optional,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -23,13 +24,43 @@ import { CreateTeamDto } from './dto/create-team.dto';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { OrganizationRole } from '../../entities/user-organization.entity';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Controller('organizations')
 @ApiTags('Organizations')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OrganizationsController {
-  constructor(private readonly organizationsService: OrganizationsService) {}
+  constructor(
+    private readonly organizationsService: OrganizationsService,
+    // People and team changes on the organization's audit trail (and its
+    // SIEM streams); they were missing from it. AuditLogModule is global.
+    @Optional() private readonly auditLog?: AuditLogService,
+  ) {}
+
+  /** One people-or-team change on the audit trail. Never throws. */
+  private audit(
+    req: any,
+    organizationId: string,
+    action: AuditAction,
+    resourceType: AuditResource,
+    resourceId: string,
+    details: Record<string, unknown> = {},
+    resourceName?: string,
+  ): void {
+    void this.auditLog?.log({
+      organizationId,
+      userId: req?.user?.id,
+      action,
+      resourceType,
+      resourceId,
+      resourceName,
+      details,
+      ipAddress: req?.ip,
+      userAgent: req?.headers?.['user-agent'],
+    });
+  }
 
   @Get()
   @UseGuards(JwtAuthGuard)  // Only JWT auth, no roles guard
@@ -112,6 +143,11 @@ export class OrganizationsController {
     @Request() req: any
   ) {
     const data = await this.organizationsService.inviteUser(organizationId, inviteData, req.user.id);
+    this.audit(req, organizationId, AuditAction.INVITE_SEND, AuditResource.INVITATION, String(inviteData.email ?? '').toLowerCase(), {
+      email: inviteData.email,
+      role: inviteData.role,
+      emailSent: data?.inviteSent ?? null,
+    }, inviteData.email);
     return { success: true, data, message: 'User invited successfully' };
   }
 
@@ -131,8 +167,10 @@ export class OrganizationsController {
   async revokePendingInvite(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('inviteId') inviteId: string,
+    @Request() req: any,
   ) {
     const data = await this.organizationsService.revokePendingInvite(organizationId, inviteId);
+    this.audit(req, organizationId, AuditAction.INVITE_REVOKE, AuditResource.INVITATION, inviteId, { revoked: data?.revoked ?? null });
     return { success: true, data, message: 'Invite revoked' };
   }
 
@@ -146,6 +184,7 @@ export class OrganizationsController {
     @Request() req: any
   ) {
     const data = await this.organizationsService.updateMemberRole(organizationId, userId, roleData.role, req.user.id);
+    this.audit(req, organizationId, AuditAction.MEMBER_ROLE_CHANGE, AuditResource.USER, userId, { role: roleData.role });
     return { success: true, data, message: 'Member role updated successfully' };
   }
 
@@ -158,6 +197,7 @@ export class OrganizationsController {
     @Request() req: any
   ) {
     const data = await this.organizationsService.removeMember(organizationId, userId, req.user.id);
+    this.audit(req, organizationId, AuditAction.MEMBER_REMOVE, AuditResource.USER, userId);
     return { success: true, data, message: 'Member removed successfully' };
   }
 
@@ -176,9 +216,10 @@ export class OrganizationsController {
   async createTeam(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Body() teamData: CreateTeamDto,
-    @Request() _req: any
+    @Request() req: any
   ) {
     const data = await this.organizationsService.createTeam(organizationId, teamData);
+    this.audit(req, organizationId, AuditAction.TEAM_CREATE, AuditResource.TEAM, data?.id ?? '', { name: teamData.name }, data?.name ?? teamData.name);
     return { success: true, data, message: 'Team created successfully' };
   }
 
@@ -201,6 +242,7 @@ export class OrganizationsController {
       teamData,
       req.user.id,
     );
+    this.audit(req, organizationId, AuditAction.TEAM_UPDATE, AuditResource.TEAM, teamId, { name: teamData.name, description: teamData.description }, data?.name);
     return { success: true, data, message: 'Team updated successfully' };
   }
 
@@ -214,6 +256,7 @@ export class OrganizationsController {
   ) {
     // Deletion is gated to org owner/admin; team_admin cannot delete.
     const data = await this.organizationsService.deleteTeam(organizationId, teamId, req.user.id);
+    this.audit(req, organizationId, AuditAction.TEAM_DELETE, AuditResource.TEAM, teamId);
     return { success: true, data, message: 'Team deleted successfully' };
   }
 
@@ -247,6 +290,7 @@ export class OrganizationsController {
       undefined,
       req.user.id,
     );
+    this.audit(req, organizationId, AuditAction.TEAM_MEMBER_ADD, AuditResource.TEAM, teamId, { userId: memberData.userId });
     return { success: true, data, message: 'Member added to team successfully' };
   }
 
@@ -267,6 +311,7 @@ export class OrganizationsController {
       roleData.role,
       req.user.id,
     );
+    this.audit(req, organizationId, AuditAction.TEAM_MEMBER_ROLE_CHANGE, AuditResource.TEAM, teamId, { userId, role: roleData.role });
     return { success: true, data, message: 'Team member role updated successfully' };
   }
 
@@ -285,6 +330,7 @@ export class OrganizationsController {
       userId,
       req.user.id,
     );
+    this.audit(req, organizationId, AuditAction.TEAM_MEMBER_REMOVE, AuditResource.TEAM, teamId, { userId });
     return { success: true, data, message: 'Member removed from team successfully' };
   }
 }

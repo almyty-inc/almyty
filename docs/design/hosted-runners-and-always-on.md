@@ -634,7 +634,8 @@ As built in phase 1 (`modules/agents/always-on/always-on.types.ts`), the
 shape differs in a few places: Webhook channels sit in `wakeOn.channelIds`
 with the rest; the owner's own channel is `ownerChannel: { channelId,
 address, trustEmail? }` (Decision 1); the ask-first list is
-`askFirstToolIds`; `report` is `every_wake`, `when_acted` or
+`askFirstToolIds`; `report` is `every_wake`, `when_news` (the default for a
+new agent: only an answer that is not `NOTHING_TO_REPORT`), `when_acted` or
 `daily_digest`, with `digest: { time, timezone }` and `enabledAt` beside it; `liveRunId` tracks the standing thread's latest run;
 `home` and `workspaceId` wait for hosted runners. `IDENTITY_LAPSED` joined
 the pause reasons with agent identity.

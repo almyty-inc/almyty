@@ -46,6 +46,7 @@ import {
   applyJsonBodyTemplate,
   substituteHeaderValue,
   encodeFormUrlencoded,
+  serializeQueryParams,
   generateRequestId,
 } from '../tool-execution-utils';
 
@@ -56,6 +57,9 @@ import {
  */
 import { executeWithPagination, processHttpResponse } from './tool-http-pagination';
 import { matchDelimited } from '../../../common/security/linear-text';
+import { operationHeaderParams } from '../operation-header-params';
+import { formEncode, isFormBody } from './form-encode';
+import { isGroupedArguments } from './argument-shape';
 const MAX_ERR_MESSAGE = 500;
 
 /** Default per-response size cap. 10MB for success, 5MB for the body we send. */
@@ -346,12 +350,7 @@ export class ToolHttpExecutor {
       let headerParams: Record<string, any> = {};
       let bodyData: any = null;
 
-      if (
-        parameters.path ||
-        parameters.query ||
-        parameters.header ||
-        parameters.body !== undefined
-      ) {
+      if (isGroupedArguments(parameters, operation)) {
         // Grouped shape
         pathParams = parameters.path || {};
         queryParams = parameters.query || {};
@@ -371,7 +370,12 @@ export class ToolHttpExecutor {
             pathParams[name] = parameters[name];
           }
         });
-        const rest = Object.keys(parameters).filter(key => !pathParamNames.includes(key));
+        // Declared header parameters (xero-tenant-id) are headers, never query.
+        const headerNames = new Set(operationHeaderParams(operation).map(([name]) => name));
+        for (const name of headerNames) {
+          if (parameters[name] !== undefined && parameters[name] !== null) headerParams[name] = String(parameters[name]);
+        }
+        const rest = Object.keys(parameters).filter(key => !pathParamNames.includes(key) && !headerNames.has(key));
         if (
           ['POST', 'PUT', 'PATCH'].includes(operation.method) &&
           operation.parameters?.body
@@ -428,19 +432,9 @@ export class ToolHttpExecutor {
         httpAgent: fullUrlCheck.httpAgent ?? ssrfSafeHttpAgent,
         httpsAgent: fullUrlCheck.httpsAgent ?? ssrfSafeHttpsAgent,
         params: queryParams,
-        paramsSerializer: (params: any) => {
-          const parts: string[] = [];
-          for (const [key, value] of Object.entries(params)) {
-            if (Array.isArray(value)) {
-              value.forEach(v =>
-                parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`),
-              );
-            } else if (value !== undefined && value !== null) {
-              parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
-            }
-          }
-          return parts.join('&');
-        },
+        // Each declared parameter as its style says (deepObject ranges like
+        // Stripe's created[gte]); anything else as name=value.
+        paramsSerializer: (params: any) => serializeQueryParams(params, operation.parameters?.query ?? {}),
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'LLM-Tool-Gateway/1.0',
@@ -452,6 +446,12 @@ export class ToolHttpExecutor {
 
       if (bodyData && ['post', 'put', 'patch'].includes(operation.method.toLowerCase())) {
         config.data = bodyData;
+        // A form body (Stripe's writes) goes as a form; sent as JSON, the
+        // API read it as no parameters.
+        if (isFormBody(operation) && bodyData && typeof bodyData === 'object' && !Array.isArray(bodyData)) {
+          config.data = formEncode(bodyData);
+          config.headers = { ...(config.headers ?? {}), 'Content-Type': 'application/x-www-form-urlencoded' };
+        }
       }
 
       const response: AxiosResponse = await axios(config);

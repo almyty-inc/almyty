@@ -213,6 +213,7 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 - `docs/runner.md` — Runner + workspace architecture
 - `docs/design/hosted-runners-and-always-on.md` — Design: hosted runner environments in k8s (not built) and always-on autonomous agents (phase 1 shipped); decisions and gVisor test results
 - `docs/design/mcp-2026-07-28.md` — MCP spec compliance: gaps against 2025-06-18 / 2025-11-25 / 2026-07-28, one protocol core, runner transport split, phases P0-P2
+- `docs/design/durable-runs.md` — Durable agent runs: append-only run event log (step 1 done: dual-write + projection check), lease-based loop, resume, idempotency keys, SSE replay; rollout and the worker-kill test
 - `docs/models.md` — Models layer: catalog, routing, pricing, deployments (design: `docs/design/models-layer.md`)
 - `docs/enterprise.md` — EE entitlements, what each grants, and how per-org gating works
 - `docs/retention.md` — Data retention classes and the sweep

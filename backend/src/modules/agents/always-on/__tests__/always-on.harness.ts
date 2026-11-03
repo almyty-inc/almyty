@@ -7,10 +7,12 @@
  * Not a `.spec.ts`, deliberately: jest collects `.*\.spec\.ts$`.
  */
 import { EventEmitter } from 'events';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { AgentRun, AgentRunStatus } from '../../../../entities/agent-run.entity';
 import { AgentWake } from '../../../../entities/agent-wake.entity';
 import { fakeRepository, FakeRepository } from '../../../../test/fake-repository';
+import { RunEventsTable, withRunEvents } from '../../../../test/fake-run-events';
 import { membershipFixture } from '../../../../test/execution-access.fixture';
 import { AlwaysOnService } from '../always-on.service';
 import { SCHEDULED_RESULT_POSTER } from '../../scheduled-result-poster';
@@ -70,6 +72,8 @@ export interface World {
   agents: FakeRepository<any>;
   wakes: FakeRepository<any>;
   runs: FakeRepository<any>;
+  /** agent_run_events, as every run write left it. */
+  runEvents: RunEventsTable;
   channels: FakeRepository<any>;
   organizations: FakeRepository<any>;
   tools: FakeRepository<any>;
@@ -80,8 +84,9 @@ export interface World {
   redis: ReturnType<typeof fakeRedis>;
   startRun: jest.Mock;
   sendInput: jest.Mock;
-  approvals: EventEmitter;
-  posted: Array<{ delivery: any; text: string }>;
+  approvals: EventEmitter & { approve: jest.Mock; reject: jest.Mock };
+  approvalRows: FakeRepository<any>;
+  posted: Array<{ delivery: any; text: string; actions?: any[] }>;
   notified: any[];
   audited: any[];
   membership: ReturnType<typeof membershipFixture>;
@@ -121,11 +126,15 @@ export function world(
     identityLicensed?: boolean;
     /** The owner's profile time zone. */
     ownerZone?: string | null;
+    /** The owner may not decide the agent's requests (ApprovalsService answers 403). */
+    approverCannotManage?: boolean;
   } = {},
 ): World {
   const agents = fakeRepository<any>(options.agent === null ? [] : [options.agent ?? alwaysOnAgent()]);
   const wakes = fakeRepository<any>({ make: () => new AgentWake(), idPrefix: 'wake' });
   const runs = fakeRepository<any>({ make: () => new AgentRun(), idPrefix: 'run' });
+  // Every write to a run goes with its events (run-event-writer.ts).
+  const runEvents = withRunEvents(runs);
   const channels = fakeRepository<any>([
     { id: SLACK, organizationId: ORG, agentId: AGENT, type: 'slack', name: 'Support Slack', gatewayId: GW_SLACK },
     { id: HOOK, organizationId: ORG, agentId: AGENT, type: 'webhook', name: 'GitHub', gatewayId: GW_HOOK },
@@ -142,7 +151,26 @@ export function world(
   const redis = fakeRedis();
   const membership = membershipFixture();
   if (options.ownerIsMember !== false) membership.member(ORG, OWNER);
-  const approvals = new EventEmitter();
+  const approvals = new EventEmitter() as EventEmitter & { approve: jest.Mock; reject: jest.Mock };
+  // Approval requests, decided the way ApprovalsService.decide does: the
+  // flip from pending is the guard, and the loser is told it is decided.
+  const approvalRows = fakeRepository<any>({ idPrefix: 'apr' });
+  const decide = (status: 'approved' | 'rejected') =>
+    jest.fn(async (id: string, decision: { decidedBy: string; decisionReason?: string }, caller: { id: string }, organizationId: string) => {
+      const row = approvalRows.row(id);
+      if (!row || row.organizationId !== organizationId) throw new NotFoundException('approval request not found');
+      if (options.approverCannotManage) throw new ForbiddenException('not allowed');
+      const claim = await approvalRows.update(
+        { id, status: 'pending' },
+        { status, decidedBy: decision.decidedBy, decisionReason: decision.decisionReason ?? null, decidedAt: new Date() },
+      );
+      if (!claim.affected) throw new BadRequestException(`approval already ${approvalRows.row(id)?.status ?? 'decided'}`);
+      const saved = approvalRows.row(id);
+      approvals.emit('approval.decided', saved);
+      return { ...saved, caller: caller.id };
+    });
+  approvals.approve = decide('approved');
+  approvals.reject = decide('rejected');
 
   let runSeq = 0;
   const startRun = jest.fn(async (agentId: string, organizationId: string, userId: string | null, input: any, opts: any = {}) => {
@@ -157,13 +185,13 @@ export function world(
     return runs.row(runId);
   });
 
-  const posted: Array<{ delivery: any; text: string }> = [];
+  const posted: Array<{ delivery: any; text: string; actions?: any[] }> = [];
   const poster = {
     destinations: jest.fn(async () => []),
     checkDestination: jest.fn(async (_agent: any, d: any) => d),
     admit: jest.fn(async () => ({ ok: true })),
-    post: jest.fn(async (_agent: any, result: any, delivery: any) => {
-      posted.push({ delivery, text: typeof result.output === 'string' ? result.output : JSON.stringify(result.output) });
+    post: jest.fn(async (_agent: any, result: any, delivery: any, when: any = {}) => {
+      posted.push({ delivery, text: typeof result.output === 'string' ? result.output : JSON.stringify(result.output), ...(when.actions ? { actions: when.actions } : {}) });
       // Recorded on the run, as ScheduledPostService.record does: the result's metadata plus the outcome.
       if (result.kind === 'run') await runs.update({ id: result.id }, { metadata: { ...(result.metadata ?? {}), channelDelivery: { status: 'delivered', channelId: delivery.channelId } } });
       return { status: 'delivered', channelId: delivery.channelId, at: new Date().toISOString() };
@@ -199,8 +227,9 @@ export function world(
     // The real resolution, with the plan's agent_identity as the world says.
     new AgentIdentityService({ hasForOrg: async () => options.identityLicensed === true } as any),
     users as any,
+    approvalRows as any,
   );
-  return { service, agents, wakes, runs, channels, organizations, tools, messages, grants, users, queue, redis, startRun, sendInput, approvals, posted, notified, audited, membership };
+  return { service, agents, wakes, runs, runEvents, channels, organizations, tools, messages, grants, users, approvalRows, queue, redis, startRun, sendInput, approvals, posted, notified, audited, membership };
 }
 
 /** Finish a run the way the step processor leaves one. */

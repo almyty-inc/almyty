@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse, InboundAttachment } from './base.adapter';
 import * as crypto from 'crypto';
+import { verifyWebhookSignature } from './webhook-signature.helper';
 
 @Injectable()
 export class WebhookAdapter extends BaseAdapter {
@@ -59,12 +60,10 @@ export class WebhookAdapter extends BaseAdapter {
    * non-2xx is a refusal. The body is kept as text rather than parsed,
    * because a reverse proxy's 502 page is as likely as JSON.
    *
-   * No configured URL is a refusal too. A webhook gateway with nowhere
-   * to send the reply cannot answer anybody, and pretending otherwise is
-   * what made a dropped reply look delivered. `testConnection` in
-   * `channel-gateway.service` already treats the same state as
-   * misconfigured, and nothing in the product has an inbound-only
-   * webhook shape.
+   * No configured URL is a refusal here. A channel without one is inbound
+   * only (repliesTo says no), so the reply pipeline never asks; what does
+   * ask -- a scheduled post sent to this channel -- has nowhere to go, and
+   * pretending otherwise is what made a dropped reply look delivered.
    *
    * `webhook_url` is accepted as well as `callback_url` because
    * `testConnection` accepts either for this gateway type. It did not
@@ -99,17 +98,23 @@ export class WebhookAdapter extends BaseAdapter {
     }
   }
 
+  /**
+   * Inbound only when no reply address is configured: a service calls the
+   * channel to start the agent and expects nothing back. The pipeline then
+   * sends nothing (see BaseAdapter.repliesTo).
+   */
+  repliesTo(config: Record<string, any>): boolean {
+    return !!(config?.callback_url || config?.webhook_url);
+  }
+
+  /**
+   * Fail closed: without a shared secret any caller could drive the agent
+   * through this endpoint. Which header, hash, encoding, prefix and signed
+   * content the sender uses is the channel's configuration
+   * (webhook-signature.helper.ts); the default is X-Webhook-Signature, the
+   * hex HMAC-SHA256 of the raw body.
+   */
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
-    // Fail closed: without a shared secret any caller could drive the
-    // agent through this endpoint.
-    if (!config.secret) return false;
-    const signature = headers['x-webhook-signature'];
-    if (!signature) return false;
-    const expected = crypto.createHmac('sha256', config.secret).update(rawBody ?? JSON.stringify(payload)).digest('hex');
-    // Length-check before timingSafeEqual, which throws on mismatched
-    // buffer lengths.
-    const a = Buffer.from(expected);
-    const b = Buffer.from(String(signature));
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
+    return verifyWebhookSignature(config, headers, rawBody ?? JSON.stringify(payload));
   }
 }

@@ -68,47 +68,126 @@ function buildJsonSchemaForParam(param: SdkParam): any {
   return schema
 }
 
-function assemblePreview(config: any): string {
-  if (!config?.packageName || !config?.construct?.className || !config?.call?.method) {
+/** An argument nobody touched is shown, and sent, as a tool parameter of its own name. */
+function defaultMethodArg(param: SdkParam): ParamValue {
+  return { source: 'parameter', paramName: param.name }
+}
+
+/**
+ * One form value as the backend's SdkValue (`node-sandbox/types.ts`), the
+ * shape SdkCodeAssemblerService renders. Undefined when nothing was given.
+ */
+function toSdkValue(v: ParamValue | undefined, fallbackKey: string): any | undefined {
+  if (!v) return undefined
+  if (v.properties && Object.keys(v.properties).length > 0) {
+    const properties: Record<string, any> = {}
+    for (const [k, sub] of Object.entries(v.properties)) {
+      const rendered = toSdkValue(sub, `${fallbackKey}_${k}`)
+      if (rendered !== undefined) properties[k] = rendered
+    }
+    return { type: 'object', properties }
+  }
+  switch (v.source) {
+    case 'parameter':
+      return { type: 'parameter', key: v.paramName || fallbackKey }
+    case 'credential':
+      return v.credentialPath ? { type: 'credential', key: v.credentialPath } : undefined
+    default:
+      return v.value === undefined || v.value === '' ? undefined : { type: 'literal', value: v.value }
+  }
+}
+
+/** Positional arguments; trailing ones left empty are omitted, gaps become null. */
+function toSdkArgs(
+  params: SdkParam[],
+  values: Record<string, ParamValue>,
+  defaultFor?: (p: SdkParam) => ParamValue,
+): any[] {
+  const args = params.map((p) => toSdkValue(values[p.name] ?? defaultFor?.(p), p.name))
+  while (args.length > 0 && args[args.length - 1] === undefined) args.pop()
+  return args.map((a) => a ?? { type: 'literal', value: null })
+}
+
+/**
+ * The tool's `sdkConfig`, in the backend's SdkConfig shape: what
+ * SdkCodeAssemblerService turns into the sandboxed call. A class is
+ * constructed and its method (or chained method) called on the instance;
+ * a function export is called directly; a namespace's methods through it.
+ */
+export function buildSdkConfig({
+  map,
+  exportEntry,
+  methodEntry,
+  constructorValues,
+  methodArgValues,
+  dataPath,
+}: {
+  map: SdkMap
+  exportEntry: SdkExport
+  methodEntry: { method: SdkMethod; chain: string[] }
+  constructorValues: Record<string, ParamValue>
+  methodArgValues: Record<string, ParamValue>
+  dataPath?: string
+}): any {
+  // `export default` is imported as the module itself.
+  const isDefault = exportEntry.name === 'default'
+  const binding = isDefault ? 'SdkDefault' : exportEntry.name
+  const chain = [...methodEntry.chain, methodEntry.method.name].join('.')
+  const args = toSdkArgs(methodEntry.method.params || [], methodArgValues, defaultMethodArg)
+  const config: any = {
+    packageName: map.packageName,
+    version: map.version,
+    imports: [{ name: binding, isDefault }],
+    call: {
+      methodPath:
+        exportEntry.kind === 'class'
+          ? chain
+          : exportEntry.kind === 'function'
+            ? binding
+            : `${binding}.${chain}`,
+      args,
+    },
+  }
+  if (exportEntry.kind === 'class') {
+    config.construct = {
+      className: binding,
+      args: toSdkArgs(exportEntry.constructorParams || [], constructorValues),
+    }
+  }
+  if (dataPath) config.responseMapping = { dataPath }
+  return config
+}
+
+function previewValue(v: any): string {
+  switch (v?.type) {
+    case 'literal': return JSON.stringify(v.value)
+    case 'parameter': return `parameters.${v.key}`
+    case 'credential': return `credentials[${JSON.stringify(v.key)}]`
+    case 'object':
+      return `{ ${Object.entries(v.properties || {}).map(([k, sub]) => `${k}: ${previewValue(sub)}`).join(', ')} }`
+    default: return 'undefined'
+  }
+}
+
+/** The code the backend assembles from `config`, for the preview. */
+export function assemblePreview(config: any): string {
+  if (!config?.packageName || !config?.call?.methodPath) {
     return '// Configure the tool to see generated code'
   }
-
   const lines: string[] = []
-  const imports = config.imports?.join(', ') || config.construct.className
-  if (config.imports?.includes('default')) {
-    lines.push(`const ${config.construct.className} = require('${config.packageName}');`)
-  } else {
-    lines.push(`const { ${imports} } = require('${config.packageName}');`)
+  const imports: Array<{ name: string; isDefault: boolean }> = config.imports || []
+  for (const imp of imports.filter((i) => i.isDefault)) {
+    lines.push(`const ${imp.name} = require('${config.packageName}');`)
   }
+  const named = imports.filter((i) => !i.isDefault).map((i) => i.name)
+  if (named.length > 0) lines.push(`const { ${named.join(', ')} } = require('${config.packageName}');`)
   lines.push('')
-
-  // Constructor
-  const ctorArgs = config.construct?.args
-    ? config.construct.args.map((a: any) =>
-      a.source === 'literal' ? JSON.stringify(a.value) :
-      a.source === 'credential' ? `<credential:${a.credentialPath || '...'}>` :
-      `params.${a.paramName || '...'}`
-    ).join(', ')
-    : '...'
-  lines.push(`const client = new ${config.construct.className}(${ctorArgs});`)
-
-  // Method call
-  const chain = config.call.chain ? `.${config.call.chain.join('.')}` : ''
-  const methodArgs = config.call?.args
-    ? config.call.args.map((a: any) =>
-      a.source === 'literal' ? JSON.stringify(a.value) :
-      a.source === 'credential' ? `<credential:${a.credentialPath || '...'}>` :
-      `params.${a.paramName || '...'}`
-    ).join(', ')
-    : '...'
-  lines.push(`const result = await client${chain}.${config.call.method}(${methodArgs});`)
-
-  if (config.responseMapping?.dataPath) {
-    lines.push(`return result.${config.responseMapping.dataPath};`)
-  } else {
-    lines.push('return result;')
+  if (config.construct) {
+    lines.push(`const client = new ${config.construct.className}(${(config.construct.args || []).map(previewValue).join(', ')});`)
   }
-
+  const target = config.construct ? `client.${config.call.methodPath}` : config.call.methodPath
+  lines.push(`const result = await ${target}(${(config.call.args || []).map(previewValue).join(', ')});`)
+  lines.push(config.responseMapping?.dataPath ? `return result.${config.responseMapping.dataPath};` : 'return result;')
   return lines.join('\n')
 }
 
@@ -338,46 +417,26 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
 
   // Rebuild config and params whenever selections change
   useEffect(() => {
-    if (!selectedPackage || !selectedExport || !selectedMethodKey || !selectedMethodEntry) {
+    if (!currentMap || !currentExport || !selectedMethodKey || !selectedMethodEntry) {
       onConfigChange(null)
       return
     }
 
-    const constructArgs = (currentExport?.constructorParams || []).map((p) => {
-      const val = constructorValues[p.name]
-      if (!val) return { source: 'literal', value: undefined }
-      return val
-    })
-
-    const methodArgs = (selectedMethodEntry.method.params || []).map((p) => {
-      const val = methodArgValues[p.name]
-      if (!val) return { source: 'literal', value: undefined }
-      return val
-    })
-
-    const config = {
-      packageName: selectedPackage,
-      imports: [selectedExport],
-      construct: {
-        className: selectedExport,
-        args: constructArgs,
-      },
-      call: {
-        method: selectedMethodEntry.method.name,
-        chain: selectedMethodEntry.chain.length > 0 ? selectedMethodEntry.chain : undefined,
-        args: methodArgs,
-      },
-      responseMapping: dataPath ? { dataPath } : undefined,
-    }
-
-    onConfigChange(config)
+    onConfigChange(buildSdkConfig({
+      map: currentMap,
+      exportEntry: currentExport,
+      methodEntry: selectedMethodEntry,
+      constructorValues,
+      methodArgValues,
+      dataPath,
+    }))
 
     // Build tool parameters from fields marked as "parameter"
     const properties: Record<string, any> = {}
     const required: string[] = []
 
     // From constructor params
-    ;(currentExport?.constructorParams || []).forEach((p) => {
+    ;(currentExport.kind === 'class' ? currentExport.constructorParams || [] : []).forEach((p) => {
       const val = constructorValues[p.name]
       if (val?.source === 'parameter') {
         const name = val.paramName || p.name
@@ -390,15 +449,15 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
       }
     })
 
-    // From method args
+    // From method args (an argument nobody touched is a tool parameter, as shown)
     ;(selectedMethodEntry.method.params || []).forEach((p) => {
-      const val = methodArgValues[p.name]
-      if (val?.source === 'parameter') {
+      const val = methodArgValues[p.name] ?? defaultMethodArg(p)
+      if (val.source === 'parameter') {
         const name = val.paramName || p.name
         properties[name] = buildJsonSchemaForParam(p)
         if (p.required) required.push(name)
       }
-      if (val?.properties) {
+      if (val.properties) {
         collectParamProperties(p, val, properties, required)
       }
     })
@@ -410,7 +469,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
     if (required.length > 0) toolParams.required = required
 
     onParamsChange(toolParams)
-  }, [selectedPackage, selectedExport, selectedMethodKey, constructorValues, methodArgValues, dataPath, selectedMethodEntry, currentExport])
+  }, [currentMap, selectedMethodKey, constructorValues, methodArgValues, dataPath, selectedMethodEntry, currentExport])
 
   // Reset dependent dropdowns when parent changes
   useEffect(() => {
@@ -431,32 +490,16 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
   }, [selectedMethodKey])
 
   const currentConfig = useMemo(() => {
-    if (!selectedPackage || !selectedExport || !selectedMethodEntry) return null
-    const constructArgs = (currentExport?.constructorParams || []).map((p) => {
-      const val = constructorValues[p.name]
-      if (!val) return { source: 'literal', value: undefined }
-      return val
+    if (!currentMap || !currentExport || !selectedMethodEntry) return null
+    return buildSdkConfig({
+      map: currentMap,
+      exportEntry: currentExport,
+      methodEntry: selectedMethodEntry,
+      constructorValues,
+      methodArgValues,
+      dataPath,
     })
-    const methodArgs = (selectedMethodEntry.method.params || []).map((p) => {
-      const val = methodArgValues[p.name]
-      if (!val) return { source: 'literal', value: undefined }
-      return val
-    })
-    return {
-      packageName: selectedPackage,
-      imports: [selectedExport],
-      construct: {
-        className: selectedExport,
-        args: constructArgs,
-      },
-      call: {
-        method: selectedMethodEntry.method.name,
-        chain: selectedMethodEntry.chain.length > 0 ? selectedMethodEntry.chain : undefined,
-        args: methodArgs,
-      },
-      responseMapping: dataPath ? { dataPath } : undefined,
-    }
-  }, [selectedPackage, selectedExport, selectedMethodEntry, constructorValues, methodArgValues, dataPath, currentExport])
+  }, [currentMap, currentExport, selectedMethodEntry, constructorValues, methodArgValues, dataPath])
 
   if (packageNames.length === 0) {
     return (
@@ -574,7 +617,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
               <SdkParamField
                 key={param.name}
                 param={param}
-                value={methodArgValues[param.name] || { source: 'parameter', paramName: param.name }}
+                value={methodArgValues[param.name] || defaultMethodArg(param)}
                 onChange={(val) => setMethodArgValues({ ...methodArgValues, [param.name]: val })}
               />
             ))}

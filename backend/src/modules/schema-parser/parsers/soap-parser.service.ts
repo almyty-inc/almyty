@@ -23,6 +23,71 @@ function assertNoDoctype(xml: string): void {
   }
 }
 
+/** The children of an xml2js node whose local name is `local`, whatever prefix the WSDL gives them (wsdl:, xs:, xsd:, s:, none). */
+function childrenNamed(node: any, local: string): any[] {
+  if (!node || typeof node !== 'object') return [];
+  const out: any[] = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (key === '$' || key === '_') continue;
+    if (key.split(':').pop() === local) out.push(...(Array.isArray(value) ? value : [value]));
+  }
+  return out;
+}
+const localName = (qname: unknown): string => String(qname ?? '').split(':').pop() ?? '';
+
+const XSD_JSON_TYPES: Record<string, string> = {
+  string: 'string', normalizedString: 'string', token: 'string', anyURI: 'string', date: 'string', dateTime: 'string', time: 'string', duration: 'string', base64Binary: 'string',
+  int: 'integer', integer: 'integer', long: 'integer', short: 'integer', byte: 'integer', unsignedInt: 'integer', unsignedLong: 'integer', unsignedShort: 'integer', positiveInteger: 'integer', nonNegativeInteger: 'integer',
+  decimal: 'number', float: 'number', double: 'number',
+  boolean: 'boolean',
+};
+
+/**
+ * What an operation takes, from the WSDL's own types: the input message's
+ * parts, and for a document/literal part the fields of the element it
+ * names (inline or through a named complexType). These become the tool's
+ * inputs; the executor builds the request body from them.
+ */
+export function soapInputFields(definitions: any, op: any): { properties: Record<string, any>; required: string[] } {
+  const properties: Record<string, any> = {};
+  const required: string[] = [];
+  const schemas = childrenNamed(definitions, 'types').flatMap((t) => childrenNamed(t, 'schema'));
+  const schemaChild = (kind: string, name: string) => {
+    for (const schema of schemas) {
+      const hit = childrenNamed(schema, kind).find((n) => n?.$?.name === name);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+  const field = (name: string, el: any) => {
+    const type = localName(el?.$?.type);
+    const many = el?.$?.maxOccurs === 'unbounded' || Number(el?.$?.maxOccurs) > 1;
+    const json: Record<string, any> = { type: XSD_JSON_TYPES[type] ?? (type ? 'object' : 'string') };
+    const doc = childrenNamed(childrenNamed(el, 'annotation')[0], 'documentation')[0];
+    if (doc) json.description = typeof doc === 'string' ? doc : doc?._;
+    properties[name] = many ? { type: 'array', items: json } : json;
+    if (el?.$?.minOccurs !== '0') required.push(name);
+  };
+  const fieldsOf = (complexType: any) => {
+    for (const group of [...childrenNamed(complexType, 'sequence'), ...childrenNamed(complexType, 'all')]) {
+      for (const el of childrenNamed(group, 'element')) if (el?.$?.name) field(el.$.name, el);
+    }
+  };
+
+  const messageName = localName(childrenNamed(op, 'input')[0]?.$?.message);
+  const message = childrenNamed(definitions, 'message').find((m) => m?.$?.name === messageName);
+  for (const part of childrenNamed(message, 'part')) {
+    if (part?.$?.element) {
+      const element = schemaChild('element', localName(part.$.element));
+      const complexType = childrenNamed(element, 'complexType')[0] ?? (element?.$?.type ? schemaChild('complexType', localName(element.$.type)) : undefined);
+      if (complexType) fieldsOf(complexType);
+    } else if (part?.$?.name) {
+      field(part.$.name, part);
+    }
+  }
+  return { properties, required };
+}
+
 @Injectable()
 export class SOAPParserService implements SchemaParser {
   private readonly logger = new Logger(SOAPParserService.name);
@@ -185,6 +250,8 @@ export class SOAPParserService implements SchemaParser {
         seen.add(operationName);
         const documentation = op.documentation || op['wsdl:documentation'];
 
+        const inputs = soapInputFields(definitions, op);
+
         operations.push({
           operationId: operationName,
           name: operationName,
@@ -193,6 +260,10 @@ export class SOAPParserService implements SchemaParser {
           endpoint: '/soap',
           parameters: {
             body: {
+              // The operation's own fields, which become the tool's inputs.
+              ...(Object.keys(inputs.properties).length > 0
+                ? { schema: { type: 'object', properties: inputs.properties, required: inputs.required } }
+                : {}),
               soapEnvelope: {
                 type: 'object',
                 description: 'SOAP envelope containing the operation request',

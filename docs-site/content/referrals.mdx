@@ -31,7 +31,7 @@ Two things put a referral on hold: signing up with a throwaway email address, or
 
 ## For developers
 
-- Share links look like `https://app.example.com/r/AB3D7XKQ` (an 8-character code); `/auth/register?ref=CODE` works too.
+- Share links look like `https://app.almyty.com/r/AB3D7XKQ` (an 8-character code); `/auth/register?ref=CODE` works too.
 - The link sets an httpOnly attribution cookie, `almyty_ref`, for 30 days and redirects to registration. Attribution is last-touch; the cookie is consumed at registration.
 - The `/r/<code>` endpoint is rate-limited to 20 requests an hour per IP. Appending `?format=json` returns `{"attributed": true|false}` instead of a redirect.
 - Rewards extend the organization's `planExpiresAt`. Days banked on the free plan are `accruedRewardDays`; the total is `totalRewardDays`.

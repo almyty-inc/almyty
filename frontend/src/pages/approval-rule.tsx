@@ -1,8 +1,8 @@
 /**
  * /settings/approvals/rules/new and /settings/approvals/rules/:ruleId --
  * an amount rule: "ask before “Create refund” when amount is over 500".
- * Free for every organization. One approval decides it; sign-off in
- * several steps is the Business approval-policy feature.
+ * Free for every organization, where one approval decides it. With the
+ * Business approval policies the rule takes its own sign-off steps here.
  */
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -11,24 +11,33 @@ import { ShieldCheck } from 'lucide-react'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { AmountRuleFields, type AmountRuleErrors, type AmountRuleValue } from '@/components/settings/approval-amount-rule'
-import { APPROVAL_POLICIES_PATH } from '@/components/settings/approval-policy-form'
+import {
+  APPROVAL_POLICIES_PATH,
+  ApprovalStepsEditor,
+  type ApprovalStepErrors,
+} from '@/components/settings/approval-policy-form'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Switch } from '@/components/ui/switch'
 import { VisibilityField } from '@/components/ui/visibility-field'
+import { useEntitlement } from '@/hooks/use-entitlement'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { approvalRulesApi, type ApprovalPolicy, type UpsertAmountRule } from '@/lib/api'
+import { approvalRulesApi, type ApprovalPolicy, type ApprovalStep, type UpsertAmountRule } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { pluralized } from '@/lib/utils'
 
+/** What a rule has without Business steps: one approval from anyone allowed to decide. */
+const SINGLE_APPROVER: ApprovalStep[] = [{ name: 'Approval', approverRole: '*', minApprovals: 1 }]
+
 interface RuleForm extends AmountRuleValue {
   name: string
   teamId: string | null
   enabled: boolean
+  steps: ApprovalStep[]
 }
 
 function formOf(rule: ApprovalPolicy | null): RuleForm {
@@ -40,17 +49,34 @@ function formOf(rule: ApprovalPolicy | null): RuleForm {
     argument: rule?.trigger?.argument ?? '',
     op: rule?.trigger?.op ?? 'gt',
     amount: rule?.trigger ? String(rule.trigger.amount) : '',
+    steps: rule?.steps?.length ? rule.steps.map((s) => ({ ...s })) : SINGLE_APPROVER.map((s) => ({ ...s })),
   }
 }
 
-/** What is missing, per field, or nothing. */
-export function ruleErrors(form: RuleForm): AmountRuleErrors & { name?: string } {
-  const errors: AmountRuleErrors & { name?: string } = {}
+/** A step's missing pieces, or undefined when it is complete. */
+function stepErrorsOf(step: ApprovalStep): ApprovalStepErrors | undefined {
+  const e: ApprovalStepErrors = {}
+  if (!step.name.trim()) e.name = 'Step name is required'
+  if (!step.approverRole.trim()) e.approverRole = 'Approver role is required'
+  if (!Number.isInteger(step.minApprovals) || step.minApprovals < 1) e.minApprovals = 'Must be at least 1'
+  return Object.keys(e).length ? e : undefined
+}
+
+/** What is missing, per field, or nothing. Steps are checked only where they can be set. */
+export function ruleErrors(
+  form: RuleForm,
+  withSteps = false,
+): AmountRuleErrors & { name?: string; steps?: Array<ApprovalStepErrors | undefined> } {
+  const errors: AmountRuleErrors & { name?: string; steps?: Array<ApprovalStepErrors | undefined> } = {}
   if (!form.name.trim()) errors.name = 'Give the rule a name'
   if (!form.toolId) errors.toolId = 'Choose the tool'
   else if (!form.argument) errors.argument = 'Choose the number to compare'
   const amount = Number(form.amount)
   if (form.amount.trim() === '' || !Number.isFinite(amount) || amount < 0) errors.amount = 'Enter an amount of 0 or more'
+  if (withSteps) {
+    const steps = form.steps.map(stepErrorsOf)
+    if (steps.some(Boolean)) errors.steps = steps
+  }
   return errors
 }
 
@@ -64,24 +90,35 @@ export function ApprovalRuleForm({
   onSubmit: (data: UpsertAmountRule) => Promise<unknown>
 }) {
   const { currentOrganization } = useOrganizationStore()
+  // Business: the rule's own steps are set here. Without it, one approval decides.
+  const { enabled: canSetSteps } = useEntitlement('approval_policy')
   const [initial] = useState(() => formOf(rule))
   const [form, setForm] = useState<RuleForm>(initial)
   const [submitted, setSubmitted] = useState(false)
   const guard = useLeaveGuard(JSON.stringify(form) !== JSON.stringify(initial))
-  const errors = submitted ? ruleErrors(form) : {}
+  const errors = submitted ? ruleErrors(form, canSetSteps) : {}
   const set = (patch: Partial<RuleForm>) => setForm((f) => ({ ...f, ...patch }))
   const steps = rule?.steps ?? []
   const severalSteps = steps.length > 1 || steps.some((s) => s.minApprovals > 1 || s.approverRole !== '*')
 
   const submit = async () => {
     setSubmitted(true)
-    if (Object.keys(ruleErrors(form)).length > 0) return
+    if (Object.keys(ruleErrors(form, canSetSteps)).length > 0) return
     try {
       await onSubmit({
         name: form.name.trim(),
         teamId: form.teamId,
         enabled: form.enabled,
         trigger: { kind: 'tool_amount', toolId: form.toolId, argument: form.argument, op: form.op, amount: Number(form.amount) },
+        ...(canSetSteps
+          ? {
+              steps: form.steps.map((s) => ({
+                name: s.name.trim(),
+                approverRole: s.approverRole.trim(),
+                minApprovals: s.minApprovals,
+              })),
+            }
+          : {}),
       })
     } catch {
       return
@@ -123,12 +160,27 @@ export function ApprovalRuleForm({
         />
       </FormSection>
 
-      <FormSection title="Who approves">
-        <p className="text-sm text-muted-foreground">
-          {severalSteps
-            ? `Signed off in ${steps.length === 1 ? 'one step' : pluralized(steps.length, 'step')}, as set in the Business approval policies.`
-            : "One approval from an owner or an admin decides it (for a team's rule, the team's lead too). Sign-off in several steps comes with the Business plan."}
-        </p>
+      <FormSection
+        title="Who approves"
+        description={
+          canSetSteps ? (
+            <>
+              Sign-off in order: each step needs its approvals before the next begins. The approver role is an org
+              role (owner, admin, member), a custom role&apos;s name, team_lead, or <code>*</code> for anyone allowed to
+              decide.
+            </>
+          ) : undefined
+        }
+      >
+        {canSetSteps ? (
+          <ApprovalStepsEditor steps={form.steps} onChange={(next) => set({ steps: next })} errors={errors.steps} />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {severalSteps
+              ? `Signed off in ${steps.length === 1 ? 'one step' : pluralized(steps.length, 'step')}, set while the organization had the Business plan.`
+              : "One approval from an owner or an admin decides it (for a team's rule, the team's lead too). Sign-off in several steps comes with the Business plan."}
+          </p>
+        )}
         <div className="flex items-center justify-between gap-4 rounded-md border p-3">
           <div>
             <Label htmlFor="rule-enabled">On</Label>

@@ -325,6 +325,10 @@ export class AuthController {
       success: true,
       data: {
         ...profile,
+        // The person's name as the app shows it. The entity keeps first
+        // and last name apart and its fullName getter does not survive the
+        // spread, so the client had no `name` and drew every avatar as "U".
+        name: profileName(user),
         // Non-blocking email verification state — the UI shows a
         // "verify your email" banner while false.
         emailVerified: !!(user.verifiedAt || user.isVerified),
@@ -378,6 +382,7 @@ export class AuthController {
       success: true,
       data: {
         ...profile,
+        name: profileName(updatedUser),
         emailVerified: !!(updatedUser.verifiedAt || updatedUser.isVerified),
       },
       message: 'Profile updated successfully',
@@ -666,4 +671,10 @@ export class AuthController {
       message: 'If an unverified account exists for this email, a verification link has been sent.',
     };
   }
+}
+
+/** "Dana Lind" from first and last name; null when neither is set. */
+export function profileName(user: Pick<User, 'firstName' | 'lastName'>): string | null {
+  const name = [user.firstName, user.lastName].filter((part) => typeof part === 'string' && part.trim()).join(' ').trim();
+  return name || null;
 }

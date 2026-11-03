@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  ActionPress,
   BaseAdapter,
   NormalizedMessage,
   AdapterResponse,
@@ -147,13 +148,15 @@ export class SlackAdapter extends BaseAdapter {
   /**
    * Images in the reply go as image blocks under the text, which Slack
    * fetches from their links; a PDF or other file stays a link, since Slack
-   * takes those only as an upload.
+   * takes those only as an upload. Buttons (Approve, Reject) go as an
+   * actions block, each carrying its action's id as its value.
    */
   formatOutbound(response: AdapterResponse): any {
     const images = (response.attachments ?? []).filter(isImage).slice(0, SlackAdapter.MAX_IMAGES);
     // The agent writes markdown; Slack shows its own mrkdwn (**b** would arrive as text).
     const text = toSlackMrkdwn(textWithMedia(response, images));
-    if (!images.length) return { text };
+    const actions = (response.actions ?? []).filter((a) => a && typeof a.id === 'string' && a.id.length <= 2000);
+    if (!images.length && !actions.length) return { text };
     const sections: any[] = [];
     for (let i = 0; i < text.length; i += SlackAdapter.SECTION_CHARS) {
       sections.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(i, i + SlackAdapter.SECTION_CHARS) } });
@@ -163,8 +166,89 @@ export class SlackAdapter extends BaseAdapter {
       blocks: [
         ...sections,
         ...images.map((image) => ({ type: 'image', image_url: image.url, alt_text: (image.name || 'image').slice(0, 2000) })),
+        ...(actions.length
+          ? [
+              {
+                type: 'actions',
+                elements: actions.map((a, i) => ({
+                  type: 'button',
+                  action_id: `almyty_action_${i}`,
+                  text: { type: 'plain_text', text: a.label.slice(0, 75) },
+                  value: a.id,
+                  ...(a.style ? { style: a.style } : {}),
+                })),
+              },
+            ]
+          : []),
       ],
     };
+  }
+
+  /**
+   * An interactive delivery (a button pressed), which Slack posts form
+   * encoded as `payload=<json>` to the app's Interactivity Request URL.
+   * Null for an Events API delivery.
+   */
+  static interactive(rawPayload: any): any | null {
+    const raw = rawPayload?.payload;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+    return raw && typeof raw === 'object' && raw.type === 'block_actions' ? raw : null;
+  }
+
+  /** A pressed button: a block_actions payload, with who pressed it and where Slack takes the answer. */
+  actionOf(rawPayload: any): ActionPress | null {
+    const payload = SlackAdapter.interactive(rawPayload);
+    if (payload?.type !== 'block_actions') return null;
+    const action = Array.isArray(payload.actions) ? payload.actions[0] : null;
+    const userId = payload.user?.id;
+    if (!action || typeof action.value !== 'string' || !userId) return null;
+    const channel = payload.channel?.id ?? payload.container?.channel_id;
+    return {
+      data: action.value,
+      userId,
+      userName: payload.user?.username || payload.user?.name || undefined,
+      group: typeof channel === 'string' && !channel.startsWith('D'),
+      context: {
+        responseUrl: payload.response_url,
+        channel,
+        messageTs: payload.message?.ts ?? payload.container?.message_ts,
+        messageText: payload.message?.text,
+      },
+    };
+  }
+
+  /** Where Slack's response URLs point; an answer goes nowhere else. */
+  static readonly RESPONSE_HOSTS = ['hooks.slack.com'];
+
+  /**
+   * Answer through the press's response_url. Settled, the message is
+   * replaced by its own text and the outcome, which takes the buttons
+   * off; not settled, the presser alone sees the answer (ephemeral).
+   */
+  async answerAction(_config: Record<string, any>, press: ActionPress, text: string, settled: boolean): Promise<void> {
+    const url = press.context?.responseUrl;
+    if (!BaseAdapter.onHost(url, SlackAdapter.RESPONSE_HOSTS)) {
+      this.sendFailed('the button press carried no Slack response URL to answer on');
+    }
+    const original = typeof press.context?.messageText === 'string' ? press.context.messageText : '';
+    const body = settled
+      ? { replace_original: true, text: original ? `${original}\n\n${toSlackMrkdwn(text)}` : toSlackMrkdwn(text) }
+      : { replace_original: false, response_type: 'ephemeral', text: toSlackMrkdwn(text) };
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (this.httpRejected(res)) this.sendFailed(`the response URL answered HTTP ${this.httpStatus(res)}`);
   }
 
   /**
@@ -255,7 +339,8 @@ export class SlackAdapter extends BaseAdapter {
   /**
    * Slack event payloads carry the workspace (team) id at the top level
    * (`team_id`), and events forwarded from other workspaces carry it on
-   * the event itself (`event.team`). Used to resolve multi-workspace
+   * the event itself (`event.team`); an interactive payload (a button
+   * pressed) carries it as `team.id`. Used to resolve multi-workspace
    * installations to the installing workspace's own bot token.
    */
   extractTenantId(rawPayload: any): string | undefined {
@@ -263,6 +348,7 @@ export class SlackAdapter extends BaseAdapter {
       rawPayload?.team_id ||
       rawPayload?.event?.team ||
       rawPayload?.team?.id ||
+      SlackAdapter.interactive(rawPayload)?.team?.id ||
       undefined
     );
   }

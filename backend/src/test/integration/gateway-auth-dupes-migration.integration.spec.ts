@@ -29,13 +29,16 @@ const describeOrSkip = process.env.RUN_DB_INTEGRATION === '1' ? describe : descr
 const TARGET = '1791000000000';
 type MigrationClass = new () => unknown;
 
-function migrationsBefore(timestamp: string): MigrationClass[] {
+function migrationsWhere(keep: (timestamp: string) => boolean): MigrationClass[] {
   const dir = join(__dirname, '..', '..', 'migrations');
   return readdirSync(dir)
-    .filter((f) => /^\d+-.*\.ts$/.test(f) && !f.endsWith('.spec.ts') && f.split('-')[0] < timestamp)
+    .filter((f) => /^\d+-.*\.ts$/.test(f) && !f.endsWith('.spec.ts') && keep(f.split('-')[0]))
     .sort()
     .flatMap((f) => Object.values(require(join(dir, f))).filter((v): v is MigrationClass => typeof v === 'function'));
 }
+
+const migrationsBefore = (timestamp: string) => migrationsWhere((t) => t < timestamp);
+const migrationsAfter = (timestamp: string) => migrationsWhere((t) => t > timestamp);
 
 const gwKey = () => `gw_${crypto.randomBytes(32).toString('base64url')}`;
 const sha256 = (key: string) => crypto.createHash('sha256').update(key).digest('hex');
@@ -82,6 +85,28 @@ async function runTarget(ds: DataSource, direction: 'up' | 'down' = 'up'): Promi
     throw error;
   } finally {
     await runner.release();
+  }
+}
+
+/**
+ * The checks authenticate through today's services and entities, so once the
+ * target has run, the migrations after it run too: otherwise a column a later
+ * migration adds (users."hasPassword", say) is missing from the queries the
+ * entities build. None of them touch the gateway auth tables.
+ */
+async function catchUpToHead(ds: DataSource): Promise<void> {
+  for (const Migration of migrationsAfter(TARGET)) {
+    const runner = ds.createQueryRunner();
+    await runner.startTransaction();
+    try {
+      await (new Migration() as { up(q: typeof runner): Promise<void> }).up(runner);
+      await runner.commitTransaction();
+    } catch (error) {
+      await runner.rollbackTransaction();
+      throw error;
+    } finally {
+      await runner.release();
+    }
   }
 }
 
@@ -185,6 +210,7 @@ describeOrSkip('GatewayEndpointAccess with duplicate active auth rows (real Post
 
   it('runs, and leaves exactly one active row per gateway and type', async () => {
     await expect(runTarget(ds)).resolves.toBeUndefined();
+    await catchUpToHead(ds);
 
     const rows = await activeRows(ds, seed.gateway);
     expect(rows.map((r: any) => r.type)).toEqual(['api_key', 'basic_auth']);
@@ -272,6 +298,7 @@ describeOrSkip('GatewayEndpointAccess with no duplicate auth rows (real Postgres
 
     const after = await ds.query(`SELECT * FROM gateway_auth ORDER BY id`);
     expect(after).toEqual(before);
+    await catchUpToHead(ds);
     expect((await authService(ds).authenticateRequest(seed.gateway, { 'x-api-key': key }, {})).isValid).toBe(true);
   });
 });

@@ -33,6 +33,7 @@ import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.e
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { Tool, ToolStatus, ToolType } from '../../../entities/tool.entity';
 import { fakeManager, fakeRepository } from '../../../test/fake-repository';
+import { withRunEvents } from '../../../test/fake-run-events';
 import { CAST, castFixture, MembershipFixture } from '../../../test/execution-access.fixture';
 import {
   ExecutionPrincipal,
@@ -120,7 +121,10 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       make: () => new Tool(),
     });
     fakeManager([[Agent, agents], [Tool, tools]]);
-    runs = fakeRepository<AgentRun>({ make: () => new AgentRun(), idPrefix: 'run' });
+    // headSeq: the column's default, which a row the runtime creates gets from Postgres.
+    runs = fakeRepository<AgentRun>({ make: () => Object.assign(new AgentRun(), { headSeq: 0 }), idPrefix: 'run' });
+    // The step commit writes the row and its run events in one transaction.
+    withRunEvents(runs);
     // One gateway_tools table, read by the MCP handler and the executor alike.
     gatewayTools = fakeRepository<GatewayTool>({ make: () => new GatewayTool() });
     queue = { add: jest.fn(), getRepeatableJobs: jest.fn().mockResolvedValue([]), removeRepeatableByKey: jest.fn() };
@@ -231,6 +235,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
           totalTokens: 0,
           executionTime: 0,
           toolCallCount: 0,
+          headSeq: 0,
           maxSteps: 50,
           limits: {},
           principal,

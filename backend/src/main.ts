@@ -6,6 +6,7 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { json } from 'express';
+import { SCIM_ROUTES, scimJsonParser } from './common/middleware/scim-json-parser';
 import { AppModule } from './app.module';
 import { createSpaRootMiddleware } from './common/frontend/frontend-static';
 import { CSP_DIRECTIVES } from './common/security/content-security-policy';
@@ -85,6 +86,10 @@ export async function createApp() {
   app.use(MODEL_PASSTHROUGH_ROUTES, function modelRouteJsonParser(req: any, res: any, next: (err?: unknown) => void) {
     return modelRouteParser(req, res, next);
   });
+
+  // SCIM clients (Entra ID, Okta) send application/scim+json, which Nest's
+  // JSON parser does not read.
+  app.use(SCIM_ROUTES, scimJsonParser());
 
   // Security middleware
   app.use(helmet({

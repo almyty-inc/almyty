@@ -1,4 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
+import { formatSpendCents } from './budget-format';
 
 /**
  * Thrown when a `reject`-behavior spend budget's period-to-date total
@@ -21,8 +22,8 @@ export class BudgetExceededException extends ForbiddenException {
       success: false,
       error: 'SPEND_BUDGET_EXCEEDED',
       message:
-        `Spend budget exceeded: $${(detail.spentCents / 100).toFixed(2)} of ` +
-        `$${(detail.limitCents / 100).toFixed(2)} used this ${detail.periodType}. ` +
+        `Spend budget exceeded: ${formatSpendCents(detail.spentCents)} of ` +
+        `${formatSpendCents(detail.limitCents)} used this ${detail.periodType}. ` +
         `New runs are blocked until the budget resets.`,
       detail,
     });

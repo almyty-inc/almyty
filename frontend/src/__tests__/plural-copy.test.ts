@@ -89,6 +89,8 @@ describe('pluralized', () => {
     expect(pluralized(0, 'member')).toBe('0 members')
     expect(pluralized(2, 'member')).toBe('2 members')
     expect(pluralized(undefined, 'tool')).toBe('0 tools')
+    // "1872 operations" sat beside "up to 1,000" on the operation picker.
+    expect(pluralized(1872, 'operation')).toBe('1,872 operations')
   })
 
   it('knows the plurals that are not a bare s', () => {

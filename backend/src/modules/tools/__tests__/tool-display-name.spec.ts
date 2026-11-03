@@ -1,0 +1,91 @@
+/**
+ * Tools made from HubSpot's description read as
+ * `hubspot_companies_get_crm_v3_objects_companies_company_id_937ca5`, or as
+ * "GET /crm/v3/owners operation" where the spec has no summary. Generation
+ * now gives each a name for people (`metadata.displayName`) and leaves the
+ * machine name as it was.
+ */
+import { Tool } from '../../../entities/tool.entity';
+import { Operation } from '../../../entities/operation.entity';
+import { ToolsOperationHelper } from '../tools-operation.helper';
+import { nameFromPath, toolDisplayName } from '../tool-display-name';
+
+describe('toolDisplayName', () => {
+  it.each([
+    // No summary, an operationId that is a path: method and path.
+    [{ name: 'GET /crm/v3/owners', operationId: 'get-/crm/v3/owners/_getPage', method: 'GET', endpoint: '/crm/v3/owners' }, 'Get owners'],
+    [{ name: 'GET /crm/v3/objects/companies/{companyId}', method: 'GET', endpoint: '/crm/v3/objects/companies/{companyId}' }, 'Get company by id'],
+    [{ name: 'DELETE /crm/v3/objects/companies/{companyId}', method: 'DELETE', endpoint: '/crm/v3/objects/companies/{companyId}' }, 'Delete company by id'],
+    // Action words at the end of the path are the verb, never "Create read".
+    [{ name: 'POST /crm/v3/objects/contacts/batch/read', operationId: 'post-/crm/v3/objects/contacts/batch/read_read', method: 'POST', endpoint: '/crm/v3/objects/contacts/batch/read' }, 'Batch read contacts'],
+    [{ name: 'POST /crm/v3/objects/contacts/search', operationId: 'post-/crm/v3/objects/contacts/search_doSearch', method: 'POST', endpoint: '/crm/v3/objects/contacts/search' }, 'Search contacts'],
+    [{ method: 'POST', endpoint: '/crm/v3/objects/contacts/batch/archive' }, 'Batch archive contacts'],
+    [{ method: 'POST', endpoint: '/crm/v3/objects/contacts/merge' }, 'Merge contacts'],
+    [{ method: 'POST', endpoint: '/crm/v3/objects/deals/{dealId}/archive' }, 'Archive deal'],
+    [{ method: 'POST', endpoint: '/search' }, 'Search'],
+    [{ method: 'POST', endpoint: '/crm/v3/objects/contacts' }, 'Create contacts'],
+    // A readable operationId beats the method and path.
+    [{ name: 'searchContacts', operationId: 'searchContacts', method: 'POST', endpoint: '/crm/v3/objects/contacts/search' }, 'Search contacts'],
+    [{ name: 'batchReadContacts', operationId: 'batchReadContacts', method: 'POST', endpoint: '/x/batch/read' }, 'Batch read contacts'],
+    [{ method: 'GET', endpoint: '/v1.0/drives/{drive-id}/items/{driveItem-id}' }, 'Get item by drive item id'],
+    [{ method: 'PATCH', endpoint: '/users/{userId}/settings' }, 'Update settings'],
+    // An operationId in words.
+    [{ name: 'listPets', operationId: 'listPets', method: 'GET', endpoint: '/pets' }, 'List pets'],
+    // Microsoft Graph: the last part is the action; the area is the tag.
+    [{ name: 'drives.items.ListChildren', operationId: 'drives.items.ListChildren', method: 'GET', endpoint: '/drives/{id}/items/{id}/children' }, 'List children'],
+    // Google: a one-word verb after the resource it acts on.
+    [{ name: 'gmail.users.messages.send', operationId: 'gmail.users.messages.send', method: 'POST', endpoint: '/gmail/v1/users/{userId}/messages/send' }, 'Send message'],
+    [{ name: 'gmail.users.threads.get', operationId: 'gmail.users.threads.get', method: 'GET', endpoint: '/gmail/v1/users/{userId}/threads/{id}' }, 'Get thread'],
+    [{ name: 'gmail.users.messages.trash', operationId: 'gmail.users.messages.trash', method: 'POST', endpoint: '/gmail/v1/users/{userId}/messages/{id}/trash' }, 'Trash message'],
+    [{ name: 'calendar.events.watch', operationId: 'calendar.events.watch', method: 'POST', endpoint: '/calendars/{calendarId}/events/watch' }, 'Watch events'],
+    [{ name: 'calendar.events.list', operationId: 'calendar.events.list', method: 'GET', endpoint: '/calendars/{calendarId}/events' }, 'List events'],
+    [{ name: 'drive.files.insert', operationId: 'drive.files.insert', method: 'POST', endpoint: '/files' }, 'Insert file'],
+    // A summary wins.
+    [{ name: 'Retrieve a company.', operationId: 'getCompany', method: 'GET', endpoint: '/companies/{id}' }, 'Retrieve a company'],
+  ])('%j -> %s', (operation, expected) => {
+    expect(toolDisplayName(operation)).toBe(expected);
+  });
+
+  it('has no name for an operation with nothing to go on', () => {
+    expect(nameFromPath('GET', '/')).toBeNull();
+    expect(toolDisplayName({})).toBeNull();
+  });
+});
+
+describe('generated tools carry the display name; the machine name is untouched', () => {
+  const operation = Object.assign(new Operation(), {
+    id: 'op-1',
+    apiId: 'api-1',
+    name: 'GET /crm/v3/objects/companies/{companyId}',
+    operationId: 'get-/crm/v3/objects/companies/{companyId}_getById',
+    method: 'GET',
+    endpoint: '/crm/v3/objects/companies/{companyId}',
+    tags: ['Basic'],
+    api: { id: 'api-1', name: 'HubSpot Companies', type: 'openapi', baseUrl: 'https://api.hubapi.com', visibility: 'org', teamId: null },
+  });
+
+  function helper() {
+    const h = Object.create(ToolsOperationHelper.prototype) as ToolsOperationHelper;
+    Object.assign(h, {
+      operationRepository: { findOne: jest.fn().mockResolvedValue(operation) },
+      toolRepository: { create: (dto: any) => Object.assign(new Tool(), dto) },
+    });
+    jest.spyOn(h, 'generateToolParametersFromOperation').mockResolvedValue({ type: 'object', properties: {} });
+    return h;
+  }
+
+  const machineName = 'hubspot_companies_get_crm_v3_objects_companies_company_id_937ca5';
+
+  it('on a new tool', async () => {
+    const tool = await helper().buildFromOperation(operation, { name: machineName, description: 'x', organizationId: 'org-1' } as any);
+    expect(tool.name).toBe(machineName);
+    expect(tool.metadata?.displayName).toBe('Get company by id');
+  });
+
+  it('on a regenerated tool', async () => {
+    const existing = Object.assign(new Tool(), { name: machineName, metadata: { autoGenerated: true } });
+    const tool = await helper().prepareUpdateFromOperation(existing, operation, { name: machineName, description: 'x', organizationId: 'org-1' });
+    expect(tool.name).toBe(machineName);
+    expect(tool.metadata?.displayName).toBe('Get company by id');
+  });
+});

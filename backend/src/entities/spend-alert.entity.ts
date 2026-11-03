@@ -6,6 +6,12 @@ import { SpendBudgetPeriod } from './spend-budget.entity';
 
 export type SpendAlertLevel = 'soft' | 'hard';
 
+/** numeric comes back from Postgres as text; the entity carries a number. */
+export const CENTS = {
+  to: (value: number | null | undefined) => value,
+  from: (value: string | number | null) => (value === null || value === undefined ? value : Number(value)),
+};
+
 /**
  * Append-only spend-breach log, mirroring `memory_softcap_warnings`.
  * A row is written the first time a budget crosses its soft (80%) or
@@ -44,8 +50,11 @@ export class SpendAlert {
   @Column({ name: 'period_start', type: 'timestamptz' })
   periodStart: Date;
 
-  /** Period-to-date spend at breach time, in cents. */
-  @Column({ type: 'integer' })
+  /**
+   * Period-to-date spend at breach time, in cents, fractions kept (a
+   * one-cent budget warns at 0.82 cents, and the history says so).
+   */
+  @Column({ type: 'numeric', precision: 14, scale: 4, transformer: CENTS })
   spentCents: number;
 
   /** The budget's limit at breach time, in cents. */

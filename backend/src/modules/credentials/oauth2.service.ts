@@ -343,6 +343,14 @@ export class OAuth2Service {
     assertSafeOAuthUrl('authorizationUrl', authorizationUrl);
     assertSafeOAuthUrl('tokenUrl', tokenUrl);
 
+    // Xero hands out a refresh token only for the offline_access scope,
+    // which its API description does not list. Without it the sign-in
+    // works for 30 minutes, and a morning schedule fails with nothing to
+    // renew it.
+    if (new URL(authorizationUrl).hostname === 'login.xero.com' && !resolvedScopes.includes('offline_access')) {
+      resolvedScopes = [...resolvedScopes, 'offline_access'];
+    }
+
     // Generate PKCE pair
     const { codeVerifier, codeChallenge } = generatePKCE();
 

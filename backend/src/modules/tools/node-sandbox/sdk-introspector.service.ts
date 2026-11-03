@@ -83,11 +83,13 @@ export class SdkIntrospectorService {
 
     for (const exportSymbol of exports) {
       const name = exportSymbol.getName();
-      const resolvedSymbol = resolveAlias(exportSymbol, checker);
-      const sdkExport = extractExport(resolvedSymbol, checker);
-
-      if (sdkExport) {
-        sdkMap[name] = sdkExport;
+      // One export the checker cannot walk is left out, not the package.
+      try {
+        const resolvedSymbol = resolveAlias(exportSymbol, checker);
+        const sdkExport = extractExport(resolvedSymbol, checker);
+        if (sdkExport) sdkMap[name] = sdkExport;
+      } catch (error: any) {
+        this.logger.warn(`Skipped export "${name}" of "${packageName}": ${error?.message ?? error}`);
       }
     }
 

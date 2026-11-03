@@ -145,6 +145,14 @@ export class AgentRun {
   @Column({ default: 0 })
   toolCallCount: number;
 
+  /**
+   * The seq of the run's last event in `agent_run_events`. Advanced in the
+   * same transaction as the events by the step commit, whose CAS includes
+   * it, so two commits cannot both append after the same seq.
+   */
+  @Column({ type: 'int', default: 0 })
+  headSeq: number;
+
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 

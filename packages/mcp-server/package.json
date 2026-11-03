@@ -36,15 +36,15 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^1.5.6",
+    "@almyty/client": "^1.5.7",
     "@modelcontextprotocol/server": "^2.3.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0",
+    "@types/node": "^26.6.5",
     "tsx": "^4.7.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "vitest": "^5.0.5"
   },
   "overrides": {
     "@hono/node-server": "^2.0.5",

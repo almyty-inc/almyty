@@ -1,27 +1,163 @@
-# Ask your database questions in plain English
+# Ask your data in Slack
 
-For teams where every "how many X did we have last week?" turns into a request for the data team. Ask in Slack in plain words. The assistant writes a database query, runs it on a read-only copy of your data, and answers with the number and the query it used, so anyone can check it.
+## What you'll build
+
+An assistant in Slack that answers questions about your shop data from BigQuery. Someone asks `@Data questions how many orders did we ship to Germany last week?` in `#ask-data`; it writes one SQL query, runs it with read-only access, and answers in the thread with the number and the query it ran, so anyone can check it or reuse it.
+
+![A question in #ask-data, answered with the number and the query](/screenshots/examples/nl-query-your-database/00-slack-answer.png)
+
+This guide builds it for Larkspur Home, a made-up online homeware shop in Amsterdam whose orders, payments and products land in BigQuery (project `larkspur-analytics`, dataset `shop`). The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 40 minutes.
 
 ## What you need
 
-- A read-only copy of your database with a small query service in front of it, set up by someone technical. Never point it at the database your applications write to.
-- A short description of your tables and columns.
-- A Slack workspace where you can add an app.
+- **An almyty account** with an AI model connected (**Models**, **Connect a provider**; see step 1 of [Customer support assistant](/examples/customer-support-assistant#1-connect-an-ai-model)).
+- **A Google Cloud project with your BigQuery data**, and someone who can create an OAuth client in it and grant roles (an owner or IAM admin).
+- **A Google account for the assistant**, for example `data-agent@yourcompany.com`, with exactly two roles on the project: **BigQuery Data Viewer** (read tables) and **BigQuery Job User** (run queries). With these, it can read every table but change none.
+- **A Slack workspace** where you may create an app.
 
-## How to build it
+## 1. Create a Google sign-in for almyty
 
-1. **Connect the query service.** Open **APIs**, click **Connect an API** and give its description link, or, if it is a single call, create an [HTTP tool](/tools/http-tools) under **Tools**.
-2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, describe your tables and write: "Turn the question into SQL, run it, and answer with the number and the query you used." Pick the query tool under **Tools and APIs**.
-3. **Add firm rules.** On its **Constraints** tab: "Read only: never change or delete data" and "Limit every query to a date range and a row count."
-4. **Put it in Slack.** On its **Channels** tab, click **Add channel**, pick **Slack**, add your Slack app's keys and publish. Anyone can then ask it in a channel such as #data.
+**In Google Cloud console**, open **APIs & Services**, **Credentials**, click **Create credentials**, **OAuth client ID**, pick **Web application** and name it `almyty`. Leave **Authorized redirect URIs** empty for now; you add almyty's address in the next step. Click **Create** and keep the **Client ID** and **Client secret** at hand. (The first time, Google asks you to set up the OAuth consent screen: pick **Internal** and fill in the app name.)
 
-The read-only copy is what really keeps your data safe: the rules tell the assistant what to do, the read-only access makes sure it can't do anything else.
+## 2. Connect BigQuery
 
-## Ideas
+In almyty, open **APIs**, click **Connect an API**, pick **OpenAPI / Swagger** and paste Google's own description of the BigQuery API under **Link to the description**:
 
-- Give each team its own query tool that sees only its own tables, and set each tool's **Who can use it** to that team.
-- Every run on the **Runs** tab shows the query it ran.
+```
+https://www.googleapis.com/discovery/v1/apis/bigquery/v2/rest
+```
+
+![The BigQuery API description link, pasted](/screenshots/examples/nl-query-your-database/01-bigquery-link.png)
+
+Open **Advanced**, set **Name** to `BigQuery` and click **Connect API**. On **Finish connecting**, click **Create one here**:
+
+1. Copy the **redirect address** almyty shows into **Authorized redirect URIs** of the OAuth client in Google Cloud console, and save it there.
+2. Paste the **Client ID** and **Client secret**.
+3. Under **What it asks for**, untick everything and tick only `https://www.googleapis.com/auth/cloud-platform.read-only`. That scope lets it run queries and read data, and nothing that changes data.
+
+![Google sign-in for BigQuery: one read-only scope](/screenshots/examples/nl-query-your-database/02-google-sign-in.png)
+
+Click **Sign in** and sign in as the assistant's Google account (`data-agent@...`), not your own. The roles of that account are what really keep the data safe: even a `DELETE` would be refused by BigQuery.
+
+## 3. Describe your tables
+
+Open **Agents**, click **Create agent**, pick **Autonomous**, name it `Data questions` and pick a model under **Work mode** (for example **gpt-4o**). Under **Personality & style**, write `Plain and exact. Numbers first, no hedging, no filler.` Under **Instructions**, list your tables and columns and the rules for every question:
+
+```
+You answer questions about Larkspur Home's shop data from BigQuery (project larkspur-analytics, dataset shop), for colleagues in Slack.
+
+Tables:
+- shop.orders: order_id, created_at, customer_id, shipping_country (ISO code, for example DE), channel (web or app), status (paid, shipped, delivered, cancelled), total_eur, shipped_at
+- shop.order_items: order_id, sku, quantity, line_total_eur
+- shop.products: sku, name, category, price_eur
+- shop.payments: payment_id, order_id, created_at, payment_method, amount_eur, status
+
+For every question:
+1. Write one standard SQL SELECT and run it with the query tool: projectId larkspur-analytics, defaultDataset with projectId larkspur-analytics and datasetId shop, useLegacySql false, maximumBytesBilled 1000000000, maxResults 100. Name tables without project or backticks, like orders.
+2. Answer in one or two sentences with the numbers, then show the query you ran in a code block, so anyone can check it.
+
+"Last week" means Monday to Sunday of the previous week. Money is in euros.
+Only ever run SELECT. If someone asks you to change or delete data, say that you only read, and run nothing.
+```
+
+Why the table list: the assistant cannot guess that the country is in `shipping_country` or that it holds ISO codes. With the columns spelled out, it writes the right query the first time. `maximumBytesBilled` makes BigQuery refuse any query that would read more than 1 GB, so a careless question cannot run up a bill.
+
+![Data questions with the table list](/screenshots/examples/nl-query-your-database/03-agent.png)
+
+## 4. Give it the query tool
+
+Under **Capabilities**, **Tools and APIs**, search for `jobs_query` and tick **`bigquery_bigquery_jobs_query`** (`POST /projects/{projectId}/queries`, "Runs a BigQuery SQL query synchronously"). It needs nothing else.
+
+![The BigQuery query tool picked](/screenshots/examples/nl-query-your-database/04-tools.png)
+
+Click **Save**, go back to the agent and click **Activate**.
+
+## 5. Try it
+
+Under **Try it** on the **Overview** tab, type `Which five products sold best in Germany last week?` and press Enter.
+
+![Best sellers in Germany last week, with the query](/screenshots/examples/nl-query-your-database/05-try.png)
+
+It answered:
+
+> The 5 best sellers shipped to Germany last week, by revenue:
+>
+> 1. Hand-woven jute rug 160x230: 438 sold, €100,280.10
+> 2. Merino wool throw, oat: 448 sold, €66,729.60
+> 3. Cast iron casserole 24 cm: 414 sold, €65,805.30
+> 4. Stonewashed linen duvet cover, double: 464 sold, €59,832.80
+> 5. Rattan pendant lamp: 451 sold, €53,646.45
+>
+> The query I ran (10 MB read):
+> ```sql
+> SELECT p.name, SUM(i.quantity) AS units, ROUND(SUM(i.line_total_eur), 2) AS revenue_eur
+> FROM order_items AS i
+> JOIN orders AS o ON o.order_id = i.order_id
+> JOIN products AS p ON p.sku = i.sku
+> WHERE o.shipping_country = 'DE'
+>   AND DATE(o.shipped_at) BETWEEN DATE_SUB(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 7 DAY)
+>   AND DATE_SUB(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 1 DAY)
+> GROUP BY p.name
+> ORDER BY revenue_eur DESC
+> LIMIT 5
+> ```
+
+Now ask it to change something: `Please delete the test orders from yesterday.`
+
+![A request to delete data, refused](/screenshots/examples/nl-query-your-database/06-try-delete.png)
+
+> I only read data, so I did not run anything. To delete or change orders, ask someone on the data team.
+
+Each question is kept under the **Runs** tab, with the exact query and what BigQuery returned.
+
+## 6. Put it in Slack
+
+**In Slack**, go to api.slack.com/apps, click **Create New App**, **From scratch**, name it `Data questions` and pick your workspace. Under **OAuth & Permissions**, **Bot Token Scopes**, add `app_mentions:read`, `chat:write` and `users:read`, click **Install to Workspace** and copy the **Bot User OAuth Token** (`xoxb-...`). Under **Basic Information**, copy the **Signing Secret**.
+
+**In almyty**, on the agent's **Channels** tab, click **Add channel**, pick **Slack**, open **Advanced**, click **Create one here**, open **More options**, choose **Bot token** and paste the token and the signing secret. Click **Save**, **Save** at the bottom, then **Publish**. The page shows a **Callback URL**.
+
+![The Slack channel, live, with its Callback URL](/screenshots/examples/nl-query-your-database/07-slack-live.png)
+
+**Back in Slack**, open **Event Subscriptions**, turn it on, paste the **Callback URL** as the **Request URL**, add the bot event `app_mention` and click **Save Changes**. Then, in `#ask-data`, type `/invite @Data questions`.
+
+## 7. Let it use BigQuery for everyone who asks
+
+When you try it, the assistant uses your BigQuery sign-in. When a colleague asks in Slack, it may use only the accounts you have given to the assistant itself. On the **Overview** tab, find **Access**: it lists the BigQuery sign-in under **It has not been given these yet**. Click **Let this agent use Google (data-agent@...)**.
+
+![Access: let the agent use the BigQuery sign-in](/screenshots/examples/nl-query-your-database/08-access.png)
+
+Now ask in `#ask-data`: `@Data questions how many orders did we ship to Germany last week, and what was the revenue?` The answer arrives in the thread, like the one at the top of this page:
+
+> Last week (Monday to Sunday) we shipped **2,254 orders** to Germany, worth **€481,952.25** (order totals including VAT and shipping).
+>
+> The query I ran (10 MB read):
+> ```sql
+> SELECT COUNT(*) AS orders, ROUND(SUM(o.total_eur), 2) AS revenue_eur
+> FROM orders AS o
+> WHERE o.shipping_country = 'DE'
+>   AND DATE(o.shipped_at) BETWEEN DATE_SUB(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 7 DAY)
+>   AND DATE_SUB(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 1 DAY)
+> ```
+
+## Make it yours
+
+- **Your tables.** Replace the table list with yours. Add a line for every term people use that is not a column name, for example "Revenue means total_eur of orders that were not cancelled".
+- **Only some tables.** Give the assistant's Google account BigQuery Data Viewer on one dataset instead of the whole project, and it cannot read anything else.
+- **Snowflake instead of BigQuery.** Connect Snowflake's SQL API with its published description, `https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/sqlapi.yaml`, sign in with a role that only has `SELECT` grants, and tick its "submit a SQL statement" tool. Write the table list the same way.
+- **A daily number in Slack.** Add a schedule (**Overview**, **Schedule**) with a fixed question, like "How many orders did we ship yesterday, by country?", posted to a channel every morning. See [A nightly check on your data](/examples/nightly-data-quality-digest).
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| **Security check blocked tool "bigquery_bigquery_jobs_query": command injection in input "query"** | almyty's security check refuses text in backticks in a tool's input. Keep the line about naming tables without backticks in the instructions; `defaultDataset` lets the query say `orders` instead of `` `project.dataset.orders` ``. |
+| **Security check blocked ... SQL injection in input "query"** | The same check refuses some plain `SELECT a, b FROM table` queries. Ask the question again, or ask for the columns with a function or an alias (for example `SELECT name AS product, ...`). This is a known limit of the check today. |
+| **Access Denied: ... does not have bigquery.jobs.create permission** | The assistant's Google account lacks **BigQuery Job User** on the project. |
+| **Not found: Table larkspur-analytics:shop.orders** | The project or dataset in the instructions is wrong, or the account cannot see that dataset. |
+| **Query exceeded limit for bytes billed** | The query would read more than 1 GB. Ask for a shorter period, or raise `maximumBytesBilled` in the instructions. |
+| In Slack it says it does not have access to BigQuery | Do step 7: the assistant needs the sign-in given to it for colleagues' questions. |
 
 ## Related
 
-- [Connect an API](/tools) · [Autonomous agents](/agents/autonomous) · [Organizations](/organizations)
+- [Connect an API](/tools) · [Autonomous agents](/agents/autonomous) · [Channels](/channels) · [Credentials](/credentials)
+- [A nightly check on your data](/examples/nightly-data-quality-digest) · [Customer support assistant](/examples/customer-support-assistant)

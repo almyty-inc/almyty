@@ -3,6 +3,7 @@ import { ApprovalsService } from '../approvals.service';
 import { ApprovalPolicyApproval } from '../../../common/ee-hooks/ee-hooks';
 import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
 import { fakeApprovalsRepo } from './approvals-repo.fixture';
+import { expectRunProjectionsHold, runsWithEvents } from '../../../test/fake-run-events';
 
 /**
  * EE (approval_policy): a quorum has to be able to count.
@@ -26,10 +27,6 @@ import { fakeApprovalsRepo } from './approvals-repo.fixture';
  * and the table, or that accepted every insert, would show none of these
  * failures however the service was written.
  */
-class FakeRunsRepo {
-  async update() { return { affected: 1 }; }
-}
-
 class FakeAccessPolicy {
   async canAccess() { return { allowed: true, reason: 'ok' }; }
   async applyListFilter() { return { bypass: true, teamIds: [] }; }
@@ -73,7 +70,7 @@ function makeService(required: number) {
   const hook = makeQuorumHook(required);
   const svc = new ApprovalsService(
     approvals as any,
-    new FakeRunsRepo() as any,
+    runsWithEvents() as any,
     policyApprovals as any,
     new FakeAccessPolicy() as any,
     hook,
@@ -93,6 +90,9 @@ const createInput = {
 /** What the hook was asked to score on its most recent call. */
 const lastScored = (hook: any): ApprovalPolicyApproval[] =>
   hook.scoreProgress.mock.calls[hook.scoreProgress.mock.calls.length - 1][2];
+
+// Durable runs step 2: every run write in this file folds into its row.
+expectRunProjectionsHold();
 
 describe('a quorum does not lose an approver', () => {
   it('two reviewers who both loaded before either committed are both counted', async () => {

@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentByAgentIdGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { Agent } from '../../entities/agent.entity';
 import { STRATEGY_SEEDS } from './strategies/strategy-seeds';
 import { Strategy } from '../../entities/strategy.entity';
@@ -80,6 +81,7 @@ export class AgentExecutionSettingsController {
 
   @Get()
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'The shape this agent runs, and its orchestrator settings' })
   async get(@Request() req: any, @Param('agentId', ParseUUIDPipe) agentId: string) {
     const agent = await this.load(req, agentId);
@@ -89,6 +91,7 @@ export class AgentExecutionSettingsController {
 
   @Put()
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @UsePipes(validation)
   @ApiOperation({ summary: 'Choose the shape this agent runs' })
   async put(
@@ -174,6 +177,7 @@ export class AgentExecutionSettingsController {
    */
   @Post('eject')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: "Compile the chosen strategy into the agent's own editable pipeline" })
   async eject(@Request() req: any, @Param('agentId', ParseUUIDPipe) agentId: string) {
     const agent = await this.load(req, agentId);

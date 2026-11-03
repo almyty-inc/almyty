@@ -300,6 +300,72 @@ export function encodeFormUrlencoded(body: Record<string, any>): string {
   return params.toString();
 }
 
+// ───── query-string serialisation (OpenAPI styles) ────────────────
+
+/** How a declared query parameter is serialised (OpenAPI `style` / `explode`). */
+export interface QueryParamStyle {
+  type?: string;
+  style?: string;
+  explode?: boolean;
+}
+
+/**
+ * Serialise query parameters the way each one's OpenAPI `style` says.
+ * An object is `name[key]=value` under `deepObject` (Stripe's
+ * `created[gte]=...`, nested and with arrays as `name[key][]=`), and is
+ * also sent that way when nothing declares it; under the default `form`
+ * style its properties become plain parameters (`key=value`), or one
+ * comma list with `explode: false`. An array repeats its name (`form`),
+ * becomes one comma list with `explode: false`, and `name[]=` under
+ * `deepObject`. An object parameter a model sent as JSON text is read as
+ * the object it spells.
+ */
+export function serializeQueryParams(params: Record<string, any>, styles: Record<string, QueryParamStyle | undefined> = {}): string {
+  const parts: string[] = [];
+  const enc = encodeURIComponent;
+  const push = (key: string, value: unknown) => {
+    if (value === undefined || value === null) return;
+    parts.push(`${key}=${enc(String(value))}`);
+  };
+  const brackets = (prefix: string, value: unknown) => {
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        if (v !== null && typeof v === 'object') brackets(`${prefix}[]`, v);
+        else push(`${prefix}[]`, v);
+      }
+    } else if (value !== null && typeof value === 'object') {
+      for (const [k, v] of Object.entries(value)) brackets(`${prefix}[${enc(k)}]`, v);
+    } else {
+      push(prefix, value);
+    }
+  };
+  for (const [name, raw] of Object.entries(params)) {
+    const spec = styles[name];
+    let value = raw;
+    if (typeof value === 'string' && (spec?.type === 'object' || spec?.style === 'deepObject') && /^\s*\{/.test(value)) {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        // Not JSON after all: sent as the text it is.
+      }
+    }
+    const key = enc(name);
+    const exploded = spec?.explode !== false;
+    if (Array.isArray(value)) {
+      if (spec?.style === 'deepObject') brackets(key, value);
+      else if (!exploded) parts.push(`${key}=${value.map((v) => enc(String(v))).join(',')}`);
+      else value.forEach((v) => push(key, v));
+    } else if (value !== null && typeof value === 'object') {
+      if (!spec || spec.style === 'deepObject') brackets(key, value);
+      else if (!exploded) parts.push(`${key}=${Object.entries(value).flat().map((v) => enc(String(v))).join(',')}`);
+      else for (const [k, v] of Object.entries(value)) push(enc(k), v);
+    } else {
+      push(key, value);
+    }
+  }
+  return parts.join('&');
+}
+
 // ───── deterministic cache-key hashing ─────────────────────────────
 
 /**

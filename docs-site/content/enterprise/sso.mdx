@@ -33,21 +33,27 @@ almyty only creates accounts through SSO for addresses on a domain your organiza
 
 A verified domain covers its subdomains too (`people@eng.example.com`). Only one organization can hold a given domain at a time. The same rule applies to SCIM.
 
+## Signing in
+
+On the sign-in page, people type their work address. When it is on one of your verified domains and SSO is on, **Continue with single sign-on** appears under it and takes them to your identity provider. The password form stays, for anyone who still has one.
+
 ## Who gets in
 
 When someone signs in through SSO, almyty looks them up by email:
 
 - **A member of your organization**: signed in.
-- **A member whose access was switched off**: refused.
+- **A member whose access was switched off**: refused, on a page that says their access was turned off and to ask an admin.
 - **Someone new**: gets an account with the default role, but only if **Just-in-time provisioning** is on and their address is on one of your verified domains. Otherwise refused, and they join through SCIM or an invitation.
 - **Someone with an almyty account who is not in your organization**: refused. SSO never adds an existing account to an organization; invite them instead.
+
+Every refusal lands on a sign-in page that says why and what to do, and every sign-in and refusal is on the [audit trail](/enterprise/audit-export).
 
 ## Keep members in sync with SCIM
 
 1. On the same page, click **Generate SCIM token**. This also turns SCIM on. The token is shown once: copy it.
 2. In your identity provider, set up SCIM with the **SCIM base URL** shown on the page and the token.
 
-From then on your identity provider adds and removes people, and its groups become almyty [teams](/organizations). When someone is removed, they lose access to your organization, but their almyty account stays if they belong to other organizations. Use **Rotate SCIM token** to replace the token.
+From then on your identity provider adds and removes people, and its groups become almyty [teams](/organizations). A group with the same name as a team you already made by hand joins that team rather than making a second one: the team keeps its members, and the group's members are added to it. When someone is removed, they lose access to your organization, but their almyty account stays if they belong to other organizations. Use **Rotate SCIM token** to replace the token.
 
 ## For developers
 
@@ -80,6 +86,7 @@ Reading the config back masks secrets and includes the computed `loginUrl` and `
 
 | Endpoint | Purpose |
 |---|---|
+| `GET /sso/discover?email=` | whether the address signs in with SSO: `{ sso, protocol, loginUrl }` when its domain is verified by an organization with SSO on (rate limited) |
 | `GET /sso/:orgId/saml/login` | redirect to the IdP (sets a relay-state cookie, 10 min) |
 | `POST /sso/:orgId/saml/callback` | SAML ACS (assertion consumer) |
 | `GET /sso/:orgId/saml/complete` | finishes the sign-in in the browser that started it |
@@ -87,7 +94,7 @@ Reading the config back masks secrets and includes the computed `loginUrl` and `
 | `GET /sso/:orgId/oidc/login` | start the OIDC flow (state cookie, 10 min) |
 | `GET /sso/:orgId/oidc/callback` | code exchange, then cookie and redirect |
 
-Refused sign-ins answer 401.
+A refused sign-in in a browser (a request that prefers HTML) is redirected to the sign-in error page, `/auth/sso-error?reason=<code>` on `FRONTEND_URL` (or `SSO_ERROR_REDIRECT`), with one of `deactivated`, `not_member`, `invite_pending`, `no_account`, `domain_unverified`, `expired`, `not_enabled`, `not_entitled`, `failed`. Any other client gets the 401 (or other status) and JSON body. Every sign-in and refusal is on the audit trail as `sso_login`.
 
 **Domain verification record:**
 
@@ -98,6 +105,6 @@ Refused sign-ins answer 401.
 **SCIM 2.0** under `/scim/v2`, authenticated by the SCIM bearer token and scoped to your organization:
 
 - **Users**: create, list (filtering limited to `userName eq "…"`), read, replace, patch, delete by id
-- **Groups**: create, list, read, patch, delete by id; groups map to teams
+- **Groups**: create, list, read, patch, delete by id; groups map to teams. Creating a group named like an existing team (case aside) links the two instead of answering 409: the team keeps its id and members and gets the group's members too. The organization's default team is never linked.
 
 Deprovisioning (patch `active: false` or delete) deactivates the user's organization membership, not their account. Both Okta and Entra patch payload shapes are handled. Creating a user at an address outside the verified domains is refused.

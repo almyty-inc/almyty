@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Agent } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Organization } from '../../entities/organization.entity';
+import { notDone, writeRun } from './run-event-writer';
 import {
   ResolvedRunLimits,
   RunLimitTrip,
@@ -61,13 +62,14 @@ export class AgentRuntimeMiscHelper {
     }
 
     try {
-      const run = await this.runRepository.findOne({ where: { id: runId } });
-      if (run && !run.isDone()) {
-        run.status = AgentRunStatus.TIMEOUT;
-        run.error = 'Timed out waiting for sub-agent';
-        await this.runRepository.save(run);
-      }
-      return run;
+      // Only a sub-agent still going: one that finished at the last moment
+      // keeps its ending, and comes back as it is.
+      const timedOut = await writeRun(
+        this.runRepository,
+        { id: runId, status: notDone() },
+        { status: AgentRunStatus.TIMEOUT, error: 'Timed out waiting for sub-agent' },
+      );
+      return timedOut ?? (await this.runRepository.findOne({ where: { id: runId } }));
     } catch {
       return null;
     }

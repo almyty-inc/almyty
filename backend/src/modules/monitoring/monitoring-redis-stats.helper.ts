@@ -233,4 +233,25 @@ export class MonitoringRedisStatsHelper {
       return zero;
     }
   }
+
+  /**
+   * Run event logs that did not fold into their row on a write, over the
+   * window (`run_projection_mismatch`, written by the projection check in
+   * agents/run-projection-check.ts when RUN_PROJECTION_CHECK is on).
+   */
+  async getRunStats(): Promise<{ projectionMismatches: number }> {
+    try {
+      const rows = await this.usageMetricRepository.query(
+        `SELECT COUNT(*)::bigint AS mismatches
+         FROM usage_metrics
+         WHERE type = 'run_projection_mismatch' AND timestamp >= $1`,
+        [this.windowStart()],
+      );
+      const row = Array.isArray(rows) ? rows[0] : undefined;
+      return { projectionMismatches: this.num(row?.mismatches) };
+    } catch (err: any) {
+      this.logger.warn(`getRunStats failed: ${err?.message}`);
+      return { projectionMismatches: 0 };
+    }
+  }
 }

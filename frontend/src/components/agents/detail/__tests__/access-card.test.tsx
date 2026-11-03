@@ -41,12 +41,29 @@ describe("the agent's Access card", () => {
       .mockResolvedValueOnce([])
     api.addGrant.mockResolvedValue({ id: 'g-1' })
     renderCard()
-
-    expect(screen.getByTestId('agent-access-card')).toHaveTextContent('When someone other than you writes to it on a channel')
-    expect(await screen.findByText('It has not been given these yet:')).toBeInTheDocument()
+    // Said as being about other people: the owner's own runs use the owner's accounts anyway.
+    expect(screen.getByTestId('agent-access-card')).toHaveTextContent('Your own runs always use your accounts')
+    expect(screen.getByTestId('agent-access-card')).toHaveTextContent('when someone else writes to it on a channel')
+    expect(await screen.findByText("Not yet given for other people's messages (your own runs still use them):")).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Let this agent use HubSpot private app' }))
     expect(api.addGrant).toHaveBeenCalledWith('c-hub', { principalType: 'agent', principalId: 'a-1' })
-    expect(await screen.findByText('It has been given every account its tools and settings use.')).toBeInTheDocument()
+    expect(await screen.findByText("Other people's messages can use every account its tools and settings use.")).toBeInTheDocument()
     await waitFor(() => expect(api.apiGet).toHaveBeenCalledTimes(2))
+  })
+
+  // A team-scoped key never serves a channel open to everyone (the access
+  // model: a team connection reaches only that team's gateways). The card
+  // said nothing about it, so the refusal looked like a bug.
+  it('says a team connection works only on the team channels, and offers no grant for it', async () => {
+    api.apiGet.mockResolvedValueOnce([
+      {
+        kind: 'connection', id: 'c-stripe', name: 'Stripe restricted key', neededFor: 'The key for Stripe', scope: 'team', canGrant: false,
+        note: "This is the team's own connection: it works for the team's members and on channels set up for that team, never on a channel open to everyone or for the agent acting as itself, and a grant cannot change that.",
+      },
+    ])
+    renderCard()
+    expect(screen.getByTestId('access-card-team-rule')).toHaveTextContent('not on a channel open to everyone')
+    expect(await screen.findByText(/never on a channel open to everyone/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Let this agent use Stripe/ })).not.toBeInTheDocument()
   })
 })

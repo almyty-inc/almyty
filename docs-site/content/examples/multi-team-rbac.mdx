@@ -1,26 +1,117 @@
 # Keep each team's assistants to that team
 
-For an organization where support, finance and IT all use almyty but shouldn't all touch the same things. Each team gets its own assistants, APIs, gateways and keys, and the people in other teams can't use them. A support agent can't reach the finance team's refund tools, and nobody has more access than they need.
+## What you'll build
+
+Two teams in one organization that cannot see each other's assistants, connections or keys. It is built for Velora Energy, a made-up energy supplier in Amsterdam:
+
+- **Finance** owns the Stripe connection, the Stripe key and the **Billing assistant**, which can refund customers.
+- **Customer support** owns the Zendesk connection and the **Support assistant**.
+
+When Mehmet, who works in customer support, opens **Agents**, he sees his team's assistant and nothing of Finance's:
+
+![Agents as Mehmet in Customer support sees them: only the Support assistant](/screenshots/examples/multi-team-rbac/00-support-view.png)
+
+Teams and the **Who can use it** setting are on every plan. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 20 minutes.
 
 ## What you need
 
-- Owner or admin access to your organization.
-- The Business plan, only if you want custom roles beyond the built-in ones (step 5).
+- **Owner or admin** in your almyty organization. Only they create teams and invite people.
+- A connected AI model (see [Connect a provider](/llm-providers)).
+- For the Finance side: a Stripe **restricted key**. In Stripe, open **Developers → API keys → Create restricted key**, name it `almyty billing assistant` and set **Customers: Read**, **Charges: Read** and **Refunds: Write**. Leave the rest at **None**.
+- For the support side: your Zendesk subdomain (for example `velora.zendesk.com`) and an API token (**Admin Center → Apps and integrations → APIs → Zendesk API → Add API token**). This guide only connects Zendesk; it does not run the support assistant.
 
-## How to build it
+## 1. Create the teams
 
-1. **Create the teams.** Open **Settings**, then **Members and teams**. Under **Create team**, add one per group: Support, Finance, IT.
-2. **Put people in them.** Add members to each team as **Member** or **Lead**. A team's lead can approve the requests of that team's assistants.
-3. **Set organization roles.** Everyone also has an organization role: **Owner**, **Admin**, **Member** or **Viewer**. Keep Owner and Admin for the few people who run almyty for everyone.
-4. **Give each thing an owner.** When you create an assistant, an API, a gateway, a runner or a key, choose **Who can use it**: **Only you**, **One team** (pick the team) or **Everyone**. Finance's refund tools and keys stay **Team: Finance**.
-5. **Go finer if you need to.** With the Business plan, **Settings**, **Roles** adds custom roles (for example "can run agents but not edit them") and access rules that allow or deny specific actions.
+Open **Settings**, then **People and access → Members and teams**. Under **Teams**, click **Create team**, enter the **Team name** and a **Description**, and click **Create team** again. Make two:
 
-## Ideas
+- `Finance`: `Billing, refunds and payments. Owns the Stripe connection and the billing assistant.`
+- `Customer support`: `Answers customers by email and chat. Owns the Zendesk connection and the support assistant.`
 
-- Approval rules per team, so a finance request needs a finance approver: see [Approval rules](/examples/approval-policies).
-- With [single sign-on](/examples/sso-scim-onboarding), teams follow the groups in your company directory.
-- Every access change is in the [audit trail](/examples/audit-to-siem).
+![The two new teams next to Everyone](/screenshots/examples/multi-team-rbac/01-teams.png)
+
+**Everyone** is there from the start and always holds every member. Anything shared with **Everyone** is shared with the whole organization, which is why the next steps pick a team instead.
+
+## 2. Invite your colleagues
+
+On the same page, under **Organization members**, click **Invite member**, enter the **Email address**, pick a **Role** and click **Send invitation**. Velora invites three people:
+
+- `lotte.jansen@veloraenergy.example` as **Admin**. Admins see and manage everything in the organization, so keep this role for the few people who run almyty for everyone.
+- `joost.bakker@veloraenergy.example` as **Member**.
+- `mehmet.yilmaz@veloraenergy.example` as **Member**.
+
+![Inviting Joost as a member](/screenshots/examples/multi-team-rbac/02-invite.png)
+
+Each of them gets an email and joins once they accept.
+
+## 3. Put people in their team
+
+Under each team, click the **Add a member** icon (the person with a plus), pick the person under **Member** and click **Add member**. Add Joost to **Finance** and Mehmet to **Customer support**. Then set Joost's role in Finance to **Lead** with the menu on his row.
+
+![Joost is the lead of Finance, Mehmet a member of Customer support](/screenshots/examples/multi-team-rbac/03-team-members.png)
+
+A team's **Lead** can approve what that team's assistants ask approval for (see [Decide who signs off](/examples/approval-policies)). A **Member** can use what the team owns.
+
+## 4. Connect Stripe for Finance only
+
+Open **APIs**, click **Connect an API** and pick **OpenAPI / Swagger**. Under **Link to the description**, paste Stripe's own description:
+
+```
+https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
+```
+
+Open **Advanced**. Next to **Who can use it: Everyone**, click **Change**, pick **One team** and choose **Finance**. Click **Connect API**.
+
+![Connecting Stripe, usable by the Finance team only](/screenshots/examples/multi-team-rbac/04-stripe-finance.png)
+
+almyty reads the description and makes a tool for each of Stripe's 612 operations. On the next screen, add the key: set **How it is sent** to **As a bearer token**, click **Create one here**, name it `Stripe restricted key (billing assistant)` and paste the restricted key from Stripe. Under its **Who can use it**, click **Change** again and pick **One team: Finance**, then **Save**.
+
+![The Stripe key, also for Finance only](/screenshots/examples/multi-team-rbac/04b-stripe-key-finance.png)
+
+The connection and the key are separate things with their own owner. Set both: a Finance-only connection with an organization-wide key would let other teams' tools use the key.
+
+Connect Zendesk the same way for **Customer support**, with this description link:
+
+```
+https://developer.zendesk.com/zendesk/oas.yaml
+```
+
+Under **Advanced**, set the **Address** to your own subdomain, for example `https://velora.zendesk.com`.
+
+## 5. Give the assistant to the team
+
+Open **Agents**, click **Create agent** and pick **Autonomous**. Name it `Billing assistant`, pick a **Model**, and under **Capabilities → Tools and APIs** tick three Stripe tools: **List all customers**, **List all charges** and **Create a refund**. (The full instructions are in [Decide who signs off](/examples/approval-policies), which builds on this assistant.)
+
+At the top, the button next to **Draft** says who can use it, **Everyone** for now. Click it, pick **One team** and choose **Finance**. Click **Save**, then **Activate** on the assistant's page.
+
+![The billing assistant: only members of Finance can see and use it](/screenshots/examples/multi-team-rbac/05-agent-team.png)
+
+Create the `Support assistant` the same way with two Zendesk tools, **List Tickets** and **Show Ticket**, for **One team: Customer support**.
+
+## Try it
+
+Sign in as Mehmet. **Agents** shows the **Support assistant** with the tag **team: Customer support**, and no **Billing assistant** (the screenshot at the top). **APIs** shows Zendesk and not Stripe, and **Credentials** does not list the Stripe key.
+
+A link to the billing assistant does not help either. Opened by Mehmet, it says the agent does not exist:
+
+![Mehmet opening the billing assistant's link: Agent not found](/screenshots/examples/multi-team-rbac/06-support-denied.png)
+
+Joost, in Finance, sees the billing assistant and can run it. Lotte, as an admin, sees both teams' assistants.
+
+## Make it yours
+
+- **More teams.** One team per group that owns its own systems: IT with Jira and Okta, Sales with HubSpot. A person can be in several teams.
+- **Shared basics.** Keep things everyone needs, such as the AI model connection, on **Everyone**.
+- **Only you.** For a personal experiment, pick **Only you**: not even admins see it.
+- **Company sign-in.** With [single sign-on](/examples/sso-scim-onboarding), your directory adds and removes people for you, and its groups become teams.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| A team member cannot see the assistant | Check the button next to **Draft** on the assistant: it must name their team. Being in a team with the same name in your directory is not enough until that group is synced (see [Company sign-in](/examples/sso-scim-onboarding)). |
+| The assistant cannot call Stripe for a team member | The key must be usable by that team too. Open **Credentials**, then the key, and check **Who can use it**. |
+| The assistant's **Access** card says it has not been given the Stripe key | That is about the assistant answering on a channel (web chat, Slack) on its own behalf: it cannot use a team's key there. Runs started by a team member, like **Try it**, use the member's own access. |
 
 ## Related
 
-- [Advanced RBAC](/enterprise/advanced-rbac) · [Organizations](/organizations) · [Credentials](/credentials) · [Approval rules](/examples/approval-policies)
+- [Organizations and teams](/organizations) · [Credentials](/credentials) · [Decide who signs off](/examples/approval-policies) · [Company sign-in](/examples/sso-scim-onboarding)

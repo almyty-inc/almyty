@@ -7,6 +7,7 @@ import {
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
+import type { OperationOutline } from '@/types'
 import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 import type { AgentWakeRow, AlwaysOnInput, AlwaysOnView } from '@/lib/always-on'
 
@@ -310,6 +311,12 @@ export const authApi = {
     apiPost('/auth/login', data),
   
   logout: () => apiPost('/auth/logout'),
+
+  /** Whether this address signs in through its organization's single sign-on, and where that starts. */
+  discoverSso: (email: string) =>
+    apiGet<{ sso: boolean; protocol?: 'saml' | 'oidc'; loginUrl?: string }>(
+      `/sso/discover?email=${encodeURIComponent(email)}`,
+    ),
   
   getProfile: () => apiGet('/auth/profile'),
   
@@ -587,6 +594,14 @@ export const apisApi = {
   testConnection: (id: string) => apiPost(`/apis/${id}/test-connection`),
   
   getOperations: (id: string) => apiGet(`/apis/${id}/operations`),
+
+  /** Every operation in outline, and how many one description may make tools from. */
+  getOperationOutline: (id: string): Promise<{ operations: OperationOutline[]; limit: number }> =>
+    apiGet(`/apis/${id}/operations/outline`),
+
+  /** Make tools from these operations only; poll the returned job like an import. */
+  selectOperations: (id: string, operationIds: string[]): Promise<{ jobId: string; selected: number }> =>
+    apiPost(`/apis/${id}/operations/selection`, { operationIds }),
   
   getSchemas: (id: string) => apiGet(`/apis/${id}/schemas`),
 
@@ -604,6 +619,8 @@ export const apisApi = {
     teamId?: string | null
   }) => apiPost('/apis/http', data),
   getSdkMaps: (apiId: string) => apiGet(`/apis/${apiId}/sdk-maps`),
+  /** Install an SDK API's packages and read what they offer again (a background job). */
+  analyseSdk: (apiId: string) => apiPost(`/apis/${apiId}/analyse-sdk`, {}),
 
   // Connect an API from its description in one call: a link, a file or
   // pasted text. The response says what was found and what is still needed.
@@ -856,6 +873,8 @@ export interface CreatePolicyPayload {
 
 export const rbacApi = {
   // Custom roles
+  /** The permissions a custom role can grant, each with what it unlocks; nothing else gates a route. */
+  listPermissions: () => apiGet<Array<{ permission: string; description: string }>>('/rbac/permissions'),
   listRoles: () => apiGet<CustomRole[]>('/rbac/roles'),
   createRole: (data: CreateRolePayload) => apiPost<CustomRole>('/rbac/roles', data),
   updateRole: (id: string, data: UpdateRolePayload) =>

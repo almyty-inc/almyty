@@ -27,6 +27,7 @@ vi.mock('../../../lib/clipboard', () => ({
 }))
 
 import { apiGet, ssoApi } from '../../../lib/api'
+import { useOrganizationStore } from '../../../store/organization'
 
 const mockedApiGet = apiGet as unknown as ReturnType<typeof vi.fn>
 const mockedGetConfig = ssoApi.getConfig as unknown as ReturnType<typeof vi.fn>
@@ -84,5 +85,31 @@ describe('SsoSettings entitlement gating', () => {
     expect(screen.getByRole('button', { name: /save sso settings/i })).toBeInTheDocument()
     expect(screen.queryByText(/upgrade to unlock it/i)).not.toBeInTheDocument()
     expect(mockedGetConfig).toHaveBeenCalled()
+  })
+})
+
+describe('SsoSettings addresses for the identity provider', () => {
+  beforeEach(() => {
+    mockedApiGet.mockReset()
+    mockedGetConfig.mockReset()
+    mockedApiGet.mockResolvedValue(withEntitlements(['sso']))
+    useOrganizationStore.setState({ currentOrganization: { id: 'org-123', name: 'Velora Energy' } as any })
+  })
+
+  it('shows the SAML reply URL, the metadata and the sign-in link for this organization', async () => {
+    mockedGetConfig.mockResolvedValue(ssoConfig)
+    render(<SsoSettings />)
+    await waitFor(() => expect(screen.getByTestId('sso-idp-addresses')).toBeInTheDocument())
+    expect(screen.getByLabelText('Reply URL (assertion consumer service)')).toHaveValue('https://api.almyty.com/sso/org-123/saml/callback')
+    expect(screen.getByLabelText('Service provider metadata')).toHaveValue('https://api.almyty.com/sso/org-123/saml/metadata')
+    expect(screen.getByLabelText('Sign-in link')).toHaveValue('https://api.almyty.com/sso/org-123/saml/login')
+  })
+
+  it('shows the OIDC redirect URI to register and the OIDC sign-in link', async () => {
+    mockedGetConfig.mockResolvedValue({ ...ssoConfig, configured: true, protocol: 'oidc' })
+    render(<SsoSettings />)
+    await waitFor(() => expect(screen.getByTestId('sso-idp-addresses')).toBeInTheDocument())
+    expect(screen.getByLabelText('Redirect URI to register')).toHaveValue('https://api.almyty.com/sso/org-123/oidc/callback')
+    expect(screen.getByLabelText('Sign-in link')).toHaveValue('https://api.almyty.com/sso/org-123/oidc/login')
   })
 })

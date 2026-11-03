@@ -48,8 +48,14 @@ const NO_TEAM_PROVIDER =
   "An agent that acts as itself does not use a team's model providers. Use a provider shared with the organization.";
 const NO_PRIVATE_CONNECTION =
   'A private connection cannot be shared. Connect it again as a personal or organization connection to give it to the agent.';
+/**
+ * A team connection serves its team and nobody else, by design: the
+ * team's members' own runs, and a channel set up for that team. A message
+ * on a channel open to the organization or the public has no team behind
+ * it, and neither has an agent acting as itself, so no grant opens it.
+ */
 const NO_TEAM_CONNECTION =
-  "An agent that acts as itself does not use a team's connections. Use a personal or organization connection.";
+  "This is the team's own connection: it works for the team's members and on channels set up for that team, never on a channel open to everyone or for the agent acting as itself, and a grant cannot change that. For those, connect the account for the organization (or as your own) and give that to the agent.";
 
 function scopeOf(row: { visibility?: string | null; ownerUserId?: string | null }): ReachScope {
   if (row.visibility === 'private') return 'private';

@@ -138,6 +138,30 @@ describe('ApprovalPoliciesSettings', () => {
     )
   })
 
+
+  // An amount rule with its own steps is a policy too; hiding every rule
+  // from this list hid exactly the rules that carry multi-step sign-off.
+  it('lists an amount rule with its steps and links it to the rule page', async () => {
+    entitlementState.granted = true
+    mockedList.mockResolvedValue([
+      {
+        ...samplePolicy,
+        id: 'r1',
+        name: 'Big refunds',
+        match: [],
+        trigger: { kind: 'tool_amount', toolId: 't1', toolName: 'issue_refund', argument: 'amount', op: 'gt', amount: 1000 },
+      },
+    ])
+
+    render(<ApprovalPoliciesSettings />)
+
+    await waitFor(() => expect(screen.getByText('Big refunds')).toBeInTheDocument())
+    expect(screen.getByText('Ask before issue_refund when amount is over 1,000')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Edit sign-off for Big refunds' })).toHaveAttribute(
+      'href',
+      '/settings/approvals/rules/r1',
+    )
+  })
   it('deletes a policy via DELETE after confirmation', async () => {
     entitlementState.granted = true
     mockedList.mockResolvedValue([samplePolicy])

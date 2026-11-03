@@ -22,6 +22,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -118,6 +119,14 @@ function runModels(run: AgentRun): string[] {
   const models = (run.steps ?? []).map((s) => (s.output as any)?.model).filter((m): m is string => typeof m === 'string' && !!m)
   return [...new Set(models)]
 }
+
+/**
+ * An answer long enough that it scrolls inside its box: Try it offers "Show
+ * all" for it. The box grows to most of the screen before it scrolls.
+ */
+export function isLongAnswer(text: string): boolean {
+  return text.length > 1500 || text.split('\n').length > 25
+}
 export function OverviewTab({
   agent,
   executions,
@@ -144,7 +153,10 @@ export function OverviewTab({
   const { success, error: errorNotif } = useNotifications()
 
   const [testInput, setTestInput] = useState('')
+  // What was sent: shown above the answer after the box clears.
+  const [testQuestion, setTestQuestion] = useState<string | null>(null)
   const [testOutput, setTestOutput] = useState<string | null>(null)
+  const [outputExpanded, setOutputExpanded] = useState(false)
   const [testError, setTestError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [webhookSaving, setWebhookSaving] = useState(false)
@@ -158,7 +170,7 @@ export function OverviewTab({
   const guard = useLeaveGuard(webhookDirty)
   // The Recent Runs empty state sends the user to Try It rather than telling
   // them to go find it; the input is the only way to start a run from here.
-  const testInputRef = React.useRef<HTMLInputElement>(null)
+  const testInputRef = React.useRef<HTMLTextAreaElement>(null)
 
   // Rollback mutation (inline, matching original)
   const handleRollback = async (versionIndex: number) => {
@@ -177,11 +189,14 @@ export function OverviewTab({
   }
 
   const handleTest = () => {
+    const message = testInput
     setTestLoading(true)
     setTestOutput(null)
     setTestError(null)
+    setOutputExpanded(false)
+    setTestQuestion(message)
     // An autonomous run is answered while it is still going; wait for it.
-    invokeAndSettle(agent.id, { message: testInput })
+    invokeAndSettle(agent.id, { message })
       .then((run: any) => {
         const outcome = runOutcome(run)
         if (outcome.error) setTestError(outcome.error)
@@ -217,38 +232,70 @@ export function OverviewTab({
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input
+              {/* The chat composer's keys: Enter sends, Shift+Enter is a new line. */}
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (testInput.trim() && !testLoading) handleTest()
+                }}
+              >
+                <Textarea
                   ref={testInputRef}
+                  aria-label="Message"
                   placeholder="Type a message to test this agent..."
                   value={testInput}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTestInput(e.target.value)}
-                  onKeyDown={(e: React.KeyboardEvent) => {
-                    if (e.key === 'Enter' && testInput.trim() && !testLoading) {
-                      handleTest()
+                  onChange={(e) => setTestInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (testInput.trim() && !testLoading) handleTest()
                     }
                   }}
                   disabled={testLoading}
+                  rows={2}
+                  className="min-h-[44px] max-h-[200px] resize-y"
                 />
                 <Button
+                  type="submit"
+                  className="self-end"
                   disabled={!testInput.trim() || testLoading}
-                  onClick={handleTest}
                   aria-label="Run test"
                 >
                   {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 </Button>
-              </div>
+              </form>
+              <p className="text-xs text-muted-foreground">Enter to send · Shift+Enter for newline</p>
+              {/* The question stays above its answer once the box is cleared. */}
+              {testQuestion && (
+                <div data-testid="try-it-question" className="rounded-lg border p-3 text-sm">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">You asked</p>
+                  <p className="whitespace-pre-wrap break-words">{testQuestion}</p>
+                </div>
+              )}
               {testError && (
                 <div role="alert" className="bg-destructive/10 text-destructive rounded-lg p-3 text-sm whitespace-pre-wrap">
                   {testError}
                 </div>
               )}
               {testOutput && (
-                <div role="status" aria-live="polite" className="bg-muted rounded-lg p-3 text-sm max-h-[320px] overflow-auto">
-                  <AssistantMarkdown>{testOutput}</AssistantMarkdown>
+                <div className="space-y-1">
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    data-testid="try-it-answer"
+                    className={`bg-muted rounded-lg p-3 text-sm overflow-auto ${outputExpanded ? '' : 'max-h-[60vh]'}`}
+                  >
+                    <AssistantMarkdown>{testOutput}</AssistantMarkdown>
+                  </div>
+                  {isLongAnswer(testOutput) && (
+                    <Button variant="link" size="sm" className="h-auto px-0" onClick={() => setOutputExpanded((v) => !v)}>
+                      {outputExpanded ? 'Show less' : 'Show all'}
+                    </Button>
+                  )}
                 </div>
               )}
-              {!testOutput && !testError && (
+              {!testOutput && !testError && !testQuestion && (
                 <p className="text-xs text-muted-foreground">Send a message to run this agent and see the response.</p>
               )}
             </div>

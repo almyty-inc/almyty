@@ -90,6 +90,22 @@ updates:
       # so a major-only ignore would not hold it. Unpin only together with
       # a diagnosis of the 30.1 change; the app itself never runs on jsdom.
       - dependency-name: "jsdom"
+      # backend: Bull's repeatable jobs evaluate cron with its own
+      # cron-parser 4, and agent-schedule-spec.ts computes the next runs the
+      # page shows with the same library so they match the queue. v5 also
+      # drops parseExpression. Move together with Bull, not on its own.
+      - dependency-name: "cron-parser"
+        update-types: ["version-update:semver-major"]
+      # backend: v5 targets Supermemory's v5 API, where namespaces replace
+      # container tags and every call changes shape. Documents stored under
+      # a containerTag need a decided mapping first; held from #1029.
+      - dependency-name: "supermemory"
+        update-types: ["version-update:semver-major"]
+      # backend: v4 reworks the client (user.listOrdered, graph.add/search,
+      # episode.getByUserId are gone). The Zep backend needs a port checked
+      # against a live account; held from #1029.
+      - dependency-name: "@getzep/zep-cloud"
+        update-types: ["version-update:semver-major"]
     groups:
       # The monthly version bumps for every npm folder, as one PR.
       npm-monthly:

@@ -33,7 +33,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { approvalPoliciesApi, type ApprovalPolicy, type UpsertApprovalPolicy } from '@/lib/api'
+import {
+  approvalPoliciesApi,
+  type ApprovalPolicy,
+  type ApprovalStep,
+  type UpsertApprovalPolicy,
+} from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
@@ -143,7 +148,6 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
   const guard = useLeaveGuard(form.formState.isDirty)
 
   const matchArray = useFieldArray({ control: form.control, name: 'match' })
-  const stepsArray = useFieldArray({ control: form.control, name: 'steps' })
 
   const submit = async (data: ApprovalPolicyFormValues) => {
     const payload: UpsertApprovalPolicy = {
@@ -299,65 +303,17 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         }
       >
         {errors.steps?.message && <p className="text-sm text-destructive">{errors.steps.message}</p>}
-        {stepsArray.fields.map((field, i) => (
-          <div key={field.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
-            <div className="flex-1">
-              <Input
-                aria-label={`Step ${i + 1} name`}
-                aria-invalid={errors.steps?.[i]?.name ? true : undefined}
-                placeholder="Step name (e.g. finance)"
-                {...form.register(`steps.${i}.name` as const)}
-              />
-              {errors.steps?.[i]?.name && (
-                <p className="mt-1 text-sm text-destructive">{errors.steps[i]?.name?.message}</p>
-              )}
-            </div>
-            <div className="flex-1">
-              <Input
-                aria-label={`Step ${i + 1} approver role`}
-                aria-invalid={errors.steps?.[i]?.approverRole ? true : undefined}
-                placeholder="approver role (e.g. admin, *)"
-                {...form.register(`steps.${i}.approverRole` as const)}
-              />
-              {errors.steps?.[i]?.approverRole && (
-                <p className="mt-1 text-sm text-destructive">{errors.steps[i]?.approverRole?.message}</p>
-              )}
-            </div>
-            <div className="flex gap-2 sm:w-40">
-              <div className="flex-1">
-                <Input
-                  type="number"
-                  min={1}
-                  aria-label={`Step ${i + 1} minimum approvals`}
-                  aria-invalid={errors.steps?.[i]?.minApprovals ? true : undefined}
-                  placeholder="min"
-                  {...form.register(`steps.${i}.minApprovals` as const, { valueAsNumber: true })}
-                />
-                {errors.steps?.[i]?.minApprovals && (
-                  <p className="mt-1 text-sm text-destructive">{errors.steps[i]?.minApprovals?.message}</p>
-                )}
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove step ${i + 1}`}
-                disabled={stepsArray.fields.length === 1}
-                onClick={() => stepsArray.remove(i)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => stepsArray.append({ name: '', approverRole: '*', minApprovals: 1 })}
-        >
-          <Plus className="mr-1 h-4 w-4" /> Add step
-        </Button>
+        <ApprovalStepsEditor
+          steps={form.watch('steps')}
+          onChange={(next) =>
+            form.setValue('steps', next, { shouldDirty: true, shouldValidate: form.formState.isSubmitted })
+          }
+          errors={(form.watch('steps') ?? []).map((_, i) => ({
+            name: errors.steps?.[i]?.name?.message,
+            approverRole: errors.steps?.[i]?.approverRole?.message,
+            minApprovals: errors.steps?.[i]?.minApprovals?.message,
+          }))}
+        />
       </FormSection>
 
       <Disclosure title="Advanced" summary={`Priority ${form.watch('priority') ?? 0}`}>
@@ -371,6 +327,94 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         </Field>
       </Disclosure>
     </FormPage>
+  )
+}
+
+export interface ApprovalStepErrors {
+  name?: string
+  approverRole?: string
+  minApprovals?: string
+}
+
+/**
+ * The ordered sign-off steps, each a name, the role that approves it and how
+ * many of them must. Shared by the approval policy form and an amount rule's
+ * "Who approves" on the Business plan.
+ */
+export function ApprovalStepsEditor({
+  steps,
+  onChange,
+  errors = [],
+}: {
+  steps: ApprovalStep[]
+  onChange: (steps: ApprovalStep[]) => void
+  errors?: Array<ApprovalStepErrors | undefined>
+}) {
+  const update = (i: number, patch: Partial<ApprovalStep>) =>
+    onChange(steps.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+  return (
+    <div className="space-y-2">
+      {steps.map((step, i) => (
+        <div key={i} className="flex flex-col gap-2 sm:flex-row sm:items-start">
+          <div className="flex-1">
+            <Input
+              aria-label={`Step ${i + 1} name`}
+              aria-invalid={errors[i]?.name ? true : undefined}
+              placeholder="Step name (e.g. finance)"
+              value={step.name}
+              onChange={(e) => update(i, { name: e.target.value })}
+            />
+            {errors[i]?.name && <p className="mt-1 text-sm text-destructive">{errors[i]?.name}</p>}
+          </div>
+          <div className="flex-1">
+            <Input
+              aria-label={`Step ${i + 1} approver role`}
+              aria-invalid={errors[i]?.approverRole ? true : undefined}
+              placeholder="approver role (e.g. admin, finance, *)"
+              value={step.approverRole}
+              onChange={(e) => update(i, { approverRole: e.target.value })}
+            />
+            {errors[i]?.approverRole && (
+              <p className="mt-1 text-sm text-destructive">{errors[i]?.approverRole}</p>
+            )}
+          </div>
+          <div className="flex gap-2 sm:w-40">
+            <div className="flex-1">
+              <Input
+                type="number"
+                min={1}
+                aria-label={`Step ${i + 1} minimum approvals`}
+                aria-invalid={errors[i]?.minApprovals ? true : undefined}
+                placeholder="min"
+                value={Number.isFinite(step.minApprovals) ? step.minApprovals : ''}
+                onChange={(e) => update(i, { minApprovals: e.target.value === '' ? NaN : Number(e.target.value) })}
+              />
+              {errors[i]?.minApprovals && (
+                <p className="mt-1 text-sm text-destructive">{errors[i]?.minApprovals}</p>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Remove step ${i + 1}`}
+              disabled={steps.length === 1}
+              onClick={() => onChange(steps.filter((_, j) => j !== i))}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => onChange([...steps, { name: '', approverRole: '*', minApprovals: 1 }])}
+      >
+        <Plus className="mr-1 h-4 w-4" /> Add step
+      </Button>
+    </div>
   )
 }
 

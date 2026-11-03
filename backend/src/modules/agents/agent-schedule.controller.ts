@@ -22,6 +22,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 
 /** The body the schedule endpoints take: the timing, the input, and where the result goes. */
 type ScheduleBody = ScheduleRequest & { enabled?: boolean };
@@ -114,6 +115,7 @@ export class AgentScheduleController {
 
   @Get(':id/schedule/destinations')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: "Where a scheduled result can be sent: the agent's webhook and its channels" })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   async destinations(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
@@ -129,6 +131,7 @@ export class AgentScheduleController {
 
   @Patch(':id/schedule')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Enable/disable agent schedule and update its timing' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiBody({
@@ -172,6 +175,7 @@ export class AgentScheduleController {
 
   @Post(':id/schedule')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Schedule agent for periodic execution' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiBody({
@@ -205,6 +209,7 @@ export class AgentScheduleController {
 
   @Delete(':id/schedule')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Remove agent schedule' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent unscheduled successfully' })

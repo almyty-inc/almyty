@@ -57,6 +57,12 @@ export function SchemaImportForm({ api }: { api: Api }) {
     queryClient.invalidateQueries({ queryKey: ['tools'] })
     // Async jobs return { status, result }; a direct import returns the result.
     const jobResult = result?.result || result
+    // More operations than one description makes tools from: imported, no
+    // tools yet. "Finish connecting" picks the job up and asks which ones.
+    if (jobResult?.selectionRequired && startedJob.current) {
+      guard.leave(`/apis/${api.id}/setup?job=${encodeURIComponent(startedJob.current)}`)
+      return
+    }
     const opCount = jobResult?.operations?.length || jobResult?.operationCount || 0
     const toolCount = jobResult?.tools?.length || jobResult?.toolCount || 0
     success('Description updated', `${pluralized(opCount, 'operation')} found, ${pluralized(toolCount, 'tool')} made.`)

@@ -29,6 +29,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { AgentStatus } from '../../entities/agent.entity';
 import { AgentRole } from '../../entities/agent-role.entity';
 
@@ -78,6 +79,7 @@ export class AgentsController {
 
   @Post()
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_CREATE)
   @ApiOperation({ summary: 'Create a new agent' })
   @ApiBody({ description: 'Agent configuration including name, pipeline, and settings' })
   @ApiResponse({ status: 201, description: 'Agent created successfully' })
@@ -122,6 +124,7 @@ export class AgentsController {
 
   @Get()
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get all agents for organization' })
   @ApiResponse({ status: 200, description: 'Agents retrieved successfully' })
   async getAgents(
@@ -169,6 +172,7 @@ export class AgentsController {
 
   @Get('templates')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get pre-built agent templates' })
   @ApiResponse({ status: 200, description: 'Templates retrieved successfully' })
   getTemplates() {
@@ -180,6 +184,7 @@ export class AgentsController {
 
   @Post('import')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_CREATE)
   @ApiOperation({ summary: 'Import an agent from JSON' })
   @ApiBody({ description: 'Exported agent JSON data' })
   @ApiResponse({ status: 201, description: 'Agent imported successfully' })
@@ -220,6 +225,7 @@ export class AgentsController {
 
   @Get(':id')
   @Roles('viewer', 'member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Get agent by ID' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent retrieved successfully' })
@@ -257,6 +263,7 @@ export class AgentsController {
 
   @Patch(':id')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Update agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiBody({ description: 'Agent fields to update' })
@@ -300,6 +307,7 @@ export class AgentsController {
 
   @Delete(':id')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_DELETE)
   @ApiOperation({ summary: 'Delete agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent deleted successfully' })
@@ -339,6 +347,7 @@ export class AgentsController {
 
   @Get(':id/readiness')
   @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_READ)
   @ApiOperation({ summary: 'Check workflow model setup without making a model call' })
   async getReadiness(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     const organizationId = req.user.currentOrganizationId;
@@ -348,6 +357,7 @@ export class AgentsController {
 
   @Post(':id/activate')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Activate agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent activated successfully' })
@@ -387,6 +397,7 @@ export class AgentsController {
 
   @Post(':id/deactivate')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
   @ApiOperation({ summary: 'Deactivate agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 200, description: 'Agent deactivated successfully' })
@@ -426,6 +437,7 @@ export class AgentsController {
 
   @Post(':id/duplicate')
   @Roles('admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_CREATE)
   @ApiOperation({ summary: 'Duplicate agent' })
   @ApiParam({ name: 'id', description: 'Agent ID' })
   @ApiResponse({ status: 201, description: 'Agent duplicated successfully' })
