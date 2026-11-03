@@ -210,7 +210,7 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
           <div>
             <Label htmlFor="policy-enabled">Enabled</Label>
             <p className="text-xs text-muted-foreground">
-              Only enabled policies are evaluated against requests.
+              Only policies that are on are checked when an agent asks.
             </p>
           </div>
           <Switch
@@ -222,19 +222,19 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
       </FormSection>
 
       <FormSection
-        title="Match conditions"
+        title="When it applies"
         description={
           <>
             An agent asks for approval when its instructions tell it to. These conditions pick which of those
-            requests this policy governs; all must hold. Leave empty to govern every request. To ask before a tool
-            call over an amount whatever the agent was told, add an amount rule under{' '}
+            requests this policy covers, and all of them must be true. Leave it empty to cover every request. To
+            always ask before an action over a set amount, whatever the agent was told, add a rule under{' '}
             <Link to={APPROVAL_POLICIES_PATH} className="underline">Ask before large amounts</Link>.
           </>
         }
       >
         {matchArray.fields.length === 0 && (
           <p className="text-sm italic text-muted-foreground">
-            No conditions — this policy applies to every request.
+            No conditions, so this policy covers every request.
           </p>
         )}
         {matchArray.fields.map((field, i) => (
@@ -268,7 +268,7 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
             <div className="flex flex-1 gap-2">
               <Input
                 aria-label={`Condition ${i + 1} value`}
-                placeholder="value (comma-separated for in/nin)"
+                placeholder="value (separate a list with commas)"
                 {...form.register(`match.${i}.value` as const)}
               />
               <Button
@@ -297,8 +297,8 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         title="Approval steps"
         description={
           <>
-            Sequential. Each step needs its quorum before the next begins. Use role{' '}
-            <code>*</code> for any authorized approver.
+            Steps run in order, and each needs enough approvals before the next starts. Use role{' '}
+            <code>*</code> to let anyone who may approve sign off.
           </>
         }
       >
@@ -428,7 +428,7 @@ export function ApprovalPolicyFormPage() {
         <UpgradePrompt
           feature="approval_policy"
           title="Approval policies"
-          description="Require multi-step, conditional, or quorum sign-off before an agent runs a sensitive action."
+          description="Have the right people sign off before an agent does something sensitive."
         />
       }
     >
@@ -487,7 +487,7 @@ function ApprovalPolicyEditor() {
         variant="panel"
         icon={ShieldCheck}
         title="Approval policy not found"
-        description="It may have been deleted. Settings > Approvals lists the policies that exist."
+        description="It may have been deleted. Settings > Advanced > Approvals lists the policies that exist."
       />
     )
   }

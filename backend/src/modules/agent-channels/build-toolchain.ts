@@ -251,7 +251,7 @@ export function electronVersionOf(shellPackageJson: unknown): string | null {
  * build time, downloaded and run on the machine that holds customers'
  * signing certificates.
  */
-export const ELECTRON_BUILDER_VERSION = '26.15.3';
+export const ELECTRON_BUILDER_VERSION = '26.18.0';
 
 /** Where the shell's lockfile install puts the electron-builder binary. */
 export function localElectronBuilderPath(shellDir: string): string {

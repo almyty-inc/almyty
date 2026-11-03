@@ -250,7 +250,7 @@ export function validatePolicyForm(values: PolicyFormValues): string[] {
       if (uniqueTrimmed(values.connectorKeys).length === 0) errors.push('Pick at least one connector')
       break
     case 'scope_rule':
-      if (values.principalKinds.length === 0) errors.push('Pick at least one principal kind')
+      if (values.principalKinds.length === 0) errors.push('Pick at least one of agents, workspaces, users, teams or roles')
       break
     case 'expiry_rule':
       if (!Number.isInteger(values.maxAgeDays) || values.maxAgeDays < 1) errors.push('Maximum age must be a whole number of days, at least 1')
@@ -299,13 +299,13 @@ export function describePolicyRule(policy: Pick<ConnectionPolicy, 'kind' | 'rule
     }
     case 'expiry_rule': {
       if (!isExpiryRule(rule)) return POLICY_KIND_LABELS[policy.kind]
-      const enforce = rule.enforce ? ', grants are revoked on expiry' : ', owners are notified only'
+      const enforce = rule.enforce ? ', access is taken away on expiry' : ', owners are only told'
       return `Secrets expire after ${days(rule.maxAgeDays)}, warning ${days(rule.warnDays)} ahead${enforce}`
     }
     case 'rotation_rule': {
       if (!isRotationRule(rule)) return POLICY_KIND_LABELS[policy.kind]
       const which = rule.connectorKeys?.length ? listWords(rule.connectorKeys.map(nameOf)) : 'every connector'
-      return `Rotate ${which} every ${days(rule.everyDays)} through the provider API`
+      return `Rotate ${which} every ${days(rule.everyDays)} through the service’s API`
     }
     default:
       return String(policy.kind)
