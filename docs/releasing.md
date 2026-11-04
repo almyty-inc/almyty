@@ -23,11 +23,13 @@ the next release would contain.
 ## What happens next
 
 1. **Version packages PR.** Every push to `development` that has changesets
-   waiting updates one open PR called "Version packages"
-   (`.github/workflows/version-packages.yml`). It moves all twelve packages to
-   the next version, writes each `CHANGELOG.md`, updates every
+   waiting updates one branch, `changeset-release/development`
+   (`.github/workflows/version-packages.yml`). It moves all twelve packages
+   to the next version, writes each `CHANGELOG.md`, updates every
    `package-lock.json`, and moves `RUNNER_VERSION` in
-   `images/runner-env/Dockerfile`. Merging it is the version bump.
+   `images/runner-env/Dockerfile`. Whoever runs the release opens the
+   "Version packages" PR from that branch (see "Opening the release PRs"
+   below). Merging it is the version bump.
 2. **Promotion.** The bump travels `development` → `staging` → `master` like
    any other change. On `master`, the runner-env images for the new runner
    version are built from the repository and pushed.
@@ -41,8 +43,8 @@ the next release would contain.
    skipped, so re-running a release, or a tag without a version change, is
    harmless.
 4. **Post-release PR.** Once npm has the new version and Docker Hub has the
-   images, `.github/workflows/post-release.yml` opens a PR against
-   `development` that:
+   images, `.github/workflows/post-release.yml` pushes a branch for a PR
+   against `development` that:
    - raises the `@almyty/*` dependency ranges to the released version and
      refreshes each `package-lock.json` from npm;
    - recaptures the six CLI help screenshots from the published packages
@@ -50,7 +52,8 @@ the next release would contain.
    - pins the runner-env image references to the pushed digests
      (`settings.json`, the backend defaults, the pre-pull DaemonSet).
 
-   Look at the recaptured screenshots, then merge it.
+   Open the PR from the run's summary, look at the recaptured screenshots,
+   then merge it.
 
 The dependency ranges move after the release, not in the Version packages PR,
 on purpose. A lockfile can only point at a version npm already has. If the
@@ -63,15 +66,35 @@ version they were built and tested against: the publish step writes
 
 The steps above are automatic. A person still has to:
 
-- [ ] Merge the "Version packages" PR when the release should happen. Check
-      that its changelog entries read well.
+- [ ] Open the "Version packages" PR from its workflow run's summary (see
+      below), and merge it when the release should happen. Check that its
+      changelog entries read well.
 - [ ] Promote to `master` and tag `v*` there, as for any platform release.
 - [ ] Check that "Publish npm Packages" passed and lists twelve
       `published` lines (or `already on npm` for a re-run).
-- [ ] Look at the post-release PR's screenshots and merge it. If it hasn't
-      appeared, run "Post-release" by hand from the Actions tab.
-- [ ] If the PR was opened without `RELEASE_PR_TOKEN` (see below), close and
-      reopen it so CI runs.
+- [ ] Open the post-release PR from the "Post-release" run's summary, look
+      at its screenshots and merge it. If the run hasn't happened, start
+      "Post-release" by hand from the Actions tab.
+
+## Opening the release PRs
+
+GitHub Actions isn't allowed to open pull requests in this repository, so
+whoever runs the release opens the two release PRs. The workflows do the
+rest: they build the branch, push it, and try to open the PR. When GitHub
+says no, the run still passes, and its summary page shows the branch name
+and an "Open the PR" link with the title and a suggested description.
+
+| Workflow         | Branch                          | PR title                                  |
+| ---------------- | ------------------------------- | ----------------------------------------- |
+| Version packages | `changeset-release/development` | Version packages                          |
+| Post-release     | `release/post-<version>`        | Follow up the @almyty/* <version> release |
+
+Open the run in the Actions tab, follow the link, paste the description and
+create the PR. A PR opened by a person runs CI like any other. Once it is
+open, later runs push to the same branch and update its description, so you
+open each one only once. Those later pushes come from GitHub Actions and
+don't start CI by themselves: before merging, close and reopen the PR if the
+branch changed after you opened it.
 
 ## By hand
 
@@ -92,9 +115,6 @@ The steps above are automatic. A person still has to:
 - npm trusted publishing for each of the twelve packages, bound to this
   repository and the workflow file `publish-packages.yml`. Publishing stays
   in that file, so the binding doesn't change.
-- `RELEASE_PR_TOKEN` (optional): a fine-grained token or GitHub App token
-  with contents and pull-requests write. With it, the Version packages and
-  post-release PRs start CI by themselves. Without it they are opened with
-  the default token, which GitHub doesn't let start workflows. That fallback
-  needs "Allow GitHub Actions to create and approve pull requests" in the
-  repository's Actions settings.
+- No token for the release PRs. GitHub Actions isn't allowed to open pull
+  requests in this repository, so the workflows only push the branches and
+  link them (see "Opening the release PRs" above).

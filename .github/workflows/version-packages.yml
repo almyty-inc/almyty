@@ -1,18 +1,19 @@
 name: Version packages
 
-# Keeps the "Version packages" PR open on development while changesets are
-# waiting (docs/releasing.md). Each push to development that leaves files in
-# .changeset/ rebuilds the PR: all twelve @almyty/* packages move to the
-# next version together (the `fixed` group in .changeset/config.json), each
-# package gets its CHANGELOG.md entry, every package-lock.json and the
-# runner-env Dockerfile's RUNNER_VERSION follow (`npm run version-packages`).
-# Merging it is the version bump. Nothing is published here: the release
+# Keeps the "Version packages" branch up to date on development while
+# changesets are waiting (docs/releasing.md). Each push to development that
+# leaves files in .changeset/ rebuilds changeset-release/development: all
+# twelve @almyty/* packages move to the next version together (the `fixed`
+# group in .changeset/config.json), each package gets its CHANGELOG.md entry,
+# every package-lock.json and the runner-env Dockerfile's RUNNER_VERSION
+# follow (`npm run version-packages`, which runs `changeset version` first).
+# Merging its PR is the version bump. Nothing is published here: the release
 # tag publishes (publish-packages.yml).
 #
-# The PR is opened with RELEASE_PR_TOKEN when that secret is set (a
-# fine-grained token or GitHub App token with contents and pull-requests
-# write). A PR opened with the default GITHUB_TOKEN does not start CI; close
-# and reopen it to run the checks.
+# GitHub Actions may not open pull requests in this repository, so the job
+# pushes the branch and then tries; when GitHub refuses, the job summary links
+# the branch for whoever runs the release to open the PR
+# (scripts/open-release-pr.js). An open PR is updated in place.
 
 on:
   push:
@@ -29,9 +30,13 @@ concurrency:
 
 jobs:
   version-pr:
-    name: Open or update the Version packages PR
+    name: Push the Version packages branch
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BASE: ${{ github.ref_name }}
+      BRANCH: changeset-release/${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -46,11 +51,42 @@ jobs:
       - name: Install Changesets
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Open or update the PR
-        uses: changesets/action@v2
-        with:
-          version-script: npm run version-packages
-          commit-message: Version packages
-          pr-title: Version packages
-          create-github-releases: false
-          github-token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+      - name: Version the packages
+        id: version
+        run: |
+          if ! find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | grep -q .; then
+            echo "No changesets waiting: nothing to version."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npm run version-packages
+          if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./packages/client/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Push the branch and open or update the PR
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -A
+          git commit -q -m "Version packages"
+          git push --force origin "$BRANCH"
+          BODY="$RUNNER_TEMP/version-packages-body.md"
+          {
+            echo "Merging this moves all twelve @almyty/* packages to $VERSION (version-packages.yml). Nothing is published until the release tag."
+            echo
+            for log in $(git diff --name-only HEAD~1 HEAD -- 'packages/*/CHANGELOG.md'); do
+              echo "# $(node -p "require('./$(dirname "$log")/package.json').name")"
+              echo
+              awk '/^## /{n++} n==1' "$log"
+              echo
+            done
+          } > "$BODY"
+          node scripts/open-release-pr.js --branch "$BRANCH" --base "$BASE" --title "Version packages" --body-file "$BODY"
