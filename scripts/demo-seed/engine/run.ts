@@ -478,6 +478,17 @@ export function readCaptures(out: string): Record<string, Record<string, Capture
   return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : {}
 }
 
+const takes = (s: Step, id?: string) => JSON.stringify(s).includes(id ? `"shot":"${id}"` : '"shot":"')
+
+/** The steps from just after the shot before `id` on: the ones that lead to that shot. */
+export function fromShot(steps: Step[], id: string, walkId = 'walk'): Step[] {
+  const at = steps.findIndex((s) => takes(s, id))
+  if (at < 0) throw new Error(`walk ${walkId} takes no shot ${id}`)
+  let start = at
+  while (start > 0 && !takes(steps[start - 1])) start--
+  return steps.slice(start)
+}
+
 export async function runWalk(walk: Walk, opts: WalkOptions): Promise<Run> {
   const out = join(opts.env.out, walk.id)
   mkdirSync(out, { recursive: true })
@@ -500,9 +511,7 @@ export async function runWalk(walk: Walk, opts: WalkOptions): Promise<Run> {
   }
   let steps = walk.steps
   if (opts.from) {
-    const at = steps.findIndex((s) => JSON.stringify(s).includes(`"shot":"${opts.from}"`))
-    if (at < 0) throw new Error(`walk ${walk.id} takes no shot ${opts.from}`)
-    steps = steps.slice(at)
+    steps = fromShot(steps, opts.from, walk.id)
   }
   try {
     await runSteps(run, steps, '', opts.actions)

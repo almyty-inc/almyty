@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { expand, MACROS } from '../engine/macros.ts'
 import { load, plan, type Family } from '../engine/load.ts'
-import { kindOf, stepLabel, WalkError } from '../engine/run.ts'
+import { kindOf, stepLabel, WalkError, fromShot } from '../engine/run.ts'
 import { matches } from '../engine/match.ts'
 import { describe as say } from '../engine/locate.ts'
 import { rows, unwrap } from '../engine/http.ts'
@@ -50,6 +50,14 @@ test('a step\'s kind is its leading key, overlapping kinds first', () => {
   assert.equal(kindOf({ as: 'tom', do: [{ goto: '/' }] }), 'as')
   assert.equal(kindOf({ press: { label: 'x' }, key: 'Enter' }), 'press')
   assert.equal(kindOf({ key: 'Escape' }), 'key')
+})
+
+test('--from starts after the shot before, with the steps that lead to the asked one', () => {
+  const steps: Step[] = [{ goto: '/a' }, { shot: 'a' }, { goto: '/b' }, { click: { role: 'button', name: 'B' } }, { shot: 'b' }, { shot: 'c' }]
+  assert.deepEqual(fromShot(steps, 'b'), steps.slice(2))
+  assert.deepEqual(fromShot(steps, 'c'), steps.slice(5))
+  assert.deepEqual(fromShot(steps, 'a'), steps)
+  assert.throws(() => fromShot(steps, 'z', 'w'), /walk w takes no shot z/)
 })
 
 test('a failed step says the walk, the step and where the screenshot is', () => {
