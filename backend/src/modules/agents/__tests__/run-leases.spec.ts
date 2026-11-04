@@ -133,6 +133,108 @@ describe('run leases', () => {
       expect(runs.events.rows(RUN).filter((e) => e.type === 'lease_taken_over').map((e) => e.payload.attempt)).toEqual([1, 2]);
       expectSound(runs);
     });
+
+    describe('the takeover cap (RUN_MAX_TAKEOVERS)', () => {
+      const STOPPED = 'This step stopped its worker 3 times in a row, so the run was stopped.';
+      /** The lease taken over `n` times, each claim's lease left to lapse. */
+      const lapseAndClaim = async (runs: ReturnType<typeof seeded>, from: number, n: number, max = 3) => {
+        const claims = [];
+        for (let i = 0; i < n; i++) claims.push(await claimRun(runs as any, RUN, { leaseMs: LEASE, now: later((from + i) * (LEASE + 1)), maxTakeovers: max }));
+        return claims;
+      };
+
+      it('the third takeover of one step fails the run instead of starting it again, on the log', async () => {
+        const runs = seeded({ workingMemory: { a: 1 } });
+        const claims = await lapseAndClaim(runs, 0, 4);
+
+        expect(claims[0]).toMatchObject({ claimed: true, takenOver: false });
+        expect(claims[1]).toMatchObject({ claimed: true, takenOver: true, attempt: 1 });
+        expect(claims[2]).toMatchObject({ claimed: true, takenOver: true, attempt: 2 });
+        expect(claims[3]).toEqual({ claimed: false, reason: 'stopped', error: STOPPED, attempt: 3 });
+
+        const row = runs.row(RUN)!;
+        expect(row.status).toBe(AgentRunStatus.FAILED);
+        expect(row.error).toBe(STOPPED);
+        expect(row.leaseOwner).toBeNull();
+        expect(row.leaseExpiresAt).toBeNull();
+        expect(row.nextWakeAt).toBeNull();
+        expect(row.attempt).toBe(3);
+        expect(row.takeovers).toBe(3);
+        const log = runs.events.rows(RUN);
+        const last = log.slice(-4);
+        expect(last.map((e) => e.type)).toEqual(['lease_taken_over', 'status_changed', 'run_failed', 'step_committed']);
+        expect(last[2].payload).toEqual({ error: STOPPED });
+        expectSound(runs);
+
+        // Finished: nothing claims it again.
+        expect(await claimRun(runs as any, RUN, { leaseMs: LEASE, now: later(10 * LEASE) })).toEqual({ claimed: false, reason: 'done' });
+      });
+
+      it('a step that commits resets the count', async () => {
+        const runs = seeded();
+        const processor = new AgentStepProcessor({ runRepository: runs, logger: { log: jest.fn(), warn: jest.fn(), debug: jest.fn() } } as any, {} as any, {} as any, {} as any);
+        const claims = await lapseAndClaim(runs, 0, 3);
+        expect(runs.row(RUN)!.takeovers).toBe(2);
+
+        // The worker holding it commits step 2 (asleep until the next claim, so the clock here decides when it is due).
+        const run: any = Object.assign(new AgentRun(), {
+          ...runs.row(RUN),
+          leaseOwner: (claims[2] as any).owner,
+          currentStep: 3,
+          steps: [],
+          status: AgentRunStatus.SLEEPING,
+          nextWakeAt: later(3 * (LEASE + 1)),
+        });
+        expect(await (processor as any).commitStep(run, 2)).toBe(true);
+        expect(runs.row(RUN)!.takeovers).toBe(0);
+
+        // Two more takeovers of step 3 restart it; the third of step 3 stops the run.
+        const again = await lapseAndClaim(runs, 3, 3);
+        expect(again[0]).toMatchObject({ claimed: true, takenOver: true, attempt: 3 });
+        expect(again[1]).toMatchObject({ claimed: true, takenOver: true, attempt: 4 });
+        expect(again[2]).toMatchObject({ claimed: false, reason: 'stopped' });
+        expect(runs.row(RUN)!.status).toBe(AgentRunStatus.FAILED);
+        expectSound(runs);
+      });
+
+      it('the collaboration step commit resets the count too', async () => {
+        const { AgentCollaborationHelper } = await import('../agent-collaboration.helper');
+        const runs = seeded();
+        const claims = await lapseAndClaim(runs, 0, 2);
+        expect(runs.row(RUN)!.takeovers).toBe(1);
+        const helper: any = Object.create(AgentCollaborationHelper.prototype);
+        helper.runRepository = runs;
+        helper.logger = { warn: jest.fn() };
+        const run: any = Object.assign(new AgentRun(), { ...runs.row(RUN), leaseOwner: (claims[1] as any).owner, currentStep: 3, steps: [] });
+        await helper.persist(run);
+        expect(runs.row(RUN)!.currentStep).toBe(3);
+        expect(runs.row(RUN)!.takeovers).toBe(0);
+      });
+
+      it('takes the cap from its option: 1 stops the run at its first takeover', async () => {
+        const runs = seeded();
+        const claims = await lapseAndClaim(runs, 0, 2, 1);
+        expect(claims[1]).toEqual({ claimed: false, reason: 'stopped', error: 'This step stopped its worker once in a row, so the run was stopped.', attempt: 1 });
+      });
+
+      it('reads the cap from RUN_MAX_TAKEOVERS when the caller names none', async () => {
+        const saved = process.env.RUN_MAX_TAKEOVERS;
+        process.env.RUN_MAX_TAKEOVERS = '2';
+        try {
+          const runs = seeded();
+          await claimRun(runs as any, RUN, { leaseMs: LEASE, now: T0 });
+          expect(await claimRun(runs as any, RUN, { leaseMs: LEASE, now: later(LEASE + 1) })).toMatchObject({ claimed: true, takenOver: true });
+          expect(await claimRun(runs as any, RUN, { leaseMs: LEASE, now: later(2 * LEASE + 2) })).toMatchObject({
+            claimed: false,
+            reason: 'stopped',
+            error: 'This step stopped its worker 2 times in a row, so the run was stopped.',
+          });
+        } finally {
+          if (saved === undefined) delete process.env.RUN_MAX_TAKEOVERS;
+          else process.env.RUN_MAX_TAKEOVERS = saved;
+        }
+      });
+    });
   });
 
   describe('fencing', () => {
@@ -335,6 +437,31 @@ describe('run leases', () => {
       expect(await processor.processStep(RUN)).toBe('done');
     });
 
+    it('a run stopped by the takeover cap is not processed: run.failed goes out with the error, and it is done', async () => {
+      const saved = process.env.RUN_MAX_TAKEOVERS;
+      process.env.RUN_MAX_TAKEOVERS = '1';
+      try {
+        const runs = seeded({ nextWakeAt: new Date(Date.now() - 1000) });
+        const emitEvent = jest.fn();
+        const logger = { log: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() };
+        const processor = new AgentStepProcessor({ runRepository: runs, runtimeQueue: { add: jest.fn() }, logger, emitEvent } as any, {} as any, {} as any, {} as any);
+        // A worker claimed it and died: its lease lapsed a while ago.
+        await claimRun(runs as any, RUN, { leaseMs: 1, now: new Date(Date.now() - 1000), maxTakeovers: 1 });
+        const leased = jest.spyOn(processor as any, 'processLeasedStep');
+
+        expect(await processor.processStep(RUN)).toBe('done');
+
+        expect(leased).not.toHaveBeenCalled();
+        const error = 'This step stopped its worker once in a row, so the run was stopped.';
+        expect(emitEvent).toHaveBeenCalledWith(RUN, 'run.failed', { error, reasonCode: 'TAKEOVER_LIMIT' });
+        expect(runs.row(RUN)).toMatchObject({ status: AgentRunStatus.FAILED, error, leaseOwner: null });
+        expect(runs.events.rows(RUN).some((e) => e.type === 'run_failed' && e.payload.error === error)).toBe(true);
+      } finally {
+        if (saved === undefined) delete process.env.RUN_MAX_TAKEOVERS;
+        else process.env.RUN_MAX_TAKEOVERS = saved;
+      }
+    });
+
     it('the step runs holding the lease, and lets it go when it returns or throws', async () => {
       const { runs, processor } = harness({});
       let during: string | null | undefined;
@@ -468,14 +595,24 @@ describe('run leases', () => {
   });
 
   describe('config', () => {
-    it('has defaults and reads each duration from the environment', () => {
-      expect(runLeaseConfig({})).toEqual({ leaseMs: 60_000, renewMs: 20_000, sweepIntervalMs: 15_000, wakeGraceMs: 30_000 });
-      expect(runLeaseConfig({ RUN_LEASE_MS: '9000', RUN_LEASE_RENEW_MS: '2000', RUN_WAKE_SWEEP_INTERVAL_MS: '500', RUN_WAKE_GRACE_MS: '700' })).toEqual({
+    it('has defaults and reads each setting from the environment', () => {
+      expect(runLeaseConfig({})).toEqual({ leaseMs: 60_000, renewMs: 20_000, sweepIntervalMs: 15_000, wakeGraceMs: 30_000, maxTakeovers: 3 });
+      expect(
+        runLeaseConfig({ RUN_LEASE_MS: '9000', RUN_LEASE_RENEW_MS: '2000', RUN_WAKE_SWEEP_INTERVAL_MS: '500', RUN_WAKE_GRACE_MS: '700', RUN_MAX_TAKEOVERS: '5' }),
+      ).toEqual({
         leaseMs: 9000,
         renewMs: 2000,
         sweepIntervalMs: 500,
         wakeGraceMs: 700,
+        maxTakeovers: 5,
       });
+    });
+
+    it('takes a whole number of takeovers, at least 1', () => {
+      expect(runLeaseConfig({ RUN_MAX_TAKEOVERS: '0' }).maxTakeovers).toBe(3);
+      expect(runLeaseConfig({ RUN_MAX_TAKEOVERS: 'many' }).maxTakeovers).toBe(3);
+      expect(runLeaseConfig({ RUN_MAX_TAKEOVERS: '0.5' }).maxTakeovers).toBe(1);
+      expect(runLeaseConfig({ RUN_MAX_TAKEOVERS: '4.7' }).maxTakeovers).toBe(4);
     });
 
     it('renews at most every half lease, and ignores a value that is not a positive number', () => {

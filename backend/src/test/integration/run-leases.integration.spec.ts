@@ -233,4 +233,54 @@ describeIfDb('run leases (real Postgres)', () => {
     const lostCall = (queue.add as jest.Mock).mock.calls.find(([, data]) => data.runId === lost.id)!;
     expect(lostCall[1].step).toBe(3);
   });
+
+  it('the takeover cap: the third takeover of one step fails the run, once, on the log; a commit resets the count', async () => {
+    const [col] = await ds.query(
+      `SELECT data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'agent_runs' AND column_name = 'takeovers'`,
+      [SCHEMA],
+    );
+    expect([col.data_type, col.is_nullable, col.column_default]).toEqual(['integer', 'NO', '0']);
+
+    const base = Date.now() - 600_000;
+    const run = await newRun({ currentStep: 1, nextWakeAt: new Date(base - 1000) });
+    const at = (i: number) => new Date(base + i * 61_000);
+    const claim = (i: number) => claimRun(runs, run.id, { leaseMs: 60_000, now: at(i), maxTakeovers: 3 });
+
+    // Taken over twice: the step starts over each time.
+    await claim(0);
+    expect(await claim(1)).toMatchObject({ claimed: true, takenOver: true, attempt: 1 });
+    const second = await claim(2);
+    expect(second).toMatchObject({ claimed: true, takenOver: true, attempt: 2 });
+    expect((await rowOf(run.id)).takeovers).toBe(2);
+
+    // The worker holding it commits the step and lets the lease go: the count starts again.
+    const committed = await writeRun(
+      runs,
+      { id: run.id, currentStep: 1, ...heldBy({ leaseOwner: (second as any).owner }) },
+      { currentStep: 2, output: 'step 1', takeovers: 0 },
+    );
+    expect(committed).not.toBeNull();
+    expect(await releaseRunLease(runs, run.id, (second as any).owner)).toBe(true);
+    expect((await rowOf(run.id)).takeovers).toBe(0);
+
+    // Step 2: claimed free, then taken over twice and started over each time.
+    expect(await claim(3)).toMatchObject({ claimed: true, takenOver: false });
+    expect(await claim(4)).toMatchObject({ claimed: true, takenOver: true, attempt: 3 });
+    expect(await claim(5)).toMatchObject({ claimed: true, takenOver: true, attempt: 4 });
+
+    // The third takeover of step 2, with workers racing for it: one write fails the run, the rest find it done.
+    const raced = await Promise.all(Array.from({ length: 6 }, () => claim(6)));
+    const error = 'This step stopped its worker 3 times in a row, so the run was stopped.';
+    expect(raced.filter((c: any) => c.reason === 'stopped')).toEqual([{ claimed: false, reason: 'stopped', error, attempt: 5 }]);
+    expect(raced.filter((c) => c.claimed)).toEqual([]);
+    expect(raced.filter((c: any) => c.reason !== 'stopped').map((c: any) => c.reason)).toEqual(Array(5).fill('done'));
+
+    const { log, row } = await expectSound(run.id);
+    expect(row).toMatchObject({ status: AgentRunStatus.FAILED, error, leaseOwner: null, leaseExpiresAt: null, nextWakeAt: null, attempt: 5, takeovers: 3 });
+    expect(log.filter((e) => e.type === 'lease_taken_over').map((e) => e.payload.attempt)).toEqual([1, 2, 3, 4, 5]);
+    const failed = log.filter((e) => e.type === 'run_failed');
+    expect(failed).toHaveLength(1);
+    expect(failed[0].payload).toEqual({ error });
+    expect(await claimRun(runs, run.id, { leaseMs: 60_000 })).toEqual({ claimed: false, reason: 'done' });
+  });
 });
