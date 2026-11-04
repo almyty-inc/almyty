@@ -1,0 +1,23 @@
+{
+  "name": "almyty-demo-seed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Seeds the local demo stack and walks the UI for the docs screenshots.",
+  "type": "module",
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "scripts": {
+    "demo": "node cli.ts",
+    "test": "node --test 'test/**/*.test.ts'",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@playwright/test": "1.64.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3"
+  }
+}
