@@ -64,8 +64,12 @@ const RULES = [
   },
 ];
 
+// A check's own test writes the shapes it catches as fixtures; those are
+// test data, not build files.
+const TESTS = /\.test\.m?js$/;
+
 function inScope(rel) {
-  return INCLUDE.some((re) => re.test(rel));
+  return !TESTS.test(rel) && INCLUDE.some((re) => re.test(rel));
 }
 
 function walk(dir, out) {

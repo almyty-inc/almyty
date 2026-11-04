@@ -6,19 +6,24 @@ name: Runner env images
 # from a PR or from development.
 #
 #   build   every PR and push that touches images/runner-env, packages/runner
-#           or this file. The runner is installed from THIS checkout
-#           (`npm pack` into the `runner-pkg` build context), so a change to
-#           enroll mode is exercised in the image before it is published.
+#           or this file.
 #   push    master and v* tags only, like build-publish.yml and release.yml.
-#           Installs the runner version the Dockerfile pins from npm (what a
-#           published image must carry), refuses to push an image whose
-#           runner has no --enroll, and tags almyty/runner-env:<flavour>-<pin>.
+#           Builds the same way, smoke-tests the result again, and tags it
+#           almyty/runner-env:<flavour>-<RUNNER_VERSION>.
 #
-# Bumping the runner: bump RUNNER_VERSION in the Dockerfile with the
-# packages and leave settings.json alone; publish the packages to npm; the
-# release builds and pushes the new images; then pin their digests in
-# settings.json, the backend defaults and image-prepull.yaml in one
-# follow-up. Until then every reference stays on the last pushed digest.
+# Both jobs install the runner from THIS checkout: `npm pack` of
+# packages/runner into the `runner-pkg` build context. So a change to the
+# runner is exercised in the image before it ships, and a release builds
+# the images for a runner version npm does not have yet; the image build
+# refuses a runner whose version is not the Dockerfile's RUNNER_VERSION,
+# which must equal packages/runner's (scripts/check-runner-env-images.js).
+#
+# Bumping the runner (docs/releasing.md): the "Version packages" PR moves
+# RUNNER_VERSION with the packages and leaves settings.json alone; master
+# and the release tag build and push the new images; post-release.yml then
+# pins their digests in settings.json, the backend defaults and
+# image-prepull.yaml. Until then every reference stays on the last pushed
+# digest.
 
 on:
   pull_request:
@@ -113,6 +118,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Set up Node 26
+        uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: packages/runner/package-lock.json
+
       - name: Resolve the pinned runner version
         id: pin
         run: |
@@ -121,6 +133,26 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=almyty/runner-env:${{ matrix.flavour }}-$VERSION" >> "$GITHUB_OUTPUT"
 
+      # The published image carries the runner built from this commit, the
+      # same as the build job, so it does not wait for npm to have the
+      # version. The tag names that version: refuse a pack whose version is
+      # not the Dockerfile's (the image build refuses it too).
+      - name: Pack the runner from this checkout
+        working-directory: packages/runner
+        env:
+          VERSION: ${{ steps.pin.outputs.version }}
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+            echo "::error::packages/runner is $PACKAGE_VERSION but the Dockerfile's RUNNER_VERSION is $VERSION"
+            exit 1
+          fi
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          mkdir -p "$RUNNER_TEMP/runner-pkg"
+          npm pack --pack-destination "$RUNNER_TEMP/runner-pkg"
+          mv "$RUNNER_TEMP"/runner-pkg/almyty-runner-*.tgz "$RUNNER_TEMP/runner-pkg/almyty-runner.tgz"
+
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
@@ -128,27 +160,28 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # The runner comes from npm at the pinned version: no runner-pkg
-      # context here. Built and loaded first, so it can be checked before
-      # anything leaves the runner.
+      # Built and loaded first, so it is tested before anything leaves the
+      # runner.
       - name: Build
         uses: docker/build-push-action@v7
         with:
           context: ./images/runner-env
           file: ./images/runner-env/Dockerfile
           target: ${{ matrix.flavour }}
+          build-contexts: runner-pkg=${{ runner.temp }}/runner-pkg
           platforms: linux/amd64
           load: true
           push: false
           tags: ${{ steps.pin.outputs.tag }}
           cache-from: type=gha,scope=runner-env-${{ matrix.flavour }}
 
-      - name: Refuse a runner that cannot enroll
-        run: |
-          docker run --rm "${{ steps.pin.outputs.tag }}" almyty-runner --help | grep -q -- '--enroll' || {
-            echo "@almyty/runner ${{ steps.pin.outputs.version }} has no --enroll; bump RUNNER_VERSION in images/runner-env/Dockerfile and settings.json"
-            exit 1
-          }
+      # The same checks as the build job, on the image that is pushed:
+      # it enrolls, fails without an API, and its tools start.
+      - name: Smoke test the image to push
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+          TAG: ${{ steps.pin.outputs.tag }}
+        run: images/runner-env/smoke.sh "$TAG" "$FLAVOUR"
 
       - name: Push
         run: docker push "${{ steps.pin.outputs.tag }}"
