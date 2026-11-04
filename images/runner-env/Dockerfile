@@ -18,18 +18,21 @@
 # at run time: npm, pip and corepack-style tools are pointed at HOME by the
 # entrypoint.
 #
-# Build one flavour (from the repo root):
-#   docker build --target standard -t almyty/runner-env:standard-1.5.8 images/runner-env
+# Build one flavour from this checkout's runner, which is how CI builds
+# both the images it tests and the ones it publishes (from the repo root):
+#   (cd packages/runner && npm ci && npm run build && npm pack --pack-destination /tmp/runner-pkg)
+#   mv /tmp/runner-pkg/almyty-runner-*.tgz /tmp/runner-pkg/almyty-runner.tgz
+#   docker build --target standard --build-context runner-pkg=/tmp/runner-pkg \
+#     -t almyty/runner-env:standard-1.5.8 images/runner-env
 #
-# Build with the runner from this checkout instead of the registry (what CI
-# does, so a change to packages/runner is exercised in the image before it is
-# published): put `npm pack` output named almyty-runner.tgz in a folder and
-# pass it as the `runner-pkg` build context:
-#   docker build --target standard --build-context runner-pkg=<folder> images/runner-env
+# Without the `runner-pkg` context the build installs RUNNER_VERSION from
+# npm instead, which only works once that version is published. Either way
+# the build fails unless the installed runner reports RUNNER_VERSION, so
+# the tag always names the runner inside.
 #
-# The tags and the pinned runner version are listed in settings.json next to
-# this file; keep RUNNER_VERSION below and that file in step
-# (scripts/check-runner-env-images.js).
+# RUNNER_VERSION below is packages/runner's version; the tags and digests
+# the backend uses are listed in settings.json next to this file
+# (scripts/check-runner-env-images.js keeps them in step).
 
 # Empty unless a `runner-pkg` build context replaces it.
 FROM scratch AS runner-pkg
@@ -63,7 +66,10 @@ RUN --mount=type=bind,from=runner-pkg,target=/opt/runner-pkg \
  && npm install --global --omit=dev --no-audit --no-fund "$PKG" \
  && npm cache clean --force \
  && rm -rf /root/.npm /root/.cache /tmp/* \
- && almyty-runner --version
+ && INSTALLED="$(almyty-runner --version)" \
+ && if [ "$INSTALLED" != "$RUNNER_VERSION" ]; then \
+      echo "the runner reports $INSTALLED, RUNNER_VERSION is $RUNNER_VERSION" >&2; exit 1; \
+    fi
 
 # The node image's own user is uid/gid 1000, what the Deployment runs as.
 # Named for what it is; its home is replaced by HOME=/workspace/.home at

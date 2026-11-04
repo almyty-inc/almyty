@@ -4,6 +4,7 @@
   "description": "almyty - Universal API to AI Tool Gateway System",
   "main": "index.js",
   "scripts": {
+    "check": "node scripts/check.js",
     "backend:install": "cd backend && npm install",
     "frontend:install": "cd frontend && npm install",
     "backend:dev": "cd backend && npm run start:dev",
