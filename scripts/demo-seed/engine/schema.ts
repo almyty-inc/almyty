@@ -205,8 +205,8 @@ export const AccountSchema = S({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   organizationName: z.string().min(1),
-  /** How the browser signs in: with the password (default), or not at all (a step signs in, e.g. through SSO). */
-  signIn: z.enum(['password', 'none']).optional(),
+  /** How the browser signs in: with the password (default); 'none', a step signs in with it; 'sso', no password at all, a step signs in through the identity provider. */
+  signIn: z.enum(['password', 'none', 'sso']).optional(),
   /** Leave the account to a step (an invitation, SSO) instead of registering it up front. */
   register: z.boolean().optional(),
 })

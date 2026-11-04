@@ -25,7 +25,7 @@ const LOTTE = colleague('Lotte', 'Jansen')
 const JOOST = colleague('Joost', 'Bakker')
 const MEHMET = colleague('Mehmet', 'Yilmaz')
 // People Entra ID signs in, and a visitor of the web chat: nobody signs them in with a password.
-const outsider = (address: string, first: string, last: string) => ({ email: address, password: 'not-used-0000', firstName: first, lastName: last, organizationName: 'Velora Energy', signIn: 'none' as const, register: false })
+const outsider = (address: string, first: string, last: string) => ({ email: address, password: 'not-used-0000', firstName: first, lastName: last, organizationName: 'Velora Energy', signIn: 'sso' as const, register: false })
 export const EVA = { email: `eva.degroot@${DOMAIN}`, given_name: 'Eva', family_name: 'de Groot', oid: '9d3e1f52-7a0b-4c88-9e21-5b6a0f4d2c13' }
 export const TOM = { email: `tom.hendriks@${DOMAIN}`, given_name: 'Tom', family_name: 'Hendriks', oid: '2a7c4e90-1b3d-4f6e-8c52-7d9e0a1b3c64' }
 

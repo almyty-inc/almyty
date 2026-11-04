@@ -60,8 +60,12 @@ export function stepLabel(step: Step): string {
 
 // ---------- people ----------
 
-/** Whether the engine signs this person in with their password; signIn: 'none' is a person a step signs in (SSO, a visitor). */
-export const byPassword = (account: Account): boolean => account.signIn !== 'none'
+/**
+ * Whether this person has a password the engine can use (to verify them and get an API token).
+ * signIn: 'sso' is someone without one (they sign in through the company's identity provider, in a step);
+ * signIn: 'none' has a password but the walk signs the browser in itself.
+ */
+export const byPassword = (account: Account): boolean => account.signIn !== 'sso'
 
 export async function preparePerson(env: Env, account: Account): Promise<Person> {
   const q = (s: string) => `'${s.replace(/'/g, "''")}'`
@@ -112,7 +116,7 @@ export async function openSession(run: Run, person?: Person, signedIn?: Session[
   const session: Session = { context, page, inflight }
   session.person = person
   if (signedIn) session.signedIn = signedIn
-  else if (person && person.account.signIn !== 'none') { await signIn(session, person.account); session.signedIn = await context.storageState() }
+  else if (person && (person.account.signIn ?? 'password') === 'password') { await signIn(session, person.account); session.signedIn = await context.storageState() }
   if (b.providerUrl) {
     const urls = typeof b.providerUrl === 'string' ? { '*': b.providerUrl } : b.providerUrl
     // The provider key goes to the fake vendor instead of the real one.

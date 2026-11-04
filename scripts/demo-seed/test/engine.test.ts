@@ -100,7 +100,8 @@ test('a forwarded request goes to the fake, and a redirect goes back to the brow
 
 test('only people who sign in with a password get the password treatment', () => {
   assert.equal(byPassword(account), true)
-  assert.equal(byPassword({ ...account, signIn: 'none' }), false)
+  assert.equal(byPassword({ ...account, signIn: 'sso' }), false)
+  assert.equal(byPassword({ ...account, signIn: 'none' }), true)
 })
 
 test('a screenshot\'s own note wins over the walk\'s', () => {
