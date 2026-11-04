@@ -92,8 +92,8 @@ const founder = walk('tutorial-founder', "Tutorial: the founder's associate", []
   { fill: { label: 'Address', exact: true }, value: '{{stack.upstream}}/calendar/v3' },
   { click: button('Connect API') },
   { waitForUrl: /\/setup/, timeout: 60000 },
-  // The count is in once the tools are made.
-  { waitFor: { text: /Found [1-9]\d* operation/ }, timeout: 120000 },
+  // The count is shown as the page loads: open it again until the tools are made.
+  { repeat: [{ reload: true }], while: { hidden: { text: /Found [1-9]\d* operation/ } }, max: 60 },
   { shot: 'founder-05' },
   // Only the two read-only calendar permissions stay ticked.
   ...googleApp(GOOGLE_APP, /calendar\.readonly$|calendar\.events\.readonly$/),
@@ -245,7 +245,8 @@ const bizdev = walk('tutorial-bizdev', 'Tutorial: the biz-dev assistant', ['tuto
 ], [
   // 1. HubSpot, in three parts
   { use: 'importApi', with: { link: `${LINKS.hubspot}Companies/Rollouts/424/v3/companies.json`, name: 'HubSpot Companies', address: '{{stack.upstream}}', linkShot: 'bizdev-01' } },
-  { waitFor: { text: /Found [1-9]\d* operation/ }, timeout: 120000 },
+  // The count is shown as the page loads: open it again until the tools are made.
+  { repeat: [{ reload: true }], while: { hidden: { text: /Found [1-9]\d* operation/ } }, max: 60 },
   { shot: 'bizdev-02' },
   { click: button('Create one here') },
   { scrollTo: button('Paste an access token instead'), block: 'end' },
