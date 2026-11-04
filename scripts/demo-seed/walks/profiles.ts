@@ -19,6 +19,12 @@ export interface Profile {
 // The Northwind fake (model vendors and company APIs) runs in every profile, on FAKE_PORT.
 export const PROFILES: Record<string, Profile> = {
   northwind: { description: 'Northwind AI: the seeded organization and the use-case guides', fakes: [] },
+  velora: {
+    description: 'Velora Energy: the governance example guides (Stripe, Splunk, Entra ID, DNS and a scripted model)',
+    fakes: [{ services: ['velora'], port: 4291 }],
+    redirect: 4291,
+    preload: ['fakes/preload/velora.ts'],
+  },
 }
 
 // A second stack beside the canonical one (a walk under development) moves
