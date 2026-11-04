@@ -5,12 +5,14 @@
 //   {{agent.id}}                         a value the walk remembered
 //   {{env.DEMO_API_URL}}                 the environment
 //   {{tools|where:name~^northwind_|map:id}}  filter a list, take one field
+//   {{tools|where:name~^(a\\|b)_}}        a bar inside an argument is escaped
 //   {{orders|first}} {{orders|last}} {{orders|len}} {{answer|rows:agents}} {{row|get:id}}
 //   {{$now|add:2m|hhmm}}                 the time two minutes from now, as 14:05
 //   {{$uuid}} {{$ms}}                    a fresh id, the clock in milliseconds
 //   {{payload|json}} {{name|sql}} {{payload|sqljson}}   quoted for a body or a query
 //   {{!input.days}}                      left as {{input.days}}, for the product's own templates
 import { randomUUID } from 'node:crypto'
+import { rows } from './http.ts'
 
 export type Vars = Record<string, unknown>
 
@@ -48,7 +50,7 @@ export function applyFilter(value: unknown, filter: string): unknown {
     case 'json': return JSON.stringify(value)
     case 'sql': return `'${String(value ?? '').replace(/'/g, "''")}'`
     case 'sqljson': return `'${JSON.stringify(value).replace(/'/g, "''")}'`
-    case 'rows': return Array.isArray(value) ? value : (['items', 'data', 'results', arg].filter(Boolean).map((k) => (value as Record<string, unknown>)?.[k]).find(Array.isArray) ?? [])
+    case 'rows': return rows(value, arg || undefined)
     case 'get': return field(value, arg)
     case 'first': return list()[0]
     case 'last': return list().at(-1)
@@ -87,7 +89,8 @@ export function applyFilter(value: unknown, filter: string): unknown {
 function evaluate(expr: string, vars: Vars): unknown {
   // {{!input.days}} is the product's own placeholder, kept as {{input.days}}.
   if (expr.startsWith('!')) return `{{${expr.slice(1)}}}`
-  const [path, ...filters] = expr.split('|').map((s) => s.trim())
+  // A bar inside a filter's argument (a regular expression's alternation) is written \\|.
+  const [path, ...filters] = expr.split(/(?<!\\)\|/).map((s) => s.trim().replace(/\\\|/g, '|'))
   let value = lookup(vars, path)
   if (value === undefined && !filters.some((f) => f.startsWith('default'))) throw new Error(`{{${expr}}}: nothing is called ${path}`)
   for (const f of filters) value = applyFilter(value, f)

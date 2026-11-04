@@ -59,7 +59,8 @@ export const LocatorSchema: z.ZodType<Locator> = z.lazy(() => z.object({
 const noText = (l: Locator): boolean => l.text === undefined && (!l.within || noText(l.within))
 export const TargetSchema = LocatorSchema.refine(noText, { message: 'act on an element by role, label, placeholder, title or testid, not by its text' })
 
-const Timeout = z.number().int().positive().max(600_000)
+// Up to half an hour: a step may wait on real coding assistants at work.
+const Timeout = z.number().int().positive().max(1_800_000)
 
 // A condition a step waits for or branches on.
 export type Condition =
@@ -141,6 +142,7 @@ export type Step =
   | { render: string; with: Record<string, unknown>; shot: string; clip?: Locator; pad?: number }
   | { download: Locator; save: string }
   | { settle: true; quiet?: number }
+  | { restart: true }
   | { ensure: { list: string; at?: string; where: Record<string, Match> }; create?: Http; pick?: string; save?: string }
 
 const S = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict()
@@ -177,6 +179,7 @@ export const StepSchema: z.ZodType<Step> = z.lazy(() => z.union([
   S({ render: z.string().min(1), with: z.record(z.string(), z.unknown()), shot: z.string().min(1), clip: LocatorSchema.optional(), pad: z.number().int().min(0).optional() }),
   S({ download: TargetSchema, save: z.string().min(1) }),
   S({ settle: z.literal(true), quiet: z.number().int().positive().optional() }),
+  S({ restart: z.literal(true) }),
   S({ ensure: S({ list: z.string().min(1), at: z.string().optional(), where: z.record(z.string(), MatchSchema) }), create: HttpSchema.optional(), pick: z.string().optional(), save: z.string().optional() }),
 ]))
 
@@ -191,6 +194,8 @@ export const ShotSchema = S({
   route: z.string().startsWith('/').optional(),
   /** Take the whole page rather than the viewport. */
   fullPage: z.boolean().optional(),
+  /** The manifest note for this screenshot, when it differs from the walk's (a rendered message). */
+  notes: z.string().min(1).optional(),
 })
 export type Shot = z.infer<typeof ShotSchema>
 

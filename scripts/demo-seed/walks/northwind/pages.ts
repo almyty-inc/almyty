@@ -171,6 +171,8 @@ function walk(id: string, title: string, pages: Page[], scale: 1 | 2, anonymous 
     steps: [
       ...(needsIds ? lookups : []),
       ...pages.flatMap((p): Step[] => [
+        // Each page in a fresh context, as a reader opening it: nothing carried over from the page before.
+        { restart: true },
         { viewport: { width: Math.round(p.size[0] / scale), height: Math.round(p.size[1] / scale) } },
         { goto: p.route },
         ...(p.then ?? []),

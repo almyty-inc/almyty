@@ -19,7 +19,7 @@ export function register(walk: Walk, captures: Record<string, Capture>, shots: s
     execFileSync(process.execPath, [
       join(ROOT, 'docs-site/scripts/record-screenshot.mjs'),
       '--image', c.file, '--path', shot.path, '--title', shot.title, '--captured-at', c.at,
-      '--route', c.route, '--environment', 'local-demo', '--notes', walk.notes ?? DEFAULT_NOTE,
+      '--route', c.route, '--environment', 'local-demo', '--notes', shot.notes ?? walk.notes ?? DEFAULT_NOTE,
       ...shot.sources.flatMap((s) => ['--sources', s]),
     ], { stdio: 'inherit' })
     done.push(id)
