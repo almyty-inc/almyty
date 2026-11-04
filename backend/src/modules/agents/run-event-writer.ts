@@ -29,6 +29,7 @@ export type RunChange = Partial<
     | 'leaseOwner'
     | 'leaseExpiresAt'
     | 'attempt'
+    | 'takeovers'
   >
 >;
 
@@ -37,7 +38,7 @@ export type RunChange = Partial<
  * run-lease.ts). Not the run's state: a write of these alone appends no
  * event, and they are not in the projection.
  */
-export const LEASE_COLUMNS = ['nextWakeAt', 'leaseOwner', 'leaseExpiresAt', 'attempt'] as const;
+export const LEASE_COLUMNS = ['nextWakeAt', 'leaseOwner', 'leaseExpiresAt', 'attempt', 'takeovers'] as const;
 
 export interface WriteRunOptions {
   /**

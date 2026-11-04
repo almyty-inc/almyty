@@ -181,6 +181,14 @@ export class AgentRun {
   @Column({ type: 'int', default: 0 })
   attempt: number;
 
+  /**
+   * How many times in a row the step the run is at was taken over: back to
+   * 0 when a step commits. The takeover that reaches RUN_MAX_TAKEOVERS
+   * fails the run instead of starting the step again (run-lease.ts).
+   */
+  @Column({ type: 'int', default: 0 })
+  takeovers: number;
+
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 

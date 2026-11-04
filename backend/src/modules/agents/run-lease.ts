@@ -15,7 +15,8 @@ import { writeRun } from './run-event-writer';
  * is fenced on the lease's token (`heldBy`), so a worker whose lease lapsed
  * and was taken over cannot write: its commit matches no row. A claim of a
  * lapsed lease is a takeover, counted in `attempt` and recorded on the
- * run's log as `lease_taken_over`. The queue only nudges: a job that finds
+ * run's log as `lease_taken_over`; the RUN_MAX_TAKEOVERS-th takeover of one
+ * step in a row fails the run instead. The queue only nudges: a job that finds
  * the run held, not due, or past the step it was queued for does nothing.
  *
  * All of it goes through writeRun. A claim, a renewal and a release change
@@ -37,6 +38,8 @@ export interface RunLeaseConfig {
   sweepIntervalMs: number;
   /** How long past due a run must be before the sweep nudges it (its own nudge had that long). */
   wakeGraceMs: number;
+  /** The takeover of one step (no commit between) that fails the run instead of starting the step again. */
+  maxTakeovers: number;
 }
 
 const positive = (raw: string | undefined, fallback: number): number => {
@@ -54,7 +57,14 @@ export function runLeaseConfig(env: NodeJS.ProcessEnv = process.env): RunLeaseCo
     renewMs: Math.max(1, renewMs),
     sweepIntervalMs: positive(env.RUN_WAKE_SWEEP_INTERVAL_MS, 15_000),
     wakeGraceMs: positive(env.RUN_WAKE_GRACE_MS, 30_000),
+    maxTakeovers: Math.max(1, Math.floor(positive(env.RUN_MAX_TAKEOVERS, 3))),
   };
+}
+
+/** What a run stopped by the takeover cap says, on the run and its log. */
+export function takeoverLimitError(maxTakeovers: number): string {
+  const times = maxTakeovers === 1 ? 'once' : `${maxTakeovers} times`;
+  return `This step stopped its worker ${times} in a row, so the run was stopped.`;
 }
 
 /** Statuses a worker may claim a run in. A run waiting on a person, or finished, is not claimed. */
@@ -62,7 +72,7 @@ export const CLAIMABLE_STATUSES: AgentRunStatus[] = [AgentRunStatus.PENDING, Age
 
 const TERMINAL: string[] = [AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED, AgentRunStatus.TIMEOUT];
 
-const LEASE_READ: Array<keyof AgentRun> = ['status', 'currentStep', 'nextWakeAt', 'leaseOwner', 'leaseExpiresAt', 'attempt'];
+const LEASE_READ: Array<keyof AgentRun> = ['status', 'currentStep', 'nextWakeAt', 'leaseOwner', 'leaseExpiresAt', 'attempt', 'takeovers'];
 
 const WORKER = `${hostname()}:${process.pid}`;
 
@@ -73,21 +83,28 @@ export function newLeaseToken(): string {
 
 export type RunClaim =
   | { claimed: true; owner: string; expiresAt: Date; attempt: number; takenOver: boolean }
-  | { claimed: false; reason: 'missing' | 'done' | 'held' | 'not_due' | 'moved_on' };
+  | { claimed: false; reason: 'missing' | 'done' | 'held' | 'not_due' | 'moved_on' }
+  | { claimed: false; reason: 'stopped'; error: string; attempt: number };
+
+type Lapsed = Pick<AgentRun, 'leaseOwner' | 'leaseExpiresAt' | 'attempt' | 'takeovers'>;
 
 /**
  * Claim a run for one step: its status claimable, due (`nextWakeAt` passed,
  * or none), its lease free or lapsed and, when `step` is given, still at
  * that step (a nudge queued for a step already processed is stale). A
- * lapsed lease is taken over: `attempt` + 1 and `lease_taken_over` on the
- * log. Not claimed: why, for the caller to log or act on.
+ * lapsed lease is taken over: `attempt` and `takeovers` + 1 and
+ * `lease_taken_over` on the log. The takeover that brings `takeovers` (the
+ * step's takeovers since a step last committed) to `maxTakeovers` fails
+ * the run instead, in the same write: 'stopped'. Not claimed: why, for the
+ * caller to log or act on.
  */
 export async function claimRun(
   runs: Repository<AgentRun>,
   runId: string,
-  options: { leaseMs: number; step?: number; now?: Date },
+  options: { leaseMs: number; step?: number; now?: Date; maxTakeovers?: number },
 ): Promise<RunClaim> {
   const now = options.now ?? new Date();
+  const maxTakeovers = options.maxTakeovers ?? runLeaseConfig().maxTakeovers;
   const owner = newLeaseToken();
   const expiresAt = new Date(now.getTime() + options.leaseMs);
   const due = {
@@ -98,13 +115,13 @@ export async function claimRun(
     ...(options.step !== undefined && options.step !== null ? { currentStep: options.step } : {}),
   };
 
-  let lapsed: Pick<AgentRun, 'leaseOwner' | 'leaseExpiresAt' | 'attempt'> | null = null;
+  let lapsed: Lapsed | null = null;
   const free = await writeRun(
     runs,
     due,
     (row) => {
       if (row.leaseOwner) {
-        lapsed = { leaseOwner: row.leaseOwner, leaseExpiresAt: row.leaseExpiresAt, attempt: row.attempt ?? 0 };
+        lapsed = { leaseOwner: row.leaseOwner, leaseExpiresAt: row.leaseExpiresAt, attempt: row.attempt ?? 0, takeovers: row.takeovers ?? 0 };
         return null;
       }
       return { leaseOwner: owner, leaseExpiresAt: expiresAt };
@@ -115,16 +132,26 @@ export async function claimRun(
   if (free) return { claimed: true, owner, expiresAt, attempt: free.attempt ?? 0, takenOver: false };
 
   if (lapsed) {
-    const before = lapsed as Pick<AgentRun, 'leaseOwner' | 'leaseExpiresAt' | 'attempt'>;
+    const before = lapsed as Lapsed;
     const attempt = (before.attempt ?? 0) + 1;
+    const takeovers = (before.takeovers ?? 0) + 1;
+    const takenOver = [{ type: 'lease_taken_over' as const, step: null, payload: { attempt, lapsedAt: before.leaseExpiresAt ? new Date(before.leaseExpiresAt).toISOString() : null } }];
     // Only the lease that lapsed: another claim that got there first changed the owner.
-    const taken = await writeRun(
-      runs,
-      { ...due, leaseOwner: before.leaseOwner as string },
-      { leaseOwner: owner, leaseExpiresAt: expiresAt, attempt },
-      [{ type: 'lease_taken_over', step: null, payload: { attempt, lapsedAt: before.leaseExpiresAt ? new Date(before.leaseExpiresAt).toISOString() : null } }],
-    );
-    if (taken) return { claimed: true, owner, expiresAt, attempt, takenOver: true };
+    const lapsedLease = { ...due, leaseOwner: before.leaseOwner as string };
+    if (takeovers >= maxTakeovers) {
+      // The step keeps taking its worker down: fail the run rather than start it again.
+      const error = takeoverLimitError(maxTakeovers);
+      const stopped = await writeRun(
+        runs,
+        lapsedLease,
+        { status: AgentRunStatus.FAILED, error, leaseOwner: null, leaseExpiresAt: null, attempt, takeovers },
+        takenOver,
+      );
+      if (stopped) return { claimed: false, reason: 'stopped', error, attempt };
+    } else {
+      const taken = await writeRun(runs, lapsedLease, { leaseOwner: owner, leaseExpiresAt: expiresAt, attempt, takeovers }, takenOver);
+      if (taken) return { claimed: true, owner, expiresAt, attempt, takenOver: true };
+    }
   }
 
   return { claimed: false, reason: await whyNotClaimed(runs, runId, options.step, now) };

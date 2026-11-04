@@ -278,7 +278,7 @@ export class AgentStepProcessor {
    */
   async processStep(runId: string, options: { step?: number } = {}): Promise<StepOutcome> {
     const config = runLeaseConfig();
-    const claim = await claimRun(this.s.runRepository, runId, { leaseMs: config.leaseMs, step: options.step });
+    const claim = await claimRun(this.s.runRepository, runId, { leaseMs: config.leaseMs, step: options.step, maxTakeovers: config.maxTakeovers });
     if ('reason' in claim) {
       if (claim.reason === 'missing') {
         this.s.logger.warn(`Run ${runId} not found, skipping`);
@@ -286,6 +286,12 @@ export class AgentStepProcessor {
       }
       if (claim.reason === 'done') {
         this.s.logger.debug(`Run ${runId} already done, skipping`);
+        return 'done';
+      }
+      if (claim.reason === 'stopped') {
+        // The takeover cap: the claim failed the run (on its log) instead of starting the step again.
+        this.s.logger.warn(`Run ${runId}: its step was taken over ${config.maxTakeovers} times in a row (attempt ${claim.attempt}); the run failed`);
+        this.s.emitEvent(runId, 'run.failed', { error: claim.error, reasonCode: 'TAKEOVER_LIMIT' });
         return 'done';
       }
       this.s.logger.debug(`Run ${runId} not claimed (${claim.reason}), skipping`);
@@ -2569,6 +2575,8 @@ export class AgentStepProcessor {
         // A sleep is due at the wake time its wait set; any other status
         // sets its own (writeRun's withWake).
         ...(run.status === AgentRunStatus.SLEEPING ? { nextWakeAt: run.nextWakeAt ?? new Date() } : {}),
+        // A step that commits did not take its worker down: the takeover cap counts again from 0 (run-lease.ts).
+        takeovers: 0,
       },
     );
   }
