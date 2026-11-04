@@ -72,12 +72,13 @@ describe('AgentStepProcessor query and serialization shape', () => {
 
     // The run is loaded once for the step; the other reads are the lease's
     // claim and release (run-lease.ts), which lock the row and read only the
-    // lease columns, never the run's steps or memory.
+    // lease columns, never the run's steps or memory. `takeovers` is one: the
+    // claim adds one to the locked row's count to cap takeovers of a step.
     const loads = runRepository.findOne.mock.calls.filter(([o]: any[]) => !o.lock);
     expect(loads).toHaveLength(1);
     const leaseReads = runRepository.findOne.mock.calls.filter(([o]: any[]) => o.lock);
     expect(leaseReads).toHaveLength(2);
-    for (const [o] of leaseReads) expect(Object.keys(o.select).sort()).toEqual(['attempt', 'currentStep', 'headSeq', 'id', 'leaseExpiresAt', 'leaseOwner', 'nextWakeAt', 'status']);
+    for (const [o] of leaseReads) expect(Object.keys(o.select).sort()).toEqual(['attempt', 'currentStep', 'headSeq', 'id', 'leaseExpiresAt', 'leaseOwner', 'nextWakeAt', 'status', 'takeovers']);
     const options = loads[0][0];
     expect(options.relations).toEqual({ agent: true });
     expect(options.select.agent).toBeDefined();
