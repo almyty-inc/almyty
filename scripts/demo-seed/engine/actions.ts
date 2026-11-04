@@ -2,6 +2,8 @@
 // typed functions a step names ({ action: 'slackEvent', with: {...} }).
 // Shared ones live here; a family adds its own next to its walks.
 import { createHmac } from 'node:crypto'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Action } from './run.ts'
 import { request } from './http.ts'
 
@@ -12,6 +14,15 @@ const need = (args: Record<string, unknown>, key: string): string => {
 }
 
 export const ACTIONS: Record<string, Action> = {
+  /** Write a file a later step uploads (an API description as a customer downloads it): { name, json | text }; answers its path. */
+  writeFile: async (run, a) => {
+    const dir = join(run.out, 'files')
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, need(a, 'name'))
+    writeFileSync(file, typeof a.text === 'string' ? a.text : JSON.stringify(a.json))
+    return file
+  },
+
   /**
    * A Slack event, signed as Slack signs it, posted to a channel's own address:
    * { slug, gateway, secret, text, user?, channel?, thread? }.
