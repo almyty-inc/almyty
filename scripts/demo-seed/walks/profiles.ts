@@ -21,6 +21,12 @@ export const PROFILES: Record<string, Profile> = {
   northwind: { description: 'Northwind AI: the seeded organization and the use-case guides', fakes: [] },
   // Intercom, HubSpot, Google Drive and Slack, and the scripted model, on the port the old stand-in had.
   parcelwise: { description: 'Parcelwise: the support and sales example guides', fakes: [{ services: ['parcelwise'], port: 4292 }], redirect: 4292 },
+  tidewater: {
+    description: 'Tidewater Labs: the engineering example guides (GitHub, PagerDuty, a SOAP service, a runner)',
+    // GitHub, PagerDuty, the SOAP stock service and the scripted model; Slack lands in the outbox.
+    fakes: [{ services: ['tidewater'], port: 4292 }, { services: ['tidewater-outbox'], port: 4291 }],
+    redirect: 4291,
+  },
 }
 
 // A second stack beside the canonical one (a walk under development) moves

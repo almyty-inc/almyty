@@ -3,5 +3,6 @@
 import type { Family } from '../engine/load.ts'
 import { northwind } from './northwind/index.ts'
 import { parcelwise } from './parcelwise/index.ts'
+import { tidewater } from './tidewater/index.ts'
 
-export const FAMILIES: Family[] = [northwind, parcelwise]
+export const FAMILIES: Family[] = [northwind, parcelwise, tidewater]
