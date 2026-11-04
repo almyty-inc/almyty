@@ -60,14 +60,17 @@ export function stepLabel(step: Step): string {
 
 // ---------- people ----------
 
+/** Whether the engine signs this person in with their password; signIn: 'none' is a person a step signs in (SSO, a visitor). */
+export const byPassword = (account: Account): boolean => account.signIn !== 'none'
+
 export async function preparePerson(env: Env, account: Account): Promise<Person> {
   const q = (s: string) => `'${s.replace(/'/g, "''")}'`
   if (account.register !== false && runSql(env, `SELECT count(*) FROM users WHERE email = ${q(account.email)}`) === '0') {
     const { signIn: _s, register: _r, ...body } = account
     await request(env, { method: 'POST', url: '/auth/register', body, auth: false })
   }
-  // Nobody can click the verification mail on a local stack.
-  runSql(env, `UPDATE users SET "isVerified" = true, "verifiedAt" = coalesce("verifiedAt", now()) WHERE email = ${q(account.email)}`)
+  // Nobody can click the verification mail on a local stack. Someone who signs in through a step (SSO) is left as that sign-in leaves them.
+  if (byPassword(account)) runSql(env, `UPDATE users SET "isVerified" = true, "verifiedAt" = coalesce("verifiedAt", now()) WHERE email = ${q(account.email)}`)
   const row = runSql(env, `SELECT o.id || '|' || o.slug || '|' || u.id FROM user_organizations uo JOIN users u ON u.id = uo."userId" JOIN organizations o ON o.id = uo."organizationId" WHERE u.email = ${q(account.email)} ORDER BY (o.name = ${q(account.organizationName)}) DESC LIMIT 1`)
   const [orgId = '', slug = '', userId = ''] = row.split('|')
   if (orgId) {
@@ -75,7 +78,7 @@ export async function preparePerson(env: Env, account: Account): Promise<Person>
     runSql(env, `UPDATE organizations SET settings = coalesce(settings, '{}'::jsonb) || '{"egressAllowlist":["localhost"]}'::jsonb WHERE id = '${orgId}'`)
   }
   let token = ''
-  if (orgId) token = ((await request(env, { method: 'POST', url: '/auth/token', body: { email: account.email, password: account.password }, auth: false })) as { accessToken: string }).accessToken
+  if (orgId && byPassword(account)) token = ((await request(env, { method: 'POST', url: '/auth/token', body: { email: account.email, password: account.password }, auth: false })) as { accessToken: string }).accessToken
   return { account, orgId, slug, userId, token }
 }
 

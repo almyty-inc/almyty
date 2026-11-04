@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { expand, MACROS } from '../engine/macros.ts'
 import { load, plan, type Family } from '../engine/load.ts'
-import { forwardTo, kindOf, stepLabel, WalkError } from '../engine/run.ts'
+import { byPassword, forwardTo, kindOf, stepLabel, WalkError } from '../engine/run.ts'
 import { noteFor } from '../engine/register.ts'
 import { matches } from '../engine/match.ts'
 import { describe as say } from '../engine/locate.ts'
@@ -87,6 +87,11 @@ test('a forwarded request goes to the fake, and a redirect goes back to the brow
   }
   await forwardTo('http://localhost:4291/idp')(route as never)
   assert.deepEqual(calls, [{ url: 'http://localhost:4291/idp/tenant/authorize?state=1', maxRedirects: 0 }, { response: 'the answer' }])
+})
+
+test('only people who sign in with a password get the password treatment', () => {
+  assert.equal(byPassword(account), true)
+  assert.equal(byPassword({ ...account, signIn: 'none' }), false)
 })
 
 test('a screenshot\'s own note wins over the walk\'s', () => {
