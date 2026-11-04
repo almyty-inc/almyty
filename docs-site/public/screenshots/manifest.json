@@ -349,9 +349,9 @@
       "id": "approval-refund-820",
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
-      "capturedAt": "2026-10-27T19:09:37.016Z",
+      "capturedAt": "2026-11-04T08:28:52.600Z",
       "status": "current",
-      "sha256": "f26ab6da9332a5d3b75792da0a7becf817bcbc92af861399bf926792aad459cd",
+      "sha256": "0b1a39cc1690a765fdd44a37215cd5f3d97d630009ab397a9dc73a3d717f41c8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -368,9 +368,9 @@
       "id": "approvals-change-set",
       "title": "A script's changes in Approvals",
       "path": "screenshots/approvals-change-set.png",
-      "capturedAt": "2026-10-27T19:10:49.489Z",
+      "capturedAt": "2026-11-04T08:29:43.780Z",
       "status": "current",
-      "sha256": "807b77810635fa1009b18995cc5431bb0f90b5bdb36c7ea95798c1de992f5469",
+      "sha256": "918d5753108ba9d563edd436dd5d6d1d6fb82b2d1455677e3e084acf42caa143",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -387,9 +387,9 @@
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
-      "capturedAt": "2026-10-27T19:09:03.918Z",
+      "capturedAt": "2026-11-04T08:28:50.803Z",
       "status": "current",
-      "sha256": "f26ab6da9332a5d3b75792da0a7becf817bcbc92af861399bf926792aad459cd",
+      "sha256": "0b1a39cc1690a765fdd44a37215cd5f3d97d630009ab397a9dc73a3d717f41c8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1558,9 +1558,9 @@
       "id": "examples-eu-ai-act-compliance-00-web-chat",
       "title": "The public web chat, with the AI notice under the message box",
       "path": "screenshots/examples/eu-ai-act-compliance/00-web-chat.png",
-      "capturedAt": "2026-10-27T20:19:12.562Z",
+      "capturedAt": "2026-11-04T10:14:25.034Z",
       "status": "current",
-      "sha256": "0a850089c98d688a81f9fddc3ff51eab9f3c31b75a3e62bda5b171cf8f3dc8bf",
+      "sha256": "3b23fa22d022fa945f9706abe03529fdb602e3920eaa1ad162dd3d1d8459a71b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1570,8 +1570,8 @@
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts"
       ],
-      "sourceDigest": "42ea2de891b2cdbb2a0ebe5fc435a7c07a5807e3781c193d29027fb51a177c37",
-      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/gov-guides.mjs): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "sourceDigest": "14350c1f83c8e2bcd071f1aef0223b7cb00008d7e5c5d7ca7cfb008b21215990",
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed, walks/velora): real public API descriptions, a local stand-in for Stripe, Microsoft Entra ID and Splunk, and a scripted stand-in model; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-eu-ai-act-compliance-01-branding",
@@ -4247,7 +4247,7 @@
       "id": "guides-marketing-6-visitor",
       "title": "A visitor asks a product question",
       "path": "screenshots/guides/marketing-6-visitor.png",
-      "capturedAt": "2026-10-27T19:18:30.627Z",
+      "capturedAt": "2026-11-04T08:08:41.250Z",
       "status": "current",
       "sha256": "f4102dbe95745ed00c5dffba33383c71feb6559f05a2b6d471ec346ce8800c0f",
       "source": {
@@ -4259,8 +4259,8 @@
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts"
       ],
-      "sourceDigest": "42ea2de891b2cdbb2a0ebe5fc435a7c07a5807e3781c193d29027fb51a177c37",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "sourceDigest": "14350c1f83c8e2bcd071f1aef0223b7cb00008d7e5c5d7ca7cfb008b21215990",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed, walks/northwind/guides.ts); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-1-connect-status",
@@ -4671,7 +4671,7 @@
       "id": "guides-support-17-customer-view",
       "title": "What a customer sees",
       "path": "screenshots/guides/support-17-customer-view.png",
-      "capturedAt": "2026-10-27T19:17:22.359Z",
+      "capturedAt": "2026-11-04T07:48:42.970Z",
       "status": "current",
       "sha256": "d82b9f8de3aa91e4de79d0dfea051bbfd0852069b43fcc8ba00b0db330a7956a",
       "source": {
@@ -4683,8 +4683,8 @@
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts"
       ],
-      "sourceDigest": "42ea2de891b2cdbb2a0ebe5fc435a7c07a5807e3781c193d29027fb51a177c37",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "sourceDigest": "14350c1f83c8e2bcd071f1aef0223b7cb00008d7e5c5d7ca7cfb008b21215990",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed, walks/northwind/guides.ts); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-2-connect-orders",
@@ -4843,7 +4843,7 @@
       "id": "hosted-chat-privacy",
       "title": "Hosted chat: visitor data",
       "path": "screenshots/hosted-chat-privacy.png",
-      "capturedAt": "2026-10-27T19:08:16.398Z",
+      "capturedAt": "2026-11-04T07:22:29.702Z",
       "status": "current",
       "sha256": "6a9a92a528b978dc343e27ee01e9acaceada7025f77d7108e2c091ec28fcb747",
       "source": {
@@ -4855,16 +4855,16 @@
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts"
       ],
-      "sourceDigest": "42ea2de891b2cdbb2a0ebe5fc435a7c07a5807e3781c193d29027fb51a177c37",
+      "sourceDigest": "14350c1f83c8e2bcd071f1aef0223b7cb00008d7e5c5d7ca7cfb008b21215990",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "hosted-chat",
       "title": "Hosted web chat",
       "path": "screenshots/hosted-chat.png",
-      "capturedAt": "2026-10-27T19:08:12.316Z",
+      "capturedAt": "2026-11-04T07:22:26.518Z",
       "status": "current",
-      "sha256": "bab377005cba0aeb978d995bb2c9083911ab766623c9fbf1b64a50a93462fb45",
+      "sha256": "37d1f850707f47e78d2faaefea17ed7520aaf345b82ceb26e0e8fc49038933e5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -4874,7 +4874,7 @@
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts"
       ],
-      "sourceDigest": "42ea2de891b2cdbb2a0ebe5fc435a7c07a5807e3781c193d29027fb51a177c37",
+      "sourceDigest": "14350c1f83c8e2bcd071f1aef0223b7cb00008d7e5c5d7ca7cfb008b21215990",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -5906,20 +5906,20 @@
       "id": "tutorials-founder-05-finish-connecting",
       "title": "Finish connecting Google Calendar",
       "path": "screenshots/tutorials/founder/05-finish-connecting.png",
-      "capturedAt": "2026-10-27T19:01:00.103Z",
+      "capturedAt": "2026-11-04T09:08:30.386Z",
       "status": "current",
-      "sha256": "daa57ac98cef9f8ce53069eb2fa211fbd717a730ee973741c7dc2fe59fb2cd8b",
+      "sha256": "92c4330124e35437d11a27a6f33928e12ceb79e3b9dd031ff3bb0ea4f4ebc9d9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/apis/:id/setup?job=4&key=1"
+        "route": "/apis/:id/setup?job=1&key=1"
       },
       "sources": [
         "frontend/src/pages/api-setup.tsx",
         "frontend/src/components/apis/api-key-form.tsx"
       ],
       "sourceDigest": "6ed979048d67f89889fdc4e37cfd42a81c71cbeecdbf8d1b7b009cd2b506231e",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 (scripts/demo-seed/usecases/tutorials.mjs): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data."
+      "notes": "Tutorial step, walked through the UI on the local demo stack with the lumen profile (scripts/demo-seed, walks/lumen): real public API descriptions, a local stand-in for Google, HubSpot, Slack and Resend, and a scripted stand-in model; fictional people and companies. Not staging or production data. A page of a message shows it exactly as almyty handed it to the provider; that provider was not used."
     },
     {
       "id": "tutorials-founder-06-google-sign-in",
@@ -6751,9 +6751,9 @@
       "id": "tutorials-personal-12-privacy",
       "title": "Settings, Compliance: hide personal data",
       "path": "screenshots/tutorials/personal/12-privacy.png",
-      "capturedAt": "2026-11-03T11:34:59.941Z",
+      "capturedAt": "2026-11-04T09:05:12.380Z",
       "status": "current",
-      "sha256": "8cb26871e61d2ce60058235989e446883cd137738448445252720de9d14d3318",
+      "sha256": "33cc3b88a988170cdd594c516c46d7d943386cd0442d76515f02568796961db2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -6763,8 +6763,8 @@
         "frontend/src/components/settings/compliance-settings.tsx",
         "frontend/src/pages/settings.tsx"
       ],
-      "sourceDigest": "af2af8c246a91bfa6ad2a3c96093da008d02741627c11cde2be86e6503633503",
-      "notes": "Tutorial step, walked through the UI on the local demo stack with USECASES=1 and USECASE_PERSONA=elena (scripts/demo-seed/usecases/personal-assistant.mjs): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data."
+      "sourceDigest": "da66db743f0a63bd686cd6537756647c3baf41eeabd415e0ca92402b5df8aa0e",
+      "notes": "Tutorial step, walked through the UI on the local demo stack with the elena profile (scripts/demo-seed, walks/lumen): real public API descriptions, a local stand-in for Google and Telegram, and a scripted stand-in model; a fictional person. Not staging or production data. A page of Telegram messages lays them out exactly as almyty sent them; Telegram was not used."
     },
     {
       "id": "tutorials-personal-13-telegram-intro",
