@@ -16,7 +16,7 @@ export interface Capture { file: string; route: string; at: string }
 
 export interface Person { account: Account; orgId: string; slug: string; userId: string; token: string }
 
-export interface Session { context: BrowserContext; page: Page; inflight: Set<unknown> }
+export interface Session { context: BrowserContext; page: Page; inflight: Set<unknown>; person?: Person; signedIn?: Awaited<ReturnType<BrowserContext['storageState']>> }
 
 /** What a step and an action can reach. */
 export interface Run {
@@ -84,13 +84,13 @@ export async function preparePerson(env: Env, account: Account): Promise<Person>
 const isStream = (r: { resourceType(): string; headers(): Record<string, string> }) =>
   r.resourceType() === 'eventsource' || r.resourceType() === 'websocket' || /text\/event-stream/.test(r.headers().accept ?? '')
 
-export async function openSession(run: Run, person?: Person): Promise<Session> {
+export async function openSession(run: Run, person?: Person, signedIn?: Session['signedIn']): Promise<Session> {
   const b = run.walk.browser ?? {}
   const scale = b.scale ?? 2
   const theme = b.theme ?? 'light'
   const context = await run.browser!.newContext({
     baseURL: run.env.web, colorScheme: theme, timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: scale,
-    viewport: b.viewport ?? { width: 1440, height: 900 }, acceptDownloads: true,
+    viewport: b.viewport ?? { width: 1440, height: 900 }, acceptDownloads: true, ...(signedIn ? { storageState: signedIn } : {}),
   })
   await context.addInitScript((t) => { try { localStorage.setItem('theme', t) } catch { /* private mode */ } }, theme)
   for (const host of b.block ?? []) {
@@ -112,7 +112,9 @@ export async function openSession(run: Run, person?: Person): Promise<Session> {
   page.on('requestfinished', (r) => inflight.delete(r))
   page.on('requestfailed', (r) => inflight.delete(r))
   const session: Session = { context, page, inflight }
-  if (person && person.account.signIn !== 'none') await signIn(session, person.account)
+  session.person = person
+  if (signedIn) session.signedIn = signedIn
+  else if (person && person.account.signIn !== 'none') { await signIn(session, person.account); session.signedIn = await context.storageState() }
   if (b.providerUrl) {
     const urls = typeof b.providerUrl === 'string' ? { '*': b.providerUrl } : b.providerUrl
     // The provider key goes to the fake vendor instead of the real one.
@@ -237,7 +239,7 @@ async function scrollIntoView(target: PwLocator, block: 'start' | 'center' | 'en
 // another kind's (a render takes a shot, each names what it is `as`) come first.
 const KINDS = ['render', 'each', 'press', 'goto', 'reload', 'click', 'fill', 'key', 'check', 'uncheck', 'select', 'upload', 'expand',
   'setChecks', 'waitFor', 'waitForUrl', 'until', 'scrollTo', 'scrollTop', 'scrollBy', 'viewport', 'shot', 'remember', 'http', 'sql',
-  'ensure', 'if', 'repeat', 'use', 'action', 'as', 'download', 'settle'] as const
+  'ensure', 'if', 'repeat', 'use', 'action', 'as', 'download', 'settle', 'restart'] as const
 type Kind = (typeof KINDS)[number]
 type Of<K extends Kind> = Extract<Step, Record<K, unknown>>
 
@@ -411,6 +413,18 @@ async function runStep(run: Run, step: Step, here: string, actions: Record<strin
       return
     }
     case 'settle': return settle(run.session!, (step as Of<'settle'>).quiet ?? 500)
+    case 'restart': {
+      // A new browser context: what a fresh tab of the same person (or a new visitor) starts with.
+      const old = run.session!
+      const name = Object.entries(run.sessions).find(([, s]) => s === old)?.[0] ?? 'me'
+      const viewport = old.page.viewportSize()
+      await old.context.close()
+      const fresh = await openSession(run, old.person, old.signedIn)
+      if (viewport) await fresh.page.setViewportSize(viewport)
+      run.sessions[name] = fresh
+      run.session = fresh
+      return
+    }
     case 'use': throw new Error(`macro ${(step as Of<'use'>).use} was not expanded`)
   }
 }
