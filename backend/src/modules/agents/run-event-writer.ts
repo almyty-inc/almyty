@@ -8,7 +8,7 @@ import { RunEventDraft, RunEventRecord, baselineOf, commitEvents } from './run-e
 /**
  * The columns of a run whose changes are logged (run-events.ts), plus
  * `deliveredAt`, the delivery receipt, which a `result_delivered` note
- * goes with.
+ * goes with, and the lease columns (LEASE_COLUMNS), which are not.
  */
 export type RunChange = Partial<
   Pick<
@@ -25,8 +25,49 @@ export type RunChange = Partial<
     | 'metadata'
     | 'steps'
     | 'deliveredAt'
+    | 'nextWakeAt'
+    | 'leaseOwner'
+    | 'leaseExpiresAt'
+    | 'attempt'
+    | 'takeovers'
   >
 >;
+
+/**
+ * Who holds a run and when it next needs a worker (durable runs step 3,
+ * run-lease.ts). Not the run's state: a write of these alone appends no
+ * event, and they are not in the projection.
+ */
+export const LEASE_COLUMNS = ['nextWakeAt', 'leaseOwner', 'leaseExpiresAt', 'attempt', 'takeovers'] as const;
+
+export interface WriteRunOptions {
+  /**
+   * Lock and read only these columns (id and headSeq always). Only for a
+   * change of lease columns alone, which needs nothing more of the row: a
+   * lease renewal should not read a run's steps back every few seconds.
+   */
+  select?: Array<keyof AgentRun>;
+}
+
+const isLeaseOnly = (patch: RunChange): boolean =>
+  Object.keys(patch).every((key) => (LEASE_COLUMNS as readonly string[]).includes(key));
+
+/** Statuses a worker is wanted for straight away. */
+const GOING: readonly string[] = [AgentRunStatus.PENDING, AgentRunStatus.RUNNING];
+
+/**
+ * When the run next needs a worker, from the status a write leaves it in,
+ * unless the write says itself: a run going is due now, a sleep keeps the
+ * wake time its step set, and a run waiting on a person or finished has
+ * none. Every writer goes through here, so a run resumed by input or an
+ * approval is due even if the nudge its writer queued is lost.
+ */
+function withWake(patch: RunChange): RunChange {
+  if ('nextWakeAt' in patch || !('status' in patch) || patch.status === undefined) return patch;
+  if (GOING.includes(patch.status)) return { ...patch, nextWakeAt: new Date() };
+  if (patch.status === AgentRunStatus.SLEEPING) return patch;
+  return { ...patch, nextWakeAt: null };
+}
 
 /**
  * Write a run's state and append the events describing the write, in one
@@ -48,6 +89,12 @@ export type RunChange = Partial<
  * still names the headSeq it read and the primary key (runId, seq) refuses
  * a repeated seq, should anything write around the lock.
  *
+ * A change of lease columns alone with no notes (a claim, a renewal, a
+ * release: run-lease.ts) appends nothing and leaves headSeq and updatedAt
+ * as they were: holding a run is not progress, and the reaper reads
+ * updatedAt as progress. A write that sets the status also sets
+ * `nextWakeAt` from it (withWake).
+ *
  * Returns the row as written (the locked row with the change applied).
  */
 export async function writeRun(
@@ -55,16 +102,30 @@ export async function writeRun(
   where: FindOptionsWhere<AgentRun> & { id: any },
   change: RunChange | ((row: AgentRun) => RunChange | null),
   notes: RunEventDraft[] = [],
+  options: WriteRunOptions = {},
 ): Promise<AgentRun | null> {
   const committed: RunWritten[] = [];
+  const select = options.select
+    ? Object.fromEntries([...new Set<string>(['id', 'headSeq', ...options.select])].map((c) => [c, true]))
+    : undefined;
   const result = await runs.manager.transaction(async (tx) => {
     const repo = tx.getRepository(AgentRun);
-    const row = await repo.findOne({ where, lock: { mode: 'pessimistic_write' } });
+    const row = await repo.findOne({ where, lock: { mode: 'pessimistic_write' }, ...(select ? { select: select as any } : {}) });
     if (!row) return null;
-    const patch = typeof change === 'function' ? change(row) : change;
-    if (!patch) return null;
-    const next = Object.assign(Object.create(Object.getPrototypeOf(row)), row, patch) as AgentRun;
+    const asked = typeof change === 'function' ? change(row) : change;
+    if (!asked) return null;
     const head = row.headSeq ?? 0;
+    if (isLeaseOnly(asked) && notes.length === 0) {
+      // A lease write appends nothing, so headSeq does not move and cannot
+      // tell two of them apart: the UPDATE names the caller's where too.
+      // And keeps updatedAt: TypeORM stamps it on every UPDATE unless the SET names it.
+      const res = await repo.update({ ...where, id: row.id, headSeq: head } as any, { ...asked, updatedAt: () => '"updatedAt"' } as any);
+      if ((res.affected ?? 0) === 0) return null;
+      return Object.assign(Object.create(Object.getPrototypeOf(row)), row, asked) as AgentRun;
+    }
+    if (select) throw new Error('writeRun: a write that reads only some columns may change lease columns only');
+    const patch = withWake(asked);
+    const next = Object.assign(Object.create(Object.getPrototypeOf(row)), row, patch) as AgentRun;
     const events = commitEvents(baselineOf(row), next, next.steps, notes);
     const headSeq = head + events.length;
     const res = await repo.update({ id: row.id, headSeq: head }, { ...patch, headSeq } as any);
@@ -168,5 +229,7 @@ export function runStateOf(run: AgentRun): RunChange {
     workingMemory: run.workingMemory,
     metadata: run.metadata,
     steps: run.steps,
+    // A sleep's wake time goes with it; any other status sets its own (withWake).
+    ...(run.status === AgentRunStatus.SLEEPING && run.nextWakeAt ? { nextWakeAt: run.nextWakeAt } : {}),
   };
 }

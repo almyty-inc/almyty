@@ -1,0 +1,16 @@
+{
+  "packages": [
+    "packages/acp-server",
+    "packages/agents-cli",
+    "packages/almyty-cli",
+    "packages/auth-cli",
+    "packages/chat-cli",
+    "packages/client",
+    "packages/credentials-cli",
+    "packages/mcp-mux",
+    "packages/mcp-server",
+    "packages/models-cli",
+    "packages/runner",
+    "packages/skills-cli"
+  ]
+}

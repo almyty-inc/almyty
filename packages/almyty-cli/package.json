@@ -1,6 +1,6 @@
 {
   "name": "@almyty/cli",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "publishConfig": {
     "access": "public"
   },
@@ -31,15 +31,15 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/acp-server": "^1.5.7",
-    "@almyty/agents": "^1.5.7",
-    "@almyty/auth": "^1.5.7",
-    "@almyty/chat": "^1.5.7",
-    "@almyty/credentials": "^1.5.7",
-    "@almyty/mcp-server": "^1.5.7",
-    "@almyty/models": "^1.5.7",
-    "@almyty/runner": "^1.5.7",
-    "@almyty/skills": "^1.5.7"
+    "@almyty/acp-server": "^1.5.8",
+    "@almyty/agents": "^1.5.8",
+    "@almyty/auth": "^1.5.8",
+    "@almyty/chat": "^1.5.8",
+    "@almyty/credentials": "^1.5.8",
+    "@almyty/mcp-server": "^1.5.8",
+    "@almyty/models": "^1.5.8",
+    "@almyty/runner": "^1.5.8",
+    "@almyty/skills": "^1.5.8"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

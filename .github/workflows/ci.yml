@@ -857,17 +857,22 @@ jobs:
               --no-banner \
               --exit-code=1
 
-  # ─── npm lockstep version gate ───────────────────────────────
-  # The @almyty/* CLI suite publishes in lockstep: every publishable
-  # package under packages/* must carry the identical version so a
-  # user installing @almyty/cli@x.y.z gets its dependents at the same
-  # x.y.z. This job fails the PR if that invariant drifts. It only
-  # needs Node + a checkout — no install — so it's cheap enough to run
-  # unconditionally on every PR.
-  npm-lockstep:
+  # ─── Repo invariants ─────────────────────────────────────────
+  # `npm run check` (scripts/check.js) is the one list: @almyty/* version
+  # lockstep, every CLI reporting its own version, package-locks matching
+  # their manifests, the dev proxy covering every API prefix, one Node
+  # major, no eaten build values, the runner-env image references, and the
+  # docs screenshot inventory, each check right after its own tests. Why
+  # each one exists is in the header of its script. Every check is Node + a
+  # checkout, no install, so it runs unconditionally on every PR, and a
+  # contributor runs the same list locally before pushing. Each step is its
+  # own collapsible group in this job's log.
+  #
+  # The display name stays as it was: it is the required status check.
+  repo-invariants:
     name: repo invariants (node version, npm versions, dev proxy)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -878,57 +883,5 @@ jobs:
         with:
           node-version: '26'
 
-      - name: Check @almyty/* version lockstep
-        run: node scripts/check-npm-lockstep.js
-
-      # check-npm-lockstep proves the manifests agree with each other; this
-      # proves each CLI's binary agrees with its own manifest. A version
-      # restated as a literal does not move when this workflow bumps
-      # package.json, which is why the published @almyty/cli@1.2.0 answers
-      # --version with 0.1.0. Same shape as the checks around it: Node + a
-      # checkout, no install (it runs the built bin only where one exists).
-      - name: Check every CLI reports its own version
-        run: node scripts/check-cli-versions.js
-
-      # A rotted package-lock.json is invisible until `npm ci`, which does
-      # not warn about it — it refuses. Two had rotted unnoticed, and the
-      # cost was that CI could not use `npm ci` for ANY package leg, so
-      # every leg tested a resolution the published artifact never saw.
-      # Same shape again: Node + a checkout, no install.
-      - name: Check every package-lock still describes its package.json
-        run: node scripts/check-package-locks.js
-
-      # A backend controller prefix with no dev-proxy rule answers with
-      # index.html under `npm run dev`, so the page dies parsing HTML as
-      # JSON. Neither test suite notices, because each mocks the other
-      # side. Same shape as the check above: Node + a checkout, no install.
-      - name: Check dev proxy covers every API prefix
-        run: node scripts/check-dev-proxy.js
-      # Node major lockstep across CI + every Dockerfile + every
-      # engines.node. Dependabot bumps `FROM node:` in a Dockerfile and
-      # nothing bumps the other two, which is exactly how CI ended up on
-      # a different major than the images — hiding both the jsdom
-      # localStorage clash and the --permission network gate. Same shape
-      # as the checks above: Node + a checkout, no install.
-      - name: Check Node major is in lockstep
-        run: node scripts/check-node-version.js
-
-      # A build file can hold a value-shaped hole and still parse:
-      # `FROM --platform= node:26-alpine` is what shipped in
-      # frontend/Dockerfile, and BuildKit read the empty value as unset and
-      # built the frontend under QEMU for months without a warning. Same
-      # shape as the checks above: Node + a checkout, no install.
-      - name: Check no build/deploy value was eaten
-        run: node scripts/check-empty-values.js
-
-      # The curated runner-env images (images/runner-env) and the list the
-      # backend is handed (settings.json there) name the same flavours, at
-      # the runner version the Dockerfile pins. Node + a checkout, no install.
-      - name: Check the runner-env images agree with their settings list
-        run: node scripts/check-runner-env-images.js
-
-      - name: Test screenshot evidence validation
-        run: node --test docs-site/scripts/check-screenshots.test.mjs
-
-      - name: Check screenshot inventory and source freshness
-        run: node docs-site/scripts/check-screenshots.mjs
+      - name: npm run check
+        run: npm run check

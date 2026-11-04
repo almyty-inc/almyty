@@ -37,6 +37,14 @@ data:
   # production; the staging and development overlays set it to "true".
   RUN_PROJECTION_CHECK: "false"
 
+  # Durable runs, leases (docs/design/durable-runs.md, step 3). Defaults in
+  # code; set any of these here (and pass it through api-deployment.yaml)
+  # only to change one: RUN_LEASE_MS (60000, how long a worker holds a run
+  # per claim or renewal), RUN_LEASE_RENEW_MS (a third of the lease),
+  # RUN_WAKE_SWEEP_INTERVAL_MS (15000), RUN_WAKE_GRACE_MS (30000, how far
+  # past due a run is before the wake sweep nudges it), RUN_MAX_TAKEOVERS
+  # (3, the takeover of one step that fails the run instead of restarting it).
+
   # JWT Configuration
   JWT_EXPIRES_IN: "24h"
 

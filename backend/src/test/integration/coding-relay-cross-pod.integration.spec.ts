@@ -214,6 +214,53 @@ interface Pod {
     off();
   });
 
+  it('live output announced during the replay, out of order, still follows the backlog', async () => {
+    await pod(); // a second pod, as in production
+    const b = await pod();
+    await subscribed();
+    const key = `coding:evt:${runnerId}:cs_race`;
+    const channel = `coding:evt:${runnerId}`;
+    const line = (n: number) => ({ kind: 'coding.output', sessionId: 'cs_race', data: `line ${n}\n`, seq: n });
+    const append = (n: number) => admin.xadd(key, '*', 'event', JSON.stringify(line(n))) as Promise<string>;
+    const announce = (id: string, n: number) => admin.publish(channel, JSON.stringify({ id, event: line(n) }));
+
+    // Line 1 is in the backlog before the viewer joins.
+    await announce(await append(1), 1);
+    await new Promise((r) => setTimeout(r, 50));
+
+    // B's backlog read runs against Redis now; its reply is held back, the
+    // way a slow round trip under load does.
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const xrange = b.redis.xrange.bind(b.redis);
+    let first = true;
+    (b.redis as any).xrange = async (...args: any[]) => {
+      const entries = await (xrange as any)(...args);
+      if (first) {
+        first = false;
+        await held;
+      }
+      return entries;
+    };
+    const seen: string[] = [];
+    const off = b.relay.subscribeSession(runnerId, 'cs_race', (e) => seen.push(e.data ?? e.kind));
+    await b.redis.ping(); // the backlog read has run
+
+    // Meanwhile lines 2-4 are appended, and the pods' announcements land
+    // out of order: 4 first.
+    const ids = [await append(2), await append(3), await append(4)];
+    await announce(ids[2], 4);
+    await announce(ids[0], 2);
+    await announce(ids[1], 3);
+    await new Promise((r) => setTimeout(r, 50)); // all three heard on B
+    release();
+
+    await waitFor(() => seen.length >= 4);
+    await new Promise((r) => setTimeout(r, 100)); // nothing arrives twice
+    expect(seen).toEqual(['line 1\n', 'line 2\n', 'line 3\n', 'line 4\n']);
+    off();
+  });
+
   it('a viewer resuming with Last-Event-ID on the other pod gets exactly what it missed', async () => {
     const a = await pod();
     const b = await pod();

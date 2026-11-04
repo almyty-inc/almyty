@@ -1,0 +1,64 @@
+// Stack profiles: which fake upstreams a set of walks needs, on which
+// ports, and what the API is started with. The ports are the ones the
+// published screenshots show (an API's address under Advanced), so a
+// profile keeps them. stack.sh reads `npm run demo -- profile <name>`.
+import { HERE } from '../engine/env.ts'
+
+export interface Profile {
+  description: string
+  /** Fake upstreams to start: service names on a port, with extra environment. */
+  fakes: { services: string[]; port: number; env?: Record<string, string> }[]
+  /** The API's email, Slack and Telegram calls go to this fake port instead of the real services. */
+  redirect?: number
+  /** More modules the API loads with node --import (paths under scripts/demo-seed). */
+  preload?: string[]
+  /** Started with PUBLIC_API_URL set to the API's own address (a Telegram channel registers its webhook only then). */
+  publicApi?: boolean
+}
+
+// The Northwind fake (model vendors and company APIs) runs in every profile, on FAKE_PORT.
+export const PROFILES: Record<string, Profile> = {
+  northwind: { description: 'Northwind AI: the seeded organization and the use-case guides', fakes: [] },
+  larkspur: { description: 'Larkspur Home: the data and finance guides (Stripe, Xero, BigQuery, Slack)', fakes: [{ services: ['larkspur'], port: 4293 }], redirect: 4293 },
+  velora: {
+    description: 'Velora Energy: the governance example guides (Stripe, Splunk, Entra ID, DNS and a scripted model)',
+    fakes: [{ services: ['velora'], port: 4291 }],
+    redirect: 4291,
+    preload: ['fakes/preload/velora.ts'],
+  },
+  lumen: {
+    description: 'Lumen: the tutorials (founder, biz-dev, onboarding) with Google, HubSpot, Slack and Resend stood in',
+    fakes: [{ services: ['lumen'], port: 4291 }],
+    redirect: 4291,
+  },
+  elena: {
+    description: 'Elena Park: the personal-assistant tutorial, with Google and Telegram stood in',
+    fakes: [{ services: ['lumen'], port: 4291, env: { USECASE_PERSONA: 'elena' } }],
+    redirect: 4291,
+    publicApi: true,
+  },
+  // Intercom, HubSpot, Google Drive and Slack, and the scripted model, on the port the old stand-in had.
+  parcelwise: { description: 'Parcelwise: the support and sales example guides', fakes: [{ services: ['parcelwise'], port: 4292 }], redirect: 4292 },
+  tidewater: {
+    description: 'Tidewater Labs: the engineering example guides (GitHub, PagerDuty, a SOAP service, a runner)',
+    // GitHub, PagerDuty, the SOAP stock service and the scripted model; Slack lands in the outbox.
+    fakes: [{ services: ['tidewater'], port: 4292 }, { services: ['tidewater-outbox'], port: 4291 }],
+    redirect: 4291,
+  },
+}
+
+// A second stack beside the canonical one (a walk under development) moves
+// every fake port by DEMO_PORT_OFFSET. Its screenshots then show other
+// ports, so only a stack without an offset is captured for publishing.
+const offset = () => Number(process.env.DEMO_PORT_OFFSET || 0)
+
+/** Lines stack.sh evaluates: FAKE <services> <port> [K=V...], REDIRECT <port>, PRELOAD <file>, PUBLIC_API 1. */
+export function profileLines(name: string): string[] {
+  const p = PROFILES[name]
+  return [
+    ...p.fakes.map((f) => ['FAKE', f.services.join(','), String(f.port + offset()), ...Object.entries(f.env ?? {}).map(([k, v]) => `${k}=${v}`)].join(' ')),
+    ...(p.redirect ? [`REDIRECT ${p.redirect + offset()}`] : []),
+    ...(p.preload ?? []).map((f) => `PRELOAD ${HERE}/${f}`),
+    ...(p.publicApi ? ['PUBLIC_API 1'] : []),
+  ]
+}

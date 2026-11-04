@@ -201,3 +201,149 @@ describe('CodingRelayService', () => {
     expect(received).toHaveLength(0);
   });
 });
+/**
+ * subscribeSession with Redis: the session's backlog stream decides the
+ * order, a published pointer only makes the viewer read on. A tiny
+ * in-memory stand-in for the commands the relay uses; pointers are fed in
+ * by hand through the subscriber's `pmessage`.
+ */
+describe('CodingRelayService.subscribeSession (Redis)', () => {
+  const KEY = 'coding:evt:r1:cs_1';
+  let stream: Array<[string, string[]]>;
+  let subscriber: EventEmitter & { psubscribe: jest.Mock; disconnect: jest.Mock };
+  let gate: Promise<void> | null;
+  let failReads: boolean;
+  let reads: number;
+  let relay: CodingRelayService;
+
+  const out = (n: number) => ({ kind: 'coding.output', sessionId: 'cs_1', data: `line ${n}\n`, seq: n });
+  const append = (n: number): string => {
+    const id = `1700000000000-${n}`;
+    stream.push([id, ['event', JSON.stringify(out(n))]]);
+    return id;
+  };
+  const announce = (id: string, n: number) =>
+    subscriber.emit('pmessage', 'coding:evt:*', 'coding:evt:r1', JSON.stringify({ id, event: out(n) }));
+  const seq = (id: string) => Number(id.split('-')[1]);
+  /** Hold back the replies of the reads started from now on. */
+  const hold = (): (() => void) => {
+    let release!: () => void;
+    gate = new Promise((r) => (release = r));
+    return release;
+  };
+
+  beforeEach(() => {
+    stream = [];
+    gate = null;
+    failReads = false;
+    reads = 0;
+    subscriber = Object.assign(new EventEmitter(), {
+      psubscribe: jest.fn().mockResolvedValue(1),
+      disconnect: jest.fn(),
+    });
+    const redis = {
+      duplicate: () => subscriber,
+      // The snapshot is taken when the command runs; `gate` holds back only
+      // the reply, the way a slow round trip does.
+      xrange: jest.fn(async (key: string, start: string) => {
+        reads += 1;
+        const after = start === '-' ? -1 : seq(start.slice(1));
+        const snapshot = key === KEY ? stream.filter(([id]) => seq(id) > after) : [];
+        if (gate) await gate;
+        if (failReads) throw new Error('redis down');
+        return snapshot;
+      }),
+    };
+    relay = new CodingRelayService({} as any, new EventEmitter() as any, redis as any);
+  });
+
+  afterEach(() => relay.onModuleDestroy());
+
+  it('a late viewer gets the backlog, then live output, when pointers arrive during the replay and out of order', async () => {
+    append(1);
+    const release = hold();
+    const seen: string[] = [];
+    relay.subscribeSession('r1', 'cs_1', (e) => seen.push(e.data!));
+    // The backlog read has run (it saw line 1) and its reply is in flight.
+    // Meanwhile two pods append 2, 3 and 4, and 4's pointer lands first.
+    const ids = [append(2), append(3), append(4)];
+    gate = null;
+    announce(ids[2], 4);
+    announce(ids[0], 2);
+    announce(ids[1], 3);
+    release();
+    await flush();
+    await flush();
+
+    expect(seen).toEqual(['line 1\n', 'line 2\n', 'line 3\n', 'line 4\n']);
+  });
+
+  it('delivers an event once when its pointer arrives after the backlog read already had it', async () => {
+    const one = append(1);
+    const seen: string[] = [];
+    relay.subscribeSession('r1', 'cs_1', (e) => seen.push(e.data!));
+    await flush();
+    announce(one, 1);
+    const two = append(2);
+    announce(two, 2);
+    announce(two, 2);
+    await flush();
+    await flush();
+
+    expect(seen).toEqual(['line 1\n', 'line 2\n']);
+  });
+
+  it('resumes after Last-Event-ID and passes each entry id on', async () => {
+    const one = append(1);
+    const two = append(2);
+    const three = append(3);
+    const seen: Array<[string, string | undefined]> = [];
+    relay.subscribeSession('r1', 'cs_1', (e, id) => seen.push([e.data!, id]), one);
+    await flush();
+
+    expect(seen).toEqual([['line 2\n', two], ['line 3\n', three]]);
+  });
+
+  it('coalesces a burst of pointers into one further read', async () => {
+    const release = hold();
+    const seen: string[] = [];
+    relay.subscribeSession('r1', 'cs_1', (e) => seen.push(e.data!));
+    for (let n = 1; n <= 5; n++) announce(append(n), n);
+    gate = null;
+    release();
+    await flush();
+    await flush();
+
+    expect(seen).toEqual([1, 2, 3, 4, 5].map((n) => `line ${n}\n`));
+    expect(reads).toBe(2);
+  });
+
+  it('when the backlog cannot be read, sends the announced events in stream order', async () => {
+    failReads = true;
+    const release = hold();
+    const seen: string[] = [];
+    relay.subscribeSession('r1', 'cs_1', (e) => seen.push(e.data!));
+    const ids = [append(1), append(2)];
+    gate = null;
+    announce(ids[1], 2);
+    announce(ids[0], 1);
+    release();
+    await flush();
+    await flush();
+
+    expect(seen).toEqual(['line 1\n', 'line 2\n']);
+  });
+
+  it('stops delivering once unsubscribed', async () => {
+    append(1);
+    const release = hold();
+    const seen: string[] = [];
+    const off = relay.subscribeSession('r1', 'cs_1', (e) => seen.push(e.data!));
+    off();
+    release();
+    await flush();
+
+    expect(seen).toEqual([]);
+    expect(relay.listenerCount('r1')).toBe(0);
+  });
+});
