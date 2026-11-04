@@ -14,6 +14,12 @@ test('a valid walk parses', () => {
   assert.equal(parseWalk(walk()).id, 'demo')
 })
 
+test('a shot may carry its own manifest note, and only a non-empty one', () => {
+  const shots = (notes: string) => ({ one: { path: 'screenshots/demo/one.png', title: 'One', sources: ['frontend/src/pages/x.tsx'], notes } })
+  assert.equal(parseWalk(walk({ shots: shots('Rendered from what the fake received.') })).shots.one.notes, 'Rendered from what the fake received.')
+  assert.throws(() => parseWalk(walk({ shots: shots('') })), /shots\.one\.notes/)
+})
+
 test('a broken entry names the walk and the field', () => {
   assert.throws(() => parseWalk(walk({ steps: [{ goto: '/x' }, { shot: 'one' }, { clik: { role: 'button' } }] })), /walk demo is invalid:\n {2}steps\.2/)
   assert.throws(() => parseWalk(walk({ id: 'Bad Id' })), /walk Bad Id is invalid:\n {2}id: lowercase/)

@@ -191,6 +191,8 @@ export const ShotSchema = S({
   route: z.string().startsWith('/').optional(),
   /** Take the whole page rather than the viewport. */
   fullPage: z.boolean().optional(),
+  /** The manifest note for this screenshot, when it differs from the walk's (a rendered message). */
+  notes: z.string().min(1).optional(),
 })
 export type Shot = z.infer<typeof ShotSchema>
 
