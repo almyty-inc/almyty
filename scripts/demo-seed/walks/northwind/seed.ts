@@ -6,8 +6,9 @@
 // go straight into the database, in the shapes the runtime writes them.
 // Every step finds what is already there by name first, so it reruns.
 import type { Step } from '../../engine/schema.ts'
+import { demoPassword } from '../../engine/password.ts'
 
-export const AVA = { email: 'ava.chen@northwind.ai', password: 'Northwind-local-2026!', firstName: 'Ava', lastName: 'Chen', organizationName: 'Northwind AI' }
+export const AVA = { email: 'ava.chen@northwind.ai', password: demoPassword(), firstName: 'Ava', lastName: 'Chen', organizationName: 'Northwind AI' }
 
 const role = (key: string, name: string, purpose: string, provider: string, model: string, extra: object = {}) =>
   ({ key, name, purpose, kind: 'model', providerId: `{{providers.${provider}.id}}`, model, ...extra })

@@ -11,8 +11,9 @@
 // addresses). Each guide builds on the ones before it (the model connected
 // in the first).
 import type { Locator, Step } from '../../engine/schema.ts'
+import { demoPassword } from '../../engine/password.ts'
 
-export const SAM = { email: 'sam.rivera@northwind.ai', password: 'Northwind-local-2026!', firstName: 'Sam', lastName: 'Rivera', organizationName: 'Northwind' }
+export const SAM = { email: 'sam.rivera@northwind.ai', password: demoPassword(), firstName: 'Sam', lastName: 'Rivera', organizationName: 'Northwind' }
 
 const NOTE = 'Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed, walks/northwind/guides.ts); fake model vendor and company systems, not staging or production data.'
 const BROWSER = { providerUrl: { openai: '{{stack.fake}}/openai/v1', mistral: '{{stack.fake}}/mistral/v1', openrouter: '{{stack.fake}}/openrouter/v1', '*': '{{stack.fake}}/openai/v1' } }

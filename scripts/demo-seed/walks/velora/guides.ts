@@ -12,9 +12,10 @@
 // sends), and what Splunk received is shown as a page. The API descriptions
 // are the real public ones, read from their links as a user would.
 import type { Locator, Step } from '../../engine/schema.ts'
+import { demoPassword } from '../../engine/password.ts'
 
 const DOMAIN = 'veloraenergy.example'
-const PASSWORD = 'Velora-2026!'
+const PASSWORD = demoPassword()
 const email = (first: string, last: string) => `${first.toLowerCase()}.${last.toLowerCase().replace(/\s+/g, '')}@${DOMAIN}`
 
 export const SANNE = { email: email('Sanne', 'Visser'), password: PASSWORD, firstName: 'Sanne', lastName: 'Visser', organizationName: 'Velora Energy' }
@@ -25,7 +26,7 @@ const LOTTE = colleague('Lotte', 'Jansen')
 const JOOST = colleague('Joost', 'Bakker')
 const MEHMET = colleague('Mehmet', 'Yilmaz')
 // People Entra ID signs in, and a visitor of the web chat: nobody signs them in with a password.
-const outsider = (address: string, first: string, last: string) => ({ email: address, password: 'not-used-0000', firstName: first, lastName: last, organizationName: 'Velora Energy', signIn: 'sso' as const, register: false })
+const outsider = (address: string, first: string, last: string) => ({ email: address, firstName: first, lastName: last, organizationName: 'Velora Energy', signIn: 'sso' as const, register: false })
 export const EVA = { email: `eva.degroot@${DOMAIN}`, given_name: 'Eva', family_name: 'de Groot', oid: '9d3e1f52-7a0b-4c88-9e21-5b6a0f4d2c13' }
 export const TOM = { email: `tom.hendriks@${DOMAIN}`, given_name: 'Tom', family_name: 'Hendriks', oid: '2a7c4e90-1b3d-4f6e-8c52-7d9e0a1b3c64' }
 

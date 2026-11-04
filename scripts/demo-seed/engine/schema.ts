@@ -201,7 +201,8 @@ export type Shot = z.infer<typeof ShotSchema>
 
 export const AccountSchema = S({
   email: z.string().email(),
-  password: z.string().min(8),
+  /** Leave it out for someone who signs in only through SSO. Walks use demoPassword(), never a literal. */
+  password: z.string().min(8).optional(),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   organizationName: z.string().min(1),
@@ -209,7 +210,7 @@ export const AccountSchema = S({
   signIn: z.enum(['password', 'none', 'sso']).optional(),
   /** Leave the account to a step (an invitation, SSO) instead of registering it up front. */
   register: z.boolean().optional(),
-})
+}).refine((a) => a.password !== undefined || a.signIn === 'sso', { message: 'only someone who signs in through SSO has no password', path: ['password'] })
 export type Account = z.infer<typeof AccountSchema>
 
 export const BrowserSchema = S({

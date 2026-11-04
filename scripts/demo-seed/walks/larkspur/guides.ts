@@ -15,8 +15,9 @@
 // received them, rendered as a page. The API descriptions are the real
 // public ones, read from their links as a user would.
 import type { Step } from '../../engine/schema.ts'
+import { demoPassword } from '../../engine/password.ts'
 
-export const INES = { email: 'ines.duarte@larkspurhome.example', password: 'Larkspur-2026!', firstName: 'Ines', lastName: 'Duarte', organizationName: 'Larkspur Home' }
+export const INES = { email: 'ines.duarte@larkspurhome.example', password: demoPassword(), firstName: 'Ines', lastName: 'Duarte', organizationName: 'Larkspur Home' }
 export const SLACK_SIGNING_SECRET = 'local-test-signing-secret-larkspur-01'
 
 const NOTE = 'Example guide step, walked through the UI on the local demo stack (scripts/demo-seed, walks/larkspur): real public API descriptions, a local stand-in for Stripe, Xero, BigQuery and Slack, and scripted stand-in models; fictional people and companies. Not staging or production data. Slack messages are rendered exactly as almyty handed them to Slack; Slack itself was not used.'

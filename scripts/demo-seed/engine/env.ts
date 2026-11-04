@@ -24,7 +24,8 @@ export interface Env {
  * fall back to the default ports and write into someone else's stack.
  */
 export function stackEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  const missing = ['DEMO_WEB_URL', 'DEMO_API_URL', 'PG_NAME'].filter((k) => !source[k])
+  // LOG_DIR too: the demo people's password is kept there (engine/password.ts).
+  const missing = ['DEMO_WEB_URL', 'DEMO_API_URL', 'PG_NAME', 'LOG_DIR'].filter((k) => !source[k])
   if (missing.length) throw new Error(`${missing.join(', ')} not set: run eval "$(scripts/demo-seed/stack.sh env)" with the same settings the stack was started with`)
   return readEnv(source)
 }

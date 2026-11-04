@@ -14,8 +14,9 @@
 // rendered as a page. The API descriptions are the real public ones, read
 // from their links as a user would.
 import type { Step } from '../../engine/schema.ts'
+import { demoPassword } from '../../engine/password.ts'
 
-export const SOFIA = { email: 'sofia.marques@parcelwise.example', password: 'Parcelwise-2026!', firstName: 'Sofia', lastName: 'Marques', organizationName: 'Parcelwise' }
+export const SOFIA = { email: 'sofia.marques@parcelwise.example', password: demoPassword(), firstName: 'Sofia', lastName: 'Marques', organizationName: 'Parcelwise' }
 
 const NOTE = 'Example guide step, walked through the UI on the local demo stack (scripts/demo-seed, walks/parcelwise): real public API descriptions, a local stand-in for Intercom, HubSpot, Google Drive and Slack, and a scripted stand-in model; fictional people and companies. Not staging or production data.'
 const RENDERED_NOTE = `${NOTE} The page renders the message exactly as almyty handed it to Slack; Slack itself was not used.`

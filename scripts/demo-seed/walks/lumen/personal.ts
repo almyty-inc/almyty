@@ -13,8 +13,9 @@
 // given), and the Telegram chat is shown as the stand-in received it.
 import type { Step } from '../../engine/schema.ts'
 import { AGENT, APPROVALS, BUILDER, CHANNEL, LINKS, MODEL_KEY, SETUP, approveOne, button, combo, googleApp, near, ownMemory, pastedToken, pendingApprovals, publishChannel, received, textbox, top } from './shared.ts'
+import { demoPassword } from '../../engine/password.ts'
 
-export const ELENA = { email: 'elena.park@example.com', password: 'Elena-Park-2026!', firstName: 'Elena', lastName: 'Park', organizationName: 'Elena Park' }
+export const ELENA = { email: 'elena.park@example.com', password: demoPassword(), firstName: 'Elena', lastName: 'Park', organizationName: 'Elena Park' }
 // Her Telegram account: the number Telegram gives it, which is also her 1:1 chat with the bot.
 export const TG_USER = 581234907
 const GOOGLE_APP = '123456789012-elenapark0001.apps.googleusercontent.com'

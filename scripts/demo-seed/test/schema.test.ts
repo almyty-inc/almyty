@@ -51,6 +51,12 @@ test('a shot inside a branch counts once; a macro is looked into only after it i
   assert.deepEqual(checkShots([{ use: 'm' }], { one: {} }), [])
 })
 
+test('only someone who signs in through SSO may have no password', () => {
+  const { password: _p, ...noPassword } = walk().account
+  assert.throws(() => parseWalk(walk({ account: noPassword })), /only someone who signs in through SSO has no password/)
+  assert.doesNotThrow(() => parseWalk(walk({ account: { ...noPassword, signIn: 'sso' } })))
+})
+
 test('paths, timeouts and headless walks are checked', () => {
   assert.throws(() => parseWalk(walk({ shots: { one: { path: 'public/one.png', title: 'One', sources: ['x'] } } })), /screenshots/)
   assert.throws(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: -1 }, { shot: 'one' }] })), /steps\.0/)

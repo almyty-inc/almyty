@@ -125,6 +125,10 @@ Conditions (`until`, `if`, `while`): `visible`, `hidden`, `enabled`,
 `checked`, `url`, `sql` (+ `is`/`not`), `http` (+ `at`, `where`, `min`),
 `value` (+ `is`), and `not`.
 
+Accounts never carry a literal password: walks use `demoPassword()`
+(`engine/password.ts`), made at random once per stack and kept in its
+`LOG_DIR`; someone who signs in only through SSO has none.
+
 Strings are templates: `{{agents.support.id}}`, `{{stack.fake}}`,
 `{{env.NAME}}`, `{{org.id}}`, `{{me.id}}`, with filters such as
 `{{tools|where:name~^petstore_|map:id}}`, `{{list|rows:agents|first|get:id}}`,

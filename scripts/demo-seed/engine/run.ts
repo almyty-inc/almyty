@@ -143,6 +143,7 @@ export async function signIn(session: Session, account: Account): Promise<void> 
   const { page } = session
   await page.goto('/auth/login')
   await page.getByLabel('Email address').fill(account.email)
+  if (!account.password) throw new Error(`${account.email} has no password to sign in with`)
   await page.getByLabel('Password', { exact: true }).fill(account.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await page.waitForURL(/\/dashboard/)

@@ -18,8 +18,9 @@
 // would, so the stack needs the internet; the APIs themselves are never called.
 import type { Step } from '../../engine/schema.ts'
 import { AGENT, APPROVALS, BUILDER, CHANNEL, LINKS, MODEL_KEY, SETUP, approveOne, button, combo, googleApp, near, ownMemory, pastedToken, pendingApprovals, publishChannel, received, textbox, top, upstream } from './shared.ts'
+import { demoPassword } from '../../engine/password.ts'
 
-export const MAYA = { email: 'maya.chen@lumenlabs.example', password: 'Lumen-Labs-2026!', firstName: 'Maya', lastName: 'Chen', organizationName: 'Lumen' }
+export const MAYA = { email: 'maya.chen@lumenlabs.example', password: demoPassword(), firstName: 'Maya', lastName: 'Chen', organizationName: 'Lumen' }
 const SLACK_SIGNING_SECRET = 'local-test-signing-secret-0123456789'
 const GOOGLE_APP = '123456789012-abc123def456.apps.googleusercontent.com'
 const HUBSPOT_TOKEN = 'local-demo-hubspot-token-0000000000000000000'

@@ -15,8 +15,9 @@
 // Claude Code and Codex installed and signed in on this machine, on a small
 // sample library it writes to /tmp/tidewater/ledgerly-utils.
 import type { Locator, Step } from '../../engine/schema.ts'
+import { demoPassword } from '../../engine/password.ts'
 
-export const INES = { email: 'ines.duarte@tidewater.example', password: 'Tidewater-Labs-2026!', firstName: 'Ines', lastName: 'Duarte', organizationName: 'Tidewater Labs', signIn: 'none' as const }
+export const INES = { email: 'ines.duarte@tidewater.example', password: demoPassword(), firstName: 'Ines', lastName: 'Duarte', organizationName: 'Tidewater Labs', signIn: 'none' as const }
 
 const NOTE = 'Example guide step, walked through the UI on the local demo stack (scripts/demo-seed, walks/tidewater): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data.'
 const RENDERED_NOTE = `${NOTE} The page renders the message exactly as almyty handed it to the provider; that provider was not used.`
