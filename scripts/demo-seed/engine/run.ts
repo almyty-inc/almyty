@@ -3,7 +3,7 @@
 // the step and a screenshot of the page as it was.
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Browser, BrowserContext, Page, Locator as PwLocator } from '@playwright/test'
+import type { Browser, BrowserContext, Page, Route, Locator as PwLocator } from '@playwright/test'
 import type { Account, Condition, Locator, Step, Walk } from './schema.ts'
 import { type Env, sql as runSql } from './env.ts'
 import { request, rows, at } from './http.ts'
@@ -89,7 +89,7 @@ export async function openSession(run: Run, person?: Person): Promise<Session> {
   const scale = b.scale ?? 2
   const theme = b.theme ?? 'light'
   const context = await run.browser!.newContext({
-    baseURL: run.env.web, colorScheme: theme, timezoneId: 'UTC', locale: 'en-US', deviceScaleFactor: scale,
+    baseURL: run.env.web, colorScheme: theme, timezoneId: b.timezone ?? 'UTC', locale: 'en-US', deviceScaleFactor: scale,
     viewport: b.viewport ?? { width: 1440, height: 900 }, acceptDownloads: true,
   })
   await context.addInitScript((t) => { try { localStorage.setItem('theme', t) } catch { /* private mode */ } }, theme)
@@ -97,12 +97,7 @@ export async function openSession(run: Run, person?: Person): Promise<Session> {
     await context.route(new RegExp(`^https?://([^/]*\\.)?${host.replace(/\./g, '\\.')}/`), (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<p>Stopped before the real page (local demo).</p>' }))
   }
   for (const [host, base] of Object.entries(b.forward ?? {})) {
-    const to = render(base, run.vars) as string
-    await context.route(new RegExp(`^https?://${host.replace(/\./g, '\\.')}/`), async (route) => {
-      const u = new URL(route.request().url())
-      const res = await route.fetch({ url: `${to}${u.pathname}${u.search}` })
-      await route.fulfill({ response: res })
-    })
+    await context.route(new RegExp(`^https?://${host.replace(/\./g, '\\.')}/`), forwardTo(render(base, run.vars) as string))
   }
   const page = await context.newPage()
   page.setDefaultTimeout(b.timeout ?? run.timeout)
@@ -124,6 +119,15 @@ export async function openSession(run: Run, person?: Person): Promise<Session> {
     })
   }
   return session
+}
+
+/** A route handler that answers from `to` instead; redirects go back to the browser, which follows them (a sign-in hands it on). */
+export function forwardTo(to: string) {
+  return async (route: Route): Promise<void> => {
+    const u = new URL(route.request().url())
+    const res = await route.fetch({ url: `${to}${u.pathname}${u.search}`, maxRedirects: 0 })
+    await route.fulfill({ response: res })
+  }
 }
 
 export async function signIn(session: Session, account: Account): Promise<void> {

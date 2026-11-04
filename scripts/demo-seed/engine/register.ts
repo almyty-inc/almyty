@@ -9,6 +9,9 @@ import { ROOT } from './env.ts'
 
 const DEFAULT_NOTE = 'Local seeded demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.'
 
+/** The manifest note for one screenshot: its own, else the walk's, else the default. */
+export const noteFor = (walk: Walk, id: string): string => walk.shots[id]?.notes ?? walk.notes ?? DEFAULT_NOTE
+
 export function register(walk: Walk, captures: Record<string, Capture>, shots: string[]): string[] {
   const done: string[] = []
   for (const id of shots.length ? shots : Object.keys(walk.shots)) {
@@ -19,7 +22,7 @@ export function register(walk: Walk, captures: Record<string, Capture>, shots: s
     execFileSync(process.execPath, [
       join(ROOT, 'docs-site/scripts/record-screenshot.mjs'),
       '--image', c.file, '--path', shot.path, '--title', shot.title, '--captured-at', c.at,
-      '--route', c.route, '--environment', 'local-demo', '--notes', walk.notes ?? DEFAULT_NOTE,
+      '--route', c.route, '--environment', 'local-demo', '--notes', noteFor(walk, id),
       ...shot.sources.flatMap((s) => ['--sources', s]),
     ], { stdio: 'inherit' })
     done.push(id)

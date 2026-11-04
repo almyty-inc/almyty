@@ -191,6 +191,8 @@ export const ShotSchema = S({
   route: z.string().startsWith('/').optional(),
   /** Take the whole page rather than the viewport. */
   fullPage: z.boolean().optional(),
+  /** The manifest note for this screenshot, when it says more than the walk's (a rendered page). */
+  notes: z.string().min(1).optional(),
 })
 export type Shot = z.infer<typeof ShotSchema>
 
@@ -214,6 +216,8 @@ export const BrowserSchema = S({
   /** Not signed in: what a visitor sees. */
   anonymous: z.boolean().optional(),
   theme: z.enum(['light', 'dark']).optional(),
+  /** The browser's time zone (default UTC), for pages that show times. */
+  timezone: z.string().min(1).optional(),
   /** Hosts whose pages are answered with a stub instead of opened (real sign-in pages). */
   block: z.array(z.string().min(1)).optional(),
   /** Send a connected model provider's key to this fake vendor (templated, may use {type}). */
