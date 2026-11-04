@@ -36,18 +36,10 @@ export class AgentBuiltInToolsHelper {
       case 'wait': {
         const seconds = Math.min(Math.max(Number(parameters.seconds) || 10, 1), 3600);
         run.status = AgentRunStatus.SLEEPING;
-
-        // Enqueue the delayed wake. Seed seq from a timestamp so it sits
-        // outside the sequential range and duplicate wakes collapse to one.
-        const wakeSeq = Date.now();
-        await this.runtimeQueue.add('next-step', { runId: run.id, seq: wakeSeq }, {
-          jobId: `step:${run.id}:${wakeSeq}`,
-          delay: seconds * 1000,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 2000 },
-          removeOnComplete: 100,
-          removeOnFail: 50,
-        });
+        // Due again at the wake time (durable runs step 3): the commit writes
+        // it, the step processor queues the nudge for it once the commit
+        // has landed, and the wake sweep nudges the run should that be lost.
+        run.nextWakeAt = new Date(Date.now() + seconds * 1000);
 
         return {
           result: `Sleeping for ${seconds} seconds. Will resume automatically.`,

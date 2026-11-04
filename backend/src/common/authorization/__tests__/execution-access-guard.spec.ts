@@ -150,7 +150,9 @@ describe('every execution path goes through the shared scope check', () => {
     });
 
     it('AgentStepProcessor.processStep: re-checks the run\'s scope against its agent before calling the model or a tool', () => {
-      const body = methodBody(read(join(SRC, 'modules/agents/agent-step-processor.ts')), /async processStep\(/);
+      // processStep claims the run's lease and hands the step to processLeasedStep (run-lease.ts).
+      expect(methodBody(read(join(SRC, 'modules/agents/agent-step-processor.ts')), /async processStep\(/)).toContain('this.processLeasedStep(runId, claim.owner)');
+      const body = methodBody(read(join(SRC, 'modules/agents/agent-step-processor.ts')), /async processLeasedStep\(/);
       const gate = body.indexOf('this.s.executionAccess.canExecute(principal, agent)');
       expect(gate).toBeGreaterThan(-1);
       for (const later of ['this.s.llmProvidersService.chatStream(', 'this.s.toolExecutorService.executeTool(', 'this.s.startRun(']) {
@@ -219,7 +221,12 @@ describe('every execution path goes through the shared scope check', () => {
         allowed: [
           'modules/agents/agent-runtime.service.ts',
           'modules/agents/agent-runtime.processor.ts',
-          'modules/agents/agent-builtin-tools.helper.ts',
+          // The nudges of durable runs step 3: the wake of a sleep the run's
+          // own step committed, and the wake sweep's for a run already started
+          // and past due. Each only names a run startRun created, and
+          // processStep re-checks the principal on every step it takes.
+          'modules/agents/agent-step-processor.ts',
+          'modules/agents/run-wake-sweep.service.ts',
         ],
       },
     ];
