@@ -24,6 +24,10 @@ test('filters select, pick and quote', () => {
   assert.equal(render('{{missing|default:x}}', vars), 'x')
 })
 
+test('a bar inside a filter argument is escaped', () => {
+  assert.deepEqual(render('{{tools|where:name~^(petstore\\|orders)_get$|map:id}}', vars), ['t1', 't2'])
+})
+
 test('time filters', () => {
   const at = applyFilter(new Date('2026-01-01T10:58:00Z'), 'add:2m') as Date
   assert.equal(applyFilter(at, 'hhmm'), '11:00')

@@ -7,7 +7,9 @@ export function rows(body: unknown, key?: string): unknown[] {
   if (Array.isArray(body)) return body
   const o = (body ?? {}) as Record<string, unknown>
   for (const k of [key, 'items', 'data', 'results'].filter(Boolean) as string[]) if (Array.isArray(o[k])) return o[k] as unknown[]
-  return []
+  // { apis: [...], total }: the one list in it.
+  const lists = Object.values(o).filter(Array.isArray)
+  return lists.length === 1 ? (lists[0] as unknown[]) : []
 }
 
 /** The API answers { success, data }; steps want the data. */
