@@ -9,7 +9,7 @@
 // operations and the schemas nothing here uses are left out.
 //
 //   curl -sSLo api.github.com.json https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-//   node engineering-github-subset.mjs api.github.com.json docs-site/public/files/github-issues-and-pulls.openapi.json
+//   node scripts/demo-seed/walks/tidewater/github-subset.mjs api.github.com.json docs-site/public/files/github-issues-and-pulls.openapi.json
 import { readFileSync, writeFileSync } from 'node:fs'
 
 export const OPERATIONS = [

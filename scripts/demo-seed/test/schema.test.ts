@@ -14,6 +14,12 @@ test('a valid walk parses', () => {
   assert.equal(parseWalk(walk()).id, 'demo')
 })
 
+test('a shot may carry its own manifest note, and only a non-empty one', () => {
+  const shots = (notes: string) => ({ one: { path: 'screenshots/demo/one.png', title: 'One', sources: ['frontend/src/pages/x.tsx'], notes } })
+  assert.equal(parseWalk(walk({ shots: shots('Rendered from what the fake received.') })).shots.one.notes, 'Rendered from what the fake received.')
+  assert.throws(() => parseWalk(walk({ shots: shots('') })), /shots\.one\.notes/)
+})
+
 test('a broken entry names the walk and the field', () => {
   assert.throws(() => parseWalk(walk({ steps: [{ goto: '/x' }, { shot: 'one' }, { clik: { role: 'button' } }] })), /walk demo is invalid:\n {2}steps\.2/)
   assert.throws(() => parseWalk(walk({ id: 'Bad Id' })), /walk Bad Id is invalid:\n {2}id: lowercase/)
@@ -48,5 +54,8 @@ test('a shot inside a branch counts once; a macro is looked into only after it i
 test('paths, timeouts and headless walks are checked', () => {
   assert.throws(() => parseWalk(walk({ shots: { one: { path: 'public/one.png', title: 'One', sources: ['x'] } } })), /screenshots/)
   assert.throws(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: -1 }, { shot: 'one' }] })), /steps\.0/)
+  // Up to half an hour, for real coding assistants at work; no longer.
+  assert.doesNotThrow(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: 1_500_000 }, { shot: 'one' }] })))
+  assert.throws(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: 1_800_001 }, { shot: 'one' }] })), /steps\.0\.timeout/)
   assert.throws(() => parseWalk(walk({ headless: true })), /headless walk takes no screenshots/)
 })

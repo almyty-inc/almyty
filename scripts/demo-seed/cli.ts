@@ -5,6 +5,7 @@
 //   npm run demo -- list                          walks, their profile and screenshots
 //   npm run demo -- seed  [--only <walk,...>]     the headless walks of the running profile
 //   npm run demo -- capture [--only <walk,...>] [--from <shot>]
+//   npm run demo -- compare [--only <walk,...>]     captures against the published images
 //   npm run demo -- register [--only <walk,...>] [shot ...]
 //   npm run demo -- profile <name>                what stack.sh starts for a profile
 import { parseArgs } from 'node:util'
@@ -13,10 +14,11 @@ import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { load, plan } from './engine/load.ts'
 import { checkCoverage, readManifest } from './engine/manifest.ts'
-import { readEnv, ROOT, HERE } from './engine/env.ts'
+import { readEnv, stackEnv, ROOT, HERE } from './engine/env.ts'
 import { runWalk, readCaptures, readVars, WalkError } from './engine/run.ts'
 import type { Vars } from './engine/template.ts'
 import { register } from './engine/register.ts'
+import { compare } from './engine/compare.ts'
 import { FAMILIES } from './walks/index.ts'
 import { PROFILES, profileLines } from './walks/profiles.ts'
 
@@ -26,7 +28,7 @@ const { values, positionals } = parseArgs({
 })
 const [command = 'check', ...rest] = positionals
 const loaded = load(FAMILIES)
-const env = readEnv()
+const env = ['seed', 'capture', 'compare', 'register'].includes(command) ? stackEnv() : readEnv()
 const only = values.only?.split(',').map((s) => s.trim()).filter(Boolean)
 
 // The profile stack.sh started, written to its log directory.
@@ -99,6 +101,27 @@ switch (command) {
     for (const w of only ? plan(loaded, only).filter((x) => only.includes(x.id)) : loaded.walks) {
       if (captures[w.id]) register(w, captures[w.id], rest)
     }
+    break
+  }
+  case 'compare': {
+    // Each capture beside the image it would replace: the share of pixels that changed, and a picture of where.
+    const require = createRequire(join(HERE, 'package.json'))
+    const { chromium } = require('@playwright/test') as typeof import('@playwright/test')
+    const browser = await chromium.launch()
+    const captures = readCaptures(env.out)
+    try {
+      for (const w of only ? loaded.walks.filter((x) => only.includes(x.id)) : loaded.walks) {
+        for (const [id, c] of Object.entries(captures[w.id] ?? {})) {
+          const shot = w.shots[id]
+          if (!shot) continue
+          const published = join(ROOT, 'docs-site/public', shot.path)
+          if (!existsSync(published)) { console.log(`${w.id}/${id}  new (nothing published yet)`); continue }
+          const d = await compare(browser, published, c.file, c.file.replace(/\.png$/, '.diff.png'))
+          const how = d.sizes ? `size ${d.sizes[0]} -> ${d.sizes[1]}` : d.same ? 'same' : `${(d.changed * 100).toFixed(2)}% changed in ${d.box!.width}x${d.box!.height} at ${d.box!.x},${d.box!.y}`
+          console.log(`${w.id}/${id}  ${how}`)
+        }
+      }
+    } finally { await browser.close() }
     break
   }
   case 'profile': {
