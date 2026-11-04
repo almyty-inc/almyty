@@ -145,7 +145,7 @@ const steps: Step[] = [
   { goto: '/settings' },
   { click: { role: 'tab', name: 'Advanced' } },
   { click: { role: 'link', name: 'Compliance', exact: true } },
-  { if: { not: { checked: { role: 'switch', name: 'Enforce PII filter' } } }, then: [{ click: { role: 'switch', name: 'Enforce PII filter' } }] },
+  { if: { not: { checked: { role: 'switch', name: 'Hide personal data' } } }, then: [{ click: { role: 'switch', name: 'Hide personal data' } }] },
   top({ role: 'heading', name: 'Compliance policy' }, 140),
   { shot: 'pa-12' },
   { click: button('Save compliance policy') },
