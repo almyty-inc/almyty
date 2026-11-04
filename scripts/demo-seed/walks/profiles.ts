@@ -19,6 +19,12 @@ export interface Profile {
 // The Northwind fake (model vendors and company APIs) runs in every profile, on FAKE_PORT.
 export const PROFILES: Record<string, Profile> = {
   northwind: { description: 'Northwind AI: the seeded organization and the use-case guides', fakes: [] },
+  tidewater: {
+    description: 'Tidewater Labs: the engineering example guides (GitHub, PagerDuty, a SOAP service, a runner)',
+    // GitHub, PagerDuty, the SOAP stock service and the scripted model; Slack lands in the outbox.
+    fakes: [{ services: ['tidewater'], port: 4292 }, { services: ['tidewater-outbox'], port: 4291 }],
+    redirect: 4291,
+  },
 }
 
 // A second stack beside the canonical one (a walk under development) moves

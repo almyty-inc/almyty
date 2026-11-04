@@ -2,5 +2,6 @@
 // macros, actions and page templates only it uses.
 import type { Family } from '../engine/load.ts'
 import { northwind } from './northwind/index.ts'
+import { tidewater } from './tidewater/index.ts'
 
-export const FAMILIES: Family[] = [northwind]
+export const FAMILIES: Family[] = [northwind, tidewater]
