@@ -566,7 +566,10 @@ The change, in `runner/coding-relay.service.ts`:
 3. `GET /runners/:id/coding/sessions/:sessionId/events` honours
    `Last-Event-ID` by reading the stream from that id (`XRANGE`). A phone
    that joins a session started on a laptop sees the backlog, then live
-   output.
+   output. The stream is the only source of order: a published pointer only
+   makes the subscriber read on from the last id it delivered, so a pointer
+   that arrives early (two pods publish independently) cannot put live
+   output ahead of the backlog, and nothing is delivered twice.
 4. Without Redis (tests, single-pod dev) it stays pod-local, as the transport
    does.
 
