@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { load, plan } from './engine/load.ts'
 import { checkCoverage, readManifest } from './engine/manifest.ts'
-import { readEnv, ROOT, HERE } from './engine/env.ts'
+import { readEnv, stackEnv, ROOT, HERE } from './engine/env.ts'
 import { runWalk, readCaptures, readVars, WalkError } from './engine/run.ts'
 import type { Vars } from './engine/template.ts'
 import { register } from './engine/register.ts'
@@ -28,7 +28,7 @@ const { values, positionals } = parseArgs({
 })
 const [command = 'check', ...rest] = positionals
 const loaded = load(FAMILIES)
-const env = readEnv()
+const env = ['seed', 'capture', 'compare', 'register'].includes(command) ? stackEnv() : readEnv()
 const only = values.only?.split(',').map((s) => s.trim()).filter(Boolean)
 
 // The profile stack.sh started, written to its log directory.
