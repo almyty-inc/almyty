@@ -13,8 +13,12 @@ name: Runner env images
 #           Installs the runner version the Dockerfile pins from npm (what a
 #           published image must carry), refuses to push an image whose
 #           runner has no --enroll, and tags almyty/runner-env:<flavour>-<pin>.
-#           settings.json lists those tags; pin them by digest there once
-#           pushed.
+#
+# Bumping the runner: bump RUNNER_VERSION in the Dockerfile with the
+# packages and leave settings.json alone; publish the packages to npm; the
+# release builds and pushes the new images; then pin their digests in
+# settings.json, the backend defaults and image-prepull.yaml in one
+# follow-up. Until then every reference stays on the last pushed digest.
 
 on:
   pull_request:
