@@ -1,38 +1,62 @@
 name: Publish npm Packages
 
+# Publishes the twelve @almyty/* packages (docs/releasing.md).
+#
+# Versions are not bumped here. Contributors add a changeset, the "Version
+# packages" PR (version-packages.yml) bumps all twelve in lockstep with
+# their changelogs, and that lands on master through development and
+# staging like any other change. The release tag (v*, cut from master)
+# then publishes what the tagged commit says:
+#
+#   node scripts/release-packages.js publish --provenance
+#
+# builds every package from the tagged checkout in dependency order (client,
+# auth and mcp-mux, then the CLIs that use the client, then almyty-cli),
+# each against the in-repo build of its @almyty/* dependencies rather than
+# the copy on npm, and only once every build passed publishes the ones npm
+# does not have yet, dependencies first. A version already on npm is
+# skipped, so re-running a release, or a tag with no version change, is a
+# no-op. The published manifests name each internal dependency as
+# ^<the version it was built against>.
+#
+# Publishing stays in THIS file: npm's trusted publisher for each package is
+# bound to this repository and the workflow filename publish-packages.yml.
+# Authentication is npm OIDC (id-token: write below), with provenance; no
+# NPM_TOKEN. Requires npm >= 11.5.
+#
+# workflow_dispatch is the manual fallback: publish the committed versions
+# of every package (or one, plus nothing else), or a throwaway
+# <version>-next.<run> of all twelve to the `next` dist-tag. It never bumps
+# or commits anything.
+#
+# After a publish, post-release.yml raises the internal ranges, refreshes
+# the lockfiles and recaptures the CLI help screenshots.
+
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       package:
-        description: 'Package to publish'
+        description: 'Package to publish (packages/<dir>), or all'
         required: true
         type: choice
         options:
-          - skills-cli
-          - mcp-server
-          - auth-cli
-          - agents-cli
-          - models-cli
-          - credentials-cli
-          - chat-cli
-          - almyty-cli
-          - acp-server
-          - runner
-          - client
-          - mcp-mux
           - all
-      version_bump:
-        description: 'Version bump type'
-        required: true
-        type: choice
-        options:
-          - none
-          - patch
-          - minor
-          - major
-        default: none
+          - acp-server
+          - agents-cli
+          - almyty-cli
+          - auth-cli
+          - chat-cli
+          - client
+          - credentials-cli
+          - mcp-mux
+          - mcp-server
+          - models-cli
+          - runner
+          - skills-cli
       dist_tag:
-        description: 'npm dist-tag channel (latest = prod, next = prerelease)'
+        description: 'npm dist-tag channel (latest = prod, next = prerelease of all twelve)'
         required: true
         type: choice
         options:
@@ -42,135 +66,52 @@ on:
 
 permissions:
   id-token: write
-  contents: write
+  contents: read
+
+concurrency:
+  group: publish-packages
+  cancel-in-progress: false
 
 jobs:
   publish:
+    name: Publish @almyty/* in dependency order
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - id: skills-cli
-            npm_name: "@almyty/skills"
-            dir: packages/skills-cli
-          - id: mcp-server
-            npm_name: "@almyty/mcp-server"
-            dir: packages/mcp-server
-          - id: auth-cli
-            npm_name: "@almyty/auth"
-            dir: packages/auth-cli
-          - id: agents-cli
-            npm_name: "@almyty/agents"
-            dir: packages/agents-cli
-          - id: models-cli
-            npm_name: "@almyty/models"
-            dir: packages/models-cli
-          - id: credentials-cli
-            npm_name: "@almyty/credentials"
-            dir: packages/credentials-cli
-          - id: chat-cli
-            npm_name: "@almyty/chat"
-            dir: packages/chat-cli
-          - id: almyty-cli
-            npm_name: "@almyty/cli"
-            dir: packages/almyty-cli
-          - id: acp-server
-            npm_name: "@almyty/acp-server"
-            dir: packages/acp-server
-          - id: runner
-            npm_name: "@almyty/runner"
-            dir: packages/runner
-          - id: client
-            npm_name: "@almyty/client"
-            dir: packages/client
-          - id: mcp-mux
-            npm_name: "@almyty/mcp-mux"
-            dir: packages/mcp-mux
+    timeout-minutes: 45
     steps:
-      - name: Skip if not selected
-        if: inputs.package != 'all' && inputs.package != matrix.id
-        run: echo "Skipping ${{ matrix.npm_name }}" && exit 0
-
       - uses: actions/checkout@v6
-        if: inputs.package == 'all' || inputs.package == matrix.id
+        with:
+          fetch-depth: 0
+
+      # Releases are cut from master (development -> staging -> master).
+      - name: Refuse a tag that is not on master
+        if: github.event_name == 'push'
+        run: |
+          git fetch --no-tags origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+            echo "::error::$GITHUB_REF_NAME is not on master; packages publish only from master's history"
+            exit 1
+          }
 
       - uses: actions/setup-node@v6
-        if: inputs.package == 'all' || inputs.package == matrix.id
         with:
           node-version: '26'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Build and publish ${{ matrix.npm_name }}
-        if: inputs.package == 'all' || inputs.package == matrix.id
-        working-directory: ${{ matrix.dir }}
-        run: |
-          # OIDC trusted publishing: npm authenticates via the GitHub
-          # Actions id-token (permissions: id-token: write above) against
-          # the trusted publisher configured on npmjs.com for this repo +
-          # workflow filename. No NPM_TOKEN needed. Requires npm >= 11.5.
-          npm install -g npm@latest
-          if [ "${{ inputs.dist_tag }}" = "next" ]; then
-            # Prerelease channel: derive a throwaway <version>-next.<run>
-            # from the committed version and publish it to the 'next' tag.
-            # This overrides the version_bump 'none' path and is never
-            # committed back to the repo (see the Commit step guard).
-            BASE=$(node -p "require('./package.json').version")
-            npm version "${BASE}-next.${{ github.run_number }}" --no-git-tag-version
-          elif [ "${{ inputs.version_bump }}" != "none" ]; then
-            # 'none' publishes the committed version as-is (clean lockstep);
-            # patch/minor/major bump first if explicitly requested.
-            npm version ${{ inputs.version_bump }} --no-git-tag-version
-          fi
-          PKG=$(node -p "require('./package.json').name")
-          VER=$(node -p "require('./package.json').version")
-          # Idempotent: skip if this exact version is already on npm, so the
-          # wave is safely re-runnable for the client->dependents bootstrap.
-          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
-            echo "$PKG@$VER already published — skipping."
-            echo "SKIP_PUBLISH=1" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          # Drop the lockfile so npm resolves @almyty/* from the
-          # registry rather than from local source.
-          #
-          # STALE AS OF THIS AUDIT: no package under packages/ declares a
-          # `file:../` dependency any more (verified across all 14
-          # package.json files), so this `rm` no longer has a reason to
-          # exist — and it means the artifact published to npm is built
-          # against floating resolutions rather than the committed,
-          # CI-tested lockfile. Replacing it with `npm ci` is the right
-          # move, but do it on a publish run you can watch, not blind.
-          rm -f package-lock.json
-          npm install --no-audit --no-fund
-          # No `|| true` here. A failing build must stop the publish at
-          # the step that names the error, not slip through to `npm
-          # publish` and rely on `prepublishOnly` catching it a second
-          # time — the packages all ship `files: ["dist"]`, so a package
-          # published on a half-built dist/ is a broken CLI on npm.
-          npm run build
-          if [ "${{ inputs.dist_tag }}" = "next" ]; then
-            npm publish --access public --provenance --tag next
-          else
-            npm publish --access public --provenance
-          fi
+      - name: npm with trusted publishing
+        run: npm install -g npm@latest
 
-      # The version bump is NOT committed back from here, deliberately.
-      #
-      # It used to be: each matrix job ran `npm version` and pushed the
-      # result to master. Twelve jobs run in parallel, so twelve pushes
-      # raced one non-fast-forward ref. On 2026-09-22 that produced a
-      # state where ten packages were published at 1.3.0 while master
-      # still said 1.2.0 (their bump commits lost the race), `agents`
-      # was published twice because its commit won and the next run
-      # bumped it again, and `chat` reached 1.4.0 in the repo while npm
-      # still had 1.2.0. Lockstep was broken on the registry and in the
-      # tree at the same time, and every re-run made it worse, because
-      # `version_bump` re-bumps whatever the previous run managed to
-      # commit.
-      #
-      # So: bump versions in the repository first, as an ordinary
-      # commit, and run this workflow with `version_bump: none` to
-      # publish exactly what is committed. That is the "clean lockstep"
-      # path the input already documents. `patch`/`minor`/`major` still
-      # work for a single-package publish, where there is no race.
+      # Every repo invariant, the version lockstep among them, before
+      # anything is built.
+      - name: npm run check
+        run: npm run check
+
+      - name: Build and publish
+        env:
+          PACKAGE: ${{ inputs.package || 'all' }}
+          DIST_TAG: ${{ inputs.dist_tag || 'latest' }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -- --provenance
+          if [ "$PACKAGE" != "all" ]; then set -- "$@" --only "$PACKAGE"; fi
+          if [ "$DIST_TAG" = "next" ]; then set -- "$@" --prerelease "next.$RUN_NUMBER"; fi
+          node scripts/release-packages.js publish "$@"

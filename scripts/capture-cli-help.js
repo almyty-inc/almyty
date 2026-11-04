@@ -17,6 +17,8 @@
 //       for byte (the recipe still reproduces what is in the repo)
 //
 //   --only auth,chat     a subset (ids below)
+//   --stale              only the images whose manifest entry names another
+//                        version than package.json (what a release changed)
 //   --out <dir>          keep the .txt and .png renders there
 //   --captured-at <iso>  what to record (default: now)
 //
@@ -73,7 +75,17 @@ function recordArgs(cli, pkg, image, capturedAt) {
   ];
 }
 
-module.exports = { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs };
+// The CLIs whose image's manifest entry names another package version than
+// package.json: the ones a release has made out of date.
+function staleClis(clis, manifest, root = repoRoot) {
+  return clis.filter((cli) => {
+    const pkg = readPackage(cli, root);
+    const entry = manifest.screenshots.find((s) => s.path === `screenshots/cli/${cli.id}-help.png`);
+    return !entry || !entry.source || entry.source.package !== `${pkg.name}@${pkg.version}`;
+  });
+}
+
+module.exports = { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis };
 
 function fail(message) {
   console.error(`capture-cli-help: ${message}`);
@@ -97,14 +109,23 @@ function main(argv) {
     else if (a === '--register') opts.register = true;
     else if (a === '--verify') opts.verify = true;
     else if (a === '--text') opts.text = true;
+    else if (a === '--stale') opts.stale = true;
     else fail(`unknown argument ${a}`);
   }
   if (!['repo', 'npm'].includes(opts.from)) fail('--from is repo or npm');
   // docs-site/SCREENSHOTS.md: a published-cli capture comes from the
   // published package, never from source.
   if (opts.register && opts.from !== 'npm') fail('--register needs --from npm; a local build only previews');
-  const clis = opts.only ? CLIS.filter((c) => opts.only.includes(c.id)) : CLIS;
+  let clis = opts.only ? CLIS.filter((c) => opts.only.includes(c.id)) : CLIS;
   if (opts.only && clis.length !== opts.only.length) fail(`--only takes ${CLIS.map((c) => c.id).join(', ')}`);
+  const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs-site', 'public', 'screenshots', 'manifest.json'), 'utf8'));
+  if (opts.stale) {
+    clis = staleClis(clis, manifest);
+    if (clis.length === 0) {
+      console.log('capture-cli-help: every CLI help image already shows its package.json version');
+      return;
+    }
+  }
   if (!opts.text && sh('freeze', ['--version']).status !== 0) fail('freeze is not on PATH');
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-help-'));
@@ -122,7 +143,6 @@ function main(argv) {
     if (r.status !== 0) fail(`npm install ${specs.join(' ')} failed`);
   }
 
-  const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs-site', 'public', 'screenshots', 'manifest.json'), 'utf8'));
   const mismatched = [];
 
   for (const cli of clis) {

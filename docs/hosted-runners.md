@@ -459,15 +459,19 @@ locally after a build: `images/runner-env/smoke.sh runner-env:standard
 standard`. CI pushes only from `master` and `v*` tags. The push job builds
 the same way, from the runner in that commit, runs the smoke test again on
 the image it is about to push, and tags it
-`almyty/runner-env:<flavour>-<RUNNER_VERSION>`. To release new images:
+`almyty/runner-env:<flavour>-<RUNNER_VERSION>`. New images ship with the
+packages ([docs/releasing.md](releasing.md)):
 
-1. Bump `RUNNER_VERSION` in the Dockerfile together with the packages.
-   Leave the image references alone: they stay on the images already
-   pushed.
-2. The release (`master` or a `v*` tag) builds and pushes the new images,
-   whether or not npm has the packages yet.
-3. Pin the new digests in `settings.json`, the backend's default `images`
-   and `docs/design/hosted-runners/image-prepull.yaml`.
+1. The "Version packages" PR bumps `RUNNER_VERSION` in the Dockerfile
+   together with the packages. The image references stay on the images
+   already pushed.
+2. Once that is on `master`, the push (and the `v*` tag) builds and pushes
+   the new images, whether or not npm has the packages yet.
+3. The post-release PR (`.github/workflows/post-release.yml`,
+   `node scripts/release-packages.js pin-runner-env`) pins the new digests
+   in `settings.json`, the backend's default `images` and
+   `docs/design/hosted-runners/image-prepull.yaml`, once all four flavours
+   are on Docker Hub.
 
 ### Coding CLIs
 
@@ -674,8 +678,8 @@ script) can still start anything. The boundary is the pod.
   1.5.8, but no 1.5.8 image has been pushed yet, so `settings.json`, the
   backend default `images` and `docs/design/hosted-runners/image-prepull.yaml`
   stay on the pushed 1.5.7 digests. The next push from `master` or a `v*`
-  tag builds the 1.5.8 images from this repository; pin their digests
-  there then.
+  tag builds the 1.5.8 images from this repository, and the post-release
+  PR then pins their digests.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).
