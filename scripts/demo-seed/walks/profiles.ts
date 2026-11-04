@@ -20,6 +20,12 @@ export interface Profile {
 export const PROFILES: Record<string, Profile> = {
   northwind: { description: 'Northwind AI: the seeded organization and the use-case guides', fakes: [] },
   larkspur: { description: 'Larkspur Home: the data and finance guides (Stripe, Xero, BigQuery, Slack)', fakes: [{ services: ['larkspur'], port: 4293 }], redirect: 4293 },
+  velora: {
+    description: 'Velora Energy: the governance example guides (Stripe, Splunk, Entra ID, DNS and a scripted model)',
+    fakes: [{ services: ['velora'], port: 4291 }],
+    redirect: 4291,
+    preload: ['fakes/preload/velora.ts'],
+  },
   // Intercom, HubSpot, Google Drive and Slack, and the scripted model, on the port the old stand-in had.
   parcelwise: { description: 'Parcelwise: the support and sales example guides', fakes: [{ services: ['parcelwise'], port: 4292 }], redirect: 4292 },
   tidewater: {

@@ -219,6 +219,8 @@ export const BrowserSchema = S({
   /** Not signed in: what a visitor sees. */
   anonymous: z.boolean().optional(),
   theme: z.enum(['light', 'dark']).optional(),
+  /** The browser's time zone (default UTC), for pages that show times. */
+  timezone: z.string().min(1).optional(),
   /** Hosts whose pages are answered with a stub instead of opened (real sign-in pages). */
   block: z.array(z.string().min(1)).optional(),
   /** Send a connected model provider's key to this fake vendor (templated, may use {type}). */

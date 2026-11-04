@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { expand, MACROS } from '../engine/macros.ts'
 import { load, plan, type Family } from '../engine/load.ts'
-import { kindOf, stepLabel, WalkError, fromShot } from '../engine/run.ts'
+import { byPassword, forwardTo, fromShot, kindOf, stepLabel, WalkError } from '../engine/run.ts'
+import { noteFor } from '../engine/register.ts'
 import { matches } from '../engine/match.ts'
 import { describe as say } from '../engine/locate.ts'
 import { rows, unwrap } from '../engine/http.ts'
@@ -84,4 +85,30 @@ test('answers are unwrapped and listed whatever they are wrapped in', () => {
 test('locators read as a person would say them', () => {
   assert.equal(say({ role: 'button', name: 'Save', within: { testid: 'form' }, nth: 'last' }), 'testid "form" > button "Save" (last)')
   assert.equal(say({ role: ['button', 'link'], name: /Save/ }), 'button or link /Save/')
+})
+
+test('a forwarded request goes to the fake, and a redirect goes back to the browser', async () => {
+  const calls: unknown[] = []
+  const route = {
+    request: () => ({ url: () => 'https://login.example.com/tenant/authorize?state=1' }),
+    fetch: async (o: unknown) => { calls.push(o); return 'the answer' },
+    fulfill: async (o: unknown) => { calls.push(o) },
+  }
+  await forwardTo('http://localhost:4291/idp')(route as never)
+  assert.deepEqual(calls, [{ url: 'http://localhost:4291/idp/tenant/authorize?state=1', maxRedirects: 0 }, { response: 'the answer' }])
+})
+
+test('only people who sign in with a password get the password treatment', () => {
+  assert.equal(byPassword(account), true)
+  assert.equal(byPassword({ ...account, signIn: 'none' }), false)
+})
+
+test('a screenshot\'s own note wins over the walk\'s', () => {
+  const w = load([{ name: 'f', walks: [walk('w', [{ shot: 'a' }, { shot: 'b' }], {
+    browser: { timezone: 'Europe/Amsterdam' }, notes: 'The walk.',
+    shots: { a: { path: 'screenshots/a.png', title: 'A', sources: ['x'] }, b: { path: 'screenshots/b.png', title: 'B', sources: ['x'], notes: 'A rendered page.' } },
+  })] }]).walks[0]
+  assert.equal(w.browser?.timezone, 'Europe/Amsterdam')
+  assert.equal(noteFor(w, 'a'), 'The walk.')
+  assert.equal(noteFor(w, 'b'), 'A rendered page.')
 })

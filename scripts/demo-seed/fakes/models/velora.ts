@@ -1,25 +1,28 @@
-// A scripted stand-in for an OpenAI-compatible chat model, for the
-// governance example guides (gov-guides.mjs). Like usecases/model.mjs it is
-// not clever: it follows a fixed plan of tool calls, reads what the tools
-// really returned, and writes its answer from that data, so a run shows
-// whether the platform plumbing (tools, approvals and their policies, the
-// audit trail) works end to end.
+// The scripted model of the Velora Energy governance guides (walks/velora).
+// It is not clever: it follows a fixed plan of tool calls, reads what the
+// tools really returned, and writes its answer from that data, so a run
+// shows whether the platform plumbing (tools, approvals and their policies,
+// the audit trail) works end to end.
 //
 // Each tool call id carries the plan step it belongs to (call_<step>_n).
 import { appendFileSync } from 'node:fs'
+import type { ChatRequest, Decision, ToolCall } from '../openai.ts'
 
-const LOG = process.env.USECASE_MODEL_LOG || '/tmp/almyty-demo/gov-model.log'
-const text = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => x?.text ?? '').join('') : c == null ? '' : JSON.stringify(c))
-function parse(s) {
+const LOG = process.env.USECASE_MODEL_LOG || `${process.env.LOG_DIR || '/tmp/almyty-demo'}/velora-model.log`
+
+const text = (c: unknown): string => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x: any) => x?.text ?? '').join('') : c == null ? '' : JSON.stringify(c))
+
+function parse(s: unknown): any {
   if (s == null) return null
   if (typeof s !== 'string') return s
-  try { return JSON.parse(s) } catch {}
+  try { return JSON.parse(s) } catch { /* not JSON as a whole */ }
   const i = s.indexOf('{'); const j = s.lastIndexOf('}')
-  if (i >= 0 && j > i) { try { return JSON.parse(s.slice(i, j + 1)) } catch {} }
+  if (i >= 0 && j > i) { try { return JSON.parse(s.slice(i, j + 1)) } catch { /* not JSON inside either */ } }
   return s
 }
+
 // Tool results arrive wrapped ({success, data}, {result}, ...); find the payload.
-function unwrap(v, isPayload) {
+export function unwrap(v: unknown, isPayload: (x: any) => boolean): any {
   let x = parse(v)
   for (let k = 0; k < 6 && x && typeof x === 'object' && !Array.isArray(x); k++) {
     if (isPayload(x)) break
@@ -30,14 +33,17 @@ function unwrap(v, isPayload) {
   return x
 }
 
-function stateOf(body) {
+interface Result { name?: string; args?: any; result: string }
+interface State { msgs: any[]; system: string; userText: string; results: Record<string, Result[]>; tools: string[] }
+
+function stateOf(body: ChatRequest): State {
   const msgs = body.messages || []
   const system = msgs.filter((m) => m.role === 'system').map((m) => text(m.content)).join('\n')
   const lastUser = msgs.map((m) => m.role).lastIndexOf('user')
   const userText = text(msgs[lastUser]?.content)
   const turn = msgs.slice(lastUser + 1)
-  const results = {}
-  const pending = {}
+  const results: Record<string, Result[]> = {}
+  const pending: Record<string, { name?: string; args?: any }> = {}
   for (const m of turn) {
     for (const c of m.tool_calls || []) pending[c.id] = { name: c.function?.name, args: parse(c.function?.arguments) }
     if (m.role === 'tool') {
@@ -46,23 +52,23 @@ function stateOf(body) {
       ;(results[step] ||= []).push({ ...call, result: text(m.content) })
     }
   }
-  const tools = (body.tools || []).map((t) => t.function?.name)
+  const tools = (body.tools || []).map((t: any) => t.function?.name)
   return { msgs, system, userText, results, tools }
 }
 
 let seq = 0
-function call(st, step, realName, args) {
+function call(st: State, step: string, realName: string, args: unknown): ToolCall {
   const id = `call_${step}_${Date.now() % 1e6}${seq++}`
   if (st.tools.includes(realName)) return { id, name: realName, args }
   return { id, name: 'call_tool', args: { name: realName, arguments: args } }
 }
-const has = (st, step) => !!st.results[step]
-const tool = (st, re) => st.tools.find((n) => re.test(n))
-const eur = (cents) => `€${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const date = (s) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+const has = (st: State, step: string) => !!st.results[step]
+const tool = (st: State, re: RegExp) => st.tools.find((n) => re.test(n))
+const eur = (cents: number) => `€${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const date = (s: number) => new Date(s * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 // ---------- the billing assistant ----------
-function billing(st) {
+function billing(st: State): Decision {
   const u = st.userText
   const search = tool(st, /get_customers$/)
   const listCharges = tool(st, /get_charges$/)
@@ -73,19 +79,19 @@ function billing(st) {
     if (!email) return { content: 'Which email address is on the customer\'s account? I look customers up in Stripe by email.' }
     return { toolCalls: [call(st, 'customer', search, { email: email.toLowerCase(), limit: 3 })] }
   }
-  const found = unwrap(st.results.customer[0].result, (x) => Array.isArray(x.data))?.data || []
+  const found: any[] = unwrap(st.results.customer[0].result, (x) => Array.isArray(x.data))?.data || []
   if (!found.length) return { content: 'I could not find that customer in Stripe. Could you give me the email address on the account?' }
   const cust = found[0]
   if (!has(st, 'charges')) return { toolCalls: [call(st, 'charges', listCharges, { customer: cust.id, limit: 10 })] }
-  const charges = unwrap(st.results.charges[0].result, (x) => Array.isArray(x.data))?.data || []
+  const charges: any[] = unwrap(st.results.charges[0].result, (x) => Array.isArray(x.data))?.data || []
   const wantsRefund = /refund/i.test(u)
 
   // Which charge, and how much.
-  let target = null
-  let amount = null
+  let target: any = null
+  let amount = 0
   let why = ''
   let stripeReason = 'requested_by_customer'
-  const byInvoice = {}
+  const byInvoice: Record<string, any[]> = {}
   for (const c of charges) (byInvoice[c.invoice] ||= []).push(c)
   const dup = Object.values(byInvoice).find((g) => g.length > 1)
   if (/twice|double|duplicate/i.test(u) && dup) {
@@ -133,9 +139,8 @@ function billing(st) {
   ].join('\n') }
 }
 
-// ---------- the support assistant (multi-team guide; it is never run with tools) ----------
 // ---------- the public website assistant (EU AI Act guide); it has no tools ----------
-function help(st) {
+function help(st: State): Decision {
   const u = st.userText
   if (/dynamic/i.test(u)) {
     const next = new Date(); next.setUTCMonth(next.getUTCMonth() + 1, 1)
@@ -145,17 +150,26 @@ function help(st) {
   return { content: 'I can help with tariffs, meter readings, moving house and paying your bill. What would you like to know?' }
 }
 
-function support(st) {
+// ---------- the support assistant (multi-team guide; it is never run with tools) ----------
+function support(): Decision {
   return { content: 'I can help with questions about your Velora Energy contract and your meter readings. What would you like to know?' }
 }
 
-export async function decide(body) {
+export function decide(body: ChatRequest): Decision {
   const st = stateOf(body)
-  let out
+  let out: Decision
   if (/Velora Energy's finance team/i.test(st.system)) out = billing(st)
-  else if (/support team/i.test(st.system)) out = support(st)
+  else if (/support team/i.test(st.system)) out = support()
   else if (/customers on our website/i.test(st.system)) out = help(st)
   else out = { content: 'Hello.' }
-  try { appendFileSync(LOG, `${new Date().toISOString()} ${JSON.stringify({ user: st.userText.slice(0, 200), steps: Object.keys(st.results), tools: st.tools.length, out }).slice(0, 2000)}\n`) } catch {}
+  try { appendFileSync(LOG, `${new Date().toISOString()} ${JSON.stringify({ user: st.userText.slice(0, 200), steps: Object.keys(st.results), tools: st.tools.length, out }).slice(0, 2000)}\n`) } catch { /* no log dir */ }
   return out
+}
+
+/** Token counts as the old stand-in reported them: a quarter of the characters, plus a base. */
+export function usage(body: ChatRequest, d: Decision): { prompt: number; completion: number } {
+  return {
+    prompt: Math.round(JSON.stringify(body.messages || []).length / 4) + 200,
+    completion: Math.round(((d.content || '') + JSON.stringify(d.toolCalls || '')).length / 4) + 5,
+  }
 }
