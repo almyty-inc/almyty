@@ -408,17 +408,22 @@ They are made for the pod the backend writes:
 
 `images/runner-env/settings.json` is the curated list in the shape of
 `HOSTED_RUNNERS_SETTINGS_FILE`: one `images.<name>` entry per target,
-tagged `almyty/runner-env:<target>-<RUNNER_VERSION>`. Point the setting at
+naming an image CI has pushed by tag and digest
+(`almyty/runner-env:<target>-<version>@sha256:...`). Point the setting at
 that file (or copy its `images` into `HOSTED_RUNNERS_SETTINGS`) to offer
 them. Settings merge key by key, so names in the built-in defaults that
 the file does not mention stay offered. The built-in defaults name
-`standard` and `standard-browser` with the same tags as the file. Once
-pushed, pin each entry by digest (`...:standard-1.6.0@sha256:...`).
+`standard` and `standard-browser` with the same references as the file.
+The references may name an older runner than the Dockerfile: after a bump,
+they keep pointing at the last images that were pushed until the new ones
+exist.
 `scripts/check-runner-env-images.js` (in CI's repo-invariants job) fails
-when a listed name is not a target, when a tag does not carry the pinned
-version, when the pin is ahead of `packages/runner`, when a built-in default
-is not in the file with the same reference, or when the workflow does not
-build and smoke-test exactly the listed flavours.
+when a listed name is not a target, when a reference has no `@sha256:`
+digest, when a reference names a runner newer than the Dockerfile's
+`RUNNER_VERSION`, when that version is ahead of `packages/runner`, when a
+built-in default or the pre-pull DaemonSet's image is not in the file with
+the same reference, or when the workflow does not build and smoke-test
+exactly the listed flavours.
 
 Build one locally from the repository root:
 
@@ -449,10 +454,15 @@ and the runner detects it, the model-token wiring, and (for
 locally after a build: `images/runner-env/smoke.sh runner-env:standard
 standard`. CI pushes only from `master` and `v*` tags. The push builds with
 the pinned runner from npm and refuses an image whose runner has no
-`--enroll`. To release new images: publish the runner, bump
-`RUNNER_VERSION` in the Dockerfile and the tags in `settings.json` and the
-backend's default `images` together, merge to `master`, then pin the pushed
-digests in `settings.json`.
+`--enroll`. To release new images:
+
+1. Bump `RUNNER_VERSION` in the Dockerfile together with the packages.
+   Leave the image references alone: they stay on the images already
+   pushed.
+2. Publish the packages to npm.
+3. The release (`master` or a `v*` tag) builds and pushes the new images.
+4. In one follow-up, pin the new digests in `settings.json`, the backend's
+   default `images` and `docs/design/hosted-runners/image-prepull.yaml`.
 
 ### Coding CLIs
 
@@ -655,12 +665,11 @@ script) can still start anything. The boundary is the pod.
 
 ## Not yet
 
-- Published `runner-env` 1.5.8 images: the Dockerfile pins @almyty/runner
-  1.5.8, and `settings.json` and the backend default `images` name the
-  1.5.8 tags without digests. TODO: the 1.5.8 images exist only after
-  1.5.8 is on npm and the release push has run; pin the pushed digests in
-  `settings.json`, the backend default `images` and
-  `docs/design/hosted-runners/image-prepull.yaml` then.
+- `runner-env` 1.5.8 images: the Dockerfile pins @almyty/runner 1.5.8,
+  but no 1.5.8 image has been pushed yet, so `settings.json`, the backend
+  default `images` and `docs/design/hosted-runners/image-prepull.yaml`
+  stay on the pushed 1.5.7 digests. Pin the 1.5.8 digests there once the
+  release has pushed them.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).
