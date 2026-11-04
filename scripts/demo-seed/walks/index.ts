@@ -6,5 +6,6 @@ import { velora } from './velora/index.ts'
 import { parcelwise } from './parcelwise/index.ts'
 import { tidewater } from './tidewater/index.ts'
 import { larkspur } from './larkspur/index.ts'
+import { lumen } from './lumen/index.ts'
 
-export const FAMILIES: Family[] = [northwind, parcelwise, tidewater, larkspur, velora]
+export const FAMILIES: Family[] = [northwind, parcelwise, tidewater, larkspur, velora, lumen]
