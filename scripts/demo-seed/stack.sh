@@ -18,6 +18,9 @@
 #   PROFILE=lumen scripts/demo-seed/stack.sh up
 #
 # Ports default to ones the usual stacks leave alone; override any of them.
+# DEMO_PORT_OFFSET moves the profile's fake ports too, for a second stack
+# beside this one (its screenshots then show other ports: develop on it,
+# capture for publishing without it).
 # `down` stops only what this stack started (scripts/lib/owned-processes.sh).
 set -euo pipefail
 
@@ -151,7 +154,7 @@ case "${1:-}" in
     sweep_port "$API_PORT" "$ROOT/backend"
     sweep_port "$WEB_PORT" "$ROOT/frontend"
     sweep_port "$FAKE_PORT" "$HERE"
-    for port in 4291 4292 4293; do sweep_port "$port" "$HERE"; done
+    for port in $(profile_lines "$(cat "$LOG_DIR/profile" 2>/dev/null || echo "$PROFILE")" | awk '$1 == "FAKE" || $1 == "REDIRECT" { print ($1 == "FAKE" ? $3 : $2) }' | sort -u); do sweep_port "$port" "$HERE"; done
     rm -f "$LOG_DIR/profile"
     ;;
   env) print_env ;;

@@ -21,12 +21,17 @@ export const PROFILES: Record<string, Profile> = {
   northwind: { description: 'Northwind AI: the seeded organization and the use-case guides', fakes: [] },
 }
 
+// A second stack beside the canonical one (a walk under development) moves
+// every fake port by DEMO_PORT_OFFSET. Its screenshots then show other
+// ports, so only a stack without an offset is captured for publishing.
+const offset = () => Number(process.env.DEMO_PORT_OFFSET || 0)
+
 /** Lines stack.sh evaluates: FAKE <services> <port> [K=V...], REDIRECT <port>, PRELOAD <file>, PUBLIC_API 1. */
 export function profileLines(name: string): string[] {
   const p = PROFILES[name]
   return [
-    ...p.fakes.map((f) => ['FAKE', f.services.join(','), String(f.port), ...Object.entries(f.env ?? {}).map(([k, v]) => `${k}=${v}`)].join(' ')),
-    ...(p.redirect ? [`REDIRECT ${p.redirect}`] : []),
+    ...p.fakes.map((f) => ['FAKE', f.services.join(','), String(f.port + offset()), ...Object.entries(f.env ?? {}).map(([k, v]) => `${k}=${v}`)].join(' ')),
+    ...(p.redirect ? [`REDIRECT ${p.redirect + offset()}`] : []),
     ...(p.preload ?? []).map((f) => `PRELOAD ${HERE}/${f}`),
     ...(p.publicApi ? ['PUBLIC_API 1'] : []),
   ]
