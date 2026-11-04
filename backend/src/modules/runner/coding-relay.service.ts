@@ -7,6 +7,7 @@ import { WorkerStreamTransport } from './transport/worker-stream.transport';
 import { codingBacklogMaxLen, codingBacklogTtlSeconds } from './transport/stream-backlog.config';
 import { WorkerEnvelope } from '../mcp/types/worker-protocol.types';
 import { RunnerService } from './runner.service';
+import { compareStreamPos } from '../agents/run-stream-position';
 
 /**
  * A coding.* event as emitted by the runner daemon's CodingSessionManager
@@ -49,7 +50,8 @@ export type CodingEventListener = (event: CodingEvent, eventId?: string) => void
  *   2. every pod holds one pattern subscription and re-emits to its local
  *      subscribers of that runner;
  *   3. subscribeSession() reads the backlog (from Last-Event-ID, or from
- *      the start for a late viewer) before going live.
+ *      the start for a late viewer), and each message after that reads it
+ *      on from the last id delivered: delivery follows the stream.
  * Without Redis (tests, single-pod dev) it relays pod-locally, without ids
  * or backlog, as it always did.
  */
@@ -155,8 +157,17 @@ export class CodingRelayService implements OnModuleDestroy {
    * Subscribe to one coding session's events. With Redis the listener
    * first gets the session's backlog -- everything after `lastEventId`, or
    * the whole retained backlog when there is none -- then live events, in
-   * order and without duplicates. Without Redis it is live only, as
+   * backlog order and each once. Without Redis it is live only, as
    * subscribe() is. Returns an unsubscribe function.
+   *
+   * The session's backlog stream is the only source of order. Pub/sub
+   * messages only say "there is more": each one (re)reads the stream after
+   * the last id delivered, one read at a time. Delivering the messages
+   * themselves interleaved them with the replay -- two pods publish
+   * independently, so a message for a later entry can arrive before one for
+   * an earlier entry the backlog read missed, and a late viewer saw
+   * `1, 4, 2, 3`. Stream ids rise with every append, so reading strictly
+   * after the cursor gives every viewer the same order, without duplicates.
    */
   subscribeSession(
     runnerId: string,
@@ -169,44 +180,77 @@ export class CodingRelayService implements OnModuleDestroy {
         if (event.sessionId === sessionId) listener(event, id);
       });
     }
+    const redis = this.redis;
+    const key = `${CODING_EVT_PREFIX}${runnerId}:${sessionId}`;
 
     let closed = false;
-    let live = false;
-    const from = lastEventId && STREAM_ID_RE.test(lastEventId) ? lastEventId : undefined;
-    const pending: Array<[CodingEvent, string | undefined]> = [];
-    // The backlog read and the live channel overlap: an event appended just
-    // before the read can still be in flight on the channel. Those are the
-    // only possible duplicates, so the backlog's ids are all that is kept.
-    // (Ids are not compared for order: two pods append independently, so a
-    // later live event can carry an earlier id.)
-    const fromBacklog = new Set<string>();
-    const deliver = (event: CodingEvent, id: string | undefined) => {
-      if (closed) return;
-      if (id && fromBacklog.has(id)) return;
-      listener(event, id);
-    };
-    const unsubscribe = this.subscribe(runnerId, (event, id) => {
-      if (event.sessionId !== sessionId) return;
-      if (live) deliver(event, id);
-      else pending.push([event, id]);
-    });
+    /** The last backlog id delivered; null before the first entry. */
+    let cursor: string | null = lastEventId && STREAM_ID_RE.test(lastEventId) ? lastEventId : null;
+    /** Set once the first backlog read has settled. */
+    let replayed = false;
+    let reading = false;
+    let again = false;
+    // Events announced while a read was due, kept for when Redis cannot be
+    // read: then they go out as announced rather than not at all.
+    const announced = new Map<string, CodingEvent>();
+    // Events with no backlog id (this pod's append failed): they are not in
+    // the stream, so they go out live, after the replay.
+    const unlogged: CodingEvent[] = [];
 
-    const key = `${CODING_EVT_PREFIX}${runnerId}:${sessionId}`;
-    void this.redis
-      .xrange(key, from ? `(${from}` : '-', '+')
-      .then((entries) => {
-        for (const [id, fields] of entries) {
-          const event = this.parseEntry(fields);
-          if (!event) continue;
-          deliver(event, id);
-          fromBacklog.add(id);
-        }
-      })
-      .catch((err) => this.logger.warn(`coding backlog read failed: ${err?.message ?? err}`))
-      .finally(() => {
-        live = true;
-        for (const [event, id] of pending.splice(0)) deliver(event, id);
-      });
+    const emit = (event: CodingEvent, id: string | undefined) => {
+      if (!closed) listener(event, id);
+    };
+    const advance = (id: string, event: CodingEvent) => {
+      if (cursor !== null && compareStreamPos(id, cursor) <= 0) return;
+      cursor = id;
+      emit(event, id);
+    };
+    const read = async (): Promise<void> => {
+      if (reading) {
+        again = true;
+        return;
+      }
+      reading = true;
+      try {
+        do {
+          again = false;
+          try {
+            const entries = await redis.xrange(key, cursor ? `(${cursor}` : '-', '+');
+            for (const [id, fields] of entries) {
+              const event = this.parseEntry(fields);
+              if (event) advance(id, event);
+              else if (cursor === null || compareStreamPos(id, cursor) > 0) cursor = id;
+            }
+          } catch (err: any) {
+            this.logger.warn(`coding backlog read failed: ${err?.message ?? err}`);
+            const ids = [...announced.keys()].sort(compareStreamPos);
+            for (const id of ids) advance(id, announced.get(id)!);
+          }
+          for (const id of [...announced.keys()]) {
+            if (cursor !== null && compareStreamPos(id, cursor) <= 0) announced.delete(id);
+          }
+          if (!replayed) {
+            replayed = true;
+            for (const event of unlogged.splice(0)) emit(event, undefined);
+          }
+        } while (again && !closed);
+      } finally {
+        reading = false;
+      }
+    };
+
+    const unsubscribe = this.subscribe(runnerId, (event, id) => {
+      if (closed || event.sessionId !== sessionId) return;
+      if (!id) {
+        if (replayed) emit(event, undefined);
+        else unlogged.push(event);
+        return;
+      }
+      if (cursor !== null && compareStreamPos(id, cursor) <= 0) return; // already delivered
+      announced.set(id, event);
+      void read();
+    });
+    void read();
 
     return () => {
       closed = true;
