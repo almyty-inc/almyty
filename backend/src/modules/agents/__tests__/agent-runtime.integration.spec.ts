@@ -602,8 +602,17 @@ describe('AgentRuntimeService (integration)', () => {
 
     it('aborts (returns done) when another worker already advanced the step', async () => {
       const run = await service.startRun('agent-1', 'org-1', 'user-1', 'race');
-      // Simulate the CAS losing the race: the guarded UPDATE matches 0 rows.
-      mockRunRepo.update.mockResolvedValueOnce({ affected: 0 });
+      // Simulate the CAS losing the race: the step commit's guarded UPDATE
+      // matches 0 rows. (The lease claim before it is an UPDATE too, and wins.)
+      const original = mockRunRepo.update.getMockImplementation()!;
+      let lost = false;
+      mockRunRepo.update.mockImplementation(async (criteria: any, patch: any) => {
+        if (!lost && patch && 'currentStep' in patch) {
+          lost = true;
+          return { affected: 0 };
+        }
+        return (original as any)(criteria, patch);
+      });
 
       const result = await service.processStep(run.id);
 
