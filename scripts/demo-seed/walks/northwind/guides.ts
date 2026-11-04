@@ -351,7 +351,8 @@ const operations = guide('guide-operations', 'Operations: a nightly systems chec
   ['ops-6-schedule-card', 'The schedule on the agent', ['frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents/detail/schedule-card.tsx'], [
     press('Save schedule'),
     { waitFor: { testid: 'schedule-card-summary' }, timeout: 20000 },
-    { scrollTo: { testid: 'schedule-card-summary' }, block: 'center' },
+    // The card in the middle of the screen: its summary sits 23 px above the card's own centre.
+    { scrollTo: { testid: 'schedule-card-summary' }, block: 'center', offset: -23 },
   ]],
   ['ops-7-report-run', 'A report run, step by step', DETAIL, [
     { scrollTop: true },
@@ -366,7 +367,7 @@ const helpdesk = guide('guide-helpdesk', 'Internal help desk: HR, IT and the off
   ['helpdesk-2-office-guide', 'The office guide, added as a document', ['frontend/src/pages/memory-new.tsx', 'frontend/src/components/memory'], [
     link('Memory'),
     press('Add memory'),
-    { fill: label('What should your agents remember?'), value: OFFICE_GUIDE },
+    { fill: { label: /What should your agents remember/ }, value: OFFICE_GUIDE },
     { fill: label('Tags'), value: 'office, wifi' },
     press('Advanced'),
     // A document in the organization's memory: what an agent with shared memory searches before it answers.
