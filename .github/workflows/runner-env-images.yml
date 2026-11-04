@@ -18,11 +18,12 @@ name: Runner env images
 # refuses a runner whose version is not the Dockerfile's RUNNER_VERSION,
 # which must equal packages/runner's (scripts/check-runner-env-images.js).
 #
-# Bumping the runner: bump RUNNER_VERSION in the Dockerfile with the
-# packages and leave settings.json alone; the release builds and pushes the
-# new images; then pin their digests in settings.json, the backend defaults
-# and image-prepull.yaml. Until then every reference stays on the last
-# pushed digest.
+# Bumping the runner (docs/releasing.md): the "Version packages" PR moves
+# RUNNER_VERSION with the packages and leaves settings.json alone; master
+# and the release tag build and push the new images; post-release.yml then
+# pins their digests in settings.json, the backend defaults and
+# image-prepull.yaml. Until then every reference stays on the last pushed
+# digest.
 
 on:
   pull_request:

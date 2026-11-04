@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "format": false,
+  "fixed": [
+    [
+      "@almyty/acp-server",
+      "@almyty/agents",
+      "@almyty/auth",
+      "@almyty/chat",
+      "@almyty/cli",
+      "@almyty/client",
+      "@almyty/credentials",
+      "@almyty/mcp-mux",
+      "@almyty/mcp-server",
+      "@almyty/models",
+      "@almyty/runner",
+      "@almyty/skills"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "development",
+  "updateInternalDependencies": "patch",
+  "bumpVersionsWithWorkspaceProtocolOnly": true,
+  "ignore": []
+}
