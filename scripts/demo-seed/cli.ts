@@ -134,3 +134,5 @@ switch (command) {
     console.error(`unknown command ${command}; see scripts/demo-seed/README.md`)
     process.exitCode = 2
 }
+// Done: a process an action started (a runner, a fake) does not keep the CLI alive.
+process.exit(process.exitCode ?? 0)

@@ -18,6 +18,8 @@ const q = (s: string) => `'${s.replace(/'/g, "''")}'`
 
 let runner: ChildProcess | undefined
 const stopRunner = () => { runner?.kill(); runner = undefined }
+// A walk that fails while the runner is up must not leave it behind.
+process.on('exit', stopRunner)
 process.on('exit', stopRunner)
 
 // ---------- what a stand-in received, laid out the way its service shows it ----------
