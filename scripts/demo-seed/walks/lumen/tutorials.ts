@@ -92,7 +92,8 @@ const founder = walk('tutorial-founder', "Tutorial: the founder's associate", []
   { fill: { label: 'Address', exact: true }, value: '{{stack.upstream}}/calendar/v3' },
   { click: button('Connect API') },
   { waitForUrl: /\/setup/, timeout: 60000 },
-  { waitFor: { text: /Found \d+ operation/ }, timeout: 120000 },
+  // The count is in once the tools are made.
+  { waitFor: { text: /Found [1-9]\d* operation/ }, timeout: 120000 },
   { shot: 'founder-05' },
   // Only the two read-only calendar permissions stay ticked.
   ...googleApp(GOOGLE_APP, /calendar\.readonly$|calendar\.events\.readonly$/),
@@ -176,22 +177,26 @@ const founder = walk('tutorial-founder', "Tutorial: the founder's associate", []
 ])
 
 // ---------- always on: a service that pushes changes ----------
-// The founder's associate wakes when Google Calendar says something changed.
+// The founder's associate wakes when Google Calendar says something changed;
+// taken once the biz-dev tutorial is done, as the published picture was.
 
 const pushWakes = {
-  id: 'tutorial-push-wakes', title: 'Always on: Google Calendar pushes its changes', profile: 'lumen', account: MAYA, after: ['tutorial-founder'],
+  id: 'tutorial-push-wakes', title: 'Always on: Google Calendar pushes its changes', profile: 'lumen', account: MAYA, after: ['tutorial-bizdev'],
   notes: 'Local demo stack with the lumen profile (scripts/demo-seed, walks/lumen), with Google Calendar served by the use-case stand-in; fictional people and companies. Not staging or production data.',
   browser: BROWSER,
   shots: { 'always-on-push-wakes': { path: 'screenshots/always-on-push-wakes.png', title: 'Always on: a service that pushes changes', sources: ['frontend/src/pages/agent-always-on.tsx', 'frontend/src/components/agents/always-on'] } },
   steps: [
     { goto: '/agents/{{agents.founder}}/always-on' },
-    { click: button('Add a service') },
-    { select: { label: 'Watch' }, option: 'When something changes in Google Calendar' },
-    { select: { label: 'Connection' }, option: 'Google Calendar' },
-    { click: button('Save and subscribe') },
+    // Once: a rerun finds the subscription there.
+    { if: { not: { visible: { testid: 'push-wake-row' } } }, then: [
+      { click: button('Add a service') },
+      { select: { label: 'Watch', exact: true }, option: 'When something changes in Google Calendar' },
+      { select: { label: 'Connection', exact: true }, option: 'Google Calendar' },
+      { click: button('Save and subscribe') },
+    ] },
     { waitFor: { testid: 'push-wake-row', hasText: 'Valid' }, timeout: 30000 },
     { click: button(/^Address and setup/) },
-    top({ text: 'When a service tells it something changed', exact: true }, 160),
+    top({ text: 'When a service tells it something changed', exact: true }, 110),
     { shot: 'always-on-push-wakes' },
   ] as Step[],
 }
@@ -240,6 +245,7 @@ const bizdev = walk('tutorial-bizdev', 'Tutorial: the biz-dev assistant', ['tuto
 ], [
   // 1. HubSpot, in three parts
   { use: 'importApi', with: { link: `${LINKS.hubspot}Companies/Rollouts/424/v3/companies.json`, name: 'HubSpot Companies', address: '{{stack.upstream}}', linkShot: 'bizdev-01' } },
+  { waitFor: { text: /Found [1-9]\d* operation/ }, timeout: 120000 },
   { shot: 'bizdev-02' },
   { click: button('Create one here') },
   { scrollTo: button('Paste an access token instead'), block: 'end' },
@@ -376,8 +382,20 @@ const ONBOARDING = '{{agents.onboarding}}'
 const lastRun = (column: string) => `SELECT ${column} FROM agent_runs WHERE "agentId" = '${ONBOARDING}' ORDER BY "createdAt" DESC LIMIT 1`
 const runWas = (status: string, what: string): Step => ({ until: { sql: lastRun('status'), is: status }, timeout: 5000, what })
 
-// It needs the model, Google Calendar, Gmail and HubSpot Contacts and Deals: the founder and biz-dev tutorials connect them.
-const onboarding = walk('tutorial-onboarding', 'Tutorial: new customer onboarding', ['tutorial-bizdev'], [
+// The onboarding tutorial starts in an organization that has only what the
+// other two connect first (the model, Google Calendar, Gmail, HubSpot
+// Contacts and Deals), and a stand-in without their deals and mail: Maya's
+// organization goes, and the stand-in starts over.
+const fresh = {
+  id: 'tutorial-onboarding-fresh', title: 'A fresh start for the onboarding tutorial', profile: 'lumen', headless: true, shots: {},
+  steps: [
+    { sql: `DELETE FROM organizations WHERE id IN (SELECT uo."organizationId" FROM user_organizations uo JOIN users u ON u.id = uo."userId" WHERE u.email = '${MAYA.email}')` },
+    { sql: `DELETE FROM users WHERE email = '${MAYA.email}'` },
+    upstream('/_admin/reset'),
+  ] as Step[],
+}
+
+const onboarding = walk('tutorial-onboarding', 'Tutorial: new customer onboarding', ['tutorial-onboarding-fresh'], [
   ['onboarding-00', 'onboarding/00-approve-kickoff.png', 'Onboarding agent: the kickoff call waiting for approval', APPROVALS],
   ['onboarding-01', 'onboarding/01-drive-link.png', 'Google Drive description link', ['frontend/src/pages/api-new-description.tsx', 'frontend/src/components/apis']],
   ['onboarding-02', 'onboarding/02-drive-sign-in.png', 'Google Drive sign-in: drive.file and drive.readonly', SETUP],
@@ -395,6 +413,19 @@ const onboarding = walk('tutorial-onboarding', 'Tutorial: new customer onboardin
   ['onboarding-14', 'onboarding/14-runs.png', 'Onboarding agent: its runs', AGENT],
   ['onboarding-15', 'onboarding/15-deal-log.png', 'The onboarding log on the CRM deal', ['backend/src/modules/tools/executors/tool-http.executor.ts'], '/agents/:id/runs/:id'],
 ], [
+  // What the other two tutorials connect first, without pictures.
+  { use: 'connectOpenAI', with: { key: MODEL_KEY } },
+  { use: 'importApi', with: { link: LINKS.calendar, name: 'Google Calendar', address: '{{stack.upstream}}/calendar/v3' } },
+  { click: button('Create one here') },
+  ...pastedToken('Google account (Maya)', 'local-test-google-token'),
+  { use: 'importApi', with: { link: LINKS.gmail, name: 'Gmail', address: '{{stack.upstream}}/' } },
+  { use: 'pickSignIn', with: { name: /Google account \(Maya\)/ } },
+  hubspot('Contacts/Rollouts/424/v3/contacts.json', 'HubSpot Contacts'),
+  { click: button('Create one here') },
+  ...pastedToken('HubSpot private app', HUBSPOT_TOKEN, /Access token|Key|token/),
+  hubspot('Deals/Rollouts/424/v3/deals.json', 'HubSpot Deals'),
+  { use: 'pickSignIn', with: { name: /HubSpot private app/ } },
+
   // 1. Google Drive, for the folder each customer shares their files in
   { goto: '/apis/new/openapi' },
   { fill: { label: 'Link to the description' }, value: LINKS.drive },
@@ -495,5 +526,5 @@ const onboarding = walk('tutorial-onboarding', 'Tutorial: new customer onboardin
   { render: 'deal', with: { name: '{{deal.dealname}}', stage: '{{deal.dealstage}}', description: '{{deal.description}}', note: "The deal's description exactly as the agent wrote it through the HubSpot API (local demo; HubSpot itself was not used)." }, shot: 'onboarding-15' },
 ])
 
-// The push wake runs last, so nothing it subscribes shows in the other tutorials' pictures.
-export const tutorials = [founder, bizdev, onboarding, pushWakes]
+// In this order on one stack: the onboarding tutorial starts over, so it comes last.
+export const tutorials = [founder, bizdev, pushWakes, fresh, onboarding]

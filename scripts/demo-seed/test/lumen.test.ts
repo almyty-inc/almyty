@@ -82,6 +82,9 @@ test('the stand-in serves Maya or Elena, wins a deal, and keeps what the API sen
   const s = await maya.call('/_admin/state')
   assert.equal(s.deals[0].properties.dealstage, 'closedwon')
   assert.equal(s.outbox[0].url, '/api.resend.com/emails')
+  await maya.call('/_admin/reset', { method: 'POST' })
+  const after = await maya.call('/_admin/state')
+  assert.deepEqual([after.deals.length, after.outbox.length], [0, 0])
   const elena = await start('elena')
   t.after(elena.close)
   const cals = (await elena.call('/calendar/v3/users/me/calendarList')).items.map((c: any) => c.summary)
@@ -100,7 +103,7 @@ test('the scripted model streams 60-character pieces under its own completion id
 
 test('the lumen walks load, and the airline writes tomorrow as a date', () => {
   const loaded = load([lumen])
-  assert.deepEqual(loaded.walks.map((w) => w.id), ['tutorial-founder', 'tutorial-bizdev', 'tutorial-onboarding', 'tutorial-push-wakes', 'tutorial-personal'])
+  assert.deepEqual(loaded.walks.map((w) => w.id), ['tutorial-founder', 'tutorial-bizdev', 'tutorial-push-wakes', 'tutorial-onboarding-fresh', 'tutorial-onboarding', 'tutorial-personal'])
   assert.equal(loaded.walks.reduce((n, w) => n + Object.keys(w.shots).length, 0), 76)
   assert.match(tomorrow(Date.UTC(2026, 10, 4)), /^Thursday 5 November$/)
 })

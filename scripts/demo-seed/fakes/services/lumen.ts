@@ -15,6 +15,7 @@
 //   POST /_admin/win?company=  the company's deal is marked won (onboarding tutorial)
 //   POST /_admin/upload        the customer's files land in their shared Drive folder
 //   POST /_admin/move?id=&inMinutes=  an event moves to start soon
+//   POST /_admin/reset         everything back to how it started (a walk that needs a fresh start)
 import { any, get, json, html, noContent, post, type Route, type Service } from '../server.ts'
 import { vendor } from '../openai.ts'
 import { outbox } from '../outbox.ts'
@@ -27,6 +28,23 @@ const at = (dayOffset: number, hh: number, mm = 0): string => {
 }
 
 export function lumenService(persona: string = process.env.USECASE_PERSONA || 'maya'): Service {
+  let routes = build(persona)
+  const reset = post('/_admin/reset', () => { routes = build(persona); return json({ reset: true }) })
+  // Each request goes to the routes of the current state, in order, as the server would.
+  const dispatch = any(/./, async (req, _m, res) => {
+    for (const r of [reset, ...routes]) {
+      if (r.method && ![r.method].flat().includes(req.method)) continue
+      const m = typeof r.path === 'string' ? (r.path === req.path ? Object.assign([req.path], { index: 0, input: req.path }) as RegExpMatchArray : null) : req.path.match(r.path)
+      if (!m) continue
+      const answer = await r.handler(req, m, res)
+      if (answer) return answer
+    }
+    return undefined
+  })
+  return { name: 'lumen', routes: [dispatch] }
+}
+
+function build(persona: string): Route[] {
   // ---------------- calendar ----------------
   const ME = persona === 'elena' ? { email: 'elena.park@example.com', name: 'Elena Park' } : { email: 'maya@lumenlabs.example', name: 'Maya Chen' }
   const calendars: any[] = [
@@ -342,7 +360,7 @@ export function lumenService(persona: string = process.env.USECASE_PERSONA || 'm
     }),
     any(/\/drive\/v3\/files$/, (req) => json({ kind: 'drive#fileList', incompleteSearch: false, files: driveQuery(files, req.query.get('q')).map(({ parents, ...f }) => ({ ...f, parents })) })),
   ]
-  return { name: 'lumen', routes }
+  return routes
 }
 
 // ---------------- helpers ----------------
