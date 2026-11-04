@@ -16,8 +16,8 @@ import type { AgentRun } from '../../entities/agent-run.entity';
  * `metadata_changed` and `step_committed`. Markers (`status_changed`,
  * `approval_requested`, `approval_decided`, `approval_resolved`,
  * `input_received`, `waiting_input`, `compaction`, `delivery_claimed`,
- * `run_completed`, `run_failed`) say what happened in the words a reader
- * or a stream wants and change nothing in the fold.
+ * `lease_taken_over`, `run_completed`, `run_failed`) say what happened in
+ * the words a reader or a stream wants and change nothing in the fold.
  */
 export const RUN_EVENT_TYPES = [
   'run_started',
@@ -37,6 +37,7 @@ export const RUN_EVENT_TYPES = [
   'waiting_input',
   'status_changed',
   'delivery_claimed',
+  'lease_taken_over',
   'run_completed',
   'run_failed',
   'step_committed',

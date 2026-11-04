@@ -1,0 +1,56 @@
+name: Version packages
+
+# Keeps the "Version packages" PR open on development while changesets are
+# waiting (docs/releasing.md). Each push to development that leaves files in
+# .changeset/ rebuilds the PR: all twelve @almyty/* packages move to the
+# next version together (the `fixed` group in .changeset/config.json), each
+# package gets its CHANGELOG.md entry, every package-lock.json and the
+# runner-env Dockerfile's RUNNER_VERSION follow (`npm run version-packages`).
+# Merging it is the version bump. Nothing is published here: the release
+# tag publishes (publish-packages.yml).
+#
+# The PR is opened with RELEASE_PR_TOKEN when that secret is set (a
+# fine-grained token or GitHub App token with contents and pull-requests
+# write). A PR opened with the default GITHUB_TOKEN does not start CI; close
+# and reopen it to run the checks.
+
+on:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: version-packages
+  cancel-in-progress: true
+
+jobs:
+  version-pr:
+    name: Open or update the Version packages PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install Changesets
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Open or update the PR
+        uses: changesets/action@v2
+        with:
+          version-script: npm run version-packages
+          commit-message: Version packages
+          pr-title: Version packages
+          create-github-releases: false
+          github-token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
