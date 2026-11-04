@@ -498,7 +498,7 @@ export class AutonomousStrategyRunner {
       childRunId = child.id;
       // Every step either advances the run or ends it, and the child's own
       // limits end it at the latest by maxSteps; the bound is a backstop.
-      let result: 'continue' | 'done' | 'waiting' = 'continue';
+      let result: 'continue' | 'done' | 'waiting' | 'held' = 'continue';
       for (let i = 0; result === 'continue' && i <= CHILD_RUN_MAX_STEPS + 1; i++) {
         result = await this.s.processStep(child.id);
       }

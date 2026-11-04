@@ -118,7 +118,7 @@ Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agent
 
 **Debugging a run from the terminal.** `almyty agents inspect <agent> <runId>` shows an autonomous run step by step — which model answered each step, what it cost, how long it took. `almyty agents trace <agent> <execId>` does the same hop by hop for a workflow execution, and flags a hop where the provider served a different model from the one requested. Both show what the router passed over and why, and a hop whose cost the provider did not report reads `cost opaque` rather than `$0`.
 
-**Versioning.** The CLI packages share one version line and release together as a suite (`@almyty/* 1.x`). That is separate from the platform's own versioning, which is the Docker images and `v0.x` git tags. The two numbers moving independently is expected; newer CLI commands need the corresponding server features, so keep both current.
+**Versioning.** The CLI packages share one version line and release together as a suite (`@almyty/* 1.x`). That is separate from the platform's own versioning, which is the Docker images and `v0.x` git tags. The two numbers moving independently is expected; newer CLI commands need the corresponding server features, so keep both current. How the packages are released: [docs/releasing.md](docs/releasing.md).
 
 ### Skills
 

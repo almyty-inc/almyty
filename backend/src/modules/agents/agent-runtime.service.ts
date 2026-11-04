@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Workspace } from '../../entities/workspace.entity';
 import { releaseRunWorkspaces } from '../workspace/run-end-release';
 import { notDone, writeRun } from './run-event-writer';
+import type { StepOutcome } from './run-lease';
 import type { RunEventDraft } from './run-events';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
@@ -464,6 +465,9 @@ export class AgentRuntimeService implements OnModuleInit {
       // default 0 -- which is what made RECURSION_DEPTH_EXCEEDED dead code.
       recursionDepth,
       toolCallCount: 0,
+      // Due at once: a worker claims it by lease (run-lease.ts), and the
+      // wake sweep nudges it should its first job never run.
+      nextWakeAt: new Date(),
       ...(options?.metadata ? { metadata: { ...options.metadata } } : {}),
     });
 
@@ -482,7 +486,7 @@ export class AgentRuntimeService implements OnModuleInit {
 
     // Enqueue first step, unless the caller drives the run itself.
     if (!options?.inline) {
-      await this.runtimeQueue.add('next-step', { runId: savedRun.id, seq: 0 }, {
+      await this.runtimeQueue.add('next-step', { runId: savedRun.id, seq: 0, step: 0 }, {
         jobId: `step:${savedRun.id}:0`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
@@ -504,8 +508,8 @@ export class AgentRuntimeService implements OnModuleInit {
    * Process one step of a run (called by BullMQ processor). Delegates
    * to AgentStepProcessor — see that file for the full inner loop.
    */
-  async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
-    return this.processor.processStep(runId);
+  async processStep(runId: string, options: { step?: number } = {}): Promise<StepOutcome> {
+    return this.processor.processStep(runId, options);
   }
 
   // ---------------------------------------------------------------------------
@@ -650,7 +654,7 @@ export class AgentRuntimeService implements OnModuleInit {
     // job's id sits outside the sequential range used before the pause,
     // and a duplicate resume within the same tick still collapses to one.
     const resumeSeq = Date.now();
-    await this.runtimeQueue.add('next-step', { runId, seq: resumeSeq }, {
+    await this.runtimeQueue.add('next-step', { runId, seq: resumeSeq, step: run.currentStep }, {
       jobId: `step:${runId}:${resumeSeq}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
@@ -794,7 +798,7 @@ export class AgentRuntimeService implements OnModuleInit {
       // out half an hour later with a misleading "worker likely
       // terminated".
       const resumeSeq = Date.now();
-      await this.runtimeQueue.add('next-step', { runId: run.id, seq: resumeSeq }, {
+      await this.runtimeQueue.add('next-step', { runId: run.id, seq: resumeSeq, step: run.currentStep }, {
         jobId: `step:${run.id}:${resumeSeq}`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },

@@ -158,8 +158,10 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
     large: { cpu: '4', memory: '8Gi', ephemeralStorage: '16Gi', volumeGi: 40 },
   },
   defaultResourceClass: 'small',
-  // The images CI builds and pushes (images/runner-env), tagged with the
-  // runner version they carry and pinned by the pushed digest;
+  // The images CI has pushed (images/runner-env), pinned by tag and digest.
+  // They may carry an older runner than the Dockerfile: after a runner bump
+  // they stay on the last pushed images until the release has built the new
+  // ones, then one follow-up pins the new digests (docs/hosted-runners.md).
   // scripts/check-runner-env-images.js keeps these equal to images/runner-env/settings.json.
   images: {
     standard: 'almyty/runner-env:standard-1.5.7@sha256:f1dacb5dcb49a64cbf2503e71f78b586e4e9b7c8d3ddc8bfab5a654b1b0339c2',

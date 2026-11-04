@@ -21,7 +21,8 @@ import { STEP_PAYLOAD_CAP } from '../persist-cap';
 describe('AgentStepProcessor query and serialization shape', () => {
   const makeProcessor = (overrides: any = {}) => {
     const runRepository: any = {
-      findOne: jest.fn().mockResolvedValue(null),
+      // The lease claim locks the row (a run nobody holds); the step's own load finds nothing.
+      findOne: jest.fn(async (o: any) => (o?.lock ? Object.assign(new AgentRun(), { id: 'run-1', status: AgentRunStatus.RUNNING, currentStep: 0, headSeq: 0, leaseOwner: null }) : null)),
       find: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
@@ -69,8 +70,16 @@ describe('AgentStepProcessor query and serialization shape', () => {
 
     await processor.processStep('run-1');
 
-    expect(runRepository.findOne).toHaveBeenCalledTimes(1);
-    const options = runRepository.findOne.mock.calls[0][0];
+    // The run is loaded once for the step; the other reads are the lease's
+    // claim and release (run-lease.ts), which lock the row and read only the
+    // lease columns, never the run's steps or memory. `takeovers` is one: the
+    // claim adds one to the locked row's count to cap takeovers of a step.
+    const loads = runRepository.findOne.mock.calls.filter(([o]: any[]) => !o.lock);
+    expect(loads).toHaveLength(1);
+    const leaseReads = runRepository.findOne.mock.calls.filter(([o]: any[]) => o.lock);
+    expect(leaseReads).toHaveLength(2);
+    for (const [o] of leaseReads) expect(Object.keys(o.select).sort()).toEqual(['attempt', 'currentStep', 'headSeq', 'id', 'leaseExpiresAt', 'leaseOwner', 'nextWakeAt', 'status', 'takeovers']);
+    const options = loads[0][0];
     expect(options.relations).toEqual({ agent: true });
     expect(options.select.agent).toBeDefined();
     expect(options.select.agent.pipeline).toBeUndefined();

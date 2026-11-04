@@ -1,9 +1,9 @@
 # Durable agent runs
 
 Status: accepted. Being built step by step (see Rollout). Done: step 1,
-the event log written alongside the run row, and step 2, the projection
+the event log written alongside the run row, step 2, the projection
 checked against the row on every write and live run views replayed from
-the log.
+the log, and step 3, run leases.
 
 ## In plain words
 
@@ -22,7 +22,9 @@ from the last event, without doing a paid call or a side effect twice.
 
 - **A dead worker strands its run.** The run sits `running` until the
   reaper times it out, and the step's work is lost. There is no lease to
-  expire and no record of how far the step got.
+  expire and no record of how far the step got. (Step 3: the lease expires
+  and another worker takes the run over, on the log; the step starts over
+  until step 4 resumes it.)
 - **Retries can repeat side effects.** The step CAS (`commitStep`, guarded
   on `currentStep` and a non-terminal status) stops a duplicate commit,
   but not a duplicate tool call made before the commit: a retried job
@@ -34,7 +36,9 @@ from the last event, without doing a paid call or a side effect twice.
   subscribed now. A viewer that reconnects gets the current row and nothing
   in between. (Closed by step 2: a viewer resumes from the last seq it saw.)
 - **Waits are queue delays.** A sleeping run or one waiting on a machine
-  is a delayed job; if the queue loses it, nothing wakes the run.
+  is a delayed job; if the queue loses it, nothing wakes the run. (Closed
+  by step 3: the wait is `nextWakeAt` on the row, and the wake sweep
+  nudges a run whose nudge was lost.)
 
 ## Spec 1: the run event log
 
@@ -82,6 +86,7 @@ Event types (`backend/src/modules/agents/run-events.ts`):
 | `approval_resolved` | A held call or change set taken off the run once its decision took effect. |
 | `input_received` | A person's input resumed a waiting run (the message by id; its words stay in the conversation). |
 | `delivery_claimed` | A finished run's result claimed for posting (schedule or always-on), once. |
+| `lease_taken_over` | A worker claimed the run after the lease of the one processing it expired (step 3): the new `attempt` and when the old lease lapsed. |
 | `waiting_input`, `status_changed`, `run_completed`, `run_failed` | Status transitions. |
 | `step_committed` | Last event of every write: status, step, cost, tokens, tool calls, time, and output and error when they changed. |
 
@@ -118,7 +123,8 @@ in step 2).
    staging and log any difference; serve SSE replay from the log. *Done*
    (see Step 2 as built, below).
 3. **Leases.** Add the lease columns, claim runs by lease, move sleeps and
-   machine waits to `nextWakeAt`. The queue only nudges.
+   machine waits to `nextWakeAt`. The queue only nudges. *Done* (see Step 3
+   as built, below).
 4. **Resume and idempotency keys.** Resume from the log after a lease
    expires; tool calls carry their key.
 5. **The log is the source of truth.** `steps` and `workingMemory` on the
@@ -308,6 +314,107 @@ stream sends each runtime event whole (`{ type, data, timestamp, pos }`),
 so every mapping reads the event's own fields from under `data`
 (`runEventData`): `tool.started` and `tool.result` reach the editor as a
 tool call and its update, and `run.failed` ends the turn with its error.
+
+## Step 3 as built: leases
+
+**The columns.** `agent_runs` has `nextWakeAt`, `leaseOwner`,
+`leaseExpiresAt` and `attempt` (migration `AgentRunLeases1791000900000`),
+with a partial index on `nextWakeAt` where it is set. They say who holds
+the run and when it next needs a worker, not what the run is, so they are
+not in the projection and a write of them alone appends nothing to the
+log.
+
+**When a run is due.** `writeRun` sets `nextWakeAt` from the status a
+write leaves: `pending` or `running` is due now, `sleeping` keeps the wake
+time its step wrote, anything else (waiting on a person, finished) has
+none. Every writer goes through it, so a run resumed by input or an
+approval is due even if the nudge its writer queued is lost. A new run is
+due at creation. The `wait` tool, and with it a machine wait (a hosted
+workspace still starting), no longer queues a delayed job: it sets
+`nextWakeAt` to the wake time and the commit writes it.
+
+**The claim.** `AgentStepProcessor.processStep` claims the run before it
+does anything (`claimRun`, `run-lease.ts`): one `writeRun` under the row
+lock whose `where` is the doc's condition, status `pending`, `running` or
+`sleeping`, `nextWakeAt` passed (or not set), the lease free or expired,
+and, when the queue job names a step, the run still at it. The lease
+token is the worker (host and pid) plus a fresh id per claim, so two
+claims of one process are told apart too. A claim reads only the lease
+columns, writes `leaseOwner` and `leaseExpiresAt`, appends nothing and
+leaves `updatedAt` alone (the reaper reads `updatedAt` as progress). Not
+claimed, the step does nothing: `done` for a run that is gone or
+finished, as before, and a new outcome, `held`, for a run another worker
+holds, that is not due, or that is past the job's step. A woken sleeping
+run is `running` again from the step that claims it.
+
+**Renewal and release.** While the step runs the lease is renewed every
+`RUN_LEASE_RENEW_MS` (`holdLease`), and let go when the step returns or
+throws, before the next step is queued. A renewal that finds the lease
+gone marks it lost and stops; a renewal that fails is retried at the next
+tick and the lease holds until it expires.
+
+**Fencing.** Every write the step makes of the run it holds names the
+lease token in its `where` (`heldBy(run)`): the step commit, the cost of
+a step abandoned because the run was cancelled, the memory step after
+completion, and the collaboration step's write. A worker whose lease
+expired and was taken over writes nothing: its commit matches no row,
+whatever it did meanwhile. A lease that expired and that nobody took over
+still lets its holder commit; there is no one to conflict with. A guard
+spec (`run-writes-are-logged.spec.ts`) fails on a write of the leased run
+in those files without the fence. Writers that do not hold the run
+(cancel, input, approvals, the reaper) are not fenced; they take the row
+lock as before, and the commit's status guard keeps a cancel final.
+
+**Takeover.** A claim that finds the lease expired takes the run over:
+`attempt` + 1, and `lease_taken_over` on the log (`attempt`, `lapsedAt`;
+the worker's identity is not on the log). In this step the taken-over
+step starts over; resuming from the log is step 4.
+
+**The takeover cap.** `takeovers` (migration
+`AgentRunTakeovers1791001000000`, a lease column like `attempt`, so not in
+the projection) counts the takeovers of the step the run is at: + 1 with
+every takeover, back to 0 when a step commits (the step commit and the
+collaboration step's write set it). `attempt` keeps counting every
+takeover of the run. The takeover that brings `takeovers` to
+`RUN_MAX_TAKEOVERS` (default 3) does not start the step again: in the same
+`writeRun`, fenced on the lapsed lease like any takeover, it fails the run
+with "This step stopped its worker 3 times in a row, so the run was
+stopped." and clears the lease. The log has `lease_taken_over`, then the
+failed-run events any failing write appends (`status_changed`,
+`run_failed` with the error, `step_committed`). The claim comes back
+`stopped`; the step processor sends `run.failed` with the error and
+reason code `TAKEOVER_LIMIT` to live viewers and processes nothing.
+Workers racing for that takeover find the run finished (`done`).
+
+**The queue only nudges.** A `next-step` job names the step it was queued
+for: the continuation (read after the commit), a sleep's wake (queued by
+the step processor for `nextWakeAt` once the commit has landed), input,
+an approval resuming the run, the first step. A job for a step already
+done claims nothing, so a duplicate nudge never starts a second chain of
+jobs. `RunWakeSweepService` runs in every backend process every
+`RUN_WAKE_SWEEP_INTERVAL_MS` and nudges up to 200 runs whose `nextWakeAt`
+is more than `RUN_WAKE_GRACE_MS` past and that no live lease holds: a lost
+nudge, an overslept wake, or a dead worker's expired lease. Its job id is
+the run and its due time, removed once run, so pods sweeping together
+queue one job and a later pass can queue another.
+
+**Settings.** Read from the environment each time, with defaults:
+
+| Variable | Default | What |
+|---|---|---|
+| `RUN_LEASE_MS` | 60000 | How long a claim or a renewal holds a run. |
+| `RUN_LEASE_RENEW_MS` | a third of the lease | How often the holder renews (at most half the lease). |
+| `RUN_WAKE_SWEEP_INTERVAL_MS` | 15000 | How often the wake sweep runs. |
+| `RUN_WAKE_GRACE_MS` | 30000 | How far past due a run must be before the sweep nudges it. |
+| `RUN_MAX_TAKEOVERS` | 3 | The takeover of one step, with no commit between, that fails the run (a whole number, at least 1). |
+
+A worker that dies mid-step is therefore taken over after at most the
+lease, the grace and one sweep interval (about 105 s by default) instead
+of the reaper's 30 minutes. The reaper still ends a run that makes no
+progress for `AGENT_RUN_STALE_MS`. A step that takes its worker down every
+time ends the run at its third takeover (by default) instead of being
+taken over until its own limits (duration, steps, cost) or the reaper end
+it.
 
 ## The worker-kill test
 

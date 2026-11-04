@@ -21,6 +21,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { OrganizationsService } from './organizations.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { CreateTeamDto } from './dto/create-team.dto';
+import { AddTeamMemberDto, UpdateTeamMemberRoleDto } from './dto/team-member.dto';
+import { TeamRole } from '../../entities/user-team.entity';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { OrganizationRole } from '../../entities/user-organization.entity';
@@ -278,19 +280,20 @@ export class OrganizationsController {
   async addMemberToTeam(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('teamId', ParseUUIDPipe) teamId: string,
-    @Body() memberData: { userId: string; role?: string },
+    @Body() memberData: AddTeamMemberDto,
     @Request() req: any
   ) {
     // 'member' permitted at guard level so team_admin can add members
     // to their own team; service re-checks via assertCanManageTeam.
+    const role = memberData.role ?? TeamRole.MEMBER;
     const data = await this.organizationsService.addTeamMember(
       organizationId,
       teamId,
       memberData.userId,
-      undefined,
+      role,
       req.user.id,
     );
-    this.audit(req, organizationId, AuditAction.TEAM_MEMBER_ADD, AuditResource.TEAM, teamId, { userId: memberData.userId });
+    this.audit(req, organizationId, AuditAction.TEAM_MEMBER_ADD, AuditResource.TEAM, teamId, { userId: memberData.userId, role });
     return { success: true, data, message: 'Member added to team successfully' };
   }
 
@@ -301,7 +304,7 @@ export class OrganizationsController {
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('teamId', ParseUUIDPipe) teamId: string,
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Body() roleData: { role: string },
+    @Body() roleData: UpdateTeamMemberRoleDto,
     @Request() req: any
   ) {
     const data = await this.organizationsService.updateTeamMemberRole(

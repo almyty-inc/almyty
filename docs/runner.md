@@ -230,7 +230,8 @@ runner tool".
   `coding.*` surface, relaying a coding-CLI session's input and output between
   the agent and the runner. Output reaches a viewer on any API pod: each event
   is appended to a per-session Redis stream and published to every pod, a
-  viewer joining late gets that backlog first, and a reconnect resumes from
+  viewer joining late gets that backlog first and then live output in the
+  stream's order, each event once, and a reconnect resumes from
   `Last-Event-ID` (backlog size and lifetime: `CODING_RELAY_BACKLOG_MAXLEN`,
   default 2000, and `CODING_RELAY_BACKLOG_TTL_S`, default 24 hours). Without
   Redis the relay is pod-local.

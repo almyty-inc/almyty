@@ -274,6 +274,12 @@ function applyColumn(row: any, key: string, value: any): void {
     return;
   }
   const expr = String(value()).trim();
+  // A column set to itself (`"updatedAt"`, to keep what TypeORM would stamp): unchanged.
+  const same = /^"?([A-Za-z_][A-Za-z0-9_]*)"?$/.exec(expr);
+  if (same) {
+    row[key] = row[same[1]];
+    return;
+  }
   const m = /^"?([A-Za-z_][A-Za-z0-9_]*)"?\s*([+-])\s*(\d+(?:\.\d+)?)$/.exec(expr);
   if (!m) throw new UnmodelledQueryError(`the SQL expression "${expr}" is not modelled`);
   const [, column, sign, operand] = m;

@@ -212,6 +212,9 @@ describe('step processor delegates a collaboration orchestrator', () => {
       executionAccess: membershipFixture().executionAccess,
       logger: { log: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() },
     };
+    // The lease claim and its release write through a transaction (run-lease.ts).
+    s.runRepository.update = jest.fn(async () => ({ affected: 1 }));
+    s.runRepository.manager = { transaction: async (work: any) => work({ getRepository: () => s.runRepository }) };
     const processor = new AgentStepProcessor(s, {} as any, {} as any, {} as any);
     // Past the gate the processor would try to load tools; stop it there.
     jest.spyOn(processor as any, 'resolveTools').mockRejectedValue(new Error('past the gate'));

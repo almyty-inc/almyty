@@ -61,6 +61,22 @@ Include that package's `package.json` and command implementation in `--sources`.
 Normalize local home paths before rendering and state the normalization in
 `--notes`. Do not render help from source and call it a published-binary capture.
 
+`scripts/capture-cli-help.js` does this for the six CLI help images in
+`screenshots/cli/`: it installs each package at its `package.json` version from
+npm, runs `<bin> --help` with `NO_COLOR=1` and `HOME` set to a placeholder that
+is shown as `~`, renders `$ <bin> --help` and the output with
+`freeze --window --language text`, and registers the result:
+
+```sh
+node scripts/capture-cli-help.js --from npm --register   # recapture all six
+node scripts/capture-cli-help.js --from npm --verify     # same bytes as committed?
+node scripts/capture-cli-help.js --from repo --text      # preview a local build
+```
+
+`--verify` fails unless every render matches the committed image byte for byte.
+`--from repo` runs the built binaries in `packages/*/dist` and only previews;
+it refuses `--register`.
+
 An image of a file in this repository, such as the Compose file, is registered
 with `--file docker-compose.yml --command 'freeze ...'` and must list that file in
 `--sources`, so editing the file marks the image as drifted.

@@ -713,6 +713,9 @@ export class OrganizationsService {
     role: TeamRole = TeamRole.MEMBER,
     actingUserId?: string,
   ): Promise<void> {
+    if (!Object.values(TeamRole).includes(role)) {
+      throw new BadRequestException('Invalid team role. Must be "member" or "lead"');
+    }
     await this.assertTeamInOrg(teamId, organizationId);
 
     // A team membership for somebody who is not in the organization is

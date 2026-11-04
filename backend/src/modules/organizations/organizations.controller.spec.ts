@@ -4,6 +4,7 @@ import { OrganizationsService } from './organizations.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { OrganizationRole } from '../../entities/user-organization.entity';
+import { TeamRole } from '../../entities/user-team.entity';
 
 describe('OrganizationsController', () => {
   let controller: OrganizationsController;
@@ -236,7 +237,7 @@ describe('OrganizationsController', () => {
   describe('addMemberToTeam', () => {
     it('should add member to team', async () => {
       const mockRequest = { user: { id: 'user-1' } };
-      const memberData = { userId: 'user-2', role: 'member' };
+      const memberData = { userId: 'user-2', role: TeamRole.LEAD };
       const mockTeamMember = { id: 'team-member-1', userId: 'user-2' };
 
       organizationsService.addTeamMember.mockResolvedValue(mockTeamMember as any);
@@ -244,22 +245,22 @@ describe('OrganizationsController', () => {
       const result = await controller.addMemberToTeam('org-1', 'team-1', memberData, mockRequest);
 
       expect(result).toEqual({ success: true, data: mockTeamMember, message: 'Member added to team successfully' });
-      expect(organizationsService.addTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', undefined, 'user-1');
+      expect(organizationsService.addTeamMember).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', 'lead', 'user-1');
     });
   });
 
   describe('updateTeamMemberRole', () => {
     it('should update team member role', async () => {
       const mockRequest = { user: { id: 'user-1' } };
-      const roleData = { role: 'admin' };
-      const mockTeamMember = { id: 'team-member-1', role: 'admin' };
+      const roleData = { role: TeamRole.LEAD };
+      const mockTeamMember = { id: 'team-member-1', role: 'lead' };
 
       organizationsService.updateTeamMemberRole.mockResolvedValue(mockTeamMember as any);
 
       const result = await controller.updateTeamMemberRole('org-1', 'team-1', 'user-2', roleData, mockRequest);
 
       expect(result).toEqual({ success: true, data: mockTeamMember, message: 'Team member role updated successfully' });
-      expect(organizationsService.updateTeamMemberRole).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', 'admin', 'user-1');
+      expect(organizationsService.updateTeamMemberRole).toHaveBeenCalledWith('org-1', 'team-1', 'user-2', 'lead', 'user-1');
     });
   });
 
