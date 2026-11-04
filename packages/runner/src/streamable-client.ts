@@ -112,7 +112,7 @@ export class StreamableClient extends EventEmitter {
     let res = await post();
     if (res.status === 404) {
       const text = await safeText(res);
-      if (!this.fellBackFrom404(text)) throw new Error(`backend POST failed: ${res.status} ${text}`);
+      if (!this.fellBackFrom404(text)) throw new BackendPostError(res.status, text);
       res = await post();
     }
     const sid = res.headers.get('mcp-session-id') ?? res.headers.get('Mcp-Session-Id');
@@ -121,7 +121,7 @@ export class StreamableClient extends EventEmitter {
     if (res.status === 202) return null;
     if (!res.ok) {
       const text = await safeText(res);
-      throw new Error(`backend POST failed: ${res.status} ${text}`);
+      throw new BackendPostError(res.status, text);
     }
     const json = await res.json();
     if (isWorkerEnvelope(json)) return json;
@@ -300,6 +300,13 @@ export class StreamableClient extends EventEmitter {
   }
 }
 
+/** A POST the backend answered with an error; `status` tells a sender whether to retry. */
+export class BackendPostError extends Error {
+  constructor(readonly status: number, body: string) {
+    super(`backend POST failed: ${status} ${body}`);
+    this.name = 'BackendPostError';
+  }
+}
 async function safeText(res: Response): Promise<string> {
   try { return await res.text(); } catch { return ''; }
 }
