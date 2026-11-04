@@ -64,6 +64,7 @@ import { AgentIdentityService } from './agent-identity';
 import { AgentIdentityReachController, AgentIdentityReachService } from './agent-identity-reach';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentRunReaperService } from './agent-run-reaper.service';
+import { RunWakeSweepService } from './run-wake-sweep.service';
 import { AgentExecutionReaperService } from './agent-execution-reaper.service';
 import { WorkflowApprovalResumeService } from './workflow-approval-resume.service';
 import { AgentValidationHelper } from './agent-validation.helper';
@@ -151,7 +152,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentApiAccessService, AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
+  providers: [AgentApiAccessService, AgentReadinessService, AgentRunReaperService, RunWakeSweepService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentIdentityService, AgentIdentityReachService,
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, PushWakesService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
     // Carries a workflow run on once the change sets its Code steps wait on are decided.

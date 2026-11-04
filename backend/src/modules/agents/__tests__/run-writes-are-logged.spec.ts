@@ -186,3 +186,48 @@ describe('no run write around the event log', () => {
     ]));
   });
 });
+
+/**
+ * Durable runs step 3: a step's writes of the run it holds are fenced on
+ * its lease (run-lease.ts `heldBy`), so a worker whose lease was taken
+ * over cannot write. Every write of `run.id` in the step processor and the
+ * collaboration step has to carry the fence; a new one without it would
+ * let a stale worker write over the one that took the run over.
+ */
+describe('writes under a lease are fenced', () => {
+  const SRC = join(__dirname, '..', '..', '..');
+  const LEASED = ['modules/agents/agent-step-processor.ts', 'modules/agents/agent-collaboration.helper.ts'];
+
+  /** The first object literal at or after `from`: a write's where. */
+  const objectAt = (source: string, from: number): string => {
+    const start = source.indexOf('{', from);
+    let depth = 0;
+    for (let i = start; i < source.length; i++) {
+      if (source[i] === '{') depth++;
+      if (source[i] === '}' && --depth === 0) return source.slice(start, i + 1);
+    }
+    return '';
+  };
+
+  it('every write of the leased run names heldBy(run) in its where', () => {
+    const unfenced: string[] = [];
+    let seen = 0;
+    for (const rel of LEASED) {
+      const source = readFileSync(join(SRC, rel), 'utf8');
+      const call = /\b(writeRun|this\.persistWithEvents)\(/g;
+      for (let m = call.exec(source); m; m = call.exec(source)) {
+        const after = source.slice(m.index + m[0].length, m.index + m[0].length + 60);
+        // The one generic write, inside persistWithEvents, takes its caller's guard.
+        if (/^this\.s\.runRepository, guard,/.test(after)) continue;
+        const where = objectAt(source, m.index);
+        // A write of another run (a race's losers) is not the one held.
+        if (!/\bid: run\.id\b/.test(where)) continue;
+        seen++;
+        if (!where.includes('...heldBy(run)')) unfenced.push(`${rel}: ${where.replace(/\s+/g, ' ').slice(0, 100)}`);
+      }
+    }
+    expect(unfenced).toEqual([]);
+    // The commit, the cost of an abandoned step, the memory step after completion, the collaboration step.
+    expect(seen).toBeGreaterThanOrEqual(4);
+  });
+});

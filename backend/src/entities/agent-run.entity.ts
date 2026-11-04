@@ -31,6 +31,7 @@ export enum AgentMode {
 @Index(['status'])
 @Index('IDX_agent_runs_conversationId', ['conversationId'])
 @Index('IDX_agent_runs_channelId_updatedAt', ['channelId', 'updatedAt'], { where: '"channelId" IS NOT NULL' })
+@Index('IDX_agent_runs_nextWakeAt', ['nextWakeAt'], { where: '"nextWakeAt" IS NOT NULL' })
 export class AgentRun {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -152,6 +153,33 @@ export class AgentRun {
    */
   @Column({ type: 'int', default: 0 })
   headSeq: number;
+
+  /**
+   * Durable runs step 3, leases (docs/design/durable-runs.md,
+   * run-lease.ts). When the run next needs a worker: now for a run that
+   * is going, the wake time of a sleep or a machine wait, null for a run
+   * waiting on a person or finished. Set by writeRun from the status it
+   * writes; the wake sweep nudges a run whose time has passed and that no
+   * worker holds.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  nextWakeAt: Date | null;
+
+  /**
+   * The lease a worker holds the run by while it processes a step: a token
+   * unique to that claim (worker and claim), and when it lapses unless
+   * renewed. The step's writes are fenced on the token, so a worker whose
+   * lease was taken over cannot write.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  leaseOwner: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  leaseExpiresAt: Date | null;
+
+  /** How many times the run was taken over from a worker whose lease lapsed. */
+  @Column({ type: 'int', default: 0 })
+  attempt: number;
 
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;

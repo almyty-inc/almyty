@@ -63,8 +63,8 @@ export class AgentRuntimeProcessor {
   ) {}
 
   @Process('next-step')
-  async handleNextStep(job: Job<{ runId: string; seq?: number; requestId?: string }>) {
-    const { runId, seq = 0 } = job.data;
+  async handleNextStep(job: Job<{ runId: string; seq?: number; step?: number; requestId?: string }>) {
+    const { runId, seq = 0, step } = job.data;
 
     // Open the correlation scope for this job. The id was minted by the
     // request that started the run and rides in the job payload, so every
@@ -82,17 +82,27 @@ export class AgentRuntimeProcessor {
         this.logger.debug(`Processing step for run ${runId}`);
 
         try {
-          const result = await this.runtimeService.processStep(runId);
+          // The job only nudges (durable runs step 3): the step runs if this
+          // worker claims the run's lease, and, when the job names the step
+          // it was queued for, only while the run is still at that step.
+          const result = await this.runtimeService.processStep(runId, typeof step === 'number' ? { step } : {});
 
-          if (result === 'continue') {
+          if (result === 'held') {
+            // Another worker holds the run, it is not due, or it has moved
+            // past this job's step: that worker, or the run's own nudge, has it.
+            this.logger.debug(`Run ${runId} not claimed by this job; nothing to do`);
+          } else if (result === 'continue') {
             // Enqueue the next step
             // Deterministic jobId so a duplicate continuation of the same step
             // (e.g. two workers that both processed this step) collapses to one
             // queued job instead of double-executing. The seq only ever
             // increments, so sequential steps never collide and can't stall.
+            // The job names the step it is for, read after the commit, so a
+            // second nudge of the same step (the wake sweep's) does nothing.
+            const next = await this.runRepository.findOne({ where: { id: runId }, select: { id: true, currentStep: true } as any });
             await this.runtimeQueue.add(
               'next-step',
-              { runId, seq: seq + 1, requestId: job.data?.requestId },
+              { runId, seq: seq + 1, ...(next ? { step: next.currentStep } : {}), requestId: job.data?.requestId },
               {
                 jobId: `step:${runId}:${seq + 1}`,
                 delay: 100, // Small delay to avoid tight loops
@@ -104,7 +114,8 @@ export class AgentRuntimeProcessor {
             );
             this.logger.debug(`Enqueued next step for run ${runId}`);
           } else if (result === 'waiting') {
-            // Run is either sleeping (delayed resume enqueued by runtime) or waiting for user input.
+            // Run is either sleeping (its wake queued by the step processor
+            // for nextWakeAt) or waiting for user input or an approval.
             // Do NOT enqueue the next step — it will be resumed by the runtime when appropriate.
             this.logger.log(`Run ${runId} is waiting (sleeping or awaiting user input)`);
             // An always-on run that asked its owner a question has it posted on their channel.

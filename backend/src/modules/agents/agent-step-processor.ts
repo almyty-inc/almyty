@@ -4,6 +4,7 @@ import { FindOptionsWhere, In, Not } from 'typeorm';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { RunEventDraft } from './run-events';
 import { RunChange, writeRun } from './run-event-writer';
+import { StepOutcome, claimRun, heldBy, holdLease, runLeaseConfig } from './run-lease';
 import { Message, MessageRole } from '../../entities/message.entity';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
@@ -264,7 +265,69 @@ export class AgentStepProcessor {
     this.pendingNotes.set(run, [...(this.pendingNotes.get(run) ?? []), note]);
   }
 
-  async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
+  /**
+   * Process one step of a run, holding its lease (durable runs step 3,
+   * run-lease.ts). The run is claimed first: due, its lease free or lapsed
+   * and, when `step` is given (a queued nudge's), still at that step. Not
+   * claimed, nothing happens: 'done' for a run that is gone or finished
+   * (as before), 'held' for one another worker holds, that is not due, or
+   * that has moved past the nudge's step. The lease is renewed while the
+   * step runs and let go when it returns or throws; the step's writes are
+   * fenced on it. A step that leaves the run asleep queues its wake for
+   * when it is due (the wake sweep catches one that is lost).
+   */
+  async processStep(runId: string, options: { step?: number } = {}): Promise<StepOutcome> {
+    const config = runLeaseConfig();
+    const claim = await claimRun(this.s.runRepository, runId, { leaseMs: config.leaseMs, step: options.step });
+    if ('reason' in claim) {
+      if (claim.reason === 'missing') {
+        this.s.logger.warn(`Run ${runId} not found, skipping`);
+        return 'done';
+      }
+      if (claim.reason === 'done') {
+        this.s.logger.debug(`Run ${runId} already done, skipping`);
+        return 'done';
+      }
+      this.s.logger.debug(`Run ${runId} not claimed (${claim.reason}), skipping`);
+      return 'held';
+    }
+    if (claim.takenOver) {
+      this.s.logger.warn(`Run ${runId}: took over a lapsed lease (attempt ${claim.attempt}); its step starts over`);
+    }
+    const lease = holdLease(this.s.runRepository, runId, claim.owner, config, this.s.logger);
+    let outcome: StepOutcome;
+    try {
+      outcome = await this.processLeasedStep(runId, claim.owner);
+    } finally {
+      await lease.release().catch((err: any) =>
+        this.s.logger.warn(`Could not let go of the lease on run ${runId} (it lapses by itself): ${err?.message ?? err}`),
+      );
+    }
+    if (outcome === 'waiting') await this.queueWake(runId);
+    return outcome;
+  }
+
+  /** A run left asleep by its step: queue the nudge for its wake time. */
+  private async queueWake(runId: string): Promise<void> {
+    const row = await this.s.runRepository.findOne({ where: { id: runId }, select: { id: true, status: true, currentStep: true, nextWakeAt: true } as any });
+    if (!row || row.status !== AgentRunStatus.SLEEPING || !row.nextWakeAt) return;
+    const at = new Date(row.nextWakeAt).getTime();
+    try {
+      await this.s.runtimeQueue.add('next-step', { runId, seq: at, step: row.currentStep }, {
+        jobId: `step:${runId}:${at}`,
+        delay: Math.max(0, at - Date.now()),
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      });
+    } catch (err: any) {
+      // The run is due at nextWakeAt whatever the queue does: the wake sweep nudges it.
+      this.s.logger.warn(`Could not queue the wake of run ${runId}; the wake sweep will: ${err?.message ?? err}`);
+    }
+  }
+
+  private async processLeasedStep(runId: string, leaseOwner: string): Promise<'continue' | 'done' | 'waiting'> {
     const run = await this.s.runRepository.findOne({
       where: { id: runId },
       relations: { agent: true },
@@ -277,12 +340,17 @@ export class AgentStepProcessor {
       this.s.logger.warn(`Run ${runId} not found, skipping`);
       return 'done';
     }
+    // The claim's token: every write this step makes is fenced on it (heldBy).
+    run.leaseOwner = leaseOwner;
 
     // Check if run is still active
     if (run.isDone()) {
       this.s.logger.debug(`Run ${runId} already done (${run.status}), skipping`);
       return 'done';
     }
+    // Woken: a run claimed asleep was due, so it is running again, and this
+    // step's commit says so (and makes it due again, not at the old wake).
+    if (run.status === AgentRunStatus.SLEEPING) run.status = AgentRunStatus.RUNNING;
 
     // Optimistic-lock token: the step number we believe we're processing.
     // Every step-completing write is guarded on this via commitStep(), so a
@@ -1605,10 +1673,11 @@ export class AgentStepProcessor {
         await memory.afterRun(agent, run, team);
         if (run.steps.length !== stepsBefore) {
           // Logged like a commit: the memory_save step and its cost are
-          // events too. The run is done, so nothing but its id guards it.
+          // events too. The run is done, so nothing but its id (and this
+          // worker's lease) guards it.
           const saved = await this.persistWithEvents(
             run,
-            { id: run.id },
+            { id: run.id, ...heldBy(run) },
             { steps: await this.stepsForPersist(run), totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata },
           );
           if (!saved) this.s.logger.warn(`Run ${run.id}: the memory step after completion was not recorded (the run is gone)`);
@@ -1813,7 +1882,7 @@ export class AgentStepProcessor {
     // the canceller left (the row as locked), not this worker's `running`.
     await writeRun(
       this.s.runRepository,
-      { id: run.id, currentStep: expectedStep },
+      { id: run.id, currentStep: expectedStep, ...heldBy(run) },
       { totalCost: run.totalCost, totalTokens: run.totalTokens },
     );
     this.s.logger.log(`Run ${run.id} is ${live.status}; abandoning step ${expectedStep} instead of finishing it`);
@@ -2479,7 +2548,9 @@ export class AgentStepProcessor {
       // advanced, and the next one was enqueued -- while the UI said
       // cancelled and the SSE consumer had already detached. A terminal
       // status is final, whoever gets there first.
-      { id: run.id, currentStep: expectedStep, status: Not(In(TERMINAL_STATUSES)) },
+      // And the lease: a worker whose lease lapsed and was taken over
+      // writes nothing (run-lease.ts).
+      { id: run.id, currentStep: expectedStep, status: Not(In(TERMINAL_STATUSES)), ...heldBy(run) },
       {
         status: run.status,
         currentStep: run.currentStep,
@@ -2495,6 +2566,9 @@ export class AgentStepProcessor {
         error: run.error,
         workingMemory: run.workingMemory,
         metadata: run.metadata,
+        // A sleep is due at the wake time its wait set; any other status
+        // sets its own (writeRun's withWake).
+        ...(run.status === AgentRunStatus.SLEEPING ? { nextWakeAt: run.nextWakeAt ?? new Date() } : {}),
       },
     );
   }
