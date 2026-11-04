@@ -11,11 +11,11 @@
 //
 // Every decision is appended to USECASE_MODEL_LOG (default
 // $LOG_DIR/usecase-model.log), one JSON line each, for reading what a run did.
-import { appendFileSync } from 'node:fs'
+import { fakeLog } from '../log.ts'
 import { join } from 'node:path'
 import type { ChatRequest, Decision, ToolCall } from '../openai.ts'
 
-const LOG = process.env.USECASE_MODEL_LOG || join(process.env.LOG_DIR || '/tmp/almyty-demo', 'usecase-model.log')
+const log = fakeLog('USECASE_MODEL_LOG', 'usecase-model.log')
 const text = (c: any): string => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => x?.text ?? '').join('') : c == null ? '' : JSON.stringify(c))
 
 function parse(s: any): any {
@@ -672,7 +672,7 @@ export function decide(body: ChatRequest): Decision {
     else if (/verdict|refute/i.test(st.system)) out = { content: '{"verdict":"pass","confidence":0.9,"issues":[]}' }
     else out = { content: 'Done.' }
   }
-  appendFileSync(LOG, JSON.stringify({
+  log(JSON.stringify({
     at: new Date().toISOString(), model: body.model, tools: st.tools, roles: st.msgs.map((m: any) => m.role[0]).join(''),
     system: st.system.slice(0, 200), user: st.userText.slice(0, 4000),
     turn: st.turn.map((m: any) => ({ role: m.role, id: m.tool_call_id, calls: (m.tool_calls || []).map((c: any) => [c.id, c.function?.name, String(c.function?.arguments).slice(0, 200)]), content: text(m.content).slice(0, 300) })),

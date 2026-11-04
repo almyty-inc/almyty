@@ -5,10 +5,10 @@
 // (tools, keys, memory, channels, schedules) works end to end.
 //
 // Each tool call id carries the plan step it belongs to (call_<step>_n).
-import { appendFileSync } from 'node:fs'
+import { fakeLog } from '../log.ts'
 import type { ChatRequest, Decision, ToolCall } from '../openai.ts'
 
-const LOG = process.env.USECASE_MODEL_LOG || `${process.env.LOG_DIR || '/tmp/almyty-demo'}/parcelwise-model.log`
+const log = fakeLog('USECASE_MODEL_LOG', 'parcelwise-model.log')
 const text = (c: any): string => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => x?.text ?? '').join('') : c == null ? '' : JSON.stringify(c))
 function parse(s: any): any {
   if (s == null) return null
@@ -328,7 +328,7 @@ export function decide(body: ChatRequest): Decision {
     else out = { content: 'Done.' }
   }
   try {
-    appendFileSync(LOG, JSON.stringify({
+    log(JSON.stringify({
       at: new Date().toISOString(), tools: st.tools, system: st.system.slice(0, 160), user: st.userText.slice(0, 600),
       out: out.toolCalls ? out.toolCalls.map((c) => [c.id, c.name, JSON.stringify(c.args).slice(0, 300)]) : (out.content ?? '').slice(0, 300),
     }) + '\n')

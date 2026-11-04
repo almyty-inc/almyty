@@ -7,7 +7,6 @@ import { decide } from '../fakes/models/lumen.ts'
 import { load } from '../engine/load.ts'
 import { lumen, tomorrow } from '../walks/lumen/index.ts'
 
-process.env.USECASE_MODEL_LOG = '/dev/null'
 
 async function start(persona: string) {
   const [server, v6] = serve([lumenService(persona)], { port: 0 })

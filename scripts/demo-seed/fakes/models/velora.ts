@@ -5,10 +5,10 @@
 // the audit trail) works end to end.
 //
 // Each tool call id carries the plan step it belongs to (call_<step>_n).
-import { appendFileSync } from 'node:fs'
+import { fakeLog } from '../log.ts'
 import type { ChatRequest, Decision, ToolCall } from '../openai.ts'
 
-const LOG = process.env.USECASE_MODEL_LOG || `${process.env.LOG_DIR || '/tmp/almyty-demo'}/velora-model.log`
+const log = fakeLog('USECASE_MODEL_LOG', 'velora-model.log')
 
 const text = (c: unknown): string => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((x: any) => x?.text ?? '').join('') : c == null ? '' : JSON.stringify(c))
 
@@ -162,7 +162,7 @@ export function decide(body: ChatRequest): Decision {
   else if (/support team/i.test(st.system)) out = support()
   else if (/customers on our website/i.test(st.system)) out = help(st)
   else out = { content: 'Hello.' }
-  try { appendFileSync(LOG, `${new Date().toISOString()} ${JSON.stringify({ user: st.userText.slice(0, 200), steps: Object.keys(st.results), tools: st.tools.length, out }).slice(0, 2000)}\n`) } catch { /* no log dir */ }
+  try { log(`${new Date().toISOString()} ${JSON.stringify({ user: st.userText.slice(0, 200), steps: Object.keys(st.results), tools: st.tools.length, out }).slice(0, 2000)}\n`) } catch { /* no log dir */ }
   return out
 }
 

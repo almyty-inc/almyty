@@ -11,7 +11,7 @@
 //
 // The tidewater-outbox service is where the API's Slack calls land
 // (fakes/outbox.ts), with the Slack workspace the old stand-in answered for.
-import { appendFileSync } from 'node:fs'
+import { fakeLog } from '../log.ts'
 import { any, get, json, post, type Reply, type Service } from '../server.ts'
 import { vendor } from '../openai.ts'
 import { outbox } from '../outbox.ts'
@@ -19,7 +19,7 @@ import { decide } from '../models/tidewater.ts'
 
 const PORT = Number(process.env.USECASE_PORT || 4292)
 const ORIGIN = `http://localhost:${PORT}`
-const MODEL_LOG = process.env.ENG_MODEL_LOG || `${process.env.LOG_DIR || '/tmp/almyty-demo'}/tidewater-model.log`
+const modelLog = fakeLog('ENG_MODEL_LOG', 'tidewater-model.log')
 const MIN = 60000
 const DAY = 86400000
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
@@ -388,7 +388,7 @@ const model = (prefix: string, owner: string, ids: string[]) => vendor({
     prompt: Math.round(JSON.stringify(body.messages || []).length / 4) + 200,
     completion: Math.round(((d.content || '') + JSON.stringify(d.toolCalls || '')).length / 4) + 5,
   }),
-  decide: (body) => decide(body, { log: (line) => { try { appendFileSync(MODEL_LOG, line + '\n') } catch { /* no log dir */ } } }),
+  decide: (body) => decide(body, { log: modelLog }),
 })
 
 export const tidewater: Service = {
