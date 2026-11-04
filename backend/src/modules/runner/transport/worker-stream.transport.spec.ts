@@ -130,6 +130,44 @@ describe('WorkerStreamTransport', () => {
     expect(res._statusCode).toBe(202);
   });
 
+  // The runner sends its next envelope only after this answer, so a POST is
+  // answered only once every listener that records the envelope has done
+  // so: otherwise two back-to-back POSTs on two pods are recorded in
+  // whichever order the pods get to them.
+  const codingOutput = (id: string) => ({
+    v: WORKER_PROTOCOL_VERSION,
+    type: 'event' as const,
+    id,
+    ts: Date.now(),
+    payload: { kind: 'coding.output', sessionId: 'cs_1', data: 'x', seq: 1 },
+  });
+
+  it('POST answers 202 only once the work a listener handed to ack has finished', async () => {
+    let finish!: () => void;
+    const recorded = new Promise<void>((r) => (finish = r));
+    transport.on('envelope', (_env, _session, ack) => ack(recorded));
+
+    const res = mockRes();
+    const posted = transport.handlePost(mockReq({}, codingOutput('e-1')), res, 'org', 'user');
+    await new Promise((r) => setImmediate(r));
+    expect(res._ended).toBe(false); // still recording
+
+    finish();
+    await posted;
+    expect(res._statusCode).toBe(202);
+    expect(res._ended).toBe(true);
+  });
+
+  it('POST answers 503 INTERNAL when that work fails, so the runner sends the envelope again', async () => {
+    transport.on('envelope', (_env, _session, ack) => ack(Promise.reject(new Error('redis down'))));
+
+    const res = mockRes();
+    await transport.handlePost(mockReq({}, codingOutput('e-2')), res, 'org', 'user');
+
+    expect(res._statusCode).toBe(503);
+    expect(res._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.INTERNAL);
+  });
+
   it('POST with a malformed envelope (wrong v) returns a typed error, not 500', async () => {
     const env = { v: 999, type: 'request', id: 'x', ts: Date.now(), payload: {} };
     const res = mockRes();

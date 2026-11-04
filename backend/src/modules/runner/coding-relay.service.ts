@@ -3,7 +3,7 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 import { EventEmitter } from 'events';
 
-import { WorkerStreamTransport } from './transport/worker-stream.transport';
+import { EnvelopeAck, WorkerStreamTransport } from './transport/worker-stream.transport';
 import { codingBacklogMaxLen, codingBacklogTtlSeconds } from './transport/stream-backlog.config';
 import { WorkerEnvelope } from '../mcp/types/worker-protocol.types';
 import { RunnerService } from './runner.service';
@@ -46,7 +46,9 @@ export type CodingEventListener = (event: CodingEvent, eventId?: string) => void
  *      `coding:evt:<runnerId>:<sessionId>` (bounded by MAXLEN ~, expiring
  *      after the last event; CODING_RELAY_BACKLOG_MAXLEN / _TTL_S), whose
  *      entry id doubles as the SSE event id, then publishes it on
- *      `coding:evt:<runnerId>`;
+ *      `coding:evt:<runnerId>`. The runner's POST is answered only once
+ *      the append has landed, and the runner sends one POST at a time, so
+ *      the stream holds the output in the order the runner sent it;
  *   2. every pod holds one pattern subscription and re-emits to its local
  *      subscribers of that runner;
  *   3. subscribeSession() reads the backlog (from Last-Event-ID, or from
@@ -69,6 +71,29 @@ const CODING_EVT_PREFIX = 'coding:evt:';
 
 /** A Redis stream entry id: `<ms>-<seq>`. */
 const STREAM_ID_RE = /^\d+-\d+$/;
+
+/**
+ * Append a coding event to its session's backlog unless the newest entry
+ * already carries the same envelope id (a runner retry whose first answer
+ * was lost), and refresh the backlog's expiry. One script, so the check and
+ * the append cannot be split by another append.
+ *   KEYS[1] backlog stream; ARGV: maxlen, event json, envelope id, ttl s.
+ * Returns { entry id, 1 if it was already there else 0 }.
+ */
+const APPEND_ONCE_SCRIPT = `
+local newest = redis.call('XREVRANGE', KEYS[1], '+', '-', 'COUNT', 1)[1]
+if newest then
+  local fields = newest[2]
+  for i = 1, #fields, 2 do
+    if fields[i] == 'env' and fields[i + 1] == ARGV[3] then
+      return { newest[1], 1 }
+    end
+  end
+end
+local id = redis.call('XADD', KEYS[1], 'MAXLEN', '~', ARGV[1], '*', 'event', ARGV[2], 'env', ARGV[3])
+redis.call('EXPIRE', KEYS[1], ARGV[4])
+return { id, 0 }
+`;
 
 /**
  * The transport hands each envelope the session it arrived on. `id` is
@@ -115,6 +140,7 @@ export class CodingRelayService implements OnModuleDestroy {
   private readonly envelopeListener: (
     env: WorkerEnvelope,
     session?: EnvelopeSession,
+    ack?: EnvelopeAck,
   ) => void;
 
   constructor(
@@ -122,10 +148,15 @@ export class CodingRelayService implements OnModuleDestroy {
     private readonly transport: WorkerStreamTransport,
     @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
   ) {
-    this.envelopeListener = (env, session) => {
-      void this.onEnvelope(env, session).catch((err) =>
-        this.logger.warn(`coding envelope relay failed: ${err?.message ?? err}`),
-      );
+    this.envelopeListener = (env, session, ack) => {
+      const work = this.onEnvelope(env, session).catch((err) => {
+        this.logger.warn(`coding envelope relay failed: ${err?.message ?? err}`);
+        throw err;
+      });
+      // On a runner's POST the answer waits for this, and a failure is a
+      // 503 the runner retries. Without an ack nobody is waiting.
+      if (ack) ack(work);
+      else work.catch(() => undefined);
     };
     this.transport.on('envelope', this.envelopeListener);
     // One listener per open SSE subscription; lift the default cap.
@@ -193,7 +224,7 @@ export class CodingRelayService implements OnModuleDestroy {
     // Events announced while a read was due, kept for when Redis cannot be
     // read: then they go out as announced rather than not at all.
     const announced = new Map<string, CodingEvent>();
-    // Events with no backlog id (this pod's append failed): they are not in
+    // Events with no backlog id (a message that names none): they are not in
     // the stream, so they go out live, after the replay.
     const unlogged: CodingEvent[] = [];
 
@@ -282,11 +313,15 @@ export class CodingRelayService implements OnModuleDestroy {
     // victim's chat window showed output the victim's machine never
     // produced.
     if (payload.kind === 'runner.hello' && payload.runnerId && session) {
-      const owned = await this.runners.isOwnedBy(
-        payload.runnerId,
-        session.organizationId,
-        session.userId,
-      );
+      // Not part of the POST's answer: a hello the cache misses costs a
+      // lookup on the first coding event instead.
+      let owned: boolean;
+      try {
+        owned = await this.runners.isOwnedBy(payload.runnerId, session.organizationId, session.userId);
+      } catch (err: any) {
+        this.logger.warn(`runner.hello ownership check failed: ${err?.message ?? err}`);
+        return;
+      }
       if (!owned) {
         this.logger.warn(
           `runner.hello claiming runner ${payload.runnerId} refused: not owned by the session's user`,
@@ -313,34 +348,53 @@ export class CodingRelayService implements OnModuleDestroy {
       this.emitter.emit(`coding:${runnerId}`, event);
       return;
     }
-    await this.relayViaRedis(runnerId, event);
+    await this.relayViaRedis(runnerId, event, env.id);
   }
 
   /**
    * Append to the session's backlog, then publish it to every pod (this
    * one included -- its own subscribers hear it through the subscription
-   * like everyone else's). If Redis refuses, the event still reaches
-   * this pod's subscribers.
+   * like everyone else's).
+   *
+   * Resolves once the append has landed, and the runner's POST is answered
+   * only then (see EnvelopeAck): that is what makes the backlog's order the
+   * order the runner sent its output in. If the append fails this rejects,
+   * the POST is answered 503 and the runner sends the same envelope again;
+   * nothing is delivered for the failed attempt, so the retry is the only
+   * copy viewers see. A retry after an append that did land (its answer was
+   * lost) carries the same envelope id, and the append script finds that id
+   * on the session's newest entry and does not append it twice. The newest
+   * entry is enough because the runner sends one envelope at a time.
    */
-  private async relayViaRedis(runnerId: string, event: CodingEvent): Promise<void> {
+  private async relayViaRedis(runnerId: string, event: CodingEvent, envelopeId: string): Promise<void> {
     const key = `${CODING_EVT_PREFIX}${runnerId}:${event.sessionId}`;
     const json = JSON.stringify(event);
-    let id: string | null;
+    let id: string;
+    let duplicate: boolean;
     try {
-      id = await this.redis!.xadd(key, 'MAXLEN', '~', codingBacklogMaxLen(), '*', 'event', json);
+      const reply = (await this.redis!.eval(
+        APPEND_ONCE_SCRIPT,
+        1,
+        key,
+        String(codingBacklogMaxLen()),
+        json,
+        envelopeId,
+        String(codingBacklogTtlSeconds()),
+      )) as [string, number | string];
+      id = String(reply[0]);
+      duplicate = Number(reply[1]) === 1;
     } catch (err: any) {
       this.logger.warn(`coding backlog append failed: ${err?.message ?? err}`);
-      this.emitter.emit(`coding:${runnerId}`, event);
-      return;
+      throw err;
     }
-    this.redis!
-      .expire(key, codingBacklogTtlSeconds())
-      .catch((err) => this.logger.warn(`coding backlog expire failed: ${err?.message ?? err}`));
+    if (duplicate) return; // delivered when it was first appended
     try {
       await this.redis!.publish(`${CODING_EVT_PREFIX}${runnerId}`, JSON.stringify({ id, event }));
     } catch (err: any) {
+      // The event is in the backlog; this pod's viewers still hear it now,
+      // the others on their next read or reconnect.
       this.logger.warn(`coding event publish failed: ${err?.message ?? err}`);
-      this.emitter.emit(`coding:${runnerId}`, event, id ?? undefined);
+      this.emitter.emit(`coding:${runnerId}`, event, id);
     }
   }
 

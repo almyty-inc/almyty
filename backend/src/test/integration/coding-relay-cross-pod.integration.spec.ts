@@ -10,6 +10,8 @@
  *   - a viewer joining late gets the backlog, then live output;
  *   - a viewer resuming with Last-Event-ID on the other pod gets exactly
  *     what it missed;
+ *   - back-to-back POSTs on the two pods land in the order they were sent,
+ *     a retried one lands once, and one that cannot land is a 503;
  *   - the runner's own stream resumes with Last-Event-ID on the other pod;
  *   - the backlogs are bounded and expire per config.
  *
@@ -98,11 +100,22 @@ interface Pod {
     runnerIdForSession: async () => runnerId,
   };
 
-  async function pod(): Promise<Pod> {
+  /** `lookupMs` slows this pod's RunnerSession lookup, as a busy database does. */
+  async function pod(opts: { lookupMs?: number } = {}): Promise<Pod> {
     const redis = new Redis({ host: REDIS_HOST, port: REDIS_PORT, maxRetriesPerRequest: 1 });
     await redis.ping();
     const transport = new WorkerStreamTransport(redis as any);
-    const relay = new CodingRelayService(runners as any, transport, redis as any);
+    const lookupMs = opts.lookupMs ?? 0;
+    const podRunners = lookupMs
+      ? {
+          ...runners,
+          runnerIdForSession: async () => {
+            await new Promise((r) => setTimeout(r, lookupMs));
+            return runnerId;
+          },
+        }
+      : runners;
+    const relay = new CodingRelayService(podRunners as any, transport, redis as any);
     const p = { redis, transport, relay };
     pods.push(p);
     return p;
@@ -287,6 +300,75 @@ interface Pod {
     await new Promise((r) => setTimeout(r, 100));
     expect(resumed).toEqual(['three', 'four', 'five']);
     offB();
+  });
+
+  it('back-to-back POSTs on two pods land in the backlog in the order the runner sent them', async () => {
+    // A has not seen the runner's hello, so it looks the runner up first,
+    // slowly; B answers straight from its cache. Each POST is sent only
+    // after the answer to the one before, as the runner does.
+    const a = await pod({ lookupMs: 150 });
+    const b = await pod();
+    await subscribed();
+    const sid = await connectRunner(b);
+    const seen: number[] = [];
+    const off = b.relay.subscribeSession(runnerId, 'cs_order', (e) => seen.push(e.seq!));
+    await new Promise((r) => setTimeout(r, 50));
+
+    for (let n = 1; n <= 6; n++) {
+      await postCoding(n % 2 ? a : b, sid, { kind: 'coding.output', sessionId: 'cs_order', data: `line ${n}\n`, seq: n });
+    }
+
+    const entries = await admin.xrange(`coding:evt:${runnerId}:cs_order`, '-', '+');
+    expect(entries.map(([, fields]) => JSON.parse(fields[1]).seq)).toEqual([1, 2, 3, 4, 5, 6]);
+    await waitFor(() => seen.length >= 6);
+    expect(seen).toEqual([1, 2, 3, 4, 5, 6]);
+    off();
+  });
+
+  it('a retried POST whose first answer was lost is appended once', async () => {
+    const a = await pod();
+    const b = await pod();
+    await subscribed();
+    const sid = await connectRunner(a);
+    const seen: string[] = [];
+    const off = a.relay.subscribeSession(runnerId, 'cs_retry', (e) => seen.push(e.data!));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const once = envelope({ kind: 'coding.output', sessionId: 'cs_retry', data: 'once', seq: 1 });
+    for (const p of [a, b]) {
+      const res = mockRes();
+      await p.transport.handlePost(req({ 'Mcp-Session-Id': sid }, once), res, ORG, USER);
+      expect(res.statusCode).toBe(202);
+    }
+    await postCoding(b, sid, { kind: 'coding.output', sessionId: 'cs_retry', data: 'next', seq: 2 });
+
+    expect((await admin.xrange(`coding:evt:${runnerId}:cs_retry`, '-', '+')).length).toBe(2);
+    await waitFor(() => seen.length >= 2);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(seen).toEqual(['once', 'next']);
+    off();
+  });
+
+  it('a POST whose append fails is answered 503 and nothing is delivered for it', async () => {
+    const a = await pod();
+    await subscribed();
+    const sid = await connectRunner(a);
+    const seen: string[] = [];
+    const off = a.relay.subscribe(runnerId, (e) => seen.push(e.data!));
+    // The backlog key is taken by a value of the wrong type: the append errors.
+    await admin.set(`coding:evt:${runnerId}:cs_fail`, 'not a stream');
+
+    const res = mockRes();
+    await a.transport.handlePost(
+      req({ 'Mcp-Session-Id': sid }, envelope({ kind: 'coding.output', sessionId: 'cs_fail', data: 'lost', seq: 1 })),
+      res,
+      ORG,
+      USER,
+    );
+    expect(res.statusCode).toBe(503);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(seen).toEqual([]);
+    off();
   });
 
   it('the coding backlog expires per config', async () => {
