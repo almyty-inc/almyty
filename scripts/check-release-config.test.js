@@ -21,6 +21,7 @@ const FILES = [
   'package.json',
   '.github/workflows/publish-packages.yml',
   '.github/workflows/version-packages.yml',
+  '.github/workflows/post-release.yml',
 ];
 
 function fixture(t) {
@@ -103,12 +104,32 @@ test('a publish workflow without tag trigger, OIDC or provenance fails', (t) => 
   assert.match(r.out, /--provenance/);
 });
 
-test('a version PR that skips the lockfile sync fails', (t) => {
+test('a version branch that skips the lockfile sync fails', (t) => {
   const { root, edit, editJson } = fixture(t);
-  edit('.github/workflows/version-packages.yml', (s) => s.replace('version-script: npm run version-packages', 'version-script: npx changeset version'));
+  edit('.github/workflows/version-packages.yml', (s) => s.replace(/^(\s+)npm run version-packages$/m, '$1npx changeset version'));
   editJson('package.json', (p) => ({ ...p, scripts: { ...p.scripts, 'version-packages': 'changeset version' } }));
   const r = run(root);
   assert.strictEqual(r.code, 1, r.out);
   assert.match(r.out, /scripts\.version-packages must be/);
-  assert.match(r.out, /version-script: npm run version-packages/);
+  assert.match(r.out, /the version step must run `npm run version-packages`/);
+});
+
+test('a release workflow that opens its PR with changesets/action fails', (t) => {
+  const { root, edit } = fixture(t);
+  edit('.github/workflows/version-packages.yml', (s) =>
+    s.replace(/node scripts\/open-release-pr\.js .*$/m, 'uses: changesets/action@v2'));
+  const r = run(root);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.match(r.out, /version-packages\.yml: must open its PR with `node scripts\/open-release-pr\.js`/);
+  assert.match(r.out, /version-packages\.yml: must not open the PR with `gh pr create` or changesets\/action/);
+});
+
+test('a release workflow that opens its PR with gh pr create fails', (t) => {
+  const { root, edit } = fixture(t);
+  edit('.github/workflows/post-release.yml', (s) =>
+    s.replace(/node scripts\/open-release-pr\.js (.*)$/m, 'gh pr create $1'));
+  const r = run(root);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.match(r.out, /post-release\.yml: must open its PR with `node scripts\/open-release-pr\.js`/);
+  assert.match(r.out, /post-release\.yml: must not open the PR with `gh pr create`/);
 });
