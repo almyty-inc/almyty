@@ -13,7 +13,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs } = require('./capture-cli-help.js');
+const { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis } = require('./capture-cli-help.js');
 
 const repo = path.join(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(repo, 'docs-site/public/screenshots/manifest.json'), 'utf8'));
@@ -81,4 +81,16 @@ test('a local build is never registered as a published capture', () => {
   const r = spawnSync(process.execPath, [path.join(__dirname, 'capture-cli-help.js'), '--from', 'repo', '--register'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 1);
   assert.match(r.stderr, /--register needs --from npm/);
+});
+
+test('--stale picks the images whose entry names another version than package.json', () => {
+  const at = (version) => ({
+    screenshots: CLIS.map((c) => ({
+      path: `screenshots/cli/${c.id}-help.png`,
+      source: { kind: 'published-cli', package: `${readPackage(c).name}@${c.id === 'chat' ? version : readPackage(c).version}` },
+    })),
+  });
+  assert.deepStrictEqual(staleClis(CLIS, at(readPackage(CLIS[0]).version)).map((c) => c.id), []);
+  assert.deepStrictEqual(staleClis(CLIS, at('0.0.1')).map((c) => c.id), ['chat']);
+  assert.deepStrictEqual(staleClis(CLIS, { screenshots: [] }).map((c) => c.id), CLIS.map((c) => c.id));
 });
