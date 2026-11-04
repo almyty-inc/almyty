@@ -45,6 +45,28 @@ started with. One profile runs at a time, because the fakes keep the ports
 the published screenshots show; `capture` refuses a walk of another
 profile. `stack.sh down` wipes the database, so each profile starts fresh.
 
+| profile | walks (`walks/<family>/`) | screenshots |
+| --- | --- | --- |
+| `northwind` | the seeded organization, its reference pages, the six use-case guides | `screenshots/*.png`, `screenshots/guides/` |
+| `parcelwise` | support and sales examples (Intercom, HubSpot, Google Drive, Slack) | `screenshots/examples/...` |
+| `larkspur` | data and finance examples (Stripe, Xero, BigQuery, Anthropic) | `screenshots/examples/...` |
+| `tidewater` | engineering examples (GitHub, PagerDuty, a SOAP service, a runner) | `screenshots/examples/...` |
+| `velora` | governance examples (Entra ID sign-in, Splunk, approvals, teams) | `screenshots/examples/...` |
+| `lumen` | the founder, biz-dev and onboarding tutorials (Google, HubSpot, Slack, email) | `screenshots/tutorials/...`, `always-on-push-wakes.png` |
+| `elena` | the personal-assistant tutorial (Google, Telegram) | `screenshots/tutorials/personal/` |
+
+To take everything, run each profile in turn (`stack.sh down`, then
+`PROFILE=<name> stack.sh up` and `capture`). Some walks read real public
+API descriptions from the internet as a customer would (Google discovery
+documents, HubSpot's and Zendesk's specs), so their tool lists follow
+those. The coding-fleet walk (tidewater) starts a real runner
+(`ALMYTY_RUNNER_BIN`, or `almyty-runner` on PATH) with Claude Code and
+Codex installed and signed in.
+
+`npm run demo -- compare` shows, for each capture, the share of pixels
+that changed against the published image and writes `<shot>.diff.png`
+with the changes in red. Register only what changed for a reason.
+
 ## A walk
 
 A walk is data, checked against `engine/schema.ts` when it loads:
