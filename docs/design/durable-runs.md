@@ -370,6 +370,22 @@ lock as before, and the commit's status guard keeps a cancel final.
 the worker's identity is not on the log). In this step the taken-over
 step starts over; resuming from the log is step 4.
 
+**The takeover cap.** `takeovers` (migration
+`AgentRunTakeovers1791001000000`, a lease column like `attempt`, so not in
+the projection) counts the takeovers of the step the run is at: + 1 with
+every takeover, back to 0 when a step commits (the step commit and the
+collaboration step's write set it). `attempt` keeps counting every
+takeover of the run. The takeover that brings `takeovers` to
+`RUN_MAX_TAKEOVERS` (default 3) does not start the step again: in the same
+`writeRun`, fenced on the lapsed lease like any takeover, it fails the run
+with "This step stopped its worker 3 times in a row, so the run was
+stopped." and clears the lease. The log has `lease_taken_over`, then the
+failed-run events any failing write appends (`status_changed`,
+`run_failed` with the error, `step_committed`). The claim comes back
+`stopped`; the step processor sends `run.failed` with the error and
+reason code `TAKEOVER_LIMIT` to live viewers and processes nothing.
+Workers racing for that takeover find the run finished (`done`).
+
 **The queue only nudges.** A `next-step` job names the step it was queued
 for: the continuation (read after the commit), a sleep's wake (queued by
 the step processor for `nextWakeAt` once the commit has landed), input,
@@ -382,7 +398,7 @@ nudge, an overslept wake, or a dead worker's expired lease. Its job id is
 the run and its due time, removed once run, so pods sweeping together
 queue one job and a later pass can queue another.
 
-**Durations.** Read from the environment each time, with defaults:
+**Settings.** Read from the environment each time, with defaults:
 
 | Variable | Default | What |
 |---|---|---|
@@ -390,15 +406,15 @@ queue one job and a later pass can queue another.
 | `RUN_LEASE_RENEW_MS` | a third of the lease | How often the holder renews (at most half the lease). |
 | `RUN_WAKE_SWEEP_INTERVAL_MS` | 15000 | How often the wake sweep runs. |
 | `RUN_WAKE_GRACE_MS` | 30000 | How far past due a run must be before the sweep nudges it. |
+| `RUN_MAX_TAKEOVERS` | 3 | The takeover of one step, with no commit between, that fails the run (a whole number, at least 1). |
 
 A worker that dies mid-step is therefore taken over after at most the
 lease, the grace and one sweep interval (about 105 s by default) instead
 of the reaper's 30 minutes. The reaper still ends a run that makes no
-progress for `AGENT_RUN_STALE_MS`.
-
-**Not done here.** There is no cap on takeovers: a run whose step kills
-its worker every time is taken over again until its own limits (duration,
-steps, cost) or the reaper end it.
+progress for `AGENT_RUN_STALE_MS`. A step that takes its worker down every
+time ends the run at its third takeover (by default) instead of being
+taken over until its own limits (duration, steps, cost) or the reaper end
+it.
 
 ## The worker-kill test
 

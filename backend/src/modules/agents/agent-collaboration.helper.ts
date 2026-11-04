@@ -592,8 +592,9 @@ export class AgentCollaborationHelper {
 
   /** The run as this step leaves it, written with its events (run-event-writer.ts). */
   private async persist(run: AgentRun): Promise<void> {
-    // Fenced on the lease the step processor claimed the run with (run-lease.ts).
-    const written = await writeRun(this.runRepository, { id: run.id, ...heldBy(run) }, runStateOf(run));
+    // Fenced on the lease the step processor claimed the run with (run-lease.ts);
+    // a step that commits resets the takeover count.
+    const written = await writeRun(this.runRepository, { id: run.id, ...heldBy(run) }, { ...runStateOf(run), takeovers: 0 });
     if (written) run.headSeq = written.headSeq;
     else if (run.leaseOwner) this.logger.warn(`Run ${run.id}: this worker no longer holds its lease; the collaboration step's write did not land`);
   }
