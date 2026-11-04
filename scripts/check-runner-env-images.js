@@ -9,16 +9,19 @@
  * no digest names an image that may not exist (the images are pushed only
  * from master and v* tags), so it is refused.
  *
- * The references may trail the Dockerfile: bumping RUNNER_VERSION comes
- * first, the release pushes the new images, and a follow-up pins their
- * digests. Until then the references stay on the last pushed images. A
- * reference that names a runner newer than the Dockerfile's pin is
- * refused, and the pin must be a release the runner package has reached.
+ * The images carry the runner built from packages/runner in the same
+ * checkout, so the Dockerfile's RUNNER_VERSION (the tag the images get)
+ * must be packages/runner's version.
+ *
+ * The references may trail the Dockerfile: bumping the runner comes first,
+ * the release pushes the new images, and a follow-up pins their digests.
+ * Until then the references stay on the last pushed images. A reference
+ * that names a runner newer than the Dockerfile's pin is refused.
  *
  * The backend's built-in image list and the pre-pull DaemonSet
  * (docs/design/hosted-runners/image-prepull.yaml) must use references from
- * settings.json, and the CI workflow must build and smoke-test exactly the
- * listed flavours.
+ * settings.json, and the CI workflow must build, smoke-test and push
+ * exactly the listed flavours, each from the in-repo runner.
  *
  * Same shape as the other repo checks: Node + a checkout, no install.
  */
@@ -45,11 +48,11 @@ const pinParts = pin && SEMVER.test(pin) ? semver(pin) : null;
 
 if (!pinParts) {
   findings.push(`Dockerfile: ARG RUNNER_VERSION must default to an exact x.y.z version, found ${pin || 'none'}.`);
-} else {
-  const b = semver(runnerPkg.version);
-  if (b.length === 3 && compare(pinParts, b) > 0) {
-    findings.push(`Dockerfile pins @almyty/runner ${pin}, newer than packages/runner (${runnerPkg.version}).`);
-  }
+} else if (pin !== runnerPkg.version) {
+  // The images are built from packages/runner in this checkout, and the
+  // build refuses a runner whose version is not RUNNER_VERSION, so the two
+  // move together.
+  findings.push(`Dockerfile pins @almyty/runner ${pin}, but packages/runner is ${runnerPkg.version}; the images carry the in-repo runner, so set RUNNER_VERSION=${runnerPkg.version}.`);
 }
 
 // A reference to a pushed image: the flavour's tag at a runner version no
@@ -124,7 +127,15 @@ for (const list of matrices) {
   const want = Object.keys(images || {}).sort().join(', ');
   if ([...list].sort().join(', ') !== want) findings.push(`runner-env-images.yml: a flavour matrix lists [${list.join(', ')}]; settings.json lists [${want}].`);
 }
-if (!/images\/runner-env\/smoke\.sh/.test(workflow)) findings.push('runner-env-images.yml: the build job must run images/runner-env/smoke.sh.');
+// Both jobs, the one that tests and the one that publishes, build from the
+// runner packed out of this checkout and smoke-test what they built.
+for (const [what, re] of [
+  ['run images/runner-env/smoke.sh', /images\/runner-env\/smoke\.sh/g],
+  ['build with the `runner-pkg` context packed from packages/runner', /build-contexts:\s*runner-pkg=/g],
+]) {
+  const n = (workflow.match(re) || []).length;
+  if (n < 2) findings.push(`runner-env-images.yml: the build and the push job must each ${what} (found ${n}).`);
+}
 
 if (!fs.existsSync(path.join(dir, 'entrypoint.sh'))) findings.push('entrypoint.sh is missing.');
 if (!/^USER 1000:1000\s*$/m.test(dockerfile)) findings.push('Dockerfile: the images must run as USER 1000:1000, the uid the hosted Deployment sets.');

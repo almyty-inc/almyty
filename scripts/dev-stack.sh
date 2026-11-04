@@ -54,67 +54,9 @@ PG_IMAGE="${PG_IMAGE:-pgvector/pgvector:pg16}"
 
 mkdir -p "$LOG_DIR"
 
-# Run a command for at most LSOF_TIMEOUT seconds: a port lookup has lsof
-# read every process on the host, which on a busy one takes minutes.
-bounded() {
-  "$@" 2>/dev/null &
-  local pid=$! watchdog
-  (sleep "$LSOF_TIMEOUT"; kill "$pid" 2>/dev/null) >/dev/null 2>&1 &
-  watchdog=$!
-  wait "$pid" 2>/dev/null
-  local rc=$?
-  kill "$watchdog" 2>/dev/null || true
-  return "$rc"
-}
-
-# When a process started; a reused pid has another start time.
-proc_started() {
-  { ps -o lstart= -p "$1" 2>/dev/null | sed 's/^ *//;s/ *$//'; } || true
-}
-
-# A process's working directory, or nothing when it cannot be read.
-proc_cwd() {
-  if [ -e "/proc/$1/cwd" ]; then
-    readlink "/proc/$1/cwd" 2>/dev/null || true
-  elif command -v lsof >/dev/null 2>&1; then
-    { bounded lsof -b -w -a -p "$1" -d cwd -Fn | sed -n 's/^n//p' | head -n 1; } || true
-  fi
-}
-
-# Physical path, so /tmp and /private/tmp (macOS) compare equal.
-real_dir() {
-  (cd "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"
-}
-
-# record NAME PID DIR: what `down` checks before it stops PID.
-record() {
-  printf '%s\t%s\t%s\n' "$2" "$(proc_started "$2")" "$(real_dir "$3")" >"$LOG_DIR/$1.pid"
-}
-
-# owned PID STARTED DIR: PID is still the process this stack started.
-owned() {
-  local pid="$1" started="$2" dir="$3" cwd
-  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
-  kill -0 "$pid" 2>/dev/null || return 1
-  [ -n "$started" ] && [ "$(proc_started "$pid")" = "$started" ] || return 1
-  cwd="$(proc_cwd "$pid")"
-  [ -z "$cwd" ] || [ "$(real_dir "$cwd")" = "$dir" ]
-}
-
-descendants() {
-  local child
-  for child in $(pgrep -P "$1" 2>/dev/null || true); do
-    descendants "$child"
-    echo "$child"
-  done
-}
-
-kill_tree() {
-  local pids
-  pids="$(descendants "$1") $1"
-  # shellcheck disable=SC2086
-  kill $pids 2>/dev/null || true
-}
+# record / stop_recorded / sweep_port: stop only what this stack started.
+# shellcheck source=lib/owned-processes.sh
+. "$ROOT/scripts/lib/owned-processes.sh"
 
 api_env() {
   env PORT="$API_PORT" NODE_ENV=development TZ="${TZ:-UTC}" \
@@ -167,29 +109,11 @@ up() {
 }
 
 down() {
-  local f pid started dir listener cwd
-  for f in backend frontend; do
-    [ -f "$LOG_DIR/$f.pid" ] || continue
-    IFS=$'\t' read -r pid started dir <"$LOG_DIR/$f.pid" || true
-    if [ "$dir" = "$(real_dir "$ROOT/$f")" ] && owned "$pid" "$started" "$dir"; then
-      kill_tree "$pid"
-    elif [ -n "$pid" ]; then
-      echo "$f: pid $pid is not the process this stack started; left alone" >&2
-    fi
-    rm -f "$LOG_DIR/$f.pid"
-  done
+  stop_recorded backend "$ROOT/backend"
+  stop_recorded frontend "$ROOT/frontend"
   # A watcher's child (nest's dist/main, vite) can outlive its parent.
-  for f in "backend:$API_PORT" "frontend:$WEB_PORT"; do
-    [ "$PORT_SWEEP" = "1" ] && command -v lsof >/dev/null 2>&1 || break
-    for listener in $(bounded lsof -b -w -nP -tiTCP:"${f#*:}" -sTCP:LISTEN || true); do
-      cwd="$(proc_cwd "$listener")"
-      if [ -n "$cwd" ] && [ "$(real_dir "$cwd")" = "$(real_dir "$ROOT/${f%%:*}")" ]; then
-        kill_tree "$listener"
-      else
-        echo "port ${f#*:}: pid $listener is not from this checkout; left alone" >&2
-      fi
-    done
-  done
+  sweep_port "$API_PORT" "$ROOT/backend"
+  sweep_port "$WEB_PORT" "$ROOT/frontend"
   docker rm -f "$PG_NAME" "$REDIS_NAME" >/dev/null 2>&1 || true
   echo "stopped"
 }

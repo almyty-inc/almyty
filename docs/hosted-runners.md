@@ -388,8 +388,9 @@ almyty.
 
 All four share a `base` stage: Debian slim with Node 26 (the repo's one
 Node major), git and git-lfs, build-essential, curl, jq, tini, and
-`@almyty/runner` at the version pinned by `ARG RUNNER_VERSION`. The
-runner's PTY binding (node-pty) compiles against the build tools there.
+`@almyty/runner` from this repository at `ARG RUNNER_VERSION`, which is
+`packages/runner`'s version. The runner's PTY binding (node-pty) compiles
+against the build tools there.
 
 They are made for the pod the backend writes:
 
@@ -417,28 +418,31 @@ the file does not mention stay offered. The built-in defaults name
 The references may name an older runner than the Dockerfile: after a bump,
 they keep pointing at the last images that were pushed until the new ones
 exist.
-`scripts/check-runner-env-images.js` (in CI's repo-invariants job) fails
-when a listed name is not a target, when a reference has no `@sha256:`
-digest, when a reference names a runner newer than the Dockerfile's
-`RUNNER_VERSION`, when that version is ahead of `packages/runner`, when a
-built-in default or the pre-pull DaemonSet's image is not in the file with
-the same reference, or when the workflow does not build and smoke-test
-exactly the listed flavours.
+`scripts/check-runner-env-images.js` (in `npm run check`, CI's
+repo-invariants job) fails when a listed name is not a target, when a
+reference has no `@sha256:` digest, when a reference names a runner newer
+than the Dockerfile's `RUNNER_VERSION`, when that version is not
+`packages/runner`'s, when a built-in default or the pre-pull DaemonSet's
+image is not in the file with the same reference, or when the workflow
+does not build, smoke-test and push exactly the listed flavours from the
+in-repo runner.
 
-Build one locally from the repository root:
-
-```bash
-docker build --target standard -t runner-env:standard images/runner-env
-```
-
-That installs the pinned runner from npm. To try the runner in this
-checkout instead, pack it and pass it as the `runner-pkg` build context:
+The images carry the runner built from `packages/runner` in the same
+checkout, never one fetched from npm, so images for a new runner version
+can be built before npm has it. Build one locally from the repository
+root the same way CI does: pack the runner and pass it as the
+`runner-pkg` build context.
 
 ```bash
 (cd packages/runner && npm ci && npm run build && npm pack --pack-destination /tmp/runner-pkg)
 mv /tmp/runner-pkg/almyty-runner-*.tgz /tmp/runner-pkg/almyty-runner.tgz
 docker build --target standard --build-context runner-pkg=/tmp/runner-pkg -t runner-env:standard images/runner-env
 ```
+
+Without `--build-context runner-pkg=...` the build installs
+`RUNNER_VERSION` from npm instead, which works only once that version is
+published. Either way the build fails unless the installed runner reports
+`RUNNER_VERSION`.
 
 To run it as the cluster does: `--user 1000:1000 --read-only --cap-drop
 ALL --tmpfs /tmp`, a volume owned by uid 1000 at `/workspace`,
@@ -452,17 +456,18 @@ runner packed from the checkout, on every PR and push that touches
 and the runner detects it, the model-token wiring, and (for
 `standard-browser`) a headless Chromium page load. Run the same script
 locally after a build: `images/runner-env/smoke.sh runner-env:standard
-standard`. CI pushes only from `master` and `v*` tags. The push builds with
-the pinned runner from npm and refuses an image whose runner has no
-`--enroll`. To release new images:
+standard`. CI pushes only from `master` and `v*` tags. The push job builds
+the same way, from the runner in that commit, runs the smoke test again on
+the image it is about to push, and tags it
+`almyty/runner-env:<flavour>-<RUNNER_VERSION>`. To release new images:
 
 1. Bump `RUNNER_VERSION` in the Dockerfile together with the packages.
    Leave the image references alone: they stay on the images already
    pushed.
-2. Publish the packages to npm.
-3. The release (`master` or a `v*` tag) builds and pushes the new images.
-4. In one follow-up, pin the new digests in `settings.json`, the backend's
-   default `images` and `docs/design/hosted-runners/image-prepull.yaml`.
+2. The release (`master` or a `v*` tag) builds and pushes the new images,
+   whether or not npm has the packages yet.
+3. Pin the new digests in `settings.json`, the backend's default `images`
+   and `docs/design/hosted-runners/image-prepull.yaml`.
 
 ### Coding CLIs
 
@@ -665,11 +670,12 @@ script) can still start anything. The boundary is the pod.
 
 ## Not yet
 
-- `runner-env` 1.5.8 images: the Dockerfile pins @almyty/runner 1.5.8,
-  but no 1.5.8 image has been pushed yet, so `settings.json`, the backend
-  default `images` and `docs/design/hosted-runners/image-prepull.yaml`
-  stay on the pushed 1.5.7 digests. Pin the 1.5.8 digests there once the
-  release has pushed them.
+- `runner-env` 1.5.8 images: the Dockerfile and packages/runner are at
+  1.5.8, but no 1.5.8 image has been pushed yet, so `settings.json`, the
+  backend default `images` and `docs/design/hosted-runners/image-prepull.yaml`
+  stay on the pushed 1.5.7 digests. The next push from `master` or a `v*`
+  tag builds the 1.5.8 images from this repository; pin their digests
+  there then.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets (later).

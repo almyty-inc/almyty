@@ -110,3 +110,32 @@ test('a backend default that differs from settings.json fails', () => {
   assert.strictEqual(r.code, 1, r.out);
   assert.match(r.out, /default image "standard" is .*; settings\.json says/);
 });
+
+test('a Dockerfile pin behind packages/runner fails: the images carry the in-repo runner', () => {
+  const { root } = fixture({ dockerVersion: '1.5.8', runnerVersion: '1.5.9', ref: (n) => `almyty/runner-env:${n}-1.5.8${DIGEST('1')}` });
+  const r = run(root);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.match(r.out, /Dockerfile pins @almyty\/runner 1\.5\.8, but packages\/runner is 1\.5\.9/);
+});
+
+test('a push job that builds without the in-repo runner fails', () => {
+  const { root, edit } = fixture({ dockerVersion: '1.5.8', ref: (n) => `almyty/runner-env:${n}-1.5.7${DIGEST('2')}` });
+  edit('.github/workflows/runner-env-images.yml', (s) => {
+    const at = s.lastIndexOf('build-contexts: runner-pkg=');
+    return s.slice(0, at) + s.slice(at).replace(/^.*build-contexts: runner-pkg=.*\n/m, '');
+  });
+  const r = run(root);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.match(r.out, /the build and the push job must each build with the `runner-pkg` context .*\(found 1\)/);
+});
+
+test('a push job that pushes without a smoke test fails', () => {
+  const { root, edit } = fixture({ dockerVersion: '1.5.8', ref: (n) => `almyty/runner-env:${n}-1.5.7${DIGEST('3')}` });
+  edit('.github/workflows/runner-env-images.yml', (s) => {
+    const at = s.lastIndexOf('images/runner-env/smoke.sh');
+    return s.slice(0, at) + s.slice(at).replace(/^.*images\/runner-env\/smoke\.sh.*\n/m, '');
+  });
+  const r = run(root);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.match(r.out, /must each run images\/runner-env\/smoke\.sh \(found 1\)/);
+});
