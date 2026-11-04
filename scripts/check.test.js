@@ -63,6 +63,10 @@ test('npm run check is this file, and the repo-invariants CI job runs it', () =>
   }
 });
 
+test('the demo seed is checked: its walks, schema and manifest coverage', () => {
+  assert.ok(commands.includes('sh scripts/demo-seed/check.sh'), 'scripts/demo-seed/check.sh is not a step in scripts/check.js');
+});
+
 test('a failing step fails the run and the steps after it still run', () => {
   const lines = [];
   const failed = runSteps(
