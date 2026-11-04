@@ -3,7 +3,8 @@
 //
 // The repo-invariants job in .github/workflows/ci.yml runs exactly this, so
 // a green `npm run check` on your machine is the same verdict CI gives. Each
-// check is Node + a checkout, no install. A check's tests run right before
+// check is Node + a checkout, no install (the demo seed's step installs its
+// own two dependencies). A check's tests run right before
 // it, so a check that was weakened fails its own tests first.
 //
 // Every step runs even after one fails, so one push shows every broken
@@ -47,6 +48,9 @@ const STEPS = [
   { name: 'Test this runner', cmd: 'node --test scripts/check.test.js' },
   { name: 'Test screenshot evidence validation', cmd: 'node --test docs-site/scripts/check-screenshots.test.mjs' },
   { name: 'Check screenshot inventory and source freshness', cmd: 'node docs-site/scripts/check-screenshots.mjs' },
+  // The one step that installs: the demo seed's walk engine needs zod. Its
+  // tests prove every local-demo screenshot above is taken by a walk step.
+  { name: 'Test the demo-seed walks, their schema and manifest coverage', cmd: 'sh scripts/demo-seed/check.sh' },
 ];
 
 // Runs each step through the shell from the repo root, the way a workflow
