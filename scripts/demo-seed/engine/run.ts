@@ -16,7 +16,7 @@ export interface Capture { file: string; route: string; at: string }
 
 export interface Person { account: Account; orgId: string; slug: string; userId: string; token: string }
 
-export interface Session { context: BrowserContext; page: Page; inflight: Set<unknown>; person?: Person; signedIn?: Awaited<ReturnType<BrowserContext['storageState']>> }
+export interface Session { context: BrowserContext; page: Page; inflight: Map<unknown, number>; person?: Person; signedIn?: Awaited<ReturnType<BrowserContext['storageState']>> }
 
 /** What a step and an action can reach. */
 export interface Run {
@@ -107,8 +107,8 @@ export async function openSession(run: Run, person?: Person, signedIn?: Session[
   const page = await context.newPage()
   page.setDefaultTimeout(b.timeout ?? run.timeout)
   page.on('dialog', (d) => { d.accept().catch(() => {}) })
-  const inflight = new Set<unknown>()
-  page.on('request', (r) => { if (!isStream(r)) inflight.add(r) })
+  const inflight = new Map<unknown, number>()
+  page.on('request', (r) => { if (!isStream(r)) inflight.set(r, Date.now()) })
   page.on('requestfinished', (r) => inflight.delete(r))
   page.on('requestfailed', (r) => inflight.delete(r))
   const session: Session = { context, page, inflight }
@@ -138,11 +138,15 @@ export async function signIn(session: Session, account: Account): Promise<void> 
 }
 
 /** Wait until the page has nothing in flight (open event streams aside) for `quiet` ms. */
+const LONG = 5000
+
 export async function settle(session: Session, quiet = 500, limit = 15000): Promise<void> {
   const end = Date.now() + limit
   let since = Date.now()
   while (Date.now() < end) {
-    if (session.inflight.size) since = Date.now()
+    // A request open for longer than LONG is a long poll or a stream, not the page loading.
+    const now = Date.now()
+    if ([...session.inflight.values()].some((started) => now - started < LONG)) since = now
     else if (Date.now() - since >= quiet) break
     await new Promise((r) => setTimeout(r, 50))
   }

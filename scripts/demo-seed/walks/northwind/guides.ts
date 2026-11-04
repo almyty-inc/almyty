@@ -344,7 +344,7 @@ const operations = guide('guide-operations', 'Operations: a nightly systems chec
     { fill: label('Time'), value: '06:00' },
     { select: label('Where'), option: /^Slack/ },
     // The channel ID of #ops; the bot has to be invited there.
-    { fill: { label: /Channel/ }, value: 'C07NWOPS01' },
+    { fill: label('Slack channel'), value: 'C07NWOPS01' },
     { fill: label('Message'), value: 'Run the nightly check.' },
     show('When it runs'),
   ]],
