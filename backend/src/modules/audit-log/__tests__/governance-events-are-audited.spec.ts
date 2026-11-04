@@ -5,6 +5,7 @@ import { InvitesController } from '../../organizations/invites.controller';
 import { fakeApprovalsRepo } from '../../approvals/__tests__/approvals-repo.fixture';
 import { FakePolicyApprovalsRepo } from '../../approvals/__tests__/fake-policy-approvals';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
+import { TeamRole } from '../../../entities/user-team.entity';
 
 /**
  * The audit trail (Settings > Audit, and every SIEM streaming target fed
@@ -110,7 +111,7 @@ describe('governance events reach the audit trail', () => {
       await ctl.createTeam('org-1', { name: 'Finance' } as any, req);
       await ctl.updateTeam('org-1', 't-1', { name: 'Finance ops' }, req);
       await ctl.addMemberToTeam('org-1', 't-1', { userId: 'u-2' }, req);
-      await ctl.updateTeamMemberRole('org-1', 't-1', 'u-2', { role: 'lead' }, req);
+      await ctl.updateTeamMemberRole('org-1', 't-1', 'u-2', { role: TeamRole.LEAD }, req);
       await ctl.removeMemberFromTeam('org-1', 't-1', 'u-2', req);
       await ctl.deleteTeam('org-1', 't-1', req);
       expect(actions(audit)).toEqual([
