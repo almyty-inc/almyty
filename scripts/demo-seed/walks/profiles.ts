@@ -19,6 +19,17 @@ export interface Profile {
 // The Northwind fake (model vendors and company APIs) runs in every profile, on FAKE_PORT.
 export const PROFILES: Record<string, Profile> = {
   northwind: { description: 'Northwind AI: the seeded organization and the use-case guides', fakes: [] },
+  lumen: {
+    description: 'Lumen: the tutorials (founder, biz-dev, onboarding) with Google, HubSpot, Slack and Resend stood in',
+    fakes: [{ services: ['lumen'], port: 4291 }],
+    redirect: 4291,
+  },
+  elena: {
+    description: 'Elena Park: the personal-assistant tutorial, with Google and Telegram stood in',
+    fakes: [{ services: ['lumen'], port: 4291, env: { USECASE_PERSONA: 'elena' } }],
+    redirect: 4291,
+    publicApi: true,
+  },
 }
 
 // A second stack beside the canonical one (a walk under development) moves
