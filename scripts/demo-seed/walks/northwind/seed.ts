@@ -117,7 +117,7 @@ export const seed = {
 
     ...[
       { name: 'Northwind Support Tools', type: 'mcp', endpoint: '/support-tools', configuration: { transport: 'http' }, tools: '^northwind_', description: "Orders and helpdesk tools for the support team's AI clients." },
-      { name: 'Orders for partners', type: 'utcp', endpoint: '/orders-utcp', configuration: { protocol: 'http' }, tools: '^northwind_orders_(get_order|track_shipment|list_orders)', description: 'Read-only order lookup for logistics partners.' },
+      { name: 'Orders for partners', type: 'utcp', endpoint: '/orders-utcp', configuration: { protocol: 'http' }, tools: '^northwind_orders_(get_order\\|track_shipment\\|list_orders)', description: 'Read-only order lookup for logistics partners.' },
       { name: 'Northwind skills', type: 'skills', endpoint: '/northwind-skills', configuration: { format: 'skill-md' }, tools: '^northwind_helpdesk_', description: 'Helpdesk skills for coding agents, installed with @almyty/skills.' },
       { name: 'Petstore', type: 'mcp', endpoint: '/petstore', configuration: { transport: 'http' }, tools: '^petstore_' },
     ].map(({ tools, ...g }): Step => ({

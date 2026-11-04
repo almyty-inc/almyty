@@ -932,3 +932,14 @@ jobs:
 
       - name: Check screenshot inventory and source freshness
         run: node docs-site/scripts/check-screenshots.mjs
+
+      # The screenshot walks are data checked against a schema; these run the
+      # engine's unit tests, type-check it, and prove every local-demo image
+      # in the manifest is taken by exactly one walk step. No stack, no browser.
+      - name: Install the demo-seed walk engine
+        run: npm ci --no-audit --no-fund
+        working-directory: scripts/demo-seed
+
+      - name: Test the demo-seed walks and their manifest coverage
+        run: npm test && npm run typecheck
+        working-directory: scripts/demo-seed

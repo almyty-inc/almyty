@@ -18,6 +18,17 @@ export interface Env {
   out: string
 }
 
+/**
+ * The stack to talk to. Steps that write (seed, capture) need it said
+ * explicitly, so a run in a shell without `eval "$(stack.sh env)"` cannot
+ * fall back to the default ports and write into someone else's stack.
+ */
+export function stackEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  const missing = ['DEMO_WEB_URL', 'DEMO_API_URL', 'PG_NAME'].filter((k) => !source[k])
+  if (missing.length) throw new Error(`${missing.join(', ')} not set: run eval "$(scripts/demo-seed/stack.sh env)" with the same settings the stack was started with`)
+  return readEnv(source)
+}
+
 export function readEnv(source: NodeJS.ProcessEnv = process.env): Env {
   return {
     web: source.DEMO_WEB_URL || 'http://localhost:3210',

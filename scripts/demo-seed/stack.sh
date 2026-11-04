@@ -92,14 +92,15 @@ start_fake() {
 print_env() {
   local up
   up="$(upstream_port "$(cat "$LOG_DIR/profile" 2>/dev/null || echo "$PROFILE")")"
+  # export lines: `eval "$(stack.sh env)"` has to reach the walks, which are child processes.
   cat <<EOF2
-DEMO_WEB_URL=http://localhost:$WEB_PORT
-DEMO_API_URL=http://localhost:$API_PORT
-DEMO_FAKE_URL=http://localhost:$FAKE_PORT
-DEMO_USECASE_URL=http://localhost:$up
-PG_NAME=$PG_NAME
-DB_NAME=$DB_NAME
-LOG_DIR=$LOG_DIR
+export DEMO_WEB_URL=http://localhost:$WEB_PORT
+export DEMO_API_URL=http://localhost:$API_PORT
+export DEMO_FAKE_URL=http://localhost:$FAKE_PORT
+export DEMO_USECASE_URL=http://localhost:$up
+export PG_NAME=$PG_NAME
+export DB_NAME=$DB_NAME
+export LOG_DIR=$LOG_DIR
 EOF2
 }
 

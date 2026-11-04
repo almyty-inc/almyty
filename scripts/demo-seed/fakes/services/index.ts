@@ -5,4 +5,5 @@ import type { Service } from '../server.ts'
 export const SERVICES: Record<string, () => Promise<Service>> = {
   northwind: async () => (await import('./northwind.ts')).northwind,
   lumen: async () => (await import('./lumen.ts')).lumenService(),
+  parcelwise: async () => (await import('./parcelwise.ts')).parcelwise,
 }

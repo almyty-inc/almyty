@@ -95,6 +95,7 @@ Steps, by their leading key:
 | `http` (+ `save`), `sql` (+ `save`), `ensure` | call the API or a fake, query the database, find-or-create by name |
 | `if` / `then` / `else`, `repeat` + `while` + `max`, `each` + `as` + `do` | control flow; no screenshot inside a loop |
 | `as` + `do` | the steps as another person from the walk's `people` |
+| `restart` | a fresh browser context for the same person (or a new visitor): nothing carried over |
 | `use` + `with` | a macro (`engine/macros.ts`, or the family's own): its steps go in its place before the walk is checked |
 | `action` + `with` | a named, typed function for what is not a click or a call (`engine/actions.ts`, or the family's own) |
 

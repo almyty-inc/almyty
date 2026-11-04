@@ -70,6 +70,7 @@ test('answers are unwrapped and listed whatever they are wrapped in', () => {
   assert.deepEqual(rows({ agents: [1, 2] }, 'agents'), [1, 2])
   assert.deepEqual(rows({ items: [3] }), [3])
   assert.deepEqual(rows([4]), [4])
+  assert.deepEqual(rows({ apis: [5], total: 1 }), [5])
 })
 
 test('locators read as a person would say them', () => {

@@ -2,6 +2,7 @@
 // macros, actions and page templates only it uses.
 import type { Family } from '../engine/load.ts'
 import { northwind } from './northwind/index.ts'
+import { parcelwise } from './parcelwise/index.ts'
 import { lumen } from './lumen/index.ts'
 
-export const FAMILIES: Family[] = [northwind, lumen]
+export const FAMILIES: Family[] = [northwind, parcelwise, lumen]
