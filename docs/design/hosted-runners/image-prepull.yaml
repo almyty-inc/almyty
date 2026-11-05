@@ -40,7 +40,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       initContainers:
       - name: pull-standard
-        image: almyty/runner-env:standard-1.5.7@sha256:f1dacb5dcb49a64cbf2503e71f78b586e4e9b7c8d3ddc8bfab5a654b1b0339c2
+        image: almyty/runner-env:standard-1.5.8@sha256:2018b278d1ece2beac2b21a25414ae8febeac62bf250f079214f0903907eebbe
         imagePullPolicy: IfNotPresent
         command: ["sh", "-c", "true"]
         resources:

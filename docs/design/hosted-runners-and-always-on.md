@@ -559,7 +559,13 @@ The change, in `runner/coding-relay.service.ts`:
    checks, append it to a Redis stream
    (`XADD coding:evt:<runnerId>:<sessionId> MAXLEN ~ 2000`; the entry id
    doubles as the SSE event id) and `PUBLISH coding:evt:<runnerId>` a
-   pointer.
+   pointer. The runner's POST is answered only once the append has landed,
+   and the runner sends its output one POST at a time, each after the
+   answer to the one before, so the stream holds output in the order the
+   runner sent it even when consecutive POSTs land on different pods. A
+   failed append is a `503` the runner retries with the same envelope; the
+   append skips an envelope id the stream's newest entry already carries,
+   so a retry after a lost answer is not appended twice.
 2. Each pod holds one pattern subscription on the subscriber connection the
    transport already opens, and re-emits to its local SSE subscribers of
    that runner.

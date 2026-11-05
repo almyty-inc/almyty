@@ -1,7 +1,8 @@
 import { EventEmitter } from 'events';
 
 import { CodingRelayService } from './coding-relay.service';
-import { WORKER_PROTOCOL_VERSION, WorkerEnvelope } from '../mcp/types/worker-protocol.types';
+import { WorkerStreamTransport } from './transport/worker-stream.transport';
+import { WORKER_ERROR_CODES, WORKER_PROTOCOL_VERSION, WorkerEnvelope } from '../mcp/types/worker-protocol.types';
 
 /**
  * CodingRelayService: maps event envelopes from a runner's streamable
@@ -345,5 +346,124 @@ describe('CodingRelayService.subscribeSession (Redis)', () => {
 
     expect(seen).toEqual([]);
     expect(relay.listenerCount('r1')).toBe(0);
+  });
+});
+
+/**
+ * A runner's POST of coding output is answered only once the event is in
+ * the session's backlog: the runner sends its next POST only after that
+ * answer, so the backlog's order is the order it sent them in, whichever
+ * pods they land on. A failed append is a 503 the runner retries, and
+ * nothing is delivered for it, so the retry is the only copy.
+ */
+describe('CodingRelayService acknowledging a runner POST (Redis)', () => {
+  const ORG = 'org-1';
+  const USER = 'owner-1';
+  let transport: WorkerStreamTransport;
+  let relay: CodingRelayService;
+  let appends: Array<{ args: unknown[]; settle: { resolve: (v: unknown) => void; reject: (e: unknown) => void } }>;
+  let redis: { duplicate: () => any; eval: jest.Mock; publish: jest.Mock; xrange: jest.Mock };
+
+  const post = (body: unknown, sid?: string) => {
+    const res: any = {
+      statusCode: 0,
+      ended: false,
+      jsonBody: undefined as any,
+      headers: {} as Record<string, string>,
+      setHeader(k: string, v: string) { res.headers[k] = v; },
+      status(code: number) { res.statusCode = code; return res; },
+      json(b: unknown) { res.jsonBody = b; res.ended = true; return res; },
+      end() { res.ended = true; return res; },
+    };
+    const req: any = { header: (n: string) => (n === 'Mcp-Session-Id' ? sid : undefined), body };
+    return { res, done: transport.handlePost(req, res, ORG, USER) };
+  };
+  const output = (id: string, seq: number) => ({
+    v: WORKER_PROTOCOL_VERSION,
+    type: 'event',
+    id,
+    ts: Date.now(),
+    payload: { kind: 'coding.output', sessionId: 'cs_1', data: `line ${seq}\n`, seq },
+  });
+
+  beforeEach(async () => {
+    appends = [];
+    const subscriber = Object.assign(new EventEmitter(), {
+      psubscribe: jest.fn().mockResolvedValue(1),
+      disconnect: jest.fn(),
+    });
+    redis = {
+      duplicate: () => subscriber,
+      eval: jest.fn(
+        (...args: unknown[]) => new Promise((resolve, reject) => appends.push({ args, settle: { resolve, reject } })),
+      ),
+      publish: jest.fn().mockResolvedValue(1),
+      xrange: jest.fn().mockResolvedValue([]),
+    };
+    transport = new WorkerStreamTransport();
+    relay = new CodingRelayService(
+      { isOwnedBy: jest.fn().mockResolvedValue(true), runnerIdForSession: jest.fn().mockResolvedValue('r1') } as any,
+      transport,
+      redis as any,
+    );
+  });
+
+  afterEach(async () => {
+    relay.onModuleDestroy();
+    await transport.shutdown();
+  });
+
+  async function session(): Promise<string> {
+    const { res, done } = post({ ...output('hb', 0), type: 'heartbeat', payload: {} });
+    await done;
+    return res.headers['Mcp-Session-Id'];
+  }
+
+  it('answers 202 only after the append to the backlog has landed', async () => {
+    const sid = await session();
+    const { res, done } = post(output('env-1', 1), sid);
+    await flush();
+    await flush();
+
+    expect(appends).toHaveLength(1);
+    expect(appends[0].args[2]).toBe('coding:evt:r1:cs_1');
+    expect(appends[0].args[5]).toBe('env-1'); // the envelope id, for the retry check
+    expect(res.ended).toBe(false); // the append is still in flight
+
+    appends[0].settle.resolve(['1700000000000-1', 0]);
+    await done;
+    expect(res.statusCode).toBe(202);
+    expect(redis.publish).toHaveBeenCalledWith(
+      'coding:evt:r1',
+      JSON.stringify({ id: '1700000000000-1', event: output('env-1', 1).payload }),
+    );
+  });
+
+  it('answers 503 when the append fails, and delivers nothing for that attempt', async () => {
+    const sid = await session();
+    const seen: unknown[] = [];
+    relay.subscribe('r1', (e) => seen.push(e));
+    const { res, done } = post(output('env-1', 1), sid);
+    await flush();
+    await flush();
+    appends[0].settle.reject(new Error('redis down'));
+    await done;
+
+    expect(res.statusCode).toBe(503);
+    expect(res.jsonBody.payload.code).toBe(WORKER_ERROR_CODES.INTERNAL);
+    expect(redis.publish).not.toHaveBeenCalled();
+    expect(seen).toEqual([]);
+  });
+
+  it('does not publish a retry the append script found already appended', async () => {
+    const sid = await session();
+    const { res, done } = post(output('env-1', 1), sid);
+    await flush();
+    await flush();
+    appends[0].settle.resolve(['1700000000000-1', 1]);
+    await done;
+
+    expect(res.statusCode).toBe(202);
+    expect(redis.publish).not.toHaveBeenCalled();
   });
 });

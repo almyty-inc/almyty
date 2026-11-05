@@ -12,6 +12,7 @@ import { StreamableClient, envelope } from './streamable-client.js';
 import { WorkerEnvelope, RequestPayload, ResponsePayload, HeartbeatPayload, WORKER_ERROR_CODES } from './protocol.js';
 import { dispatchHandler, HandlerContext } from './handlers.js';
 import { CodingSessionManager } from './coding-sessions.js';
+import { OrderedSender } from './ordered-sender.js';
 import { WorkspaceReclaimer } from './workspace-reclaimer.js';
 import { enroll, EnrollmentError, readEnrollSettings, RunnerCredential } from './enroll.js';
 import { parseAllowBinaries, withAllowBinaries } from './policy.js';
@@ -90,6 +91,8 @@ export class RunnerDaemon {
   private client: StreamableClient | null = null;
   private processes: ProcessManager | null = null;
   private coding: CodingSessionManager | null = null;
+  /** Sends coding output in order, one POST at a time (see connect()). */
+  private codingSender: OrderedSender | null = null;
   private reclaimer: WorkspaceReclaimer | null = null;
   private runnerId: string | null = null;
   /** Where shell.exec starts when a call names no cwd (enroll mode: the checkout). */
@@ -330,11 +333,21 @@ export class RunnerDaemon {
     this.processes = new ProcessManager(createDefaultAdapterFactory(), o.effective.maxConcurrent);
     // Coding-session registry for the chat bridge. Output events are sent
     // through the same streamable client the heartbeats ride; the client is
-    // captured lazily so construction order doesn't matter.
+    // captured lazily so construction order doesn't matter. They go through
+    // one ordered sender: one POST at a time, each after the backend has
+    // recorded the one before, retried on a failure that can pass. Firing
+    // them concurrently let two chunks land on two pods and be recorded in
+    // the wrong order.
+    this.codingSender = new OrderedSender({
+      send: (env) => (this.client ? this.client.send(env) : Promise.reject(new Error('not connected'))),
+      onDrop: (env, err: any) => {
+        const kind = (env.payload as { kind?: string } | undefined)?.kind ?? env.type;
+        process.stderr.write(`coding event ${kind} not delivered: ${err?.message ?? err}\n`);
+      },
+    });
+    const codingSender = this.codingSender;
     this.coding = new CodingSessionManager(this.processes, (payload) => {
-      void this.client?.send(envelope('event', payload)).catch((err: any) => {
-        process.stderr.write(`coding event send failed: ${err?.message ?? err}\n`);
-      });
+      codingSender.enqueue(envelope('event', payload));
     });
     // Workspace cleanup. Each heartbeat ack carries the set of
     // workspaces the backend still lists as active; anything this
@@ -418,6 +431,11 @@ export class RunnerDaemon {
       this.modelToken?.stop();
       await this.closeModelProxy?.().catch(() => undefined);
       this.closeModelProxy = null;
+      if (this.codingSender) {
+        // Let queued output reach the backend first, for a moment at most.
+        await Promise.race([this.codingSender.idle(), new Promise((r) => setTimeout(r, 2_000).unref?.())]);
+        this.codingSender.stop();
+      }
       if (this.client) {
         await this.client.send(envelope('event', { kind: 'runner.draining' })).catch(() => {});
         this.client.stop();

@@ -18,11 +18,11 @@ name: Post-release
 # and the PR carries everything. Each run starts again from development,
 # so it is idempotent, and it does nothing when nothing is out of date.
 #
-# The PR is opened with RELEASE_PR_TOKEN when that secret is set (a
-# fine-grained token or GitHub App token with contents and pull-requests
-# write). A PR opened with the default GITHUB_TOKEN does not start CI; close
-# and reopen it to run the checks. Review the recaptured images before
-# merging.
+# GitHub Actions may not open pull requests in this repository, so the job
+# pushes release/post-<version> and then tries; when GitHub refuses, the job
+# summary links the branch for whoever runs the release to open the PR
+# (scripts/open-release-pr.js). An open PR is updated in place. Review the
+# recaptured images before merging.
 
 on:
   workflow_run:
@@ -45,14 +45,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+      GH_TOKEN: ${{ github.token }}
       FREEZE_VERSION: '0.2.2'
       FREEZE_SHA256: 012fdbdd16c0c19570f9052aac34d16d93d7d0d3b565b05374cc59492f53539b
     steps:
       - uses: actions/checkout@v6
         with:
           ref: development
-          token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
 
       - uses: actions/setup-node@v6
         with:
@@ -110,14 +109,11 @@ jobs:
           git add -A
           git commit -q -m "Follow up the @almyty/* $VERSION release"
           git push --force origin "$BRANCH"
-          BODY=$(printf '%s\n' \
+          BODY_FILE="$RUNNER_TEMP/post-release-body.md"
+          printf '%s\n' \
             "Automated follow-up to the @almyty/* $VERSION release (post-release.yml):" \
             "" \
             "$(git show --stat --format="" HEAD)" \
             "" \
-            "Review the recaptured CLI help images before merging.")
-          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number -q '.[].number')" ]; then
-            gh pr edit "$BRANCH" --body "$BODY"
-          else
-            gh pr create --base development --head "$BRANCH" --title "Follow up the @almyty/* $VERSION release" --body "$BODY"
-          fi
+            "Review the recaptured CLI help images before merging." > "$BODY_FILE"
+          node scripts/open-release-pr.js --branch "$BRANCH" --base development --title "Follow up the @almyty/* $VERSION release" --body-file "$BODY_FILE"
