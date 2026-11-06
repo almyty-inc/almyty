@@ -545,116 +545,116 @@
     },
     {
       "id": "cli-agents-help",
-      "title": "Agents CLI 1.5.8 help",
+      "title": "Agents CLI 1.5.9 help",
       "path": "screenshots/cli/agents-help.png",
-      "capturedAt": "2026-11-04T05:08:00.000Z",
+      "capturedAt": "2026-11-06T13:27:18.283Z",
       "status": "current",
-      "sha256": "a9876417f951e3a8a9df27a7be81d76ae816d2dc91744b9787d84f2e759e6852",
+      "sha256": "33bc7fc996db4c55cd65d4b0a933dd2e7ff98cb2d641ffbbaa962c3f988260a1",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/agents@1.5.8",
+        "package": "@almyty/agents@1.5.9",
         "command": "almyty-agents --help"
       },
       "sources": [
         "packages/agents-cli/src",
         "packages/agents-cli/package.json"
       ],
-      "sourceDigest": "d12d739682da57889286db02d7653179b81e9d2afb01cdb209d337c771f8fff5",
+      "sourceDigest": "31917009fd5103fdb5c15ae2e9b0e6f3f8e4dff175345f1f298f01ce6c9e4b51",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-almyty-help",
-      "title": "almyty CLI 1.5.8 help",
+      "title": "almyty CLI 1.5.9 help",
       "path": "screenshots/cli/almyty-help.png",
-      "capturedAt": "2026-11-04T05:08:00.000Z",
+      "capturedAt": "2026-11-06T13:27:18.283Z",
       "status": "current",
-      "sha256": "81b9c455df5624ed9a64bf17a6b3211600a3785c028a6b4365d4d485049956e4",
+      "sha256": "8cffb615e62a078a241f9af1d40c591754d744e2da770037623810c71c44e807",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/cli@1.5.8",
+        "package": "@almyty/cli@1.5.9",
         "command": "almyty --help"
       },
       "sources": [
         "packages/almyty-cli/src",
         "packages/almyty-cli/package.json"
       ],
-      "sourceDigest": "0f6417a66250cf9a44ba1befee6741fd89adf2375df3c0b95b440e03e2b6b58b",
+      "sourceDigest": "e5b99e610abb2876fa123dffe624053e06f72815366b37c88d10785e86789491",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-auth-help",
-      "title": "Auth CLI 1.5.8 help",
+      "title": "Auth CLI 1.5.9 help",
       "path": "screenshots/cli/auth-help.png",
-      "capturedAt": "2026-11-04T05:08:00.000Z",
+      "capturedAt": "2026-11-06T13:27:18.283Z",
       "status": "current",
-      "sha256": "161d00cd47eabeb6b69327470611a976934bb198f1e788bbc6e4e80ce587659f",
+      "sha256": "f008ecfbbc85608cc97c6dc07db67fe35d6ef5a944d3faf5e1a20ba58af2c0f8",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/auth@1.5.8",
+        "package": "@almyty/auth@1.5.9",
         "command": "almyty-auth --help"
       },
       "sources": [
         "packages/auth-cli/src",
         "packages/auth-cli/package.json"
       ],
-      "sourceDigest": "c8306f5a7b3df3fe327eff163abc8eba3e7aa7b5d70f5bc5482b536501d1d991",
+      "sourceDigest": "a32d9b4c93dc7b7b1fc067ef6c7b6c7c55174e2c7d1b52f024bb96a373225467",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-chat-help",
-      "title": "Chat CLI 1.5.8 help",
+      "title": "Chat CLI 1.5.9 help",
       "path": "screenshots/cli/chat-help.png",
-      "capturedAt": "2026-11-04T05:08:00.000Z",
+      "capturedAt": "2026-11-06T13:27:18.283Z",
       "status": "current",
-      "sha256": "03a154ad2782cc15cf5f07787e350b2c9e743c2a6410f175c879a1f2f494cc03",
+      "sha256": "d45ee2c1aebc7a152624b9feab30b5a7e06009781de03bded7aab7c4218bc9f1",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/chat@1.5.8",
+        "package": "@almyty/chat@1.5.9",
         "command": "almyty-chat --help"
       },
       "sources": [
         "packages/chat-cli/src",
         "packages/chat-cli/package.json"
       ],
-      "sourceDigest": "f6872c73484c906819a3998e327f74ab8d5f9074df49bc76d3350e4ee36fae96",
+      "sourceDigest": "64dbc1ffc60c255dacb8f1819102819a1f39772c502f6ce5e1c600fa317ff237",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-mcp-server-help",
-      "title": "MCP server CLI 1.5.8 help",
+      "title": "MCP server CLI 1.5.9 help",
       "path": "screenshots/cli/mcp-server-help.png",
-      "capturedAt": "2026-11-04T05:08:00.000Z",
+      "capturedAt": "2026-11-06T13:27:18.283Z",
       "status": "current",
-      "sha256": "84c1b95dc514f96ad353efbae47e90aa6403f40b2b3b7ea6d77f2734c11a4fad",
+      "sha256": "473e58202bfbf3184a99af12af4841b4a47ee7312d4310517b438d9f0599acf1",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/mcp-server@1.5.8",
+        "package": "@almyty/mcp-server@1.5.9",
         "command": "almyty-mcp --help"
       },
       "sources": [
         "packages/mcp-server/src",
         "packages/mcp-server/package.json"
       ],
-      "sourceDigest": "dbad50d092f6d0b220e49bd6f29bac273fd3bc7fc91d5fade707b50b8769054b",
+      "sourceDigest": "edcaef8ba4489d55d1300fff4b575d76d852e6febb3747bf736c7a059c0645d6",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
       "id": "cli-skills-help",
-      "title": "Skills CLI 1.5.8 help",
+      "title": "Skills CLI 1.5.9 help",
       "path": "screenshots/cli/skills-help.png",
-      "capturedAt": "2026-11-04T05:08:00.000Z",
+      "capturedAt": "2026-11-06T13:27:18.283Z",
       "status": "current",
-      "sha256": "7b440dccf2e57e8d69a7eb90c23df2f3fa6de36864765ff00df91cbb5130c8b3",
+      "sha256": "9a9795fe7b157a8640f0c2fb6ed4159a186a495add31f5aae2f46c0e3c274b26",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/skills@1.5.8",
+        "package": "@almyty/skills@1.5.9",
         "command": "almyty-skills --help"
       },
       "sources": [
         "packages/skills-cli/src",
         "packages/skills-cli/package.json"
       ],
-      "sourceDigest": "bdbca034657da39c8aabef31378a465062adb9c2e8b95303f4d38aa8d937f7c3",
+      "sourceDigest": "615faeeb9b03ddd74c07f65330a84e304a6e86258987f95d915f8912e973b843",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
