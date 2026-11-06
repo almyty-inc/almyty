@@ -46,6 +46,7 @@ const STEPS = [
   { name: 'Test the release tooling', cmd: 'node --test scripts/release-packages.test.js' },
   { name: 'Test the npm audit retry classification', cmd: 'node --test scripts/npm-audit-retry.test.js' },
   { name: 'Test the CLI help capture', cmd: 'node --test scripts/capture-cli-help.test.js' },
+  { name: 'Test the wait for npm to serve a release', cmd: 'node --test scripts/wait-for-npm.test.js' },
   { name: 'Test this runner', cmd: 'node --test scripts/check.test.js' },
   { name: 'Test screenshot evidence validation', cmd: 'node --test docs-site/scripts/check-screenshots.test.mjs' },
   { name: 'Check screenshot inventory and source freshness', cmd: 'node docs-site/scripts/check-screenshots.mjs' },
