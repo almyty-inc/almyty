@@ -111,6 +111,14 @@ const SHARED_BUFFER_PREFIX = 'strm:buf:';
  * exactly the in-memory implementation it always was.
  */
 
+/**
+ * Passed as the third argument of an `envelope` event emitted for a worker
+ * POST: a listener that must finish recording the envelope before the POST
+ * is answered hands that work here. A rejection answers the POST with a 503
+ * the worker retries. Envelopes re-emitted from another pod carry no ack.
+ */
+export type EnvelopeAck = (work: Promise<unknown>) => void;
+
 @Injectable()
 export class WorkerStreamTransport extends EventEmitter implements OnModuleDestroy {
   private readonly logger = new Logger(WorkerStreamTransport.name);
@@ -135,8 +143,11 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
    *   - 404 when `Mcp-Session-Id` names a session this server does not
    *     know: the worker's signal to start a new one (after a pod restart
    *     or a session GC).
-   *   - 202 Accepted, empty body, for an accepted envelope; anything the
-   *     server sends back arrives on the GET stream.
+   *   - 202 Accepted, empty body, for an accepted envelope, once every
+   *     listener that has to record it has done so (see EnvelopeAck);
+   *     anything the server sends back arrives on the GET stream.
+   *   - 503 INTERNAL when such a listener failed to record it: the worker
+   *     sends the same envelope again.
    *   - 400 MALFORMED_ENVELOPE for anything that is not an envelope,
    *     JSON-RPC included: MCP is served elsewhere.
    */
@@ -206,10 +217,13 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
         this.sendErrorResponse(res, WORKER_ERROR_CODES.MALFORMED_ENVELOPE, 'invalid envelope');
         return;
       }
-      // Notifications/responses are fire-and-forget: emit and return 202.
       // Requests can elicit a server-side response later via the GET stream;
       // the POST itself just acknowledges receipt.
-      this.emit('envelope', body, session);
+      const acks: Promise<unknown>[] = [];
+      const ack: EnvelopeAck = (work) => {
+        acks.push(work);
+      };
+      this.emit('envelope', body, session, ack);
       // A response/error may belong to a dispatch whose pending call lives on
       // a DIFFERENT pod (the one that issued the request). Fan it out so that
       // pod can match by correlation id, with the session it arrived on so
@@ -221,6 +235,21 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
         this.redis
           .publish(CH_RESP, JSON.stringify({ envelope: body, session: origin }))
           .catch((err) => this.logger.warn(`CH_RESP publish failed: ${err?.message ?? err}`));
+      }
+      // A listener that has to record the envelope before it counts as
+      // received (the coding relay appending output to its stream) hands
+      // its work to `ack`, and the POST is answered once that work is done.
+      // The worker sends its next envelope only after this answer, so the
+      // order its envelopes are recorded in is the order it sent them, on
+      // any pod. Answering first let two back-to-back POSTs on different
+      // pods be recorded the other way round. If the work fails the answer
+      // is a 503 and the worker sends the same envelope again.
+      if (acks.length > 0) {
+        const failed = (await Promise.allSettled(acks)).some((r) => r.status === 'rejected');
+        if (failed) {
+          this.sendErrorResponse(res, WORKER_ERROR_CODES.INTERNAL, 'envelope not recorded; send it again');
+          return;
+        }
       }
       res.status(202).end();
       return;
@@ -683,7 +712,10 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
   }
 
   private sendErrorResponse(res: Response, code: number, message: string): void {
-    const status = code === WORKER_ERROR_CODES.UNKNOWN_SESSION ? 404 : 400;
+    // INTERNAL is a 503: the envelope was understood but could not be
+    // recorded, and the worker sends it again.
+    const status =
+      code === WORKER_ERROR_CODES.UNKNOWN_SESSION ? 404 : code === WORKER_ERROR_CODES.INTERNAL ? 503 : 400;
     res.status(status).json({
       v: WORKER_PROTOCOL_VERSION,
       type: 'error',

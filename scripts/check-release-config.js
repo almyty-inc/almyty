@@ -14,7 +14,11 @@
 //   publish-packages.yml    the manual fallback's package choices; it also
 //                           has to publish on v* tags through
 //                           scripts/release-packages.js with provenance
-//   version-packages.yml    the version PR runs `npm run version-packages`
+//   version-packages.yml    the version branch runs `npm run version-packages`
+//   version-packages.yml,   open their PR through scripts/open-release-pr.js,
+//   post-release.yml        never `gh pr create` or changesets/action: GitHub
+//                           refuses Actions PRs here, and only that script
+//                           turns the refusal into a link instead of a failure
 //
 // Node + a checkout, no install. Exits 0 when they agree, 1 with a report.
 
@@ -80,8 +84,21 @@ if (!(rootPkg.devDependencies || {})['@changesets/cli']) findings.push('package.
 if ((rootPkg.scripts || {})['version-packages'] !== 'node scripts/release-packages.js version') {
   findings.push('package.json: scripts.version-packages must be `node scripts/release-packages.js version`.');
 }
-if (!/version-script:\s*npm run version-packages/.test(read('.github/workflows/version-packages.yml'))) {
-  findings.push('version-packages.yml: the Changesets action must run `version-script: npm run version-packages`.');
+const versionWf = read('.github/workflows/version-packages.yml');
+if (!/^\s+npm run version-packages\s*$/m.test(versionWf)) {
+  findings.push('version-packages.yml: the version step must run `npm run version-packages`.');
+}
+if (!/changeset-release\//.test(versionWf)) findings.push('version-packages.yml: must push the changeset-release/<base> branch.');
+
+// GitHub Actions may not open pull requests here. Each workflow that pushes
+// a release branch opens its PR through scripts/open-release-pr.js, which
+// turns that refusal into a job summary with the link instead of a failure.
+for (const wf of ['version-packages.yml', 'post-release.yml']) {
+  const text = wf === 'version-packages.yml' ? versionWf : read(`.github/workflows/${wf}`);
+  if (!/node scripts\/open-release-pr\.js /.test(text)) findings.push(`${wf}: must open its PR with \`node scripts/open-release-pr.js\`.`);
+  if (/gh pr create|changesets\/action@/.test(text)) {
+    findings.push(`${wf}: must not open the PR with \`gh pr create\` or changesets/action; GitHub refuses Actions here and the job would fail (use scripts/open-release-pr.js).`);
+  }
 }
 
 if (findings.length) {

@@ -42,6 +42,7 @@ const STEPS = [
   { name: 'Check the runner-env images agree with their settings list', cmd: 'node scripts/check-runner-env-images.js' },
   { name: 'Test the release config check', cmd: 'node --test scripts/check-release-config.test.js' },
   { name: 'Check the release tooling covers every publishable package', cmd: 'node scripts/check-release-config.js' },
+  { name: 'Test the release PR opener', cmd: 'node --test scripts/open-release-pr.test.js' },
   { name: 'Test the release tooling', cmd: 'node --test scripts/release-packages.test.js' },
   { name: 'Test the npm audit retry classification', cmd: 'node --test scripts/npm-audit-retry.test.js' },
   { name: 'Test the CLI help capture', cmd: 'node --test scripts/capture-cli-help.test.js' },
