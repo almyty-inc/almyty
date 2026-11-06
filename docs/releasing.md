@@ -44,7 +44,10 @@ the next release would contain.
    harmless.
 4. **Post-release PR.** Once npm has the new version and Docker Hub has the
    images, `.github/workflows/post-release.yml` pushes a branch for a PR
-   against `development` that:
+   against `development`. npm can take minutes to serve a version it has just
+   published, so before installing anything the job waits until npm serves
+   all twelve (`scripts/wait-for-npm.js`, up to 20 minutes) and fails naming
+   any package it still does not serve. The PR:
    - raises the `@almyty/*` dependency ranges to the released version and
      refreshes each `package-lock.json` from npm;
    - recaptures the six CLI help screenshots from the published packages

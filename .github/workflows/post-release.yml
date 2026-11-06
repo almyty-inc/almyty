@@ -43,7 +43,7 @@ jobs:
     name: Open or update the post-release PR
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       GH_TOKEN: ${{ github.token }}
       FREEZE_VERSION: '0.2.2'
@@ -59,12 +59,27 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
+      # Every install below resolves @almyty/* from npm, and npm can take
+      # minutes to serve a version it has just accepted (v0.2.27 failed on
+      # ETARGET seconds after its publish). So once the release is out (this
+      # run follows the publish of these versions, or npm already has the
+      # client), wait until npm serves all twelve, up to 20 minutes
+      # (scripts/wait-for-npm.js).
       - name: Released version
         id: v
+        env:
+          TRIGGER: ${{ github.event.workflow_run.name }}
+          TAGGED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           VERSION=$(node -p "require('./packages/client/package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if npm view "@almyty/client@$VERSION" version >/dev/null 2>&1; then
+          RELEASED=
+          if [ "$TRIGGER" = "Publish npm Packages" ]; then
+            git fetch -q --depth 1 origin "$TAGGED_SHA"
+            RELEASED=$(git show FETCH_HEAD:packages/client/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          fi
+          if [ "$RELEASED" = "$VERSION" ] || npm view "@almyty/client@$VERSION" version --prefer-online >/dev/null 2>&1; then
+            node scripts/wait-for-npm.js
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
             echo "@almyty/* $VERSION is not on npm yet: ranges and CLI help wait for the release"
