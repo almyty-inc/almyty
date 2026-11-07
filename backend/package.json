@@ -28,6 +28,7 @@
     "ensure:test-db": "node scripts/ensure-test-db.js",
     "test:e2e:staging": "npx tsx test/e2e/agent-runtime.e2e.ts",
     "verify:ee-di": "node scripts/ee-di-smoke.js",
+    "mcp:coverage": "npx tsx scripts/mcp-coverage.ts",
     "verify:boot": "npm run build:ee && node scripts/boot-probe.js",
     "verify:openai-sdk": "npx tsx scripts/test-openai-sdk.ts",
     "load-test": "npx tsx scripts/load-test.ts",
