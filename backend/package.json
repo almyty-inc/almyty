@@ -61,7 +61,7 @@
     "@nestjs/typeorm": "^11.0.3",
     "@node-saml/passport-saml": "^5.1.1",
     "@radix-ui/react-switch": "^1.4.1",
-    "@sentry/node": "^11.10.0",
+    "@sentry/node": "^11.11.0",
     "@types/bcrypt": "^6.0.0",
     "@types/bull": "^4.10.4",
     "@types/node-fetch": "^2.6.13",
