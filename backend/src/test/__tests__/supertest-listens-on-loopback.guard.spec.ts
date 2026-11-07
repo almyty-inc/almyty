@@ -27,15 +27,33 @@ class OursController {
   }
 }
 
+/**
+ * Resolves on the server's own 'listening' or 'error' event, whichever comes,
+ * and leaves no listener behind for the other.
+ */
 function listening(server: http.Server, port: number, host?: string): Promise<boolean> {
   return new Promise((resolve) => {
-    server.once('error', () => resolve(false));
-    server.listen(port, ...(host ? [host] : []), () => resolve(true));
+    const onListening = () => {
+      server.off('error', onError);
+      resolve(true);
+    };
+    const onError = () => {
+      server.off('listening', onListening);
+      resolve(false);
+    };
+    server.once('listening', onListening);
+    server.once('error', onError);
+    server.listen(port, ...(host ? [host] : []));
   });
 }
 
+/** Closes at once: supertest's keep-alive sockets are dropped, not waited out. */
 function close(server: http.Server): Promise<void> {
-  return new Promise((resolve) => (server.listening ? server.close(() => resolve()) : resolve()));
+  if (!server.listening) return Promise.resolve();
+  return new Promise((resolve) => {
+    server.close(() => resolve());
+    server.closeAllConnections();
+  });
 }
 
 function specs(dir: string): string[] {
@@ -75,6 +93,20 @@ describe('supertest requests reach the app under test', () => {
     const moduleRef = await Test.createTestingModule({ controllers: [OursController] }).compile();
     return moduleRef.createNestApplication({ logger: false });
   }
+
+  // The first Nest app a jest worker initialises loads express and its
+  // middleware into the module sandbox, which takes seconds on a loaded
+  // machine and blew the 5s test budget of whichever case ran first. Pay it
+  // once here, so the cases themselves only do socket work and wait on
+  // events. The generous hook budget is for module loading, not for a socket.
+  beforeAll(async () => {
+    const warm = await listenOnLoopback(await oursApp());
+    try {
+      await request(warm.getHttpServer()).get('/whoami').expect(200);
+    } finally {
+      await warm.close();
+    }
+  }, 120_000);
 
   it('an app on the IPv6 wildcard can be shadowed by another 127.0.0.1 listener (what supertest used to get)', async () => {
     const other = someoneElse();
