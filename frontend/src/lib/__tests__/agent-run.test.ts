@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/api', () => ({ agentsApi: { invoke: vi.fn(), getRun: vi.fn() } }))
 
 import { agentsApi } from '@/lib/api'
-import { invokeAndSettle, runOutcome, SETTLE_TIMEOUT_MS, SLOW_INTERVAL_MS } from '../agent-run'
+import { invokeAndSettle, MAX_FAILED_POLLS, runOutcome, SETTLE_TIMEOUT_MS, SLOW_INTERVAL_MS } from '../agent-run'
 
 const invoke = vi.mocked(agentsApi.invoke)
 const getRun = vi.mocked(agentsApi.getRun)
@@ -61,6 +61,21 @@ describe('invokeAndSettle', () => {
 
   it('waits up to the operator ceiling on a run, an hour, by default', () => {
     expect(SETTLE_TIMEOUT_MS).toBe(60 * 60 * 1000)
+  })
+
+  it('rides out a failed poll of a long run, and gives up after several in a row', async () => {
+    invoke.mockResolvedValue({ id: 'run-1', mode: 'autonomous', status: 'running', output: null })
+    getRun
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValueOnce({ id: 'run-1', mode: 'autonomous', status: 'running' })
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValueOnce({ id: 'run-1', mode: 'autonomous', status: 'completed', output: 'done' })
+    expect((await invokeAndSettle('agent-1', {}, { wait: noWait })).output).toBe('done')
+
+    getRun.mockReset()
+    getRun.mockRejectedValue(new Error('Request failed with status code 404'))
+    await expect(invokeAndSettle('agent-1', {}, { wait: noWait })).rejects.toThrow(/404/)
+    expect(getRun).toHaveBeenCalledTimes(MAX_FAILED_POLLS)
   })
 
   it('returns a workflow execution as invoke answered it', async () => {

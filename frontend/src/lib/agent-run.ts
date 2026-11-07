@@ -29,6 +29,9 @@ export const SETTLE_TIMEOUT_MS = 60 * 60 * 1000
 /** After the first minute, poll this often: a long run needs no request a second. */
 export const SLOW_INTERVAL_MS = 5000
 
+/** Polls in a row that may fail before the wait gives up with the error. */
+export const MAX_FAILED_POLLS = 3
+
 export interface SettleOptions {
   /** Between polls in the first minute; SLOW_INTERVAL_MS after it. */
   intervalMs?: number
@@ -53,9 +56,18 @@ export async function invokeAndSettle(agentId: string, input: unknown, options: 
   let run: Run = first
   const started = Date.now()
   const deadline = started + timeoutMs
+  // A long run is polled hundreds of times; one failed poll (a restart, a
+  // dropped connection) is not the run failing. Several in a row are.
+  let failedPolls = 0
   while (!SETTLED.has(String(run.status)) && Date.now() < deadline) {
     await wait(Date.now() - started < 60_000 ? intervalMs : Math.max(intervalMs, SLOW_INTERVAL_MS))
-    run = (await agentsApi.getRun(agentId, first.id)) as Run
+    try {
+      run = (await agentsApi.getRun(agentId, first.id)) as Run
+      failedPolls = 0
+    } catch (err) {
+      failedPolls += 1
+      if (failedPolls >= MAX_FAILED_POLLS) throw err
+    }
   }
   return run
 }
