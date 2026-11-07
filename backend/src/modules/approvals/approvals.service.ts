@@ -209,11 +209,12 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
 
     // Pause the run; a held tool call has none to pause. On the run's log:
     // the pause, and for request_approval (whose request is the run itself)
-    // the request by id. A held call or a change set is announced by the
-    // step that holds it, from its working memory, with the call's detail.
+    // the request by id. A held call, a change set or a write whose outcome
+    // was lost is announced by the step that holds it, from its working
+    // memory, with the call's detail.
     if (input.runId) {
       const payload = (saved.payload ?? {}) as Record<string, any>;
-      const ownRequest = !payload._gate && payload.kind !== 'change_set';
+      const ownRequest = !payload._gate && payload.kind !== 'change_set' && payload.kind !== 'unknown_outcome';
       await writeRun(
         this.runs,
         { id: input.runId },

@@ -6,6 +6,7 @@ import { RunEventDraft } from './run-events';
 import { RunChange, writeRun } from './run-event-writer';
 import { StepOutcome, claimRun, heldBy, holdLease, runLeaseConfig } from './run-lease';
 import { CallFinished, StepJournal } from './run-resume';
+import { UnknownOutcomeCall, approvalReason, decisionForModel, needsCareOnResume, reattempt, tellModel, unknownWriteSettings } from './unknown-writes';
 import { Message, MessageRole, MessageType } from '../../entities/message.entity';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
@@ -476,12 +477,14 @@ export class AgentStepProcessor {
         return await this.retryWakingCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart, journal);
       }
 
-      // Calls an approval policy held on an earlier step, and scripts'
-      // change sets, now decided: the approved ones run, as a step of their
-      // own, before the model is asked anything (it needs their results).
+      // Calls an approval policy held on an earlier step, scripts' change
+      // sets and writes whose outcome was lost, now decided: the approved
+      // ones run (a lost write's decision is told), as a step of their own,
+      // before the model is asked anything (it needs their results).
       if (
         (Array.isArray(run.workingMemory?.gatedToolCalls) && run.workingMemory.gatedToolCalls.length > 0) ||
-        (Array.isArray(run.workingMemory?.pendingChangeSets) && run.workingMemory.pendingChangeSets.length > 0)
+        (Array.isArray(run.workingMemory?.pendingChangeSets) && run.workingMemory.pendingChangeSets.length > 0) ||
+        (Array.isArray(run.workingMemory?.unknownOutcomeCalls) && run.workingMemory.unknownOutcomeCalls.length > 0)
       ) {
         return await this.runApprovedCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart, journal);
       }
@@ -878,10 +881,12 @@ export class AgentStepProcessor {
         const waking: WakingToolCall[] = [];
         // A call whose machine failed to start or wake: the run fails.
         let machineFailure: MachineFailure | null = null;
+        // Writes whose outcome a cut-off attempt lost, waiting for a person (unknown-writes.ts).
+        const unknown: UnknownOutcomeCall[] = [];
         // The call under way: on the log as started, and as finished once the
         // next one begins or the loop ends (closeCall), with what it did.
         let open: OpenCall | null = null;
-        const callLocals = () => ({ gated, changeSets, waking, wakeRetryMs, machineFailure });
+        const callLocals = () => ({ gated, changeSets, waking, unknown, wakeRetryMs, machineFailure });
         // Execute each tool call
         for (const toolCall of responseMessage.toolCalls) {
           if (open && !(await this.closeCall(journal, run, open, callLocals()))) {
@@ -898,6 +903,7 @@ export class AgentStepProcessor {
             gated.push(...(local.gated ?? []));
             changeSets.push(...(local.changeSets ?? []));
             waking.push(...(local.waking ?? []));
+            unknown.push(...(local.unknown ?? []));
             if ('wakeRetryMs' in local) wakeRetryMs = local.wakeRetryMs;
             if ('machineFailure' in local) machineFailure = local.machineFailure;
             continue;
@@ -923,10 +929,14 @@ export class AgentStepProcessor {
             });
             return 'done';
           }
-          // On the log, with its key, before it is made: a worker that picks
-          // this step up knows the call was started, whatever came of it.
+          // Started by an earlier attempt of this step whose outcome is lost
+          // (on the log as started, not finished): the worker died in it.
+          const cutOff = journal.wasStarted(callIndex);
+          // On the log, with its key and arguments, before it is made: a
+          // worker that picks this step up knows the call was started,
+          // whatever came of it.
           open = { callIndex, tool: toolCall.name, toolCall, mark: this.markCall(run, callLocals()) };
-          if (!(await journal.recordStarted(callIndex, toolCall.name))) {
+          if (!(await journal.recordStarted(callIndex, toolCall.name, toolCall.parameters || {}))) {
             await this.abandonIfTerminal(run, expectedStep);
             return 'done';
           }
@@ -1256,11 +1266,25 @@ export class AgentStepProcessor {
               idempotencyKey: journal.key(callIndex),
             };
 
-            const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
-              matchingTool.id,
-              callParams,
-              execOptions,
-            );
+            // The one executor call site of a direct (or call_tool) call.
+            const makeCall = () => this.s.toolExecutorService.executeTool(matchingTool.id, callParams, execOptions);
+
+            // Started by an earlier attempt of this step that was cut off, its
+            // outcome lost: a write or delete to a tool that takes no key is
+            // not made again silently. It is tried again with care, the model
+            // is told, and a person decides (unknown-writes.ts). Reads, and
+            // tools that take a key, go out again below as before.
+            if (cutOff && (await this.cutOffWriteNeedsCare(matchingTool))) {
+              const settled = await this.settleUnknownWrite(run, agent, journal, callIndex, { toolCallId: toolCall.id, tool: matchingTool, parameters: callParams }, makeCall);
+              if (!settled) {
+                await this.abandonIfTerminal(run, expectedStep);
+                return 'done';
+              }
+              unknown.push(settled);
+              toolCall.executionTime = Date.now() - toolExecStart;
+              continue;
+            }
+            const toolResult: ToolExecutionResult = await makeCall();
 
             // Held by an approval policy's amount rule: the call did not
             // run. Ask a person, and run it once they approve.
@@ -1397,11 +1421,12 @@ export class AgentStepProcessor {
           return this.failForMachine(run, machineFailure, expectedStep, stepStart);
         }
 
-        // A call an approval policy's amount rule held, or a script's change
-        // set: the run waits for a person. The other calls of this reply have
-        // run; the held ones run, and the change sets are run or dropped, on
-        // the step after they are decided (runApprovedCalls).
-        if (gated.length > 0 || changeSets.length > 0) {
+        // A call an approval policy's amount rule held, a script's change
+        // set, or a write whose outcome was lost: the run waits for a person.
+        // The other calls of this reply have run; the held ones run, the
+        // change sets are run or dropped, and the model is told the decision
+        // on a lost write, on the step after they are decided (runApprovedCalls).
+        if (gated.length > 0 || changeSets.length > 0 || unknown.length > 0) {
           const stepDuration = Date.now() - stepStart;
           run.steps.push({
             type: 'llm_call',
@@ -1411,6 +1436,7 @@ export class AgentStepProcessor {
               status: 'waiting_approval',
               ...(gated.length ? { heldToolCalls: gated.map((g) => ({ tool: g.toolName, rule: g.rule })) } : {}),
               ...(changeSets.length ? { heldChangeSets: changeSets.map((c) => ({ codeExecutionId: c.codeExecutionId, approvalId: c.approvalId })) } : {}),
+              ...(unknown.length ? { unknownOutcomes: unknown.map((u) => ({ tool: u.toolName, approvalId: u.approvalId, attempts: u.attempts.length })) } : {}),
               ...answeredBy(llmResponse, acting),
             },
             cost: stepCost,
@@ -1423,6 +1449,7 @@ export class AgentStepProcessor {
             ...(gated.length ? { gatedToolCalls: gated } : {}),
             ...(waking.length ? { wakingToolCalls: waking } : {}),
             ...(changeSets.length ? { pendingChangeSets: changeSets } : {}),
+            ...(unknown.length ? { unknownOutcomeCalls: unknown } : {}),
           };
           run.status = AgentRunStatus.WAITING_APPROVAL;
           run.currentStep++;
@@ -2409,14 +2436,24 @@ export class AgentStepProcessor {
     const pending: WakingToolCall[] = run.workingMemory?.wakingToolCalls ?? [];
     const still: WakingToolCall[] = [];
     const gated: GatedToolCall[] = [];
+    // Calls cut off on an earlier attempt of this step, their outcome lost (unknown-writes.ts).
+    const unknown: UnknownOutcomeCall[] = [];
     let retryMs = 0;
     let failure: MachineFailure | null = null;
-    const locals = () => ({ still, gated, retryMs, failure });
+    const locals = () => ({ still, gated, unknown, retryMs, failure });
     for (const [callIndex, call] of pending.entries()) {
       if (failure) break;
-      const went = await this.journaledCall(journal, run, callIndex, call.toolName, locals, async () => {
+      const went = await this.journaledCall(journal, run, callIndex, call.toolName, locals, async (cutOff) => {
         const started = Date.now();
         const tool = tools.find((t) => t.id === call.toolId);
+        if (cutOff && tool && (await this.cutOffWriteNeedsCare(tool))) {
+          const settled = await this.settleUnknownWrite(run, agent, journal, callIndex, { toolCallId: call.toolCallId, tool, parameters: call.parameters }, () =>
+            this.runHeldCall(run, agent, tools, resolvedLimits, call, undefined, journal.key(callIndex)),
+          );
+          if (!settled) return false;
+          unknown.push(settled);
+          return;
+        }
         const result: ToolExecutionResult = await this.runHeldCall(run, agent, tools, resolvedLimits, call, undefined, journal.key(callIndex));
         if (result.approvalRequired && tool) {
           gated.push(await this.holdForApproval(run, agent, tool, { id: call.toolCallId, parameters: call.parameters }, result.approvalRequired));
@@ -2457,9 +2494,10 @@ export class AgentStepProcessor {
       }, (local) => {
         still.push(...(local.still ?? []));
         gated.push(...(local.gated ?? []));
+        unknown.push(...(local.unknown ?? []));
         if ('retryMs' in local) retryMs = local.retryMs;
         if ('failure' in local) failure = local.failure;
-      });
+      }, call.parameters);
       if (!went) {
         await this.abandonIfTerminal(run, expectedStep);
         return 'done';
@@ -2470,6 +2508,7 @@ export class AgentStepProcessor {
       ...rest,
       ...(still.length && !failure ? { wakingToolCalls: still } : {}),
       ...(gated.length ? { gatedToolCalls: [...(rest.gatedToolCalls ?? []), ...gated] } : {}),
+      ...(unknown.length ? { unknownOutcomeCalls: [...(rest.unknownOutcomeCalls ?? []), ...unknown] } : {}),
     };
     if (failure) return this.failForMachine(run, failure, expectedStep, stepStart);
     if (still.length) {
@@ -2482,11 +2521,12 @@ export class AgentStepProcessor {
         timestamp: new Date().toISOString(),
       });
     }
-    if (gated.length) run.status = AgentRunStatus.WAITING_APPROVAL;
+    const askingPerson = gated.length > 0 || unknown.length > 0;
+    if (askingPerson) run.status = AgentRunStatus.WAITING_APPROVAL;
     run.currentStep++;
     run.executionTime += Date.now() - stepStart;
     if (!(await this.commitStep(run, expectedStep))) return 'done';
-    const status = gated.length ? 'waiting_approval' : still.length ? 'sleeping' : undefined;
+    const status = askingPerson ? 'waiting_approval' : still.length ? 'sleeping' : undefined;
     this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, ...(status ? { status } : { total: run.maxSteps }) });
     return status ? 'waiting' : 'continue';
   }
@@ -2556,12 +2596,169 @@ export class AgentStepProcessor {
   }
 
   /**
+   * Whether a call cut off with its outcome lost must not simply be made
+   * again: a write or delete to a tool that takes no idempotency key
+   * (unknown-writes.ts). The tool set is loaded without the generating
+   * operation, so an operation-backed tool is read again with it, to see
+   * the headers it declares. If that read fails, the call is treated with
+   * care: it is never made again silently on a guess.
+   */
+  private async cutOffWriteNeedsCare(tool: Tool): Promise<boolean> {
+    let full: Tool = tool;
+    if (tool.operationId && tool.operation === undefined) {
+      try {
+        full = (await this.s.toolRepository.findOne({ where: { id: tool.id, organizationId: tool.organizationId }, relations: { operation: true } })) ?? tool;
+      } catch (err: any) {
+        this.s.logger.warn(`Could not read the operation of tool ${tool.id}: ${err?.message ?? err}`);
+        return true;
+      }
+    }
+    return needsCareOnResume(full);
+  }
+
+  /**
+   * A write whose outcome a cut-off attempt lost, on a tool that takes no
+   * idempotency key (unknown-writes.ts): try it again with backoff until an
+   * attempt has a definite outcome, each attempt on the log; tell the model
+   * plainly that an earlier attempt may already have happened, and what each
+   * attempt came to; and ask a person, with the call, its arguments with
+   * personal data hidden, and the attempts. The run waits for them
+   * (`unknownOutcomeCalls`); runApprovedCalls tells the model the decision.
+   * Null when a write was refused: the run finished, or the lease was lost.
+   */
+  private async settleUnknownWrite(
+    run: AgentRun,
+    agent: Agent,
+    journal: StepJournal,
+    callIndex: number,
+    call: { toolCallId: string; tool: Tool; parameters: Record<string, any> },
+    attempt: () => Promise<ToolExecutionResult>,
+  ): Promise<UnknownOutcomeCall | null> {
+    const started = Date.now();
+    const name = readableToolName(call.tool as NamedTool);
+    const { attempts, last, refused } = await reattempt({
+      settings: unknownWriteSettings(),
+      before: journal.attemptsOf(callIndex),
+      call: attempt,
+      begin: (n) => journal.recordAttemptStarted(callIndex, call.tool.name, n),
+      // On the log as the stored steps are: error and result capped, personal data hidden.
+      record: async (made, result) => {
+        const [seen] = await this.hideForLog(run, [{ type: 'tool_result', output: result?.data, error: made.error }]);
+        if (seen?.error !== undefined) made.error = seen.error;
+        return journal.recordAttempt(callIndex, call.tool.name, made, seen?.output !== undefined ? { result: seen.output } : undefined);
+      },
+      pause: (ms) => this.pause(ms),
+    });
+    if (refused) return null;
+
+    // What the model reads as the call's result.
+    if (run.conversationId) {
+      const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, tellModel(call.tool.name, attempts, last));
+      msg.runId = run.id;
+      await this.s.messageRepository.save(msg);
+    }
+
+    const shown = await this.s.toolExecutorService.hidePersonalData(
+      call.parameters,
+      { organizationId: run.organizationId, userId: run.userId ?? undefined },
+      call.tool.id,
+    );
+    const approval = await this.s.approvals.create({
+      organizationId: run.organizationId,
+      teamId: agent.teamId ?? null,
+      runId: run.id,
+      agentId: agent.id,
+      toolId: call.tool.id,
+      toolCallId: call.toolCallId,
+      reason: approvalReason(name, attempts),
+      payload: { kind: 'unknown_outcome', tool: name, parameters: shown, attempts },
+      principal: principalOfRun(run),
+    });
+
+    const executionTime = Date.now() - started;
+    this.s.emitEvent(run.id, 'tool.result', {
+      step: run.currentStep,
+      toolCallId: call.toolCallId,
+      tool: call.tool.name,
+      success: false,
+      awaitingApproval: true,
+      unknownOutcome: true,
+      attempts: attempts.length,
+      executionTime,
+    });
+    run.steps.push({
+      type: 'tool_call',
+      input: { tool: call.tool.name, toolId: call.tool.id, parameters: call.parameters },
+      output: { status: 'waiting_approval', unknownOutcome: true, approvalId: approval.id, attempts },
+      duration: executionTime,
+      timestamp: new Date().toISOString(),
+    });
+    return {
+      toolCallId: call.toolCallId,
+      toolId: call.tool.id,
+      toolName: call.tool.name,
+      approvalId: approval.id,
+      attempts: attempts.map((a) => ({ attempt: a.attempt, outcome: a.outcome, ...(a.httpStatus ? { httpStatus: a.httpStatus } : {}), ...(a.cutOff ? { cutOff: true } : {}) })),
+    };
+  }
+
+  /**
+   * A person decided on a write whose outcome was lost: the decision is
+   * added to what the model reads as the call's result (once, whichever
+   * attempt of this step writes it), and nothing is made. Approved, the
+   * model carries on with what it was told; rejected or expired, it is told
+   * to carry on without the action.
+   */
+  private async tellUnknownWriteDecision(
+    run: AgentRun,
+    call: UnknownOutcomeCall,
+    approval: { status: string; decisionReason?: string | null },
+  ): Promise<void> {
+    const decision = approval.status === 'approved' ? 'approved' : approval.status === 'expired' ? 'expired' : 'rejected';
+    const words = decisionForModel(decision, null, approval.decisionReason ?? null);
+    if (run.conversationId) {
+      const told: Message | null = await this.s.messageRepository.findOne({
+        where: { conversationId: run.conversationId, toolCallId: call.toolCallId } as any,
+      });
+      if (!told) {
+        const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, words);
+        msg.runId = run.id;
+        await this.s.messageRepository.save(msg);
+      } else if (!String(told.content ?? '').includes(words)) {
+        await this.s.messageRepository.update({ id: told.id } as any, { content: `${told.content ?? ''}\n\n${words}` } as any);
+      }
+    }
+    this.s.emitEvent(run.id, 'tool.result', {
+      step: run.currentStep,
+      toolCallId: call.toolCallId,
+      tool: call.toolName,
+      success: decision === 'approved',
+      unknownOutcome: true,
+      decision,
+    });
+    run.steps.push({
+      type: 'tool_call',
+      input: { tool: call.toolName, toolId: call.toolId, approvalId: call.approvalId },
+      output: { status: decision, unknownOutcome: true },
+      duration: 0,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /** Wait before trying a lost write again (the backoff of unknown-writes.ts). */
+  private pause(ms: number): Promise<void> {
+    return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
+  }
+
+  /**
    * The step after a held call or a script's change set is decided: run
    * each approved call with its approval, exactly as it was asked for, run
    * or drop each decided change set, and hand the model the results.
    * Anything still waiting keeps the run waiting. A rejected held call never
    * gets here: it cancels the run. A rejected change set does: the model is
-   * told nothing in it ran, and carries on.
+   * told nothing in it ran, and carries on. So does a write whose outcome
+   * was lost (unknown-writes.ts): approved or not, the model is told the
+   * decision and carries on.
    */
   private async runApprovedCalls(
     run: AgentRun,
@@ -2573,6 +2770,16 @@ export class AgentStepProcessor {
     journal: StepJournal,
   ): Promise<'continue' | 'done' | 'waiting'> {
     const runId = run.id;
+    // Writes whose outcome was lost, now decided by a person: the model is
+    // told the decision, and nothing is made. Still pending: the run waits.
+    const unknownWaiting: UnknownOutcomeCall[] = [];
+    for (const call of (run.workingMemory?.unknownOutcomeCalls ?? []) as UnknownOutcomeCall[]) {
+      const approval = await this.s.approvals.findInOrganization(call.approvalId, run.organizationId);
+      if (!approval || approval.status === 'pending') unknownWaiting.push(call);
+      else await this.tellUnknownWriteDecision(run, call, approval);
+    }
+    // Held calls cut off again on this step, their outcome lost.
+    const unknown: UnknownOutcomeCall[] = [];
     // Scripts' change sets a person has now decided (code mode, part D):
     // an approved set runs in order through the executor with the approval,
     // under its script; a rejected or expired one runs nothing. Either way
@@ -2583,10 +2790,11 @@ export class AgentStepProcessor {
     const waiting: GatedToolCall[] = [];
     // Each set, then each held call, is one call of this step: the sets
     // first (0..), the held calls after them.
-    const locals = () => ({ setsWaiting, waiting });
+    const locals = () => ({ setsWaiting, waiting, unknown });
     const restore = (local: Record<string, any>) => {
       setsWaiting.push(...(local.setsWaiting ?? []));
       waiting.push(...(local.waiting ?? []));
+      unknown.push(...(local.unknown ?? []));
     };
     for (const [setIndex, set] of sets.entries()) {
       const went = await this.journaledCall(journal, run, setIndex, RUN_CODE, locals, async () => {
@@ -2642,8 +2850,19 @@ export class AgentStepProcessor {
 
     for (const [heldIndex, call] of held.entries()) {
       const callIndex = sets.length + heldIndex;
-      const went = await this.journaledCall(journal, run, callIndex, call.toolName, locals, async () => {
+      const went = await this.journaledCall(journal, run, callIndex, call.toolName, locals, async (cutOff) => {
         const started = Date.now();
+        // Made before by an attempt that was cut off, its outcome lost: a
+        // keyless write is not made again silently (unknown-writes.ts).
+        const tool = cutOff ? tools.find((t) => t.id === call.toolId) : undefined;
+        if (tool && (await this.cutOffWriteNeedsCare(tool))) {
+          const settled = await this.settleUnknownWrite(run, agent, journal, callIndex, { toolCallId: call.toolCallId, tool, parameters: call.parameters }, () =>
+            this.runHeldCall(run, agent, tools, resolvedLimits, call, { approvalId: call.approvalId }, journal.key(callIndex)),
+          );
+          if (!settled) return false;
+          unknown.push(settled);
+          return;
+        }
         const result: ToolExecutionResult = await this.runHeldCall(run, agent, tools, resolvedLimits, call, { approvalId: call.approvalId }, journal.key(callIndex));
         if (result.approvalRequired) {
           waiting.push(call);
@@ -2675,19 +2894,21 @@ export class AgentStepProcessor {
           timestamp: new Date().toISOString(),
           error: result.success ? undefined : result.error,
         });
-      }, restore);
+      }, restore, call.parameters);
       if (!went) {
         await this.abandonIfTerminal(run, expectedStep);
         return 'done';
       }
     }
-    const { gatedToolCalls: _done, pendingChangeSets: _sets, ...rest } = run.workingMemory || {};
+    const { gatedToolCalls: _done, pendingChangeSets: _sets, unknownOutcomeCalls: _unknown, ...rest } = run.workingMemory || {};
+    const unknownStill = [...unknownWaiting, ...unknown];
     run.workingMemory = {
       ...rest,
       ...(waiting.length ? { gatedToolCalls: waiting } : {}),
       ...(setsWaiting.length ? { pendingChangeSets: setsWaiting } : {}),
+      ...(unknownStill.length ? { unknownOutcomeCalls: unknownStill } : {}),
     };
-    const stillWaiting = waiting.length > 0 || setsWaiting.length > 0;
+    const stillWaiting = waiting.length > 0 || setsWaiting.length > 0 || unknownStill.length > 0;
     if (stillWaiting) run.status = AgentRunStatus.WAITING_APPROVAL;
     run.currentStep++;
     run.executionTime += Date.now() - stepStart;
@@ -2757,8 +2978,11 @@ export class AgentStepProcessor {
    * step 4): replayed from the log when an earlier attempt finished it,
    * else put on the log as started, made (`body`), and put on the log as
    * finished. `locals` is the step's own bookkeeping the call may add to,
-   * and `restore` puts a replayed call's share of it back. False when a
-   * write was refused: the run finished, or this worker lost its lease.
+   * and `restore` puts a replayed call's share of it back. `body` is told
+   * whether an earlier attempt started the call and its outcome was lost
+   * (`cutOff`: a keyless write then goes through settleUnknownWrite), and
+   * returns false when a write it made was refused. False when a write was
+   * refused: the run finished, or this worker lost its lease.
    */
   private async journaledCall(
     journal: StepJournal,
@@ -2766,17 +2990,19 @@ export class AgentStepProcessor {
     callIndex: number,
     tool: string,
     locals: () => Record<string, any>,
-    body: () => Promise<void>,
+    body: (cutOff: boolean) => Promise<void | boolean>,
     restore: (local: Record<string, any>) => void,
+    parameters?: Record<string, any>,
   ): Promise<boolean> {
     const made = journal.outcomeOf(callIndex);
     if (made) {
       restore(this.replayCall(run, {}, made));
       return true;
     }
+    const cutOff = journal.wasStarted(callIndex);
     const open: OpenCall = { callIndex, tool, toolCall: {}, mark: this.markCall(run, locals()) };
-    if (!(await journal.recordStarted(callIndex, tool))) return false;
-    await body();
+    if (!(await journal.recordStarted(callIndex, tool, parameters))) return false;
+    if ((await body(cutOff)) === false) return false;
     return this.closeCall(journal, run, open, locals());
   }
 

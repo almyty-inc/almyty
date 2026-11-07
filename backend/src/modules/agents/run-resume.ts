@@ -5,6 +5,7 @@ import { AgentRunEvent } from '../../entities/agent-run-event.entity';
 import { notDone, writeRun } from './run-event-writer';
 import { RunEventDraft, RunEventRecord, STEP_PROGRESS_TYPES } from './run-events';
 import { heldBy } from './run-lease';
+import type { WriteAttempt } from './unknown-writes';
 
 /**
  * Resume and idempotency keys, durable runs step 4
@@ -24,7 +25,10 @@ import { heldBy } from './run-lease';
  * log with the call, checked there before any call, and sent to tools that
  * accept one (ToolExecutionOptions.idempotencyKey), so a call whose outcome
  * the log does not know (started, not finished: the worker died in the
- * call) reaches such a tool again with the key it was first made with.
+ * call) reaches such a tool again with the key it was first made with. A
+ * write to a tool that takes no key is not made again silently: it is
+ * tried again with care, each try on the log (`tool_attempted`), and a
+ * person decides (unknown-writes.ts).
  *
  * A step's progress is the tail of the log written at its step number:
  * every event of step N comes after the commit that moved the run to N
@@ -83,6 +87,7 @@ export class StepJournal {
   private readonly answered: ModelAnswered | null;
   private readonly started = new Set<number>();
   private readonly finished = new Map<number, CallFinished>();
+  private readonly attempts = new Map<number, Map<number, WriteAttempt>>();
 
   private constructor(
     private readonly runs: Repository<AgentRun>,
@@ -96,6 +101,11 @@ export class StepJournal {
       if (event.type === 'model_answered') answered = p as ModelAnswered;
       if (event.type === 'tool_started') this.started.add(Number(p.callIndex));
       if (event.type === 'tool_finished') this.finished.set(Number(p.callIndex), p as CallFinished);
+      if (event.type === 'tool_attempted') {
+        const { callIndex, key: _key, tool: _tool, result: _result, phase, ...attempt } = p;
+        if (phase === 'started') this.noteAttempt(Number(callIndex), { attempt: Number(p.attempt), outcome: 'unknown', cutOff: true }, false);
+        else this.noteAttempt(Number(callIndex), attempt as WriteAttempt, true);
+      }
     }
     this.answered = answered;
   }
@@ -169,10 +179,46 @@ export class StepJournal {
     return this.write({ type: 'model_answered', step: this.step, payload: answer });
   }
 
-  /** Record that call `callIndex` is about to be made, with its key. Before the call, always. */
-  recordStarted(callIndex: number, tool: string): Promise<boolean> {
+  /**
+   * Record that call `callIndex` is about to be made, with its key and the
+   * arguments it is made with (the real ones: a resumed step reads them;
+   * whoever views the log sees them with personal data hidden,
+   * run-log-privacy.ts). Before the call, always.
+   */
+  recordStarted(callIndex: number, tool: string, parameters?: Record<string, any>): Promise<boolean> {
     this.started.add(callIndex);
-    return this.write({ type: 'tool_started', step: this.step, payload: { callIndex, key: this.key(callIndex), tool } });
+    return this.write({
+      type: 'tool_started',
+      step: this.step,
+      payload: { callIndex, key: this.key(callIndex), tool, ...(parameters !== undefined ? { parameters } : {}) },
+    });
+  }
+
+  /**
+   * The attempts made again at call `callIndex`, its first outcome lost
+   * (unknown-writes.ts), by number. One begun and never come back (yet
+   * another death) is `unknown` and `cutOff`.
+   */
+  attemptsOf(callIndex: number): WriteAttempt[] {
+    return [...(this.attempts.get(callIndex)?.values() ?? [])].sort((a, b) => a.attempt - b.attempt);
+  }
+
+  /** Record that attempt `n` at call `callIndex` is about to be made (`tool_attempted`, phase `started`). */
+  recordAttemptStarted(callIndex: number, tool: string, n: number): Promise<boolean> {
+    this.noteAttempt(callIndex, { attempt: n, outcome: 'unknown', cutOff: true }, false);
+    return this.write({ type: 'tool_attempted', step: this.step, payload: { callIndex, key: this.key(callIndex), tool, phase: 'started', attempt: n } });
+  }
+
+  /** Record what attempt `attempt.attempt` at call `callIndex` came to (phase `finished`, with its result as stored). */
+  recordAttempt(callIndex: number, tool: string, attempt: WriteAttempt, result?: { result?: any }): Promise<boolean> {
+    this.noteAttempt(callIndex, attempt, true);
+    return this.write({ type: 'tool_attempted', step: this.step, payload: { callIndex, key: this.key(callIndex), tool, phase: 'finished', ...attempt, ...(result ?? {}) } });
+  }
+
+  private noteAttempt(callIndex: number, attempt: WriteAttempt, finished: boolean): void {
+    const byNumber = this.attempts.get(callIndex) ?? new Map<number, WriteAttempt>();
+    if (finished || !byNumber.has(attempt.attempt)) byNumber.set(attempt.attempt, attempt);
+    this.attempts.set(callIndex, byNumber);
   }
 
   /** Record what call `callIndex` came to. */

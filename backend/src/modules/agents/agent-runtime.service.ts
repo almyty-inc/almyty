@@ -37,6 +37,7 @@ import { ApprovalsService } from '../approvals/approvals.service';
 import { describeLimitTrip } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
 import { conversationTitle } from './conversation-title';
+import { runForViewers, runLogView } from './run-log-privacy';
 import {
   ExecutionAccessService,
   ExecutionPrincipal,
@@ -159,6 +160,14 @@ export class AgentRuntimeService implements OnModuleInit {
     // Wire the emitter cleanup hook so terminal events flush
     // collaboration-temp agents tied to the run.
     this.events.setCleanupHook((runId) => this.misc.cleanupTemporaryAgents(runId));
+    // Live run views send the log with tool-call arguments' personal data
+    // hidden under the run's organization's filter (run-log-privacy.ts).
+    this.events.setRunLogView(
+      runLogView(
+        (runId) => this.runRepository.findOne({ where: { id: runId }, select: { id: true, organizationId: true, userId: true } }),
+        (data, options) => this.toolExecutorService.hidePersonalData(data, options),
+      ),
+    );
     // HITL: when an approval is decided, resume or terminate the run.
     this.approvals.on('approval.decided', async (approval: any) => {
       try {
@@ -545,6 +554,19 @@ export class AgentRuntimeService implements OnModuleInit {
   }
 
   /**
+   * A run as the run view shows it (GET /agents/:id/runs/:runId and the
+   * API-key route): getRun, with the arguments of the calls held in its
+   * working memory and of its steps hidden under the organization's PII
+   * filter (run-log-privacy.ts). The run itself keeps the real ones.
+   */
+  async getRunForViewer(runId: string, organizationId: string, agentId?: string): Promise<AgentRun> {
+    const run = await this.getRun(runId, organizationId, agentId);
+    return runForViewers(run, (values) =>
+      this.toolExecutorService.hidePersonalData(values, { organizationId: run.organizationId, userId: run.userId ?? undefined }),
+    );
+  }
+
+  /**
    * List runs for an agent.
    *
    * `limit` is caller-set, so it needs a ceiling: `?limit=100000` used to put
@@ -736,7 +758,8 @@ export class AgentRuntimeService implements OnModuleInit {
   /**
    * React to an approval decision. On 'approved' the run is moved
    * back to RUNNING and re-queued for the next step. On 'rejected'
-   * /'expired' the run is cancelled with the decision_reason.
+   * /'expired' the run is cancelled with the decision_reason, except for a
+   * change set or a write whose outcome was lost: those resume either way.
    *
    * Either way the request_approval call's result becomes the decision
    * ({ approved, decided_by, decision_reason }), as the tool promises: the
@@ -762,8 +785,11 @@ export class AgentRuntimeService implements OnModuleInit {
     // held tool call (an ask-first or amount rule, `_gate` in its payload)
     // gets its real result when it runs after the approval; writing the
     // decision too gave that call two results, and the model read the
-    // first one, the decision, as the call's outcome.
-    if (approval.payload?.kind !== 'change_set' && !approval.payload?._gate) {
+    // first one, the decision, as the call's outcome. A write whose outcome
+    // was lost gets the decision added to its result by the step that
+    // resumes (AgentStepProcessor.tellUnknownWriteDecision).
+    const kind = approval.payload?.kind;
+    if (kind !== 'change_set' && kind !== 'unknown_outcome' && !approval.payload?._gate) {
       await this.recordDecisionForModel(run, approval);
     }
 
@@ -775,7 +801,7 @@ export class AgentRuntimeService implements OnModuleInit {
       step: null,
       payload: {
         approvalId: approval.id ?? null,
-        kind: approval.payload?.kind === 'change_set' ? 'change_set' : approval.payload?._gate ? 'tool_call' : 'run',
+        kind: kind === 'change_set' || kind === 'unknown_outcome' ? kind : approval.payload?._gate ? 'tool_call' : 'run',
         status: approval.status,
         decidedBy: approval.status === 'expired' ? null : approval.decidedBy ?? null,
         decisionReason: approval.decisionReason ?? null,
@@ -786,8 +812,10 @@ export class AgentRuntimeService implements OnModuleInit {
 
     // A script's change set (code mode) resumes the run whatever the
     // decision: rejected or expired, none of it runs, the model is told so
-    // and carries on (docs/design/code-mode.md, part D).
-    if (approval.status === 'approved' || approval.payload?.kind === 'change_set') {
+    // and carries on (docs/design/code-mode.md, part D). So does a write
+    // whose outcome was lost (unknown-writes.ts): rejected or expired, the
+    // model is told to carry on without it.
+    if (approval.status === 'approved' || kind === 'change_set' || kind === 'unknown_outcome') {
       if (!(await writeRun(this.runRepository, waiting, { status: AgentRunStatus.RUNNING }, [decided]))) return;
       run.status = AgentRunStatus.RUNNING;
       // Same seq-from-timestamp rule as the resume path above, and for

@@ -33,3 +33,16 @@ export function idempotencyHeader(names: Iterable<string>): string | null {
   for (const name of names) if (IDEMPOTENCY_HEADER.test(name)) return name;
   return null;
 }
+
+/**
+ * Whether a tool accepts an idempotency key (durable runs step 4): its HTTP
+ * config sets the header for one, or its generating operation declares it.
+ * `operation` must be loaded for an operation-backed tool to be told apart;
+ * a tool with neither is sent no key.
+ */
+export function takesIdempotencyKey(tool: {
+  httpConfig?: { headers?: Record<string, any> | null } | null;
+  operation?: { parameters?: { header?: Record<string, any> } | null } | null;
+}): boolean {
+  return idempotencyHeader([...Object.keys(tool.httpConfig?.headers ?? {}), ...operationHeaderParams(tool.operation).map(([name]) => name)]) !== null;
+}
