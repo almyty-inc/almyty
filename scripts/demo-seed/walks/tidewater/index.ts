@@ -98,18 +98,25 @@ export const tidewater: Family = {
       writeFileSync(join(dir, 'src/index.js'), "export { formatMoney } from './money.js'\n")
       writeFileSync(join(dir, 'src/money.js'), "// Format an amount in cents, e.g. formatMoney(418000, 'EUR') -> \"4,180.00 EUR\"\nexport function formatMoney(cents, currency) {\n  const value = (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })\n  return `${value} ${currency}`\n}\n")
       writeFileSync(join(dir, 'test/money.test.js'), "import { test } from 'node:test'\nimport assert from 'node:assert/strict'\nimport { formatMoney } from '../src/index.js'\n\ntest('formats cents with two decimals and the currency', () => {\n  assert.equal(formatMoney(418000, 'EUR'), '4,180.00 EUR')\n})\n")
+      // Folders the tools on the capturing machine leave in a project (editor state, an
+      // assistant's own workspace) stay out of the run's "what changed".
+      writeFileSync(join(dir, '.gitignore'), 'node_modules/\n.agented/\n.idea/\n.vscode/\n')
       return dir
     },
 
     /**
      * Start @almyty/runner (ALMYTY_RUNNER_BIN or almyty-runner on PATH) as Ines,
      * in /tmp/tidewater: { name }. Her API token stands in for "almyty login".
+     * Its project config keeps commands, and so the run folders it makes, in
+     * /tmp/tidewater, not under the home folder of whoever takes the screenshots.
      */
     startRunner: async (run, a) => {
       // A coding assistant started from inside another one's session refuses to run; this one starts clean.
       const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^CLAUDE/.test(k)))
       const state = join(run.out, 'runner-state')
       mkdirSync(state, { recursive: true })
+      mkdirSync('/tmp/tidewater/.almyty', { recursive: true })
+      writeFileSync('/tmp/tidewater/.almyty/config.json', JSON.stringify({ config: { allowedCwdRoots: ['/tmp/tidewater'] } }, null, 2) + '\n')
       stopRunner()
       runner = spawn(process.env.ALMYTY_RUNNER_BIN || 'almyty-runner', ['start', '--name', String(a.name), '--org', run.person!.orgId, '--url', run.env.api], {
         cwd: '/tmp/tidewater', env: { ...env, ALMYTY_TOKEN: run.person!.token, ALMYTY_URL: run.env.api, ALMYTY_RUNNER_STATE_DIR: state }, stdio: ['ignore', 'inherit', 'inherit'],

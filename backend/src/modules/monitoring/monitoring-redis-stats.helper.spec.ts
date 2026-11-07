@@ -202,16 +202,23 @@ describe('MonitoringRedisStatsHelper (Postgres-backed)', () => {
       await expect(helper.getRunStats()).resolves.toEqual({ projectionMismatches: 0 });
     });
 
-    it('is exposed to Prometheus when the sample has it', () => {
+    it('is exposed to Prometheus when the sample has it, with the checks counter next to it', () => {
       const sample: any = {
         system: { uptime: 1, memoryUsage: { heapUsed: 1, heapTotal: 2 } },
         application: { tools: { total: 0, active: 0 }, requests: { successful: 0, failed: 0 } },
         performance: { averageResponseTime: 0 },
         protocols: { mcp: { sessions: 0 }, a2a: { activeAgents: 0 } },
-        runs: { projectionMismatches: 2 },
+        runs: { projectionMismatches: 2, projectionChecks: 1234 },
       };
-      expect(formatPrometheusMetrics(sample)).toContain('almyty_run_projection_mismatches 2\n');
-      expect(formatPrometheusMetrics({ ...sample, runs: undefined })).not.toContain('almyty_run_projection_mismatches');
+      const text = formatPrometheusMetrics(sample);
+      expect(text).toContain('almyty_run_projection_mismatches 2\n');
+      expect(text).toContain('# TYPE almyty_run_projection_checks_total counter\n');
+      expect(text).toContain('almyty_run_projection_checks_total 1234\n');
+      // A sample written before the counter existed reads as 0 checked.
+      expect(formatPrometheusMetrics({ ...sample, runs: { projectionMismatches: 0 } })).toContain('almyty_run_projection_checks_total 0\n');
+      const without = formatPrometheusMetrics({ ...sample, runs: undefined });
+      expect(without).not.toContain('almyty_run_projection_mismatches');
+      expect(without).not.toContain('almyty_run_projection_checks_total');
     });
   });
 });

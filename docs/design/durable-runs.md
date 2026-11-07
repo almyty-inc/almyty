@@ -159,6 +159,16 @@ window (`runs.projectionMismatches`, Prometheus
 `almyty_run_projection_mismatches`). The write has already committed: a
 check that differs, throws or is slow changes nothing about it.
 
+"No mismatches" means something only against how many writes were
+compared, so that is counted too. Every write checked increments the
+Redis key `run_projection:checks`, shared by all replicas and kept across
+restarts; the sample carries it as `runs.projectionChecks`, Prometheus as
+the counter `almyty_run_projection_checks_total`. Each process also logs
+its own totals every 15 minutes when they moved, and once on shutdown
+(`event: run_projection_summary`, "N run writes checked, M mismatches
+since this process started"), so `kubectl logs` answers the question
+where the metrics endpoint is closed (`PLATFORM_METRICS_TOKEN` unset).
+
 The flag is read, never inferred from the environment's name. It is off
 when unset and in the base Kubernetes config map, which is production's
 (the API deployment reads it from there, `optional: true`);
