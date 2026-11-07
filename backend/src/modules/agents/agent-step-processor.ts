@@ -5,7 +5,8 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { RunEventDraft } from './run-events';
 import { RunChange, writeRun } from './run-event-writer';
 import { StepOutcome, claimRun, heldBy, holdLease, runLeaseConfig } from './run-lease';
-import { Message, MessageRole } from '../../entities/message.entity';
+import { CallFinished, StepJournal } from './run-resume';
+import { Message, MessageRole, MessageType } from '../../entities/message.entity';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
@@ -216,6 +217,26 @@ type PendingChangeSet = {
   forModel: CodeResultForModel;
 };
 
+/** Where the run stood before a call of a step (durable runs step 4): what closeCall diffs against. */
+type CallMark = {
+  steps: number;
+  cost: number;
+  tokens: number;
+  toolCalls: number;
+  workingMemory: any;
+  metadata: any;
+  /** The step's own bookkeeping: a list's length, or a value. */
+  locals: Record<string, any>;
+};
+
+/** A call of a step on the log as started, not yet as finished. */
+type OpenCall = {
+  callIndex: number;
+  tool: string;
+  toolCall: { result?: any; error?: string; executionTime?: number; cached?: boolean };
+  mark: CallMark;
+};
+
 @Injectable()
 export class AgentStepProcessor {
   constructor(
@@ -298,7 +319,7 @@ export class AgentStepProcessor {
       return 'held';
     }
     if (claim.takenOver) {
-      this.s.logger.warn(`Run ${runId}: took over a lapsed lease (attempt ${claim.attempt}); its step starts over`);
+      this.s.logger.warn(`Run ${runId}: took over a lapsed lease (attempt ${claim.attempt}); its step resumes from the log`);
     }
     const lease = holdLease(this.s.runRepository, runId, claim.owner, config, this.s.logger);
     let outcome: StepOutcome;
@@ -443,9 +464,16 @@ export class AgentStepProcessor {
       // (principal: the run's, resolved above)
       const tools = await this.s.executionAccess.filterExecutable(principal, await this.resolveTools(agent));
 
+      // What an earlier attempt of this step did before it stopped (its
+      // worker died, or the job was retried): the model's answer and each
+      // call's outcome, on the run's log. This attempt resumes from them
+      // and does none of it again (durable runs step 4, run-resume.ts).
+      const journal = await StepJournal.read(this.s.runRepository, run);
+      if (journal.resuming) this.s.logger.log(`Run ${runId}: step ${expectedStep} resumes from its log`);
+
       // Calls that found their hosted machine starting run again first.
       if (Array.isArray(run.workingMemory?.wakingToolCalls) && run.workingMemory.wakingToolCalls.length > 0) {
-        return await this.retryWakingCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart);
+        return await this.retryWakingCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart, journal);
       }
 
       // Calls an approval policy held on an earlier step, and scripts'
@@ -455,7 +483,7 @@ export class AgentStepProcessor {
         (Array.isArray(run.workingMemory?.gatedToolCalls) && run.workingMemory.gatedToolCalls.length > 0) ||
         (Array.isArray(run.workingMemory?.pendingChangeSets) && run.workingMemory.pendingChangeSets.length > 0)
       ) {
-        return await this.runApprovedCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart);
+        return await this.runApprovedCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart, journal);
       }
 
       // The roles this step works with (autonomous-team.ts), read from the
@@ -543,7 +571,27 @@ export class AgentStepProcessor {
       const compaction = run.metadata?.triggerType === 'always_on'
         ? { ...ALWAYS_ON_COMPACTION, ...(agent.modelConfig?.compaction ?? {}), enabled: true }
         : agent.modelConfig?.compaction;
-      if (compaction?.enabled) {
+      // The model already answered an earlier attempt of this step: what
+      // compaction folded before that call (and paid for) is put back as it
+      // was, not done again.
+      const answered = journal.answer;
+      if (answered?.compaction) {
+        const folded = answered.compaction;
+        run.workingMemory = { ...(run.workingMemory || {}), contextSummary: folded.contextSummary };
+        run.totalCost += folded.cost;
+        run.totalTokens += folded.tokens;
+        this.noteEvent(run, {
+          type: 'compaction',
+          step: null,
+          payload: { folded: folded.folded, foldedTotal: folded.foldedTotal, cost: folded.cost, tokens: folded.tokens },
+        });
+      }
+      // What compaction did this step, for the model's answer to carry on the log.
+      let foldedThisStep: NonNullable<typeof answered>['compaction'] | undefined;
+      // A resumed step whose answer called tools reads no messages again; one
+      // whose answer is final may (its strategy's calls), from the summary
+      // put back above, which the compactor reuses.
+      if (compaction?.enabled && !answered?.response?.message?.toolCalls?.length) {
         // A new run of the thread starts from the summary the last one left,
         // instead of summarizing the whole history window again.
         try {
@@ -567,18 +615,28 @@ export class AgentStepProcessor {
         // run-wide count and what the summarizer cost. It is written by the
         // same commit as the step it belongs to (persistWithEvents).
         if (compacted.folded > 0) {
+          const foldedTotal = Number(run.workingMemory?.contextSummary?.foldedTotal ?? compacted.folded);
           this.noteEvent(run, {
             type: 'compaction',
             step: null,
             payload: {
               folded: compacted.folded,
-              foldedTotal: Number(run.workingMemory?.contextSummary?.foldedTotal ?? compacted.folded),
+              foldedTotal,
               cost: compacted.cost,
               tokens: compacted.tokens,
             },
           });
+          foldedThisStep = {
+            contextSummary: run.workingMemory?.contextSummary ?? null,
+            cost: compacted.cost,
+            tokens: compacted.tokens,
+            folded: compacted.folded,
+            foldedTotal,
+          };
         }
       }
+      // The messages the model was (or is now) asked with.
+      const messageCount = answered?.messageCount ?? messages.length;
 
       // Build tool definitions for the LLM (user tools + built-in tools)
       const llmTools = [
@@ -705,21 +763,26 @@ export class AgentStepProcessor {
       // is working, and a visitor surface shows none of it.
       const composing = composesFinalAnswer(run, agent);
       const offersTools = !!chatRequest.tools;
-      this.s.emitEvent(runId, 'llm.started', {
-        step: run.currentStep,
-        role: stampOf(acting),
-        ...(composing ? { answer: !offersTools } : {}),
-      });
+      // A resumed step is not asked again: its answer is the one on the log.
+      if (!answered) {
+        this.s.emitEvent(runId, 'llm.started', {
+          step: run.currentStep,
+          role: stampOf(acting),
+          ...(composing ? { answer: !offersTools } : {}),
+        });
+      }
 
-      const llmResponse: ChatResponse = await this.s.llmProvidersService.chatStream(
-        providerId,
-        chatRequest,
-        run.organizationId,
-        // As the run's principal, inherited: a gateway run reaches its
-        // gateway team's providers and keys, never the run row's user's.
-        principalOfRun(run),
-        (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), run.currentStep, chunk),
-      );
+      const llmResponse: ChatResponse = answered
+        ? (answered.response as ChatResponse)
+        : await this.s.llmProvidersService.chatStream(
+            providerId,
+            chatRequest,
+            run.organizationId,
+            // As the run's principal, inherited: a gateway run reaches its
+            // gateway team's providers and keys, never the run row's user's.
+            principalOfRun(run),
+            (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), run.currentStep, chunk),
+          );
 
       // Track cost and tokens
       const stepCost = llmResponse.cost || 0;
@@ -730,6 +793,23 @@ export class AgentStepProcessor {
       run.totalCost += stepCost;
       run.totalTokens += stepTotalTokens;
       chargeRole(run, acting, stepCost, stepTotalTokens);
+
+      // The answer goes on the log before anything acts on it, so a worker
+      // that picks this step up does not ask (and pay) again. A write that
+      // is refused means the step may not go on: the run was cancelled, or
+      // this worker lost its lease.
+      if (!answered) {
+        const recorded = await journal.recordAnswer({
+          response: llmResponse,
+          messageCount,
+          role: acting.key,
+          ...(foldedThisStep ? { compaction: foldedThisStep } : {}),
+        });
+        if (!recorded) {
+          await this.abandonIfTerminal(run, expectedStep);
+          return 'done';
+        }
+      }
 
       // The user may have cancelled while the model was answering. Stop
       // here, before a single tool runs, rather than at the next commit.
@@ -773,12 +853,15 @@ export class AgentStepProcessor {
         role: stampOf(acting),
         // In a composing run, whether this reply is the visitor's answer.
         ...(composing ? { answer: !offersTools || (!calledTools && !composeAnswer) } : {}),
+        // Read back from the run's log by a resumed step, not asked again.
+        ...(answered ? { resumed: true } : {}),
       });
 
       // Check if the LLM returned tool calls
       if (responseMessage.toolCalls && responseMessage.toolCalls.length > 0) {
-        // Persist assistant message with tool calls
-        if (run.conversationId) {
+        // Persist assistant message with tool calls (once: a resumed step
+        // finds the one its earlier attempt saved)
+        if (run.conversationId && !(answered && (await this.toolCallMessageSaved(run, responseMessage.toolCalls)))) {
           const assistantMsg = Message.createToolCallMessage(run.conversationId, responseMessage.toolCalls);
           assistantMsg.content = responseMessage.content || '';
           assistantMsg.runId = run.id;
@@ -795,8 +878,30 @@ export class AgentStepProcessor {
         const waking: WakingToolCall[] = [];
         // A call whose machine failed to start or wake: the run fails.
         let machineFailure: MachineFailure | null = null;
+        // The call under way: on the log as started, and as finished once the
+        // next one begins or the loop ends (closeCall), with what it did.
+        let open: OpenCall | null = null;
+        const callLocals = () => ({ gated, changeSets, waking, wakeRetryMs, machineFailure });
         // Execute each tool call
         for (const toolCall of responseMessage.toolCalls) {
+          if (open && !(await this.closeCall(journal, run, open, callLocals()))) {
+            await this.abandonIfTerminal(run, expectedStep);
+            return 'done';
+          }
+          open = null;
+          const callIndex = responseMessage.toolCalls.indexOf(toolCall);
+          // Made by an earlier attempt of this step: its outcome, from the
+          // log, stands in for it, and it is not made again.
+          const made = journal.outcomeOf(callIndex);
+          if (made) {
+            const local = this.replayCall(run, toolCall, made);
+            gated.push(...(local.gated ?? []));
+            changeSets.push(...(local.changeSets ?? []));
+            waking.push(...(local.waking ?? []));
+            if ('wakeRetryMs' in local) wakeRetryMs = local.wakeRetryMs;
+            if ('machineFailure' in local) machineFailure = local.machineFailure;
+            continue;
+          }
           // The tool-call budget, spent per call rather than per step.
           // `maxToolCalls` was resolved on every step and compared against
           // `run.toolCallCount` -- a column no code ever incremented, so the
@@ -816,6 +921,13 @@ export class AgentStepProcessor {
               reasonCode: trip.code,
               reason: trip.message,
             });
+            return 'done';
+          }
+          // On the log, with its key, before it is made: a worker that picks
+          // this step up knows the call was started, whatever came of it.
+          open = { callIndex, tool: toolCall.name, toolCall, mark: this.markCall(run, callLocals()) };
+          if (!(await journal.recordStarted(callIndex, toolCall.name))) {
+            await this.abandonIfTerminal(run, expectedStep);
             return 'done';
           }
           run.toolCallCount = (run.toolCallCount ?? 0) + 1;
@@ -882,7 +994,7 @@ export class AgentStepProcessor {
               run.steps.push({
                 type: 'llm_call',
                 role: stampOf(acting),
-                input: { messageCount: messages.length, toolCount: allToolDefs.length },
+                input: { messageCount, toolCount: allToolDefs.length },
                 output: { status: 'sleeping', reason: toolCall.parameters?.reason, ...answeredBy(llmResponse, acting) },
                 cost: stepCost,
                 tokens: { input: stepInputTokens, output: stepOutputTokens },
@@ -901,7 +1013,7 @@ export class AgentStepProcessor {
               run.steps.push({
                 type: 'llm_call',
                 role: stampOf(acting),
-                input: { messageCount: messages.length, toolCount: allToolDefs.length },
+                input: { messageCount, toolCount: allToolDefs.length },
                 output: { status: 'waiting_input', question: toolCall.parameters?.question, ...answeredBy(llmResponse, acting) },
                 cost: stepCost,
                 tokens: { input: stepInputTokens, output: stepOutputTokens },
@@ -1140,6 +1252,8 @@ export class AgentStepProcessor {
               agentTeamId: agent.teamId ?? null,
               // This run pauses and asks a person itself (holdForApproval).
               holdForApproval: 'caller',
+              // The same on every attempt of this step (run-resume.ts).
+              idempotencyKey: journal.key(callIndex),
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
@@ -1261,6 +1375,10 @@ export class AgentStepProcessor {
             });
           }
         }
+        if (open && !(await this.closeCall(journal, run, open, callLocals()))) {
+          await this.abandonIfTerminal(run, expectedStep);
+          return 'done';
+        }
 
         // A call's hosted machine failed to start or wake: nothing more can
         // run there, so the run ends failed instead of letting the model
@@ -1269,7 +1387,7 @@ export class AgentStepProcessor {
           run.steps.push({
             type: 'llm_call',
             role: stampOf(acting),
-            input: { messageCount: messages.length, toolCount: allToolDefs.length },
+            input: { messageCount, toolCount: allToolDefs.length },
             output: { toolCalls: responseMessage.toolCalls.map((tc) => ({ name: tc.name, hasResult: !!tc.result })), ...answeredBy(llmResponse, acting) },
             cost: stepCost,
             tokens: { input: stepInputTokens, output: stepOutputTokens },
@@ -1288,7 +1406,7 @@ export class AgentStepProcessor {
           run.steps.push({
             type: 'llm_call',
             role: stampOf(acting),
-            input: { messageCount: messages.length, toolCount: allToolDefs.length },
+            input: { messageCount, toolCount: allToolDefs.length },
             output: {
               status: 'waiting_approval',
               ...(gated.length ? { heldToolCalls: gated.map((g) => ({ tool: g.toolName, rule: g.rule })) } : {}),
@@ -1327,7 +1445,7 @@ export class AgentStepProcessor {
           run.steps.push({
             type: 'llm_call',
             role: stampOf(acting),
-            input: { messageCount: messages.length, toolCount: allToolDefs.length },
+            input: { messageCount, toolCount: allToolDefs.length },
             output: { status: 'sleeping', reason: 'the hosted workspace is starting', ...answeredBy(llmResponse, acting) },
             cost: stepCost,
             tokens: { input: stepInputTokens, output: stepOutputTokens },
@@ -1346,7 +1464,7 @@ export class AgentStepProcessor {
         run.steps.push({
           type: 'llm_call',
           role: stampOf(acting),
-          input: { messageCount: messages.length, toolCount: allToolDefs.length },
+          input: { messageCount, toolCount: allToolDefs.length },
           output: { toolCalls: responseMessage.toolCalls.map(tc => ({ name: tc.name, hasResult: !!tc.result })), ...answeredBy(llmResponse, acting) },
           cost: stepCost,
           tokens: { input: stepInputTokens, output: stepOutputTokens },
@@ -1377,7 +1495,7 @@ export class AgentStepProcessor {
           inputTokens: stepInputTokens,
           outputTokens: stepOutputTokens,
           routing: llmResponse.routing,
-          messageCount: messages.length,
+          messageCount,
           toolCount: allToolDefs.length,
           startedAt: stepStart,
         };
@@ -1397,7 +1515,7 @@ export class AgentStepProcessor {
             run.steps.push({
               type: 'llm_call',
               role: stampOf(acting),
-              input: { messageCount: messages.length, toolCount: allToolDefs.length },
+              input: { messageCount, toolCount: allToolDefs.length },
               output: { status: 'escalated', content: finalContent.substring(0, 200), ...answeredBy(llmResponse, acting) },
               cost: stepCost,
               tokens: { input: stepInputTokens, output: stepOutputTokens },
@@ -1487,7 +1605,7 @@ export class AgentStepProcessor {
             run.steps.push({
               type: 'llm_call',
               role: stampOf(acting),
-              input: { messageCount: messages.length, toolCount: allToolDefs.length },
+              input: { messageCount, toolCount: allToolDefs.length },
               output: { status: 'revising', content: finalContent.substring(0, 200), ...answeredBy(llmResponse, acting) },
               cost: stepCost,
               tokens: { input: stepInputTokens, output: stepOutputTokens },
@@ -1577,7 +1695,7 @@ export class AgentStepProcessor {
             run.steps.push({
               type: 'llm_call',
               role: stampOf(acting),
-              input: { messageCount: messages.length, toolCount: allToolDefs.length },
+              input: { messageCount, toolCount: allToolDefs.length },
               output: { status: 'revising', content: finalContent.substring(0, 200), ...answeredBy(llmResponse, acting) },
               cost: stepCost,
               tokens: { input: stepInputTokens, output: stepOutputTokens },
@@ -2238,6 +2356,7 @@ export class AgentStepProcessor {
     resolvedLimits: ResolvedRunLimits,
     call: { toolId: string; toolName: string; parameters: Record<string, any> },
     approvedGate?: { approvalId: string },
+    idempotencyKey?: string,
   ): Promise<ToolExecutionResult> {
     const tool = tools.find((t) => t.id === call.toolId);
     if (!tool) {
@@ -2263,6 +2382,7 @@ export class AgentStepProcessor {
       agentTeamId: agent.teamId ?? null,
       ...(approvedGate ? { approvedGate } : {}),
       holdForApproval: 'caller',
+      ...(idempotencyKey ? { idempotencyKey } : {}),
     });
   }
 
@@ -2283,6 +2403,7 @@ export class AgentStepProcessor {
     resolvedLimits: ResolvedRunLimits,
     expectedStep: number,
     stepStart: number,
+    journal: StepJournal,
   ): Promise<'continue' | 'done' | 'waiting'> {
     const runId = run.id;
     const pending: WakingToolCall[] = run.workingMemory?.wakingToolCalls ?? [];
@@ -2290,47 +2411,59 @@ export class AgentStepProcessor {
     const gated: GatedToolCall[] = [];
     let retryMs = 0;
     let failure: MachineFailure | null = null;
-    for (const call of pending) {
+    const locals = () => ({ still, gated, retryMs, failure });
+    for (const [callIndex, call] of pending.entries()) {
       if (failure) break;
-      const started = Date.now();
-      const tool = tools.find((t) => t.id === call.toolId);
-      const result: ToolExecutionResult = await this.runHeldCall(run, agent, tools, resolvedLimits, call);
-      if (result.approvalRequired && tool) {
-        gated.push(await this.holdForApproval(run, agent, tool, { id: call.toolCallId, parameters: call.parameters }, result.approvalRequired));
-        continue;
-      }
-      if (isWaking(result)) {
-        still.push(call);
-        retryMs = Math.max(retryMs, Number(result.metadata?.retryAfterMs) || 0);
-        continue;
-      }
-      failure = machineFailureOf(result);
-      this.s.emitEvent(runId, 'tool.result', {
-        step: run.currentStep,
-        toolCallId: call.toolCallId,
-        tool: call.toolName,
-        success: result.success,
-        executionTime: result.executionTime,
+      const went = await this.journaledCall(journal, run, callIndex, call.toolName, locals, async () => {
+        const started = Date.now();
+        const tool = tools.find((t) => t.id === call.toolId);
+        const result: ToolExecutionResult = await this.runHeldCall(run, agent, tools, resolvedLimits, call, undefined, journal.key(callIndex));
+        if (result.approvalRequired && tool) {
+          gated.push(await this.holdForApproval(run, agent, tool, { id: call.toolCallId, parameters: call.parameters }, result.approvalRequired));
+          return;
+        }
+        if (isWaking(result)) {
+          still.push(call);
+          retryMs = Math.max(retryMs, Number(result.metadata?.retryAfterMs) || 0);
+          return;
+        }
+        failure = machineFailureOf(result);
+        this.s.emitEvent(runId, 'tool.result', {
+          step: run.currentStep,
+          toolCallId: call.toolCallId,
+          tool: call.toolName,
+          success: result.success,
+          executionTime: result.executionTime,
+        });
+        if (run.conversationId) {
+          const content = result.success
+            ? typeof result.data === 'string'
+              ? result.data
+              : JSON.stringify(result.data)
+            : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
+          const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
+          msg.runId = run.id;
+          await this.s.messageRepository.save(msg);
+        }
+        run.steps.push({
+          type: 'tool_call',
+          input: { tool: call.toolName, toolId: call.toolId, parameters: call.parameters },
+          output: failure ? { machineError: failure } : result.data,
+          cost: result.metadata?.cost || 0,
+          duration: Date.now() - started,
+          timestamp: new Date().toISOString(),
+          error: result.success ? undefined : result.error,
+        });
+      }, (local) => {
+        still.push(...(local.still ?? []));
+        gated.push(...(local.gated ?? []));
+        if ('retryMs' in local) retryMs = local.retryMs;
+        if ('failure' in local) failure = local.failure;
       });
-      if (run.conversationId) {
-        const content = result.success
-          ? typeof result.data === 'string'
-            ? result.data
-            : JSON.stringify(result.data)
-          : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
-        const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
-        msg.runId = run.id;
-        await this.s.messageRepository.save(msg);
+      if (!went) {
+        await this.abandonIfTerminal(run, expectedStep);
+        return 'done';
       }
-      run.steps.push({
-        type: 'tool_call',
-        input: { tool: call.toolName, toolId: call.toolId, parameters: call.parameters },
-        output: failure ? { machineError: failure } : result.data,
-        cost: result.metadata?.cost || 0,
-        duration: Date.now() - started,
-        timestamp: new Date().toISOString(),
-        error: result.success ? undefined : result.error,
-      });
     }
     const { wakingToolCalls: _retried, ...rest } = run.workingMemory || {};
     run.workingMemory = {
@@ -2437,6 +2570,7 @@ export class AgentStepProcessor {
     resolvedLimits: ResolvedRunLimits,
     expectedStep: number,
     stepStart: number,
+    journal: StepJournal,
   ): Promise<'continue' | 'done' | 'waiting'> {
     const runId = run.id;
     // Scripts' change sets a person has now decided (code mode, part D):
@@ -2445,87 +2579,107 @@ export class AgentStepProcessor {
     // the model gets one result for its run_code call.
     const sets: PendingChangeSet[] = run.workingMemory?.pendingChangeSets ?? [];
     const setsWaiting: PendingChangeSet[] = [];
-    for (const set of sets) {
-      const started = Date.now();
-      const approval = await this.s.approvals.findInOrganization(set.approvalId, run.organizationId);
-      if (!approval || approval.status === 'pending' || !this.codeMode) {
-        setsWaiting.push(set);
-        continue;
-      }
-      const decision = approval.status === 'approved' ? 'approved' : approval.status === 'expired' ? 'expired' : 'rejected';
-      const entries =
-        decision === 'approved'
-          ? await this.codeMode.applyChangeSet(set.codeExecutionId, set.approvalId, tools, {
-              organizationId: run.organizationId,
-              userId: run.userId ?? null,
-              principal: principalOfRun(run),
-              runId: run.id,
-              agentId: agent.id,
-              agentTeamId: agent.teamId ?? null,
-              runnerLabels: agent.agentConfig?.runnerLabels,
-              pinnedRunnerId: agentRunnerId(agent) ?? undefined,
-              environmentId: agentEnvironmentId(agent) ?? undefined,
-            })
-          : await this.codeMode.rejectChangeSet(set.codeExecutionId, run.organizationId);
-      const answer = changeSetOutcomeForModel(set.forModel, decision, entries, approval.decisionReason);
-      const failed = entries.find((e) => e.outcome === 'failed');
-      this.s.emitEvent(runId, 'tool.result', {
-        step: run.currentStep,
-        toolCallId: set.toolCallId,
-        tool: RUN_CODE,
-        success: decision === 'approved' && !failed,
-        executionTime: Date.now() - started,
-      });
-      if (run.conversationId) {
-        const msg = Message.createToolResultMessage(run.conversationId, set.toolCallId, JSON.stringify(answer), failed?.error);
-        msg.runId = run.id;
-        await this.s.messageRepository.save(msg);
-      }
-      run.steps.push({
-        type: 'tool_call',
-        input: { tool: RUN_CODE, codeExecutionId: set.codeExecutionId, approvalId: set.approvalId },
-        output: answer.changeSet,
-        duration: Date.now() - started,
-        timestamp: new Date().toISOString(),
-        ...(failed ? { error: failed.error } : {}),
-      });
-    }
-
     const held: GatedToolCall[] = run.workingMemory?.gatedToolCalls ?? [];
     const waiting: GatedToolCall[] = [];
-    for (const call of held) {
-      const started = Date.now();
-      const result: ToolExecutionResult = await this.runHeldCall(run, agent, tools, resolvedLimits, call, { approvalId: call.approvalId });
-      if (result.approvalRequired) {
-        waiting.push(call);
-        continue;
+    // Each set, then each held call, is one call of this step: the sets
+    // first (0..), the held calls after them.
+    const locals = () => ({ setsWaiting, waiting });
+    const restore = (local: Record<string, any>) => {
+      setsWaiting.push(...(local.setsWaiting ?? []));
+      waiting.push(...(local.waiting ?? []));
+    };
+    for (const [setIndex, set] of sets.entries()) {
+      const went = await this.journaledCall(journal, run, setIndex, RUN_CODE, locals, async () => {
+        const started = Date.now();
+        const approval = await this.s.approvals.findInOrganization(set.approvalId, run.organizationId);
+        if (!approval || approval.status === 'pending' || !this.codeMode) {
+          setsWaiting.push(set);
+          return;
+        }
+        const decision = approval.status === 'approved' ? 'approved' : approval.status === 'expired' ? 'expired' : 'rejected';
+        const entries =
+          decision === 'approved'
+            ? await this.codeMode.applyChangeSet(set.codeExecutionId, set.approvalId, tools, {
+                organizationId: run.organizationId,
+                userId: run.userId ?? null,
+                principal: principalOfRun(run),
+                runId: run.id,
+                agentId: agent.id,
+                agentTeamId: agent.teamId ?? null,
+                runnerLabels: agent.agentConfig?.runnerLabels,
+                pinnedRunnerId: agentRunnerId(agent) ?? undefined,
+                environmentId: agentEnvironmentId(agent) ?? undefined,
+              })
+            : await this.codeMode.rejectChangeSet(set.codeExecutionId, run.organizationId);
+        const answer = changeSetOutcomeForModel(set.forModel, decision, entries, approval.decisionReason);
+        const failed = entries.find((e) => e.outcome === 'failed');
+        this.s.emitEvent(runId, 'tool.result', {
+          step: run.currentStep,
+          toolCallId: set.toolCallId,
+          tool: RUN_CODE,
+          success: decision === 'approved' && !failed,
+          executionTime: Date.now() - started,
+        });
+        if (run.conversationId) {
+          const msg = Message.createToolResultMessage(run.conversationId, set.toolCallId, JSON.stringify(answer), failed?.error);
+          msg.runId = run.id;
+          await this.s.messageRepository.save(msg);
+        }
+        run.steps.push({
+          type: 'tool_call',
+          input: { tool: RUN_CODE, codeExecutionId: set.codeExecutionId, approvalId: set.approvalId },
+          output: answer.changeSet,
+          duration: Date.now() - started,
+          timestamp: new Date().toISOString(),
+          ...(failed ? { error: failed.error } : {}),
+        });
+      }, restore);
+      if (!went) {
+        await this.abandonIfTerminal(run, expectedStep);
+        return 'done';
       }
-      this.s.emitEvent(runId, 'tool.result', {
-        step: run.currentStep,
-        toolCallId: call.toolCallId,
-        tool: call.toolName,
-        success: result.success,
-        executionTime: result.executionTime,
-      });
-      if (run.conversationId) {
-        const content = result.success
-          ? typeof result.data === 'string'
-            ? result.data
-            : JSON.stringify(result.data)
-          : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
-        const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
-        msg.runId = run.id;
-        await this.s.messageRepository.save(msg);
+    }
+
+    for (const [heldIndex, call] of held.entries()) {
+      const callIndex = sets.length + heldIndex;
+      const went = await this.journaledCall(journal, run, callIndex, call.toolName, locals, async () => {
+        const started = Date.now();
+        const result: ToolExecutionResult = await this.runHeldCall(run, agent, tools, resolvedLimits, call, { approvalId: call.approvalId }, journal.key(callIndex));
+        if (result.approvalRequired) {
+          waiting.push(call);
+          return;
+        }
+        this.s.emitEvent(runId, 'tool.result', {
+          step: run.currentStep,
+          toolCallId: call.toolCallId,
+          tool: call.toolName,
+          success: result.success,
+          executionTime: result.executionTime,
+        });
+        if (run.conversationId) {
+          const content = result.success
+            ? typeof result.data === 'string'
+              ? result.data
+              : JSON.stringify(result.data)
+            : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
+          const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
+          msg.runId = run.id;
+          await this.s.messageRepository.save(msg);
+        }
+        run.steps.push({
+          type: 'tool_call',
+          input: { tool: call.toolName, toolId: call.toolId, parameters: call.parameters, approvalId: call.approvalId },
+          output: result.data,
+          cost: result.metadata?.cost || 0,
+          duration: Date.now() - started,
+          timestamp: new Date().toISOString(),
+          error: result.success ? undefined : result.error,
+        });
+      }, restore);
+      if (!went) {
+        await this.abandonIfTerminal(run, expectedStep);
+        return 'done';
       }
-      run.steps.push({
-        type: 'tool_call',
-        input: { tool: call.toolName, toolId: call.toolId, parameters: call.parameters, approvalId: call.approvalId },
-        output: result.data,
-        cost: result.metadata?.cost || 0,
-        duration: Date.now() - started,
-        timestamp: new Date().toISOString(),
-        error: result.success ? undefined : result.error,
-      });
     }
     const { gatedToolCalls: _done, pendingChangeSets: _sets, ...rest } = run.workingMemory || {};
     run.workingMemory = {
@@ -2596,6 +2750,133 @@ export class AgentStepProcessor {
     run.headSeq = written.headSeq;
     this.pendingNotes.delete(run);
     return true;
+  }
+
+  /**
+   * One call of a step, at most once over all its attempts (durable runs
+   * step 4): replayed from the log when an earlier attempt finished it,
+   * else put on the log as started, made (`body`), and put on the log as
+   * finished. `locals` is the step's own bookkeeping the call may add to,
+   * and `restore` puts a replayed call's share of it back. False when a
+   * write was refused: the run finished, or this worker lost its lease.
+   */
+  private async journaledCall(
+    journal: StepJournal,
+    run: AgentRun,
+    callIndex: number,
+    tool: string,
+    locals: () => Record<string, any>,
+    body: () => Promise<void>,
+    restore: (local: Record<string, any>) => void,
+  ): Promise<boolean> {
+    const made = journal.outcomeOf(callIndex);
+    if (made) {
+      restore(this.replayCall(run, {}, made));
+      return true;
+    }
+    const open: OpenCall = { callIndex, tool, toolCall: {}, mark: this.markCall(run, locals()) };
+    if (!(await journal.recordStarted(callIndex, tool))) return false;
+    await body();
+    return this.closeCall(journal, run, open, locals());
+  }
+
+  /**
+   * Where the run stood before a call of this step: enough to tell, once
+   * the call is done, what it did (closeCall).
+   */
+  private markCall(run: AgentRun, locals: Record<string, any>): CallMark {
+    return {
+      steps: run.steps.length,
+      cost: run.totalCost ?? 0,
+      tokens: run.totalTokens ?? 0,
+      toolCalls: run.toolCallCount ?? 0,
+      workingMemory: run.workingMemory,
+      metadata: run.metadata,
+      locals: Object.fromEntries(Object.entries(locals).map(([name, value]) => [name, Array.isArray(value) ? value.length : value])),
+    };
+  }
+
+  /**
+   * Put a call that has finished on the run's log (`tool_finished`), with
+   * what it did: the steps it recorded and its result, as they are stored
+   * (capped, personal data hidden), what it added to the run's totals,
+   * working memory or metadata when it changed them, and what it left for
+   * the rest of the step (`locals`: lists it added to, values it set). A
+   * resumed step replays exactly that (replayCall). False when the write
+   * was refused: the run finished, or this worker lost its lease.
+   */
+  private async closeCall(journal: StepJournal, run: AgentRun, open: OpenCall, locals: Record<string, any>): Promise<boolean> {
+    const { mark, toolCall } = open;
+    const steps = run.steps.slice(mark.steps);
+    const [seen, ...stored] = await this.hideForLog(run, [{ type: 'tool_result', output: toolCall.result, error: toolCall.error }, ...steps]);
+    const local: Record<string, any> = {};
+    for (const [name, value] of Object.entries(locals)) {
+      const before = mark.locals[name];
+      if (Array.isArray(value)) {
+        const added = value.slice(before as number);
+        if (added.length) local[name] = added;
+      } else if (value !== before) {
+        local[name] = value ?? null;
+      }
+    }
+    return journal.recordFinished({
+      callIndex: open.callIndex,
+      tool: open.tool,
+      call: {
+        ...(seen?.output !== undefined ? { result: seen.output } : {}),
+        ...(seen?.error !== undefined ? { error: seen.error } : {}),
+        ...(toolCall.executionTime !== undefined ? { executionTime: toolCall.executionTime } : {}),
+        ...(toolCall.cached !== undefined ? { cached: toolCall.cached } : {}),
+      },
+      steps: stored,
+      cost: (run.totalCost ?? 0) - mark.cost,
+      tokens: (run.totalTokens ?? 0) - mark.tokens,
+      toolCalls: (run.toolCallCount ?? 0) - mark.toolCalls,
+      ...(run.workingMemory !== mark.workingMemory ? { workingMemory: run.workingMemory ?? null } : {}),
+      ...(run.metadata !== mark.metadata ? { metadata: run.metadata ?? null } : {}),
+      local,
+    });
+  }
+
+  /**
+   * A call an earlier attempt of this step made, played back from its
+   * `tool_finished` instead of being made again: its result on the call,
+   * its steps on the run, its totals added, working memory and metadata as
+   * it left them. Returns what it left for the rest of the step.
+   */
+  private replayCall(run: AgentRun, toolCall: { result?: any; error?: string; executionTime?: number; cached?: boolean }, made: CallFinished): Record<string, any> {
+    toolCall.result = made.call?.result;
+    toolCall.error = made.call?.error;
+    toolCall.executionTime = made.call?.executionTime;
+    toolCall.cached = made.call?.cached;
+    if (Array.isArray(made.steps)) run.steps.push(...made.steps);
+    run.totalCost = (run.totalCost ?? 0) + (Number(made.cost) || 0);
+    run.totalTokens = (run.totalTokens ?? 0) + (Number(made.tokens) || 0);
+    run.toolCallCount = (run.toolCallCount ?? 0) + (Number(made.toolCalls) || 0);
+    if ('workingMemory' in made) run.workingMemory = made.workingMemory;
+    if ('metadata' in made) run.metadata = made.metadata;
+    return made.local ?? {};
+  }
+
+  /** Steps as the log may hold them: capped, personal data hidden (as stepsForPersist stores them). */
+  private async hideForLog(run: AgentRun, steps: any[]): Promise<any[]> {
+    const bounded = this.boundStepsForPersist(steps as AgentRun['steps']);
+    return this.s.tracePrivacy ? this.s.tracePrivacy.hideSteps(bounded, run.organizationId, run.userId) : bounded;
+  }
+
+  /**
+   * Whether the assistant message carrying these tool calls is already in
+   * the conversation: a resumed step saved before its worker stopped.
+   */
+  private async toolCallMessageSaved(run: AgentRun, toolCalls: Array<{ id: string }>): Promise<boolean> {
+    const first = toolCalls[0]?.id;
+    if (!first || !run.conversationId) return false;
+    const saved = await this.s.messageRepository.find({
+      where: { conversationId: run.conversationId, runId: run.id, type: MessageType.TOOL_CALL } as any,
+      order: { createdAt: 'DESC' } as any,
+      take: 5,
+    });
+    return saved.some((m: Message) => Array.isArray(m.toolCalls) && m.toolCalls.some((c: any) => c?.id === first));
   }
 
   /**

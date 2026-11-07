@@ -3,7 +3,7 @@ import { FindOptionsWhere, In, IsNull, Not, Repository } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { AgentRunEvent } from '../../entities/agent-run-event.entity';
-import { RunEventDraft, RunEventRecord, baselineOf, commitEvents } from './run-events';
+import { RunEventDraft, RunEventRecord, asStored, baselineOf, commitEvents, runStartedEvent } from './run-events';
 
 /**
  * The columns of a run whose changes are logged (run-events.ts), plus
@@ -47,10 +47,23 @@ export interface WriteRunOptions {
    * lease renewal should not read a run's steps back every few seconds.
    */
   select?: Array<keyof AgentRun>;
+  /**
+   * Append the notes alone, as a step's progress (durable runs step 4,
+   * run-resume.ts): what a step has done so far, written before its commit.
+   * The change must be empty. Nothing of the row's state is read or
+   * written but headSeq (and updatedAt: progress is progress, for the
+   * reaper), and no `step_committed` closes the events, so a reader can
+   * tell a step under way from one committed. Each note's step defaults to
+   * the run's current step.
+   */
+  progress?: boolean;
 }
 
 const isLeaseOnly = (patch: RunChange): boolean =>
   Object.keys(patch).every((key) => (LEASE_COLUMNS as readonly string[]).includes(key));
+
+/** What a progress write locks and reads: enough to guard it and to tell whether the run is done. */
+const PROGRESS_READ = ['id', 'headSeq', 'status', 'currentStep', 'leaseOwner'];
 
 /** Statuses a worker is wanted for straight away. */
 const GOING: readonly string[] = [AgentRunStatus.PENDING, AgentRunStatus.RUNNING];
@@ -105,9 +118,12 @@ export async function writeRun(
   options: WriteRunOptions = {},
 ): Promise<AgentRun | null> {
   const committed: RunWritten[] = [];
-  const select = options.select
-    ? Object.fromEntries([...new Set<string>(['id', 'headSeq', ...options.select])].map((c) => [c, true]))
-    : undefined;
+  if (options.progress && options.select) throw new Error('writeRun: a progress write reads its own columns');
+  const select = options.progress
+    ? Object.fromEntries(PROGRESS_READ.map((c) => [c, true]))
+    : options.select
+      ? Object.fromEntries([...new Set<string>(['id', 'headSeq', ...options.select])].map((c) => [c, true]))
+      : undefined;
   const result = await runs.manager.transaction(async (tx) => {
     const repo = tx.getRepository(AgentRun);
     const row = await repo.findOne({ where, lock: { mode: 'pessimistic_write' }, ...(select ? { select: select as any } : {}) });
@@ -115,6 +131,30 @@ export async function writeRun(
     const asked = typeof change === 'function' ? change(row) : change;
     if (!asked) return null;
     const head = row.headSeq ?? 0;
+    if (options.progress) {
+      if (Object.keys(asked).length > 0) throw new Error('writeRun: a progress write changes nothing but the log');
+      if (notes.length === 0) return null;
+      // Progress before the run's first commit opens its log, as that commit would have.
+      const opening: RunEventDraft[] = [];
+      if (head === 0) {
+        const whole = await repo.findOne({ where: { id: row.id } });
+        if (whole) opening.push(runStartedEvent(baselineOf(whole)));
+      }
+      const records = [...opening, ...notes].map((n, i) => ({
+        runId: row.id,
+        seq: head + i + 1,
+        type: n.type,
+        step: n.step ?? row.currentStep ?? 0,
+        payload: asStored(n.payload ?? {}),
+      }));
+      const headSeq = head + records.length;
+      const res = await repo.update({ id: row.id, headSeq: head }, { headSeq } as any);
+      if ((res.affected ?? 0) === 0) return null;
+      await tx.getRepository(AgentRunEvent).insert(records.map((r) => ({ ...r })));
+      const next = Object.assign(Object.create(Object.getPrototypeOf(row)), row, { headSeq }) as AgentRun;
+      committed.push({ before: row, after: next, events: records, progress: true });
+      return next;
+    }
     if (isLeaseOnly(asked) && notes.length === 0) {
       // A lease write appends nothing, so headSeq does not move and cannot
       // tell two of them apart: the UPDATE names the caller's where too.
@@ -150,6 +190,11 @@ export interface RunWritten {
   before: AgentRun;
   after: AgentRun;
   events: Array<RunEventRecord & { runId: string }>;
+  /**
+   * A step's progress (WriteRunOptions.progress): markers only, the row's
+   * state untouched, and `before` / `after` hold only the columns it read.
+   */
+  progress?: boolean;
 }
 
 export type RunWriteListener = (written: RunWritten) => void | Promise<void>;
