@@ -96,8 +96,8 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 
 | | Routes |
 | --- | ---: |
-| Controller routes (src/modules + ee/modules) | 589 |
-| Excluded (an MCP client must not or cannot use them) | 133 |
+| Controller routes (src/modules + ee/modules) | 590 |
+| Excluded (an MCP client must not or cannot use them) | 134 |
 | In scope | 456 |
 | Covered by a dedicated tool | 79 (17.3%) |
 | Covered by an operation | 351 (77.0%) |
@@ -115,7 +115,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | apis | 30 | 6 | 23 | 0 | 1 |
 | approvals | 9 | 3 | 6 | 0 | 0 |
 | audit-log | 2 | 0 | 2 | 0 | 0 |
-| auth | 18 | 0 | 4 | 1 | 13 |
+| auth | 19 | 0 | 4 | 1 | 14 |
 | budgets | 7 | 2 | 5 | 0 | 0 |
 | connections | 5 | 2 | 1 | 0 | 2 |
 | credentials | 21 | 4 | 15 | 1 | 1 |
@@ -381,6 +381,7 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | auth | `POST /auth/token` (AuthController.token) |  | excluded |
 | auth | `POST /auth/refresh` (AuthController.refresh) |  | excluded |
 | auth | `POST /auth/logout` (AuthController.logout) |  | excluded |
+| auth | `POST /auth/sessions/revoke-others` (AuthController.revokeOtherSessions) |  | excluded |
 | auth | `GET /auth/profile` (AuthController.getProfile) | `profile.get` (read) | operation |
 | auth | `PATCH /auth/profile` (AuthController.updateProfile) | `profile.update` (write) | operation |
 | auth | `POST /auth/api-keys` (AuthController.createApiKey) |  | held |
@@ -755,7 +756,7 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 ## Exclusions
 
 - Sign-in, sign-up and session handling: an MCP client is already signed in through the MCP OAuth flow and must not create, refresh or end sessions, or handle passwords and email verification.
-  `AuthController.checkOrganizationName`, `AuthController.register`, `AuthController.login`, `AuthController.token`, `AuthController.refresh`, `AuthController.logout`, `AuthController.forgotPassword`, `AuthController.resetPassword`, `AuthController.changePassword`, `AuthController.verifyEmail`, `AuthController.verifyEmailLink`, `AuthController.resendVerification`, `AuthController.resendVerificationByEmail`, `InvitesController.getMembershipInvite`, `InvitesController.acceptMembershipInvite`, `InvitesController.getInviteDetails`, `InvitesController.acceptInvite`, `ReferralsController.attribute`
+  `AuthController.checkOrganizationName`, `AuthController.register`, `AuthController.login`, `AuthController.token`, `AuthController.refresh`, `AuthController.logout`, `AuthController.revokeOtherSessions`, `AuthController.forgotPassword`, `AuthController.resetPassword`, `AuthController.changePassword`, `AuthController.verifyEmail`, `AuthController.verifyEmailLink`, `AuthController.resendVerification`, `AuthController.resendVerificationByEmail`, `InvitesController.getMembershipInvite`, `InvitesController.acceptMembershipInvite`, `InvitesController.getInviteDetails`, `InvitesController.acceptInvite`, `ReferralsController.attribute`
 - Single sign-on browser flow (redirects, IdP callbacks, SAML posts): run by a browser and an identity provider, not by an MCP client.
   `SsoController.discover`, `SsoController.samlLogin`, `SsoController.samlCallback`, `SsoController.samlComplete`, `SsoController.samlMetadata`, `SsoController.oidcLogin`, `SsoController.oidcCallback`
 - SCIM provisioning: authenticated by the organization's SCIM token and called by its identity provider, not by a signed-in user.
