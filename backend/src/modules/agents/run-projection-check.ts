@@ -151,6 +151,24 @@ export class RunProjectionChecker {
   check(written: RunWritten): ProjectionMismatch | null {
     const { before, after, events } = written;
     if (!events.length) return null;
+    if (written.progress) {
+      // A step's progress: markers only, so nothing to compare (the write
+      // read only a few columns). A projection held at the head before it
+      // moves to the head after it; any other is dropped, and the next
+      // write folds from its own locked row.
+      const held = this.cache.get(after.id);
+      const fromSeq = before.headSeq ?? 0;
+      if (held && held.projection.headSeq === fromSeq) {
+        try {
+          held.projection = foldRunEvents(held.projection, events)!;
+        } catch {
+          this.forget(after.id);
+        }
+      } else {
+        this.forget(after.id);
+      }
+      return null;
+    }
     this.stats.checks++;
     const runId = after.id;
     const fromSeq = before.headSeq ?? 0;
