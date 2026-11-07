@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 
 import { gitAuthEnv, prepareHostedWorkspace, redactUrl, RunCommand, runCommand } from '../src/hosted-setup.js';
 
 let root: string;
 let tmp: string;
 const quiet = { log: () => {}, warn: () => {} };
+const execFileAsync = promisify(execFile);
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'hosted-ws-'));
@@ -72,20 +74,57 @@ describe('prepareHostedWorkspace: the setup script', () => {
 });
 
 describe('prepareHostedWorkspace: the repository', () => {
+  // Real git, run the way the daemon runs it (with the process's PATH), but
+  // with nothing from the person running the tests: its own HOME and global
+  // config, no system config, no signing, no hooks, no credential helper.
+  // Without PATH the spawn falls back to /usr/bin, which on macOS is the
+  // xcrun shim and costs seconds per call; with the user's config a signing
+  // key or hook could prompt or fail the commit.
+  function isolatedGitEnv(): NodeJS.ProcessEnv {
+    const home = join(tmp, 'home');
+    mkdirSync(home);
+    const config = join(home, '.gitconfig');
+    writeFileSync(config, [
+      '[user]', '\tname = t', '\temail = t@example.com',
+      '[commit]', '\tgpgsign = false',
+      '[tag]', '\tgpgsign = false',
+      '[init]', '\tdefaultBranch = main',
+      '[core]', `\thooksPath = ${join(home, 'no-hooks')}`, '\tfsmonitor = false',
+      '[credential]', '\thelper =',
+      '',
+    ].join('\n'));
+    const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: home, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1' };
+    if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
+    return env;
+  }
+
+  function gitWithInput(cwd: string, env: NodeJS.ProcessEnv, args: string[], input: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const child = execFile('git', args, { cwd, env }, (err) => (err ? reject(err) : resolve()));
+      child.stdin!.end(input);
+    });
+  }
+
   it('clones a real repository at its ref into <workspace>/repo and runs setup inside it', async () => {
+    const gitEnv = isolatedGitEnv();
     const origin = join(tmp, 'origin');
     mkdirSync(origin);
-    const git = (...args: string[]) => execFileSync('git', args, { cwd: origin, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' } });
-    git('init', '-q', '-b', 'main');
-    writeFileSync(join(origin, 'README.md'), 'main\n');
-    git('add', '.');
-    git('commit', '-q', '-m', 'one');
-    git('checkout', '-q', '-b', 'feature');
-    writeFileSync(join(origin, 'README.md'), 'feature\n');
-    git('commit', '-q', '-am', 'two');
-    git('checkout', '-q', 'main');
+    // Two git processes instead of one per commit: `main` and `feature`
+    // written in one fast-import stream. Each spawn costs seconds on a
+    // loaded Mac, and fast-import runs no hooks and signs nothing.
+    // Asynchronous, so a slow machine meets the test timeout instead of
+    // blocking the test runner's clock.
+    await execFileAsync('git', ['init', '-q', '-b', 'main'], { cwd: origin, env: gitEnv });
+    const who = 't <t@example.com> 1700000000 +0000';
+    const data = (s: string) => `data ${Buffer.byteLength(s)}\n${s}`;
+    await gitWithInput(origin, gitEnv, ['fast-import', '--quiet'], [
+      'commit refs/heads/main', `author ${who}`, `committer ${who}`, data('one'), 'M 100644 inline README.md', data('main\n'),
+      'commit refs/heads/feature', `author ${who}`, `committer ${who}`, data('two'), 'from refs/heads/main', 'M 100644 inline README.md', data('feature\n'),
+      '',
+    ].join('\n'));
 
     const env = {
+      ...gitEnv,
       ALMYTY_WORKSPACE_ROOT: root,
       ALMYTY_ENVIRONMENT_VERSION: '1',
       ALMYTY_REPO_URL: origin,
@@ -102,7 +141,8 @@ describe('prepareHostedWorkspace: the repository', () => {
     const again = await prepareHostedWorkspace({ env: { ...env, ALMYTY_ENVIRONMENT_VERSION: '2' }, tmpDir: tmp, ...quiet });
     expect(again).toMatchObject({ cloned: false, setupRan: true, ok: true });
     expect(readFileSync(join(root, 'repo', 'README.md'), 'utf-8')).toBe('edited\n');
-  });
+    // Four real processes for the clone; on a loaded machine each can take seconds.
+  }, 60_000);
 
   it('hands the git token to git through GIT_CONFIG_* variables, never on the command line', async () => {
     const calls: Array<{ cmd: string; args: string[]; env: NodeJS.ProcessEnv }> = [];
