@@ -10,8 +10,6 @@ import {
   spawnHelperPaths,
   type HelperFs,
 } from '../src/pty-helper.js';
-import { ProcessManager, createDefaultAdapterFactory } from '../src/process-manager.js';
-
 /**
  * node-pty 1.1.0 ships its macOS spawn-helper without the execute bit, so
  * every PTY spawn on a Mac failed with "posix_spawnp failed." and no
@@ -75,14 +73,4 @@ describe('node-pty spawn-helper', () => {
     expect(nodePtyDir()).toMatch(/node-pty$/);
   });
 
-  it('the default adapter checks the helper before its first PTY spawn, once', async () => {
-    let calls = 0;
-    const mgr = new ProcessManager(createDefaultAdapterFactory(() => { calls += 1; return ensureSpawnHelperExecutable(); }), 4);
-    for (const n of [1, 2]) {
-      const h = await mgr.spawn('ws', { binary: '/bin/sh', args: ['-c', `printf 'pty ${n}\\n'`], pty: true });
-      const res = await mgr.wait('ws', h.processId, 5_000);
-      expect(res.exitCode).toBe(0);
-    }
-    expect(calls).toBe(1);
-  });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { ProcessManager, createDefaultAdapterFactory } from '../src/process-manager.js';
+import { ensureSpawnHelperExecutable } from '../src/pty-helper.js';
 
 /**
  * End-to-end against a real subprocess (no fake adapter). Exercises
@@ -67,5 +68,18 @@ describeIfPosix('ProcessManager (real subprocess)', () => {
     const exit = await mgr.wait('ws', h.processId, 3_000);
     // Either a non-zero exit or a captured signal name; treat both as success.
     expect(exit.exitCode !== 0 || exit.signal).toBeTruthy();
+  });
+
+  // The default adapter makes node-pty's spawn-helper executable before the
+  // first PTY spawn, and only once (pty-helper.ts). Real PTY, so it lives here.
+  it('the default adapter checks the helper before its first PTY spawn, once', async () => {
+    let calls = 0;
+    const mgr = new ProcessManager(createDefaultAdapterFactory(() => { calls += 1; return ensureSpawnHelperExecutable(); }), 4);
+    for (const n of [1, 2]) {
+      const h = await mgr.spawn('ws', { binary: '/bin/sh', args: ['-c', `printf 'pty ${n}\\n'`], pty: true });
+      const res = await mgr.wait('ws', h.processId, 5_000);
+      expect(res.exitCode).toBe(0);
+    }
+    expect(calls).toBe(1);
   });
 });
