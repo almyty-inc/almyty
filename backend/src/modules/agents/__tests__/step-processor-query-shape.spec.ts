@@ -8,6 +8,7 @@ import {
 import { Agent } from '../../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { STEP_PAYLOAD_CAP } from '../persist-cap';
+import { StepJournal } from '../run-resume';
 
 /**
  * What one autonomous step costs in queries and in serialization.
@@ -180,5 +181,24 @@ describe('AgentStepProcessor query and serialization shape', () => {
     expect(capped.output).toContain('truncated from');
     // The in-memory array the tick reasons over is untouched.
     expect(typeof steps[0].output).toBe('object');
+  });
+
+  it('reads the step\'s own progress back with one bounded read of the log, newest first, never the whole log', async () => {
+    // Durable runs step 4 (run-resume.ts): the step's events are the log's
+    // tail; the previous step's commit ends it, normally in the first page.
+    const page = [
+      { runId: 'run-1', seq: 9, step: 3, type: 'tool_started', payload: { callIndex: 0 } },
+      { runId: 'run-1', seq: 8, step: 3, type: 'model_answered', payload: { messageCount: 4, response: {} } },
+      { runId: 'run-1', seq: 7, step: 2, type: 'step_committed', payload: { currentStep: 3 } },
+    ];
+    const events = { find: jest.fn().mockResolvedValue(page) };
+    const runs: any = { manager: { getRepository: () => events } };
+
+    const journal = await StepJournal.read(runs, { id: 'run-1', currentStep: 3, headSeq: 9, leaseOwner: 'w' } as any);
+
+    expect(events.find).toHaveBeenCalledTimes(1);
+    expect(events.find).toHaveBeenCalledWith({ where: { runId: 'run-1' }, order: { seq: 'DESC' }, take: 100 });
+    expect(journal.answer).toMatchObject({ messageCount: 4 });
+    expect(journal.wasStarted(0)).toBe(true);
   });
 });

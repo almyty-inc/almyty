@@ -6,6 +6,7 @@ import { UsageMetric } from '../../entities/usage-metric.entity';
 import { Tool } from '../../entities/tool.entity';
 import { Api } from '../../entities/api.entity';
 import { Organization } from '../../entities/organization.entity';
+import { PROJECTION_CHECKS_KEY } from '../agents/run-projection-check';
 
 describe('MonitoringService', () => {
   let service: MonitoringService;
@@ -384,6 +385,22 @@ describe('MonitoringService', () => {
       const result = await service.getPrometheusMetrics();
 
       expect(typeof result).toBe('string');
+    });
+  });
+
+  describe('projection checks', () => {
+    it('the sample carries the shared Redis count of run writes checked', async () => {
+      mockRedis.get.mockImplementation(async (key: string) => (key === PROJECTION_CHECKS_KEY ? '42' : null));
+      const metrics = await (service as any).collectSystemMetrics();
+      expect(mockRedis.get).toHaveBeenCalledWith(PROJECTION_CHECKS_KEY);
+      expect(metrics.runs).toEqual({ projectionMismatches: expect.any(Number), projectionChecks: 42 });
+    });
+
+    it('an unset counter or an unreachable Redis reads as 0', async () => {
+      mockRedis.get.mockResolvedValue(null);
+      expect((await (service as any).collectSystemMetrics()).runs.projectionChecks).toBe(0);
+      mockRedis.get.mockRejectedValue(new Error('redis down'));
+      expect((await (service as any).collectSystemMetrics()).runs.projectionChecks).toBe(0);
     });
   });
 

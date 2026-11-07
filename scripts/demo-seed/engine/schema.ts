@@ -59,8 +59,9 @@ export const LocatorSchema: z.ZodType<Locator> = z.lazy(() => z.object({
 const noText = (l: Locator): boolean => l.text === undefined && (!l.within || noText(l.within))
 export const TargetSchema = LocatorSchema.refine(noText, { message: 'act on an element by role, label, placeholder, title or testid, not by its text' })
 
-// Up to half an hour: a step may wait on real coding assistants at work.
-const Timeout = z.number().int().positive().max(1_800_000)
+// Up to two hours: a step may wait on real coding assistants at work, as
+// long as the walk says (the coding fleet's DEMO_FLEET_RUN_MINUTES).
+const Timeout = z.number().int().positive().max(7_200_000)
 
 // A condition a step waits for or branches on.
 export type Condition =

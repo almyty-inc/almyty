@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync } from 'fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -82,6 +82,32 @@ describe('runner policy enforcement', () => {
     });
     it('requires a cwd when roots are configured', () => {
       expect(() => spawn(base({ allowedCwdRoots: ['/tmp/x'] }), 'ls')).toThrow(/cwd is required/);
+    });
+    it('allows a folder not made yet under a root reached through a symlink (/tmp on macOS)', () => {
+      const real = mkdtempSync(join(tmpdir(), 'runner-cwd-'));
+      const link = `${real}-link`;
+      symlinkSync(real, link);
+      try {
+        // The root is named through the link; the workspace folder does not exist yet.
+        const cfg = base({ allowedCwdRoots: [link] });
+        expect(() => spawn(cfg, 'ls', [], join(link, 'almyty-workspaces', 'coding-lead-1'))).not.toThrow();
+        expect(() => spawn(base({ allowedCwdRoots: [real] }), 'ls', [], join(link, 'new'))).not.toThrow();
+      } finally {
+        rmSync(link, { force: true });
+        rmSync(real, { recursive: true, force: true });
+      }
+    });
+    it('refuses a folder not made yet under a symlink that leads out of the root', () => {
+      const root = mkdtempSync(join(tmpdir(), 'runner-cwd-'));
+      const outside = mkdtempSync(join(tmpdir(), 'runner-out-'));
+      symlinkSync(outside, join(root, 'escape'));
+      try {
+        expect(() => spawn(base({ allowedCwdRoots: [root] }), 'ls', [], join(root, 'escape', 'new')))
+          .toThrow(/allowedCwdRoots/);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(outside, { recursive: true, force: true });
+      }
     });
   });
 
