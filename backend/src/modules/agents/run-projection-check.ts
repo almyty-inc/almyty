@@ -1,5 +1,7 @@
 import { createHash } from 'crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import type Redis from 'ioredis';
 
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { MetricStatus, MetricType } from '../../entities/usage-metric.entity';
@@ -261,10 +263,23 @@ export function projectionCheckEnabled(env: NodeJS.ProcessEnv = process.env): bo
 }
 
 /**
+ * Redis counter of run writes checked, shared by every replica and kept
+ * across restarts: monitoring exports it as almyty_run_projection_checks_total,
+ * next to almyty_run_projection_mismatches, so "0 mismatches" can be read
+ * against how many writes were actually compared.
+ */
+export const PROJECTION_CHECKS_KEY = 'run_projection:checks';
+
+/** How often a process logs its own check and mismatch totals, when they moved. */
+export const PROJECTION_SUMMARY_INTERVAL_MS = 15 * 60 * 1000;
+
+/**
  * Runs the check on every committed run write when RUN_PROJECTION_CHECK is
  * set (the staging and development deployments set it; production leaves
  * it off). A difference is a warning and a `run_projection_mismatch`
- * metric; the write it describes has already committed.
+ * metric; the write it describes has already committed. Every write
+ * checked increments PROJECTION_CHECKS_KEY, and each process logs its
+ * totals every PROJECTION_SUMMARY_INTERVAL_MS when they changed.
  */
 @Injectable()
 export class RunProjectionCheckService implements OnModuleInit, OnModuleDestroy {
@@ -272,8 +287,13 @@ export class RunProjectionCheckService implements OnModuleInit, OnModuleDestroy 
   readonly enabled = projectionCheckEnabled();
   readonly checker: RunProjectionChecker;
   private stop?: () => void;
+  private summaryTimer?: NodeJS.Timeout;
+  private lastSummaryChecks = 0;
 
-  constructor(@Optional() private readonly metrics?: MetricsRecorderService) {
+  constructor(
+    @Optional() private readonly metrics?: MetricsRecorderService,
+    @Optional() @InjectRedis() private readonly redis?: Redis,
+  ) {
     const mb = Number(process.env.RUN_PROJECTION_CHECK_CACHE_MB);
     this.checker = new RunProjectionChecker(
       (mismatch) => this.report(mismatch),
@@ -284,15 +304,47 @@ export class RunProjectionCheckService implements OnModuleInit, OnModuleDestroy 
   onModuleInit(): void {
     if (!this.enabled) return;
     this.stop = onRunWritten((written) => {
+      const before = this.checker.stats.checks;
       this.checker.check(written);
+      if (this.checker.stats.checks > before) this.count();
     });
+    this.summaryTimer = setInterval(() => this.summarize(), PROJECTION_SUMMARY_INTERVAL_MS);
+    this.summaryTimer.unref?.();
     this.logger.log('Run projection check is on: every run write is compared with its event log');
   }
 
   onModuleDestroy(): void {
     this.stop?.();
     this.stop = undefined;
+    if (this.summaryTimer) clearInterval(this.summaryTimer);
+    this.summaryTimer = undefined;
+    this.summarize();
     this.checker.forget();
+  }
+
+  /** Log this process's totals, if any write was checked since the last summary. */
+  summarize(): void {
+    const { checks, mismatches, cacheHits, cacheMisses } = this.checker.stats;
+    if (checks === this.lastSummaryChecks) return;
+    this.lastSummaryChecks = checks;
+    this.logger.log({
+      message: `Run projection check: ${checks} run writes checked, ${mismatches} mismatches since this process started`,
+      event: 'run_projection_summary',
+      checks,
+      mismatches,
+      cacheHits,
+      cacheMisses,
+    });
+  }
+
+  /** One more write checked, in the shared counter. Never fails or delays the write. */
+  private count(): void {
+    if (typeof this.redis?.incr !== 'function') return;
+    try {
+      void Promise.resolve(this.redis.incr(PROJECTION_CHECKS_KEY)).catch(() => undefined);
+    } catch {
+      // Redis unavailable: the count is lost, the write is not.
+    }
   }
 
   private report(mismatch: ProjectionMismatch): void {
