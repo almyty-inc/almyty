@@ -57,7 +57,7 @@ import {
  */
 import { executeWithPagination, processHttpResponse } from './tool-http-pagination';
 import { matchDelimited } from '../../../common/security/linear-text';
-import { operationHeaderParams } from '../operation-header-params';
+import { idempotencyHeader, operationHeaderParams } from '../operation-header-params';
 import { formEncode, isFormBody } from './form-encode';
 import { isGroupedArguments } from './argument-shape';
 const MAX_ERR_MESSAGE = 500;
@@ -191,6 +191,14 @@ export class ToolHttpExecutor {
             headers['Content-Type'] = headers['Content-Type'] ?? 'text/plain';
             break;
         }
+      }
+      // The call's idempotency key, to a tool whose config or operation names the header for one.
+      const keyHeader = options.idempotencyKey
+        ? idempotencyHeader([...Object.keys(httpConfig.headers ?? {}), ...operationHeaderParams(tool.operation as any).map(([name]) => name)])
+        : null;
+      if (keyHeader) {
+        for (const name of Object.keys(headers)) if (name.toLowerCase() === keyHeader.toLowerCase()) delete headers[name];
+        headers[keyHeader] = options.idempotencyKey!;
       }
       const safeHeaders = sanitizeHeaders(headers);
 
@@ -417,6 +425,12 @@ export class ToolHttpExecutor {
         return this.blockedResult(url, operation.method, policyCheck.reason!, Date.now());
       }
 
+      // The call's idempotency key, to an operation that declares the header for one.
+      const keyHeader = options.idempotencyKey ? idempotencyHeader(operationHeaderParams(operation).map(([name]) => name)) : null;
+      if (keyHeader) {
+        for (const name of Object.keys(headerParams)) if (name.toLowerCase() === keyHeader.toLowerCase()) delete headerParams[name];
+        headerParams[keyHeader] = options.idempotencyKey;
+      }
       const safeHeaders = sanitizeHeaders(headerParams as Record<string, string>);
 
       const config: AxiosRequestConfig = {
