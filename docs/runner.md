@@ -191,6 +191,49 @@ New package; ships as `@almyty/runner` with a `bin: almyty-runner`.
 
 53 tests, including end-to-end against real `node-pty` and real `/bin/cat` over a real PTY round-tripping stdin/EOF/exit. Streamable HTTP client tests cover POST 202/200, GET stream parse, Last-Event-ID reconnect carry, 404 session-lost, and malformed SSE recovery.
 
+### Codex session start: cold and warm
+
+Measured 2026-11-07 on a local runner: `@almyty/runner` 1.5.9 from this
+tree (with the spawn-helper fix below), `codex-cli` 0.166.0 signed in with
+ChatGPT, Node v26.13.0, macOS on Apple silicon (10 cores, load average
+about 60 from other work on the machine the whole time).
+
+Method: `packages/runner/scripts/measure-codex-start.mjs` calls the
+runner's own `agent.spawn` handler, as a dispatched call would, ten
+rounds. Each round starts a new session (cold: `codex
+--dangerously-bypass-approvals-and-sandbox exec --json`) and then resumes
+that session (warm: `resumeSessionId`, which the runner turns into `codex
+exec resume <id>`), with the same one-word prompt, so cold and warm
+alternate under the same load. Times are from the handler call to Codex's
+`thread.started` event (session open), its first agent message (answer)
+and the process exit. Of ten, the median is the fifth and p90 the ninth.
+
+| | session open, median / p90 | answer, median / p90 | exit, median / p90 |
+| --- | --- | --- | --- |
+| cold (new session) | 1.5 s / 5.8 s | 6.5 s / 10.7 s | 8.2 s / 12.5 s |
+| warm (resumed) | 2.5 s / 5.2 s | 5.9 s / 8.9 s | 7.4 s / 11.0 s |
+
+All 20 runs answered and exited 0, and every warm run resumed the session
+it was given. The first cold run of the series took 44 s to exit; the
+medians are the same without it. Warm start is not faster in
+any way that matters: resuming reads the session back before it opens
+(about a second more), and the answer, which is most of the time, is one
+round trip to the model either way. What a resumed session buys is the
+conversation so far, not speed.
+
+Before the fix, neither worked on a Mac: node-pty 1.1.0 installs its
+macOS `spawn-helper` without the execute bit, so every PTY spawn
+(`process.spawn`, `agent.spawn`, `coding.start`) failed with
+"posix_spawnp failed." and no Codex or Claude Code session could start,
+new or resumed. `shell.exec` has no PTY and was not affected. The runner
+now makes the helper executable before its first PTY spawn
+(`src/pty-helper.ts`).
+
+The earlier figure, a hosted runner's warm wake on staging (UI click to
+the first command's output, runner 1.5.6, 2026-10-22: 48.6, 39.6 and 43.0
+s, median 43.0 s), measures waking a parked pod, not starting a session,
+and cannot be taken on a local runner.
+
 ## Cluster 4: Demo + docs
 
 The walkthrough lives at [docs/runner-demo.md](runner-demo.md): start a runner with `almyty runner start`, watch capabilities auto-publish in `/tools`, execute `runner.info` and `shell.exec` from the UI, see output stream back. Every step exercises the routing path end-to-end (cluster 5.5).

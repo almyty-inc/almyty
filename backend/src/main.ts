@@ -18,6 +18,7 @@ import { sentryInitOptions } from './common/observability/sentry-options';
 import { SurfaceCorsService } from './modules/gateways/channels/surface-cors';
 import { csrfOriginCheck } from './common/security/csrf-origin';
 import { dashboardAllowedOrigins } from './common/security/allowed-origins';
+import { GLOBAL_VALIDATION_OPTIONS } from './common/validation-options';
 // No global response interceptor — each controller is responsible for consistent {success, data} format
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestLog } from './entities/request-log.entity';
@@ -160,17 +161,8 @@ export async function createApp() {
 
   // No API prefix - this is a pure API backend
 
-  // Global validation pipe
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: {
-        enableImplicitConversion: false, // Disabled for performance - use explicit @Type() decorators
-      },
-    }),
-  );
+  // Global validation pipe (the management MCP validates with the same options)
+  app.useGlobalPipes(new ValidationPipe(GLOBAL_VALIDATION_OPTIONS));
 
   // Swagger documentation. Default FAIL-CLOSED: unless
   // SWAGGER_ENABLED is explicitly set to 'true', the /docs

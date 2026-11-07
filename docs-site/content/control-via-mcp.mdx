@@ -8,11 +8,13 @@ This is different from [publishing your own tools on an MCP gateway](/gateways/m
 
 ## Connect your assistant
 
-Add almyty to your assistant as an MCP server with the address `https://api.almyty.com/mcp`, and sign in once. The exact commands are under [For developers](#for-developers).
+Add almyty to your assistant as an MCP server with the address `https://api.almyty.com/<org>/almyty`, where `<org>` is your organization's slug, and sign in once. The exact commands are under [For developers](#for-developers).
 
 ## What your assistant can do
 
-It has 71 tools covering almost everything in the dashboard. None of them depends on your plan.
+It can do what you can do in the dashboard. It has 76 tools: 71 cover the everyday jobs directly, and five more reach everything else, from rolling back an agent to a saved version to managing teams, approval rules and audit streams.
+
+It acts as you. Your role and your plan apply exactly as they do in the dashboard: if the dashboard would refuse you something, your assistant is refused it too.
 
 | Area | What it can do |
 | --- | --- |
@@ -31,6 +33,7 @@ It has 71 tools covering almost everything in the dashboard. None of them depend
 | **Cost** | List spending budgets and see what has been spent this period |
 | **Analytics** | Get one report at a time: overview, tools, gateways, models, agent runs, alerts, routing failures |
 | **Approvals** | See what is waiting for approval and approve or reject it, so a paused run carries on |
+| **Everything else** | Find any other dashboard action and run it: agent versions, schedules, roles and limits; run traces; channel domains and visitor sign-in; API keys and operations; gateway tools and keys; teams; budgets and alerts; notifications; the audit log; files; and, on plans that include them, custom roles, policies, compliance and governance |
 
 ## Examples
 
@@ -63,18 +66,23 @@ Only someone who could approve a request on the **Approvals** page is asked to a
 
 ## What it cannot do
 
-A few things are left out on purpose:
+Some things are left out on purpose:
 
 - **Change an existing gateway.** Gateways can be created and wired up, but editing one that is already published is done in the dashboard or the [REST API](/api-reference/authentication), so a stray request cannot quietly rewrite a live address.
-- **Write tools by hand.** Tools come from importing an API description or installing a template.
+- **Write or edit tools by hand.** Tools come from importing an API description or installing a template.
 - **Switch an agent on directly.** A new agent always starts as a draft. Switching it on runs its checks first, and only a switched-on agent can be run.
+- **Run your account.** Signing in and out, changing your password, inviting or removing people, changing someone's role, and creating or deleting the organization stay in the dashboard.
+- **Hand out keys.** It cannot create API keys or access keys, and it never shows a secret: credentials it stores stay hidden, as they do in the dashboard.
+- **Change sign-in, encryption, billing or data retention.** Single sign-on settings, your own encryption key, checkout and the billing portal, and how long data is kept are changed in the dashboard.
+
+It also cannot download files or app builds directly (it gets a download link instead), and it checks on long jobs by asking for their status rather than watching a live stream.
 
 ## For developers
 
 Add the built-in `almyty` system gateway at the universal `/mcp` endpoint:
 
 ```bash
-claude mcp add almyty --transport http https://api.almyty.com/mcp
+claude mcp add almyty --transport http https://api.almyty.com/<org>/almyty
 ```
 
 Or in a client config file:
@@ -82,12 +90,14 @@ Or in a client config file:
 ```json
 {
   "mcpServers": {
-    "almyty": { "url": "https://api.almyty.com/mcp" }
+    "almyty": { "url": "https://api.almyty.com/<org>/almyty" }
   }
 }
 ```
 
-Authenticate once with `npx @almyty/auth login`; the server announces itself as `almyty`. Use Streamable HTTP (`--transport http`, the address above); the older SSE address `/mcp/sse` is deprecated and goes away (see [Legacy SSE transport](/gateways/mcp#legacy-sse-transport)).
+Replace `<org>` with your organization's slug. The first time your assistant connects, it opens a browser window where you sign in and approve it (MCP OAuth); the server announces itself as `almyty`. Use Streamable HTTP (`--transport http`, the address above).
+
+This is not `https://api.almyty.com/mcp`: that address serves your organization's own API tools, the ones you publish on gateways, not the tools that manage almyty.
 
 The management server speaks the same MCP versions as every gateway: **2026-07-28**, **2025-11-25** and **2025-06-18**, plus 2025-03-26 and 2024-11-05 for older clients (see [MCP gateway, Protocol versions](/gateways/mcp#protocol-versions)). Its tools carry titles and annotations (`list_*` and `get_*` only read, `delete_*` destructive), and a tool that returns a record also returns it as `structuredContent`. An unknown tool name is a `-32602` error. Its tool set does not change, so it reports `tools.listChanged: false` and a `subscriptions/listen` stream on it only keeps alive.
 
@@ -110,10 +120,31 @@ The tools, by area:
 | Cost governance | `list_budgets`, `get_spend` |
 | Analytics | `get_analytics` |
 | Approvals | `list_approvals`, `decide_approval` |
+| Everything else | `search_operations`, `get_operation`, `call_read_operation`, `call_write_operation`, `call_destructive_operation` |
 
 The first example chains `import_schema`, `check_import_status`, `list_tools`, `create_gateway`, `assign_tools_to_gateway` and `add_auth_to_gateway`. The second chains `update_public_settings`, `add_channel`, `check_channel` and `publish_channel`.
 
 What is left out: there is no `update_gateway` and no `create_tool` (`activate_tool` and `delete_tool` manage what an import produced). Status is not a settable field: `create_agent` always produces a draft, `activate_agent` is the only path to active because it runs pipeline validation first, and `invoke_agent` refuses an agent that is not active.
+
+### Every other operation
+
+Everything else the REST API does for a signed-in member is an **operation**, reached through five tools instead of hundreds:
+
+| Tool | What it does |
+| --- | --- |
+| `search_operations` | Search by words (`"rollback agent version"`), by `resource` (`teams`, `budgets`) or by `effect`. Returns each operation's name, summary, effect and the tool that runs it |
+| `get_operation` | One operation in full: its HTTP route, who may run it (roles, permissions, plan) and the JSON Schema of its arguments |
+| `call_read_operation` | Runs an operation that only reads (`readOnlyHint`) |
+| `call_write_operation` | Runs one that creates or changes something |
+| `call_destructive_operation` | Runs one that deletes, revokes or erases (`destructiveHint`); a client that confirms destructive tools confirms these |
+
+An operation runs only through the tool for its effect. Arguments follow `get_operation`'s schema: path parameters and query fields at the top level, the request body under `body`:
+
+```json
+{ "name": "teams.create", "arguments": { "body": { "name": "Support" } } }
+```
+
+An operation is the REST route itself, run for you: the same validation, the same role, permission and plan checks, the same audit entry (with `almyty-mcp` as the user agent), and the same error text. Every dedicated tool above also passes its REST route's checks before it runs. The full list of routes, and which tool or operation covers each one, is in `docs/design/almyty-mcp-coverage.md` in the repository.
 
 ### Agent runs: tasks, input_required, get_run
 

@@ -7,6 +7,7 @@ import { AgentExecutionEngine } from '../../agents/agent-execution.engine';
 import { ApprovalsService } from '../../approvals/approvals.service';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
 import { snapshotEnv } from '../../../test/env';
+import { ManagementRouteInvoker } from '../management/route-invoker.service';
 
 /**
  * invoke_agent on the management MCP server, per what the request can do:
@@ -71,6 +72,8 @@ function setup(runOver: Record<string, any> = {}) {
     [AgentRuntimeService, runtime],
     [AgentExecutionEngine, { execute: jest.fn() }],
     [ApprovalsService, approvals],
+    // The REST-twin guards pass; they are exercised in management/__tests__.
+    [ManagementRouteInvoker, { authorize: async () => undefined }],
   ]);
   const moduleRef: any = { get: (cls: any) => services.get(cls) };
   const service = new AlmytyMcpService(moduleRef);

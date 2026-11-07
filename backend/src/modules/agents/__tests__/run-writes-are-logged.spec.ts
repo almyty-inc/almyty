@@ -230,4 +230,17 @@ describe('writes under a lease are fenced', () => {
     // The commit, the cost of an abandoned step, the memory step after completion, the collaboration step.
     expect(seen).toBeGreaterThanOrEqual(4);
   });
+
+  it('a step\'s progress (durable runs step 4) goes through writeRun, fenced like its commit', () => {
+    const source = readFileSync(join(SRC, 'modules/agents/run-resume.ts'), 'utf8');
+    const at = source.indexOf('writeRun(');
+    expect(at).toBeGreaterThan(-1);
+    const where = objectAt(source, at);
+    expect(where).toContain('...heldBy(this.run)');
+    expect(where).toContain('currentStep: this.step');
+    expect(where).toContain('status: notDone()');
+    expect(source.slice(at, at + 300)).toContain('{ progress: true }');
+    // Nothing writes the run or its events around the writer.
+    expect(source).not.toMatch(/\.(insert|save|update)\(/);
+  });
 });

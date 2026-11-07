@@ -75,3 +75,22 @@ test('the tidewater walks load', () => {
   const ids = load(FAMILIES).walks.filter((w) => w.profile === 'tidewater').map((w) => w.id)
   assert.deepEqual(ids, ['example-issue-triage', 'example-pr-review', 'example-oncall', 'example-legacy-soap', 'example-coding-fleet'])
 })
+
+test('the coding fleet gives its run the time a real coding task takes, and waits on the run for it', async () => {
+  const { FLEET_RUN } = await import('../walks/tidewater/guides.ts')
+  const fleet = load(FAMILIES).walks.find((w) => w.id === 'example-coding-fleet')!
+  const steps = fleet.steps as any[]
+  // The agent's own run timeout, set in the builder, is the walk's.
+  const timeout = steps.find((s) => s.fill?.label === 'Timeout (seconds)')
+  assert.equal(timeout?.value, String(FLEET_RUN.minutes * 60))
+  assert.ok(FLEET_RUN.minutes > 15, 'longer than a run gets by default')
+  // The walk waits on the run in the database, as long as the run may take; then briefly on Try it's answer.
+  const i = steps.findIndex((s) => s.until?.sql?.includes('FROM agent_runs'))
+  assert.ok(i > 0)
+  assert.equal(steps[i].timeout, FLEET_RUN.minutes * 60_000)
+  assert.equal(steps[i + 1].waitFor?.role, 'status')
+  assert.ok(steps[i + 1].timeout <= 300_000)
+  // Only git's own summary counts as an answer: a run whose commands failed has none.
+  assert.ok(steps[i + 1].waitFor.hasText.test(' 3 files changed, 42 insertions(+)'))
+  assert.ok(!steps[i + 1].waitFor.hasText.test('**Changed files:**\nError: workspace_unavailable'))
+})

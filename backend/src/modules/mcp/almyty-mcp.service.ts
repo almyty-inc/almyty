@@ -77,6 +77,9 @@ import { MonitoringService } from '../monitoring/monitoring.service';
 import { ToolHubService } from '../tool-hub/tool-hub.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
+import { ManagementOperationsService } from './management/management-operations.service';
+import { ManagementRouteInvoker } from './management/route-invoker.service';
+import { CURATED_AUTHORIZATION, CURATED_PARAMS, CURATED_TOOL_ROUTES } from './management/management-operations';
 
 interface AssignmentSummary {
   toolsAssigned: number;
@@ -233,6 +236,65 @@ const TOOLS = [
   // ── Approvals ──
   { name: 'list_approvals', description: 'Pending approval requests visible to the caller. An agent run that hit an approval gate sits in waiting_approval until one of these is decided, so this is where a stalled run shows up.', inputSchema: { type: 'object', properties: {} } },
   { name: 'decide_approval', description: 'Approve or reject a pending approval. Approving resumes the waiting run; rejecting terminates it. Refused unless the caller may decide this one (team lead for a team-scoped request, or organization admin/owner).', inputSchema: { type: 'object', properties: { approvalId: { type: 'string' }, decision: { type: 'string', enum: ['approve', 'reject'] }, reason: { type: 'string', description: 'Recorded with the decision.' } }, required: ['approvalId', 'decision'] } },
+  // ── Every other platform operation (management/management-operations.ts) ──
+  // The routes above have tools of their own. Everything else the dashboard
+  // does is an operation: found by search, described, then run through the
+  // call tool for its effect, so a client that confirms destructive tools
+  // confirms every destructive operation.
+  {
+    name: 'search_operations',
+    description: 'Find a platform operation that has no tool of its own. Nearly everything the dashboard does is one: agent versions, schedules, roles and constraints; runs and their traces; channel domains, visitor sign-in and visitor data; API operations and keys; creating and editing tools; gateway tools, keys and stats; credentials; providers; model cards and deployments; memory accounts; runners and environments; approval rules and policies; budgets; analytics; notifications; the audit log; versions; files; teams; users; and the enterprise roles, policies, SSO, compliance and billing pages. Returns each match with its name, what it does, its effect (read, write or destructive) and the tool that runs it. Read get_operation for its arguments before calling it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Words describing what you want to do, e.g. "rollback agent version" or "team members".' },
+        resource: { type: 'string', description: 'Only operations of this resource, e.g. agents, teams, budgets. The answer lists every resource.' },
+        effect: { type: 'string', enum: ['read', 'write', 'destructive'] },
+        limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 20.' },
+      },
+    },
+  },
+  {
+    name: 'get_operation',
+    description: 'One operation in full: what it does, its effect, the HTTP route it is, who may run it (roles, permissions, enterprise entitlements) and the JSON Schema of its arguments. Path parameters and query fields are top-level arguments; the request body goes under `body`.',
+    inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'The operation name from search_operations, e.g. agents.list_versions.' } }, required: ['name'] },
+  },
+  {
+    name: 'call_read_operation',
+    description: 'Run an operation whose effect is read. It changes nothing. It runs as you, with your role: anything the dashboard would refuse you is refused here too.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The operation name.' },
+        arguments: { type: 'object', description: 'As get_operation describes: path parameters and query fields at the top level, the request body under `body`.', additionalProperties: true },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'call_write_operation',
+    description: 'Run an operation whose effect is write: it creates or changes something, and deletes nothing. It runs as you, with your role and your plan: anything the dashboard would refuse you is refused here too.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The operation name.' },
+        arguments: { type: 'object', description: 'As get_operation describes: path parameters and query fields at the top level, the request body under `body`.', additionalProperties: true },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'call_destructive_operation',
+    description: 'Run an operation whose effect is destructive: it deletes, revokes, erases or tears something down, and it cannot be undone here. Confirm with the person first. It runs as you, with your role and your plan: anything the dashboard would refuse you is refused here too.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The operation name.' },
+        arguments: { type: 'object', description: 'As get_operation describes: path parameters and query fields at the top level, the request body under `body`.', additionalProperties: true },
+      },
+      required: ['name'],
+    },
+  },
 ];
 
 /**
@@ -241,8 +303,27 @@ const TOOLS = [
  * everything else changes something.
  */
 const READ_ONLY_PREFIXES = ['list_', 'get_', 'check_', 'preview_'];
-const READ_ONLY_TOOLS = new Set(['memory_search', 'memory_get', 'memory_backends_health']);
-const DESTRUCTIVE_TOOLS = new Set(['delete_api', 'delete_tool', 'delete_gateway', 'delete_agent', 'delete_channel', 'remove_auth_from_gateway', 'memory_delete']);
+const READ_ONLY_TOOLS = new Set(['memory_search', 'memory_get', 'memory_backends_health', 'search_operations', 'call_read_operation']);
+const DESTRUCTIVE_TOOLS = new Set(['delete_api', 'delete_tool', 'delete_gateway', 'delete_agent', 'delete_channel', 'remove_auth_from_gateway', 'memory_delete', 'call_destructive_operation']);
+/** Changes that land the same way however often they are sent. */
+const IDEMPOTENT_TOOLS = new Set([
+  'delete_api',
+  'delete_tool',
+  'delete_gateway',
+  'delete_agent',
+  'delete_channel',
+  'remove_auth_from_gateway',
+  'memory_delete',
+  'update_api',
+  'update_agent',
+  'update_channel',
+  'update_public_settings',
+  'activate_tool',
+  'activate_agent',
+  'deactivate_agent',
+  'publish_channel',
+  'unpublish_channel',
+]);
 /** Tools that reach outside almyty: fetch a URL, call a model or a third party, run an agent. */
 const OPEN_WORLD_TOOLS = new Set([
   'import_schema',
@@ -253,6 +334,11 @@ const OPEN_WORLD_TOOLS = new Set([
   'complete_connection',
   'install_tool_template',
   'memory_consolidate',
+  // An operation may run a tool, call a model or reach a third party; which
+  // one does is in get_operation's annotations.
+  'call_read_operation',
+  'call_write_operation',
+  'call_destructive_operation',
 ]);
 const ACRONYMS: Record<string, string> = { api: 'API', apis: 'APIs', mcp: 'MCP', a2a: 'A2A' };
 
@@ -266,7 +352,7 @@ function managementAnnotations(name: string) {
   const readOnly = READ_ONLY_TOOLS.has(name) || READ_ONLY_PREFIXES.some((p) => name.startsWith(p));
   return {
     readOnlyHint: readOnly,
-    ...(readOnly ? {} : { destructiveHint: DESTRUCTIVE_TOOLS.has(name) }),
+    ...(readOnly ? {} : { destructiveHint: DESTRUCTIVE_TOOLS.has(name), idempotentHint: IDEMPOTENT_TOOLS.has(name) }),
     openWorldHint: OPEN_WORLD_TOOLS.has(name),
   };
 }
@@ -464,6 +550,7 @@ export class AlmytyMcpService {
       throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, `Tool not found: ${name}`);
     }
     try {
+      await this.authorizeCurated(name, args, orgId, userId);
       if (name === 'invoke_agent' && ctx.era === 'modern') {
         return await this.invokeAgentModern(args, orgId, userId, ctx, params);
       }
@@ -1327,8 +1414,41 @@ export class AlmytyMcpService {
         };
       }
 
+      // ── Every other platform operation ─────────────────────────
+      case 'search_operations':
+        return get(ManagementOperationsService).search(args.query, {
+          resource: args.resource,
+          effect: args.effect,
+          limit: args.limit,
+        });
+      case 'get_operation':
+        return get(ManagementOperationsService).describe(String(args.name));
+      case 'call_read_operation':
+        return get(ManagementOperationsService).call('read', String(args.name), args.arguments, orgId, userId);
+      case 'call_write_operation':
+        return get(ManagementOperationsService).call('write', String(args.name), args.arguments, orgId, userId);
+      case 'call_destructive_operation':
+        return get(ManagementOperationsService).call('destructive', String(args.name), args.arguments, orgId, userId);
+
       default: throw new Error(`Unknown tool: ${name}`);
     }
+  }
+
+  /**
+   * A curated tool answers to the guards of the REST route it mirrors
+   * (CURATED_TOOL_ROUTES): the caller must be an effective member of this
+   * organization, and the route's role, permission, entitlement and
+   * private-resource checks must pass, exactly as for the dashboard. The
+   * tool's own service call then runs as before. Operations are
+   * authorized by the route invoker itself.
+   */
+  private async authorizeCurated(name: string, args: any, orgId: string, userId: string): Promise<void> {
+    const routes = CURATED_TOOL_ROUTES[name];
+    if (!routes?.length) return;
+    const route = CURATED_AUTHORIZATION[name]?.(args) ?? routes[0];
+    await this.moduleRef
+      .get(ManagementRouteInvoker, { strict: false })
+      .authorize(route, orgId, userId, { params: CURATED_PARAMS[name]?.(args) ?? {}, body: args, lenient: true });
   }
 
   /**
