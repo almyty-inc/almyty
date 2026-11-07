@@ -34,6 +34,7 @@ import { AnalyticsService } from '../../monitoring/analytics.service';
 import { MonitoringService } from '../../monitoring/monitoring.service';
 import { ToolHubService } from '../../tool-hub/tool-hub.service';
 import { ApprovalsService } from '../../approvals/approvals.service';
+import { ManagementRouteInvoker } from '../management/route-invoker.service';
 
 // Mock axios for import_schema URL fetching
 const mockAxiosGet = jest.fn().mockResolvedValue({ data: '{"openapi":"3.0.0","info":{"title":"Test","version":"1.0"},"paths":{}}' });
@@ -281,6 +282,11 @@ describe('AlmytyMcpService', () => {
     ]),
   };
 
+  // Each curated tool first passes its REST twin's guards. Here the
+  // invoker is a recorder; the real guards run in
+  // management/__tests__/management-operations.service.spec.ts.
+  const mockInvoker: any = { authorize: jest.fn().mockResolvedValue(undefined) };
+
   const mockModuleRef = {
     get: jest.fn((cls: any) => {
       if (cls === ApisService) return mockApisService;
@@ -318,6 +324,7 @@ describe('AlmytyMcpService', () => {
       if (cls === ToolHubService) return mockToolHubService;
       if (cls === ApprovalsService) return mockApprovalsService;
       if (cls === getRepositoryToken(AgentExecution)) return mockAgentExecutionRepo;
+      if (cls === ManagementRouteInvoker) return mockInvoker;
       throw new Error(`Unknown service: ${typeof cls === 'string' ? cls : cls?.name}`);
     }),
   };
@@ -372,6 +379,33 @@ describe('AlmytyMcpService', () => {
       expect(names).toContain('list_gateways');
       expect(names).toContain('list_agents');
       expect(names).toContain('create_agent');
+    });
+  });
+
+  describe('authorization through the REST twin', () => {
+    it('asks the route a tool mirrors before the tool runs', async () => {
+      await call('tools/call', { name: 'delete_agent', arguments: { agentId: 'agent-1' } });
+      expect(mockInvoker.authorize).toHaveBeenCalledWith('AgentsController.deleteAgent', 'org-1', 'user-1', {
+        params: { id: 'agent-1' },
+        body: { agentId: 'agent-1' },
+        lenient: true,
+      });
+      expect(mockAgentsService.deleteAgent).toHaveBeenCalled();
+    });
+
+    it('does not run the tool when the route refuses', async () => {
+      mockInvoker.authorize.mockRejectedValueOnce(new Error('Insufficient role privileges'));
+      const res = await call('tools/call', { name: 'delete_agent', arguments: { agentId: 'agent-1' } });
+      expect(res.result.isError).toBe(true);
+      expect(res.result.content[0].text).toBe('Error: Insufficient role privileges');
+      expect(mockAgentsService.deleteAgent).not.toHaveBeenCalled();
+    });
+
+    it('picks the route the arguments name when a tool mirrors several', async () => {
+      await call('tools/call', { name: 'get_analytics', arguments: { report: 'alerts' } });
+      expect(mockInvoker.authorize.mock.calls[0][0]).toBe('MonitoringController.getAlerts');
+      await call('tools/call', { name: 'decide_approval', arguments: { approvalId: 'appr-1', decision: 'reject' } });
+      expect(mockInvoker.authorize.mock.calls[1][0]).toBe('ApprovalsController.reject');
     });
   });
 
