@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/api', () => ({ agentsApi: { invoke: vi.fn(), getRun: vi.fn() } }))
 
 import { agentsApi } from '@/lib/api'
-import { invokeAndSettle, runOutcome } from '../agent-run'
+import { invokeAndSettle, runOutcome, SETTLE_TIMEOUT_MS, SLOW_INTERVAL_MS } from '../agent-run'
 
 const invoke = vi.mocked(agentsApi.invoke)
 const getRun = vi.mocked(agentsApi.getRun)
@@ -28,6 +28,39 @@ describe('invokeAndSettle', () => {
     expect(getRun).toHaveBeenCalledWith('agent-1', 'run-1')
     expect(run.status).toBe('completed')
     expect(runOutcome(run)).toEqual({ output: 'It is sunny in Lisbon.' })
+  })
+
+  it('keeps waiting for a run that takes longer than five minutes, polling less often after the first minute', async () => {
+    // Real coding assistants on a runner: the answer came after six minutes.
+    vi.useFakeTimers()
+    try {
+      invoke.mockResolvedValue({ id: 'run-1', mode: 'autonomous', status: 'running', output: null })
+      let polls = 0
+      getRun.mockImplementation(async () => {
+        polls += 1
+        return Date.now() - start >= 6 * 60_000
+          ? { id: 'run-1', mode: 'autonomous', status: 'completed', output: 'Changed files: src/iban.js' }
+          : { id: 'run-1', mode: 'autonomous', status: 'running', output: null }
+      })
+      const waits: number[] = []
+      const start = Date.now()
+      const advance = async (ms: number) => { waits.push(ms); vi.setSystemTime(Date.now() + ms) }
+
+      const run = await invokeAndSettle('agent-1', {}, { wait: advance })
+
+      expect(run.status).toBe('completed')
+      expect(runOutcome(run)).toEqual({ output: 'Changed files: src/iban.js' })
+      expect(waits.slice(0, 60).every((ms) => ms === 1000)).toBe(true)
+      expect(waits.slice(60).every((ms) => ms === SLOW_INTERVAL_MS)).toBe(true)
+      // 60 one-second polls, then five minutes at the slow pace: not a request a second.
+      expect(polls).toBeLessThan(60 + (5 * 60_000) / SLOW_INTERVAL_MS + 2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('waits up to the operator ceiling on a run, an hour, by default', () => {
+    expect(SETTLE_TIMEOUT_MS).toBe(60 * 60 * 1000)
   })
 
   it('returns a workflow execution as invoke answered it', async () => {

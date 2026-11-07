@@ -14,8 +14,23 @@ import { agentsApi } from '@/lib/api'
 /** Statuses a run does not leave on its own. */
 const SETTLED = new Set(['completed', 'failed', 'cancelled', 'timeout', 'waiting_input', 'waiting_approval', 'sleeping'])
 
+/**
+ * How long Try it and the Run panel wait for a run by default: the
+ * operator's ceiling on a run's duration (RUN_LIMIT_MAX_DURATION_MS, an
+ * hour unless set). The backend ends every run within its run limits (15
+ * minutes unless the agent or organization says otherwise), so a run
+ * settles before this; it is a backstop. Five minutes was shorter than a
+ * run may take: real coding assistants on a runner took six, and Try it
+ * said "The run is still going." for good while the answer arrived on
+ * the Runs tab.
+ */
+export const SETTLE_TIMEOUT_MS = 60 * 60 * 1000
+
+/** After the first minute, poll this often: a long run needs no request a second. */
+export const SLOW_INTERVAL_MS = 5000
+
 export interface SettleOptions {
-  /** Between polls. */
+  /** Between polls in the first minute; SLOW_INTERVAL_MS after it. */
   intervalMs?: number
   /** Give up and return the run as it stands after this long. */
   timeoutMs?: number
@@ -31,14 +46,15 @@ function isStartedAutonomousRun(result: unknown): result is Run & { id: string }
 }
 
 export async function invokeAndSettle(agentId: string, input: unknown, options: SettleOptions = {}): Promise<any> {
-  const { intervalMs = 1000, timeoutMs = 5 * 60 * 1000, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = options
+  const { intervalMs = 1000, timeoutMs = SETTLE_TIMEOUT_MS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = options
   const first = await agentsApi.invoke(agentId, input)
   if (!isStartedAutonomousRun(first)) return first
 
   let run: Run = first
-  const deadline = Date.now() + timeoutMs
+  const started = Date.now()
+  const deadline = started + timeoutMs
   while (!SETTLED.has(String(run.status)) && Date.now() < deadline) {
-    await wait(intervalMs)
+    await wait(Date.now() - started < 60_000 ? intervalMs : Math.max(intervalMs, SLOW_INTERVAL_MS))
     run = (await agentsApi.getRun(agentId, first.id)) as Run
   }
   return run
