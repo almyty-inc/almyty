@@ -138,7 +138,7 @@ export type AuditAction =
   | 'memory_store' | 'memory_recall' | 'memory_update' | 'memory_delete'
   | 'file_upload' | 'file_download' | 'file_delete'
   | 'interface_deploy' | 'interface_message'
-  | 'login' | 'api_key_create' | 'api_key_revoke'
+  | 'login' | 'api_key_create' | 'api_key_revoke' | 'sessions_revoke'
   | 'credential_create' | 'credential_update' | 'credential_delete' | 'credential_use'
   | 'ownership_transfer' | 'visibility_change'
   | 'visitor_data_export' | 'visitor_data_erase'

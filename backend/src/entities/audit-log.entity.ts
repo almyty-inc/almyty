@@ -60,6 +60,9 @@ export enum AuditAction {
   LOGIN = 'login',
   API_KEY_CREATE = 'api_key_create',
   API_KEY_REVOKE = 'api_key_revoke',
+  // A person ending every session of theirs but the one they asked from
+  // (Settings > Security > Sign out other devices).
+  SESSIONS_REVOKE = 'sessions_revoke',
   // Referral program
   REFERRAL_ATTRIBUTED = 'referral_attributed',
   REFERRAL_QUALIFIED = 'referral_qualified',

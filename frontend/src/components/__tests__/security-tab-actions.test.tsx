@@ -8,7 +8,7 @@ import { SecurityTab } from '../SecurityTab'
 import { authApi } from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({
-  authApi: { resendVerification: vi.fn(), changePassword: vi.fn(), getProfile: vi.fn(), forgotPassword: vi.fn() },
+  authApi: { resendVerification: vi.fn(), changePassword: vi.fn(), getProfile: vi.fn(), forgotPassword: vi.fn(), revokeOtherSessions: vi.fn() },
 }))
 
 /**
@@ -18,9 +18,9 @@ vi.mock('@/lib/api', () => ({
  * while the identical action in the top banner worked, so anyone who had
  * dismissed the banner could never resend. "Revoke All Other Sessions"
  * did nothing under the promise "This will sign you out of all other
- * devices" — the worst kind, because someone who suspects a compromise
- * clicks it and believes they have acted. There is no endpoint behind it,
- * so it is gone rather than faked.
+ * devices" -- the worst kind, because someone who suspects a compromise
+ * clicks it and believes they have acted. It was removed; "Sign out other
+ * devices" replaces it with a real endpoint (sign-out-other-devices.test.tsx).
  */
 describe('the Security tab', () => {
   beforeEach(() => {
@@ -49,12 +49,13 @@ describe('the Security tab', () => {
     expect(await screen.findByTestId('verification-error')).toHaveTextContent('Too many requests')
   })
 
-  it('does not offer to revoke other sessions, because it cannot', () => {
+  it('offers a working sign-out of other devices, not the old dead button', async () => {
     render(<SecurityTab />)
 
     expect(screen.queryByText(/Revoke All Other Sessions/i)).not.toBeInTheDocument()
-    // And says what to do instead, rather than going quiet on the subject.
-    expect(screen.getByText(/change your password/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign out other devices' })).toBeInTheDocument()
+    // Changing the password ends the other sessions too, and it says so.
+    expect(await screen.findByText(/changing your password also signs out every other device/i)).toBeInTheDocument()
   })
 
   // "Password strength: Good, last changed recently" was hardcoded for
@@ -121,14 +122,14 @@ describe('the Security tab', () => {
     expect(screen.queryByTestId('send-verification')).not.toBeInTheDocument()
   })
 
-  // Telling someone with no password to change it, to sign out other
-  // devices, sends them looking for a form that is not there.
+  // Telling someone with no password to change it sends them looking for
+  // a form that is not there; setting one is what applies to them.
   it('does not tell an account without a password to change it', async () => {
     ;(authApi.getProfile as any).mockResolvedValue({ id: 'u1', email: 'dana@example.com', hasPassword: false })
     render(<SecurityTab />)
     await screen.findByTestId('no-password')
 
-    expect(screen.queryByText(/change your password/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/set a password with the emailed link/i)).toBeInTheDocument()
+    expect(screen.queryByText(/chang(e|ing) your password/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/setting a password with the emailed link/i)).toBeInTheDocument()
   })
 })
