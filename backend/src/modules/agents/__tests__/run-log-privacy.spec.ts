@@ -202,6 +202,52 @@ describe('run-log-privacy: a live run view of the log', () => {
   });
 });
 
+describe('run-log-privacy: hidden whatever the organization set', () => {
+  /** An organization whose PII filter is off: hidePersonalData hands every value back as it is. */
+  const filterOff = async <T>(data: T) => data;
+
+  it('the stream view hides personal data even when the organization’s filter is off', async () => {
+    const view = runLogView(async () => ({ organizationId: 'org-off', userId: null }), filterOff);
+    const shown = await view('run-1', [
+      event(1, 'tool_started', { callIndex: 0, key: 'run-1:0:0', tool: 'notify_customer', parameters: { to: EMAIL, phone: '555-123-4567' } }),
+      event(2, 'model_answered', { response: { message: { toolCalls: [{ id: 'tc-1', name: 'notify_customer', parameters: { to: EMAIL } }] } } }),
+    ]);
+    expect(JSON.stringify(shown)).not.toContain(EMAIL);
+    expect(JSON.stringify(shown)).not.toContain('555-123-4567');
+    expect(shown[0].payload).toMatchObject({ callIndex: 0, key: 'run-1:0:0', tool: 'notify_customer' });
+  });
+
+  it('the run view hides personal data even when the organization’s filter is off', async () => {
+    const row = { id: 'run-1', organizationId: 'org-off', userId: null, workingMemory: { gatedToolCalls: [{ approvalId: 'a-1', parameters: { email: EMAIL } }] }, steps: [] };
+    const self = { getRun: jest.fn(async () => row), toolExecutorService: { hidePersonalData: jest.fn(filterOff) } };
+    const shown = await AgentRuntimeService.prototype.getRunForViewer.call(self, 'run-1', 'org-off');
+    expect(JSON.stringify(shown)).not.toContain(EMAIL);
+    expect(shown.workingMemory.gatedToolCalls[0].approvalId).toBe('a-1');
+  });
+
+  it('the runtime service’s stream view hides personal data even when the organization’s filter is off', async () => {
+    let view: any;
+    const self: any = {
+      events: { setCleanupHook: jest.fn(), setRunLogView: jest.fn((v: any) => (view = v)) },
+      approvals: { on: jest.fn() },
+      misc: {},
+      runRepository: { findOne: jest.fn(async () => ({ id: 'run-1', organizationId: 'org-off', userId: null })) },
+      toolExecutorService: { hidePersonalData: jest.fn(filterOff) },
+    };
+    AgentRuntimeService.prototype.onModuleInit.call(self);
+    const shown = await view('run-1', [event(1, 'tool_started', { callIndex: 0, parameters: { to: EMAIL } })]);
+    expect(JSON.stringify(shown)).not.toContain(EMAIL);
+  });
+
+  it('the result does not depend on the setting: filter off and filter on show the same', async () => {
+    const page = () => [event(1, 'tool_started', { callIndex: 0, parameters: { to: EMAIL, card: '4111 1111 1111 1111' } })];
+    const off = await runLogView(async () => ({ organizationId: 'org-off' }), filterOff)('run-1', page());
+    const on = await runLogView(async () => ({ organizationId: 'org-on' }), (data, options) => hide(data, options))('run-1', page());
+    expect(off[0].payload.parameters).toEqual(on[0].payload.parameters);
+    expect(JSON.stringify(off)).not.toMatch(/ana\.lopez|4111 1111 1111 1111/);
+  });
+});
+
 describe('run-log-privacy: every reader of the log', () => {
   const root = join(__dirname, '..', '..', '..');
   const files = (dir: string): string[] =>

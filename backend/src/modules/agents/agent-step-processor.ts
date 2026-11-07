@@ -6,6 +6,7 @@ import { RunEventDraft } from './run-events';
 import { RunChange, writeRun } from './run-event-writer';
 import { StepOutcome, claimRun, heldBy, holdLease, runLeaseConfig } from './run-lease';
 import { CallFinished, StepJournal } from './run-resume';
+import { hidePersonalDataAlways } from './run-log-privacy';
 import { UnknownOutcomeCall, approvalReason, decisionForModel, needsCareOnResume, reattempt, tellModel, unknownWriteSettings } from './unknown-writes';
 import { Message, MessageRole, MessageType } from '../../entities/message.entity';
 import { AgentRuntimeService } from './agent-runtime.service';
@@ -2658,11 +2659,11 @@ export class AgentStepProcessor {
       await this.s.messageRepository.save(msg);
     }
 
-    const shown = await this.s.toolExecutorService.hidePersonalData(
-      call.parameters,
-      { organizationId: run.organizationId, userId: run.userId ?? undefined },
-      call.tool.id,
-    );
+    // The approval shows the arguments with personal data hidden, always:
+    // the organization's filter, then the built-in detector (run-log-privacy.ts).
+    const shown = await hidePersonalDataAlways(
+      await this.s.toolExecutorService.hidePersonalData(call.parameters, { organizationId: run.organizationId, userId: run.userId ?? undefined }, call.tool.id),
+    ).catch(() => '[hidden]');
     const approval = await this.s.approvals.create({
       organizationId: run.organizationId,
       teamId: agent.teamId ?? null,

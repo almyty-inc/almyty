@@ -598,13 +598,18 @@ with personal data hidden (`backend/src/modules/agents/run-log-privacy.ts`):
   and the live view starts reading `agent_run_events`, so a new reader
   goes through `eventsForViewers` from the start.
 
-The hiding is the organization's own PII filter
-(`ToolExecutorService.hidePersonalData`, the pii-filter plugin), the same
-one the stored steps and tool results go through, so it applies exactly
-where they are hidden: an organization with the filter on, or a
-compliance policy that enforces it. Only arguments are touched; ids,
-states and costs are left as they are. A filter that fails, or a run that
-can no longer be found, hides the arguments altogether.
+The hiding always applies, whatever the organization set. The arguments
+go through the organization's own PII filter first
+(`ToolExecutorService.hidePersonalData`, the pii-filter plugin, so its
+custom patterns and any compliance policy apply), then through the same
+plugin's detector with its shipped settings (emails, card numbers, SSNs,
+phone numbers, IP addresses; `hidePersonalDataAlways`), so an
+organization with the filter off still gets them hidden. The approval for
+a lost write shows its arguments the same way. Stored steps and tool
+results keep the organization's rule; only what a viewer of the log gets
+is hidden unconditionally. Only arguments are touched; ids, states and
+costs are left as they are. A filter that fails, or a run that can no
+longer be found, hides the arguments altogether.
 
 The lease settings above decide when a step is picked up again.
 

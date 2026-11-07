@@ -9,14 +9,20 @@
  * calls with them. Everyone else gets them through here: the run streams
  * (`/agents/:id/runs/:runId/stream` and the API-key route), the run view
  * (the row's held calls) and anything that reads the log out later. The
- * hiding is the organization's PII filter, the same one the stored steps
- * and tool results go through (ToolExecutorService.hidePersonalData); no
- * detector of its own.
+ * hiding always applies: the organization's PII filter first, the same one
+ * the stored steps and tool results go through
+ * (ToolExecutorService.hidePersonalData), then the built-in PII filter's own
+ * detector with its shipped settings, whether or not the organization turned
+ * its filter on. Stored steps keep the organization's rule; this is only
+ * what a viewer of the log gets.
  *
  * Only the arguments are touched. Ids, states, costs and the rest of each
  * payload are left exactly as they are, so a viewer folds the log the same
  * way and nothing it keys on changes.
  */
+
+import { PiiFilterPlugin } from '../plugins/built-in/pii-filter.plugin';
+import { PluginHookType } from '../plugins/types/plugin.types';
 
 /** Hides personal data in each value, in order; the same number back. */
 export type HideValues = (values: any[]) => Promise<any[]>;
@@ -116,12 +122,33 @@ export function carriesArguments(events: Array<{ type: string; payload?: any }>)
   });
 }
 
+/**
+ * The built-in PII filter's detector, with its shipped settings (emails,
+ * card numbers, SSNs, phone numbers, IP addresses), run on every argument a
+ * viewer gets whatever the organization's own filter is set to: logged
+ * arguments are always shown with personal data hidden. The organization's
+ * filter (`hide`) runs first, so its own patterns and enforced settings
+ * apply as well.
+ */
+const detector = new PiiFilterPlugin();
+const DETECTOR_SETTINGS = { ...detector.getPluginDefinition().configuration.settings, logDetections: false };
+
+/** `values` with personal data hidden by the built-in detector, whatever the organization's filter says. */
+export async function hidePersonalDataAlways<T>(values: T): Promise<T> {
+  const result = await detector.filterPiiFromData(
+    { hookType: PluginHookType.DATA_FILTER, organizationId: '', requestId: 'run-log-view', data: values } as any,
+    DETECTOR_SETTINGS,
+  );
+  if (!result.success) throw new Error('the personal data detector failed');
+  return result.data as T;
+}
+
 async function hideSlots(slots: Slot[], hide: HideValues): Promise<void> {
   if (!slots.length) return;
   const values = slots.map((s) => s.get());
   let hidden: any[];
   try {
-    hidden = await hide(values);
+    hidden = await hidePersonalDataAlways(await hide(values));
   } catch {
     hidden = [];
   }
@@ -171,7 +198,7 @@ export type RunOwnerOf = (runId: string) => Promise<{ organizationId: string; us
 
 /**
  * The view a run stream sends a page of the log through: the arguments in
- * it hidden under the run's organization's filter. A page with no
+ * it hidden, always (the run's organization's filter, then the detector). A page with no
  * arguments goes out as it is, without looking the run up. A run that can
  * no longer be found has its arguments hidden altogether.
  */

@@ -350,6 +350,9 @@ describe('unknown-writes: a keyless write cut off mid-call, resumed', () => {
       [3, 'succeeded', false],
     ]);
     expect(w.approvals.rows[0].reason).toContain('attempt 2 was cut off too, with no answer');
+    // This run's organization has no PII filter: the approval still hides the address.
+    expect(JSON.stringify(w.approvals.rows[0].payload.parameters)).not.toContain(EMAIL);
+    expect(w.approvals.rows[0].payload.parameters.text).toBe('Your refund is on its way');
   });
 
   it('a read cut off mid-call is made again, as before: no retries, no person', async () => {
