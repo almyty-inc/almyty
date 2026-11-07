@@ -13,7 +13,8 @@
  *    call_read_operation / call_write_operation / call_destructive_operation.
  *    An operation is the route itself (route-invoker.service.ts).
  *  - EXCLUDED_ROUTES: routes an MCP client must not or cannot use, each
- *    with the reason.
+ *    with the reason. SECRET_OPERATIONS among them: a route whose purpose
+ *    is a secret is never an operation (secret-arguments.ts).
  *  - HELD_ROUTES: routes left out until someone decides whether an MCP
  *    client may do this at all. Moving one into OPERATIONS is a product
  *    decision, not an engineering one.
@@ -35,6 +36,18 @@ export interface OperationEntry {
   summary?: string;
   /** Reaches outside almyty: calls a model, a third party or a URL, or runs a tool or an agent. */
   openWorld?: boolean;
+  /**
+   * Fields the route takes that are secrets (a current password, a bearer
+   * token): left out of the operation's schema and refused on call. The
+   * rest of the route is the operation; the secret is set in the app.
+   */
+  secretFields?: string[];
+  /** Argument paths whose name reads like a secret but is not one (a role's `key`), each with its reason in a comment. */
+  notSecret?: string[];
+  /** Argument paths that are a tool's or an agent's own input, handed to it as they are and not kept as almyty configuration. */
+  passThrough?: string[];
+  /** The app page a refused secret goes to instead (`:param` filled from the arguments). Default: /credentials/new. */
+  secretPage?: string;
 }
 
 /** An operation's effect: the catalog's override, else what the HTTP method says. */
@@ -49,6 +62,9 @@ type Extra = Omit<OperationEntry, 'name' | 'route'>;
 const op = (name: string, route: string, extra: Extra = {}): OperationEntry => ({ name, route, ...extra });
 const READ: Extra = { effect: 'read' };
 const OPEN: Extra = { openWorld: true };
+/** The summary of an operation that mints a key: the key comes back once, in plaintext, as over REST. */
+const KEY_ONCE = (what: string) =>
+  `${what}. The key is shown only once: the answer holds it in full, in plaintext, exactly as the dashboard shows it. Copy it now; it cannot be read again.`;
 
 /** Hand-written management tools and the REST routes each one is. */
 export const CURATED_TOOL_ROUTES: Record<string, string[]> = {
@@ -216,8 +232,9 @@ export const OPERATIONS: OperationEntry[] = [
   op('agents.update_execution_settings', 'AgentExecutionSettingsController.put'),
   op('agents.eject_execution_settings', 'AgentExecutionSettingsController.eject'),
   op('agents.list_roles', 'AgentRolesController.list'),
-  op('agents.upsert_role', 'AgentRolesController.upsert'),
-  op('agents.remove_role', 'AgentRolesController.remove'),
+  // A role's `key` is its name on the agent (planner, verifier), not a secret.
+  op('agents.upsert_role', 'AgentRolesController.upsert', { notSecret: ['body.key'] }),
+  op('agents.remove_role', 'AgentRolesController.remove', { notSecret: ['key'] }),
   op('agents.resolve_roles', 'AgentRolesController.resolve', READ),
   op('agents.list_constraints', 'AgentConstraintsController.list'),
   op('agents.add_constraint', 'AgentConstraintsController.add'),
@@ -267,7 +284,6 @@ export const OPERATIONS: OperationEntry[] = [
   op('channels.verify_custom_domain', 'CustomDomainController.verify', OPEN),
   op('channels.remove_custom_domain', 'CustomDomainController.remove'),
   op('channels.get_visitor_sign_in', 'VisitorOAuthConfigController.get'),
-  op('channels.set_visitor_sign_in', 'VisitorOAuthConfigController.set'),
   op('channels.remove_visitor_sign_in', 'VisitorOAuthConfigController.remove'),
   op('channels.get_managing_channel', 'ChannelLinkController.managedBy'),
   op('channels.get_hosted_chat_sso', 'HostedChatSsoSettingsController.get'),
@@ -285,7 +301,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('promoted_skills.get', 'PromotedSkillsController.get'),
   op('promoted_skills.get_skill_md', 'PromotedSkillsController.raw'),
   op('promoted_skills.remove', 'PromotedSkillsController.remove'),
-  op('promoted_skills.replay', 'PromotedSkillReplayController.replay', OPEN),
+  op('promoted_skills.replay', 'PromotedSkillReplayController.replay', { ...OPEN, passThrough: ['body.input'] }),
   // ── APIs ──
   op('apis.connect', 'ApisController.connect', { ...OPEN, summary: 'Connect an API in one call from a schema URL or pasted schema content; the import runs in the background. (A file upload is the dashboard\'s; over MCP pass the URL or the content.)' }),
   op('apis.create_http', 'ApisController.createHttpApi'),
@@ -303,19 +319,18 @@ export const OPERATIONS: OperationEntry[] = [
   op('apis.get_parsed_schema', 'ApisController.getParsedSchema'),
   op('apis.set_status', 'ApisController.updateStatus'),
   op('apis.get_key', 'ApisCredentialsController.getKey'),
-  op('apis.set_key', 'ApisCredentialsController.setKey'),
   op('apis.remove_key', 'ApisCredentialsController.removeKey'),
-  op('apis.add_credential', 'ApisCredentialsController.createCredential'),
   op('apis.list_credentials', 'ApisCredentialsController.getCredentials'),
-  op('apis.update_credential', 'ApisCredentialsController.updateCredential'),
   op('apis.remove_credential', 'ApisCredentialsController.deleteCredential'),
   op('apis.test_credential', 'ApisCredentialsController.testCredential', { effect: 'read', openWorld: true }),
   // ── Tools ──
+  op('tools.create', 'ToolsController.createTool', { summary: 'Write a tool by hand: an HTTP request, JavaScript code, a GraphQL query or an LLM prompt. Its credentials come from a stored credential (credentialId); a secret in its auth or headers is refused.' }),
+  op('tools.update', 'ToolsController.updateTool', { summary: "Change a tool's definition: its request, code, prompt, parameters or auth. A secret in its auth or headers is refused; point it at a stored credential instead." }),
   op('tools.search', 'ToolsController.searchTools', READ),
   op('tools.get_signature', 'ToolsController.toolSignature'),
   op('tools.get', 'ToolsController.getTool'),
   op('tools.deactivate', 'ToolsController.deactivateTool'),
-  op('tools.execute', 'ToolsController.executeTool', OPEN),
+  op('tools.execute', 'ToolsController.executeTool', { ...OPEN, passThrough: ['body.parameters'] }),
   op('tools.list_versions', 'ToolsController.getToolVersions'),
   op('tools.get_stats', 'ToolsController.getToolStats'),
   op('tools.generate_from_api', 'ToolsController.generateToolsFromApi'),
@@ -324,7 +339,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('tools.export_skill', 'ToolsExportController.getToolSkill'),
   op('tools.export_cli', 'ToolsExportController.getToolCli'),
   op('tools.export_sdk', 'ToolsExportController.getToolSdk'),
-  op('mcp_sources.add', 'McpSourcesController.create', OPEN),
+  op('mcp_sources.add', 'McpSourcesController.create', { ...OPEN, secretFields: ['body.bearerToken'] }),
   op('mcp_sources.list', 'McpSourcesController.findAll'),
   op('mcp_sources.get', 'McpSourcesController.findOne'),
   op('mcp_sources.sync', 'McpSourcesController.sync', OPEN),
@@ -339,6 +354,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('tool_hub.delete_template', 'ToolHubController.deleteTemplate'),
   // ── Gateways ──
   op('gateways.get', 'GatewaysController.getGateway'),
+  op('gateways.update', 'GatewaysController.updateGateway', { summary: "Change a gateway: its name, address, protocol settings, rate limits, CORS, webhooks, custom headers or health check. A published gateway changes at once for everyone who calls it. A secret in its headers or configuration is refused." }),
   op('gateways.activate', 'GatewaysController.activateGateway'),
   op('gateways.deactivate', 'GatewaysController.deactivateGateway'),
   op('gateways.add_tool', 'GatewayToolsController.associateTool'),
@@ -352,6 +368,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('gateways.list_auth', 'GatewayAuthController.getGatewayAuths'),
   op('gateways.update_auth', 'GatewayAuthController.updateGatewayAuth'),
   op('gateways.list_api_keys', 'GatewayAuthController.listGatewayApiKeys'),
+  op('gateways.create_api_key', 'GatewayAuthController.generateGatewayApiKey', { summary: KEY_ONCE('Create an API key for a gateway') }),
   op('gateways.revoke_api_key', 'GatewayAuthController.revokeGatewayApiKey'),
   op('gateways.search_skills', 'GatewayInfoController.searchSkills'),
   op('gateways.list_all_skills', 'GatewayInfoController.getAllSkills'),
@@ -361,33 +378,32 @@ export const OPERATIONS: OperationEntry[] = [
   op('gateways.resolve', 'GatewayInfoController.resolveGateway'),
   op('gateways.get_skills', 'GatewaySkillsController.getGatewaySkills'),
   op('gateways.list_skills', 'GatewaySkillsController.getGatewayIndividualSkills'),
-  op('gateways.execute_skill', 'GatewaySkillsController.executeSkill', OPEN),
+  // A tool's parameters go to the tool as they are (a `pageToken` is the tool's, not almyty's).
+  op('gateways.execute_skill', 'GatewaySkillsController.executeSkill', { ...OPEN, passThrough: ['body.parameters'] }),
   op('gateways.run_code', 'GatewaySkillsController.runCode', OPEN),
   op('gateways.get_cli_bundle', 'GatewaySkillsController.getGatewayCliBundle'),
   op('gateways.get_sdk', 'GatewaySkillsController.getGatewaySdk'),
   // ── Credentials and connections ──
-  op('credentials.add_connector', 'CredentialsController.createService'),
-  op('credentials.add', 'CredentialsController.create'),
+  // A connector's `key` is its name in the catalog, not a secret.
+  op('credentials.add_connector', 'CredentialsController.createService', { notSecret: ['body.key'] }),
   op('credentials.get', 'CredentialsController.findById'),
-  op('credentials.update', 'CredentialsController.update'),
   op('credentials.delete', 'CredentialsController.delete'),
   op('credentials.check', 'CredentialsController.validate', OPEN),
-  op('credentials.rotate', 'CredentialsController.rotate', OPEN),
   op('credentials.set_sharing', 'CredentialsController.setSharing'),
   op('credentials.get_usage', 'CredentialsController.getUsage'),
   op('credentials.list_access_keys', 'CredentialsController.findAllAccessKeys'),
+  op('credentials.create_access_key', 'CredentialsController.createAccessKey', { summary: KEY_ONCE('Create an organization access key') }),
   op('credentials.revoke_access_key', 'CredentialsController.revokeAccessKey'),
   op('credentials.revoke_grant', 'GrantsController.revoke'),
   op('credentials.list_oauth_presets', 'OAuth2Controller.getPresets'),
   op('credentials.get_oauth_callback_url', 'OAuth2Controller.getCallbackUrl'),
-  op('credentials.start_oauth', 'OAuth2Controller.authorize', OPEN),
-  op('credentials.oauth_client_credentials', 'OAuth2Controller.clientCredentials', OPEN),
   // ── Providers and models ──
-  op('providers.connect', 'LlmProvidersController.connectProvider', OPEN),
+  // A provider's API key is added in the app; a keyless provider (Ollama) connects here.
+  op('providers.connect', 'LlmProvidersController.connectProvider', { ...OPEN, secretPage: '/models/providers/new' }),
   op('providers.list_types', 'LlmProvidersController.getProviderTypes'),
   op('providers.get', 'LlmProvidersController.getProvider'),
   op('providers.get_usage', 'LlmProvidersController.getProviderUsage'),
-  op('providers.update', 'LlmProvidersController.updateProvider'),
+  op('providers.update', 'LlmProvidersController.updateProvider', { secretPage: '/models/providers/:id' }),
   op('providers.list_agents_using', 'LlmProvidersController.agentsUsingProvider'),
   op('providers.delete', 'LlmProvidersController.deleteProvider'),
   op('providers.chat', 'LlmProvidersController.chat', OPEN),
@@ -434,7 +450,8 @@ export const OPERATIONS: OperationEntry[] = [
   op('runners.update', 'RunnerController.update'),
   op('runners.remove', 'RunnerController.unregister'),
   op('runners.list_agents', 'RunnerController.agentList'),
-  op('runners.spawn_agent', 'RunnerController.agentSpawn', OPEN),
+  // apiKeyEnvVar names an environment variable; it holds no key.
+  op('runners.spawn_agent', 'RunnerController.agentSpawn', { ...OPEN, secretFields: ['body.apiKey'], notSecret: ['body.apiKeyEnvVar'] }),
   op('runners.get_agent_status', 'RunnerController.agentStatus', READ),
   op('runners.list_coding_agents', 'RunnerController.codingAgents'),
   op('runners.start_coding_session', 'RunnerController.codingStart', OPEN),
@@ -493,8 +510,8 @@ export const OPERATIONS: OperationEntry[] = [
   op('audit.get_resource_history', 'AuditLogController.getResourceHistory'),
   op('audit.export', 'AuditExportController.download'),
   op('audit.list_streams', 'AuditExportController.listStreams'),
-  op('audit.create_stream', 'AuditExportController.createStream'),
-  op('audit.update_stream', 'AuditExportController.updateStream'),
+  op('audit.create_stream', 'AuditExportController.createStream', { secretFields: ['body.token'], secretPage: '/settings/audit-streams' }),
+  op('audit.update_stream', 'AuditExportController.updateStream', { secretFields: ['body.token'], secretPage: '/settings/audit-streams' }),
   op('audit.delete_stream', 'AuditExportController.deleteStream'),
   op('versions.get', 'VersionsController.getVersion'),
   op('versions.list', 'VersionsController.getVersions'),
@@ -504,9 +521,15 @@ export const OPERATIONS: OperationEntry[] = [
   op('files.remove', 'FilesController.remove'),
   // ── Organization, teams, members ──
   op('organization.list_mine', 'OrganizationsController.getUserOrganizations'),
+  op('organization.create', 'OrganizationsController.createOrganization', { summary: 'Create another organization, with you as its owner. This MCP connection stays on the organization it was opened for.' }),
   op('organization.get', 'OrganizationsController.getOrganization'),
   op('organization.update', 'OrganizationsController.updateOrganization'),
+  op('organization.delete', 'OrganizationsController.deleteOrganization', { summary: 'Delete this organization and everything in it (owners only). It cannot be undone.' }),
   op('organization.list_pending_invites', 'OrganizationsController.listPendingInvites'),
+  op('members.invite', 'OrganizationsController.inviteUserToOrganization', { summary: 'Invite someone into the organization by email, with an organization role. They get an email to accept.' }),
+  op('members.revoke_invite', 'OrganizationsController.revokePendingInvite'),
+  op('members.update_role', 'OrganizationsController.updateMemberRole', { summary: "Change a member's organization role. body: { role: 'viewer' | 'member' | 'admin' | 'owner' }." }),
+  op('members.remove', 'OrganizationsController.removeMember', { summary: 'Remove a member from the organization. They lose access at once.' }),
   op('teams.list', 'OrganizationsController.getOrganizationTeams'),
   op('teams.create', 'OrganizationsController.createTeam'),
   op('teams.update', 'OrganizationsController.updateTeam'),
@@ -518,18 +541,26 @@ export const OPERATIONS: OperationEntry[] = [
   op('organization.get_onboarding', 'OnboardingController.getOnboarding'),
   op('organization.update_onboarding', 'OnboardingController.patchOnboarding'),
   op('organization.get_retention', 'RetentionController.getRetentionPolicy'),
+  // Every window can only be set through the destructive call: a shorter
+  // one deletes older data on the next sweep.
+  op('organization.update_retention', 'RetentionController.updateRetentionPolicy', { effect: 'destructive', summary: 'Set how long runs, logs, audit entries and memory are kept. A shorter window deletes everything older on the next retention sweep, so this runs through call_destructive_operation.' }),
   op('organization.get_entitlements', 'LicensingController.getEntitlements'),
   op('users.list', 'UsersController.findAll'),
   op('users.search', 'UsersController.searchUsers'),
   op('users.get_me', 'UsersController.getCurrentUser'),
   op('users.get_my_activity', 'UsersController.getCurrentUserActivity'),
   op('users.get', 'UsersController.findOne'),
-  op('users.update_me', 'UsersController.updateCurrentUser'),
+  op('users.update_me', 'UsersController.updateCurrentUser', { secretFields: ['body.currentPassword'], secretPage: '/settings/security' }),
   op('users.get_stats', 'UsersController.getUserStats'),
   op('users.get_activity', 'UsersController.getUserActivity'),
+  op('users.update', 'UsersController.update', { secretFields: ['body.currentPassword'], secretPage: '/settings/security', summary: "Change another member's account in this organization (name, email, profile); admins and owners. Your own password is never an argument." }),
+  op('users.deactivate', 'UsersController.deactivate', { summary: 'Deactivate a user account: they can no longer sign in until reactivated. Their data stays.' }),
+  op('users.reactivate', 'UsersController.reactivate'),
+  op('users.delete', 'UsersController.remove', { summary: 'Delete a user account (owners only). It cannot be undone.' }),
   op('profile.get', 'AuthController.getProfile'),
-  op('profile.update', 'AuthController.updateProfile'),
+  op('profile.update', 'AuthController.updateProfile', { secretFields: ['body.currentPassword'], secretPage: '/settings/security' }),
   op('profile.list_api_keys', 'AuthController.getApiKeys'),
+  op('profile.create_api_key', 'AuthController.createApiKey', { summary: KEY_ONCE('Create a platform API key for yourself') }),
   op('profile.revoke_api_key', 'AuthController.revokeApiKey'),
   op('referrals.get_code', 'ReferralsController.getCode'),
   op('referrals.get_stats', 'ReferralsController.getStats'),
@@ -548,7 +579,11 @@ export const OPERATIONS: OperationEntry[] = [
   op('rbac.create_policy', 'RbacController.createPolicy'),
   op('rbac.delete_policy', 'RbacController.deletePolicy'),
   op('sso.get_settings', 'SsoConfigController.get'),
+  op('sso.update_settings', 'SsoConfigController.upsert', { secretPage: '/settings/sso', summary: "Create or change how members sign in with single sign-on (SAML or OIDC). The identity provider's client secret is added in the app; one in the arguments is refused." }),
   op('sso.list_domains', 'SsoConfigController.listDomains'),
+  op('sso.add_domain', 'SsoConfigController.addDomain', { summary: 'Add an email domain for single sign-on (body.domain). It counts once its DNS TXT record is verified with sso.verify_domain.' }),
+  op('sso.verify_domain', 'SsoConfigController.verifyDomain', OPEN),
+  op('sso.remove_domain', 'SsoConfigController.removeDomain'),
   op('compliance.get_policy', 'ComplianceController.getPolicy'),
   op('compliance.set_policy', 'ComplianceController.upsertPolicy'),
   op('compliance.get_report', 'ComplianceController.getReport'),
@@ -567,7 +602,14 @@ export const OPERATIONS: OperationEntry[] = [
   op('connection_governance.export_audit', 'ConnectionsGovernanceController.auditExport'),
   op('billing.get_status', 'BillingController.getStatus'),
   op('billing.list_invoices', 'BillingController.listInvoices'),
+  op('billing.create_checkout', 'BillingController.createCheckout', { ...OPEN, summary: 'Start a paid-plan checkout. Returns the Stripe checkout URL: open it to pay; nothing is charged until the person completes it there.' }),
+  op('billing.open_portal', 'BillingController.createPortal', { ...OPEN, summary: 'Open the billing portal (payment methods, invoices, cancellation). Returns the Stripe portal URL to open.' }),
   op('kms.get', 'KmsController.get'),
+  op('kms.set_key', 'KmsController.setCmk', { ...OPEN, summary: "Attach the organization's customer-managed key (an AWS KMS key ARN and region): a fresh data key is wrapped under it. Refused when a key is already attached; replacing one is kms.rotate_key. A key almyty cannot use locks the organization out of its own secrets." }),
+  op('kms.rotate_key', 'KmsController.rotate', { ...OPEN, summary: 'Rotate onto a fresh data key, optionally under a different customer-managed key. The outgoing data key is kept, so secrets sealed under it stay readable.' }),
+  // One route turns envelope encryption on and off; turning it off is
+  // destructive, so both run through call_destructive_operation.
+  op('kms.set_enabled', 'KmsController.setEnabled', { effect: 'destructive', summary: 'Turn bring-your-own-key encryption on or off (body.enabled). Turning it off stops sealing new secrets under your key, so this runs through call_destructive_operation either way.' }),
 ];
 
 /** Routes an MCP client must not or cannot use, and why. */
@@ -619,7 +661,7 @@ exclude('SCIM provisioning: authenticated by the organization\'s SCIM token and 
   'ScimController.patchGroup',
   'ScimController.deleteGroup',
 ]);
-exclude('Returns a secret in plaintext (the SCIM bearer token). Secrets never leave through the MCP.', [
+exclude('Returns the SCIM bearer token in plaintext: the credential the identity provider provisions with, set up in the app together with the provider, not a key for the MCP client.', [
   'SsoConfigController.rotateScimToken',
   'SsoConfigController.revealScimToken',
 ]);
@@ -738,35 +780,33 @@ exclude('One-click link in an email (unsubscribe), authenticated by the token in
 ]);
 
 /**
- * Routes held back until a product decision: each says what the
- * decision is. Not excluded for a technical reason; any of them could be
- * an operation tomorrow.
+ * Operations whose purpose is a secret: adding, changing or rotating a
+ * credential, setting an API's key, an OAuth client secret. No MCP
+ * argument carries a secret (secret-arguments.ts), so these are excluded,
+ * and calling one by name answers with the app page that takes it
+ * (`:param` filled from the call's arguments).
  */
-export const HELD_ROUTES: Record<string, string> = {
-  'OrganizationsController.deleteOrganization': 'May an MCP client delete the whole organization (owner only over REST)?',
-  'OrganizationsController.createOrganization': 'May an MCP client connected to one organization create another one?',
-  'OrganizationsController.inviteUserToOrganization': 'May an MCP client invite people into the organization? (The management MCP has said "invites, role changes and removals are not exposed" since list_org_members shipped.)',
-  'OrganizationsController.revokePendingInvite': 'May an MCP client revoke a pending invitation? Held with inviteUserToOrganization.',
-  'OrganizationsController.updateMemberRole': 'May an MCP client change a member\'s organization role?',
-  'OrganizationsController.removeMember': 'May an MCP client remove a member from the organization?',
-  'UsersController.update': 'May an MCP client edit another user\'s account (admin over REST)?',
-  'UsersController.deactivate': 'May an MCP client deactivate a user account?',
-  'UsersController.reactivate': 'May an MCP client reactivate a user account?',
-  'UsersController.remove': 'May an MCP client delete a user account (owner over REST)?',
-  'AuthController.createApiKey': 'May an MCP client mint a platform API key for its user? The key is returned in plaintext once.',
-  'CredentialsController.createAccessKey': 'May an MCP client mint an organization access key? The key is returned in plaintext once.',
-  'GatewayAuthController.generateGatewayApiKey': 'May an MCP client mint a gateway API key? The key is returned in plaintext once.',
-  'SsoConfigController.upsert': 'May an MCP client change how every member signs in (the organization\'s SSO configuration)?',
-  'SsoConfigController.addDomain': 'May an MCP client add a sign-in domain for SSO? Held with upsert.',
-  'SsoConfigController.verifyDomain': 'May an MCP client verify an SSO domain? Held with upsert.',
-  'SsoConfigController.removeDomain': 'May an MCP client remove an SSO domain? Held with upsert.',
-  'KmsController.setCmk': 'May an MCP client set the organization\'s customer-managed encryption key? A wrong key locks the organization out of its own secrets.',
-  'KmsController.rotate': 'May an MCP client rotate the organization\'s encryption key?',
-  'KmsController.setEnabled': 'May an MCP client turn bring-your-own-key encryption on or off?',
-  'BillingController.createCheckout': 'May an MCP client start a paid plan checkout?',
-  'BillingController.createPortal': 'May an MCP client open the billing portal (payment methods, cancellation)?',
-  'GatewaysController.updateGateway': 'May an MCP client edit an existing gateway? The management MCP has left this out on purpose so a stray request cannot quietly rewrite a live address (docs-site control-via-mcp).',
-  'ToolsController.createTool': 'May an MCP client write a tool by hand (HTTP, JavaScript, GraphQL, LLM)? The management MCP has left this out on purpose: tools come from an import or a template (docs-site control-via-mcp).',
-  'ToolsController.updateTool': 'May an MCP client edit a tool\'s definition (its request, code or prompt)? Held with createTool.',
-  'RetentionController.updateRetentionPolicy': 'May an MCP client shorten data retention? A shorter window deletes runs, logs and memory on the next sweep.',
+export const SECRET_OPERATIONS: Record<string, { route: string; page: string }> = {
+  'credentials.add': { route: 'CredentialsController.create', page: '/credentials/new' },
+  'credentials.update': { route: 'CredentialsController.update', page: '/credentials/:id' },
+  'credentials.rotate': { route: 'CredentialsController.rotate', page: '/credentials/:id' },
+  'credentials.start_oauth': { route: 'OAuth2Controller.authorize', page: '/credentials/new' },
+  'credentials.oauth_client_credentials': { route: 'OAuth2Controller.clientCredentials', page: '/credentials/new' },
+  'apis.set_key': { route: 'ApisCredentialsController.setKey', page: '/apis/:id' },
+  'apis.add_credential': { route: 'ApisCredentialsController.createCredential', page: '/apis/:id' },
+  'apis.update_credential': { route: 'ApisCredentialsController.updateCredential', page: '/apis/:id' },
+  'channels.set_visitor_sign_in': { route: 'VisitorOAuthConfigController.set', page: '/agents' },
 };
+
+/** The exclusion reason of every route in SECRET_OPERATIONS. */
+export const TAKES_A_SECRET = 'Takes a secret; add it in the app. No MCP argument carries a secret, so calling it answers with the app page instead.';
+
+exclude(TAKES_A_SECRET, Object.values(SECRET_OPERATIONS).map((s) => s.route));
+
+/**
+ * Routes held back until a product decision: each says what the decision
+ * is. Empty: every route is a tool, an operation or an exclusion. A route
+ * may land here when it waits for someone to decide whether an MCP client
+ * may do it at all.
+ */
+export const HELD_ROUTES: Record<string, string> = {};

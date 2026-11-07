@@ -130,9 +130,13 @@ export function coverageMarkdown(routes: ControllerRoute[]): string {
 
   lines.push('## Held for a product decision');
   lines.push('');
-  lines.push('| Route | Question |');
-  lines.push('| --- | --- |');
-  for (const [ref, question] of Object.entries(HELD_ROUTES)) {
+  const held = Object.entries(HELD_ROUTES);
+  if (!held.length) lines.push('None: every route is a tool, an operation or an exclusion.');
+  else {
+    lines.push('| Route | Question |');
+    lines.push('| --- | --- |');
+  }
+  for (const [ref, question] of held) {
     const route = routes.find((r) => r.ref === ref);
     lines.push(`| \`${route ? `${route.method} ${route.path}` : ref}\` (${ref}) | ${cell(question)} |`);
   }
