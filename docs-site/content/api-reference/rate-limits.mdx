@@ -12,6 +12,7 @@ Every client IP address gets a general allowance of 100 requests a minute across
 | Register (`POST /auth/register`) | 10 per hour |
 | Refresh a session (`POST /auth/refresh`) | 20 per 5 minutes |
 | Forgot password (`POST /auth/forgot-password`) | 5 per hour per IP, and 3 per hour per account |
+| Sign out other devices (`POST /auth/sessions/revoke-others`) | 5 per 15 minutes |
 | Start an autonomous run (`POST /agents/:id/runs`) | 20 per minute |
 | Invoke or stream an agent (`POST /agents/:id/invoke`, `/stream`) | 30 per minute |
 | Gateway endpoints (`/:org/:gateway`, the unified root endpoint) | 60 per minute |
