@@ -6,13 +6,17 @@
     "node": ">=26.0.0"
   },
   "scripts": {
+    "predev": "node scripts/llms.mjs",
     "dev": "next dev -p 3003",
+    "prebuild": "node scripts/llms.mjs",
     "build": "next build --webpack",
     "postbuild": "pagefind --site .next/server/app --output-path public/_pagefind",
     "start": "next start",
     "check-copy": "node scripts/check-copy.mjs",
     "check-screenshots": "node scripts/check-screenshots.mjs",
-    "test-screenshots": "node --test scripts/check-screenshots.test.mjs"
+    "test-screenshots": "node --test scripts/check-screenshots.test.mjs",
+    "check-llms": "node scripts/check-llms.mjs",
+    "test-llms": "node --test scripts/check-llms.test.mjs"
   },
   "dependencies": {
     "next": "^16.4.4",
