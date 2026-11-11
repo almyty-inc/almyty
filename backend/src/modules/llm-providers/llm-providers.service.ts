@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Inject, forwardRef } from '@nestjs/common';
-import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig, type LlmProviderCredentialRefs } from '../../entities/llm-provider.entity';
 import { decideEgress, hostMatches } from '../connections/egress-policy';
 import { llmCallOptionsFor } from './providers/safe-request';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -671,7 +671,10 @@ export class LlmProvidersService {
       throw new NotFoundException('Provider not found');
     }
 
-    return includeSecrets ? provider : provider.maskSensitiveData() as LlmProvider;
+    if (includeSecrets) return provider;
+    const masked = provider.maskSensitiveData() as LlmProvider;
+    await this.attachModelCounts([masked]);
+    return masked;
   }
   async getProviders(filters: LlmProviderSearchFilters): Promise<{
     providers: LlmProvider[];
@@ -731,6 +734,7 @@ export class LlmProvidersService {
 
     // Mask sensitive data
     const maskedProviders = providers.map(provider => provider.maskSensitiveData() as LlmProvider);
+    await this.attachModelCounts(maskedProviders);
 
     const totalPages = Math.ceil(total / limit);
 
@@ -741,6 +745,37 @@ export class LlmProvidersService {
       limit,
       totalPages,
     };
+  }
+
+  /**
+   * How many models each connection lists and how many of those can be
+   * used now (`modelCounts`), read from the cards by the same rule as
+   * `Model.isSelectable()`. A key that works ("Key works") over a list
+   * where nothing is usable is not a connection that works, and the
+   * page says so from these numbers.
+   */
+  async attachModelCounts(providers: LlmProvider[]): Promise<void> {
+    const ids = providers.map((p) => p.id).filter(Boolean);
+    if (ids.length === 0) return;
+    let rows: Array<{ providerId: string; vendorModelId: string; status: string; validationStatus: string }>;
+    try {
+      rows = await this.llmProviderRepository.manager
+        .createQueryBuilder()
+        .select(['m."providerId" AS "providerId"', 'm."vendorModelId" AS "vendorModelId"', 'm.status AS status', 'm."validationStatus" AS "validationStatus"'])
+        .from('models', 'm')
+        .where('m."providerId" IN (:...ids)', { ids })
+        .getRawMany();
+    } catch (err: any) {
+      this.logger.warn(`Could not count the models of ${ids.length} providers: ${err?.message ?? err}`);
+      return;
+    }
+    for (const provider of providers) {
+      const mine = rows.filter((r) => r.providerId === provider.id && r.status !== 'inactive');
+      (provider as LlmProvider & LlmProviderCredentialRefs).modelCounts = {
+        listed: mine.length,
+        usable: mine.filter((r) => r.status === 'active' && r.validationStatus === 'passed' && providerAllowsModel(provider, r.vendorModelId)).length,
+      };
+    }
   }
 
   /**
@@ -866,24 +901,49 @@ export class LlmProvidersService {
       // vendor currently serves (DefaultModelResolver). Never a literal:
       // a fixed id here marked Mistral, Groq and DeepSeek unhealthy with
       // valid keys, and rotted for Anthropic when the id was retired.
-      const healthCheckModel = await this.defaultModels.resolve(provider);
-
-      // Perform a simple health check request
-      const testRequest: ChatRequest = {
-        messages: [{ role: MessageRole.USER, content: 'Hello' }],
-        model: healthCheckModel,
-        maxTokens: 10,
-        temperature: 0.1,
-      };
+      let healthCheckModel = await this.defaultModels.resolve(provider);
 
       const session = Conversation.createConversation({
         providerId: provider.id,
         organizationId: provider.organizationId,
         title: 'Health Check',
       });
+      // Perform a simple health check request
+      const probe = (model: string) => {
+        const testRequest: ChatRequest = {
+          messages: [{ role: MessageRole.USER, content: 'Hello' }],
+          model,
+          maxTokens: 10,
+          temperature: 0.1,
+        };
+        return this.runner.callLlmProvider(provider!, testRequest, session, []);
+      };
 
-      const response = await this.runner.callLlmProvider(provider, testRequest, session, []);
+      // A model the key may not use (gone, or not in the key's plan) says
+      // nothing about the key: the vendor accepted it and refused that one
+      // model. Try another model it lists, twice at most, before calling
+      // the check failed. Otherwise a key that works and lists 41 models
+      // left every one of them unusable because the configured one was
+      // outside its plan.
+      const unavailable: Array<{ model: string; error: string }> = [];
+      let response: Awaited<ReturnType<typeof probe>>;
+      for (;;) {
+        try {
+          response = await probe(healthCheckModel);
+          break;
+        } catch (probeError) {
+          const fallback = findModelNotFound(probeError) && unavailable.length < 2
+            ? await this.defaultModels.alternative(provider, [healthCheckModel, ...unavailable.map((u) => u.model)])
+            : undefined;
+          if (!fallback) throw probeError;
+          unavailable.push({ model: healthCheckModel, error: extractUpstreamErrorMessage(probeError) });
+          healthCheckModel = fallback;
+        }
+      }
       const responseTime = Date.now() - startTime;
+      for (const u of unavailable) {
+        await this.recordCatalogValidation(provider, u.model, { passed: false, error: u.error });
+      }
 
       // A connection a failed check turned off comes back on when someone
       // who may change it asks for this check and the key works: the check

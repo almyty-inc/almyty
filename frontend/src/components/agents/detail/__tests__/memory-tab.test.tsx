@@ -111,7 +111,8 @@ describe('MemoryTab add memory', () => {
       tier: 'short',
       tags: ['billing', 'refunds'],
       metadata: { type: 'context' },
-      scope: { scope_type: 'workspace', scope_id: 'org-1' },
+      // No scope handed down: the agent's own memory, never the shared one.
+      scope: { scope_type: 'agent', scope_id: 'org-1:agent:agent-1' },
       provenance: expect.objectContaining({ agent_id: 'agent-1' }),
     })
     await waitFor(() => expect(screen.queryByTestId('add-memory-form')).not.toBeInTheDocument())

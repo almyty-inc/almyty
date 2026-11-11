@@ -61,13 +61,17 @@ export interface MemorySettings {
   credentialId: string | null;
 }
 
-/** The settings with every default filled in. */
+/**
+ * The settings with every default filled in. Whose memory defaults to the
+ * agent's own: the organization's shared memory, which every agent reads,
+ * is used only when someone picks it.
+ */
 export function memorySettings(cfg: AgentMemoryConfig | null | undefined): MemorySettings {
   const c = cfg ?? {};
   return {
     enabled: c.enabled === true,
     account: typeof c.account === 'string' && c.account ? c.account : NATIVE_MEMORY_ACCOUNT,
-    whose: MEMORY_WHOSE.includes(c.whose as MemoryWhose) ? (c.whose as MemoryWhose) : 'shared',
+    whose: MEMORY_WHOSE.includes(c.whose as MemoryWhose) ? (c.whose as MemoryWhose) : 'agent',
     save: MEMORY_SAVE.includes(c.save as MemorySave) ? (c.save as MemorySave) : c.autoSave ? 'facts' : 'asked',
     neverSave: typeof c.neverSave === 'string'
       ? c.neverSave.split('\n').map((l) => l.trim()).filter(Boolean)

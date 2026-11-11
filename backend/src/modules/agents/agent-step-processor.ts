@@ -516,23 +516,20 @@ export class AgentStepProcessor {
         return await this.explorePhase(run, agent, team, runner, resolvedLimits, expectedStep, stepStart);
       }
 
-      // Recall memories if memory is enabled: from the scope and the account
-      // the agent's Memory section names (AgentMemoryKeeper).
+      // Memory on: the run looks up what it saved before, once, at its start,
+      // and every step carries what it found (AgentMemoryKeeper.recallAtStart,
+      // recorded as a memory_recall step). The model does not have to think
+      // of calling recall_memory for it.
       const memory = new AgentMemoryKeeper(this.s, runner);
       let memoryContext = '';
       if (agent.memoryConfig?.enabled) {
         try {
-          const recentMessages = run.conversationId
-            ? await this.s.messageRepository.find({ where: { conversationId: run.conversationId, role: MessageRole.USER as any }, order: { createdAt: 'DESC' }, take: 1 })
-            : [];
-          const lastUserMessage = recentMessages[0];
-          if (lastUserMessage) {
-            memoryContext = await memory.recallContext(
-              agent,
-              run,
-              typeof lastUserMessage.content === 'string' ? lastUserMessage.content : JSON.stringify(lastUserMessage.content),
-            );
-          }
+          memoryContext = await memory.recallAtStart(agent, run, async () => {
+            if (!run.conversationId) return '';
+            const [last] = await this.s.messageRepository.find({ where: { conversationId: run.conversationId, role: MessageRole.USER as any }, order: { createdAt: 'DESC' }, take: 1 });
+            if (!last) return '';
+            return typeof last.content === 'string' ? last.content : JSON.stringify(last.content);
+          });
         } catch (err) {
           this.s.logger.warn(`Failed to recall memories for run ${runId}: ${err.message}`);
         }
