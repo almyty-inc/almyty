@@ -70,3 +70,20 @@ describe('OperationsTab (inline operation details)', () => {
     expect(screen.queryByTestId('operation-details')).not.toBeInTheDocument()
   })
 })
+
+describe('OperationsTab for a manual HTTP API (no description)', () => {
+  const HTTP_API = { ...API, id: 'api-http', type: 'http', schemas: [] } as unknown as Api
+
+  it('offers "Add a tool", opening the create-tool page linked to this API', () => {
+    render(<OperationsTab api={HTTP_API} operations={[]} apiTools={[]} onOpenSchemaImport={vi.fn()} />)
+
+    expect(screen.getByText(/Add its tools by hand/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add a tool' })).toHaveAttribute(
+      'href',
+      '/tools/new?type=http&api=api-http',
+    )
+    // Importing a description stays possible.
+    expect(screen.getByRole('button', { name: 'Import a description' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})

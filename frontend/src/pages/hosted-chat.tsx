@@ -1,7 +1,7 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, Download, MessageSquarePlus, Menu, MoreHorizontal, Trash2, X } from 'lucide-react'
-import { assistantMarkdownComponents } from '@/components/hosted-chat/assistant-markdown'
+import { AssistantMarkdown, assistantMarkdownComponents } from '@/components/hosted-chat/assistant-markdown'
 
 import {
   AlertDialog,
@@ -36,15 +36,8 @@ import {
   type HostedChatMessage,
 } from '@/lib/hosted-chat'
 
-// GitHub-flavoured markdown: an agent's tables and task lists render as
-// such, not as a paragraph of pipes. Loaded with the renderer, off the
-// first paint.
-const ReactMarkdown = lazy(() =>
-  Promise.all([import('react-markdown'), import('remark-gfm')]).then(([md, gfm]) => ({
-    default: (props: React.ComponentProps<typeof md.default>) => <md.default remarkPlugins={[gfm.default]} {...props} />,
-  })),
-)
-
+// An answer renders through AssistantMarkdown, the same renderer as an agent's
+// Try it: GitHub-flavoured (tables render as tables), line breaks kept.
 export { assistantMarkdownComponents }
 
 /**
@@ -1091,11 +1084,7 @@ function MessageBubble({ message }: { message: PendingMessage }) {
           isUser ? (
             message.content
           ) : (
-            <Suspense fallback={<span className="whitespace-pre-wrap">{message.content}</span>}>
-              <ReactMarkdown skipHtml components={assistantMarkdownComponents}>
-                {message.content}
-              </ReactMarkdown>
-            </Suspense>
+            <AssistantMarkdown>{message.content}</AssistantMarkdown>
           )
         ) : message.streaming ? (
           <StreamingDots />

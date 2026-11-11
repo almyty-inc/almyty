@@ -41,6 +41,19 @@ export function fillScheduleTemplate(text: string, values: ScheduleTemplateValue
  * shape, are left exactly as they were.
  */
 export function withFilledMessage<T extends Record<string, any> | null | undefined>(input: T, values: ScheduleTemplateValues): T {
-  if (!input || !usesScheduleTemplate(input.message)) return input;
-  return { ...input, message: fillScheduleTemplate(input.message, values) };
+  if (!inputUsesScheduleTemplate(input)) return input;
+  const filled: Record<string, any> = { ...input };
+  for (const [key, value] of Object.entries(filled)) {
+    if (usesScheduleTemplate(value)) filled[key] = fillScheduleTemplate(value, values);
+  }
+  return filled as T;
+}
+
+/**
+ * Whether any top-level text field of a run input uses a value. The input
+ * is shaped before it is filled, so the text sits in the agent's declared
+ * input field, which is not always `message`.
+ */
+export function inputUsesScheduleTemplate(input: Record<string, any> | null | undefined): boolean {
+  return !!input && Object.values(input).some((value) => usesScheduleTemplate(value));
 }

@@ -126,6 +126,9 @@ const RAW_NOT_OTHERS_PRIVATE = new RegExp(
     `AND \\2\\.visibility = 'private' ` +
     `AND \\(\\2\\."([A-Za-z_]+)"::text = CAST\\(:([A-Za-z_]+) AS text\\)\\) IS NOT TRUE\\)$`,
 );
+// The agent-name check (AgentsService.assertNameFree): same text, case and
+// surrounding spaces ignored.
+const RAW_SAME_NAME = new RegExp(`^LOWER\\(TRIM\\(${RAW_COLUMN_RE}\\)\\) = LOWER\\(TRIM\\(:([A-Za-z_]+)\\)\\)$`);
 
 const asText = (v: any): string | null => (v === null || v === undefined ? null : String(v));
 
@@ -133,6 +136,13 @@ function rawExpressionMatches(sql: string, cell: any, params: Record<string, any
   const orNull = RAW_OR_NULL.exec(sql);
   if (orNull) return cell === null || cell === undefined || rawExpressionMatches(orNull[1], cell, params, ctx);
   if (RAW_IS_NULL.test(sql)) return cell === null || cell === undefined;
+  const sameName = RAW_SAME_NAME.exec(sql);
+  if (sameName) {
+    const value = params[sameName[1]];
+    if (value === undefined) throw new UnmodelledQueryError(`a Raw predicate binds :${sameName[1]}, which has no value`);
+    if (cell === null || cell === undefined || value === null) return false;
+    return String(cell).trim().toLowerCase() === String(value).trim().toLowerCase();
+  }
   const jsonText = RAW_JSON_TEXT_EQUALS.exec(sql);
   if (jsonText) {
     const value = cell && typeof cell === 'object' ? cell[jsonText[1]] : undefined;

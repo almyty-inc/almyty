@@ -7,9 +7,9 @@
  * (`pages/api-detail.tsx`).
  */
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Edit, ExternalLink, TestTube, Upload, Zap } from 'lucide-react'
+import { Edit, ExternalLink, Plus, TestTube, Upload, Zap } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import { useNotifications } from '@/store/app'
 import { Api, ApiOperation, Tool } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { pluralized } from '@/lib/utils'
+import { addToolPath } from './operations-tab'
 
 /** How the API's key is sent, as the overview's Key row says it. */
 const AUTH_WORDS: Record<string, string> = {
@@ -148,6 +149,16 @@ export function OverviewTab({
           <Upload className="mr-2 h-4 w-4" />
           {api.schemas && api.schemas.length > 0 ? 'Update the description' : 'Import a description'}
         </Button>
+        {/* A tool made by hand, calling a path under this API's address. With
+            no operations, the Operations card's empty state offers it instead. */}
+        {operations.length > 0 && (
+          <Button variant="outline" asChild>
+            <Link to={addToolPath(api)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add a tool
+            </Link>
+          </Button>
+        )}
         {operations.length > 0 && (
           <Button
             onClick={async () => {

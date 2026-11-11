@@ -31,10 +31,11 @@ describe('the values in a schedule message', () => {
       );
     });
 
-    it('touches only the message text, never the rest of the input', () => {
-      const input = { message: 'Papers since {{last_run_at}}', days: 1, filter: { since: '{{today}}' } };
+    it('fills the top-level text fields of the input, never nested values or other types', () => {
+      const input = { message: 'Papers since {{last_run_at}}', invoices: 'Rates of {{today}}', days: 1, filter: { since: '{{today}}' } };
       expect(withFilledMessage(input, values)).toEqual({
         message: 'Papers since 2026-11-10T08:00:12+01:00',
+        invoices: 'Rates of 2026-11-11',
         days: 1,
         filter: { since: '{{today}}' },
       });
@@ -113,9 +114,9 @@ describe('the values in a schedule message', () => {
 
       expect(timeZones.configuredZoneOf).toHaveBeenCalledWith('org-1');
       expect(runtime.startRun).toHaveBeenCalledTimes(1);
-      expect((runtime.startRun.mock.calls[0] as any[])[3]).toBe(
-        'List the papers published since 2026-11-10T08:00:00+01:00. Today is 2026-11-11.',
-      );
+      expect((runtime.startRun.mock.calls[0] as any[])[3]).toEqual({
+        message: 'List the papers published since 2026-11-10T08:00:00+01:00. Today is 2026-11-11.',
+      });
     });
 
     it('on the first run, last_run_at is when the schedule was created', async () => {
@@ -125,7 +126,7 @@ describe('the values in a schedule message', () => {
 
       await tick(input);
 
-      expect((runtime.startRun.mock.calls[0] as any[])[3]).toBe('Since 2026-11-01T09:00:00+00:00');
+      expect((runtime.startRun.mock.calls[0] as any[])[3]).toEqual({ message: 'Since 2026-11-01T09:00:00+00:00' });
     });
 
     it('a workflow agent reads its last successful scheduled execution, and is given the rest of the input as it was', async () => {
@@ -149,13 +150,26 @@ describe('the values in a schedule message', () => {
       });
     });
 
+
+    it('a schedule saved as bare text is filled in the declared input field, whatever it is called', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-11T07:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
+      const agent = {
+        ...workflow({} as any, 'UTC'),
+        pipeline: { nodes: [{ id: 'input', type: 'input', data: { schema: { type: 'object', properties: { invoices: { type: 'string' } }, required: ['invoices'] } } }], edges: [] },
+      };
+      const { engine, tick } = build(agent, { orgZone: 'UTC' });
+
+      await tick('Convert the invoices of {{today}}' as any);
+
+      expect((engine.execute.mock.calls[0] as any[])[3].input).toEqual({ invoices: 'Convert the invoices of 2026-11-11' });
+    });
     it('a message without values is passed on untouched', async () => {
       const input = { message: 'Write the morning summary.' };
       const { runtime, tick, timeZones } = build(autonomous(input));
 
       await tick(input);
 
-      expect((runtime.startRun.mock.calls[0] as any[])[3]).toBe('Write the morning summary.');
+      expect((runtime.startRun.mock.calls[0] as any[])[3]).toEqual({ message: 'Write the morning summary.' });
       expect(timeZones.configuredZoneOf).not.toHaveBeenCalled();
     });
 

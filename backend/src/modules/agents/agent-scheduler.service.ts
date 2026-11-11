@@ -76,7 +76,8 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { claimDelivery } from './run-event-writer';
 import { runsOnAutonomousRuntime } from './agent-invocation';
 import { ScheduledResult } from './scheduled-result-poster';
-import { scheduleTemplateValues, usesScheduleTemplate, withFilledMessage } from './schedule-template';
+import { runInputOf } from './input-schema';
+import { inputUsesScheduleTemplate, scheduleTemplateValues, withFilledMessage } from './schedule-template';
 import { resolveTimeZone } from '../../common/utils/current-time';
 import { OrganizationTimeZoneService } from '../llm-providers/organization-time-zone.service';
 
@@ -92,6 +93,14 @@ export function scheduledTask(input: Record<string, any> | null | undefined): st
   return 'Do your scheduled task now.';
 }
 
+/**
+ * A scheduled autonomous run's input, as Try it and the API send one:
+ * `{ message }`. An input that already has a message is kept whole.
+ */
+export function scheduledRunInput(input: Record<string, any> | null | undefined): Record<string, any> {
+  if (typeof input?.message === 'string' && input.message.trim()) return input;
+  return { message: scheduledTask(input) };
+}
 /** A finished workflow execution, as the poster reads it. */
 export function resultOfExecution(execution: AgentExecution): ScheduledResult {
   return {
@@ -266,7 +275,7 @@ export class AgentSchedulerService implements OnModuleInit {
     settings.schedule = {
       enabled: true,
       ...validated,
-      input: request.input ?? input,
+      input: runInputOf(request.input ?? input, agent.pipeline),
       ...(deliverTo ? { deliverTo } : {}),
       // Kept across edits: {{last_run_at}} on the first run is this.
       createdAt: scheduleCreatedAt(agent.settings?.schedule)?.toISOString() ?? new Date().toISOString(),
@@ -305,7 +314,7 @@ export class AgentSchedulerService implements OnModuleInit {
     schedule: AgentScheduleConfig,
     input: Record<string, any> | null | undefined,
   ): Promise<Record<string, any>> {
-    if (!input || !usesScheduleTemplate(input.message)) return input ?? {};
+    if (!input || !inputUsesScheduleTemplate(input)) return input ?? {};
     const orgZone = this.timeZones ? await this.timeZones.configuredZoneOf(agent.organizationId) : null;
     const zone = resolveTimeZone(orgZone, schedule?.timezone);
     const lastRunAt =
@@ -870,19 +879,20 @@ export class AgentSchedulerService implements OnModuleInit {
         }
       }
 
-      // The template step: {{last_run_at}}, {{today}} and {{now}} in the
-      // message text are filled in for this run (schedule-template.ts).
-      // Only the message text changes; everything else is passed on as is.
-      const input = await this.fillTemplate(agent, schedule, scheduledInput);
-
       // Run it on the engine that owns the agent: an autonomous agent on
       // the autonomous runtime, a workflow on the workflow engine -- the
       // same dispatch every other entry point makes (runsOnAutonomousRuntime).
       // Sending an autonomous agent to the workflow engine ran its (empty)
       // pipeline, which finished at once with no output.
+      // The run gets its input in the shape a manual run sends it, an
+      // object: a schedule saved with bare text has it put in the declared
+      // input field (runInputOf). Then the template step fills
+      // {{last_run_at}}, {{today}} and {{now}} in its text fields
+      // (schedule-template.ts), whatever the field is called.
+      const runInput = await this.fillTemplate(agent, schedule, runInputOf(scheduledInput, agent.pipeline));
       if (runsOnAutonomousRuntime(agent)) {
         if (!this.runtime) throw new Error('The autonomous runtime is not available on this server');
-        await this.runtime.startRun(agent.id, organizationId, runUser, scheduledTask(input), {
+        await this.runtime.startRun(agent.id, organizationId, runUser, scheduledRunInput(runInput), {
           principal,
           // Where the result goes is decided now and carried by the run, so
           // it is posted when the run finishes (deliverScheduledRun), on
@@ -897,7 +907,7 @@ export class AgentSchedulerService implements OnModuleInit {
         organizationId,
         runUser,
         {
-          input,
+          input: runInput,
           metadata: { triggerType: 'scheduled' },
           principal,
         },

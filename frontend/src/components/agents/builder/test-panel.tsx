@@ -11,14 +11,18 @@ import { Label } from '@/components/ui/label'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { agentsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { sampleInput } from '../step-values'
 
 export interface TestPanelProps {
   agentId: string
+  /** The input step's schema: the input starts with the fields it declares, not always a message. */
+  inputSchema?: unknown
   onClose: () => void
 }
 
-export function TestPanel({ agentId, onClose }: TestPanelProps) {
-  const [testInput, setTestInput] = useState('{"message": "Hello"}')
+export function TestPanel({ agentId, inputSchema, onClose }: TestPanelProps) {
+  const placeholder = JSON.stringify(sampleInput(inputSchema))
+  const [testInput, setTestInput] = useState(() => JSON.stringify(sampleInput(inputSchema), null, 2))
   const [testOutput, setTestOutput] = useState<string | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
@@ -55,7 +59,7 @@ export function TestPanel({ agentId, onClose }: TestPanelProps) {
             onChange={(value) => setTestInput(value)}
             language="json"
             height="140px"
-            placeholder='{"message": "Hello"}'
+            placeholder={placeholder}
           />
           <Button size="sm" onClick={runTest} disabled={testLoading}>
             {testLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}

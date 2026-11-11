@@ -7,8 +7,8 @@
  * detail page (`pages/api-detail.tsx`).
  */
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Code, Search, Upload } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronRight, Code, Plus, Search, Upload } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,8 +16,18 @@ import { Badge } from '@/components/ui/badge'
 import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
 
-import { Api, ApiOperation, Tool } from '@/types'
+import { Api, ApiOperation, ApiType, Tool } from '@/types'
 import { pluralized } from '@/lib/utils'
+
+/** An API connected as a bare address (Manual HTTP), with no description to import. */
+export function isManualHttp(api: Api): boolean {
+  return api.type === ApiType.HTTP && !(api.schemas && api.schemas.length > 0)
+}
+
+/** The create-tool page, opened as an HTTP tool already linked to this API. */
+export function addToolPath(api: Api): string {
+  return `/tools/new?type=http&api=${encodeURIComponent(api.id)}`
+}
 
 interface OperationsTabProps {
   api: Api
@@ -64,13 +74,25 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
           {operations.length === 0 ? (
             <div className="text-center py-12">
               <Code className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              {/* A manual HTTP API has no description to import: its tools are
+                  made by hand, so that is offered first. */}
               <p className="text-muted-foreground mb-4">
-                No operations yet. Import the API's description to get them.
+                {isManualHttp(api)
+                  ? 'No operations: this API has no description. Add its tools by hand, each calling a path under its address.'
+                  : "No operations yet. Import the API's description to get them, or add a tool by hand."}
               </p>
-              <Button onClick={onOpenSchemaImport}>
-                <Upload className="mr-2 h-4 w-4" />
-                Import a description
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button asChild variant={isManualHttp(api) ? 'default' : 'outline'}>
+                  <Link to={addToolPath(api)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add a tool
+                  </Link>
+                </Button>
+                <Button variant={isManualHttp(api) ? 'outline' : 'default'} onClick={onOpenSchemaImport}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import a description
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
