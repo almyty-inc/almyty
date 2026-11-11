@@ -72,4 +72,12 @@ export const assistantMarkdownComponents: Components = {
   blockquote: ({ children }) => (
     <blockquote className="mb-3 border-l-2 border-current/30 pl-3 last:mb-0">{children}</blockquote>
   ),
+  // Agents answer with tables (a dependency report, an FX note); a wide one scrolls inside the bubble.
+  table: ({ children }) => (
+    <div className="mb-3 overflow-x-auto last:mb-0">
+      <table className="w-full border-collapse text-left text-[0.92em]">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => <th className="border-b border-current/30 px-2 py-1 font-semibold">{children}</th>,
+  td: ({ children }) => <td className="border-b border-current/10 px-2 py-1 align-top">{children}</td>,
 }

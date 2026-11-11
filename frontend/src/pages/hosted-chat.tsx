@@ -36,7 +36,14 @@ import {
   type HostedChatMessage,
 } from '@/lib/hosted-chat'
 
-const ReactMarkdown = lazy(() => import('react-markdown'))
+// GitHub-flavoured markdown: an agent's tables and task lists render as
+// such, not as a paragraph of pipes. Loaded with the renderer, off the
+// first paint.
+const ReactMarkdown = lazy(() =>
+  Promise.all([import('react-markdown'), import('remark-gfm')]).then(([md, gfm]) => ({
+    default: (props: React.ComponentProps<typeof md.default>) => <md.default remarkPlugins={[gfm.default]} {...props} />,
+  })),
+)
 
 export { assistantMarkdownComponents }
 
