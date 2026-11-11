@@ -78,7 +78,7 @@ import { runsOnAutonomousRuntime } from './agent-invocation';
 import { ScheduledResult } from './scheduled-result-poster';
 import { runInputOf } from './input-schema';
 import { inputUsesScheduleTemplate, scheduleTemplateValues, withFilledMessage } from './schedule-template';
-import { resolveTimeZone } from '../../common/utils/current-time';
+import { isKnownTimeZone, resolveTimeZone } from '../../common/utils/current-time';
 import { OrganizationTimeZoneService } from '../llm-providers/organization-time-zone.service';
 
 /** When a schedule was first set up, if it says. */
@@ -306,8 +306,9 @@ export class AgentSchedulerService implements OnModuleInit {
   /**
    * The template step of a scheduled run: the input with {{last_run_at}},
    * {{today}} and {{now}} filled in in its message text, in the
-   * organization's time zone (the schedule's own zone when the
-   * organization has none, then UTC). Only `input.message` is touched.
+   * schedule's own time zone -- the one the schedule page shows next to
+   * it, for an interval too -- else the organization's, else UTC. Only
+   * `input.message` is touched.
    */
   async fillTemplate(
     agent: Agent,
@@ -315,8 +316,9 @@ export class AgentSchedulerService implements OnModuleInit {
     input: Record<string, any> | null | undefined,
   ): Promise<Record<string, any>> {
     if (!input || !inputUsesScheduleTemplate(input)) return input ?? {};
-    const orgZone = this.timeZones ? await this.timeZones.configuredZoneOf(agent.organizationId) : null;
-    const zone = resolveTimeZone(orgZone, schedule?.timezone);
+    const orgZone =
+      isKnownTimeZone(schedule?.timezone) || !this.timeZones ? null : await this.timeZones.configuredZoneOf(agent.organizationId);
+    const zone = resolveTimeZone(schedule?.timezone, orgZone);
     const lastRunAt =
       (await this.lastSuccessfulRunStart(agent)) ?? scheduleCreatedAt(schedule) ?? agent.createdAt ?? new Date();
     return withFilledMessage(input, scheduleTemplateValues(new Date(), lastRunAt, zone));
@@ -366,7 +368,7 @@ export class AgentSchedulerService implements OnModuleInit {
   /**
    * The schedule as the page shows it: the stored settings, the same
    * thing in plain words, and when it next fires. An interval's next run
-   * is the queue's (it counts from when the repeat was registered); a
+   * is the queue's (Bull lines it up with the clock, see nextRuns); a
    * time of day's is computed from its cron expression and zone, the way
    * the queue computes it.
    */

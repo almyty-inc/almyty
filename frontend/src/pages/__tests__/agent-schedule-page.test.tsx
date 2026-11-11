@@ -264,7 +264,50 @@ describe('/agents/:id/schedule', () => {
     expect(screen.getByTestId('schedule-summary')).toHaveTextContent('Every 15 minutes')
     await user.click(screen.getByRole('button', { name: 'Save schedule' }))
     await waitFor(() =>
-      expect(api.schedule).toHaveBeenCalledWith('a1', { kind: 'interval', intervalMinutes: 15, input: { topic: 'x' }, deliverTo: null }),
+      expect(api.schedule).toHaveBeenCalledWith('a1', {
+        kind: 'interval',
+        intervalMinutes: 15,
+        timezone: 'America/New_York',
+        input: { topic: 'x' },
+        deliverTo: null,
+      }),
     )
   })
+
+  // Run d0bde308: switching to an interval hid the zone and dropped it, so
+  // {{today}} and {{last_run_at}} were filled in UTC instead of Berlin time.
+  it('keeps the time zone on an interval, says what it is for, and sends it', async () => {
+    const user = userEvent.setup()
+    api.previewSchedule.mockResolvedValue({
+      summary: 'Every 15 minutes',
+      nextRuns: ['2026-11-11T21:45:00.000Z', '2026-11-11T22:00:00.000Z'],
+      timezone: 'Europe/Berlin',
+    })
+    renderAtRoute(<AgentSchedulePage />, AT)
+    await screen.findByRole('heading', { name: 'Set up a schedule' })
+
+    await pick(user, 'Repeat', 'Every few minutes or hours')
+    fireEvent.change(screen.getByLabelText('Every'), { target: { value: '15' } })
+    await pick(user, 'Unit', 'minutes')
+
+    // Inline, next to the interval, with what it is used for.
+    const zone = screen.getByLabelText('Time zone')
+    expect(zone).toHaveTextContent('Europe/Berlin')
+    expect(screen.getByText('Used for the dates in the message: {{today}}, {{now}} and {{last_run_at}}.')).toBeInTheDocument()
+
+    // The runs line up with the clock (Bull's `every`), and the page says so
+    // instead of "Counted from when you save it", and shows when they are.
+    const summary = screen.getByTestId('schedule-summary')
+    expect(summary).not.toHaveTextContent('Counted from when you save it')
+    expect(summary).toHaveTextContent('line up with the clock')
+    expect(await within(summary).findByText(/Next runs: Wed 11 Nov, 22:45 \(Europe\/Berlin\)/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.previewSchedule).toHaveBeenCalledWith('a1', { kind: 'interval', intervalMinutes: 15, timezone: 'Europe/Berlin' }),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Save schedule' }))
+    await waitFor(() =>
+      expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ kind: 'interval', intervalMinutes: 15, timezone: 'Europe/Berlin' })),
+    )
+  }, 20_000)
 })

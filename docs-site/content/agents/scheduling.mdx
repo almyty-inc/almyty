@@ -13,8 +13,8 @@ A schedule runs one task at a set time and posts the result. To keep an autonomo
 3. Under **When it runs**, pick how it repeats:
    - **At a time of day**: every day, weekdays (Monday to Friday), or the days you pick, at a time.
    - **Once a month**: a day from the 1st to the 28th, or the **last day of the month**, at a time.
-   - **Every few minutes or hours**: how often.
-4. Check the **Time zone**. It starts as the one on your profile (**Settings → Your account**). The agent runs at that time there in summer and in winter.
+   - **Every few minutes or hours**: how often. The runs line up with the clock, not with when you save: every 15 minutes runs at :00, :15, :30 and :45, so the first run can come sooner than 15 minutes after you save.
+4. Check the **Time zone**. It starts as the one on your profile (**Settings → Your account**). The agent runs at that time there in summer and in winter, and the dates in its message are in that zone.
 5. Under **Send the result to**, choose where the result goes (see below).
 6. Say what the agent should do:
    - For an agent that works on its own, write the **Message** it gets each time, the way you would ask it in a chat: "Summarise yesterday's sales and point out anything unusual."
@@ -37,7 +37,7 @@ A message can name the day it runs and the last time it ran. Write one of these 
 
 So *"List the papers published since `{{last_run_at}}`"* asks for exactly what is new since the last report, even after a run failed or was skipped. The page lists these values under the message, so you do not have to remember them.
 
-Dates and times are in your organization's time zone: the one on the profile of the organization's owner (**Settings → Your account**), or the schedule's own time zone when the owner has not set one, else UTC. For an agent you drew step by step, they are filled in in a `"message"` field of **What the agent is given**; the rest of it is passed on as you wrote it.
+Dates and times are in the schedule's **Time zone**, the one next to when it runs. A schedule that repeats every few minutes or hours has one too: it does not change when the runs happen, only the dates in the message. For an agent you drew step by step, they are filled in in a `"message"` field of **What the agent is given**; the rest of it is passed on as you wrote it.
 
 Every agent is also told today's date and the organization's time zone on its own, whenever it calls a model, so "yesterday" or "this week" in a message already means the right days.
 
