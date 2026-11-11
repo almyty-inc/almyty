@@ -144,6 +144,40 @@ export function trimAgentVersions(
   if (versions.length <= MAX_INLINE_AGENT_VERSIONS) return versions;
   return versions.slice(versions.length - MAX_INLINE_AGENT_VERSIONS);
 }
+
+/**
+ * The version an edited agent gets: the patch number goes up by one, the
+ * same rule tools follow (ToolsService.updateTool). Every save is also
+ * recorded in full by the typeorm-versions subscriber (`GET /versions/
+ * Agent/:id`); this label is the short name people see for it. A label
+ * that is not `major.minor.patch` starts over at 1.0.1.
+ */
+export function nextAgentVersion(current: string | null | undefined): string {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(current ?? '').trim());
+  if (!m) return '1.0.1';
+  return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
+}
+
+/** Fields an update can carry that do not change what the agent is or does. */
+const NOT_AN_EDIT = new Set(['version', 'status', 'visibility', 'teamId']);
+
+/**
+ * The agent's fields named in `keys` as one comparable string: object keys
+ * sorted (jsonb hands them back in its own order) and a missing value the
+ * same as null.
+ */
+export function agentDefinition(agent: Partial<Agent>, keys: Iterable<string>): string {
+  const picked: Record<string, unknown> = {};
+  for (const key of keys) if (!NOT_AN_EDIT.has(key)) picked[key] = (agent as any)[key];
+  return JSON.stringify(picked, (_key, v) =>
+    v === undefined
+      ? null
+      : v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+        : v,
+  );
+}
+
 /**
  * Columns the agents list response emits. `metadata` is deliberately absent:
  * it carries the inline version history and no list consumer reads it.
@@ -937,10 +971,17 @@ export class AgentsService {
     );
 
     const { visibility: _v, teamId: _t, ...rest } = updateDto;
+    // Saving an edit is a new version; a status or sharing change, or a save
+    // that changes nothing, keeps the label. A caller naming a version keeps it.
+    const editedKeys = [...Object.keys(rest), 'modelConfig', 'models'];
+    const definitionBefore = agentDefinition(agent, editedKeys);
     Object.assign(agent, rest);
     if (typeof rest.name === 'string') agent.name = rest.name.trim();
     agent.modelConfig = next.modelConfig as Agent['modelConfig'];
     agent.models = next.models;
+    if (rest.version === undefined && agentDefinition(agent, editedKeys) !== definitionBefore) {
+      agent.version = nextAgentVersion(agent.version);
+    }
     if (scope) {
       agent.visibility = scope.visibility;
       agent.teamId = scope.teamId;

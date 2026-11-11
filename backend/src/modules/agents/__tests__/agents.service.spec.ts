@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
-import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS } from '../agents.service';
+import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS, nextAgentVersion } from '../agents.service';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
 import { AgentReadinessService } from '../agent-readiness.service';
@@ -1561,6 +1561,56 @@ describe('AgentsService', () => {
 
       await expect(service.freeAgentName('org-1', 'Invoices (Copy)')).resolves.toBe('Invoices (Copy) (3)');
       await expect(service.freeAgentName('org-1', 'Support (Copy)')).resolves.toBe('Support (Copy)');
+    });
+  });
+
+  // ── the version label goes up with each edit ────────────────────────────
+
+  describe('saving an edit bumps the version', () => {
+    beforeEach(() => agentRepo.save.mockImplementation((a: any) => Promise.resolve(a)));
+
+    it('raises the patch number when the pipeline changes', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent({ version: '1.0.0' }));
+      const pipeline = makeValidPipeline();
+      (pipeline.nodes[1] as any).data.userPromptTemplate = '{{input.invoices}}';
+
+      const saved = await service.updateAgent('agent-1', { pipeline }, 'org-1');
+      expect(saved.version).toBe('1.0.1');
+    });
+
+    it('raises it again on the next edit', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent({ version: '1.0.1', description: 'old' }));
+      const saved = await service.updateAgent('agent-1', { description: 'new' }, 'org-1');
+      expect(saved.version).toBe('1.0.2');
+    });
+
+    it('keeps it when the save changes nothing, even with keys in another order', async () => {
+      const agent = makeAgent({ version: '1.0.3' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      // What jsonb hands back has its keys in its own order; the builder sends them in its own.
+      const resent = JSON.parse(JSON.stringify(agent.pipeline), (_k, v) =>
+        v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).reverse()) : v,
+      );
+      const saved = await service.updateAgent('agent-1', { name: agent.name, description: agent.description, pipeline: resent }, 'org-1');
+      expect(saved.version).toBe('1.0.3');
+    });
+
+    it('keeps it for a status or sharing change, which is not an edit', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent({ version: '2.1.0', visibility: 'org' } as any));
+      const saved = await service.updateAgent('agent-1', { status: AgentStatus.INACTIVE }, 'org-1');
+      expect(saved.version).toBe('2.1.0');
+    });
+
+    it('takes the version a caller names', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent({ version: '1.0.0', description: 'old' }));
+      const saved = await service.updateAgent('agent-1', { description: 'new', version: '2.0.0' }, 'org-1');
+      expect(saved.version).toBe('2.0.0');
+    });
+
+    it('starts a label that is not major.minor.patch over at 1.0.1', () => {
+      expect(nextAgentVersion('1.4.9')).toBe('1.4.10');
+      expect(nextAgentVersion('v2')).toBe('1.0.1');
+      expect(nextAgentVersion(undefined)).toBe('1.0.1');
     });
   });
 });
