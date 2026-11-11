@@ -28,6 +28,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Agent, AgentMemoryConfig, AgentModels, PipelineNode, PipelineEdge } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { inputSchemaOf } from '@/components/agents/step-values'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
@@ -257,7 +258,12 @@ export function AgentBuilderPage() {
     return errors
   }, [agentName, agentMode, agentInstructions, agentModels, agentMemoryConfig, agentConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
 
-  const validationErrors = useMemo(() => validationIssues.map((issue) => issue.text), [validationIssues])
+  // Advisory items (a value read from a renamed field or a deleted step) are
+  // on the list but do not hold the save back: the server accepts them.
+  const validationErrors = useMemo(
+    () => validationIssues.filter((issue) => !issue.advisory).map((issue) => issue.text),
+    [validationIssues],
+  )
 
   const canSave = validationErrors.length === 0
 
@@ -522,7 +528,7 @@ export function AgentBuilderPage() {
         says so. Both render the same strings, so nothing is hidden either
         way and Save is gated by canSave in both.
       */}
-      {validationErrors.length > 0 && (
+      {validationIssues.length > 0 && (
         <NextStepsBar issues={validationIssues} asErrors={showValidationErrors} onGoTo={goToIssue} />
       )}
 
@@ -654,6 +660,7 @@ export function AgentBuilderPage() {
       {showTestPanel && isEditing && agentMode === 'workflow' && (
         <TestPanel
           agentId={id!}
+          inputSchema={inputSchemaOf(pipeline.nodes)}
           onClose={() => setShowTestPanel(false)}
         />
       )}
