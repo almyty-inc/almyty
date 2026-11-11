@@ -234,9 +234,6 @@ export class AgentVerifierHelper {
       `You are a verifier. Your ONLY job is to find what is WRONG with the OUTPUT ` +
       `relative to the SPEC. Do not praise, summarize, or restate. Hunt for ` +
       `violations, missing requirements, unsupported claims, and contradictions.` +
-      // Without it a checker took its training cutoff for today and failed
-      // real papers dated last week as "from the future".
-      ` Today is ${new Date().toISOString().slice(0, 10)}; a date on or before it is not in the future.` +
       (evidence
         ? `\n\nThe EVIDENCE is what the agent was asked and what its tools returned in this run. ` +
           `Judge every factual claim against it: a claim is wrong only if the EVIDENCE contradicts it or does not support it. ` +
@@ -266,6 +263,9 @@ export class AgentVerifierHelper {
           temperature: checker.temperature ?? 0,
           maxTokens: checker.maxTokens,
           signal,
+          // Without the date a checker took its training cutoff for today
+          // and failed real papers dated last week as "from the future".
+          currentTime: true,
         },
         organizationId,
         userId,
