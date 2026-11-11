@@ -7,7 +7,16 @@ import { RBAC_ACTION_KEY } from '../../../common/authorization/rbac-actions';
 import { ENTITLEMENT_KEY } from '../../licensing/decorators/requires-entitlement.decorator';
 import { dtoSchema, isDtoClass, JsonSchema } from './dto-schema';
 import { ManagementRouteInvoker, OperationError, ResolvedRoute } from './route-invoker.service';
-import { OPERATIONS, OperationEffect, OperationEntry, effectOf } from './management-operations';
+import { OPERATIONS, OperationEffect, OperationEntry, SECRET_OPERATIONS, effectOf } from './management-operations';
+import { appUrl, secretArgumentPaths, secretRefusal, withoutSchemaPaths } from './secret-arguments';
+
+/** `/credentials/:id` with `:id` taken from the call's arguments (left as is when absent). */
+function fillPage(page: string, args: Record<string, unknown> | undefined): string {
+  return page.replace(/:(\w+)/g, (whole, key) => {
+    const value = args?.[key];
+    return typeof value === 'string' && /^[\w-]+$/.test(value) ? value : whole;
+  }).replace(/\/:\w+/g, '');
+}
 
 /** `@ApiOperation({ summary })`, as @nestjs/swagger stores it on the handler. */
 const API_OPERATION_KEY = 'swagger/apiOperation';
@@ -74,9 +83,19 @@ export class ManagementOperationsService {
     return this.invoker.resolve(entry.route);
   }
 
-  private entry(name: string): { entry: OperationEntry; route: ResolvedRoute } {
+  private entry(name: string, args?: Record<string, unknown>): { entry: OperationEntry; route: ResolvedRoute } {
     const entry = this.byName.get(String(name));
     if (!entry) {
+      // An operation whose purpose is a secret is not one; the answer is
+      // the app page that takes the secret (as start_connection does for
+      // a form-based connect).
+      const secret = SECRET_OPERATIONS[String(name)];
+      if (secret) {
+        throw new OperationError(
+          `${name} takes a secret, and no MCP call carries one. Add it in the app: ${appUrl(fillPage(secret.page, args))}`,
+          400,
+        );
+      }
       throw new OperationError(`Unknown operation: ${name}. Find operations with search_operations.`, 404);
     }
     const route = this.route(entry);
@@ -154,7 +173,7 @@ export class ManagementOperationsService {
     return {
       ...view,
       callWith: CALL_TOOL_FOR[view.effect],
-      inputSchema: this.inputSchema(route),
+      inputSchema: this.inputSchema(route, entry.secretFields),
       requires,
       annotations: annotationsFor(view.effect, view.method, !!entry.openWorld),
     };
@@ -166,7 +185,7 @@ export class ManagementOperationsService {
    * organization), the query fields at the top level, and the request
    * body under `body`.
    */
-  inputSchema(route: ResolvedRoute): JsonSchema {
+  inputSchema(route: ResolvedRoute, secretFields: readonly string[] = []): JsonSchema {
     const properties: Record<string, JsonSchema> = {};
     const required: string[] = [];
     for (const param of route.pathParams) {
@@ -204,11 +223,13 @@ export class ManagementOperationsService {
       properties.body = { ...body, description: 'The request body.' };
       if (body.required?.length) required.push('body');
     }
-    return {
+    const schema: JsonSchema = {
       type: 'object',
       properties,
       ...(required.length ? { required } : {}),
     };
+    // A secret the route takes is the app's to set, never an argument.
+    return withoutSchemaPaths(schema, secretFields);
   }
 
   /**
@@ -224,13 +245,19 @@ export class ManagementOperationsService {
     organizationId: string,
     userId: string | undefined,
   ): Promise<unknown> {
-    const { entry, route } = this.entry(name);
+    const { entry, route } = this.entry(name, args);
     const effect = effectOf(entry, route.method);
     if (effect !== via) {
       throw new OperationError(
         `${name} is a ${effect} operation; run it with ${CALL_TOOL_FOR[effect]}.`,
         400,
       );
+    }
+    // No argument carries a secret, at any depth: a DTO field, a header in
+    // a free-form object, a key inside an auth config (secret-arguments.ts).
+    const secrets = secretArgumentPaths(args ?? {}, { notSecret: entry.notSecret, passThrough: entry.passThrough });
+    if (secrets.length) {
+      throw new OperationError(secretRefusal(name, secrets, fillPage(entry.secretPage ?? '/credentials/new', args)), 400);
     }
     const params: Record<string, unknown> = {};
     const query: Record<string, unknown> = {};

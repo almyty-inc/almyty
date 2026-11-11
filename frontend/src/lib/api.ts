@@ -327,6 +327,13 @@ export const authApi = {
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     apiPatch('/auth/change-password', data),
 
+  /**
+   * Sign out every other browser and device. This browser stays signed in:
+   * the server re-issues its httpOnly cookie; the body carries no token.
+   */
+  revokeOtherSessions: () =>
+    apiPost<{ signedOut: number; expiresIn: number }>('/auth/sessions/revoke-others'),
+
   createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
     apiPost('/auth/api-keys', data),
 

@@ -916,13 +916,20 @@ describe('AlmytyMcpService', () => {
     });
 
     it('add_channel forwards the type, settings and credential as the caller', async () => {
-      await callTool('add_channel', { agentId: 'agent-1', type: 'slack', configuration: { signing_secret: 'x' }, credentialId: 'c-1' });
+      await callTool('add_channel', { agentId: 'agent-1', type: 'slack', configuration: { channelName: 'support' }, credentialId: 'c-1' });
       expect(mockAgentChannelsService.add).toHaveBeenCalledWith('org-1', 'agent-1', ME, {
         type: 'slack',
         slug: undefined,
-        configuration: { signing_secret: 'x' },
+        configuration: { channelName: 'support' },
         credentialId: 'c-1',
       });
+    });
+
+    it('add_channel refuses a platform key in configuration before the service runs', async () => {
+      const res = await callTool('add_channel', { agentId: 'agent-1', type: 'slack', configuration: { signing_secret: 'x' } });
+      expect(res.result.isError).toBe(true);
+      expect(res.result.content[0].text).toContain('configuration.signing_secret');
+      expect(mockAgentChannelsService.add).not.toHaveBeenCalled();
     });
 
     it('check_channel surfaces what blocks it', async () => {
@@ -1226,19 +1233,21 @@ describe('AlmytyMcpService', () => {
     const callTool = (name: string, args: any = {}) =>
       call('tools/call', { name, arguments: args });
 
-    // jwt requires configuration.secret (gateway-auth-utils.ts:114); with no
-    // way to pass it, the enum advertised a type this tool could not create.
-    it('forwards a jwt secret so the advertised jwt type is actually creatable', async () => {
-      await callTool('add_auth_to_gateway', {
+    // jwt needs a signing secret, and no MCP argument carries one: the
+    // type is not advertised, and a secret sent anyway is refused before
+    // the service runs.
+    it('refuses a jwt secret and does not advertise jwt', async () => {
+      const res = await callTool('add_auth_to_gateway', {
         gatewayId: 'gw-1',
         type: 'jwt',
         configuration: { secret: 'gateway-specific' },
       });
-      expect(mockGatewayAuthService.createGatewayAuth).toHaveBeenCalledWith(
-        'gw-1',
-        { type: 'jwt', configuration: { secret: 'gateway-specific' } },
-        'org-1',
-      );
+      expect(res.result.isError).toBe(true);
+      expect(res.result.content[0].text).not.toContain('gateway-specific');
+      expect(mockGatewayAuthService.createGatewayAuth).not.toHaveBeenCalled();
+      const list = await call('tools/list');
+      const schema = list.result.tools.find((t: any) => t.name === 'add_auth_to_gateway').inputSchema;
+      expect(schema.properties.type.enum).not.toContain('jwt');
     });
 
     it('lets an explicit api_key configuration override the defaults', async () => {
@@ -1257,11 +1266,11 @@ describe('AlmytyMcpService', () => {
     it('never echoes configuration values back, only the key names', async () => {
       const res = await callTool('add_auth_to_gateway', {
         gatewayId: 'gw-1',
-        type: 'jwt',
-        configuration: { secret: 'do-not-echo' },
+        type: 'api_key',
+        configuration: { keyHeader: 'x-do-not-echo' },
       });
-      expect(res.result.content[0].text).not.toContain('do-not-echo');
-      expect(JSON.parse(res.result.content[0].text).configuredKeys).toEqual(['secret']);
+      expect(res.result.content[0].text).not.toContain('x-do-not-echo');
+      expect(JSON.parse(res.result.content[0].text).configuredKeys).toEqual(['keyHeader']);
     });
 
     it('advertises configuration on the tool schema', async () => {
@@ -1440,7 +1449,7 @@ describe('AlmytyMcpService', () => {
       const res = await callTool('start_connection', {
         connectorKey: 'github', method: 'oauth2_pkce', owner: 'org', mode: 'headless', name: 'GitHub',
         // Even if a caller invents one, the tool has no input parameter.
-        input: { apiKey: 'sk-live-should-never-travel' },
+        input: { region: 'eu' },
       });
       expect(mockConnectionsService.connect).toHaveBeenCalledWith(
         { id: 'user-1', organizationMemberships: [{ organizationId: 'org-1', role: 'admin' }] },
@@ -1451,6 +1460,17 @@ describe('AlmytyMcpService', () => {
       const forwarded = mockConnectionsService.connect.mock.calls[0][3];
       expect(forwarded).not.toHaveProperty('input');
       expect(parse(res).authorizeUrl).toBe('https://github.com/login/oauth/authorize?x=1');
+    });
+
+    it('start_connection refuses a secret outright, with the credentials page instead', async () => {
+      const res = await callTool('start_connection', {
+        connectorKey: 'openai', method: 'api_key',
+        input: { apiKey: 'sk-live-should-never-travel' },
+      });
+      expect(res.result.isError).toBe(true);
+      expect(res.result.content[0].text).toContain('/credentials/new');
+      expect(res.result.content[0].text).not.toContain('sk-live-should-never-travel');
+      expect(mockConnectionsService.connect).not.toHaveBeenCalled();
     });
 
     it('start_connection surfaces the connector field list when a form method refuses', async () => {
@@ -1660,14 +1680,25 @@ describe('AlmytyMcpService', () => {
       const secretish = /^(apiKey|api_key|secret|clientSecret|password|token|accessToken|refreshToken|botToken|signingSecret)$/;
       const offenders: string[] = [];
       for (const tool of res.result.tools) {
-        // Tools that predate this pass and already take a platform
-        // credential keep doing so; the surfaces added here must not.
-        if (['add_provider', 'create_api', 'update_api'].includes(tool.name)) continue;
         for (const prop of Object.keys(tool.inputSchema?.properties ?? {})) {
           if (secretish.test(prop)) offenders.push(`${tool.name}.${prop}`);
         }
       }
       expect(offenders).toEqual([]);
+    });
+
+    it('refuses a secret in any argument before the tool runs, with the app page instead', async () => {
+      for (const [tool, args, page] of [
+        ['add_provider', { name: 'OpenAI', type: 'openai', apiKey: 'sk-live' }, '/models/providers/new'],
+        ['create_api', { name: 'a', type: 'openapi', baseUrl: 'https://x.test', authentication: { type: 'api_key', config: { apiKey: 'k' } } }, '/apis'],
+        ['update_api', { apiId: 'api-1', headers: { Authorization: 'Bearer live' } }, '/apis'],
+        ['add_auth_to_gateway', { gatewayId: 'gw-1', type: 'jwt', configuration: { secret: 's' } }, '/gateways'],
+      ] as const) {
+        const res = await call('tools/call', { name: tool, arguments: args });
+        expect(res.result.isError).toBe(true);
+        expect(res.result.content[0].text).toContain('does not take secrets over MCP');
+        expect(res.result.content[0].text).toContain(page);
+      }
     });
   });
 });

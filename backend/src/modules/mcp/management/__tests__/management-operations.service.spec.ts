@@ -377,6 +377,37 @@ describe('management MCP operations', () => {
       expect((await rpc('member', 'call_read_operation', { name: 'widgets.traced' })).text).toMatch(/cannot reproduce/);
     });
 
+    it('refuses a secret at any depth before the route runs, naming where it was and the app page instead', async () => {
+      for (const body of [
+        { name: 'Gear', apiKey: 'sk-live' },
+        { name: 'Gear', headers: { Authorization: 'Bearer live' } },
+        { name: 'Gear', auth: { config: { clientSecret: 's' } } },
+        { name: 'Gear', items: [{ password: 'p' }] },
+      ]) {
+        const res = await rpc('admin', 'call_write_operation', { name: 'widgets.create', arguments: { body } });
+        expect(res.isError).toBe(true);
+        expect(res.text).toContain('does not take secrets over MCP');
+        expect(res.text).toContain('/credentials/new');
+        expect(res.text).not.toMatch(/sk-live|Bearer live/);
+      }
+      expect(calls).toEqual([]);
+    });
+
+    it('lets an empty secret-named field through to the route\'s own validation', async () => {
+      const res = await rpc('admin', 'call_write_operation', { name: 'widgets.create', arguments: { body: { name: 'Gear', token: '' } } });
+      expect(res.text).not.toContain('does not take secrets');
+      expect(res.isError).toBe(true); // forbidNonWhitelisted: CreateWidgetDto has no token
+    });
+
+    it('answers an operation that takes a secret with the app page, without running anything', async () => {
+      const res = await rpc('admin', 'call_write_operation', { name: 'credentials.rotate', arguments: { id: WIDGET_ID } });
+      expect(res.isError).toBe(true);
+      expect(res.text).toContain('takes a secret');
+      expect(res.text).toContain(`/credentials/${WIDGET_ID}`);
+      const described = await rpc('admin', 'get_operation', { name: 'credentials.add' });
+      expect(described.text).toContain('/credentials/new');
+    });
+
     it('tells an unexpected failure the way the REST error filter does, without its detail', async () => {
       const res = await rpc('owner', 'call_read_operation', { name: 'widgets.broken' });
       expect(res.text).toBe('Error: Internal server error');

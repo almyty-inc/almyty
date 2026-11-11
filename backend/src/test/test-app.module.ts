@@ -193,6 +193,10 @@ const mockRedis = {
             ? { extra: { options: `-c search_path=${schema},public` } }
             : {}),
           entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
+          // The entities outside entities/ (canonical memory) are registered
+          // by forFeature below, as AppModule lists them: without this an
+          // organization delete fails on CanonicalMemorySoftcapWarning.
+          autoLoadEntities: true,
           migrations: [__dirname + '/../migrations/*{.ts,.js}'],
           migrationsRun: true,
           dropSchema: isolated,
