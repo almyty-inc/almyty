@@ -283,14 +283,14 @@ export function ToolsPage() {
         const isMcpTool = tool.type === 'mcp'
         return (
           <div className="flex items-center space-x-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isRunnerTool ? 'bg-cyan-500/10' : 'bg-primary/10'}`}>
-              {isRunnerTool ? <Server className="h-5 w-5 text-cyan-500" /> : <Code className="h-5 w-5 text-primary" />}
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isRunnerTool ? 'bg-teal-500/10' : 'bg-selection'}`}>
+              {isRunnerTool ? <Server className="h-5 w-5 text-teal-600 dark:text-teal-400" /> : <Code className="h-5 w-5 text-selection-foreground" />}
             </div>
             <div className="max-w-[300px]">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-primary hover:underline truncate" title={tool.name}>{tool.metadata?.displayName || tool.name}</span>
                 {isRunnerTool && (
-                  <Badge variant="outline" className="text-cyan-600 border-cyan-300 dark:border-cyan-800 dark:text-cyan-400 shrink-0">
+                  <Badge variant="outline" className="text-teal-700 border-teal-600/40 dark:border-teal-400/40 dark:text-teal-300 shrink-0">
                     runner: {tool.runnerConfig?.runnerName}
                   </Badge>
                 )}
@@ -498,7 +498,7 @@ export function ToolsPage() {
               used to keep to itself.
             */}
             {(visibleSelectedIds.length > 0 || selectableDraftIds.length > 0) && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-teal-600/30 bg-teal-500/5 p-3">
                 <p className="text-sm text-muted-foreground">
                   {visibleSelectedIds.length > 0
                     ? `${visibleSelectedIds.length} selected.`

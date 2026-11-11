@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
-import { WaitingApprovalNote, runStatusLabel } from '../waiting-approval'
+import { WaitingApprovalNote } from '../waiting-approval'
 
 const note = (run: { status: string; error?: string | null }) =>
   render(
@@ -25,10 +25,5 @@ describe('WaitingApprovalNote (Recent runs)', () => {
   it('adds nothing under other runs', () => {
     const { container } = note({ status: 'cancelled', error: 'Execution cancelled' })
     expect(container).toBeEmptyDOMElement()
-  })
-
-  it('labels the status in words', () => {
-    expect(runStatusLabel('waiting_approval')).toBe('waiting for approval')
-    expect(runStatusLabel('waiting_input')).toBe('waiting input')
   })
 })

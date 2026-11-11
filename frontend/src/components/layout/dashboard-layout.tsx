@@ -79,18 +79,20 @@ interface DashboardLayoutProps {
 }
 
 // Work first, then the resources agents use, then organization controls.
-const navigation: { name: string; href: string; icon: any }[] = [
+// A divider starts a labelled group in the expanded sidebar and draws a
+// rule in the collapsed one.
+const navigation: { name: string; href: string; icon: any; label?: string }[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Approvals', href: '/approvals', icon: Shield },
-  { name: 'divider', href: '', icon: null as any },
+  { name: 'divider', href: '', icon: null as any, label: 'Workspace' },
   { name: 'Models', href: '/models', icon: Brain },
   { name: 'Memory', href: '/memories', icon: Database },
   { name: 'Tools', href: '/tools', icon: Wrench },
   { name: 'APIs', href: '/apis', icon: Globe },
   { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'Runners', href: '/runners', icon: Cpu },
-  { name: 'divider', href: '', icon: null as any },
+  { name: 'divider', href: '', icon: null as any, label: 'Manage' },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Credentials', href: '/credentials', icon: KeyRound },
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -209,7 +211,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-muted dark:bg-background">
+    <div className="h-screen flex overflow-hidden bg-surround dark:bg-background">
       {/* Skip to main content — keyboard users should be able to
        * bypass the 14-item sidebar on every page. Hidden visually
        * until it receives focus, then pops in at the top-left as
@@ -228,19 +230,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
        * from anywhere outside of an editable field. */}
       <KeyboardShortcutsListener />
       {/* Sidebar */}
+      {/* Sidebar: on the app surround, beside the white working panel. */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 bg-card border-r transform transition-all duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+          "fixed inset-y-0 left-0 z-50 bg-surround border-r lg:border-r-0 transform transition-all duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
           sidebarCollapsed ? "w-16" : "w-64",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className={cn("flex-shrink-0 flex items-center h-14 border-b", sidebarCollapsed ? "justify-center px-2" : "justify-between px-4")}>
-            <div className="flex items-center gap-2">
+          <div className={cn("flex-shrink-0 flex items-center h-16", sidebarCollapsed ? "justify-center px-2" : "justify-between px-5")}>
+            <div className="flex items-center gap-2.5">
               <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8 shrink-0" />
-              {!sidebarCollapsed && <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>}
+              {!sidebarCollapsed && <span className="text-[1.375rem] font-heading font-semibold tracking-[-0.05em] text-foreground">almyty</span>}
             </div>
             {!sidebarCollapsed && (
               <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Close navigation" onClick={() => setSidebarOpen(false)}>
@@ -251,12 +254,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Organization Selector */}
           {currentOrganization && !sidebarCollapsed && (
-            <div className="flex-shrink-0 p-4 border-b">
+            <div className="flex-shrink-0 px-3 pt-4">
               <DropdownMenu onOpenChange={(open) => { if (open) fetchOrganizations().catch(() => null) }}>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between" aria-label={`Switch organization, current: ${currentOrganization.name}`}>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-6 h-6 bg-muted rounded flex items-center justify-center">
+                  <Button variant="outline" className="w-full justify-between border-border px-2.5" aria-label={`Switch organization, current: ${currentOrganization.name}`}>
+                    <div className="flex min-w-0 items-center space-x-2">
+                      <div className="w-6 h-6 shrink-0 bg-selection text-selection-foreground rounded-md flex items-center justify-center">
                         <span className="text-xs font-medium">
                           {getInitials(currentOrganization.name)}
                         </span>
@@ -298,7 +301,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
            * code path that opens the dialog. Hidden when the
            * sidebar is collapsed (no room for the key hint). */}
           {!sidebarCollapsed && (
-            <div className="flex-shrink-0 border-b px-2 py-3">
+            <div className="flex-shrink-0 px-3 pt-3">
               <button
                 type="button"
                 onClick={() => {
@@ -306,11 +309,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
                   )
                 }}
-                className="w-full flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                className="w-full flex items-center gap-2 rounded-lg border bg-field px-3 py-2 text-sm text-muted-foreground hover:bg-field-hover hover:text-foreground transition-colors duration-[120ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 aria-label="Open command palette"
               >
                 <span className="text-muted-foreground">Search or jump to…</span>
-                <kbd className="ml-auto inline-flex items-center gap-1 rounded border border-border/80 bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                <kbd className="ml-auto inline-flex items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">
                   ⌘K
                 </kbd>
               </button>
@@ -321,10 +324,19 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               below its content inside the column, so on a short window it
               scrolls within its own box instead of pushing the footer off
               screen or sliding under the header above. */}
-          <nav key={location.pathname} className={cn("flex-1 min-h-0 py-3 space-y-1 overflow-y-auto overscroll-contain", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation" data-testid="sidebar-nav">
+          <nav key={location.pathname} className={cn("flex-1 min-h-0 py-3 space-y-0.5 overflow-y-auto overscroll-contain", sidebarCollapsed ? "px-1" : "px-3")} aria-label="Main navigation" data-testid="sidebar-nav">
             {navigation.map((item, index) => {
               if (item.name === 'divider') {
-                return <div key={`divider-${index}`} className="my-2 mx-3 border-t border-border/40" />
+                return sidebarCollapsed || !item.label ? (
+                  <div key={`divider-${index}`} className="my-2 mx-3 border-t" />
+                ) : (
+                  <p
+                    key={`divider-${index}`}
+                    className="px-3 pb-1.5 pt-5 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground"
+                  >
+                    {item.label}
+                  </p>
+                )
               }
               // NavLink computes `isActive` per-render against the live
               // router location, sidestepping the React reconciliation
@@ -337,23 +349,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   end={item.href === '/dashboard'}
                   title={sidebarCollapsed ? item.name : undefined}
                   className={({ isActive }) => cn(
-                    "group relative flex items-center rounded-md transition-colors",
-                    sidebarCollapsed ? "justify-center px-2 py-2" : "px-3 py-1.5 text-[13px]",
+                    "group relative flex items-center rounded-lg text-sm transition-colors duration-[120ms]",
+                    sidebarCollapsed ? "justify-center px-2 py-2.5" : "px-3 py-2",
+                    // Selected: the selection surface with its blue text.
                     isActive
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    // DS sidebar-active signature: violet->cyan gradient accent bar
-                    isActive && !sidebarCollapsed &&
-                      "before:absolute before:left-0 before:top-1/2 before:h-4 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-gradient-to-b before:from-violet-500 before:to-cyan-400"
+                      ? "bg-selection text-selection-foreground font-semibold"
+                      : "font-medium text-muted-foreground hover:bg-[var(--am-surface-hover)] hover:text-foreground",
                   )}
                 >
                   {({ isActive }) => (
                     <>
                       <item.icon
+                        strokeWidth={1.75}
                         className={cn(
                           "flex-shrink-0 h-5 w-5",
                           !sidebarCollapsed && "mr-3",
-                          isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                          isActive ? "text-selection-foreground" : "text-muted-foreground group-hover:text-foreground"
                         )}
                       />
                       {!sidebarCollapsed && item.name}
@@ -455,13 +466,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Main Content: the white working panel, inset on the app surround
+          from lg up; edge to edge below it. */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden bg-background lg:my-2 lg:mr-2 lg:rounded-xl lg:border lg:shadow-panel">
         {/* Email verification nudge — renders only when the backend
          * explicitly reports emailVerified === false. */}
         <EmailVerificationBanner />
         {/* Top Bar */}
-        <header className="bg-background shadow-sm border-b lg:hidden">
+        <header className="bg-background border-b lg:hidden">
           <div className="flex items-center justify-between h-16 px-4">
             <Button
               variant="ghost"
@@ -473,7 +485,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </Button>
             <div className="flex items-center gap-2">
               <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8" />
-              <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>
+              <span className="text-[1.375rem] font-heading font-semibold tracking-[-0.05em] text-foreground">almyty</span>
             </div>
             <NotificationBell />
           </div>
@@ -508,7 +520,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Overlay for mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-40 bg-[var(--am-overlay)] lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}

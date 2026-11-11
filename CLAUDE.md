@@ -223,13 +223,17 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 
 ## Brand: Almyty
 
+Design system v1 (white revision). Tokens live in `frontend/src/styles/tokens.css`, copied verbatim from the design-system package (`/Users/frane/Documents/Codex/2026-10-27/referenced-chatgpt-conversation-this-is-an/outputs/almyty-design-system`); details in `docs/brand/`.
+
 - Always lowercase `almyty` in code and text. Capitalize `Almyty` only at sentence start.
-- Primary: violet-500 `#8b5cf6` (dark) / violet-600 `#7C3AED` (light). **Not** indigo.
-- Cyan accent: `cyan-400` `#22d3ee` (dark) / `cyan-600` `#0891B2` (light) — Tailwind class `cyan-*`, NOT `accent-*`
-- shadcn `--accent` = neutral zinc (for hover states). Never set to cyan.
-- Fonts: Manrope (headings), DM Sans (body), JetBrains Mono (code). Google Fonts, SIL OFL.
-- Protocol badges: MCP=violet, A2A=cyan, UTCP=emerald, SOAP=amber, GraphQL=rose, REST=blue
-- Primary CTA buttons use violet-to-cyan gradient. One gradient CTA per page max.
+- Primary: blue `#1469EC` (hover `#105BD0`, pressed `#0F4FB3`); dark `#7AB5FF`. Explicit hover/pressed tokens, never an opacity. **Not** violet.
+- Light: text `#141E30`, secondary `#5C6980`, rules `#E6EBF2`, page `#FFFFFF`, app surround `#F6F9FD` (`bg-surround`), selected nav `#EBF3FF` with blue text `#185FCA` (`bg-selection text-selection-foreground`). Dark variants are in the same tokens file.
+- shadcn `--accent` is the selection surface `#EBF3FF` per the design-system bridge; hover surfaces use `--am-surface-hover`.
+- Status: paired text/surface tokens `info`, `success`, `warning`, `danger`, neutral (`bg-info-subtle text-info`, ...). Run states map through `frontend/src/lib/run-status.ts`.
+- Fonts: Manrope for everything, JetBrains Mono for code. Google Fonts, SIL OFL.
+- Protocol badges: MCP=brand blue, A2A=teal, UTCP=emerald, SOAP=amber, GraphQL=rose, REST=slate, Protobuf/gRPC=fuchsia. Each with a light and a dark half.
+- Gradients are accents only: accent `#2775F7 → #26C5CF → #85E5BA` (`bg-accent-gradient`), product field `#EAF1FF → #E5F8FF → #E6FCF1` (`bg-product-field`). Never on a button: primary actions are solid blue.
+- Keep the original lightning mark (`frontend/public/favicon.svg`) unchanged.
 - Sidebar order: Dashboard → Agents → Approvals | Models → Memory → Tools → APIs → Gateways → Runners | Analytics → Credentials → Settings
 
 <!-- BEGIN agented section v0.1.0 -->

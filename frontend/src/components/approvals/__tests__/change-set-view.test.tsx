@@ -42,9 +42,12 @@ describe('a change set awaiting approval', () => {
     expect(argumentsLine({})).toBe('no arguments')
   })
 
-  it('is shown on the Approvals page (guard)', () => {
-    const source = readFileSync(join(__dirname, '..', '..', '..', 'pages', 'approvals.tsx'), 'utf8')
-    expect(source).toMatch(/isChangeSet\(row\) && \([\s\S]*<ChangeSetView entries=\{row\.payload!\.changeSet/)
-    expect(source).toMatch(/\{decisionMessage\(row, decisionFor\.intent\)\}/)
+  it('is shown on the Approvals page and beside a waiting run (guard)', () => {
+    // The inspector both places render: the Approvals page and a run's steps.
+    const inspector = readFileSync(join(__dirname, '..', 'approval-inspector.tsx'), 'utf8')
+    expect(inspector).toMatch(/isChangeSet\(row\) && <ChangeSetView entries=\{row\.payload!\.changeSet/)
+    expect(inspector).toMatch(/\{decisionMessage\(row, intent\)\}/)
+    const page = readFileSync(join(__dirname, '..', '..', '..', 'pages', 'approvals.tsx'), 'utf8')
+    expect(page).toMatch(/<ApprovalInspector key=\{selected\.id\} row=\{selected\} \/>/)
   })
 })

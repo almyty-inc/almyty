@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { Fragment, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
 import {
@@ -222,36 +222,34 @@ export function DashboardPage() {
           on an empty org it says what to do instead. */}
       {(!showGuide || hasAnything) && (
         <>
-          {/* Pipeline: APIs → Tools → Gateways → Agents */}
-          <Card>
-            <CardContent className="py-6">
-              <div className="grid grid-cols-2 gap-3 items-center sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
-                <button onClick={() => navigate('/apis')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-violet-500/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
-                  <div className="text-2xl font-bold">{apisTotal}</div>
-                  <div className="text-sm text-muted-foreground">{pluralize(apisTotal, 'API')}</div>
-                </button>
-                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
-                <button onClick={() => navigate('/tools')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-violet-500/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
-                  <div className="text-2xl font-bold">{toolsTotal}</div>
-                  <div className="text-sm text-muted-foreground">{pluralize(toolsTotal, 'Tool')}</div>
-                </button>
-                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
-                <button onClick={() => navigate('/gateways')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-cyan-400/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
-                  <div className="text-2xl font-bold">{gatewaysTotal}</div>
-                  <div className="text-sm text-muted-foreground">{pluralize(gatewaysTotal, 'Gateway')}</div>
-                </button>
-                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" />
-                <button onClick={() => navigate('/agents')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-cyan-400/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
-                  <div className="text-2xl font-bold">{agents.length}</div>
-                  <div className="text-sm text-muted-foreground">{pluralize(agents.length, 'Agent')}</div>
-                </button>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Pipeline: APIs → Tools → Gateways → Agents, on the product
+              field (the one place the product gradient sits on this page),
+              each step an opaque tile. */}
+          <section aria-label="What is built" className="rounded-2xl bg-product-field p-3 sm:p-4">
+            <div className="grid grid-cols-2 gap-3 items-center sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
+              {([
+                { to: '/apis', count: apisTotal, label: pluralize(apisTotal, 'API') },
+                { to: '/tools', count: toolsTotal, label: pluralize(toolsTotal, 'Tool') },
+                { to: '/gateways', count: gatewaysTotal, label: pluralize(gatewaysTotal, 'Gateway') },
+                { to: '/agents', count: agents.length, label: pluralize(agents.length, 'Agent') },
+              ]).map((step, i) => (
+                <Fragment key={step.to}>
+                  {i > 0 && <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 hidden sm:block" aria-hidden />}
+                  <button
+                    onClick={() => navigate(step.to)}
+                    className="flex-1 cursor-pointer rounded-xl border bg-card px-4 py-5 text-center shadow-panel transition-colors duration-[120ms] hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <div className="font-heading text-[1.75rem] font-bold leading-9 tracking-[-0.03em] tabular-nums">{step.count}</div>
+                    <div className="text-sm text-muted-foreground">{step.label}</div>
+                  </button>
+                </Fragment>
+              ))}
+            </div>
+          </section>
 
           {/* Needs Attention */}
           {(apisWithNoTools.length > 0 || gatewaysWithNoAuth.length > 0) && (
-            <Card className="border-t-2 border-t-amber-500/20">
+            <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Needs attention</CardTitle>
               </CardHeader>
@@ -266,7 +264,7 @@ export function DashboardPage() {
                   {apisWithNoTools.length > 0 && (
                     <Link
                       to="/apis"
-                      className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                      className="flex items-center gap-2 rounded-lg bg-warning-subtle px-3 py-2.5 text-sm font-medium text-warning hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
                       <span>{`${pluralized(apisWithNoTools.length, 'API')} ${apisWithNoTools.length === 1 ? 'has' : 'have'} no tools yet`}</span>
@@ -275,7 +273,7 @@ export function DashboardPage() {
                   {gatewaysWithNoAuth.length > 0 && (
                     <Link
                       to="/gateways"
-                      className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                      className="flex items-center gap-2 rounded-lg bg-warning-subtle px-3 py-2.5 text-sm font-medium text-warning hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
                       <span>{`${pluralized(gatewaysWithNoAuth.length, 'gateway')} ${gatewaysWithNoAuth.length === 1 ? 'is' : 'are'} open to anyone: add sign-in`}</span>
@@ -289,20 +287,20 @@ export function DashboardPage() {
       )}
 
       {/* Recent Activity */}
-      <Card className="border-t-2 border-t-cyan-400/20">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Recent activity</CardTitle>
         </CardHeader>
         <CardContent>
           {recentLogs.length > 0 ? (
-            <div className="space-y-2">
+            <div className="divide-y">
               {recentLogs.map((log: RequestLog, i: number) => (
-                <div key={log.id || i} className="flex items-center gap-3 text-sm py-1.5 border-b last:border-0">
-                  <span className="text-muted-foreground text-xs w-32 shrink-0">
+                <div key={log.id || i} className="flex min-w-0 items-center gap-3 py-2.5 text-sm">
+                  <time dateTime={new Date(log.timestamp).toISOString()} className="w-20 shrink-0 text-xs tabular-nums text-muted-foreground sm:w-28">
                     {new Date(log.timestamp).toLocaleTimeString()}
-                  </span>
-                  <span className="truncate flex-1 text-xs">{humanizePath(log.path, log.method)}</span>
-                  <Badge variant={log.statusCode < 400 ? 'default' : 'destructive'} className="text-xs">
+                  </time>
+                  <span className="min-w-0 flex-1 truncate">{humanizePath(log.path, log.method)}</span>
+                  <Badge variant={log.statusCode < 400 ? 'success' : 'destructive'} className="tabular-nums">
                     {log.statusCode}
                   </Badge>
                   {log.protocol && (

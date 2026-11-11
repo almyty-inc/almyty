@@ -211,10 +211,10 @@ function SdkParamField({ param, value, onChange, depth = 0 }: {
     const colors: Record<string, string> = {
       string: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
       number: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300',
-      boolean: 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300',
+      boolean: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-300',
       object: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
       array: 'bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-300',
-      enum: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300',
+      enum: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300',
     }
     return (
       <Badge

@@ -49,7 +49,7 @@ export const WIDGET_PLACEMENT_DEFAULTS: WidgetPlacement = {
 
 /** Mirrors WIDGET_DEFAULT_AI_DISCLOSURE on the backend (widget-script.ts). */
 const DEFAULT_AI_DISCLOSURE = 'You are chatting with an AI assistant.'
-const DEFAULT_COLOR = '#8b5cf6'
+const DEFAULT_COLOR = '#1469ec'
 const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
 /** The saved placement, field by field, with the defaults for anything missing or invalid. */

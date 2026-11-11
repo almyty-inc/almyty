@@ -64,7 +64,7 @@ export const WIDGET_DISCLOSURE_MAX = 200;
 export const WIDGET_DEFAULT_AI_DISCLOSURE = 'You are chatting with an AI assistant.';
 
 export const WIDGET_CONFIG_DEFAULTS: WidgetPublicConfig = Object.freeze({
-  primaryColor: '#8b5cf6',
+  primaryColor: '#1469ec',
   position: 'bottom-right' as WidgetPosition,
   launcherIcon: 'spark' as WidgetLauncherIcon,
   greeting: '',
@@ -236,7 +236,7 @@ export function buildWidgetScript(gatewayId: string): string {
   // values that pass client-side validation, so a failed or malformed
   // fetch leaves a fully working widget.
   var DEFAULTS = {
-    primaryColor: '#8b5cf6',
+    primaryColor: '#1469ec',
     position: 'bottom-right',
     launcherIcon: 'spark',
     greeting: '',
@@ -252,7 +252,7 @@ export function buildWidgetScript(gatewayId: string): string {
   var cfg = DEFAULTS;
 
   var css = [
-    '.~root{--aw-primary:#8b5cf6;--aw-panel-bg:#fff;--aw-msgs-bg:#fafafa;--aw-agent-bg:#ececf1;',
+    '.~root{--aw-primary:#1469ec;--aw-panel-bg:#fff;--aw-msgs-bg:#fafafa;--aw-agent-bg:#ececf1;',
     '--aw-agent-fg:#1a1a1a;--aw-border:#e5e5e5;--aw-text:#1a1a1a;--aw-muted:#8a8a93}',
     '.~root.~dark{--aw-panel-bg:#18181b;--aw-msgs-bg:#101012;--aw-agent-bg:#27272a;',
     '--aw-agent-fg:#e4e4e7;--aw-border:#27272a;--aw-text:#e4e4e7}',

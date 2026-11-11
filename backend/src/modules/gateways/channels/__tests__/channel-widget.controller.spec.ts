@@ -133,7 +133,7 @@ describe('ChannelWidgetController', () => {
       // and the fetch failure path leaves them in place.
       expect(script).toContain('applyConfig(DEFAULTS)');
       has(script, 'applyConfig(pickConfig(out && out.data));\n}).catch(function () {});');
-      has(script, `primaryColor: '#8b5cf6'`);
+      has(script, `primaryColor: '#1469ec'`);
       // Config-derived text is applied via textContent, not markup.
       has(script, 'header.textContent = c.title');
     });
@@ -397,9 +397,9 @@ describe('ChannelWidgetController', () => {
     });
 
     it('defaults primaryColor to violet and falls back on invalid hex', () => {
-      expect(WIDGET_CONFIG_DEFAULTS.primaryColor).toBe('#8b5cf6');
-      for (const bad of ['red', '#12345g', '#1234', 'javascript:alert(1)', '8b5cf6', '#8b5cf6;x']) {
-        expect(sanitizeWidgetConfig({ widget: { primaryColor: bad } }).primaryColor).toBe('#8b5cf6');
+      expect(WIDGET_CONFIG_DEFAULTS.primaryColor).toBe('#1469ec');
+      for (const bad of ['red', '#12345g', '#1234', 'javascript:alert(1)', '1469ec', '#1469ec;x']) {
+        expect(sanitizeWidgetConfig({ widget: { primaryColor: bad } }).primaryColor).toBe('#1469ec');
       }
     });
 

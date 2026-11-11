@@ -4,8 +4,6 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  CheckCircle2,
-  XCircle,
   Loader2,
   ChevronDown,
   ChevronUp,
@@ -26,7 +24,9 @@ import {
 
 import { formatDateTime, pluralized } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/empty-state'
-import { runStatusVariant, formatDuration } from './constants'
+import { formatDuration } from './constants'
+import { RunStatusBadge } from './run-status-badge'
+import { RunApproval } from '@/components/approvals/approval-inspector'
 import type { AgentRun } from '@/types'
 import { VerifyStepCard, VerifySummary } from './verify-step'
 import { CodeStepCard, isCodeStep } from './code-step'
@@ -93,7 +93,7 @@ export function RunsTab({ runs, agentId, openRunId }: RunsTabProps) {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="@container overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -171,12 +171,7 @@ function RunRow({
             : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </TableCell>
         <TableCell>
-          <Badge variant={runStatusVariant[run.status] || 'secondary'}>
-            {run.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
-            {run.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
-            {run.status === 'running' && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-            {run.status.replace('_', ' ')}
-          </Badge>
+          <RunStatusBadge status={run.status} />
           <DeliveryNote outcome={run.metadata?.channelDelivery} />
         </TableCell>
         <TableCell className="text-sm max-w-[200px] truncate">
@@ -200,11 +195,17 @@ function RunRow({
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={8} className="bg-muted/30 p-4">
-            {/* w-0 min-w-full: the details fill the row without widening the
-                table, so a long step line truncates instead of pushing every
-                column off screen. */}
-            <div className="w-0 min-w-full space-y-4">
+          <TableCell colSpan={8} className="bg-surround p-4 sm:p-5">
+            {/* The details take the visible width of the list (100cqw of the
+                @container around it) and stay put while the columns scroll
+                sideways on a phone, so nothing in them is cut off; a long
+                step line truncates instead of widening the table. */}
+            <div className="sticky left-0 w-[calc(100cqw-2rem)] sm:w-[calc(100cqw-2.5rem)] flow-root space-y-4">
+                {/* A run held for a person: the request beside its steps
+                    (floated right on wide screens, first on a phone). */}
+                {run.status === 'waiting_approval' && (
+                  <RunApproval runId={run.id} className="lg:float-right lg:mb-4 lg:ml-5 lg:w-80" />
+                )}
                 {/* While the run is going, its steps arrive as it takes them. */}
                 <LiveRunNote connection={connection} />
               {/* Verification verdict (if the agent ran a verify gate) */}
@@ -220,25 +221,25 @@ function RunRow({
               )}
               {/* Which role spent what, for runs of an agent with several models */}
               <RoleCostTable run={run} />
-              {/* Steps */}
+              {/* Steps: the model and tool history, in order. */}
               {run.steps && run.steps.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Steps</h4>
-                  <div className="space-y-2">
+                  <h4 className="text-sm font-semibold mb-2">Steps</h4>
+                  <div className="space-y-3">
                     {run.steps.map((step, idx) => {
                       if (step.type === 'verify') return <VerifyStepCard key={idx} step={step} index={idx} />
                       if (isCodeStep(step)) return <CodeStepCard key={idx} step={step} index={idx} agentId={agentId} runId={run.id} />
                       const summary = stepSummary(step)
                       const machineError = stepMachineError(step)
                       return (
-                      <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background dark:bg-muted/40 border text-sm" data-testid={`run-step-${idx}`}>
+                      <div key={idx} className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border bg-card p-3 text-sm sm:flex-nowrap" data-testid={`run-step-${idx}`}>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-mono text-muted-foreground">#{idx + 1}</span>
-                          <Badge variant="outline" className="text-[10px]">{step.type}</Badge>
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-selection text-xs font-semibold tabular-nums text-selection-foreground" aria-label={`Step ${idx + 1}`}>{idx + 1}</span>
+                          <Badge variant="outline" className="font-mono">{step.type}</Badge>
                         </div>
-                        <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="order-last min-w-0 flex-1 basis-full space-y-0.5 sm:order-none sm:basis-auto">
                           <StepRoleLine step={step} />
-                          {summary && <div className="text-xs">{summary}</div>}
+                          {summary && <div className="text-sm">{summary}</div>}
                           {step.input && !hasStepSummary(step) && (
                             <div className="text-xs text-muted-foreground truncate">
                               In: {typeof step.input === 'string' ? step.input : JSON.stringify(step.input)}
@@ -257,7 +258,7 @@ function RunRow({
                             </div>
                           )}
                         </div>
-                        <div className="text-[10px] text-muted-foreground shrink-0 text-right">
+                        <div className="text-xs tabular-nums text-muted-foreground shrink-0 text-right">
                           {step.duration ? formatDuration(step.duration) : ''}
                           {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
                         </div>
@@ -285,15 +286,15 @@ function RunRow({
               )}
               {/* Error */}
               {run.error && (
-                <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                <div className="rounded-lg border border-danger-border bg-danger-subtle p-3 text-sm text-danger">
                   {run.error}
                 </div>
               )}
               {/* Output */}
               {run.output && (
                 <div>
-                  <h4 className="text-sm font-medium mb-1">Output</h4>
-                  <div className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
+                  <h4 className="text-sm font-semibold mb-1.5">Output</h4>
+                  <div className="rounded-lg border bg-code p-3 font-mono text-[0.8125rem] leading-[1.375rem] text-code-foreground whitespace-pre-wrap [overflow-wrap:anywhere] max-h-[240px] overflow-auto">
                     {typeof run.output === 'string' ? run.output : JSON.stringify(run.output, null, 2)}
                   </div>
                 </div>

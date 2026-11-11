@@ -115,7 +115,8 @@ describe('AlertDialogAction variant', () => {
   it('takes the destructive variant from buttonVariants', () => {
     renderAction({ variant: 'destructive' })
     const button = screen.getByRole('button', { name: 'Go' })
-    expect(button).toHaveClass('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive/90')
+    // Hover is the explicit destructive-hover token, not an opacity of the base.
+    expect(button).toHaveClass('bg-destructive', 'text-destructive-foreground', 'hover:bg-destructive-hover')
     expect(button).not.toHaveClass('bg-primary')
   })
 

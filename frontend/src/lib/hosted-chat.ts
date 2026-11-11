@@ -116,7 +116,7 @@ function assertBranding(value: any): HostedChatBranding {
   }
   return {
     ...value,
-    primaryColor: typeof value.primaryColor === 'string' ? value.primaryColor : '#8b5cf6',
+    primaryColor: typeof value.primaryColor === 'string' ? value.primaryColor : '#1469EC',
     greeting: typeof value.greeting === 'string' ? value.greeting : '',
     suggestedPrompts: Array.isArray(value.suggestedPrompts) ? value.suggestedPrompts : [],
     whiteLabel: value.whiteLabel === true,

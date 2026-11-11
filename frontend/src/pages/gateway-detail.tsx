@@ -382,7 +382,7 @@ export function GatewayDetailPage() {
           {!gateway.isSystem && <GatewayStatusSwitch gateway={gateway} />}
           {gateway.type && <ProtocolBadge protocol={gateway.type} />}
           {gateway.isSystem && (
-            <Badge className="border-transparent bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">System</Badge>
+            <Badge variant="info">System</Badge>
           )}
         </div>
       </div>
@@ -446,11 +446,11 @@ export function GatewayDetailPage() {
 
       {/* System gateway banner */}
       {gateway.isSystem && (
-        <div className="flex items-start gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 dark:border-violet-800 dark:bg-violet-950/30">
-          <Info className="h-5 w-5 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-3 rounded-lg border border-info-border bg-info-subtle p-4">
+          <Info className="h-5 w-5 text-info mt-0.5 shrink-0" />
           <div>
-            <p className="font-medium text-violet-900 dark:text-violet-200">This is a system gateway</p>
-            <p className="text-sm text-violet-700 dark:text-violet-400">
+            <p className="font-medium text-foreground">This is a system gateway</p>
+            <p className="text-sm text-info">
               It provides almyty platform management tools. The endpoint, tools, and deletion are managed automatically.
             </p>
           </div>

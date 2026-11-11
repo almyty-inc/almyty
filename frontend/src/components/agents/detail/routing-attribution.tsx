@@ -27,7 +27,7 @@ export function RoutingAttribution({ routing, nodeId, cardNames }: RoutingAttrib
   return (
     <div className="relative text-xs" data-testid="routing-attribution">
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Route className="h-3 w-3 text-violet-500 shrink-0" aria-hidden />
+        <Route className="h-3 w-3 text-primary shrink-0" aria-hidden />
         {nodeId && <span className="font-mono text-muted-foreground">{nodeId}:</span>}
         <span>
           Routed: <span className="font-mono font-medium">{routing.vendorModelId}</span>

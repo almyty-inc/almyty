@@ -188,7 +188,7 @@ export function OperationPicker({ apiId, total, limit: importLimit, newOperation
                                 </span>
                               </span>
                               {newIds.has(op.id) && (
-                                <Badge variant="outline" className="shrink-0 border-cyan-600 text-xs text-cyan-600 dark:border-cyan-400 dark:text-cyan-400">
+                                <Badge variant="outline" className="shrink-0 border-teal-600/40 text-xs text-teal-700 dark:border-teal-400/40 dark:text-teal-300">
                                   New
                                 </Badge>
                               )}

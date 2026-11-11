@@ -123,7 +123,7 @@ export function VisibilityBadge({ visibility, teamId, teamLookup }: VisibilityBa
     return (
       <Badge
         variant="outline"
-        className="text-cyan-600 border-cyan-300 dark:border-cyan-800 dark:text-cyan-400 shrink-0"
+        className="text-teal-700 border-teal-600/40 dark:border-teal-400/40 dark:text-teal-300 shrink-0"
       >
         team: {name}
       </Badge>

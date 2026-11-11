@@ -266,14 +266,16 @@ function lineAt(src: string, index: number): number {
 }
 
 describe('the brand gradient', () => {
-  it('is on at most one button per page', () => {
-    // docs/brand/colors.md: the violet-to-cyan gradient marks the single
-    // primary CTA of a page; secondary buttons, form submits, table
-    // actions and repeated elements never carry it.
+  it('no button carries a gradient', () => {
+    // Design system v1 (docs/brand/colors.md): default actions are solid
+    // primary, with explicit hover and pressed tokens. Gradients are
+    // accents only -- the mark, short strips, progress fills and the
+    // product field -- never a button, whose label must read at every
+    // point of its background.
     const offenders: string[] = []
     for (const { rel, src } of sources) {
-      const gradientButtons = jsxLabels(src, ['Button']).filter((b) => /bg-gradient-to-/.test(b.attrs))
-      if (gradientButtons.length > 1) offenders.push(`${rel}: ${gradientButtons.length}`)
+      const gradientButtons = jsxLabels(src, ['Button']).filter((b) => /bg-gradient-to-|bg-accent-gradient|bg-product-field/.test(b.attrs))
+      if (gradientButtons.length > 0) offenders.push(`${rel}: ${gradientButtons.length}`)
     }
     expect(offenders).toEqual([])
   })

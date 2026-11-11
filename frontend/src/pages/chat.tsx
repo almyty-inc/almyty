@@ -401,7 +401,7 @@ export function ChatPage() {
           {messages.map((msg, i) => (
             <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {msg.role !== 'user' && (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-full bg-accent-gradient flex items-center justify-center shrink-0">
                   <Bot className="h-4 w-4 text-white" />
                 </div>
               )}
@@ -447,7 +447,7 @@ export function ChatPage() {
 
           {isSending && (
             <div className="flex gap-3 justify-start">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-full bg-accent-gradient flex items-center justify-center shrink-0">
                 <Bot className="h-4 w-4 text-white" />
               </div>
               <div className="bg-muted rounded-lg px-4 py-3">
