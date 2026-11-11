@@ -32,7 +32,10 @@ export interface ScheduleTiming {
   days?: number[];
   /** kind 'monthly': the day of the month, 1-28 (every month has one), or 'last' for its last day. */
   dayOfMonth?: number | 'last';
-  /** kinds 'days' and 'monthly': an IANA time zone name. */
+  /**
+   * An IANA time zone name. Kinds 'days' and 'monthly' run at their time
+   * there; every kind dates the values in its message there.
+   */
   timezone?: string;
 }
 
@@ -93,21 +96,23 @@ function normalizeDays(value: unknown): number[] {
 
 /**
  * The timing a request describes, validated and in its stored shape.
- * `fallbackZone` is used when a time-of-day schedule names no zone: the
- * zone of the person setting it (their profile), else UTC.
+ * `fallbackZone` is used when a schedule names no zone: the zone of the
+ * person setting it (their profile), else UTC. An interval keeps a zone
+ * too: it does not time the runs, but it dates {{today}}, {{now}} and
+ * {{last_run_at}} in the message (schedule-template.ts).
  */
 export function normalizeTiming(body: Record<string, any>, fallbackZone?: string | null): ScheduleTiming {
   const kind: ScheduleKind = body?.kind ?? 'interval';
+  const zone = body?.timezone ?? (isTimeZone(fallbackZone) ? fallbackZone : 'UTC');
+  if (!isTimeZone(zone)) throw new BadRequestException(`Unknown time zone: ${String(zone)}`);
   if (kind === 'interval') {
-    return { kind, intervalMinutes: validateIntervalMinutes(body.intervalMinutes) };
+    return { kind, intervalMinutes: validateIntervalMinutes(body.intervalMinutes), timezone: zone };
   }
   if (kind !== 'days' && kind !== 'monthly') {
     throw new BadRequestException('kind must be interval, days or monthly');
   }
   const { hour, minute } = parseTime(body.time);
   const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  const zone = body.timezone ?? (isTimeZone(fallbackZone) ? fallbackZone : 'UTC');
-  if (!isTimeZone(zone)) throw new BadRequestException(`Unknown time zone: ${String(zone)}`);
   if (kind === 'days') {
     return { kind, time, days: normalizeDays(body.days), timezone: zone };
   }
@@ -122,7 +127,9 @@ export function normalizeTiming(body: Record<string, any>, fallbackZone?: string
 /** The stored timing of a schedule; one saved before kinds existed is an interval. */
 export function timingOf(schedule: Record<string, any> | null | undefined): ScheduleTiming {
   const kind: ScheduleKind = schedule?.kind ?? 'interval';
-  if (kind === 'interval') return { kind, intervalMinutes: schedule?.intervalMinutes };
+  if (kind === 'interval') {
+    return { kind, intervalMinutes: schedule?.intervalMinutes, ...(schedule?.timezone ? { timezone: schedule.timezone } : {}) };
+  }
   return {
     kind,
     time: schedule?.time,
@@ -159,11 +166,22 @@ export function repeatFor(timing: ScheduleTiming): { every: number } | { cron: s
 }
 
 /**
- * The next `count` times a time-of-day timing fires after `from`, as UTC
- * instants. Empty for an interval, whose next run depends on when the
- * repeat was registered (the queue reports it).
+ * The next `count` times a timing fires after `from`, as UTC instants.
+ *
+ * A time of day: from its cron expression and zone. An interval: Bull's
+ * `every` (bull/lib/repeatable.js getNextMillis) lines the runs up with
+ * the clock, at whole multiples of the interval counted from 1970-01-01
+ * UTC, not from when the schedule was saved: every 15 minutes fires at
+ * :00, :15, :30 and :45, so one saved at 22:40 first runs at 22:45. Bull 4
+ * has no offset or start date for `every`, so the page says this rather
+ * than promising a count from the save.
  */
 export function nextRuns(timing: ScheduleTiming, from: Date, count = 1): Date[] {
+  if (timing.kind === 'interval') {
+    const every = validateIntervalMinutes(timing.intervalMinutes) * 60 * 1000;
+    const first = Math.floor(from.getTime() / every) * every + every;
+    return Array.from({ length: count }, (_v, i) => new Date(first + i * every));
+  }
   const cron = cronFor(timing);
   if (!cron) return [];
   const it = parseExpression(cron, { currentDate: from, tz: timing.timezone });

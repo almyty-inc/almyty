@@ -609,6 +609,10 @@ export const apisApi = {
   /** Make tools from these operations only; poll the returned job like an import. */
   selectOperations: (id: string, operationIds: string[]): Promise<{ jobId: string; selected: number }> =>
     apiPost(`/apis/${id}/operations/selection`, { operationIds }),
+
+  /** Make the tool of one operation, or remake it in place (it keeps its id). */
+  makeOperationTool: (id: string, operationId: string): Promise<{ toolId: string; toolName: string }> =>
+    apiPost(`/apis/${id}/operations/${operationId}/tool`),
   
   getSchemas: (id: string) => apiGet(`/apis/${id}/schemas`),
 
