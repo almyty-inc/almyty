@@ -28,12 +28,12 @@ describe('a final-answer checker sees the run evidence', () => {
     expect(evidence).not.toContain('thinking');
   });
 
-  it('stays bounded when tools return large payloads', () => {
+  it('stays bounded when tools return large payloads, and says what it left out', () => {
     const big = { type: 'tool_call', input: { tool: 'github_list_issues' }, output: 'x'.repeat(30_000) };
-    const evidence = runEvidence({ steps: [big, big, big, big, big, big, big] });
+    const evidence = runEvidence({ steps: [big, big, big, big, big, big, big] }, { budgetChars: 40_000 });
     expect(evidence.length).toBeLessThan(45_000);
-    expect(evidence).toContain('… (cut)');
-    expect(evidence).toContain('(left out: the evidence limit was reached)');
+    // Every result is there, each shortened and each saying so.
+    expect(evidence.match(/github_list_issues: \[result shortened: [\d,]+ of 30,000 chars omitted; only the start is shown\]/g)).toHaveLength(7);
   });
 
   it('puts the evidence in front of each checker and tells it not to overrule it', async () => {
@@ -64,6 +64,8 @@ describe('a final-answer checker sees the run evidence', () => {
   it('is what the autonomous final-output verification passes', () => {
     const src = readFileSync(join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
     const verify = src.slice(src.indexOf('private async runAutonomousVerify'), src.indexOf('private hasFinalOutputVerification'));
-    expect(verify).toMatch(/evidence: runEvidence\(run/);
+    expect(verify).toMatch(/evidence: await this\.checkerEvidence\(run/);
+    // ...and that is runEvidence, sized to the checkers' context window.
+    expect(verify).toMatch(/return runEvidence\(run as any, \{ budgetChars: evidenceBudget\(window/);
   });
 });

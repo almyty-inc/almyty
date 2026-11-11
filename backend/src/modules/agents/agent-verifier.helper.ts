@@ -4,6 +4,8 @@ import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 import type { ChatResponse } from '../llm-providers/llm-providers.service';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
+import { SHORTENED_MARK } from './checker-evidence';
+import { falseVersionOrder } from './version-order';
 
 /** Verdict-merge policy for a verify node's checker panel. */
 export type VerifyPolicy = 'all_pass' | 'majority' | 'any_fail_blocks';
@@ -12,6 +14,10 @@ export interface VerifyFailure {
   rule: string;
   evidence: string;
   checker: string;
+  /** The claim in the answer the failure is about, when the checker named it. */
+  claim?: string;
+  /** A machine code for a failure the platform raised itself (verification_unavailable). `rule` is the words a person reads. */
+  code?: string;
 }
 
 /**
@@ -33,7 +39,10 @@ export interface CheckerResult {
   verdict: 'pass' | 'fail' | 'error';
   failures: VerifyFailure[];
   passedRules: string[];
+  /** Why the checker gave no verdict, in words a person can act on. */
   error?: string;
+  /** What else happened reading the verdict: a cut-off reply read in part, items not counted. */
+  note?: string;
   cost?: number;
   tokens?: number;
   /** The model that gave the verdict, and the router's attribution when it was routed. */
@@ -45,6 +54,8 @@ export interface CheckerResult {
 export interface VerifyPanelResult {
   verdict: 'pass' | 'fail';
   passed: boolean;
+  /** No checker gave a verdict: the answer was not checked, nothing was found wrong with it. */
+  unavailable?: boolean;
   policy: VerifyPolicy;
   failures: VerifyFailure[];
   passedRules: string[];
@@ -52,6 +63,7 @@ export interface VerifyPanelResult {
     checker: string;
     verdict: 'pass' | 'fail' | 'error';
     error?: string;
+    note?: string;
     model?: string;
     providerId?: string;
     routing?: ChatResponse['routing'];
@@ -73,39 +85,127 @@ export function stripClosingFence(text: string): string {
   return text.slice(0, end);
 }
 
-/** Per tool result and in all: what a checker is shown of the run's evidence. */
-const EVIDENCE_PER_RESULT = 8_000;
-const EVIDENCE_TOTAL = 40_000;
+/**
+ * Output budget of a checker call when its config sets none. Not the
+ * provider's default: Anthropic's is 1,024 tokens, which cut a dozen-item
+ * verdict off mid-JSON (run b9803830).
+ */
+export const CHECKER_MAX_TOKENS = 4_096;
+
+/** What a person reads when no checker could give a verdict. Code: verification_unavailable. */
+export const UNAVAILABLE_RULE = 'the checker could not give a verdict';
+
+/** Item statuses that mean "this claim is wrong". Any other status is not a failure. */
+const FAILED_STATUSES = new Set(['fail', 'failed', 'failure', 'wrong', 'incorrect', 'violation', 'contradicted', 'unsupported', 'error']);
+
+type ParsedVerdict = { verdict?: string; failures?: any[]; passed_rules?: any[] };
+
+function tryJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function asVerdict(value: unknown): ParsedVerdict | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as ParsedVerdict) : null;
+}
+
+/** Whether a provider's finish reason says the reply hit its output limit. */
+function isCutOff(finishReason: unknown): boolean {
+  return typeof finishReason === 'string' && ['length', 'max_tokens', 'max_output_tokens', 'MAX_TOKENS'].includes(finishReason);
+}
+
+function oneLine(text: string, max: number): string {
+  const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
+}
 
 /**
- * What an autonomous run was asked and what its tools returned: the ground a
- * checker judges the final answer against. Without it a checker had only the
- * answer, so "is this version what npm returned?" was judged from the
- * checker's own (stale) knowledge, and a correct answer was failed and sent
- * back for revision (lodash 4.18.1 "is not the latest, 4.17.21 is").
- * Bounded so a run that read large payloads cannot blow the checker's context.
+ * A verdict object cut off mid-way (the reply hit its output limit), read
+ * up to the last value that closed inside it, with the open brackets
+ * closed. `{"verdict":"fail","failures":[{"rule":"a"},{"rule":"b","evid`
+ * reads as a fail with failure "a". Only a reply that states its verdict
+ * is read this way; a pass is accepted only when its "failures" list
+ * closed, so a cut-off list of failures is never read as a clean pass.
+ * One pass over the text; no regex.
  */
-export function runEvidence(run: { input?: unknown; steps?: Array<{ type?: string; input?: any; output?: unknown; error?: unknown }> }): string {
-  const parts: string[] = [];
-  const request = run.input && typeof run.input === 'object' && 'message' in (run.input as any) ? (run.input as any).message : run.input;
-  if (request !== undefined && request !== null && request !== '') {
-    parts.push(`REQUEST:\n${typeof request === 'string' ? request : JSON.stringify(request)}`);
-  }
-  let used = 0;
-  for (const step of run.steps ?? []) {
-    if (step?.type !== 'tool_call') continue;
-    const tool = step.input?.tool ?? step.input?.toolName ?? 'tool';
-    const args = step.input?.parameters ? ` ${JSON.stringify(step.input.parameters)}` : '';
-    const raw = step.error ? `ERROR ${String((step.error as any)?.message ?? step.error)}` : typeof step.output === 'string' ? step.output : JSON.stringify(step.output ?? null);
-    const body = raw.length > EVIDENCE_PER_RESULT ? `${raw.slice(0, EVIDENCE_PER_RESULT)}… (cut)` : raw;
-    if (used + body.length > EVIDENCE_TOTAL) {
-      parts.push(`${tool}${args}: (left out: the evidence limit was reached)`);
+export function salvageTruncatedJson(text: string): ParsedVerdict | null {
+  if (!text.startsWith('{')) return null;
+  const stack: string[] = [];
+  const cuts: Array<{ at: number; closers: string }> = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
       continue;
     }
-    used += body.length;
-    parts.push(`${tool}${args}:\n${body}`);
+    if (c === '"') inString = true;
+    else if (c === '{') stack.push('}');
+    else if (c === '[') stack.push(']');
+    else if (c === '}' || c === ']') {
+      if (stack.pop() !== c) return null;
+      if (stack.length === 0) break;
+      cuts.push({ at: i + 1, closers: [...stack].reverse().join('') });
+    }
   }
-  return parts.join('\n\n');
+  for (let k = cuts.length - 1; k >= 0 && k >= cuts.length - 8; k--) {
+    const parsed = asVerdict(tryJson(text.slice(0, cuts[k].at) + cuts[k].closers));
+    if (!parsed || (parsed.verdict !== 'pass' && parsed.verdict !== 'fail')) continue;
+    if (parsed.verdict === 'pass' && !failuresClosed(text, cuts[k].at)) continue;
+    return parsed;
+  }
+  return null;
+}
+
+/** Whether the "failures" list closed before `at` (it is read up to there). */
+function failuresClosed(text: string, at: number): boolean {
+  const key = text.indexOf('"failures"');
+  if (key === -1 || key > at) return false;
+  const open = text.indexOf('[', key);
+  if (open === -1 || open > at) return false;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = open; i < at; i++) {
+    const c = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '[' || c === '{') depth++;
+    else if (c === ']' || c === '}') {
+      depth--;
+      if (depth === 0) return true;
+    }
+  }
+  return false;
+}
+
+export { runEvidence, evidenceBudget, SHORTENED_MARK } from './checker-evidence';
+
+/**
+ * Each checker's verdict, for the verify step it is recorded on: why one
+ * gave none ("the checker's reply was cut off at its output limit ...")
+ * and what else happened reading it. The run view shows these.
+ */
+export function checkerVerdicts(
+  panel: Pick<VerifyPanelResult, 'checkers'>,
+): Array<{ checker: string; verdict: 'pass' | 'fail' | 'error'; error?: string; note?: string }> {
+  return (panel.checkers ?? []).map((c) => ({
+    checker: c.checker,
+    verdict: c.verdict,
+    ...(c.error ? { error: c.error } : {}),
+    ...(c.note ? { note: c.note } : {}),
+  }));
 }
 
 /**
@@ -162,6 +262,7 @@ export class AgentVerifierHelper {
     return {
       verdict: merged.verdict,
       passed: merged.verdict === 'pass',
+      ...(merged.unavailable ? { unavailable: true } : {}),
       policy,
       failures: merged.failures,
       passedRules: merged.passedRules,
@@ -169,6 +270,7 @@ export class AgentVerifierHelper {
         checker: r.checker,
         verdict: r.verdict,
         ...(r.error ? { error: r.error } : {}),
+        ...(r.note ? { note: r.note } : {}),
         ...(r.model ? { model: r.model } : {}),
         ...(r.providerId ? { providerId: r.providerId } : {}),
         ...(r.routing ? { routing: r.routing } : {}),
@@ -181,6 +283,9 @@ export class AgentVerifierHelper {
   /**
    * Render a checker panel's failures into a critique message the agent can
    * act on. Used by the autonomous revise loop as synthetic user feedback.
+   * The reviser changes only what a failure names: revisions that rewrote
+   * the whole answer deleted correct, tool-backed items the checker had
+   * merely not seen.
    */
   formatFailuresForRevision(
     failures: VerifyFailure[],
@@ -191,16 +296,18 @@ export class AgentVerifierHelper {
       ? failures
           .map(
             (f, i) =>
-              `${i + 1}. ${f.rule}${f.evidence ? ` — evidence: ${f.evidence}` : ''}` +
+              `${i + 1}. ${f.claim ? `"${f.claim}": ` : ''}${f.rule}${f.evidence ? ` — evidence: ${f.evidence}` : ''}` +
               (f.checker ? ` (${f.checker})` : ''),
           )
           .join('\n')
-      : 'The verifier could not confirm the answer is correct.';
+      : 'The checker could not confirm the answer is correct, and named nothing wrong with it.';
     return (
-      `A verification panel reviewed your answer and found problems ` +
+      `A checker reviewed your answer and named these problems ` +
       `(revision ${attempt} of ${maxAttempts}):\n\n${lines}\n\n` +
-      `Fix every issue above and produce a corrected final answer. ` +
-      `Do not repeat the same mistakes.`
+      `Fix each problem above and produce a corrected final answer. ` +
+      `Change only what a problem above names. Keep every other fact, item, number and date that your tool results support exactly as it is: ` +
+      `do not drop or change an item the checker did not name. ` +
+      `If your tool results show that a named problem is not a problem, keep the claim and say which tool result supports it.`
     );
   }
 
@@ -226,23 +333,30 @@ export class AgentVerifierHelper {
         verdict: 'error',
         failures: [],
         passedRules: [],
-        error: 'missing providerId',
+        error: 'the checker has no model set',
       };
     }
 
+    const maxTokens = checker.maxTokens && checker.maxTokens > 0 ? checker.maxTokens : CHECKER_MAX_TOKENS;
     const systemPrompt =
       `You are a verifier. Your ONLY job is to find what is WRONG with the OUTPUT ` +
       `relative to the SPEC. Do not praise, summarize, or restate. Hunt for ` +
       `violations, missing requirements, unsupported claims, and contradictions.` +
       (evidence
         ? `\n\nThe EVIDENCE is what the agent was asked and what its tools returned in this run. ` +
-          `Judge every factual claim against it: a claim is wrong only if the EVIDENCE contradicts it or does not support it. ` +
-          `Never use your own knowledge of versions, dates, prices or other facts to overrule the EVIDENCE; it is newer than you.`
+          `Judge every factual claim against it. You refute; you do not need to confirm. Fail a claim only when:\n` +
+          `- the EVIDENCE contradicts it, or\n` +
+          `- the EVIDENCE that would hold it is complete and does not hold it.\n` +
+          `A tool result marked "${SHORTENED_MARK} ...]" or "[result left out ...]" is incomplete: items, fields and text were left out of what you see. ` +
+          `Never fail a claim only because it is absent from shortened evidence; absence counts only where the evidence is complete. ` +
+          `Never use your own knowledge of versions, dates, prices or other facts to overrule the EVIDENCE; it is newer than you. ` +
+          `Compare version numbers part by part as integers: 4.18.1 is newer than 4.17.21, because 18 > 17.`
         : '') +
       (checker.instructions ? `\n\nFocus: ${checker.instructions}` : '') +
       `\n\nReply with ONLY a JSON object, no prose, no code fences:\n` +
-      `{"verdict":"pass"|"fail","failures":[{"rule":"<short rule violated>","evidence":"<quote or location>"}],"passed_rules":["<rule satisfied>"]}\n` +
-      `Use "fail" if you find ANY violation. Use "pass" only if the output fully satisfies the spec.`;
+      `{"verdict":"pass"|"fail","failures":[{"claim":"<the wrong claim in the OUTPUT>","status":"fail","rule":"<what is wrong, briefly>","evidence":"<quote or location>"}],"passed_rules":["<rule satisfied>"]}\n` +
+      `List in "failures" only claims that are wrong. A claim the evidence confirms is not a failure: leave it out of "failures" (or give it "status":"pass"). ` +
+      `Keep each entry short. Use "fail" if you find ANY violation. Use "pass" only if the output fully satisfies the spec.`;
 
     const userPrompt =
       `SPEC (rules to enforce):\n${spec || '(no explicit spec — judge for correctness, completeness, and internal consistency)'}\n\n` +
@@ -261,7 +375,10 @@ export class AgentVerifierHelper {
           model: checker.routing ? undefined : checker.model,
           ...(checker.routing ? { routing: checker.routing } : {}),
           temperature: checker.temperature ?? 0,
-          maxTokens: checker.maxTokens,
+          // Never the provider's default: Anthropic's is 1,024 tokens, and a
+          // verdict listing a dozen items was cut off mid-JSON, read as no
+          // verdict, and the answer was sent back for paid revisions.
+          maxTokens,
           signal,
           // Without the date a checker took its training cutoff for today
           // and failed real papers dated last week as "from the future".
@@ -287,40 +404,62 @@ export class AgentVerifierHelper {
       };
 
       if (!parsed) {
+        // Said on the step, in words a person can act on: the run view
+        // shows it next to the check that could not give a verdict.
+        const cutOff = isCutOff(response?.message?.finishReason);
         return {
           checker: name,
           verdict: 'error',
           failures: [],
           passedRules: [],
-          error: 'unparseable checker response',
+          error:
+            (cutOff
+              ? `the checker's reply was cut off at its output limit (${maxTokens} tokens) before it gave a verdict`
+              : raw.trim()
+                ? `the checker's reply could not be read as a verdict`
+                : 'the checker gave an empty reply') + (raw.trim() ? `: "${oneLine(raw, 200)}"` : ''),
           cost,
           tokens,
           ...answered,
         };
       }
 
-      const verdict: 'pass' | 'fail' = parsed.verdict === 'pass' ? 'pass' : 'fail';
-      const failures: VerifyFailure[] = Array.isArray(parsed.failures)
-        ? parsed.failures.map((f: any) => ({
-            rule: String(f?.rule ?? 'unspecified'),
-            evidence: String(f?.evidence ?? ''),
-            checker: name,
-          }))
-        : [];
-      // A 'fail' with no listed failure still blocks — synthesize one so the
-      // failure list is never silently empty on a fail.
+      const read = this.readFailures(parsed, name);
+      // A 'fail' that names no failure still blocks: synthesize one so the
+      // failure list is never silently empty on a fail. A fail whose every
+      // listed item turned out not to be a failure (marked correct, or
+      // resting on a false version order) is a pass: nothing was refuted.
+      const failures = read.failures;
+      let verdict: 'pass' | 'fail' = failures.length ? 'fail' : parsed.verdict === 'pass' ? 'pass' : 'fail';
       if (verdict === 'fail' && failures.length === 0) {
-        failures.push({
-          rule: 'unspecified failure',
-          evidence: raw.slice(0, 280),
-          checker: name,
-        });
+        if (read.listed > 0) {
+          verdict = 'pass';
+        } else {
+          failures.push({
+            rule: 'the checker failed the answer without saying why',
+            evidence: oneLine(raw, 280),
+            checker: name,
+          });
+        }
       }
       const passedRules = Array.isArray(parsed.passed_rules)
         ? parsed.passed_rules.map((r: any) => String(r))
         : [];
+      const notes = [
+        ...(parsed.truncated ? [`the checker's reply was cut off at its output limit (${maxTokens} tokens); it was read up to its last complete item`] : []),
+        ...read.discarded.map((d) => `not counted: "${oneLine(d.rule, 120)}" (${d.reason})`),
+      ];
 
-      return { checker: name, verdict, failures, passedRules, cost, tokens, ...answered };
+      return {
+        checker: name,
+        verdict,
+        failures,
+        passedRules,
+        cost,
+        tokens,
+        ...(notes.length ? { note: notes.join('; ') } : {}),
+        ...answered,
+      };
     } catch (err: any) {
       const detail =
         err?.response?.data?.error?.message || err?.message || 'checker call failed';
@@ -334,25 +473,60 @@ export class AgentVerifierHelper {
     }
   }
 
-  /** Tolerant JSON extraction from a checker reply (handles code fences / prose). */
-  private parseCheckerJson(
-    raw: string,
-  ): { verdict?: string; failures?: any[]; passed_rules?: any[] } | null {
+  /**
+   * The items of a checker reply that count as failures. Only an item the
+   * checker marks as failed counts: one it marks as correct ("status":
+   * "pass", or "ok", "correct", "confirmed", ...) does not, though checkers
+   * listed confirmed items under "failures" and each was counted as a
+   * failure. An item with no status counts on a "fail" verdict only. An
+   * item whose reason states a false version order ("4.18.1 is older than
+   * 4.17.21") is not a refutation and does not count either.
+   */
+  readFailures(
+    parsed: ParsedVerdict,
+    checker: string,
+  ): { failures: VerifyFailure[]; listed: number; discarded: Array<{ rule: string; reason: string }> } {
+    const items = Array.isArray(parsed.failures) ? parsed.failures : [];
+    const failures: VerifyFailure[] = [];
+    const discarded: Array<{ rule: string; reason: string }> = [];
+    for (const f of items) {
+      const rule = String((f && typeof f === 'object' ? f.rule : f) ?? 'unspecified');
+      const evidence = String((f && typeof f === 'object' ? f.evidence : '') ?? '');
+      const claim = f && typeof f === 'object' && f.claim !== undefined && f.claim !== null ? String(f.claim) : undefined;
+      const status = f && typeof f === 'object' && typeof f.status === 'string' ? f.status.trim().toLowerCase() : '';
+      if (status ? !FAILED_STATUSES.has(status) : parsed.verdict === 'pass') {
+        discarded.push({ rule, reason: 'the checker did not mark it as failed' });
+        continue;
+      }
+      const wrongOrder = falseVersionOrder(`${rule} ${evidence}`);
+      if (wrongOrder) {
+        discarded.push({ rule, reason: wrongOrder });
+        continue;
+      }
+      failures.push({ rule, evidence, checker, ...(claim ? { claim } : {}) });
+    }
+    return { failures, listed: items.length, discarded };
+  }
+
+  /**
+   * Tolerant JSON extraction from a checker reply (handles code fences /
+   * prose). A reply cut off mid-JSON (the output limit) is read up to its
+   * last complete item, and says so (`truncated`).
+   */
+  parseCheckerJson(raw: string): (ParsedVerdict & { truncated?: boolean }) | null {
     if (!raw) return null;
     const text = stripClosingFence(raw.trim().replace(/^```(?:json)?\s*/i, ''));
-    try {
-      return JSON.parse(text);
-    } catch {
-      /* fall through to brace extraction */
-    }
+    const whole = asVerdict(tryJson(text));
+    if (whole) return whole;
     const start = text.indexOf('{');
+    if (start === -1) return null;
     const end = text.lastIndexOf('}');
-    if (start === -1 || end === -1 || end <= start) return null;
-    try {
-      return JSON.parse(text.slice(start, end + 1));
-    } catch {
-      return null;
+    if (end > start) {
+      const inner = asVerdict(tryJson(text.slice(start, end + 1)));
+      if (inner) return inner;
     }
+    const salvaged = salvageTruncatedJson(text.slice(start));
+    return salvaged ? { ...salvaged, truncated: true } : null;
   }
 
   /**
@@ -360,28 +534,36 @@ export class AgentVerifierHelper {
    *  - all_pass:        pass only if every checker explicitly passed (fail OR error blocks)
    *  - majority:        pass if decisive passes outnumber decisive fails (errors ignored; tie blocks)
    *  - any_fail_blocks: pass unless a checker explicitly failed (errors do not veto) — default
-   * If no checker returned a usable verdict, the result is 'fail': correctness
-   * could not be asserted, so the gate must not silently pass.
+   * If no checker returned a usable verdict, the result is 'fail' and
+   * `unavailable`: correctness could not be asserted, so the gate must not
+   * silently pass, but nothing was found wrong either, and the failure says
+   * that in plain words.
    */
   mergeVerdicts(
     results: CheckerResult[],
     policy: VerifyPolicy,
-  ): { verdict: 'pass' | 'fail'; failures: VerifyFailure[]; passedRules: string[] } {
+  ): { verdict: 'pass' | 'fail'; failures: VerifyFailure[]; passedRules: string[]; unavailable?: boolean } {
     const failures = results.flatMap((r) => r.failures);
     const passedRules = Array.from(new Set(results.flatMap((r) => r.passedRules)));
     const passes = results.filter((r) => r.verdict === 'pass').length;
     const fails = results.filter((r) => r.verdict === 'fail').length;
 
     if (passes + fails === 0) {
+      const why = results
+        .map((r) => (r.error ? `${r.checker}: ${r.error}` : ''))
+        .filter(Boolean)
+        .join('; ');
       return {
         verdict: 'fail',
+        unavailable: true,
         failures: failures.length
           ? failures
           : [
               {
-                rule: 'verification_unavailable',
-                evidence: 'no checker returned a usable verdict',
+                rule: UNAVAILABLE_RULE,
+                evidence: why || 'no checker was configured',
                 checker: 'verify',
+                code: 'verification_unavailable',
               },
             ],
         passedRules,

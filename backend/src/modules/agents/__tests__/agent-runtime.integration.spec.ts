@@ -899,7 +899,7 @@ describe('AgentRuntimeService (integration)', () => {
       expect(stored.steps.some(s => s.type === 'verify')).toBe(true);
       // No revision feedback message was injected.
       expect(
-        messageStore.some(m => m.role === 'user' && String(m.content).includes('verification panel')),
+        messageStore.some(m => m.role === 'user' && String(m.content).includes('reviewed your answer')),
       ).toBe(false);
       expect(
         messageStore.find(m => m.role === 'assistant' && m.runId === run.id)?.metadata?.internal,
@@ -920,7 +920,7 @@ describe('AgentRuntimeService (integration)', () => {
       expect(stored.status).toBe(AgentRunStatus.RUNNING);
       expect(stored.workingMemory?.verifyRevisions).toBe(1);
       const critique = messageStore.find(
-        m => m.role === 'user' && String(m.content).includes('verification panel'),
+        m => m.role === 'user' && String(m.content).includes('reviewed your answer'),
       );
       expect(critique).toBeDefined();
       expect(String(critique!.content)).toContain('missing total');
@@ -988,6 +988,30 @@ describe('AgentRuntimeService (integration)', () => {
 
       const stored = runStore.find(r => r.id === run.id)!;
       expect(String(stored.output)).not.toContain("check didn't pass");
+    });
+
+    // Run b9803830: every checker reply was cut off, nothing was read, and
+    // the answer was sent back for two paid revisions nobody could judge,
+    // then marked "check didn't pass: verification_unavailable".
+    it('does not revise an answer no checker could give a verdict on, and says it was not checked', async () => {
+      agentStore.push(verifyAgent());
+      llmService.chat.mockResolvedValue({ ...checkerReply('{"verdict":"fail","failures":[{"rule":"a'), message: { role: 'assistant', content: '{"verdict":"fail","failures":[{"rule":"a', finishReason: 'max_tokens' } });
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.status).toBe(AgentRunStatus.COMPLETED);
+      expect(stored.workingMemory?.verifyRevisions ?? 0).toBe(0);
+      expect(messageStore.some(m => m.role === 'user' && String(m.content).includes('reviewed your answer'))).toBe(false);
+      expect(stored.metadata?.verify).toMatchObject({ verdict: 'fail', unavailable: true, exhausted: false, reason: 'the checker could not give a verdict' });
+      expect(String(stored.output).startsWith('Note: this answer could not be checked: the checker could not give a verdict.')).toBe(true);
+      expect(String(stored.output)).not.toContain('verification_unavailable');
+      // The step says why: the reply hit the output limit.
+      const verify = stored.steps.filter(s => s.type === 'verify').pop()!;
+      expect(verify.output.unavailable).toBe(true);
+      expect(verify.output.checkers[0].error).toMatch(/cut off at its output limit \(4096 tokens\)/);
     });
 
     it('does not run the panel when verify is disabled', async () => {

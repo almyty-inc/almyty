@@ -14,7 +14,7 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentVerifierHelper, VerifyPanelResult, runEvidence } from './agent-verifier.helper';
+import { AgentVerifierHelper, CheckerConfig, VerifyPanelResult, checkerVerdicts, evidenceBudget, runEvidence } from './agent-verifier.helper';
 import { ALWAYS_ON_COMPACTION, AgentContextCompactor, carriedContextSummary } from './agent-context-compactor.helper';
 import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
@@ -28,7 +28,7 @@ import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
 import { markUnverifiedAnswer, unverifiedReason } from './unverified-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
-import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
+import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy, checkerOf } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
 import { hitDetail, type ApprovalGateHit } from '../tools/tool-approval-gate.service';
 import { NamedTool, readableToolName } from '../tools/tool-readable-name';
@@ -1545,7 +1545,13 @@ export class AgentStepProcessor {
           // a failed check sends the step to the main role, which redoes it
           // as the next step. An unreadable verdict is a fail, so "we could
           // not tell" escalates rather than passing an unchecked draft.
-          const check = await runner.check(run, team.checker!, finalContent, agent.agentConfig?.verify?.spec);
+          const check = await runner.check(
+            run,
+            team.checker!,
+            finalContent,
+            agent.agentConfig?.verify?.spec,
+            await this.checkerEvidence(run, [checkerOf(team.checker!)], finalContent, agent.agentConfig?.verify?.spec),
+          );
           if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
           const checkDuration = Date.now() - stepStart;
           if (!check.passed) {
@@ -1619,12 +1625,19 @@ export class AgentStepProcessor {
           // The main role acted on the brief; the checker verifies. A
           // failure goes back to the main role to revise, within the same
           // revision budget the verify gate uses.
-          const check = await runner.check(run, team.checker!, finalContent, agent.agentConfig?.verify?.spec);
+          const check = await runner.check(
+            run,
+            team.checker!,
+            finalContent,
+            agent.agentConfig?.verify?.spec,
+            await this.checkerEvidence(run, [checkerOf(team.checker!)], finalContent, agent.agentConfig?.verify?.spec),
+          );
           if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
           const maxLoops = agent.agentConfig?.verify?.maxReviseLoops ?? 2;
           const revisions = run.workingMemory?.patchRevisions ?? 0;
           const checkDuration = Date.now() - stepStart;
-          if (!check.passed && revisions < maxLoops) {
+          // A check no checker could give a verdict on is not sent back for revision.
+          if (!check.passed && !check.unavailable && revisions < maxLoops) {
             run.workingMemory = { ...(run.workingMemory || {}), patchRevisions: revisions + 1 };
             if (run.conversationId) {
               const candidate = Message.createAssistantMessage(run.conversationId, finalContent);
@@ -1653,7 +1666,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: stampOf(team.checker!),
               input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, ...checkedBy(check) },
+              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, checkers: checkerVerdicts(check), ...checkedBy(check) },
               cost: check.cost,
               duration: checkDuration,
               timestamp: new Date().toISOString(),
@@ -1665,11 +1678,19 @@ export class AgentStepProcessor {
             this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'revising' });
             return 'continue';
           }
+          const unavailable = !check.passed && check.unavailable === true;
           run.steps.push({
             type: 'verify',
             role: stampOf(team.checker!),
             input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-            output: { verdict: check.verdict, exhausted: !check.passed, failures: check.failures, ...checkedBy(check) },
+            output: {
+              verdict: check.verdict,
+              exhausted: !check.passed && !unavailable,
+              ...(unavailable ? { unavailable: true } : {}),
+              failures: check.failures,
+              checkers: checkerVerdicts(check),
+              ...checkedBy(check),
+            },
             cost: check.cost,
             duration: checkDuration,
             timestamp: new Date().toISOString(),
@@ -1678,7 +1699,13 @@ export class AgentStepProcessor {
             failedCheck = check.failures ?? [];
             run.metadata = {
               ...(run.metadata || {}),
-              verify: { verdict: check.verdict, revisions, exhausted: true, reason: unverifiedReason(check.failures) },
+              verify: {
+                verdict: check.verdict,
+                revisions,
+                exhausted: !unavailable,
+                ...(unavailable ? { unavailable: true } : {}),
+                reason: unverifiedReason(check.failures),
+              },
             };
           }
         }
@@ -1711,7 +1738,7 @@ export class AgentStepProcessor {
           const revisions = run.workingMemory?.verifyRevisions ?? 0;
           const verifyStepDuration = Date.now() - stepStart;
 
-          if (!verifyPanel.passed && revisions < maxLoops) {
+          if (!verifyPanel.passed && !verifyPanel.unavailable && revisions < maxLoops) {
             // Send the answer back for revision.
             run.workingMemory = { ...(run.workingMemory || {}), verifyRevisions: revisions + 1 };
             this.escalateRouteOnVerifyFail(run, agent, verifyPanel, llmResponse);
@@ -1749,7 +1776,7 @@ export class AgentStepProcessor {
             run.steps.push({
               type: 'verify',
               input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures },
+              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures, checkers: checkerVerdicts(verifyPanel) },
               cost: verifyPanel.cost,
               duration: verifyStepDuration,
               timestamp: new Date().toISOString(),
@@ -1766,15 +1793,22 @@ export class AgentStepProcessor {
             return 'continue';
           }
 
-          // Passed, or the revision budget is exhausted: record the verdict and
-          // let the run complete with this answer.
+          // Passed, the revision budget is exhausted, or no checker could
+          // give a verdict: record it and let the run complete with this
+          // answer. A check that could not be done is not a failure to fix:
+          // revising on it paid for new drafts nobody could judge (run
+          // b9803830), so it is never sent back for revision.
+          const unavailable = !verifyPanel.passed && verifyPanel.unavailable === true;
+          const exhausted = !verifyPanel.passed && !unavailable && revisions >= maxLoops;
           run.steps.push({
             type: 'verify',
             input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
             output: {
               verdict: verifyPanel.verdict,
-              exhausted: !verifyPanel.passed && revisions >= maxLoops,
+              exhausted,
+              ...(unavailable ? { unavailable: true } : {}),
               failures: verifyPanel.failures,
+              checkers: checkerVerdicts(verifyPanel),
             },
             cost: verifyPanel.cost,
             duration: verifyStepDuration,
@@ -1785,7 +1819,8 @@ export class AgentStepProcessor {
             verify: {
               verdict: verifyPanel.verdict,
               revisions,
-              exhausted: !verifyPanel.passed && revisions >= maxLoops,
+              exhausted,
+              ...(unavailable ? { unavailable: true } : {}),
               ...(!verifyPanel.passed ? { reason: unverifiedReason(verifyPanel.failures) } : {}),
             },
           };
@@ -3172,13 +3207,41 @@ export class AgentStepProcessor {
     const cfg = agent.agentConfig!.verify!;
     const panel = await this.verifier.runPanel(
       // The checker judges the answer against what the run was asked and what its tools returned.
-      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy, evidence: runEvidence(run as any) },
+      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy, evidence: await this.checkerEvidence(run, cfg.checkers!, finalContent, cfg.spec) },
       run.organizationId,
       principalOfRun(run),
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
     return panel;
+  }
+
+  /**
+   * The run's evidence for these checkers (runEvidence), sized to the
+   * smallest context window among them: a model card's context length, or
+   * the minimum a routed checker's policy demands. Unknown windows get the
+   * default budget.
+   */
+  async checkerEvidence(run: AgentRun, checkers: CheckerConfig[], target: string, spec?: string): Promise<string> {
+    const windows: number[] = [];
+    for (const checker of checkers ?? []) {
+      if (checker?.routing) {
+        if (typeof checker.routing.minContextLength === 'number' && checker.routing.minContextLength > 0) windows.push(checker.routing.minContextLength);
+        continue;
+      }
+      if (!checker?.providerId || !checker.model) continue;
+      try {
+        const card = await this.s.toolRepository.manager.getRepository(Model).findOne({
+          where: { organizationId: run.organizationId, providerId: checker.providerId, vendorModelId: checker.model },
+          select: { id: true, contextLength: true },
+        });
+        if (card?.contextLength && card.contextLength > 0) windows.push(card.contextLength);
+      } catch (err) {
+        this.s.logger.warn(`No model card for the checker evidence budget on run ${run.id}: ${(err as Error)?.message}`);
+      }
+    }
+    const window = windows.length ? Math.min(...windows) : null;
+    return runEvidence(run as any, { budgetChars: evidenceBudget(window, (target?.length ?? 0) + (spec?.length ?? 0)) });
   }
 
   private hasFinalOutputVerification(agent: Agent, finalContent: string): boolean {
