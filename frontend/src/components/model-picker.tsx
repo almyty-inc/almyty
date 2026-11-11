@@ -128,6 +128,40 @@ export function useProviderList() {
   })
 }
 
+/** The model cards every picker reads (`GET /models`), one shared query. */
+export function useModelCards() {
+  return useQuery({
+    queryKey: PICKER_MODELS_KEY,
+    queryFn: async () => {
+      const rows = await modelsApi.list()
+      return Array.isArray(rows) ? rows : []
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  })
+}
+
+/**
+ * The model a new choice starts on: a model that can be used now, from the
+ * first connection (in list order) that has one; that connection's own
+ * default when it is usable, else its first usable model by name.
+ * Undefined when nothing can be used. A default that names a connection
+ * whose models cannot be used is a choice that fails on its first call.
+ */
+export function firstUsableModel(providers: ProviderOption[], cards: ModelCard[]): { providerId: string; model: string } | undefined {
+  for (const p of providers) {
+    if (!isActive(p)) continue
+    const usable = cards
+      .filter((c) => c.providerId === p.id && c.selectable && c.status !== 'inactive')
+      .sort((a, b) => cardLabel(a).localeCompare(cardLabel(b)))
+    if (usable.length === 0) continue
+    const configured = (p as ProviderOption & { configuration?: { model?: string } }).configuration?.model
+    const card = usable.find((c) => c.vendorModelId === configured) ?? usable[0]
+    return { providerId: p.id, model: card.vendorModelId }
+  }
+  return undefined
+}
+
 type Item =
   | { key: string; kind: 'auto'; label: string }
   | { key: string; kind: 'clear'; label: string }
@@ -193,15 +227,7 @@ export function ModelPicker({
     return activeOnly ? listed.filter(isActive) : listed
   }, [allProviders, providerLocked, value.providerId, excludeProvider, activeOnly])
 
-  const cardsQuery = useQuery({
-    queryKey: PICKER_MODELS_KEY,
-    queryFn: async () => {
-      const rows = await modelsApi.list()
-      return Array.isArray(rows) ? rows : []
-    },
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  })
+  const cardsQuery = useModelCards()
   const cards: ModelCard[] = useMemo(() => cardsQuery.data ?? [], [cardsQuery.data])
 
   const [open, setOpen] = useState(false)

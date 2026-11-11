@@ -33,16 +33,19 @@ export class ModelNotFoundError extends Error {
  *
  *  - Anthropic:  404 {"error":{"type":"not_found_error","message":"model: claude-x"}}
  *  - OpenAI:     404 {"error":{"code":"model_not_found", ...}}
- *                400 {"error":{"message":"The model `x` does not exist ..."}}
- *  - Google:     404 {"error":{"message":"models/x is not found for API version ..."}}
- *  - Mistral:    404 {"message":"Invalid model: x"} / {"detail":"Invalid model"}
- *  - Cohere:     404 {"message":"model 'x' not found"}
  *  - Ollama:     404 {"error":"model 'x' not found"}
+ *
+ * A model the key's plan does not include ("This model is not available
+ * in your subscription tier", "does not have access to model x") counts
+ * too, also on a 403: the vendor accepted the key and refused only that
+ * model, so it is the model that is unavailable, not the key.
  */
 export function isModelNotFoundResponse(status: number | undefined, body: unknown): boolean {
-  if (!status || (status !== 404 && status !== 400)) return false;
+  if (!status) return false;
   const text = bodyText(body);
   if (!text) return false;
+  if ((status === 400 || status === 403 || status === 404) && MODEL_NOT_IN_PLAN.test(text)) return true;
+  if (status !== 404 && status !== 400) return false;
   if (/"code"\s*:\s*"model_not_found"/i.test(text)) return true;
   if (/not_found_error/i.test(text) && /model/i.test(text)) return true;
   if (/\bmodels?\b/i.test(text) && /(not (be )?found|does not exist|is not found|invalid model|unknown model|not available|no longer (supported|available)|deprecated)/i.test(text)) {
@@ -50,6 +53,9 @@ export function isModelNotFoundResponse(status: number | undefined, body: unknow
   }
   return false;
 }
+
+/** A vendor's words for "your plan does not include this model". */
+const MODEL_NOT_IN_PLAN = /\bmodel\b[^"]{0,80}not available (in|on|for) your (subscription|plan|tier)|do(es)? not have access to (the )?model/i;
 
 /** Best-effort extraction of the vendor's own wording, for the error message. */
 export function vendorMessage(body: unknown): string | undefined {
