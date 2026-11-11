@@ -12,7 +12,12 @@ export interface NamedTool {
   api?: { name?: string | null } | null
   operation?: { name?: string | null; description?: string | null; api?: { name?: string | null } | null } | null
   /** `displayName`: the name tool generation chose for people (backend tools/tool-display-name.ts). */
-  metadata?: { displayName?: string | null; [key: string]: unknown } | null
+  metadata?: {
+    displayName?: string | null
+    /** The operation a generated tool calls: its method and path tell two same-named operations apart. */
+    sourceOperation?: { method?: string | null; endpoint?: string | null } | null
+    [key: string]: unknown
+  } | null
 }
 
 /** The API name the way tool generation prefixes it: lowercase, words joined by underscores. */
@@ -77,4 +82,43 @@ export function readableToolName(tool: NamedTool): string {
   // A long generated name ends in a six-character hash that keeps it unique; it is not a word.
   rest = rest.replace(/_[0-9a-f]{6}$/, '')
   return looksLikeMachineName(rest) ? humanizeIdentifier(rest) : rest
+}
+/** "GET /{start_date}..": the method and path of the operation a generated tool calls, when known. */
+function operationRoute(tool: NamedTool): string | null {
+  const op = tool.metadata?.sourceOperation
+  const endpoint = typeof op?.endpoint === 'string' ? op.endpoint.trim() : ''
+  if (!endpoint) return null
+  const method = typeof op?.method === 'string' ? op.method.trim().toUpperCase() : ''
+  return method ? `${method} ${endpoint}` : endpoint
+}
+
+/**
+ * Every tool's name for people, unique within the list. A spec may give two
+ * operations one summary (Frankfurter's `/{start_date}..` and
+ * `/{start_date}..{end_date}` are both "Get rates for a time period"), and a
+ * picker that shows the same words twice cannot be chosen from. Names that
+ * collide carry what tells them apart: the operation's method and path, else
+ * the tool's machine name.
+ */
+export function distinctToolNames<T extends NamedTool & { id: string }>(tools: readonly T[]): Map<string, string> {
+  const base = new Map<string, string>()
+  const count = new Map<string, number>()
+  for (const t of tools) {
+    const name = readableToolName(t)
+    base.set(t.id, name)
+    count.set(name, (count.get(name) ?? 0) + 1)
+  }
+  const out = new Map<string, string>()
+  for (const t of tools) {
+    const name = base.get(t.id)!
+    if ((count.get(name) ?? 0) < 2) {
+      out.set(t.id, name)
+      continue
+    }
+    const route = operationRoute(t)
+    const sameRoute = route ? tools.filter((o) => base.get(o.id) === name && operationRoute(o) === route).length : 0
+    const qualifier = route && sameRoute === 1 ? route : t.name !== name ? t.name : null
+    out.set(t.id, qualifier ? `${name} (${qualifier})` : name)
+  }
+  return out
 }

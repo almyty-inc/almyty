@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { humanizeIdentifier, readableToolName } from '../tool-names'
+import { distinctToolNames, humanizeIdentifier, readableToolName } from '../tool-names'
 
 const petstore = { id: 'api-p', name: 'Swagger Petstore - OpenAPI 3.0' }
 
@@ -68,5 +68,41 @@ describe('the name generation chose', () => {
       api: { name: 'HubSpot Companies' },
       description: 'GET /crm/v3/objects/companies/{companyId} operation',
     })).toBe('Get crm v3 objects companies company id')
+  })
+})
+
+describe('distinctToolNames', () => {
+  // Frankfurter's spec gives two operations the same summary; both tools
+  // read "Get rates for a time period" and a picker showed it twice.
+  const frankfurter = (id: string, name: string, endpoint: string) => ({
+    id,
+    name,
+    metadata: { displayName: 'Get rates for a time period', sourceOperation: { method: 'GET', endpoint } },
+  })
+
+  it('tells two operations with one summary apart by method and path', () => {
+    const names = distinctToolNames([
+      frankfurter('a', 'frankfurter_api_get_start_date_end_date', '/{start_date}..{end_date}'),
+      frankfurter('b', 'frankfurter_api_get_start_date', '/{start_date}..'),
+      { id: 'c', name: 'frankfurter_api_get_latest', metadata: { displayName: 'Get the latest rates' } },
+    ])
+    expect(names.get('a')).toBe('Get rates for a time period (GET /{start_date}..{end_date})')
+    expect(names.get('b')).toBe('Get rates for a time period (GET /{start_date}..)')
+    expect(names.get('c')).toBe('Get the latest rates')
+    expect(new Set(names.values()).size).toBe(3)
+  })
+
+  it('falls back to the machine name when there is no operation to show', () => {
+    const names = distinctToolNames([
+      { id: 'a', name: 'lookup_order', description: 'Look up an order.' },
+      { id: 'b', name: 'lookup_order_v2', description: 'Look up an order.' },
+    ])
+    expect(names.get('a')).toBe('Look up an order (lookup_order)')
+    expect(names.get('b')).toBe('Look up an order (lookup_order_v2)')
+  })
+
+  it('leaves a name alone when no other tool shares it', () => {
+    const names = distinctToolNames([{ id: 'a', name: 'x', metadata: { displayName: 'Only one' } }])
+    expect(names.get('a')).toBe('Only one')
   })
 })
