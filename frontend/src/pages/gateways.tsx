@@ -125,7 +125,7 @@ export function GatewaysPage() {
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">Agent</Badge>
             )}
             {gateway.isSystem && (
-              <Badge className="text-[10px] px-1.5 py-0 border-transparent bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">System</Badge>
+              <Badge variant="info" className="text-[10px] px-1.5 py-0">System</Badge>
             )}
           </div>
         )

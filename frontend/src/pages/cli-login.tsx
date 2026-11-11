@@ -183,7 +183,7 @@ export function CliLoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100 p-6">
       <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-lg p-6">
-        <h1 className="text-xl font-semibold mb-2 bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+        <h1 className="text-xl font-semibold mb-2 text-foreground">
           Connect almyty CLI
         </h1>
         <p className="text-sm text-zinc-400 mb-6">

@@ -119,11 +119,11 @@ export function HostedIntro() {
   const { enabled } = useEnvironments()
   if (!enabled) return null
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-sm" data-testid="hosted-intro" role="note">
-      <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" aria-hidden="true" />
+    <div className="flex items-start gap-3 rounded-lg border border-info-border bg-info-subtle px-4 py-3 text-sm" data-testid="hosted-intro" role="note">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
       <p className="min-w-0 flex-1 text-muted-foreground">
         almyty starts a machine for your agent when it needs one and parks it when nobody uses it. Its files stay.{' '}
-        <a href={HOSTED_DOCS_URL} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap font-medium text-violet-600 hover:underline dark:text-violet-400">
+        <a href={HOSTED_DOCS_URL} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap font-medium text-selection-foreground hover:underline">
           How it works
         </a>
       </p>

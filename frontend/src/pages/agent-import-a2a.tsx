@@ -152,7 +152,7 @@ export function ExternalA2AImport() {
               </div>
               <Badge
                 variant="outline"
-                className="shrink-0 border-cyan-300 text-[10px] text-cyan-600 dark:border-cyan-500/40 dark:text-cyan-400"
+                className="shrink-0 border-teal-600/40 text-[10px] text-teal-700 dark:border-teal-400/40 dark:text-teal-300"
               >
                 A2A
               </Badge>

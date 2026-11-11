@@ -24,14 +24,14 @@ export function ManagedByChannelBanner({ managedBy }: { managedBy: GatewayManage
   return (
     <div
       data-testid="managed-by-channel"
-      className="flex items-start gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 dark:border-violet-800 dark:bg-violet-950/30"
+      className="flex items-start gap-3 rounded-lg border border-info-border bg-info-subtle p-4"
     >
-      <MessagesSquare className="mt-0.5 h-5 w-5 shrink-0 text-violet-600 dark:text-violet-400" aria-hidden="true" />
+      <MessagesSquare className="mt-0.5 h-5 w-5 shrink-0 text-info" aria-hidden="true" />
       <div className="space-y-1">
-        <p className="font-medium text-violet-900 dark:text-violet-200">
+        <p className="font-medium text-foreground">
           {label} channel of {managedBy.agent.name}
         </p>
-        <p className="text-sm text-violet-700 dark:text-violet-400">
+        <p className="text-sm text-info">
           Who can use it, its look and its settings are on the agent.{' '}
           <Link
             to={`/agents/${managedBy.agent.id}/channels/${managedBy.channel.id}`}

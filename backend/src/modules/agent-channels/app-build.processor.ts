@@ -344,7 +344,7 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
         {
           appName: branding.appName,
           url,
-          primaryColor: branding.primaryColor ?? '#8b5cf6',
+          primaryColor: branding.primaryColor ?? '#1469ec',
           theme: branding.theme ?? 'auto',
         },
         null,

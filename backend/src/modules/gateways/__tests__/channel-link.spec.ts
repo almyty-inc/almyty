@@ -171,7 +171,7 @@ describe('the hosted chat reads branding from the agent and its channel only', (
     const gateway = await service.findBySlug('acme');
     const branding = await service.publicBranding(gateway);
     expect(branding.appName).toBe('Assistant');
-    expect(branding.primaryColor).toBe('#8b5cf6');
+    expect(branding.primaryColor).toBe('#1469ec');
     expect(branding.greeting).toBe('');
     expect(service.authMode(gateway)).toBe('public_link');
   });

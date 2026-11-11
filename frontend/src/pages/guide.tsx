@@ -79,7 +79,7 @@ export function GuidePage() {
             <NextStep journey={next.journey} step={next.step} state={state} />
           ) : (
             <div className="flex items-center gap-3" data-testid="guide-complete">
-              <CheckCircle2 className="h-6 w-6 text-violet-600 dark:text-violet-400" aria-hidden="true" />
+              <CheckCircle2 className="h-6 w-6 text-primary" aria-hidden="true" />
               <p className="text-sm">
                 You have done every step. Your agents are reachable, and the rest of the platform is below
                 whenever you need it.
@@ -127,7 +127,7 @@ export function GuidePage() {
           You closed the tip line on {closedTips === 1 ? 'one page' : `${closedTips} pages`}.{' '}
           <button
             type="button"
-            className="font-medium text-violet-600 hover:underline disabled:opacity-50 dark:text-violet-400"
+            className="font-medium text-selection-foreground hover:underline disabled:opacity-50"
             onClick={() => resetIntros.mutate()}
             disabled={resetIntros.isPending}
           >

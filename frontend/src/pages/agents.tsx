@@ -260,8 +260,8 @@ export function AgentsPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-amber-500" />
-                  <h2 className="text-sm font-semibold">Start from a template</h2>
+                  <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+                  <h2 className="text-base font-semibold">Start from a template</h2>
                 </div>
                 <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setShowTemplates(false)}>
                   Hide
@@ -278,18 +278,18 @@ export function AgentsPage() {
                     <Link
                       key={template.id}
                       to={`/agents/new?template=${template.id}`}
-                      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
-                      <Card className="h-full hover:shadow-md transition-shadow cursor-pointer border-dashed">
+                      <Card className="h-full cursor-pointer transition-colors duration-[120ms] hover:border-primary">
                         <CardContent className="pt-4 pb-4">
                           <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-md bg-amber-500/10 flex items-center justify-center shrink-0">
-                              <Icon className="h-4 w-4 text-amber-600" />
+                            <div className="w-9 h-9 rounded-lg bg-selection flex items-center justify-center shrink-0">
+                              <Icon className="h-4 w-4 text-selection-foreground" />
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium text-sm">{template.name}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{template.description}</p>
-                              <Badge variant="outline" className="mt-1.5 text-[10px]">{template.category}</Badge>
+                              <p className="font-semibold text-sm">{template.name}</p>
+                              <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{template.description}</p>
+                              <Badge variant="neutral" className="mt-2">{template.category}</Badge>
                             </div>
                           </div>
                         </CardContent>
@@ -305,8 +305,8 @@ export function AgentsPage() {
           <Card>
             <CardContent className="pt-6 space-y-4">
               {agents.length > 0 && (
-                <div className="flex items-center gap-4">
-                  <div className="relative flex-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative min-w-0 basis-full sm:basis-auto sm:flex-1">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       placeholder="Search agents..."
@@ -318,7 +318,8 @@ export function AgentsPage() {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-field px-3 text-sm w-32"
+                    aria-label="Status"
+                    className="h-10 rounded-lg border border-input bg-field px-3 text-sm w-32 hover:bg-field-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <option value="all">All status</option>
                     <option value="draft">Draft</option>
@@ -332,14 +333,16 @@ export function AgentsPage() {
                   />
                 </div>
               )}
-              <table className="w-full">
+              {/* A deliberate scroll region on a phone: five columns do not fit 390px. */}
+              <div className="relative overflow-x-auto" role="region" aria-label="Agents" tabIndex={0}>
+              <table className="w-full min-w-[40rem]">
                 <thead>
-                  <tr className="border-b border-border/50">
-                    <th className="py-3 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nodes</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Runs</th>
-                    <th className="py-3 px-4 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"></th>
+                  <tr className="border-b">
+                    <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Name</th>
+                    <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Status</th>
+                    <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Nodes</th>
+                    <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Runs</th>
+                    <th className="h-11 px-4 text-right text-xs font-semibold text-muted-foreground"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -348,7 +351,7 @@ export function AgentsPage() {
               return (
                 <tr
                   key={agent.id}
-                  className="border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors"
+                  className="border-b hover:bg-[var(--am-surface-hover)] cursor-pointer transition-colors duration-[120ms]"
                   onClick={(e) => {
                     const target = e.target as HTMLElement
                     // The name is now a real link, so let the anchor handle its
@@ -390,10 +393,7 @@ export function AgentsPage() {
                   </td>
                   <td className="py-3 px-4 text-sm text-muted-foreground">
                     {agent.mode === 'autonomous' ? (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0 border-violet-600 text-violet-600 dark:border-violet-500 dark:text-violet-400"
-                      >
+                      <Badge variant="info">
                         Autonomous
                       </Badge>
                     ) : (
@@ -455,12 +455,12 @@ export function AgentsPage() {
               .map((ea) => (
               <tr
                 key={`ext-${ea.id}`}
-                className="border-b border-border/50 hover:bg-accent/30 transition-colors"
+                className="border-b hover:bg-[var(--am-surface-hover)] transition-colors"
               >
                 <td className="py-3 px-4">
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <Globe className="h-3.5 w-3.5 text-cyan-500 shrink-0" />
+                      <Globe className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
                       <span className="font-medium">{ea.name}</span>
                       <ProtocolBadge protocol="a2a" label="External A2A" className="text-[10px] px-1.5 py-0 normal-case" />
                     </div>
@@ -481,6 +481,7 @@ export function AgentsPage() {
             ))}
                 </tbody>
               </table>
+              </div>
             </CardContent>
           </Card>
 

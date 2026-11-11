@@ -1,93 +1,38 @@
-import { Fragment, useEffect, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { Check, X, Clock, AlertCircle, Bot } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Check } from 'lucide-react'
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
-import { Field, InlineFormActions } from '@/components/layout/form-page'
-import { useLeaveGuard } from '@/hooks/use-leave-guard'
+import {
+  ApprovalInspector,
+  isChangeSet,
+  type ApprovalRequest,
+} from '@/components/approvals/approval-inspector'
 
 import { approvalsApi } from '@/lib/api'
-import { formatRelativeTime, pluralized } from '@/lib/utils'
-import { useNotifications } from '@/store/app'
-import { getApiErrorMessage } from '@/lib/api-error'
-import { emailPreviewOf } from '@/lib/email-preview'
-import { actionDetailsOf, policyStepOf, withoutInternalFields } from '@/lib/approval-summary'
-import { ChangeSetView } from '@/components/approvals/change-set-view'
-import type { ChangeSetEntry } from '@/types'
+import { cn, formatRelativeTime, pluralized } from '@/lib/utils'
 
-interface ApprovalRequest {
-  id: string
-  organizationId: string
-  teamId: string | null
-  visibility: 'org' | 'team' | 'private'
-  /** Null for a held tool call from a caller that could not wait (a workflow, a gateway, the Test button). */
-  runId: string | null
-  agentId: string | null
-  /** The agent's name; null once the agent has been deleted. */
-  agentName?: string | null
-  toolCallId: string | null
-  reason: string
-  payload: Record<string, any> | null
-  /** The held tool's parameter schema, for its own parameter titles; absent when there is no tool. */
-  parameterSchema?: Record<string, any> | null
-  status: 'pending' | 'approved' | 'rejected' | 'expired'
-  decidedBy: string | null
-  decidedAt: string | null
-  decisionReason: string | null
-  expiresAt: string | null
-  createdAt: string
-}
+export { decisionMessage, isChangeSet, isUnknownOutcome } from '@/components/approvals/approval-inspector'
 
 const POLL_MS = 10_000
 
-/** A script's change set (code mode): several calls approved or rejected as a whole. */
-export function isChangeSet(row: Pick<ApprovalRequest, 'payload'>): boolean {
-  return row.payload?.kind === 'change_set' && Array.isArray(row.payload?.changeSet)
+/** Who is asking, for the queue: the agent, a deleted agent, or a held tool call. */
+function requesterName(row: Pick<ApprovalRequest, 'agentId' | 'agentName'>): string {
+  if (!row.agentId) return 'Tool call'
+  return row.agentName || 'Deleted agent'
 }
 
-/**
- * A call that was cut off when the worker running it stopped, so it may
- * already have happened, and was tried again (durable runs, unknown-writes).
- * Either way the run carries on; only what the agent is told differs.
- */
-export function isUnknownOutcome(row: Pick<ApprovalRequest, 'payload'>): boolean {
-  return row.payload?.kind === 'unknown_outcome'
-}
-
-/** What a decision does, in one sentence, before a person confirms it. */
-export function decisionMessage(row: Pick<ApprovalRequest, 'payload'>, intent: 'approve' | 'reject'): string {
-  if (isChangeSet(row)) {
-    const n = (row.payload!.changeSet as unknown[]).length
-    return intent === 'approve'
-      ? `All ${pluralized(n, 'change')} run, in this order. If one fails, the ones after it do not run; nothing is undone.`
-      : 'None of the changes run. The agent is told, and carries on without them.'
-  }
-  if (isUnknownOutcome(row)) {
-    return intent === 'approve'
-      ? 'The run carries on. Nothing is sent again; the agent is told you checked it.'
-      : 'Nothing is sent again or undone. The agent is told to treat this action as not done, and carries on without it.'
-  }
-  return intent === 'approve'
-    ? 'The run resumes where it paused, with this approval as the answer to its request.'
-    : 'The run is cancelled for good; it cannot be resumed.'
+/** What is asked, in a few words, for the queue. */
+function queueLine(row: Pick<ApprovalRequest, 'payload'>): string {
+  if (isChangeSet(row)) return pluralized((row.payload!.changeSet as unknown[]).length, 'change')
+  return typeof row.payload?.tool === 'string' ? row.payload.tool : 'A tool call'
 }
 
 export function ApprovalsPage() {
-  const queryClient = useQueryClient()
-  const { success, error: errNotif } = useNotifications()
-  const [decisionFor, setDecisionFor] = useState<{ row: ApprovalRequest; intent: 'approve' | 'reject' } | null>(null)
-  const [decisionReason, setDecisionReason] = useState('')
-  // A written note asks before a navigation throws it away. Cancel and a
-  // recorded decision both clear it, so neither asks.
-  const guard = useLeaveGuard(decisionFor !== null && decisionReason !== '')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
     document.title = 'Approvals | almyty'
@@ -106,29 +51,9 @@ export function ApprovalsPage() {
     refetchInterval: POLL_MS,
   })
 
-  const approveMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) => approvalsApi.approve(id, reason),
-    onSuccess: () => {
-      success('Approved', 'The agent run will resume.')
-      queryClient.invalidateQueries({ queryKey: ['approvals'] })
-      setDecisionFor(null)
-      setDecisionReason('')
-    },
-    onError: (err: any) => errNotif('Approve failed', getApiErrorMessage(err, 'Unknown')),
-  })
-
-  const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) => approvalsApi.reject(id, reason),
-    onSuccess: () => {
-      success('Rejected', 'The agent run was cancelled.')
-      queryClient.invalidateQueries({ queryKey: ['approvals'] })
-      setDecisionFor(null)
-      setDecisionReason('')
-    },
-    onError: (err: any) => errNotif('Reject failed', getApiErrorMessage(err, 'Unknown')),
-  })
-
   const rows = (query.data ?? []) as ApprovalRequest[]
+  // The request in the inspector: the one picked in the queue, else the first listed.
+  const selected = rows.find((r) => r.id === selectedId) ?? rows[0]
 
   return (
     <div className="space-y-6">
@@ -153,182 +78,39 @@ export function ApprovalsPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
-          {rows.map((row) => (
-            <Card key={row.id} className="border-amber-200 dark:border-amber-900">
-              <CardHeader>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Bot className="h-4 w-4 text-muted-foreground" />
-                      {!row.agentId ? (
-                        // A held tool call no agent made.
-                        <span className="truncate">{row.payload?.tool ? `Tool call: ${row.payload.tool}` : 'Tool call'}</span>
-                      ) : row.agentName ? (
-                        <Link to={`/agents/${row.agentId}`} className="hover:underline truncate">
-                          {row.agentName}
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground truncate">Deleted agent</span>
-                      )}
-                      <Badge variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-800 dark:text-amber-400">
-                        <Clock className="h-3 w-3 mr-1" />
-                        pending
-                      </Badge>
-                      <Badge variant="outline">{row.visibility === 'private' ? 'private' : row.visibility === 'team' ? 'team' : 'org'}</Badge>
-                    </CardTitle>
-                    <CardDescription className="mt-2 text-foreground">{row.reason}</CardDescription>
-                    {isChangeSet(row) && (
-                      <div className="mt-3">
-                        <ChangeSetView entries={row.payload!.changeSet as ChangeSetEntry[]} />
-                      </div>
-                    )}
-                  </div>
-                  {decisionFor?.row.id !== row.id && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
-                      onClick={() => { setDecisionFor({ row, intent: 'approve' }); setDecisionReason('') }}
-                    >
-                      <Check className="h-4 w-4 mr-1" /> Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-red-700 dark:text-red-400 border-red-300 dark:border-red-800"
-                      onClick={() => { setDecisionFor({ row, intent: 'reject' }); setDecisionReason('') }}
-                    >
-                      <X className="h-4 w-4 mr-1" /> Reject
-                    </Button>
-                  </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="text-xs text-muted-foreground space-y-1">
-                <div>
-                  {row.runId ? (
-                    <>
-                      Run:{' '}
-                      <Link to={`/agents/${row.agentId}/runs/${row.runId}`} className="font-mono hover:underline">
-                        {row.runId.slice(0, 12)}
-                      </Link>
-                      {' · '}
-                    </>
-                  ) : (
-                    // A held tool call: it runs, exactly as asked, once approved.
-                    <>The call runs once approved · </>
-                  )}
-                  requested {formatRelativeTime(row.createdAt)}
-                  {row.expiresAt && (
-                    <> · expires {formatRelativeTime(row.expiresAt)}</>
-                  )}
-                </div>
-                {(() => {
-                  // A multi-step policy: which step it is on, said from the
-                  // server's score, never the raw `_policy` bookkeeping.
-                  const step = policyStepOf(row.payload)
-                  if (!step) return null
+        // The queue on the left (only when there is more than one), one
+        // focused inspector on the right; stacked on a phone.
+        <div className={cn('grid gap-4', rows.length > 1 && 'lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start')}>
+          {rows.length > 1 && (
+            <nav aria-label="Pending approvals" className="rounded-xl border bg-card p-1.5">
+              <ul className="space-y-0.5">
+                {rows.map((row) => {
+                  const active = row.id === selected?.id
                   return (
-                    <p className="mt-1 text-sm font-medium text-foreground" data-testid="approval-policy-step">
-                      {step}
-                    </p>
-                  )
-                })()}
-                {(() => {
-                  const email = emailPreviewOf(row.payload)
-                  if (email) return (
-                    <div className="mt-2 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground" data-testid="approval-email-preview">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">The email it will send</p>
-                      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                        <dt className="text-muted-foreground">To</dt>
-                        <dd className="break-all">{email.to || '(nobody)'}</dd>
-                        {email.cc && (
-                          <>
-                            <dt className="text-muted-foreground">Cc</dt>
-                            <dd className="break-all">{email.cc}</dd>
-                          </>
+                    <li key={row.id}>
+                      <button
+                        type="button"
+                        aria-current={active ? 'true' : undefined}
+                        onClick={() => setSelectedId(row.id)}
+                        className={cn(
+                          'flex w-full min-h-11 flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left text-sm transition-colors duration-[120ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          active ? 'bg-selection text-selection-foreground' : 'hover:bg-[var(--am-surface-hover)]',
                         )}
-                        <dt className="text-muted-foreground">Subject</dt>
-                        <dd>{email.subject || '(no subject)'}</dd>
-                      </dl>
-                      <p className="mt-3 whitespace-pre-wrap">{email.body}</p>
-                    </div>
+                      >
+                        <span className="w-full truncate font-semibold">{requesterName(row)}</span>
+                        <span className={cn('w-full truncate text-xs', active ? 'text-selection-foreground' : 'text-muted-foreground')}>
+                          {queueLine(row)} · {formatRelativeTime(row.createdAt)}
+                        </span>
+                      </button>
+                    </li>
                   )
-                  if (isChangeSet(row)) return null
-                  // Any other call: its arguments, in words, in the same panel.
-                  const details = actionDetailsOf(row.payload, row.parameterSchema)
-                  if (details.length === 0) return null
-                  return (
-                    <div className="mt-2 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground" data-testid="approval-action-preview">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What it will do</p>
-                      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                        {details.map((d) => (
-                          <Fragment key={d.label}>
-                            <dt className="text-muted-foreground">{d.label}</dt>
-                            <dd className="whitespace-pre-wrap break-words">{d.value}</dd>
-                          </Fragment>
-                        ))}
-                      </dl>
-                    </div>
-                  )
-                })()}
-                {(() => {
-                  // Internal fields (`_gate`: the rule, the fingerprint, who called) are the server's, never the approver's.
-                  const visible = withoutInternalFields(row.payload) as Record<string, unknown> | null
-                  if (!visible || Object.keys(visible).length === 0) return null
-                  return (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-foreground/80">Show details</summary>
-                      <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-auto max-h-64">
-                        {JSON.stringify(visible, null, 2)}
-                      </pre>
-                    </details>
-                  )
-                })()}
-                {decisionFor?.row.id === row.id && (
-                  <form
-                    className="mt-3 space-y-3 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground"
-                    aria-label={decisionFor.intent === 'approve' ? 'Approve this action' : 'Reject this action'}
-                    onSubmit={(e) => {
-                      e.preventDefault()
-                      const args = { id: row.id, reason: decisionReason.trim() || undefined }
-                      if (decisionFor.intent === 'approve') approveMutation.mutate(args)
-                      else rejectMutation.mutate(args)
-                    }}
-                  >
-                    <p className="flex items-start gap-2">
-                      {decisionFor.intent === 'approve' ? (
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
-                      ) : (
-                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
-                      )}
-                      {decisionMessage(row, decisionFor.intent)}
-                    </p>
-                    <Field id={`decision-reason-${row.id}`} label="Note (optional)" hint="Saved with the decision.">
-                      <Textarea
-                        rows={2}
-                        autoFocus
-                        value={decisionReason}
-                        onChange={(e) => setDecisionReason(e.target.value)}
-                        placeholder={decisionFor.intent === 'approve' ? 'Why this is OK to proceed' : 'Why this should not proceed'}
-                      />
-                    </Field>
-                    <InlineFormActions
-                      onCancel={() => { setDecisionFor(null); setDecisionReason('') }}
-                      submitLabel={decisionFor.intent === 'approve' ? 'Approve' : 'Reject'}
-                      submitVariant={decisionFor.intent === 'approve' ? 'default' : 'destructive'}
-                      submitting={approveMutation.isPending || rejectMutation.isPending}
-                    />
-                  </form>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                })}
+              </ul>
+            </nav>
+          )}
+          {selected && <ApprovalInspector key={selected.id} row={selected} />}
         </div>
       )}
-      {guard.element}
     </div>
   )
 }

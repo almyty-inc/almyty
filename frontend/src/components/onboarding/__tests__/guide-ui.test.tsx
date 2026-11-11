@@ -92,11 +92,16 @@ describe('GuidePage', () => {
     expect(within(screen.getByTestId('next-step')).getByText(/Connect Claude Code/)).toBeInTheDocument()
   })
 
-  it('has exactly one gradient call to action', async () => {
+  it('has exactly one solid primary call to action, and no gradient one', async () => {
     api.get.mockResolvedValue(HALF)
     render(<GuidePage />)
     await screen.findByRole('heading', { name: 'Guide' })
-    expect(document.querySelectorAll('a.bg-gradient-to-r, button.bg-gradient-to-r')).toHaveLength(1)
+    // Design system v1: the page's one main action is the solid primary
+    // button (the next step); gradients never sit on a button.
+    const primary = document.querySelectorAll('a.bg-primary, button.bg-primary')
+    expect(primary).toHaveLength(1)
+    expect(primary[0]).toBe(screen.getByTestId('next-step-link'))
+    expect(document.querySelectorAll('a[class*="gradient"], button[class*="gradient"]')).toHaveLength(0)
   })
 
   it('brings the card back to the dashboard after it was hidden', async () => {

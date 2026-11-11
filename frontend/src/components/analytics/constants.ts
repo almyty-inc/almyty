@@ -1,8 +1,8 @@
 /* Shared constants for the analytics tabs. */
 
 /*
- * Protocol colours used to live here as a dark-only map
- * (`text-violet-300` with no light half), so in light mode an MCP badge
+ * Protocol colours used to live here as a dark-only map (a -300 text
+ * shade with no light half), so in light mode an MCP badge
  * was unreadable. There is exactly one canonical map, in
  * `components/ui/protocol-badge.tsx`, and it carries both halves — so the
  * analytics tabs render <ProtocolBadge /> directly rather than keeping a
@@ -23,10 +23,10 @@ export const statusColors: Record<string, string> = {
  * DataTable, and had drifted into three densities (px-4 py-3 headers,
  * px-4 py-2.5 cells, px-3 py-2 in the log tabs). All eight now use one
  * density: this header class — the same one TableHead applies in
- * components/ui/table.tsx — over `px-4 py-3` cells.
+ * components/ui/table.tsx (sentence case, 12px semibold) — over `px-4 py-3` cells.
  */
 export const TABLE_HEAD_CLASS =
-  'h-12 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider'
+  'h-11 px-4 text-xs font-semibold text-muted-foreground'
 
 export type AnalyticsTab =
   | 'overview'

@@ -67,7 +67,7 @@ describe('Recent runs on Overview', () => {
     const rows = screen.getAllByRole('row').slice(1)
     expect(rows).toHaveLength(2)
     // Newest first.
-    expect(within(rows[0]).getByText('waiting input')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Waiting for input')).toBeInTheDocument()
     expect(within(rows[1]).getByText('gpt-4o-mini')).toBeInTheDocument()
     expect(within(rows[1]).getByText('$0.0123')).toBeInTheDocument()
   })

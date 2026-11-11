@@ -10,27 +10,8 @@ export const statusVariant: Record<string, 'default' | 'secondary' | 'destructiv
   error: 'destructive',
 }
 
-export const execStatusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  completed: 'default',
-  running: 'secondary',
-  pending: 'outline',
-  failed: 'destructive',
-  cancelled: 'secondary',
-  timeout: 'destructive',
-  waiting_approval: 'outline',
-}
-
-export const runStatusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success'> = {
-  pending: 'secondary',
-  running: 'default',
-  waiting_input: 'outline',
-  completed: 'success',
-  failed: 'destructive',
-  cancelled: 'secondary',
-  timeout: 'destructive',
-  waiting_approval: 'outline',
-}
-
+// Run and execution states are presented by RunStatusBadge (lib/run-status.ts),
+// which covers every state of the runtime union.
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024

@@ -10,6 +10,7 @@ import { Code2 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChangeSetView, argumentsLine } from '@/components/approvals/change-set-view'
 import { api } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
@@ -54,15 +55,15 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
   })
   const failed = step.output.status === 'failed'
   return (
-    <div className={`rounded border p-2 text-sm ${failed ? 'border-destructive/30 bg-destructive/5' : 'bg-background dark:bg-muted/40'}`} data-testid={`run-step-${index}`}>
+    <div className={`rounded-lg border p-3 text-sm ${failed ? 'border-danger-border bg-danger-subtle' : 'bg-card'}`} data-testid={`run-step-${index}`}>
       <div className="flex items-start gap-3">
         <div className="flex shrink-0 items-center gap-2">
-          <span className="font-mono text-xs text-muted-foreground">#{index + 1}</span>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-teal-500/10 text-xs font-semibold tabular-nums text-teal-700 dark:text-teal-300" aria-label={`Step ${index + 1}`}>{index + 1}</span>
           <Code2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <Badge variant="outline" className="text-[10px]">script</Badge>
+          <Badge variant="outline" className="font-mono">script</Badge>
         </div>
         <div className="min-w-0 flex-1 space-y-0.5">
-          <div className="text-xs">
+          <div className="text-sm">
             {calls ? (
               <>
                 {pluralized(calls.made, 'call')}: {calls.ran} ran
@@ -75,67 +76,77 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
             )}
             {typeof step.output.cpuMs === 'number' && <span className="text-muted-foreground"> · {step.output.cpuMs} ms CPU</span>}
           </div>
-          {step.error && <div className="truncate text-xs text-destructive">Error: {step.error}</div>}
+          {step.error && <div className="truncate text-xs text-danger">Error: {step.error}</div>}
         </div>
-        <div className="shrink-0 text-right text-[10px] text-muted-foreground">
+        <div className="flex shrink-0 items-center text-right text-xs tabular-nums text-muted-foreground">
           {step.duration ? formatDuration(step.duration) : ''}
           {agentId && (
-            <Button variant="ghost" size="sm" className="ml-2 h-6 px-2 text-xs" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+            <Button variant="outline" size="sm" className="ml-2 h-8 px-2.5 text-xs" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
               {open ? 'Hide script' : 'Show script'}
             </Button>
           )}
         </div>
       </div>
       {open && (
-        <div className="mt-2 space-y-3 border-t pt-2" data-testid="code-trace">
-          {trace.isLoading && <div className="h-16 animate-pulse rounded bg-muted" />}
-          {trace.isError && <p className="text-xs text-red-600 dark:text-red-400">Could not load the script.</p>}
+        <div className="mt-3 space-y-3 border-t pt-3" data-testid="code-trace">
+          {trace.isLoading && <div className="h-16 animate-pulse rounded-lg bg-muted" />}
+          {trace.isError && <p className="text-xs text-danger">Could not load the script.</p>}
           {trace.data && (
             <>
-              <div>
-                <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium">
-                  Script <Badge variant="outline" className="text-[10px]">{STATUS_LABEL[trace.data.status]}</Badge>
-                  <span className="font-normal text-muted-foreground">
+              {/* Code and Arguments: two views of the same script, side by side in time. */}
+              <Tabs defaultValue="code">
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-medium">
+                  <TabsList className="h-9" aria-label="Script view">
+                    <TabsTrigger value="code" className="px-2.5 py-1 text-xs">Code</TabsTrigger>
+                    <TabsTrigger value="arguments" className="px-2.5 py-1 text-xs">Arguments</TabsTrigger>
+                  </TabsList>
+                  <Badge variant={STATUS_TONE[trace.data.status]}>{STATUS_LABEL[trace.data.status]}</Badge>
+                  <span className="font-normal tabular-nums text-muted-foreground">
                     {formatDuration(trace.data.durationMs)} · {trace.data.cpuMs} ms CPU
                   </span>
                 </div>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">
-                  {trace.data.code.split('\n').map((line, i) => (
-                    <div key={i} className={trace.data!.error?.line === i + 1 ? 'bg-destructive/15' : undefined}>
-                      <span className="mr-3 inline-block w-6 select-none text-right text-muted-foreground">{i + 1}</span>
-                      {line}
-                    </div>
-                  ))}
-                </pre>
-              </div>
+                <TabsContent value="code" className="mt-0">
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-code p-3 font-mono text-[0.8125rem] leading-[1.375rem] text-code-foreground">
+                    {trace.data.code.split('\n').map((line, i) => (
+                      <div key={i} className={trace.data!.error?.line === i + 1 ? 'bg-danger-subtle' : undefined}>
+                        <span className="mr-3 inline-block w-6 select-none text-right text-code-comment">{i + 1}</span>
+                        {line}
+                      </div>
+                    ))}
+                  </pre>
+                </TabsContent>
+                <TabsContent value="arguments" className="mt-0">
+                  <ScriptArguments changeSet={trace.data.changeSet} calls={trace.data.calls} />
+                </TabsContent>
+              </Tabs>
               {trace.data.error && (
-                <p className="text-xs text-destructive">
+                <p className="text-xs text-danger">
                   {trace.data.error.line ? `Line ${trace.data.error.line}: ` : ''}
                   {trace.data.error.message}
                 </p>
               )}
               {trace.data.logs && (
                 <div>
-                  <div className="mb-1 text-xs font-medium">Log</div>
-                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{trace.data.logs}</pre>
+                  <div className="mb-1 text-xs font-semibold">Log</div>
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-code p-3 font-mono text-xs text-code-foreground">{trace.data.logs}</pre>
                 </div>
               )}
               {trace.data.result !== null && trace.data.result !== undefined && (
                 <div>
-                  <div className="mb-1 text-xs font-medium">Returned</div>
-                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">
+                  <div className="mb-1 text-xs font-semibold">Returned</div>
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-code p-3 font-mono text-xs text-code-foreground">
                     {typeof trace.data.result === 'string' ? trace.data.result : JSON.stringify(trace.data.result, null, 2)}
                   </pre>
                 </div>
               )}
               {trace.data.changeSet.length > 0 && (
                 <div>
-                  <div className="mb-1 text-xs font-medium">Changes it asked to make</div>
+                  <div className="mb-1 text-xs font-semibold">Changes it asked to make</div>
                   <ChangeSetView entries={trace.data.changeSet} />
                 </div>
               )}
               <div>
-                <div className="mb-1 text-xs font-medium">Calls that ran ({trace.data.calls.length})</div>
+                <div className="mb-1 text-xs font-semibold">Calls that ran ({trace.data.calls.length})</div>
                 {trace.data.calls.length === 0 ? (
                   <p className="text-xs text-muted-foreground">None.</p>
                 ) : (
@@ -145,7 +156,7 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
                         <span className="w-5 text-right font-mono text-muted-foreground">{i + 1}</span>
                         <span className="font-mono">{c.toolName ?? 'deleted tool'}</span>
                         <span className="min-w-0 flex-1 truncate text-muted-foreground">{argumentsLine(c.parameters, 120)}</span>
-                        <span className={c.success ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}>
+                        <span className={c.success ? 'text-success' : 'text-danger'}>
                           {c.success ? 'ok' : (c.error ?? 'failed')}
                         </span>
                         <span className="text-muted-foreground">{formatDuration(c.executionTime)}</span>
@@ -159,5 +170,43 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
         </div>
       )}
     </div>
+  )
+}
+
+const STATUS_TONE: Record<CodeExecutionTrace['status'], 'info' | 'success' | 'destructive' | 'warning' | 'neutral'> = {
+  running: 'info',
+  completed: 'success',
+  failed: 'destructive',
+  waiting_approval: 'warning',
+  approved: 'success',
+  rejected: 'neutral',
+}
+
+/**
+ * The script's arguments: what each staged change and each call that ran
+ * was given, as the JSON the tool received. Secrets never reach the trace.
+ */
+function ScriptArguments({ changeSet, calls }: { changeSet: ChangeSetEntry[]; calls: CodeExecutionTrace['calls'] }) {
+  if (changeSet.length === 0 && calls.length === 0) {
+    return <p className="rounded-lg bg-code p-3 text-xs text-muted-foreground">The script made no calls.</p>
+  }
+  return (
+    <ol className="space-y-2" data-testid="code-arguments">
+      {changeSet.map((e) => (
+        <li key={`change-${e.id}`} className="rounded-lg bg-code p-3">
+          <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-mono font-semibold text-selection-foreground">{e.codeName}</span>
+            <Badge variant="warning">{e.outcome ? e.outcome.replace('_', ' ') : 'staged'}</Badge>
+          </div>
+          <pre className="whitespace-pre-wrap break-all font-mono text-[0.8125rem] leading-[1.375rem] text-code-foreground">{JSON.stringify(e.arguments ?? {}, null, 2)}</pre>
+        </li>
+      ))}
+      {calls.map((c) => (
+        <li key={`call-${c.id}`} className="rounded-lg bg-code p-3">
+          <div className="mb-1 text-xs font-mono font-semibold text-selection-foreground">{c.toolName ?? 'deleted tool'}</div>
+          <pre className="whitespace-pre-wrap break-all font-mono text-[0.8125rem] leading-[1.375rem] text-code-foreground">{JSON.stringify(c.parameters ?? {}, null, 2)}</pre>
+        </li>
+      ))}
+    </ol>
   )
 }

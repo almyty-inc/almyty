@@ -29,10 +29,10 @@ export function GuideJourney({ journey, state, orgSlug, nextKey }: GuideJourneyP
   const more = journey.more?.(state) ?? []
 
   return (
-    <Card data-testid={`journey-${journey.id}`} className="border-t-2 border-t-violet-500/20">
+    <Card data-testid={`journey-${journey.id}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-selection text-selection-foreground">
             <Icon className="h-5 w-5" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
@@ -112,7 +112,7 @@ function GuideStepRow({ step, index, state, orgSlug, isNext }: GuideStepRowProps
       data-done={done ? 'true' : 'false'}
       className={cn(
         'rounded-lg border p-3',
-        isNext && !done && 'border-violet-500/40 bg-violet-500/5',
+        isNext && !done && 'border-primary/40 bg-selection',
       )}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">

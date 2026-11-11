@@ -50,7 +50,7 @@ const RUN: AgentRun = {
 describe('a run step whose hosted machine could not start', () => {
   it('names the machine problem with the raw error behind Details', () => {
     renderWithProviders(<RunsTab runs={[RUN]} agentId="agent-1" />)
-    fireEvent.click(screen.getByText('failed'))
+    fireEvent.click(screen.getByText('Failed'))
     const step = screen.getByTestId('run-step-0')
     expect(step).toHaveTextContent("Can't reach the cluster: its certificate isn't trusted")
     expect(screen.getByTestId('run-step-0-machine-detail')).toHaveTextContent('x509')

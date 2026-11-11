@@ -364,7 +364,7 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
     enabled: admitted,
   })
 
-  const accent = branding?.primaryColor ?? '#8b5cf6'
+  const accent = branding?.primaryColor ?? '#1469EC'
   const onAccent = useMemo(() => readableOn(accent), [accent])
 
   // The tenant picks one colour; everything else derives from it so a

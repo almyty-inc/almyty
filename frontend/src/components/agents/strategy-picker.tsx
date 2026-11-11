@@ -116,7 +116,7 @@ export function StrategyPicker({
                   <Badge
                     variant="outline"
                     data-testid={`strategy-experimental-${s.key}`}
-                    className="border-violet-500/40 text-violet-600 dark:text-violet-400"
+                    className="border-primary/40 text-primary"
                   >
                     experimental
                   </Badge>
@@ -137,7 +137,7 @@ export function StrategyPicker({
               // The cost band alone would read as a promise. It is not one:
               // whether this shape saves anything depends on the price gap
               // between the slots and on your own traffic.
-              <p data-testid={`strategy-caveat-${s.key}`} className="mt-1 text-[11px] text-violet-600 dark:text-violet-400">
+              <p data-testid={`strategy-caveat-${s.key}`} className="mt-1 text-xs text-primary">
                 Not claimed to be cheaper. Run it against your own traffic and check the all-model failure rate first: the higher that is, the less any extra model can win.
               </p>
             )}

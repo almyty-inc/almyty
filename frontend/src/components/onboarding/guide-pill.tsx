@@ -70,7 +70,7 @@ export function GuidePill({ collapsed }: GuidePillProps) {
         )
       }
     >
-      <Compass className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-400" aria-hidden="true" />
+      <Compass className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
       {!collapsed && (
         <span className="flex min-w-0 flex-1 flex-col gap-1 text-left">
           <span className="flex items-center justify-between">
@@ -84,7 +84,7 @@ export function GuidePill({ collapsed }: GuidePillProps) {
           {showProgress && (
             <span className="h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
               <span
-                className="block h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400"
+                className="block h-full rounded-full bg-accent-gradient"
                 style={{ width: `${Math.round((done / total) * 100)}%` }}
               />
             </span>

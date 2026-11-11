@@ -79,7 +79,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-violet-500" />
+              <BookOpen className="h-5 w-5 text-primary" />
               Skills installation
             </CardTitle>
             <CardDescription>
@@ -215,7 +215,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
                   {copiedField === 'claude-code-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
-              <div className="rounded-md border border-violet-500/30 bg-gradient-to-r from-violet-500/5 to-cyan-400/5 px-3 py-2 text-xs text-muted-foreground">
+              <div className="rounded-md border border-info-border bg-info-subtle px-3 py-2 text-xs text-muted-foreground">
                 Point any MCP client at this and your tools are live. This is the moment almyty exists for.
               </div>
             </div>

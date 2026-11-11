@@ -88,7 +88,7 @@ export function McpSourcesPanel({ organizationId }: McpSourcesPanelProps) {
     <Card className="mb-4">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <Plug className="h-5 w-5 text-violet-500" />
+          <Plug className="h-5 w-5 text-primary" />
           MCP servers
         </CardTitle>
         <CardDescription>

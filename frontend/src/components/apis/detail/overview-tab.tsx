@@ -143,7 +143,7 @@ export function OverviewTab({
       </div>
 
       {/* Quick Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" onClick={onOpenSchemaImport}>
           <Upload className="mr-2 h-4 w-4" />
           {api.schemas && api.schemas.length > 0 ? 'Update the description' : 'Import a description'}

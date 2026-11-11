@@ -251,7 +251,7 @@ export function ToolHubPage() {
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm">{template.name}</span>
                           <Badge variant="secondary" className="text-xs">{template.provider}</Badge>
-                          <Badge variant="outline" className="text-xs border-cyan-600/40 text-cyan-700 dark:border-cyan-400/40 dark:text-cyan-400">
+                          <Badge variant="outline" className="text-xs border-teal-600/40 text-teal-700 dark:border-teal-400/40 dark:text-teal-300">
                             {template.category}
                           </Badge>
                         </div>

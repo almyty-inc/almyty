@@ -7,7 +7,7 @@ import { statusColors, TABLE_HEAD_CLASS } from '../constants'
 /**
  * The analytics palette used to be half a palette.
  *
- * `protocolColors` was dark-only (`text-violet-300`, no light half), so
+ * `protocolColors` was dark-only (a -300 text shade, no light half), so
  * in light mode an MCP badge was unreadable; the HTTP status colours
  * were the mirror image (`text-green-600`, no dark half). There is one
  * canonical protocol map — ProtocolBadge — and the tabs now render it
@@ -49,10 +49,11 @@ describe('the analytics palette carries both themes', () => {
     render(<GatewaysTab />)
 
     const badge = await screen.findByText('MCP')
-    // The light half is what was missing: violet-700 on violet-100.
-    expect(badge.className).toContain('bg-violet-100')
-    expect(badge.className).toContain('text-violet-700')
-    expect(badge.className).toContain('dark:text-violet-300')
+    // The light half is what was missing. MCP is the brand blue in the
+    // design system v1 palette: brand-700 on brand-50, brand-200 in dark.
+    expect(badge.className).toContain('bg-brand-50')
+    expect(badge.className).toContain('text-brand-700')
+    expect(badge.className).toContain('dark:text-brand-200')
   })
 
   it('uses the shared table header style, not a local one', async () => {
@@ -65,8 +66,9 @@ describe('the analytics palette carries both themes', () => {
 
     // Same shape as TableHead in components/ui/table.tsx, so the eight
     // hand-rolled analytics tables no longer each pick their own density.
-    expect(TABLE_HEAD_CLASS).toContain('h-12')
-    expect(TABLE_HEAD_CLASS).toContain('uppercase')
+    // Sentence-case headers (design system v1), so no uppercase.
+    expect(TABLE_HEAD_CLASS).toContain('h-11')
+    expect(TABLE_HEAD_CLASS).not.toContain('uppercase')
     const header = await screen.findByText('Gateway')
     expect(header.className).toBe(TABLE_HEAD_CLASS)
   })
