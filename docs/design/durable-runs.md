@@ -440,7 +440,8 @@ puts what it has done on the run's log (`StepJournal`,
 | Event | When | What it carries |
 |---|---|---|
 | `model_answered` | The model answered, before anything acts on the answer. | The response as the provider layer returned it (message, tool calls with their arguments, cost, usage, model, routing), how many messages the call was made with, the role, and what compaction folded before the call (its summary, cost and tokens), when it folded anything. |
-| `tool_started` | Before each call is made. | `callIndex` (the call's place in the step), its idempotency key, the tool. |
+| `tool_started` | Before each call is made. | `callIndex` (the call's place in the step), its idempotency key, the tool, and the arguments it is made with (the real ones; see Arguments on the log, below). |
+| `tool_attempted` | Before and after each further try of a write whose outcome was lost (Unknown outcomes, below). | The key, the try's number and phase (`started`, `finished`), and once finished its outcome, HTTP status, error and result (capped, personal data hidden). |
 | `tool_finished` | Once the call's outcome is known. | The key, what the step reads of the call afterwards (its result and error, capped and with personal data hidden, as the stored steps are), the steps it recorded (stored the same way), what it added to cost, tokens and the tool-call ledger, working memory or metadata when it changed them, and what it left for the rest of the step (a call held for approval, a call waiting on a machine, a change set, a machine failure). |
 
 They are markers: nothing in the fold changes, and the commit that follows
@@ -482,8 +483,11 @@ takeover after a lapsed lease, a retried job, or, almost always, nothing):
   `tool_finished`, so it is not saved twice.
 - A call has `tool_started` and no `tool_finished`: the worker died in
   the call, or between the call returning and its outcome landing on the
-  log, and nobody knows whether it ran. It is made again, with the key it
-  was first made with.
+  log, and nobody knows whether it ran. A read, or a call to a tool that
+  takes an idempotency key, is made again, with the key it was first made
+  with. A write or delete to a tool that takes none is not: it is tried
+  again with backoff, the model is told, and a person decides (Unknown
+  outcomes, below).
 - Anything else runs as it would have.
 
 The calls of a step made before the model is asked, held calls once
@@ -501,7 +505,8 @@ retries. A tool accepts one when its operation declares an
 config sets one (`idempotencyHeader`, `operation-header-params.ts`): the
 call sends the key as that header, in place of whatever the model put
 there. A tool that declares none is sent no key; for it, a call the log
-does not know the outcome of is made again, as before this step.
+does not know the outcome of is made again when it reads, and tried again
+with care when it writes (Unknown outcomes, below).
 
 **The takeover cap.** Resuming does not change what the cap counts:
 `takeovers` goes back to 0 only when a step commits, so a step that makes
@@ -520,8 +525,93 @@ its child run again. Built-in tools (memory, wait, input) and teammates are
 journaled like any call but get no key: they make no outside call of their
 own.
 
-No new settings: the lease settings above decide when a step is picked up
-again.
+**Unknown outcomes.** A call on the log as started and not finished, to
+a tool that writes or deletes (its side-effect class, `tool-side-effect.ts`)
+and takes no idempotency key, is not made again silently
+(`backend/src/modules/agents/unknown-writes.ts`). Making it again could do
+the same thing twice, a second email or a second payment, and nobody
+would know. Instead:
+
+1. It is tried again, up to `RUN_UNKNOWN_WRITE_RETRIES` times, waiting
+   `RUN_UNKNOWN_WRITE_BACKOFF_MS` before the first try and twice as long
+   before each next one. It stops at the first try with a definite
+   outcome: the tool succeeded, the service refused it (a 4xx other than
+   408 and 429), or it never reached the service (no such tool, no
+   access, held by an approval rule). A timeout, a network error, a 5xx,
+   408 or 429, or a machine still starting is no answer, and the next try
+   follows. Each try is on the log twice, as `tool_attempted`: before it
+   is made (`phase: started`) and once it came back (`phase: finished`,
+   its outcome, HTTP status, error and result, capped and with personal
+   data hidden). A try that another death cut off is counted as one that
+   got no answer, and the step that picks up next goes on from the tries
+   already made.
+2. Whatever came of the tries, the model is told plainly, as the call's
+   result: an earlier attempt may already have gone through, the tool
+   takes no idempotency key, how many tries were made and what each came
+   to (the last one's result when it succeeded), and not to make the call
+   again itself.
+3. The run waits for a person. The step asks for an approval of kind
+   `unknown_outcome` (the same approvals as held calls, on the Approvals
+   page and in the approval notifications) carrying the call, its
+   arguments with personal data hidden, and the tries; the call goes on
+   working memory as `unknownOutcomeCalls` (tool, approval and each try's
+   outcome, no arguments and no results), and the run is
+   `waiting_approval` once the step commits, like a held call. The log
+   says so with `approval_requested` (kind `unknown_outcome`).
+4. Once the person decides (`approval_decided`, kind `unknown_outcome`),
+   the run carries on whatever the decision, like a change set: a
+   rejection does not cancel it. The next step adds the decision to the
+   call's result before the model is asked anything. Approved: a person
+   checked it and the agent carries on. Rejected, or left until the
+   request expired: the agent is told to treat the action as not done,
+   not to make the call again, and to carry on without it. Nothing is
+   sent again or undone either way.
+
+Reads, and tools that take a key, are made again as described above. The
+same holds for held calls once approved and calls retried after a waking
+machine: one of those cut off mid-call goes through the same tries,
+telling and approval.
+
+| Variable | Default | What |
+|---|---|---|
+| `RUN_UNKNOWN_WRITE_RETRIES` | 3 | How many times a keyless write whose outcome was lost is tried again (a whole number from 0 to 10; 0 tries nothing and still asks a person). |
+| `RUN_UNKNOWN_WRITE_BACKOFF_MS` | 1000 | The wait before the first try; each next try waits twice as long (1 s, 2 s, 4 s by default). |
+
+**Arguments on the log.** `model_answered` and `tool_started` keep a
+call's real arguments: a step that resumes reads them from the log
+(`StepJournal`) and makes the call with them, so every try above sends
+the real values. Everywhere the log is read out, the arguments are shown
+with personal data hidden (`backend/src/modules/agents/run-log-privacy.ts`):
+
+- The run streams, `GET /agents/:id/runs/:runId/stream` and the API-key
+  route, send every page of the log they read through the run log view
+  (`AgentRuntimeEventsHelper.setRunLogView`, set by the runtime service on
+  start). What a live view folds the log into, the run as the dashboard
+  rebuilds it, is therefore built from hidden arguments too.
+- The run view (`GET /agents/:id/runs/:runId` and the API-key route)
+  answers with the run's held calls (`gatedToolCalls`, `wakingToolCalls`,
+  `unknownOutcomeCalls`) and its steps the same way
+  (`AgentRuntimeService.getRunForViewer`).
+- A visitor's reply stream reads only the runtime events, which carry no
+  arguments, never the log. Nothing exports the log today; a guard spec
+  (`run-log-privacy.spec.ts`) fails when code outside resume, the writer
+  and the live view starts reading `agent_run_events`, so a new reader
+  goes through `eventsForViewers` from the start.
+
+The hiding always applies, whatever the organization set. The arguments
+go through the organization's own PII filter first
+(`ToolExecutorService.hidePersonalData`, the pii-filter plugin, so its
+custom patterns and any compliance policy apply), then through the same
+plugin's detector with its shipped settings (emails, card numbers, SSNs,
+phone numbers, IP addresses; `hidePersonalDataAlways`), so an
+organization with the filter off still gets them hidden. The approval for
+a lost write shows its arguments the same way. Stored steps and tool
+results keep the organization's rule; only what a viewer of the log gets
+is hidden unconditionally. Only arguments are touched; ids, states and
+costs are left as they are. A filter that fails, or a run that can no
+longer be found, hides the arguments altogether.
+
+The lease settings above decide when a step is picked up again.
 
 ## The worker-kill test
 
@@ -539,3 +629,12 @@ the run's log from seq 0 sees it whole. The same spec kills a worker inside
 its call (the call goes out again with its first key, and the service makes
 it once) and runs a step into the takeover cap; `run-resume.spec.ts` drives
 the same cases over the fake repositories.
+
+`unknown-writes.integration.spec.ts` (real Postgres and Redis) kills a
+worker inside a call to a keyless write: the run is taken over, the call
+is tried again with backoff and the run waits for a person; approved, it
+carries on to the end without the call made again; rejected, the model is
+told to carry on without it; and a viewer on the run's SSE stream never
+sees the email address in the call's arguments while every try sends the
+real one. `unknown-writes.spec.ts` and `run-log-privacy.spec.ts` drive
+the same over the fake repositories.

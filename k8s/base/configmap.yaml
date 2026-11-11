@@ -44,6 +44,9 @@ data:
   # RUN_WAKE_SWEEP_INTERVAL_MS (15000), RUN_WAKE_GRACE_MS (30000, how far
   # past due a run is before the wake sweep nudges it), RUN_MAX_TAKEOVERS
   # (3, the takeover of one step that fails the run instead of restarting it).
+  # Step 4, a keyless write whose outcome a cut-off step lost:
+  # RUN_UNKNOWN_WRITE_RETRIES (3, tries again before a person is asked) and
+  # RUN_UNKNOWN_WRITE_BACKOFF_MS (1000, the first wait, doubling).
 
   # JWT Configuration
   JWT_EXPIRES_IN: "24h"

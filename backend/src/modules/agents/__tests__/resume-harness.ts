@@ -19,6 +19,8 @@ import { Repository } from 'typeorm';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Message } from '../../../entities/message.entity';
 import { AgentStepProcessor } from '../agent-step-processor';
+import { AgentRuntimeService } from '../agent-runtime.service';
+import { writeRun } from '../run-event-writer';
 import { AgentRuntimeBuilders } from '../agent-runtime-builders';
 import { AgentVerifierHelper } from '../agent-verifier.helper';
 import { resolveRunLimits } from '../run-limits';
@@ -28,9 +30,13 @@ import { membershipFixture } from '../../../test/execution-access.fixture';
 import { userPrincipal } from '../../../common/authorization/execution-access.service';
 
 export const MODEL = 'resume-model';
-/** The agent's two tools (ids are uuids, as `agents.toolIds` stores them). */
+/** The agent's tools (ids are uuids, as `agents.toolIds` stores them). */
 export const TOOL_CHARGE = '6f1c2b0e-4d7a-4c5e-9b1a-0c3d5e7f9a11';
 export const TOOL_EMAIL = '6f1c2b0e-4d7a-4c5e-9b1a-0c3d5e7f9a22';
+/** A write that takes no idempotency key. */
+export const TOOL_NOTIFY = '6f1c2b0e-4d7a-4c5e-9b1a-0c3d5e7f9a33';
+/** A read that takes no idempotency key. */
+export const TOOL_LOOKUP = '6f1c2b0e-4d7a-4c5e-9b1a-0c3d5e7f9a44';
 
 /** A model reply calling tools, as the provider layer hands it back. */
 export const callsTools = (calls: Array<{ id: string; name: string; parameters: Record<string, any> }>, cost = 0.002, tokens = 100) => ({
@@ -85,10 +91,38 @@ export interface Workers {
   toolCalls: Array<{ toolId: string; parameters: any; options: any }>;
   messages: ReturnType<typeof fakeRepository<Message>>;
   events: Array<{ type: string; data: any }>;
+  /** The approval requests the run made (ApprovalsService, doubled). */
+  approvals: ReturnType<typeof fakeApprovals>;
   /** A new worker: its own processor over the same database and services. */
   worker(): AgentStepProcessor;
   /** Claim the run for a worker that will die: a lease that has already lapsed and is never renewed. */
   claimDead(): Promise<string>;
+  /**
+   * A person decides an approval: the request is decided, and the run is
+   * resumed (or not) by the runtime's own handler (AgentRuntimeService
+   * handleApprovalDecided), as the 'approval.decided' event does.
+   */
+  decide(approvalId: string, status: 'approved' | 'rejected' | 'expired', reason?: string): Promise<void>;
+}
+
+/**
+ * ApprovalsService, doubled: a request per (run, tool call), pausing the
+ * run as the real create does (WAITING_APPROVAL through writeRun).
+ */
+export function fakeApprovals(runs: Repository<AgentRun>) {
+  const rows: any[] = [];
+  return {
+    rows,
+    create: jest.fn(async (input: any) => {
+      const existing = rows.find((r) => input.toolCallId && r.runId === input.runId && r.toolCallId === input.toolCallId);
+      if (existing) return existing;
+      const row = { id: `a0a0a0a0-0000-4000-8000-${String(rows.length + 1).padStart(12, '0')}`, status: 'pending', decisionReason: null, decidedBy: null, ...input };
+      rows.push(row);
+      if (input.runId) await writeRun(runs, { id: input.runId }, { status: AgentRunStatus.WAITING_APPROVAL }, []);
+      return row;
+    }),
+    findInOrganization: jest.fn(async (id: string, organizationId: string) => rows.find((r) => r.id === id && r.organizationId === organizationId) ?? null),
+  };
 }
 
 export async function resumeWorkers(opts: {
@@ -100,11 +134,14 @@ export async function resumeWorkers(opts: {
   replies: any[];
   /** What the tool executor does for a call (the doubled executeTool). */
   executeTool: (toolId: string, parameters: any, options: any) => Promise<any>;
+  /** The organization's PII filter (ToolExecutorService.hidePersonalData); none when not given. */
+  hidePersonalData?: (data: any, options: any) => Promise<any>;
 }): Promise<Workers> {
   const modelCalls: any[] = [];
   const toolCalls: Workers['toolCalls'] = [];
   const events: Workers['events'] = [];
   const replies = [...opts.replies];
+  const approvals = fakeApprovals(opts.runs);
   const messages = fakeRepository<Message>({ make: () => new Message(), idPrefix: 'msg' });
   let clock = Date.parse('2026-11-07T10:00:00Z');
   const store = messages.save.getMockImplementation()!;
@@ -133,12 +170,14 @@ export async function resumeWorkers(opts: {
     messageRepository: messages,
     organizationRepository: fakeRepository([{ id: opts.organizationId, settings: {} }]),
     toolRepository: fakeRepository<any>([
+      // Both send the call's idempotency key (their HTTP config names the header).
       {
         id: TOOL_CHARGE,
         organizationId: opts.organizationId,
         name: 'charge_card',
         description: 'Charge the customer',
         parameters: { type: 'object', properties: { amount: { type: 'number' } } },
+        httpConfig: { method: 'POST', path: '/charges', headers: { 'Idempotency-Key': '' } },
       },
       {
         id: TOOL_EMAIL,
@@ -146,6 +185,25 @@ export async function resumeWorkers(opts: {
         name: 'send_receipt',
         description: 'Email the receipt',
         parameters: { type: 'object', properties: { to: { type: 'string' } } },
+        httpConfig: { method: 'POST', path: '/receipts', headers: { 'X-Idempotency-Key': '' } },
+      },
+      // A write that takes no key: made again, it may happen twice (unknown-writes.ts).
+      {
+        id: TOOL_NOTIFY,
+        organizationId: opts.organizationId,
+        name: 'notify_customer',
+        description: 'Send the customer a message',
+        parameters: { type: 'object', properties: { to: { type: 'string' }, text: { type: 'string' } } },
+        httpConfig: { method: 'POST', path: '/messages', headers: {} },
+      },
+      // A read that takes no key: reading twice changes nothing.
+      {
+        id: TOOL_LOOKUP,
+        organizationId: opts.organizationId,
+        name: 'look_up_order',
+        description: 'Look an order up',
+        parameters: { type: 'object', properties: { email: { type: 'string' } } },
+        httpConfig: { method: 'GET', path: '/orders', headers: {} },
       },
     ]),
     agentRepository: fakeRepository([]),
@@ -161,17 +219,22 @@ export async function resumeWorkers(opts: {
         toolCalls.push({ toolId, parameters, options });
         return opts.executeTool(toolId, parameters, options);
       }),
+      // The organization's PII filter; none by default.
+      hidePersonalData: jest.fn(async (data: any, options: any) => (opts.hidePersonalData ? opts.hidePersonalData(data, options) : data)),
     },
+    approvals,
     llmProvidersService,
     emitEvent: (_runId: string, type: string, data: any) => events.push({ type, data }),
   };
 
+  const queued: any[] = [];
   return {
     runId: opts.runId,
     modelCalls,
     toolCalls,
     messages,
     events,
+    approvals,
     worker: () => new AgentStepProcessor(s, new AgentVerifierHelper(llmProvidersService as any), {} as any, {} as any),
     claimDead: async () => {
       // A lease of 1 ms: lapsed by the time anyone else looks, and never renewed.
@@ -179,6 +242,13 @@ export async function resumeWorkers(opts: {
       if (!claim.claimed) throw new Error(`could not claim the run for the dying worker: ${(claim as any).reason}`);
       await new Promise((r) => setTimeout(r, 5));
       return claim.owner;
+    },
+    decide: async (approvalId, status, reason) => {
+      const row = approvals.rows.find((r) => r.id === approvalId);
+      if (!row) throw new Error(`no approval ${approvalId}`);
+      Object.assign(row, { status, decisionReason: reason ?? null, decidedBy: status === 'expired' ? null : 'u-1' });
+      const runtime = { runRepository: opts.runs, messageRepository: messages, runtimeQueue: { add: async (...job: any[]) => queued.push(job) }, logger: s.logger };
+      await (AgentRuntimeService.prototype as any).handleApprovalDecided.call(runtime, row);
     },
   };
 }
@@ -192,7 +262,7 @@ export const resumeAgent = (organizationId: string) => ({
   mode: 'autonomous',
   status: 'active',
   instructions: 'Charge the customer and send the receipt.',
-  toolIds: [TOOL_CHARGE, TOOL_EMAIL],
+  toolIds: [TOOL_CHARGE, TOOL_EMAIL, TOOL_NOTIFY, TOOL_LOOKUP],
   modelConfig: { providerId: 'p-1', model: MODEL, temperature: 0, maxTokens: 400 },
   memoryConfig: { enabled: false },
   agentConfig: {},
