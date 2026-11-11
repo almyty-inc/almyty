@@ -50,12 +50,14 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
   let runtimeMock: {
     startRun: jest.Mock;
     getRun: jest.Mock;
+    getRunForViewer: jest.Mock;
     listRuns: jest.Mock;
     cancelRun: jest.Mock;
     sendInput: jest.Mock;
     getRunEmitter: jest.Mock;
     subscribeRunEvents: jest.Mock;
     executionAccess?: ExecutionAccessService;
+    toolExecutorService?: { hidePersonalData: jest.Mock };
   };
 
   // Suffix mixes Date.now() with random bytes — Date.now() alone
@@ -81,6 +83,12 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
     runtimeMock = {
       startRun: jest.fn(),
       getRun: jest.fn(),
+      // The run view is the real one (getRun, then the arguments in the row
+      // hidden for the viewer) over the mocked getRun, so the route runs the
+      // masking it runs in production.
+      getRunForViewer: jest.fn((...args: Parameters<AgentRuntimeService['getRunForViewer']>) =>
+        AgentRuntimeService.prototype.getRunForViewer.apply(runtimeMock as unknown as AgentRuntimeService, args),
+      ),
       listRuns: jest.fn(),
       cancelRun: jest.fn(),
       sendInput: jest.fn(),
@@ -104,6 +112,10 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
     // The runtime is mocked, but who may run the agent is not: the unified
     // endpoint asks the runtime's execution gate, so hand the mock the real one.
     runtimeMock.executionAccess = module.get(ExecutionAccessService);
+    // TestAppModule has no tool executor. The organization's own PII filter
+    // is off here (data back as it is), so what hides the address in the run
+    // view is the built-in detector that always runs on logged arguments.
+    runtimeMock.toolExecutorService = { hidePersonalData: jest.fn(async (data: unknown) => data) };
 
     app = module.createNestApplication();
     app.use(cookieParser());
@@ -260,13 +272,18 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
 
   // ── GET /runs/:id — get run status ─────────────────────────────
 
-  it('should get run status via GET /:org/:agent/runs/:id', async () => {
+  it('should get run status via GET /:org/:agent/runs/:id, personal data in logged arguments hidden', async () => {
     runtimeMock.getRun.mockResolvedValue({
       id: 'run-1',
       agentId: agent.id,
+      organizationId: org.id,
       status: 'completed',
       output: 'The answer is 42',
       conversationId: 'conv-1',
+      workingMemory: {
+        gatedToolCalls: [{ toolName: 'send_mail', parameters: { to: 'jane.doe@example.com', subject: 'Hi' } }],
+      },
+      steps: [{ nodeId: 'tool_1', input: { parameters: { email: 'jane.doe@example.com', count: 3 } } }],
     });
 
     const res = await request(app.getHttpServer())
@@ -278,7 +295,14 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
     expect(res.body.data.status).toBe('completed');
     expect(res.body.data.output).toBe('The answer is 42');
 
-    expect(runtimeMock.getRun).toHaveBeenCalledWith('run-1', org.id);
+    // The arguments are shown, with the address hidden, whatever the
+    // organization's own filter is set to.
+    expect(JSON.stringify(res.body.data)).not.toContain('jane.doe@example.com');
+    expect(res.body.data.workingMemory.gatedToolCalls[0].parameters.subject).toBe('Hi');
+    expect(res.body.data.steps[0].input.parameters.count).toBe(3);
+
+    expect(runtimeMock.getRunForViewer).toHaveBeenCalledWith('run-1', org.id);
+    expect(runtimeMock.getRun).toHaveBeenCalledWith('run-1', org.id, undefined);
   });
 
   // ── POST /runs/:id/cancel ─────────────────────────────────────
