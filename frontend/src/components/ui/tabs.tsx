@@ -13,7 +13,7 @@ const TabsVariantContext = React.createContext<TabsVariant>("segmented")
 
 const listVariants: Record<TabsVariant, string> = {
   segmented:
-    "inline-flex h-10 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+    "inline-flex h-10 max-w-full items-center justify-center-safe overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground",
   underline:
     "flex w-full items-end justify-start gap-6 overflow-x-auto border-b text-muted-foreground",
 }
