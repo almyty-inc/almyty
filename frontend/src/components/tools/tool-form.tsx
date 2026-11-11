@@ -143,8 +143,11 @@ export function ToolForm() {
   // How the tool signs its calls; the secret is always a credential it points at.
   const [authConfig, setAuthConfig] = useState<{ type: string; credentialId?: string }>({ type: 'none' })
 
-  // HTTP structured config
-  const [selectedApiId, setSelectedApiId] = useState<string>('')
+  // HTTP structured config. `?type=http&api=<id>` (a manual HTTP API's
+  // "Add a tool") opens linked to that API, so the path is relative to it.
+  const [selectedApiId, setSelectedApiId] = useState<string>(() =>
+    executionMethod === 'http' ? searchParams.get('api') ?? '' : '',
+  )
   const [bodyEncoding, setBodyEncoding] = useState<string>('json')
   const [responseMappingOpen, setResponseMappingOpen] = useState(false)
   const [responseMapping, setResponseMapping] = useState({ dataPath: '', errorPath: '', successCondition: '' })

@@ -3,13 +3,13 @@
  * dialog on the Tools list. "Private (just me)" picked there has to reach
  * the create call.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { renderWithProviders } from '@/test/setup'
 import { ToolNewPage } from '../tool-new'
-import { toolsApi } from '@/lib/api'
+import { apisApi, toolsApi } from '@/lib/api'
 
 const navigate = vi.fn()
 
@@ -145,5 +145,33 @@ describe('the create-tool page', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(navigate).toHaveBeenCalledWith('/tools', undefined)
     expect(toolsApi.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('the create-tool page opened from an API ("Add a tool")', () => {
+  afterEach(() => window.history.pushState({}, '', '/'))
+
+  it('starts linked to that API and sends its id with a relative path', async () => {
+    window.history.pushState({}, '', '/tools/new?type=http&api=api-9')
+    vi.mocked(apisApi.getAll).mockResolvedValue([
+      { id: 'api-9', name: 'Acme orders', baseUrl: 'https://orders.example.com', type: 'http' },
+    ] as any)
+    vi.mocked(toolsApi.create).mockResolvedValue({ id: 'tool-9' } as any)
+    const user = userEvent.setup()
+    renderWithProviders(<ToolNewPage />)
+
+    expect(await screen.findByRole('combobox', { name: 'Link to API (optional)' })).toHaveTextContent('Acme orders')
+    await user.type(screen.getByLabelText(/Tool name/), 'list_orders')
+    // Linked, the field is a path under the API's address, not a full URL.
+    await user.type(screen.getByLabelText('Path'), '/orders')
+    await user.click(screen.getByRole('button', { name: 'Create tool' }))
+
+    await waitFor(() => expect(toolsApi.create).toHaveBeenCalled())
+    expect(vi.mocked(toolsApi.create).mock.calls[0][0]).toMatchObject({
+      name: 'list_orders',
+      apiId: 'api-9',
+      executionMethod: 'http',
+      httpConfig: expect.objectContaining({ method: 'GET', path: '/orders' }),
+    })
   })
 })
