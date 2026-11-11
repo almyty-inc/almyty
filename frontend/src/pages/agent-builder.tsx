@@ -75,6 +75,8 @@ export function AgentBuilderPage() {
   const [visibilityChosen, setVisibilityChosen] = useState(false)
   // Why the last save was refused, shown next to Save with the fix.
   const [saveError, setSaveError] = useState<string | null>(null)
+  // A name another agent in the organization already has, refused on save.
+  const [nameError, setNameError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const orgRunLimits = useOrgRunLimits()
 
@@ -413,6 +415,7 @@ export function AgentBuilderPage() {
     },
     onSuccess: async (res) => {
       setSaveError(null)
+      setNameError(null)
       success('Saved', `Agent "${agentName}" saved successfully.`)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       if (!isEditing) {
@@ -427,6 +430,11 @@ export function AgentBuilderPage() {
     },
     onError: (err: any) => {
       const message = getApiErrorMessage(err, 'Failed to save agent')
+      // Another agent here has this name: said beside the name, where it is fixed.
+      if (err?.response?.status === 409) {
+        setNameError(message)
+        return
+      }
       // Private tools in a shared agent: answered next to Save, with the fix.
       if (isPrivateReferenceRefusal(message)) {
         setSaveError(message)
@@ -496,7 +504,11 @@ export function AgentBuilderPage() {
       {/* Top Bar */}
       <BuilderToolbar
         agentName={agentName}
-        onAgentNameChange={setAgentName}
+        onAgentNameChange={(name) => {
+          setAgentName(name)
+          setNameError(null)
+        }}
+        nameError={nameError}
         agentStatus={agentStatus}
         agentMode={agentMode}
         onAgentModeChange={setAgentMode}

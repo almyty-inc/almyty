@@ -2,13 +2,13 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
-import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ConflictException, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { AgentChannelsService } from '../agent-channels/agent-channels.service';
 import { PushWakesService } from './always-on/push-wakes/push-wakes.service';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Raw, Repository } from 'typeorm';
 import { Tool } from '../../entities/tool.entity';
 
 import { Agent, AgentStatus, AgentPipeline } from '../../entities/agent.entity';
@@ -144,7 +144,6 @@ export function trimAgentVersions(
   if (versions.length <= MAX_INLINE_AGENT_VERSIONS) return versions;
   return versions.slice(versions.length - MAX_INLINE_AGENT_VERSIONS);
 }
-
 /**
  * Columns the agents list response emits. `metadata` is deliberately absent:
  * it carries the inline version history and no list consumer reads it.
@@ -492,6 +491,7 @@ export class AgentsService {
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
       await this.assertMemoryAndCapabilities(createDto.memoryConfig, createDto.agentConfig, organizationId);
       await (this.identity ?? new AgentIdentityService()).assertMaySave(organizationId, createDto.agentConfig);
+      await this.assertNameFree(organizationId, createDto.name ?? '');
 
       // Verify organization
       const organization = await this.organizationRepository.findOne({
@@ -564,7 +564,7 @@ export class AgentsService {
       );
 
       const agent = this.agentRepository.create({
-        name: createDto.name,
+        name: createDto.name?.trim(),
         description: createDto.description,
         organizationId,
         status: createDto.status || AgentStatus.DRAFT,
@@ -590,7 +590,7 @@ export class AgentsService {
       });
 
       if (agent.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
-      const saved = await this.agentRepository.save(agent);
+      const saved = await this.saveNamed(agent);
       this.logger.log(`[CREATE_AGENT] Agent created: id=${saved.id}`);
 
       await this.auditService.log({
@@ -627,6 +627,55 @@ export class AgentsService {
     }
 
     return agent;
+  }
+
+  /**
+   * Two agents in one organization may not share a name: a name is how a
+   * person picks an agent out of a list, and how the OpenAI-compatible API
+   * finds one (`findByName`). Case and surrounding spaces do not make a
+   * name different. `exceptId` is the agent being renamed. The unique index
+   * on ("organizationId", LOWER(name)) backs this up against a race.
+   */
+  async assertNameFree(organizationId: string, name: string, exceptId?: string): Promise<void> {
+    const clash = await this.agentRepository.findOne({
+      where: { organizationId, name: Raw((alias) => `LOWER(TRIM(${alias})) = LOWER(TRIM(:agentName))`, { agentName: name }) },
+      select: { id: true },
+    });
+    if (clash && clash.id !== exceptId) {
+      throw new ConflictException(`An agent called "${name.trim()}" already exists here. Choose another name.`);
+    }
+  }
+
+  /**
+   * Save an agent; a name taken between assertNameFree and the save (two
+   * creates at once) hits the unique index and gets the same answer.
+   */
+  private async saveNamed(agent: Agent): Promise<Agent> {
+    try {
+      return await this.agentRepository.save(agent);
+    } catch (err: any) {
+      if (String(err?.code) === '23505' && /agents_org_name/i.test(String(err?.constraint ?? err?.message ?? ''))) {
+        throw new ConflictException(`An agent called "${(agent.name ?? '').trim()}" already exists here. Choose another name.`);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * `base` if no agent in the organization has that name yet, otherwise the
+   * first free "base (2)", "base (3)", ... For copies and imports, which pick
+   * the name themselves and should not fail on it.
+   */
+  async freeAgentName(organizationId: string, base: string): Promise<string> {
+    for (let n = 1; n < 1000; n++) {
+      const candidate = n === 1 ? base : `${base} (${n})`;
+      const clash = await this.agentRepository.findOne({
+        where: { organizationId, name: Raw((alias) => `LOWER(TRIM(${alias})) = LOWER(TRIM(:agentName))`, { agentName: candidate }) },
+        select: { id: true },
+      });
+      if (!clash) return candidate;
+    }
+    return `${base} (${Date.now()})`;
   }
 
   /**
@@ -748,6 +797,10 @@ export class AgentsService {
     // Permission check: admin+ can update any agent, members can only update their own
     if (userId) {
       await this.checkAgentPermission(agent, userId);
+    }
+    // A rename may not take another agent's name.
+    if (typeof updateDto.name === 'string' && updateDto.name.trim().toLowerCase() !== (agent.name ?? '').trim().toLowerCase()) {
+      await this.assertNameFree(organizationId, updateDto.name, agent.id);
     }
 
     // Re-validate team scoping if it's being changed on this update.
@@ -885,6 +938,7 @@ export class AgentsService {
 
     const { visibility: _v, teamId: _t, ...rest } = updateDto;
     Object.assign(agent, rest);
+    if (typeof rest.name === 'string') agent.name = rest.name.trim();
     agent.modelConfig = next.modelConfig as Agent['modelConfig'];
     agent.models = next.models;
     if (scope) {
@@ -893,7 +947,7 @@ export class AgentsService {
       if (scope.ownerId) agent.createdBy = scope.ownerId;
     }
     if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
-    const saved = await this.agentRepository.save(agent);
+    const saved = await this.saveNamed(agent);
 
     // A changed retention applies to what the agent already saved, in
     // almyty's own store and in outside accounts alike.
@@ -1148,7 +1202,7 @@ export class AgentsService {
     }
     return this.createAgent(
       {
-        name: (data.name || 'Imported Agent') + ' (Imported)',
+        name: await this.freeAgentName(organizationId, (data.name || 'Imported Agent') + ' (Imported)'),
         description: data.description,
         pipeline: data.pipeline,
         variables: data.variables,
