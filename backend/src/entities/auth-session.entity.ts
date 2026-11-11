@@ -50,7 +50,7 @@ export class AuthSession {
   @Column({ type: 'timestamptz', nullable: true })
   revokedAt: Date | null;
 
-  /** `logout` or `refresh_reuse`. */
+  /** `logout`, `refresh_reuse` or `signed_out_elsewhere`. */
   @Column({ type: 'varchar', length: 32, nullable: true })
   revokedReason: string | null;
 

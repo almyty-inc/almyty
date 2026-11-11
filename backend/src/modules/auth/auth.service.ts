@@ -31,6 +31,7 @@ import { normalizeEmail, isDisposableEmail } from './email-normalization';
 import { effectiveMemberships, isEffectiveMembership } from '../../common/authorization/membership';
 import { AuthSession } from '../../entities/auth-session.entity';
 import { AuthSessionService } from './auth-session.service';
+import { ssoSessionOrganization } from './sso-session';
 import { EMAIL_VERIFY_TOKEN_AUDIENCE, REFRESH_TOKEN_AUDIENCE, isAccessTokenPayload } from './token-kinds';
 
 /**
@@ -549,6 +550,62 @@ export class AuthService {
       return;
     }
     await this.authSessions.revoke(payload.sid, 'logout', payload.sub);
+  }
+
+  /**
+   * Sign out every other device: end every session the person has and
+   * keep them signed in where they asked from.
+   *
+   * Two things make every other token fail, and both happen. The
+   * tokenVersion bump refuses every access and refresh token minted
+   * before it, including ones whose session row is somehow missed; ending
+   * the session rows refuses them by `sid` as well, and stops any refresh
+   * token from being redeemed. The caller's own session ends too and a new
+   * one is started in its place, so the token in their old cookie dies
+   * with the rest: whoever copied it is signed out as well. An SSO session
+   * stays an SSO session (same organization scope).
+   *
+   * Only a signed-in session may do this, never an API key: re-issuing a
+   * session to a key would turn the key into a browser login.
+   */
+  async revokeOtherSessions(
+    user: User,
+    context: { sessionId?: string; organizationId?: string; ipAddress?: string; userAgent?: string },
+  ): Promise<{ tokens: AuthTokens; signedOut: number }> {
+    if (typeof context.sessionId !== 'string' || !context.sessionId) {
+      throw new ForbiddenException({
+        code: 'SESSION_REQUIRED',
+        message: 'Sign in to the app to sign out other devices.',
+      });
+    }
+    const ssoOrganizationId = ssoSessionOrganization(user);
+
+    await this.userRepository.increment({ id: user.id }, 'tokenVersion', 1);
+    const live = await this.authSessions.revokeAllForUser(user.id, 'signed_out_elsewhere');
+    // The caller's own session was among the live ones.
+    const signedOut = Math.max(0, live - 1);
+    const tokens = await this.generateTokens(user, { ssoOrganizationId });
+
+    const organizationId =
+      context.organizationId ??
+      ssoOrganizationId ??
+      effectiveMemberships(user.organizationMemberships)[0]?.organizationId;
+    if (organizationId) {
+      this.auditLogService.log({
+        organizationId,
+        userId: user.id,
+        userEmail: user.email,
+        action: AuditAction.SESSIONS_REVOKE,
+        resourceType: AuditResource.USER,
+        resourceId: user.id,
+        resourceName: user.email,
+        details: { signedOut },
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      });
+    }
+
+    return { tokens, signedOut };
   }
 
   async createApiKey(userId: string, createApiKeyDto: CreateApiKeyDto): Promise<{ apiKey: string; keyData: ApiKey }> {

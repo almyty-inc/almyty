@@ -6,7 +6,7 @@ A "coding lead" assistant that takes a programming task, splits it, and hands th
 
 ![The coding lead's report: Claude Code wrote formatIban, Codex wrote two tests, 3 tests pass, three files changed](/screenshots/examples/multi-vendor-coding-fleet/00-result.png)
 
-This guide builds it for Tidewater Labs, a made-up company, on the laptop of one of its engineers, Ines. The task is real and so are the assistants: the run in the screenshots used Claude Code 2.1 and Codex 0.163, which wrote the code and tests shown below. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 20 minutes, plus a few minutes for each run.
+This guide builds it for Tidewater Labs, a made-up company, on the laptop of one of its engineers, Ines. The task is real and so are the assistants: the run in the screenshots used Claude Code 2.1 and Codex 0.166, which wrote the code and tests shown below. The screenshots come from a test installation, so web addresses in them start with `http://localhost`. It takes about 20 minutes, plus up to a quarter of an hour for each run.
 
 ## What you need
 
@@ -84,7 +84,9 @@ Why the commands look like this:
 
 ![Who can use the agent: only you](/screenshots/examples/multi-vendor-coding-fleet/07-only-you.png)
 
-6. Click **Save**, go back and click **Activate**.
+6. **Run limits:** open **Advanced** and set **Timeout (seconds)** to `2700`. Coding assistants at work take minutes each, and a run stops after 15 minutes unless the agent says otherwise.
+
+7. Click **Save**, go back and click **Activate**.
 
 ## 4. Try it
 
@@ -94,15 +96,15 @@ Under **Try it**, type the task:
 Add formatIban(iban) to ledgerly-utils: it removes spaces, makes the letters upper case, checks the IBAN checksum (mod 97) and returns the IBAN in groups of four, or throws an Error for an invalid IBAN. Export it from src/index.js.
 ```
 
-It takes a few minutes: each coding assistant does its part on the machine while the lead waits.
+It takes several minutes: each coding assistant does its part on the machine while the lead waits, and Try it waits with it.
 
-![Try it: the report after about four minutes](/screenshots/examples/multi-vendor-coding-fleet/08-try.png)
+![Try it: the report after about ten minutes](/screenshots/examples/multi-vendor-coding-fleet/08-try.png)
 
 In this run:
 
-- **Claude Code** wrote `src/iban.js` (29 lines: it compacts and upper-cases the IBAN, checks its shape, computes the mod 97 checksum, and returns it in groups of four) and added the export to `src/index.js`. It said it had not run the code: with `acceptEdits` it may change files but not run commands.
-- **Codex** wrote `test/iban.test.js` with two tests: an IBAN in lower case with uneven spaces (`'  de89  37040044 0532 013000  '` becomes `'DE89 3704 0044 0532 0130 00'`) and one with a wrong checksum that must throw.
-- **The tests:** 3 passed, 0 failed (the two new ones and the one the library already had). Three files changed, 44 lines added.
+- **Claude Code** wrote `src/iban.js` (31 lines: it compacts and upper-cases the IBAN, checks its shape, computes the mod 97 checksum, and returns it in groups of four) and added the export to `src/index.js`. It said it had not run the code: with `acceptEdits` it may change files but not run commands.
+- **Codex** wrote `test/iban.test.js` with two tests: an IBAN in lower case with uneven spaces (`'  de89  3704 0044 0532 0130 00  '` becomes `'DE89 3704 0044 0532 0130 00'`) and one with a wrong checksum that must throw.
+- **The tests:** 3 passed, 0 failed (the two new ones and the one the library already had). Three files changed, 46 lines added.
 
 The **Runs** tab shows each command, what it printed and how long it took, so you can follow exactly what each assistant did. The code stays in the run's folder on the machine (`~/.almyty/workspaces/coding-lead-.../app`); review it there as you would any change, and commit it yourself.
 

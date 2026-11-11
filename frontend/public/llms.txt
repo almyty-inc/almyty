@@ -1,0 +1,79 @@
+# almyty
+
+> almyty turns the software a company already runs into AI assistants (agents) that do real work, and puts them wherever its staff and customers already talk. This file tells a program or an AI agent how to use almyty without the web app: the HTTP API, API keys, the MCP server that manages almyty itself, and the command-line tools.
+
+app.almyty.com is the web app for people. Programs talk to the API at `https://api.almyty.com` instead. The API has no path prefix: `https://api.almyty.com/agents` lists agents.
+
+What you can do through the API is what the app does: connect a company's APIs (OpenAPI, GraphQL, SOAP, gRPC or an npm SDK) and get one tool per action, build agents that use those tools on almost any AI model, publish tools on gateways (MCP, UTCP, Agent Skills), put agents in chat apps and on websites, and run them with spending limits, approvals and an audit trail.
+
+Rules for agents:
+
+- Authenticate with an API key, sent as `Authorization: Bearer almyty_...`. Never use or copy the web app's session cookie; it is httpOnly on purpose and is not an API credential.
+- An API key acts with the full permissions of the person who made it. Keep it out of logs, prompts and code you share.
+- A user in more than one organization must send `X-Organization-Id: <organization id>` on every request, or the API answers `400 NO_ORGANIZATION`.
+- A new agent is always a draft. Switching it on runs its checks first, and only a switched-on agent can be run.
+- Ask a person before anything that cannot be undone: deleting, publishing, refunds, payments, messages to customers.
+
+## Get an API key
+
+- [API keys in the app](https://app.almyty.com/settings/api-keys): Settings, API keys. Make a key, copy it once; it starts with `almyty_`.
+- [Log in from a terminal](https://docs.almyty.com/cli/authentication): `npx @almyty/auth login` opens the browser, makes a key named after the machine and stores it in `~/.almyty/credentials.json`, where every almyty CLI finds it. `ALMYTY_TOKEN` and `ALMYTY_URL` override the file in CI.
+- [API authentication](https://docs.almyty.com/api-reference/authentication): `POST https://api.almyty.com/auth/api-keys` with `{"name": "..."}` makes a key from a script; `GET /auth/api-keys` lists keys and `DELETE /auth/api-keys/:keyId` revokes one. Also covers organizations and token expiry.
+- [Create an account](https://app.almyty.com/auth/register): a person signs up here first; there is no card required.
+
+## HTTP API
+
+Every page below shows the requests with `curl` against `https://api.almyty.com`.
+
+- [APIs](https://docs.almyty.com/api-reference/apis): `/apis`. Connect an API from its description and import it into tools.
+- [Tools](https://docs.almyty.com/api-reference/tools-api): `/organizations/{orgId}/tools`. List, create and run tools.
+- [Gateways](https://docs.almyty.com/api-reference/gateways-api): `/gateways`. Publish a set of tools at one address with its own sign-in.
+- [Agents](https://docs.almyty.com/api-reference/agents-api): `/agents`. Create agents, run one with `POST /agents/{id}/invoke`, follow runs under `/agents/{id}/runs`, read history from `/agents/{id}/executions`.
+- [Providers](https://docs.almyty.com/api-reference/llm-providers-api): `/llm-providers`. Connect an AI model vendor with your own key.
+- [Models](https://docs.almyty.com/api-reference/models-api): `/models`. The models an organization can use, and models on its own cloud account.
+- [Credentials](https://docs.almyty.com/api-reference/credentials-api): `/credentials`. Keys, tokens and accounts that tools and channels use, and who may use each.
+- [Rate limits](https://docs.almyty.com/api-reference/rate-limits): how many calls a program may make in a given time, and how to react to "too many requests" (wait and retry).
+- [Error codes](https://docs.almyty.com/api-reference/error-codes): the shape of an error answer and what each code means.
+
+## Call agents as a model
+
+Existing OpenAI or Anthropic client code can call almyty agents and connected models by changing only the base address and the key.
+
+- [OpenAI-compatible API](https://docs.almyty.com/api-reference/openai-compatible): base URL `https://api.almyty.com/v1`; `POST /v1/chat/completions`, `GET /v1/models`.
+- [Anthropic-compatible API](https://docs.almyty.com/api-reference/anthropic-compatible): base URL `https://api.almyty.com`; `POST /v1/messages`.
+
+## Manage almyty over MCP
+
+almyty is an MCP server for its own management: an MCP client can connect APIs, create gateways, build, switch on and run agents, publish channels, read analytics and decide approvals.
+
+- Address: `https://api.almyty.com/<organization slug>/almyty`, over Streamable HTTP. The slug is in each organization returned by `GET https://api.almyty.com/organizations`.
+- Sign-in: MCP clients that support OAuth sign the user in through the browser on first connect. Other clients send `Authorization: Bearer almyty_...` with an API key of a member of that organization.
+- `https://api.almyty.com/mcp` is a different server: it offers the organization's own tools (the ones made from its APIs), not the management tools.
+- [Control almyty via MCP](https://docs.almyty.com/control-via-mcp): what the management tools can and cannot do, how long agent runs are followed (`get_run`, `answer_run`, `decide_approval`), and the full tool list.
+- [MCP gateways](https://docs.almyty.com/gateways/mcp): publishing your own tools over MCP, at `https://api.almyty.com/<organization slug>/<gateway endpoint>`, and the MCP versions served.
+
+## Command-line tools
+
+Each is an npm package; `npm install -g @almyty/cli` installs the `almyty` command that runs all of them, and each also runs alone with `npx`.
+
+- [CLI overview](https://docs.almyty.com/cli): `@almyty/cli`, one login for every command.
+- [Agents](https://docs.almyty.com/cli/agents): `@almyty/agents`, list, run and inspect agents from a terminal or script.
+- [Chat](https://docs.almyty.com/cli/chat): `@almyty/chat`, talk to an agent in the terminal.
+- [Skills](https://docs.almyty.com/cli/skills): `@almyty/skills`, install an API's operations as skills into AI coding assistants.
+- [MCP server](https://docs.almyty.com/cli/mcp-server): `@almyty/mcp-server`, connect an MCP client to a gateway.
+- [Runner](https://docs.almyty.com/cli/runner): `@almyty/runner`, let agents run commands and coding assistants on one of your own machines.
+- [ACP server](https://docs.almyty.com/cli/acp-server): `@almyty/acp-server`, use an agent from editors that speak the Agent Client Protocol.
+- [Models CLI](https://docs.almyty.com/models/cli): `@almyty/models`, the model catalog, checks and hosted models.
+- [Credentials](https://docs.almyty.com/credentials): `@almyty/credentials`, add, check and share keys and accounts.
+
+## Documentation
+
+- [Docs index for LLMs](https://docs.almyty.com/llms.txt): every documentation page with a one-line summary.
+- [Full docs text](https://docs.almyty.com/llms-full.txt): every documentation page in one file.
+- [Get started](https://docs.almyty.com/): what almyty is and the first assistant, step by step.
+- [Self-hosting](https://docs.almyty.com/self-hosting): run almyty on your own servers. A self-hosted API serves its OpenAPI description at `/docs` (and `/docs-json`) when started with `SWAGGER_ENABLED=true`; the hosted API does not publish one.
+
+## Optional
+
+- [Website](https://almyty.com/llms.txt): what almyty is, in plain words, and its plans.
+- [Source code](https://github.com/almyty-inc/almyty): almyty is open source (Apache-2.0), with paid features under `backend/ee/`.

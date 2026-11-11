@@ -53,6 +53,15 @@ export function isChangeSet(row: Pick<ApprovalRequest, 'payload'>): boolean {
   return row.payload?.kind === 'change_set' && Array.isArray(row.payload?.changeSet)
 }
 
+/**
+ * A call that was cut off when the worker running it stopped, so it may
+ * already have happened, and was tried again (durable runs, unknown-writes).
+ * Either way the run carries on; only what the agent is told differs.
+ */
+export function isUnknownOutcome(row: Pick<ApprovalRequest, 'payload'>): boolean {
+  return row.payload?.kind === 'unknown_outcome'
+}
+
 /** What a decision does, in one sentence, before a person confirms it. */
 export function decisionMessage(row: Pick<ApprovalRequest, 'payload'>, intent: 'approve' | 'reject'): string {
   if (isChangeSet(row)) {
@@ -60,6 +69,11 @@ export function decisionMessage(row: Pick<ApprovalRequest, 'payload'>, intent: '
     return intent === 'approve'
       ? `All ${pluralized(n, 'change')} run, in this order. If one fails, the ones after it do not run; nothing is undone.`
       : 'None of the changes run. The agent is told, and carries on without them.'
+  }
+  if (isUnknownOutcome(row)) {
+    return intent === 'approve'
+      ? 'The run carries on. Nothing is sent again; the agent is told you checked it.'
+      : 'Nothing is sent again or undone. The agent is told to treat this action as not done, and carries on without it.'
   }
   return intent === 'approve'
     ? 'The run resumes where it paused, with this approval as the answer to its request.'

@@ -81,6 +81,16 @@ export interface ToolExecutionOptions {
    */
   agentId?: string | null;
   /**
+   * The call's idempotency key (durable runs step 4, run-resume.ts): the
+   * same on every attempt of the run step that makes the call, so a step
+   * resumed after its worker died sends a call it may already have made
+   * with the key it was first made with. Sent only to a tool that accepts
+   * one: an HTTP operation that declares an `Idempotency-Key` (or
+   * `X-Idempotency-Key`) header gets it as that header's value
+   * (operation-header-params.ts). Every other tool ignores it.
+   */
+  idempotencyKey?: string;
+  /**
    * The `gateway_tools.securityPolicy` row governing this call.
    *
    * Normally left undefined: `ToolExecutorService.executeTool` resolves it

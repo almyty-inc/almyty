@@ -18,6 +18,7 @@ import {
   WaitResult,
 } from './types.js';
 import { lastFrameResetIndex } from './coding-agents/index.js';
+import { ensureSpawnHelperExecutable, explainPtySpawnError } from './pty-helper.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -402,8 +403,11 @@ export class ProcessManager {
 
 // ── Default adapter (real subprocess via node-pty / child_process) ──
 
-export function createDefaultAdapterFactory(): AdapterFactory {
+export function createDefaultAdapterFactory(
+  ensureHelper: () => { failed: string[] } = ensureSpawnHelperExecutable,
+): AdapterFactory {
   let nodePtyMod: typeof import('node-pty') | null = null;
+  let helperFailed: string[] = [];
 
   return {
     async spawnPty(opts: SpawnOptions): Promise<ProcessAdapter> {
@@ -412,14 +416,22 @@ export function createDefaultAdapterFactory(): AdapterFactory {
         // a PTY don't pay the cost or hit the build-toolchain
         // requirement.
         nodePtyMod = await import('node-pty');
+        // On macOS node-pty starts children through a helper that may be
+        // installed without its execute bit (pty-helper.ts).
+        helperFailed = ensureHelper().failed;
       }
-      const pty = nodePtyMod.spawn(opts.binary, opts.args, {
-        name: 'xterm-color',
-        cwd: opts.cwd ?? process.cwd(),
-        env: { ...process.env, ...(opts.env ?? {}) } as Record<string, string>,
-        cols: 120,
-        rows: 30,
-      });
+      let pty: ReturnType<typeof nodePtyMod.spawn>;
+      try {
+        pty = nodePtyMod.spawn(opts.binary, opts.args, {
+          name: 'xterm-color',
+          cwd: opts.cwd ?? process.cwd(),
+          env: { ...process.env, ...(opts.env ?? {}) } as Record<string, string>,
+          cols: 120,
+          rows: 30,
+        });
+      } catch (err) {
+        throw explainPtySpawnError(err, helperFailed);
+      }
       const emitter = new EventEmitter() as ProcessAdapter & EventEmitter;
       Object.defineProperty(emitter, 'pid', { get: () => pty.pid });
       emitter.write = (data: string) => pty.write(data);

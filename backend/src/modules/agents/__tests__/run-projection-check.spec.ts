@@ -10,6 +10,8 @@ import { MetricStatus, MetricType } from '../../../entities/usage-metric.entity'
 import * as runEvents from '../run-events';
 import { claimDelivery, mergeMetadata, notDone, onRunWritten, runStateOf, writeRun } from '../run-event-writer';
 import {
+  PROJECTION_CHECKS_KEY,
+  PROJECTION_SUMMARY_INTERVAL_MS,
   RunProjectionCheckService,
   RunProjectionChecker,
   projectionCheckEnabled,
@@ -317,6 +319,87 @@ describe('the cost of the check is the write, not the history', () => {
     } finally {
       watch.stop();
     }
+  });
+});
+
+describe('how many writes were checked is counted, not only the mismatches', () => {
+  const previous = process.env.RUN_PROJECTION_CHECK;
+  afterEach(() => {
+    jest.useRealTimers();
+    if (previous === undefined) delete process.env.RUN_PROJECTION_CHECK;
+    else process.env.RUN_PROJECTION_CHECK = previous;
+  });
+
+  const service = (redis: any) => {
+    process.env.RUN_PROJECTION_CHECK = 'true';
+    const svc = new RunProjectionCheckService({ record: jest.fn() } as any, redis);
+    const log = jest.spyOn((svc as any).logger, 'log').mockImplementation(() => undefined);
+    jest.spyOn((svc as any).logger, 'warn').mockImplementation(() => undefined);
+    return { svc, log };
+  };
+  const summaries = (log: jest.SpyInstance) => log.mock.calls.map(([m]) => m).filter((m: any) => m?.event === 'run_projection_summary');
+
+  it('every checked write increments the shared Redis counter', async () => {
+    const redis = { incr: jest.fn().mockResolvedValue(1) };
+    const { svc } = service(redis);
+    svc.onModuleInit();
+    try {
+      const runs = seedRun();
+      await writeRun(runs as any, { id: 'run-1' }, { currentStep: 1 });
+      await writeRun(runs as any, { id: 'run-1' }, { currentStep: 2 });
+      await writeRun(runs as any, { id: 'run-1' }, { status: AgentRunStatus.COMPLETED });
+      expect(svc.checker.stats.checks).toBe(3);
+      expect(redis.incr).toHaveBeenCalledTimes(3);
+      expect(redis.incr).toHaveBeenCalledWith(PROJECTION_CHECKS_KEY);
+    } finally {
+      svc.onModuleDestroy();
+    }
+  });
+
+  it('a Redis that refuses or throws never fails the write', async () => {
+    for (const redis of [
+      { incr: jest.fn().mockRejectedValue(new Error('redis down')) },
+      { incr: jest.fn(() => { throw new Error('redis down'); }) },
+      undefined,
+    ]) {
+      const { svc } = service(redis);
+      svc.onModuleInit();
+      try {
+        const runs = seedRun();
+        await expect(writeRun(runs as any, { id: 'run-1' }, { currentStep: 1 })).resolves.toBeTruthy();
+        expect(runs.row('run-1')!.currentStep).toBe(1);
+        expect(svc.checker.stats.checks).toBe(1);
+      } finally {
+        svc.onModuleDestroy();
+      }
+    }
+  });
+
+  it('each process logs its totals on the interval, only when they moved, and once more on shutdown', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    const { svc, log } = service({ incr: jest.fn().mockResolvedValue(1) });
+    svc.onModuleInit();
+    const runs = seedRun();
+    await writeRun(runs as any, { id: 'run-1' }, { currentStep: 1 });
+    await writeRun(runs as any, { id: 'run-1' }, { currentStep: 2 });
+
+    jest.advanceTimersByTime(PROJECTION_SUMMARY_INTERVAL_MS);
+    expect(summaries(log)).toEqual([
+      expect.objectContaining({ checks: 2, mismatches: 0, message: expect.stringContaining('2 run writes checked, 0 mismatches') }),
+    ]);
+
+    // Nothing new: no line.
+    jest.advanceTimersByTime(PROJECTION_SUMMARY_INTERVAL_MS);
+    expect(summaries(log)).toHaveLength(1);
+
+    await writeRun(runs as any, { id: 'run-1' }, { currentStep: 3 });
+    svc.onModuleDestroy();
+    expect(summaries(log)).toHaveLength(2);
+    expect(summaries(log)[1]).toMatchObject({ checks: 3, mismatches: 0 });
+
+    // The timer is gone with the service.
+    jest.advanceTimersByTime(PROJECTION_SUMMARY_INTERVAL_MS * 2);
+    expect(summaries(log)).toHaveLength(2);
   });
 });
 

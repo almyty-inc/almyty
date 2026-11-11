@@ -321,6 +321,11 @@ describeIfDb('visitor resume (real Postgres and Redis)', () => {
     await runs.update({ id: mine.run.id }, { status: AgentRunStatus.COMPLETED });
     await runs.update({ id: theirs.run.id }, { status: AgentRunStatus.COMPLETED });
 
+    // The limiter counts in fixed clock windows (per minute, per hour). Pin the
+    // clock just after a window starts so the whole burst lands in one window;
+    // a burst that straddled a minute boundary split its count and never tripped.
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2030, 0, 1, 12, 0, 1));
+
     // A fresh address per visitor, so only the visitor bucket is in play.
     const open = async (runId: string, sessionKey: string, ip: string) => {
       const res: any = { setHeader: jest.fn(), flushHeaders: () => undefined, write: () => undefined, end: () => undefined };
@@ -349,6 +354,7 @@ describeIfDb('visitor resume (real Postgres and Redis)', () => {
 
     // Somebody else on the same chat is not held up.
     expect((await open(theirs.run.id, theirs.sessionKey, '192.0.2.77')).status).toBe(200);
+    now.mockRestore();
   });
 
   it('a conversation names the reply still being written, and none once it is finished', async () => {

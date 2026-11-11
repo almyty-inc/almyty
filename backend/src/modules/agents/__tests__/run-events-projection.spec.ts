@@ -53,10 +53,12 @@ describe('the run event log folds back into the stored run', () => {
     const result = await runAgent({ models: null, streams: { [MODEL]: [anthropicText(MODEL, 40, ['Your order ships Monday.'], 8)] } });
 
     expect(result.run.status).toBe(AgentRunStatus.COMPLETED);
-    // One commit: opened by run_started, closed by step_committed, with what
-    // the step wrote to working memory and metadata in between.
+    // The model's answer goes on the log as the step's progress (durable
+    // runs step 4), opening it with run_started; then one commit, closed by
+    // step_committed, with what the step wrote to working memory and
+    // metadata in between.
     const seen = types(result);
-    expect(seen.slice(0, 2)).toEqual(['run_started', 'model_call']);
+    expect(seen.slice(0, 3)).toEqual(['run_started', 'model_answered', 'model_call']);
     expect(seen.slice(-3)).toEqual(['status_changed', 'run_completed', 'step_committed']);
     expect(seen.filter((t) => t === 'step_committed')).toHaveLength(1);
     expectLogMatchesRow(result);

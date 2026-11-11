@@ -50,6 +50,8 @@ const STEPS = [
   { name: 'Test this runner', cmd: 'node --test scripts/check.test.js' },
   { name: 'Test screenshot evidence validation', cmd: 'node --test docs-site/scripts/check-screenshots.test.mjs' },
   { name: 'Check screenshot inventory and source freshness', cmd: 'node docs-site/scripts/check-screenshots.mjs' },
+  { name: 'Test the docs llms.txt generator', cmd: 'node --test docs-site/scripts/check-llms.test.mjs' },
+  { name: 'Check docs llms.txt and llms-full.txt list every docs page', cmd: 'node docs-site/scripts/check-llms.mjs' },
   // The one step that installs: the demo seed's walk engine needs zod. Its
   // tests prove every local-demo screenshot above is taken by a walk step.
   { name: 'Test the demo-seed walks, their schema and manifest coverage', cmd: 'sh scripts/demo-seed/check.sh' },

@@ -14,6 +14,7 @@ import { Organization } from '../../entities/organization.entity';
 import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
 import { DEFAULT_ALERT_RULES, DefaultAlertRule } from './default-alert-rules';
 import { formatPrometheusMetrics, computeSystemHealth } from './monitoring-prometheus';
+import { PROJECTION_CHECKS_KEY } from '../agents/run-projection-check';
 
 export interface SystemMetrics {
   timestamp: string;
@@ -88,9 +89,12 @@ export interface SystemMetrics {
     cacheHitRate: number;
     errorRate: number;
   };
-  /** Autonomous runs: event logs that did not fold into their row (the projection check). */
+  /** Autonomous runs: the projection check (agents/run-projection-check.ts). */
   runs?: {
+    /** Run writes whose event log did not fold into the row, over the stats window. */
     projectionMismatches: number;
+    /** Run writes compared with their event log, all replicas, since the counter began. */
+    projectionChecks?: number;
   };
 }
 
@@ -258,7 +262,7 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     const protocolStats = await this.redisStats.getProtocolStats();
     const securityStats = await this.redisStats.getSecurityStats();
     const performanceStats = await this.redisStats.getPerformanceStats();
-    const runStats = await this.redisStats.getRunStats();
+    const runStats = { ...(await this.redisStats.getRunStats()), projectionChecks: await this.projectionChecks() };
 
     const metrics: SystemMetrics = {
       timestamp: new Date().toISOString(),
@@ -681,6 +685,20 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
       this.pingRedis(),
     ]);
     return computeSystemHealth(metrics, alerts, { database, redis });
+  }
+
+  /**
+   * Run writes the projection check has compared, across replicas: the
+   * Redis counter RunProjectionCheckService increments. 0 when unset or
+   * Redis is unreachable.
+   */
+  private async projectionChecks(): Promise<number> {
+    try {
+      const n = Number(await this.redis.get(PROJECTION_CHECKS_KEY));
+      return Number.isFinite(n) ? n : 0;
+    } catch {
+      return 0;
+    }
   }
 
   /** Live readiness ping of Redis for the health rollup. */

@@ -104,9 +104,12 @@ const saveAndActivate = (as: string): Step[] => [
 ]
 
 // Ask in Try it; the hero is the whole card, answer included, for the top of the guide.
-const tryIt = (message: string, answer: RegExp, shotId: string, hero?: string, timeout = 120000): Step[] => [
-  { fill: { placeholder: 'Type a message to test this agent...' }, value: message },
-  { press: { placeholder: 'Type a message to test this agent...' }, key: 'Enter' },
+// Without a message, the question was asked by the steps before.
+const tryIt = (message: string | undefined, answer: RegExp, shotId: string, hero?: string, timeout = 120000): Step[] => [
+  ...(message === undefined ? [] : [
+    { fill: { placeholder: 'Type a message to test this agent...' }, value: message },
+    { press: { placeholder: 'Type a message to test this agent...' }, key: 'Enter' },
+  ] as Step[]),
   { waitFor: { role: 'status', hasText: answer }, timeout },
   { scrollTo: { role: 'heading', name: 'Try it' }, block: 'nearest' },
   shot(shotId),
@@ -406,6 +409,16 @@ For each task:
 
 Then report who did what, whether the tests pass, and which files changed. Never push or publish anything.`
 const FLEET_TASK = 'Add formatIban(iban) to ledgerly-utils: it removes spaces, makes the letters upper case, checks the IBAN checksum (mod 97) and returns the IBAN in groups of four, or throws an Error for an invalid IBAN. Export it from src/index.js.'
+// How long the coding run may take: the agent's run timeout and the walk's
+// wait for it. Claude Code and Codex at work on a loaded machine take from
+// a few minutes to well past the 15 a run gets by default; set
+// DEMO_FLEET_RUN_MINUTES to wait longer (the deployment's ceiling on a run,
+// RUN_LIMIT_MAX_DURATION_MS, is an hour unless set).
+export const FLEET_RUN = {
+  minutes: Number(process.env.DEMO_FLEET_RUN_MINUTES) || 45,
+  // Try it polls a long run every few seconds; on a loaded machine the page may lag behind the run.
+  answerMs: 180_000,
+}
 
 const fleet = walk('example-coding-fleet', 'Several coding assistants on one task', 'multi-vendor-coding-fleet', [
   ['fleet-00-result', '00-result', 'Coding lead: the report of a run', AGENT],
@@ -426,7 +439,7 @@ const fleet = walk('example-coding-fleet', 'Several coding assistants on one tas
   shot('fleet-02-start-runner'),
   // Ines starts the runner on her laptop; "almyty login" opens a browser, here her token stands in.
   { action: 'startRunner', with: { name: 'ines-macbook' } },
-  { until: { sql: "SELECT count(*) FROM runners WHERE name = 'ines-macbook' AND state = 'online'", not: '0' }, timeout: 60000, what: 'the runner to come online' },
+  { until: { sql: "SELECT count(*) FROM runners WHERE name = 'ines-macbook' AND state = 'online'", not: '0' }, timeout: 180000, what: 'the runner to come online' },
   { goto: '/runners' },
   shot('fleet-03-runners'),
   { click: { role: ['link', 'row'], name: /ines-macbook/ } },
@@ -445,9 +458,16 @@ const fleet = walk('example-coding-fleet', 'Several coding assistants on one tas
   press('Only you'),
   shot('fleet-07-only-you'),
   { key: 'Escape' },
+  // Real coding assistants at work take minutes, more than a run's default 15: give the run the time.
+  { click: { role: 'button', name: /^Advanced.*cost, time/ } },
+  { fill: { label: 'Timeout (seconds)' }, value: String(FLEET_RUN.minutes * 60) },
   ...saveAndActivate('agents.fleet'),
-  // Real coding assistants at work: minutes, not seconds.
-  ...tryIt(FLEET_TASK, /Changed files/, 'fleet-08-try', 'fleet-00-result', 1500000),
+  // Wait on the run itself, as long as it may take, then on Try it showing its answer.
+  { fill: { placeholder: 'Type a message to test this agent...' }, value: FLEET_TASK },
+  { press: { placeholder: 'Type a message to test this agent...' }, key: 'Enter' },
+  { until: { sql: `SELECT count(*) FROM agent_runs WHERE "agentId" = '{{agents.fleet}}' AND status NOT IN ('pending', 'running')`, not: '0' }, timeout: FLEET_RUN.minutes * 60_000, every: 10_000, what: 'the coding run to finish' },
+  // git's own summary line: a run whose commands failed reports no files changed and stops the walk here.
+  ...tryIt(undefined, /\d+ files? changed, \d+ insertion/, 'fleet-08-try', 'fleet-00-result', FLEET_RUN.answerMs),
   ...runSteps('agents.fleet', 'fleet-09-run'),
   { action: 'stopRunner' },
 ])
