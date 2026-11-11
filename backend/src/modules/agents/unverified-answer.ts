@@ -19,9 +19,22 @@
 
 export const UNVERIFIED_ANSWER_LEAD = "Note: this answer's check didn't pass";
 
+/**
+ * The marker on an answer no checker could give a verdict on (the check
+ * failed to run, or every reply was unreadable). Nothing was found wrong
+ * with it; it was not checked, and it says that, not "didn't pass".
+ */
+export const UNCHECKED_ANSWER_LEAD = 'Note: this answer could not be checked';
+
 const MAX_REASON = 160;
 
-type Failure = { rule?: unknown; evidence?: unknown } | null | undefined;
+type Failure = { rule?: unknown; evidence?: unknown; code?: unknown } | null | undefined;
+
+/** Whether these failures say no checker gave a verdict (agent-verifier.helper.ts mergeVerdicts). */
+export function checkUnavailable(failures: Failure[] | null | undefined): boolean {
+  const list = (failures ?? []).filter(Boolean);
+  return list.length > 0 && list.every((f) => f?.code === 'verification_unavailable');
+}
 
 /**
  * The short reason: the first failed rule, one line. The evidence is left
@@ -29,6 +42,7 @@ type Failure = { rule?: unknown; evidence?: unknown } | null | undefined;
  * which a visitor may not be meant to see.
  */
 export function unverifiedReason(failures: Failure[] | null | undefined): string {
+  if (checkUnavailable(failures)) return 'the checker could not give a verdict';
   const rule = (failures ?? [])
     .map((f) => (typeof f?.rule === 'string' ? f.rule : ''))
     .map((r) => trimTrailingDots(r.replace(/\s+/g, ' ').trim()))
@@ -46,13 +60,14 @@ function trimTrailingDots(text: string): string {
 
 /** The marker line for these failures. */
 export function unverifiedLine(failures: Failure[] | null | undefined): string {
-  return `${UNVERIFIED_ANSWER_LEAD}: ${unverifiedReason(failures)}.`;
+  const lead = checkUnavailable(failures) ? UNCHECKED_ANSWER_LEAD : UNVERIFIED_ANSWER_LEAD;
+  return `${lead}: ${unverifiedReason(failures)}.`;
 }
 
 /** The answer with the marker line above it. Marking twice is a no-op. */
 export function markUnverifiedAnswer(content: string, failures: Failure[] | null | undefined): string {
   const text = typeof content === 'string' ? content : '';
-  if (text.startsWith(UNVERIFIED_ANSWER_LEAD)) return text;
+  if (text.startsWith(UNVERIFIED_ANSWER_LEAD) || text.startsWith(UNCHECKED_ANSWER_LEAD)) return text;
   const line = unverifiedLine(failures);
   return text.trim() ? `${line}\n\n${text}` : line;
 }

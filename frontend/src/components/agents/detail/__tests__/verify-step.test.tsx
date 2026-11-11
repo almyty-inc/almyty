@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { screen } from '@testing-library/react'
 import { render } from '../../../../test/setup'
-import { VerifyStepCard, VerifySummary } from '../verify-step'
+import { UnverifiedNote, VerifyStepCard, VerifySummary } from '../verify-step'
 import type { AgentRun, AgentRunStep } from '@/types'
 
 const step = (over: Partial<AgentRunStep>): AgentRunStep =>
@@ -63,5 +63,53 @@ describe('VerifySummary', () => {
     expect(screen.getByText('Verification failed')).toBeInTheDocument()
     expect(screen.getByText(/2 revisions/)).toBeInTheDocument()
     expect(screen.getByText(/budget exhausted/)).toBeInTheDocument()
+  })
+})
+
+// Run b9803830: no checker gave a verdict (each reply was cut off), and the
+// run view said "the checkers still found problems" and showed the internal
+// code. A check that could not be done says so, in plain words.
+describe('a check no checker could give a verdict on', () => {
+  const unchecked = {
+    status: 'completed',
+    metadata: { verify: { verdict: 'fail', revisions: 0, exhausted: false, unavailable: true, reason: 'the checker could not give a verdict' } },
+  } as unknown as AgentRun
+
+  it('says the check could not be done, not that problems were found', () => {
+    render(<VerifySummary run={unchecked} />)
+    expect(screen.getByText('Verification could not be done')).toBeInTheDocument()
+    expect(screen.queryByText('Verification failed')).not.toBeInTheDocument()
+  })
+
+  it('marks the answer as not checked', () => {
+    render(<UnverifiedNote run={unchecked} />)
+    const note = screen.getByTestId('unverified-note')
+    expect(note).toHaveTextContent('Not checked: the check could not be done')
+    expect(note).not.toHaveTextContent(/found problems/)
+    expect(note).not.toHaveTextContent(/verification_unavailable/)
+  })
+
+  it('keeps the "found problems" line for an answer the checkers did fail', () => {
+    render(<UnverifiedNote run={{ status: 'completed', metadata: { verify: { verdict: 'fail', exhausted: true } } }} />)
+    expect(screen.getByTestId('unverified-note')).toHaveTextContent(/still found problems/)
+  })
+
+  it('shows on the step why each checker gave no verdict', () => {
+    render(
+      <VerifyStepCard
+        step={step({
+          output: {
+            verdict: 'fail',
+            unavailable: true,
+            failures: [{ rule: 'the checker could not give a verdict', checker: 'verify', code: 'verification_unavailable' }],
+            checkers: [{ checker: 'checker_1', verdict: 'error', error: "the checker's reply was cut off at its output limit (4096 tokens) before it gave a verdict" }],
+          },
+        })}
+        index={0}
+      />,
+    )
+    expect(screen.getByText('Check could not be done: no checker gave a verdict')).toBeInTheDocument()
+    expect(screen.getByTestId('verify-checker-notes')).toHaveTextContent(/checker_1: the checker's reply was cut off at its output limit/)
+    expect(screen.queryByText('Failed verification')).not.toBeInTheDocument()
   })
 })

@@ -234,9 +234,10 @@ export class AutonomousStrategyRunner {
    * shared verifier. An error or unreadable verdict is a fail: "we could
    * not tell" must never pass an unchecked answer.
    */
-  async check(run: AgentRun, checker: ModelRoleCall, target: string, spec?: string): Promise<VerifyPanelResult> {
+  async check(run: AgentRun, checker: ModelRoleCall, target: string, spec?: string, evidence?: string): Promise<VerifyPanelResult> {
     const panel = await this.verifier.runPanel(
-      { target, spec, checkers: [checkerOf(checker)], policy: 'any_fail_blocks' },
+      // What the run was asked and what its tools returned, when the caller has it (runEvidence).
+      { target, spec, checkers: [checkerOf(checker)], policy: 'any_fail_blocks', ...(evidence ? { evidence } : {}) },
       run.organizationId,
       principalOfRun(run),
     );

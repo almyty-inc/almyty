@@ -122,7 +122,7 @@ Experimental, and not claimed to save money (see `docs/strategies.md`).
 - The checker verifies the main role's answer. A failure goes back to the
   main role as a revision, within the verify gate's `maxReviseLoops`
   (default 2); an exhausted budget completes with the last answer and
-  says so.
+  says so. A check no checker could give a verdict on is not revised.
 
 ### What every strategy keeps
 
@@ -136,6 +136,37 @@ Experimental, and not claimed to save money (see `docs/strategies.md`).
   run could start it.
 - The agent's own verify gate (`agentConfig.verify`) still reviews the
   final answer, after the strategy has chosen it.
+
+### What a checker sees, and what counts as a failure
+
+These rules hold for the verify gate and the strategy checks alike
+(`agent-verifier.helper.ts`, `checker-evidence.ts`).
+
+- A checker sees the request, today's date and every tool result of the
+  run. The amount is sized to the checker model's context window (half
+  of it, from its model card), 120,000 characters when the window is
+  unknown, and never more than 400,000.
+- A tool result too large for its share is shortened without losing
+  items: a JSON result keeps every item with its identifying fields (id,
+  name, title, tag, version, date, url, doi) and drops long fields such as
+  bodies and abstracts first. Only when that still does not fit are
+  items left out. A shortened result always says so on its first line:
+  `[result shortened: 4 of 10 items shown in results; ...]`.
+- A checker only refutes. It fails a claim when the evidence contradicts
+  it, or when the evidence that would hold it is complete and does not.
+  Absence from shortened evidence is not grounds to fail.
+- Only items a checker marks as failed count. An item it marks as correct
+  does not, and neither does one whose reason states a false version
+  order ("4.18.1 is older than 4.17.21"): versions are compared part by
+  part as numbers. Both are noted on the `verify` step.
+- A checker call asks for 4,096 output tokens unless the checker sets its
+  own. A reply cut off mid-way is read up to its last complete item.
+- When no checker gives a verdict, the answer is not sent back for
+  revision. The run completes, the `verify` step says why each checker
+  gave none, and the answer is marked "Note: this answer could not be
+  checked".
+- A revision is told to change only what a failure names and to keep
+  every other fact its tool results support.
 - Hosted chat: a Single run composes its answer with a no-tools call and
   streams it (`final-answer.ts`). Every other strategy checks or chooses
   among candidate answers, so, like a verify gate, it holds everything
