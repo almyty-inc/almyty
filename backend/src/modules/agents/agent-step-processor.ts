@@ -26,6 +26,7 @@ import { agentApiIds, agentEnvironmentId, agentRunnerId, callsAgents, mayCallAge
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
+import { markUnverifiedAnswer, unverifiedReason } from './unverified-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
 import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
@@ -1521,6 +1522,8 @@ export class AgentStepProcessor {
       } else {
         // No tool calls — the agent has a final response
         let finalContent = responseMessage.content || '';
+        // The failures of a check that still failed when its revisions ran out (unverified-answer.ts).
+        let failedCheck: Array<{ rule?: unknown; evidence?: unknown }> | null = null;
         // What the recorded final step says about the call that wrote it.
         let finalCall: FinalCall = {
           cost: stepCost,
@@ -1669,6 +1672,13 @@ export class AgentStepProcessor {
             duration: checkDuration,
             timestamp: new Date().toISOString(),
           });
+          if (!check.passed) {
+            failedCheck = check.failures ?? [];
+            run.metadata = {
+              ...(run.metadata || {}),
+              verify: { verdict: check.verdict, revisions, exhausted: true, reason: unverifiedReason(check.failures) },
+            };
+          }
         }
         if (escalated) run.workingMemory = { ...(run.workingMemory || {}), cascadeEscalated: false };
 
@@ -1774,8 +1784,18 @@ export class AgentStepProcessor {
               verdict: verifyPanel.verdict,
               revisions,
               exhausted: !verifyPanel.passed && revisions >= maxLoops,
+              ...(!verifyPanel.passed ? { reason: unverifiedReason(verifyPanel.failures) } : {}),
             },
           };
+          failedCheck = verifyPanel.passed ? null : (verifyPanel.failures ?? []);
+        }
+
+        // The checks ran out of revisions and the answer still failed: it is
+        // delivered, marked. The marker goes on the answer itself, so every
+        // surface that reads it (the conversation, run.output) carries it.
+        if (failedCheck) {
+          finalContent = markUnverifiedAnswer(finalContent, failedCheck);
+          if (finalMsg) finalMsg.content = finalContent;
         }
 
         // Verification candidates are only committed to customer-visible
