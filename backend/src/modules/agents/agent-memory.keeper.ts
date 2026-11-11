@@ -71,10 +71,28 @@ export function factsPrompt(rules: string[]): string {
   return (
     'You pick out what is worth remembering from one exchange between a person and an assistant: lasting facts, ' +
     'preferences and decisions that would help in a later conversation. Each fact is one short sentence that makes ' +
-    `sense on its own. Answer with JSON only: {"facts": ["..."]}, at most ${FACTS_PER_RUN_MAX} facts, or {"facts": []} ` +
+    'sense on its own and keeps the specifics: names, ids, versions, dates and numbers as the exchange gave them. ' +
+    'A fact too vague to act on later ("the user is interested in a topic") is not worth keeping, and neither is ' +
+    `a guess or a conclusion the exchange does not back. Answer with JSON only: {"facts": ["..."]}, at most ${FACTS_PER_RUN_MAX} facts, or {"facts": []} ` +
     'when nothing is worth keeping.' +
     (rules.length ? `\n\nNever include anything these rules cover:\n${rulesBlock(rules)}` : '')
   );
+}
+
+/**
+ * Whether the answer a run finished with failed its verification: the last
+ * verdict on the answer (not a mid-run advisory one) is not a pass. The
+ * panel ran out of revisions with its checks still failing, and the run
+ * completed with an answer the checks refuted.
+ */
+export function verificationFailed(run: Pick<AgentRun, 'steps' | 'metadata'>): boolean {
+  // A cascade's failed draft is not the answer: the stronger model answered
+  // instead (escalateTo), so that verdict says nothing about what was kept.
+  const verdicts = (run.steps ?? []).filter((st) => st?.type === 'verify' && st.output?.advisory !== true && !st.output?.escalateTo);
+  const last = verdicts[verdicts.length - 1];
+  if (last) return last.output?.verdict !== 'pass';
+  const meta = run.metadata?.verify?.verdict;
+  return typeof meta === 'string' && meta !== 'pass';
 }
 
 /** The facts in a facts call's answer; [] when it is not the asked-for shape. */
@@ -109,6 +127,28 @@ export function recallText(item: Pick<MemoryItem, 'content'>): string {
   return text.length > RECALL_ITEM_MAX_CHARS ? `${text.slice(0, RECALL_ITEM_MAX_CHARS)}…` : text;
 }
 
+/** The "Relevant Memories" block a prompt carries, or '' when nothing was found. */
+export function recallBlock(ranked: Array<Pick<RankedItem, 'item'>>): string {
+  if (ranked.length === 0) return '';
+  return '\n\n## Relevant Memories\n' + ranked.map((r) => `- [${recallLabel(r.item)}] ${recallText(r.item)}`).join('\n');
+}
+
+/**
+ * What a run's memory lookup searches with: what the person asked. A run
+ * started with `{ message }` is searched with the message, not its JSON;
+ * an always-on run with the owner's words only (personWordsOf). '' when
+ * the run carries none.
+ */
+export function recallQueryOf(run: Pick<AgentRun, 'input' | 'metadata'>): string {
+  if (run.metadata?.triggerType === 'always_on') return personWordsOf(run);
+  const input = run.input as unknown;
+  if (typeof input === 'string') return input.trim();
+  if (input && typeof input === 'object' && typeof (input as { message?: unknown }).message === 'string') {
+    return ((input as { message: string }).message).trim();
+  }
+  return asText(input).trim();
+}
+
 /**
  * An autonomous agent's memory, as its Memory section says: whose memory a
  * run reads and writes (memoryScopeFor), the account it lives in, what is
@@ -136,12 +176,52 @@ export class AgentMemoryKeeper {
     if (!scope || !query.trim()) return '';
     try {
       const ranked = await this.search(agent, run, scope, query, 5);
-      if (ranked.length === 0) return '';
-      return '\n\n## Relevant Memories\n' + ranked.map((r) => `- [${recallLabel(r.item)}] ${recallText(r.item)}`).join('\n');
+      return recallBlock(ranked);
     } catch (err: any) {
       this.s.logger.warn(`Failed to recall memories for run ${run.id}: ${err?.message ?? err}`);
       return '';
     }
+  }
+
+  /**
+   * The memories a run starts with, when memory is on: looked up once, at
+   * the start of the run, with what the person asked (recallQueryOf; the
+   * conversation's last message when the run carries no words of its own),
+   * and kept on the run so every later step reads the same block. Asked on
+   * every step instead, the newest user message was a verifier's feedback
+   * by the second answer. Recorded as a `memory_recall` step, so the run
+   * shows it looked and how many memories it found. A lookup that fails is
+   * recorded too, and the run goes on without memories.
+   */
+  async recallAtStart(agent: Agent, run: AgentRun, conversationQuery: () => Promise<string>): Promise<string> {
+    const held = run.workingMemory?.memoryRecall;
+    if (held && typeof held.context === 'string') return held.context;
+    const s = this.settings(agent);
+    if (!s.enabled) return '';
+    const scope = memoryScopeFor(agent, run);
+    if (!scope) return '';
+    const startedAt = Date.now();
+    let query = recallQueryOf(run);
+    let ranked: RankedItem[] = [];
+    let error: string | undefined;
+    try {
+      if (!query) query = (await conversationQuery()).trim();
+      if (query) ranked = await this.search(agent, run, scope, query, 5);
+    } catch (err: any) {
+      error = `Failed to recall memories: ${err?.message ?? err}`;
+      this.s.logger.warn(`${error} (run ${run.id})`);
+    }
+    const context = recallBlock(ranked);
+    run.workingMemory = { ...(run.workingMemory ?? {}), memoryRecall: { context, found: ranked.length } };
+    run.steps.push({
+      type: 'memory_recall',
+      input: { scope: scope.scope_type, account: s.account },
+      output: { found: ranked.length, ...(query ? {} : { skipped: 'nothing to search with' }) },
+      duration: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+      ...(error ? { error } : {}),
+    });
+    return context;
   }
 
   /** The recall_memory tool. */
@@ -201,6 +281,22 @@ export class AgentMemoryKeeper {
     const input = personWordsOf(run);
     // Nothing a person said: nothing to learn about them.
     if (!input) return;
+    // An answer the verification panel rejected (it ran out of revisions
+    // with the checks still failing) is not saved: facts drawn from it carry
+    // the very conclusion the checks refuted, and a later run would recall
+    // it as true.
+    if (verificationFailed(run)) {
+      run.steps.push({
+        type: 'memory_save',
+        role: stampOf(team.main),
+        input: { save: s.save, scope: scope.scope_type, account: s.account },
+        output: { saved: 0, skipped: 'the answer did not pass verification' },
+        cost: 0,
+        duration: 0,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
     const output = asText(run.output).trim();
     const exchange = `Person: ${input}\nAgent: ${output}`;
     const startedAt = Date.now();
