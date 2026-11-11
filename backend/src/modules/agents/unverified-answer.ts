@@ -31,10 +31,17 @@ type Failure = { rule?: unknown; evidence?: unknown } | null | undefined;
 export function unverifiedReason(failures: Failure[] | null | undefined): string {
   const rule = (failures ?? [])
     .map((f) => (typeof f?.rule === 'string' ? f.rule : ''))
-    .map((r) => r.replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, ''))
+    .map((r) => trimTrailingDots(r.replace(/\s+/g, ' ').trim()))
     .find((r) => r.length > 0);
   if (!rule) return 'the checkers found problems that were not fixed';
   return rule.length > MAX_REASON ? `${rule.slice(0, MAX_REASON - 1).trimEnd()}…` : rule;
+}
+
+/** Drop trailing dots and spaces without a backtracking regex. */
+function trimTrailingDots(text: string): string {
+  let end = text.length;
+  while (end > 0 && (text[end - 1] === '.' || text[end - 1] === ' ')) end -= 1;
+  return text.slice(0, end);
 }
 
 /** The marker line for these failures. */
