@@ -94,3 +94,29 @@ export function passThroughResult(result: UpstreamToolResult) {
     ...(result.isError ? { isError: true as const } : {}),
   };
 }
+
+/**
+ * The result `almyty_execute` hands back: the gateway's first text block
+ * (pretty-printed when it is JSON), else the whole result as JSON. A call
+ * the gateway marked as failed (the upstream API answered 401, say, or the
+ * arguments were refused) stays marked: `isError` goes through, with the
+ * gateway's own error text, so the model reads it as a failure rather than
+ * as data.
+ */
+export function executeResult(result: UpstreamToolResult) {
+  const first = result.content.find((c: any) => c?.type === 'text' && typeof c.text === 'string' && c.text);
+  let text: string;
+  if (first) {
+    try {
+      text = JSON.stringify(JSON.parse(first.text), null, 2);
+    } catch {
+      text = first.text;
+    }
+  } else {
+    text = JSON.stringify(result, null, 2);
+  }
+  return {
+    content: [{ type: 'text' as const, text }],
+    ...(result.isError ? { isError: true as const } : {}),
+  };
+}

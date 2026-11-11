@@ -5,6 +5,7 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { RunEventDraft } from './run-events';
 import { RunChange, writeRun } from './run-event-writer';
 import { StepOutcome, claimRun, heldBy, holdLease, runLeaseConfig } from './run-lease';
+import { serveRunFromLog } from './run-log-source';
 import { CallFinished, StepJournal } from './run-resume';
 import { hidePersonalDataAlways } from './run-log-privacy';
 import { UnknownOutcomeCall, approvalReason, decisionForModel, needsCareOnResume, reattempt, tellModel, unknownWriteSettings } from './unknown-writes';
@@ -13,7 +14,7 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
+import { AgentVerifierHelper, VerifyPanelResult, runEvidence } from './agent-verifier.helper';
 import { ALWAYS_ON_COMPACTION, AgentContextCompactor, carriedContextSummary } from './agent-context-compactor.helper';
 import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
@@ -25,6 +26,7 @@ import { agentApiIds, agentEnvironmentId, agentRunnerId, callsAgents, mayCallAge
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
+import { markUnverifiedAnswer, unverifiedReason } from './unverified-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
 import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
@@ -357,7 +359,7 @@ export class AgentStepProcessor {
   }
 
   private async processLeasedStep(runId: string, leaseOwner: string): Promise<'continue' | 'done' | 'waiting'> {
-    const run = await this.s.runRepository.findOne({
+    const row = await this.s.runRepository.findOne({
       where: { id: runId },
       relations: { agent: true },
       // Narrow the joined agent: `pipeline` and `metadata` are the two
@@ -365,10 +367,13 @@ export class AgentStepProcessor {
       // path. Still one query.
       select: { agent: { ...AGENT_STEP_COLUMNS } } as any,
     });
-    if (!run) {
+    if (!row) {
       this.s.logger.warn(`Run ${runId} not found, skipping`);
       return 'done';
     }
+    // The step works on the run as its log describes it, not the row's cache
+    // of it (durable runs step 5, run-log-source.ts).
+    const { run } = await serveRunFromLog(this.s.runRepository, row, 'step');
     // The claim's token: every write this step makes is fenced on it (heldBy).
     run.leaseOwner = leaseOwner;
 
@@ -511,23 +516,20 @@ export class AgentStepProcessor {
         return await this.explorePhase(run, agent, team, runner, resolvedLimits, expectedStep, stepStart);
       }
 
-      // Recall memories if memory is enabled: from the scope and the account
-      // the agent's Memory section names (AgentMemoryKeeper).
+      // Memory on: the run looks up what it saved before, once, at its start,
+      // and every step carries what it found (AgentMemoryKeeper.recallAtStart,
+      // recorded as a memory_recall step). The model does not have to think
+      // of calling recall_memory for it.
       const memory = new AgentMemoryKeeper(this.s, runner);
       let memoryContext = '';
       if (agent.memoryConfig?.enabled) {
         try {
-          const recentMessages = run.conversationId
-            ? await this.s.messageRepository.find({ where: { conversationId: run.conversationId, role: MessageRole.USER as any }, order: { createdAt: 'DESC' }, take: 1 })
-            : [];
-          const lastUserMessage = recentMessages[0];
-          if (lastUserMessage) {
-            memoryContext = await memory.recallContext(
-              agent,
-              run,
-              typeof lastUserMessage.content === 'string' ? lastUserMessage.content : JSON.stringify(lastUserMessage.content),
-            );
-          }
+          memoryContext = await memory.recallAtStart(agent, run, async () => {
+            if (!run.conversationId) return '';
+            const [last] = await this.s.messageRepository.find({ where: { conversationId: run.conversationId, role: MessageRole.USER as any }, order: { createdAt: 'DESC' }, take: 1 });
+            if (!last) return '';
+            return typeof last.content === 'string' ? last.content : JSON.stringify(last.content);
+          });
         } catch (err) {
           this.s.logger.warn(`Failed to recall memories for run ${runId}: ${err.message}`);
         }
@@ -757,6 +759,9 @@ export class AgentStepProcessor {
         tools: allToolDefs.length > 0 ? allToolDefs : undefined,
         skipToolExecution: true, // We handle tool execution ourselves
         ...(routing ? { routing } : {}),
+        // The moment the model is told it is: fixed for the step, so the
+        // step's answer call (composeAnswer) says exactly the same.
+        currentTime: new Date(),
       };
 
       // Call the LLM
@@ -780,7 +785,9 @@ export class AgentStepProcessor {
         ? (answered.response as ChatResponse)
         : await this.s.llmProvidersService.chatStream(
             providerId,
-            chatRequest,
+            // Today's date and the organization's time zone (current-time.ts),
+            // as of this step.
+            { ...chatRequest, currentTime: chatRequest.currentTime ?? true },
             run.organizationId,
             // As the run's principal, inherited: a gateway run reaches its
             // gateway team's providers and keys, never the run row's user's.
@@ -1517,6 +1524,8 @@ export class AgentStepProcessor {
       } else {
         // No tool calls — the agent has a final response
         let finalContent = responseMessage.content || '';
+        // The failures of a check that still failed when its revisions ran out (unverified-answer.ts).
+        let failedCheck: Array<{ rule?: unknown; evidence?: unknown }> | null = null;
         // What the recorded final step says about the call that wrote it.
         let finalCall: FinalCall = {
           cost: stepCost,
@@ -1665,6 +1674,13 @@ export class AgentStepProcessor {
             duration: checkDuration,
             timestamp: new Date().toISOString(),
           });
+          if (!check.passed) {
+            failedCheck = check.failures ?? [];
+            run.metadata = {
+              ...(run.metadata || {}),
+              verify: { verdict: check.verdict, revisions, exhausted: true, reason: unverifiedReason(check.failures) },
+            };
+          }
         }
         if (escalated) run.workingMemory = { ...(run.workingMemory || {}), cascadeEscalated: false };
 
@@ -1770,8 +1786,18 @@ export class AgentStepProcessor {
               verdict: verifyPanel.verdict,
               revisions,
               exhausted: !verifyPanel.passed && revisions >= maxLoops,
+              ...(!verifyPanel.passed ? { reason: unverifiedReason(verifyPanel.failures) } : {}),
             },
           };
+          failedCheck = verifyPanel.passed ? null : (verifyPanel.failures ?? []);
+        }
+
+        // The checks ran out of revisions and the answer still failed: it is
+        // delivered, marked. The marker goes on the answer itself, so every
+        // surface that reads it (the conversation, run.output) carries it.
+        if (failedCheck) {
+          finalContent = markUnverifiedAnswer(finalContent, failedCheck);
+          if (finalMsg) finalMsg.content = finalContent;
         }
 
         // Verification candidates are only committed to customer-visible
@@ -2111,7 +2137,9 @@ export class AgentStepProcessor {
     try {
       response = await this.s.llmProvidersService.chatStream(
         providerId,
-        answerRequest,
+        // The draft's moment: the answer call stands for the same step, so
+        // it sends the same system prompt, date included.
+        { ...answerRequest, currentTime: chatRequest.currentTime ?? true },
         run.organizationId,
         principalOfRun(run),
         (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), step, chunk),
@@ -2320,7 +2348,8 @@ export class AgentStepProcessor {
       grantsLeft: grantsLeftFor(config, run.workingMemory?.codeGrantsUsed),
       limits,
       extract: buildExtract({
-        chat: (providerId, request) => this.s.llmProvidersService.chat(providerId, request as any, run.organizationId, principal),
+        chat: (providerId, request) =>
+          this.s.llmProvidersService.chat(providerId, { ...(request as any), currentTime: true }, run.organizationId, principal),
         extractor: config?.extractor ?? null,
         routing: organization?.settings?.defaultRouting ?? null,
       }),
@@ -3142,7 +3171,8 @@ export class AgentStepProcessor {
     if (!this.hasFinalOutputVerification(agent, finalContent)) return null;
     const cfg = agent.agentConfig!.verify!;
     const panel = await this.verifier.runPanel(
-      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy },
+      // The checker judges the answer against what the run was asked and what its tools returned.
+      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy, evidence: runEvidence(run as any) },
       run.organizationId,
       principalOfRun(run),
     );

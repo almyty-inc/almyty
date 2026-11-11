@@ -18,7 +18,8 @@ import {
   uniquePromptNames,
   upstreamErrorText,
 } from '../catalog';
-import { cleanAnnotations, gatewayToolConfig, passThroughResult } from '../registration';
+import { cleanAnnotations, executeResult, gatewayToolConfig, passThroughResult } from '../registration';
+import { STOPWORDS, queryTerms, searchTools } from '../tool-search';
 import { AlmytyProxy, encodeMcpHeaderValue, isEraRefusal, upstreamEraFromEnv } from '../proxy';
 
 function source(overrides: Partial<DiscoverySource> = {}): DiscoverySource {
@@ -115,6 +116,94 @@ describe('ToolCatalog', () => {
     expect(catalog.search('place an').map((t) => t.name)).toEqual(['orders_create']);
     expect(catalog.search('  ')).toHaveLength(2);
     expect(catalog.search('nothing-like-this')).toEqual([]);
+  });
+});
+
+describe('almyty_search ranking', () => {
+  const tools = [
+    { name: 'list_issues', title: 'List issues', description: 'List the issues in a repository' },
+    { name: 'get_issue', title: 'Get an issue', description: 'Fetch one issue by its number' },
+    { name: 'create_pull_request', title: 'Open a pull request', description: 'Open a pull request from a branch' },
+    { name: 'search_code', description: 'Search code across repositories' },
+  ];
+
+  it('finds a tool from a natural phrase, not only from one exact substring', async () => {
+    // The whole query as one substring found nothing for "get an issue".
+    const catalog = new ToolCatalog(source({ fetchTools: async () => tools }));
+    await catalog.refresh();
+    const found = catalog.search('get an issue').map((t) => t.name);
+    expect(found).toEqual(expect.arrayContaining(['get_issue', 'list_issues']));
+    expect(found).not.toContain('search_code');
+  });
+
+  it('ranks by how many query words match and where', () => {
+    // "open pull request": all three words in create_pull_request's title and
+    // description, two in its name; nothing else has more than none.
+    expect(searchTools(tools, 'open a pull request').map((t) => t.name)).toEqual(['create_pull_request']);
+    // Both words in a name beat one word in a description.
+    const ranked = searchTools(tools, 'search repositories').map((t) => t.name);
+    expect(ranked[0]).toBe('search_code');
+    // A name match outranks a description-only match.
+    expect(searchTools(tools, 'number issue').map((t) => t.name)[0]).toBe('get_issue');
+  });
+
+  it('matches across name, title and description, and word prefixes', () => {
+    expect(searchTools(tools, 'fetch').map((t) => t.name)).toEqual(['get_issue']);
+    expect(searchTools(tools, 'pull').map((t) => t.name)).toEqual(['create_pull_request']);
+    expect(searchTools(tools, 'repo').map((t) => t.name).sort()).toEqual(['list_issues', 'search_code']);
+    expect(searchTools([{ name: 'listPets' }], 'pets').map((t) => t.name)).toEqual(['listPets']);
+  });
+
+  it('ignores stopwords, but a query of only stopwords still finds by substring', () => {
+    expect(queryTerms('how do I get the issues')).toEqual(['issues']);
+    expect(searchTools(tools, 'get').map((t) => t.name)).toEqual(['get_issue']);
+  });
+
+  it('keeps the backend search_tools rules: same stopwords, same word splitting', () => {
+    // Copied, not imported (this package ships on its own); this keeps the copy honest.
+    const backend = readFileSync(
+      join(import.meta.dirname, '..', '..', '..', '..', 'backend', 'src', 'modules', 'tool-discovery', 'tool-search.ts'),
+      'utf-8',
+    );
+    const stopwordLine = backend.match(/const STOPWORDS = new Set\(\s*'([^']+)'/);
+    expect(stopwordLine).not.toBeNull();
+    expect([...STOPWORDS].join(' ')).toBe(stopwordLine![1]);
+    const own = readFileSync(join(import.meta.dirname, '..', 'tool-search.ts'), 'utf-8');
+    const body = (src: string) => src.match(/export function words\([\s\S]*?\n}\n/)?.[0];
+    expect(body(own)).toBeDefined();
+    expect(body(own)).toBe(body(backend));
+  });
+});
+
+describe('almyty_execute result', () => {
+  it('flags an upstream failure as an error and keeps its text readable', () => {
+    // The gateway marks a 401 from the API behind the tool with isError;
+    // almyty_execute used to drop the flag and hand it back as data.
+    const result = executeResult({
+      content: [{ type: 'text', text: 'Request failed with status code 401: {"error":{"message":"Invalid API Key provided"}}' }],
+      isError: true,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: 'text', text: 'Request failed with status code 401: {"error":{"message":"Invalid API Key provided"}}' },
+    ]);
+  });
+
+  it('pretty-prints a JSON error body and still flags it', () => {
+    const result = executeResult({ content: [{ type: 'text', text: '{"error":"unauthorized"}' }], isError: true });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(JSON.stringify({ error: 'unauthorized' }, null, 2));
+  });
+
+  it('leaves a successful call unflagged', () => {
+    const result = executeResult({ content: [{ type: 'text', text: '{"id":1}' }], structuredContent: { id: 1 }, isError: false });
+    expect(result).toEqual({ content: [{ type: 'text', text: JSON.stringify({ id: 1 }, null, 2) }] });
+  });
+
+  it('is what almyty_execute answers with', () => {
+    const index = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
+    const handler = index.slice(index.indexOf("'almyty_execute'"), index.indexOf("'almyty_search'"));
+    expect(handler).toContain('executeResult(await proxy.callToolResult(');
   });
 });
 

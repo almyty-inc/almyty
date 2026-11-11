@@ -105,7 +105,8 @@ export function MemorySection({ value, onChange }: MemorySectionProps) {
         expiresItself: false,
       }
     : accounts.find((a) => a.id === accountId)
-  const whose = value.whose ?? 'shared'
+  // The agent's own unless someone picked another: shared memory shows every agent's memories.
+  const whose = value.whose ?? 'agent'
   const save = saveOf(value)
   // A number, even one being typed (0 while the box is empty), means "for a number of days".
   const keepsForDays = typeof value.retentionDays === 'number'
@@ -128,7 +129,12 @@ export function MemorySection({ value, onChange }: MemorySectionProps) {
             <Label htmlFor="memory-enabled" className="text-sm font-medium">Remember between conversations</Label>
             <p className="text-xs text-muted-foreground">Before it answers, the agent looks up what it saved earlier.</p>
           </div>
-          <Switch id="memory-enabled" checked={!!value.enabled} onCheckedChange={(enabled) => set({ enabled })} />
+          <Switch
+            id="memory-enabled"
+            checked={!!value.enabled}
+            // Switched on, it is this agent's own memory until someone picks another.
+            onCheckedChange={(enabled) => set({ enabled, ...(enabled && !value.whose ? { whose: 'agent' as MemoryWhose } : {}) })}
+          />
         </div>
 
         {value.enabled && (

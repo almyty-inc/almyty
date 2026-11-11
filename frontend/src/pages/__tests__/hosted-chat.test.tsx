@@ -461,6 +461,35 @@ describe('HostedChatPage', { retry: 2 }, () => {
     )
   })
 
+  it('renders a Markdown table in an assistant reply as a table', async () => {
+    // A dependency-check agent's answer on staging came out as one paragraph of pipes.
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: '| Package | Latest |\n|---|---|\n| express | 5.3.0 |\n| left-pad | 1.3.0 |\n\nSummary: 2 checked.',
+          createdAt: '2026-01-01',
+        },
+      ],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    await sendMessage('check')
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+    await emitAndSettle('done', { reason: 'run.completed' })
+
+    const table = await screen.findByRole('table')
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Package', 'Latest'])
+    expect(screen.getAllByRole('row')).toHaveLength(3)
+    expect(table.textContent).toContain('5.3.0')
+    expect(screen.queryByText(/\|\s*express\s*\|/)).not.toBeInTheDocument()
+  })
+
   it('does not render raw HTML from assistant replies', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })

@@ -7,9 +7,9 @@ import type { AgentRun } from '../../entities/agent-run.entity';
  * `agent_run_events`, in the same transaction as the row write: the step
  * commit, and every writer outside it (cancel, input, an approval and its
  * decision, the reaper, delivery bookkeeping), all through
- * run-event-writer.ts. Nothing reads them yet: `projectRunEvents` folding
- * them back into the row's state is the check that they are complete, and
- * the read path the later steps build on.
+ * run-event-writer.ts. `foldRunEvents` folding them back is the run's
+ * state: readers serve it in place of the row's columns, which are its
+ * cache (durable runs step 5, run-log-source.ts).
  *
  * Two kinds of event. State events carry what the fold needs to rebuild
  * the row: `run_started`, the step events, `memory_changed`,

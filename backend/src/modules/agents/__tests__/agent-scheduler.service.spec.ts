@@ -365,7 +365,7 @@ describe('AgentSchedulerService', () => {
       const saved = await service.scheduleAgent('a1', 'org-1', 15);
 
       expect(saved.settings.modelIssue).toBeUndefined();
-      expect(saved.settings.schedule).toEqual({ enabled: true, kind: 'interval', intervalMinutes: 15, input: {} });
+      expect(saved.settings.schedule).toEqual({ enabled: true, kind: 'interval', intervalMinutes: 15, input: {}, createdAt: expect.any(String) });
     });
   });
 
@@ -419,6 +419,62 @@ describe('AgentSchedulerService', () => {
       expect(queue.getRepeatableJobs).toHaveBeenCalledTimes(1);
       expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('kx');
       expect(queue.add).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── a scheduled run's input has a manual run's shape ───────────────
+
+  describe('a scheduled run gets its input in the shape a manual run sends', () => {
+    const owner = '11111111-1111-4111-8111-000000000001';
+    const workflow = (input: unknown) => ({
+      id: 'a1',
+      organizationId: 'org-1',
+      createdBy: owner,
+      status: AgentStatus.ACTIVE,
+      mode: 'workflow',
+      pipeline: {
+        nodes: [
+          { id: 'input_1', type: 'input', data: { schema: { type: 'object', properties: { invoices: { type: 'string' } }, required: ['invoices'] } } },
+          { id: 'output_1', type: 'output', data: {} },
+        ],
+        edges: [],
+      },
+      settings: { schedule: { enabled: true, intervalMinutes: 10, input } },
+    });
+
+    it('puts bare text in the declared input field of a workflow', async () => {
+      agentRepo.findOne.mockResolvedValue(workflow('Check the March invoices'));
+      await service.handleScheduledExecution({ data: { agentId: 'a1', organizationId: 'org-1', input: 'Check the March invoices' } } as any);
+      expect(executionEngine.execute).toHaveBeenCalledWith(
+        expect.anything(),
+        'org-1',
+        owner,
+        expect.objectContaining({ input: { invoices: 'Check the March invoices' } }),
+      );
+    });
+
+    it('keeps an object input as it is', async () => {
+      agentRepo.findOne.mockResolvedValue(workflow({ invoices: 'all' }));
+      await service.handleScheduledExecution({ data: { agentId: 'a1', organizationId: 'org-1', input: { invoices: 'all' } } } as any);
+      expect(executionEngine.execute).toHaveBeenCalledWith(expect.anything(), 'org-1', owner, expect.objectContaining({ input: { invoices: 'all' } }));
+    });
+
+    it('stores bare text as an object when the schedule is saved', async () => {
+      agentsService.getAgent.mockResolvedValue(workflow({}));
+      const saved = await service.scheduleAgent('a1', 'org-1', { kind: 'interval', intervalMinutes: 15, input: 'Check them' as any });
+      expect(saved.settings.schedule.input).toEqual({ invoices: 'Check them' });
+    });
+
+    it('starts an autonomous run with { message }, as Try it does, not a bare string', async () => {
+      const startRun = jest.fn().mockResolvedValue({ id: 'r1' });
+      (service as any).runtime = { startRun };
+      agentRepo.findOne.mockResolvedValue({ ...workflow({ message: 'Summarise sales' }), mode: 'autonomous', pipeline: { nodes: [], edges: [] } });
+      await service.handleScheduledExecution({ data: { agentId: 'a1', organizationId: 'org-1', input: { message: 'Summarise sales' } } } as any);
+      expect(startRun).toHaveBeenCalledWith('a1', 'org-1', owner, { message: 'Summarise sales' }, expect.anything());
+
+      startRun.mockClear();
+      await service.handleScheduledExecution({ data: { agentId: 'a1', organizationId: 'org-1', input: {} } } as any);
+      expect(startRun).toHaveBeenCalledWith('a1', 'org-1', owner, { message: 'Do your scheduled task now.' }, expect.anything());
     });
   });
 });

@@ -1,5 +1,6 @@
 import { StatusLabel, type ServiceCheck } from '@/components/connect/status-label'
 import { currentProviderFailure, type ProviderHealthFields } from '@/lib/provider-health'
+import { pluralized } from '@/lib/utils'
 
 export type ProviderCheck = ServiceCheck
 
@@ -9,16 +10,28 @@ const KEY_WORDS = /\b40[13]\b|unauthori[sz]ed|forbidden|authentication|invalid[_
  * The provider's key, in two words, by the same rule that makes its models
  * usable: the backend sends `keyChecked` (the key check ran and passed, and
  * the provider is on), and every model the provider lists is usable while
- * it holds. So "Key works" never sits over a list of models that are not.
+ * it holds. So "Key works" never sits over a list of models that are not:
+ * when the connection lists models and none of them can be used now
+ * (`modelCounts`), it says that instead.
  *
  * Otherwise a failed check, or a later call the vendor refused, is "Key
  * rejected" when the provider said the key is wrong and "Check failed"
  * otherwise (a network problem, the provider down); with neither it is
  * "Not checked yet".
  */
-export function providerCheck(p: (ProviderHealthFields & { lastHealthCheckAt?: string | null; keyChecked?: boolean }) | null | undefined): ProviderCheck {
+export function providerCheck(p: (ProviderHealthFields & { lastHealthCheckAt?: string | null; keyChecked?: boolean; modelCounts?: { listed: number; usable: number } | null }) | null | undefined): ProviderCheck {
   if (!p) return { state: 'unchecked', label: 'Not checked yet' }
-  if (p.keyChecked === true) return { state: 'ok', label: 'Key works' }
+  if (p.keyChecked === true) {
+    const counts = p.modelCounts
+    if (counts && counts.listed > 0 && counts.usable === 0) {
+      return {
+        state: 'failed',
+        label: 'No usable models',
+        error: `The key works, but none of the ${pluralized(counts.listed, 'model')} it lists can be used now. Open a model to see why.`,
+      }
+    }
+    return { state: 'ok', label: 'Key works' }
+  }
   // Off: nothing it offers is used until a check passes (its page says why).
   if (p.status === 'inactive') return { state: 'failed', label: 'Inactive', error: currentProviderFailure(p)?.message ?? (p.lastError || undefined) }
   const failure = currentProviderFailure(p)

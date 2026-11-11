@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils'
 export interface BuilderToolbarProps {
   agentName: string
   onAgentNameChange: (name: string) => void
+  /** Why the name was refused (another agent here has it), shown beside it. */
+  nameError?: string | null
   agentStatus: string
   agentMode: 'workflow' | 'autonomous'
   onAgentModeChange: (mode: 'workflow' | 'autonomous') => void
@@ -64,6 +66,7 @@ const VISIBILITY_LABEL = {
 export function BuilderToolbar({
   agentName,
   onAgentNameChange,
+  nameError,
   agentStatus,
   agentMode,
   onAgentModeChange,
@@ -95,12 +98,23 @@ export function BuilderToolbar({
         <Input
           // Sized to the name (within bounds) so the status and visibility
           // sit next to it instead of after a fixed 260px gap.
-          className="text-base sm:text-lg font-semibold border-none shadow-none focus-visible:ring-0 min-w-[8ch] max-w-[140px] sm:max-w-[320px] px-1"
+          className={cn(
+            'text-base sm:text-lg font-semibold border-none shadow-none focus-visible:ring-0 min-w-[8ch] max-w-[140px] sm:max-w-[320px] px-1',
+            nameError && 'text-destructive',
+          )}
           style={{ width: `${Math.max(8, agentName.length + 2)}ch` }}
           value={agentName}
           onChange={(e) => onAgentNameChange(e.target.value)}
           placeholder="Agent name"
+          aria-label="Agent name"
+          aria-invalid={nameError ? true : undefined}
+          aria-describedby={nameError ? 'agent-name-error' : undefined}
         />
+        {nameError && (
+          <span id="agent-name-error" role="alert" className="text-xs text-destructive max-w-[220px] sm:max-w-[320px]">
+            {nameError}
+          </span>
+        )}
         <Badge variant={agentStatus === 'active' ? 'success' : agentStatus === 'error' ? 'destructive' : 'outline'} className="hidden sm:inline-flex">
           {agentStatus ? agentStatus.charAt(0).toUpperCase() + agentStatus.slice(1) : agentStatus}
         </Badge>

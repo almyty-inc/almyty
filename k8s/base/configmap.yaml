@@ -36,6 +36,12 @@ data:
   # difference (docs/design/durable-runs.md). Off here, which is
   # production; the staging and development overlays set it to "true".
   RUN_PROJECTION_CHECK: "false"
+  # Durable runs step 5: the run view, the runs list, a resuming step and
+  # every run write read a run's state from its event log; the row is a
+  # cache, repaired on the next write (docs/design/durable-runs.md). Unset,
+  # it is on everywhere but NODE_ENV=production; off here until staging's
+  # projection check shows no mismatches.
+  RUN_LOG_SOURCE_OF_TRUTH: "false"
 
   # Durable runs, leases (docs/design/durable-runs.md, step 3). Defaults in
   # code; set any of these here (and pass it through api-deployment.yaml)

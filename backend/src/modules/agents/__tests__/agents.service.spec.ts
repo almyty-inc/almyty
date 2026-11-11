@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS } from '../agents.service';
+import { NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS, nextAgentVersion } from '../agents.service';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
 import { AgentReadinessService } from '../agent-readiness.service';
@@ -1495,6 +1495,133 @@ describe('AgentsService', () => {
       expect(result.total).toBe(1);
       expect(result.page).toBe(1);
       expect(result.totalPages).toBe(1);
+    });
+  });
+
+  // ── one name per agent in an organization ───────────────────────────────
+
+  describe('agent names are unique in an organization', () => {
+    const dto: CreateAgentInput = { name: 'Invoices', pipeline: makeValidPipeline() };
+
+    it('refuses to create an agent with a name another agent has, whatever the case and spaces', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      agentRepo.findOne.mockResolvedValue({ id: 'agent-2' });
+
+      await expect(service.createAgent({ ...dto, name: ' invoices ' }, 'org-1', 'user-1')).rejects.toThrow(
+        'That name is already in use in this organization; pick another.',
+      );
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('says nothing about the agent holding the name, which may be someone else\'s private agent', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      // The clash is another user's private agent.
+      agentRepo.findOne.mockResolvedValue({ id: 'agent-9', name: 'Payroll', visibility: 'private', createdBy: 'user-2' });
+
+      const refusal = await service.createAgent({ ...dto, name: 'Payroll' }, 'org-1', 'user-1').catch((e) => e);
+      expect(refusal).toBeInstanceOf(ConflictException);
+      const text = JSON.stringify(refusal.getResponse());
+      for (const leak of ['Payroll', 'agent-9', 'user-2', 'private']) expect(text).not.toContain(leak);
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('creates an agent whose name is free, stored without surrounding spaces', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      agentRepo.findOne.mockResolvedValue(null);
+      agentRepo.create.mockImplementation((a: any) => a);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const saved = await service.createAgent({ ...dto, name: ' Invoices ' }, 'org-1', 'user-1');
+      expect(saved.name).toBe('Invoices');
+    });
+
+    it('refuses to rename an agent to another agent\'s name', async () => {
+      const agent = makeAgent({ name: 'Support' });
+      agentRepo.findOne.mockResolvedValueOnce(agent).mockResolvedValueOnce({ id: 'agent-2' });
+
+      await expect(service.updateAgent('agent-1', { name: 'Invoices' }, 'org-1')).rejects.toThrow(ConflictException);
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('lets an agent keep its own name, or change only its case', async () => {
+      const agent = makeAgent({ name: 'Invoices' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const saved = await service.updateAgent('agent-1', { name: 'INVOICES' }, 'org-1');
+      expect(saved.name).toBe('INVOICES');
+    });
+
+    it('answers a name taken in a race (the unique index) the same way', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      agentRepo.findOne.mockResolvedValue(null);
+      agentRepo.create.mockImplementation((a: any) => a);
+      agentRepo.save.mockRejectedValue(Object.assign(new Error('duplicate key value violates unique constraint "IDX_agents_org_name_unique"'), { code: '23505', constraint: 'IDX_agents_org_name_unique' }));
+
+      await expect(service.createAgent(dto, 'org-1', 'user-1')).rejects.toThrow(ConflictException);
+    });
+
+    it('gives a copy or an import the first free name', async () => {
+      const taken = new Set(['invoices (copy)', 'invoices (copy) (2)']);
+      agentRepo.findOne.mockImplementation(async (opts: any) => {
+        const sql: string = opts.where.name.getSql('name');
+        const wanted = String(opts.where.name.objectLiteralParameters.agentName).trim().toLowerCase();
+        expect(sql).toContain('LOWER(TRIM(name))');
+        return taken.has(wanted) ? { id: 'x' } : null;
+      });
+
+      await expect(service.freeAgentName('org-1', 'Invoices (Copy)')).resolves.toBe('Invoices (Copy) (3)');
+      await expect(service.freeAgentName('org-1', 'Support (Copy)')).resolves.toBe('Support (Copy)');
+    });
+  });
+
+  // ── the version label goes up with each edit ────────────────────────────
+
+  describe('saving an edit bumps the version', () => {
+    beforeEach(() => agentRepo.save.mockImplementation((a: any) => Promise.resolve(a)));
+
+    it('raises the patch number when the pipeline changes', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent({ version: '1.0.0' }));
+      const pipeline = makeValidPipeline();
+      (pipeline.nodes[1] as any).data.userPromptTemplate = '{{input.invoices}}';
+
+      const saved = await service.updateAgent('agent-1', { pipeline }, 'org-1');
+      expect(saved.version).toBe('1.0.1');
+    });
+
+    it('raises it again on the next edit', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent({ version: '1.0.1', description: 'old' }));
+      const saved = await service.updateAgent('agent-1', { description: 'new' }, 'org-1');
+      expect(saved.version).toBe('1.0.2');
+    });
+
+    it('keeps it when the save changes nothing, even with keys in another order', async () => {
+      const agent = makeAgent({ version: '1.0.3' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      // What jsonb hands back has its keys in its own order; the builder sends them in its own.
+      const resent = JSON.parse(JSON.stringify(agent.pipeline), (_k, v) =>
+        v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).reverse()) : v,
+      );
+      const saved = await service.updateAgent('agent-1', { name: agent.name, description: agent.description, pipeline: resent }, 'org-1');
+      expect(saved.version).toBe('1.0.3');
+    });
+
+    it('keeps it for a status or sharing change, which is not an edit', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent({ version: '2.1.0', visibility: 'org' } as any));
+      const saved = await service.updateAgent('agent-1', { status: AgentStatus.INACTIVE }, 'org-1');
+      expect(saved.version).toBe('2.1.0');
+    });
+
+    it('takes the version a caller names', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent({ version: '1.0.0', description: 'old' }));
+      const saved = await service.updateAgent('agent-1', { description: 'new', version: '2.0.0' }, 'org-1');
+      expect(saved.version).toBe('2.0.0');
+    });
+
+    it('starts a label that is not major.minor.patch over at 1.0.1', () => {
+      expect(nextAgentVersion('1.4.9')).toBe('1.4.10');
+      expect(nextAgentVersion('v2')).toBe('1.0.1');
+      expect(nextAgentVersion(undefined)).toBe('1.0.1');
     });
   });
 });

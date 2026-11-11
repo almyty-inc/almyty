@@ -958,6 +958,38 @@ describe('AgentRuntimeService (integration)', () => {
       ).not.toBe(true);
     });
 
+    it('delivers an answer whose check still failed with the marker line, on the run and in the conversation', async () => {
+      agentStore.push(verifyAgent({ maxReviseLoops: 1 }));
+      llmService.chat.mockResolvedValue(
+        checkerReply('{"verdict":"fail","failures":[{"rule":"the total does not match the invoices","evidence":"secret row 7"}]}'),
+      );
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+      run.workingMemory = { verifyRevisions: 1 };
+      await mockRunRepo.save(run);
+
+      await service.processStep(run.id);
+
+      const stored = runStore.find(r => r.id === run.id)!;
+      const line = "Note: this answer's check didn't pass: the total does not match the invoices.";
+      expect(String(stored.output).startsWith(line)).toBe(true);
+      // The evidence quotes what the checker read; it stays off the answer.
+      expect(String(stored.output)).not.toContain('secret row 7');
+      expect(stored.metadata?.verify?.reason).toBe('the total does not match the invoices');
+      const reply = messageStore.find(m => m.role === 'assistant' && m.runId === run.id && !m.metadata?.internal);
+      expect(String(reply?.content).startsWith(line)).toBe(true);
+    });
+
+    it('delivers a passed answer unmarked', async () => {
+      agentStore.push(verifyAgent());
+      llmService.chat.mockResolvedValue(checkerReply('{"verdict":"pass"}'));
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+
+      await service.processStep(run.id);
+
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(String(stored.output)).not.toContain("check didn't pass");
+    });
+
     it('does not run the panel when verify is disabled', async () => {
       agentStore.push(
         makeAgent({

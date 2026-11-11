@@ -12,7 +12,9 @@ class FakeRepo {
     return { id: `t_${++this.idCounter}`, ...partial } as Tool;
   }
   async save(tool: Tool) {
-    this.rows.push(tool);
+    const at = this.rows.findIndex((r) => r.id === tool.id);
+    if (at >= 0) this.rows[at] = tool;
+    else this.rows.push(tool);
     return tool;
   }
   async delete(criteria: any) {
@@ -38,8 +40,9 @@ class FakeRepo {
   private static readonly CLAUSES: Record<string, (r: Tool, p: any) => boolean> = {
     [`"runnerConfig"->>'runnerId' = :runnerId`]: (r, p) => r.runnerConfig?.runnerId === p.runnerId,
     [`t."runnerConfig"->>'runnerId' = :runnerId`]: (r, p) => r.runnerConfig?.runnerId === p.runnerId,
-    ['"organizationId" = :organizationId AND name IN (:...names)']: (r, p) =>
-      r.organizationId === p.organizationId && (p.names as string[]).includes(r.name),
+    [`t."organizationId" = :organizationId AND (t."runnerConfig"->>'runnerId' = :ownerId OR t.name IN (:...names))`]: (r, p) =>
+      r.organizationId === p.organizationId && (r.runnerConfig?.runnerId === p.ownerId || (p.names as string[]).includes(r.name)),
+    ['id IN (:...ids)']: (r, p) => (p.ids as string[]).includes(r.id),
   };
   createQueryBuilder() {
     const self = this;
@@ -60,7 +63,7 @@ class FakeRepo {
         self.rows = self.rows.filter((r) => !filters.every((f) => f(r)));
         return { affected: before - self.rows.length };
       },
-      getMany: async () => self.rows.filter((r) => filters.every((f) => f(r))),
+      getMany: async () => self.rows.filter((r) => filters.every((f) => f(r))).map((r) => ({ ...r })),
     };
     return qb;
   }
@@ -98,18 +101,39 @@ describe('RunnerCapabilityPublisher', () => {
     expect(info.runnerConfig?.requiresWorkspace).toBe(false);
   });
 
-  it('republish on the same runner deletes old rows and inserts fresh ones', async () => {
+  it('republish on the same runner keeps the same rows and ids, never duplicating', async () => {
     const repo = new FakeRepo();
     const pub = new RunnerCapabilityPublisher(repo as any);
     const first = await pub.publish(makeRunner());
-    const second = await pub.publish(makeRunner());
-    // Same set of capabilities; rows are upserted (delete + insert),
-    // never duplicated.
-    expect(repo.rows.length).toBe(second.length);
-    const idsFirst = new Set(first.map((r) => r.id));
-    for (const row of repo.rows) {
-      expect(idsFirst.has(row.id)).toBe(false);
+    // Every daemon restart re-registers. Agents and gateways hold these
+    // tools by id, so the ids must survive.
+    for (let i = 0; i < 10; i++) await pub.publish(makeRunner());
+    const last = await pub.publish(makeRunner());
+    expect(repo.rows).toHaveLength(first.length);
+    expect(last.map((r) => r.id).sort()).toEqual(first.map((r) => r.id).sort());
+  });
+
+  it('a rename keeps the ids and renames the rows', async () => {
+    const repo = new FakeRepo();
+    const pub = new RunnerCapabilityPublisher(repo as any);
+    const first = await pub.publish(makeRunner());
+    const renamed = await pub.publish(makeRunner({ name: 'studio' }));
+    expect(repo.rows).toHaveLength(first.length);
+    expect(renamed.map((r) => r.id).sort()).toEqual(first.map((r) => r.id).sort());
+    expect(repo.rows.every((r) => r.name.startsWith('runner.studio.'))).toBe(true);
+  });
+
+  it('republish clears retired copies of the runner\'s tools', async () => {
+    const repo = new FakeRepo();
+    const pub = new RunnerCapabilityPublisher(repo as any);
+    const first = await pub.publish(makeRunner());
+    // Copies an earlier bug left behind, retired as deleted.
+    for (const row of first) {
+      repo.rows.push({ ...row, id: `${row.id}-copy`, status: ToolStatus.DELETED } as Tool);
     }
+    await pub.publish(makeRunner());
+    expect(repo.rows).toHaveLength(first.length);
+    expect(repo.rows.every((r) => r.status === ToolStatus.ACTIVE)).toBe(true);
   });
 
   it('unpublish drops every capability for the runner', async () => {

@@ -361,6 +361,8 @@ export interface AgentExecution {
     tokens?: { input: number; output: number }
     /** Present when the node carried a routing policy: which card answered and why. */
     routing?: RouteAttribution
+    /** The model a model step answered with, routed or pinned. */
+    model?: string
   }>
   executionTime: number
   totalCost: number

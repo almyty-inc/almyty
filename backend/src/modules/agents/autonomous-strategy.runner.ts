@@ -180,7 +180,8 @@ export class AutonomousStrategyRunner {
     try {
       const response = await this.s.llmProvidersService.chatStream(
         role.providerId,
-        requestFor(role, request),
+        // Every role -- worker, judge, checker, summariser -- is told today's date.
+        { ...requestFor(role, request), currentTime: true },
         run.organizationId,
         principalOfRun(run),
         () => undefined,
