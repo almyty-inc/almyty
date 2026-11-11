@@ -232,6 +232,25 @@ describe('a tool step lists what the tool takes', () => {
     expect(screen.queryByText(/Parameter mapping/i)).not.toBeInTheDocument()
   })
 
+  it('never offers two tools under the same words in the tool picker', async () => {
+    // Frankfurter's spec gives /{start_date}.. and /{start_date}..{end_date}
+    // one summary; the picker listed "Get rates for a time period" twice.
+    const period = (id: string, endpoint: string) => ({
+      id,
+      name: id,
+      metadata: { displayName: 'Get rates for a time period', sourceOperation: { method: 'GET', endpoint } },
+    })
+    vi.mocked(toolsApi.getAll).mockResolvedValue({ tools: [period('fx_from', '/{start_date}..'), period('fx_range', '/{start_date}..{end_date}')] } as any)
+    const tool = n('tool_1', 'tool_call', { parameterMapping: [] })
+    const { onUpdateNode } = renderPanel(tool, [input, draft, tool])
+    const picker = await screen.findByLabelText('tool-step-tool')
+    await waitFor(() => expect(within(picker).getAllByRole('option')).toHaveLength(3))
+    const labels = within(picker).getAllByRole('option').slice(1).map((o) => o.textContent)
+    expect(labels).toEqual(['Get rates for a time period (GET /{start_date}..)', 'Get rates for a time period (GET /{start_date}..{end_date})'])
+    fireEvent.change(picker, { target: { value: 'fx_range' } })
+    expect(onUpdateNode).toHaveBeenCalledWith('tool_1', expect.objectContaining({ toolId: 'fx_range', toolLabel: 'Get rates for a time period (GET /{start_date}..{end_date})' }))
+  })
+
   it('"Ask the user" reads the run input and gives the input step the field', async () => {
     const tool = n('tool_1', 'tool_call', { toolId: 'tool-weather', parameterMapping: [] })
     const { onUpdateNode } = renderPanel(tool, [input, draft, tool])

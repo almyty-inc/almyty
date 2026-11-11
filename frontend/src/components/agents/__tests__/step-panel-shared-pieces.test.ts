@@ -17,9 +17,11 @@ describe('workflow step panels', () => {
     expect(panel).not.toMatch(/<input\s+type="checkbox"/)
   })
 
-  it('lists tools by readable name in the model and tool steps', () => {
-    expect(panel).toMatch(/import \{ readableToolName \} from '@\/lib\/tool-names'/)
+  it('lists tools by readable name, unique within the list, in the model and tool steps', () => {
+    expect(panel).toMatch(/import \{ distinctToolNames \} from '@\/lib\/tool-names'/)
     expect(panel).not.toMatch(/>\s*\{(t|tool)\.name\}/)
+    // readableToolName alone repeats a summary two operations share.
+    expect(panel).not.toMatch(/readableToolName\(/)
   })
 
   it('shows the readable tool name on the canvas', () => {
