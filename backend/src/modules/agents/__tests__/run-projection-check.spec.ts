@@ -140,9 +140,19 @@ describe('the projection check holds for every way a run is written', () => {
 
 describe('a difference is logged and counted, and the write still succeeds', () => {
   const previous = process.env.RUN_PROJECTION_CHECK;
+  // With the log not the source of truth (RUN_LOG_SOURCE_OF_TRUTH off): the
+  // write starts from the row and the check after it finds the difference.
+  // With it on, the write's own read finds it first and repairs the row
+  // (run-log-source.spec.ts).
+  const previousSource = process.env.RUN_LOG_SOURCE_OF_TRUTH;
+  beforeEach(() => {
+    process.env.RUN_LOG_SOURCE_OF_TRUTH = 'false';
+  });
   afterEach(() => {
     if (previous === undefined) delete process.env.RUN_PROJECTION_CHECK;
     else process.env.RUN_PROJECTION_CHECK = previous;
+    if (previousSource === undefined) delete process.env.RUN_LOG_SOURCE_OF_TRUTH;
+    else process.env.RUN_LOG_SOURCE_OF_TRUTH = previousSource;
   });
 
   const service = () => {

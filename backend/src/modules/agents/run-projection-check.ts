@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import type Redis from 'ioredis';
@@ -6,7 +5,16 @@ import type Redis from 'ioredis';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { MetricStatus, MetricType } from '../../entities/usage-metric.entity';
 import { RunWritten, onRunWritten } from './run-event-writer';
-import { RunProjection, RunState, asStored, foldRunEvents, storedRunState } from './run-events';
+import { RunProjection, foldRunEvents, storedRunState } from './run-events';
+import {
+  FieldDifference,
+  ProjectionMismatch,
+  RUN_STATE_FIELDS,
+  describeDifference,
+  onLogMismatch,
+  rowField,
+  sameJson,
+} from './run-log-source';
 
 /**
  * The projection check, durable runs step 2 ("shadow read",
@@ -33,45 +41,11 @@ import { RunProjection, RunState, asStored, foldRunEvents, storedRunState } from
  * projection, folded from the cache, no longer matches.
  */
 
-/** The row's fields the log describes, in the order a difference is reported. */
-export const RUN_STATE_FIELDS: ReadonlyArray<keyof RunState> = [
-  'status',
-  'currentStep',
-  'totalCost',
-  'totalTokens',
-  'toolCallCount',
-  'executionTime',
-  'output',
-  'error',
-  'workingMemory',
-  'metadata',
-  'steps',
-];
-
-/** One differing field: hashes of both sides, and for steps where they part. Never the values. */
-export interface FieldDifference {
-  field: keyof RunState;
-  rowHash: string;
-  projectionHash: string;
-  /** Steps only: how many each side holds and the first index they disagree at. */
-  rowLength?: number;
-  projectionLength?: number;
-  firstDifferentIndex?: number;
-}
-
-export interface ProjectionMismatch {
-  runId: string;
-  organizationId: string | null;
-  /** The run's head after the write: the seq the projection was compared at. */
-  seq: number;
-  /** The head the fold started from. */
-  fromSeq: number;
-  /** Where the fold started: the cached projection, or the row as locked. */
-  from: 'cache' | 'row';
-  differences: FieldDifference[];
-  /** The fold itself refused the events (a gap, a repeat, a step out of order). */
-  foldError?: string;
-}
+// The comparison is shared with the readers that serve a run from its log
+// (durable runs step 5, run-log-source.ts), which report a difference the
+// same way.
+export { RUN_STATE_FIELDS };
+export type { FieldDifference, ProjectionMismatch };
 
 export interface ProjectionCheckStats {
   checks: number;
@@ -84,40 +58,6 @@ export interface ProjectionCheckStats {
 
 /** Default memory the cached projections may hold, per process. */
 export const DEFAULT_PROJECTION_CACHE_BYTES = 32 * 1024 * 1024;
-
-const isPlainObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
-
-/** JSON equality that ignores key order, the way the json columns may hand keys back in another order. */
-function sameJson(a: any, b: any): boolean {
-  if (a === b) return true;
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b) || a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) if (!sameJson(a[i], b[i])) return false;
-    return true;
-  }
-  if (isPlainObject(a)) {
-    if (!isPlainObject(b)) return false;
-    const ak = Object.keys(a);
-    if (ak.length !== Object.keys(b).length) return false;
-    for (const k of ak) if (!(k in b) || !sameJson(a[k], b[k])) return false;
-    return true;
-  }
-  return false;
-}
-
-/** Keys sorted, so equal values hash equal whatever order their keys are in. */
-function canonical(value: any): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (isPlainObject(value)) {
-    return `{${Object.keys(value)
-      .sort()
-      .map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value ?? null);
-}
-
-const hashOf = (value: any): string => createHash('sha256').update(canonical(value)).digest('hex').slice(0, 16);
 
 /**
  * The check itself, without Nest: what the service runs on every write,
@@ -210,7 +150,7 @@ export class RunProjectionChecker {
         // Same values, keys in another order: not a difference.
         const rowStored = JSON.parse(rowText);
         if (sameJson(rowStored, JSON.parse(projectedText))) continue;
-        differences.push(describe(field, rowStored, projected));
+        differences.push(describeDifference(field, rowStored, projected));
       }
     }
 
@@ -245,36 +185,6 @@ export class RunProjectionChecker {
   }
 }
 
-/** The row's value of a field, normalised the way storedRunState does it. */
-function rowField(row: RunWritten['after'], field: keyof RunState): any {
-  switch (field) {
-    case 'currentStep':
-      return row.currentStep;
-    case 'totalCost':
-    case 'totalTokens':
-    case 'toolCallCount':
-    case 'executionTime':
-      return row[field] ?? 0;
-    case 'steps':
-      return row.steps ?? [];
-    default:
-      return (row as any)[field] ?? null;
-  }
-}
-
-function describe(field: keyof RunState, rowValue: any, projected: any): FieldDifference {
-  const difference: FieldDifference = { field, rowHash: hashOf(rowValue), projectionHash: hashOf(projected) };
-  if (field === 'steps' && Array.isArray(rowValue) && Array.isArray(projected)) {
-    difference.rowLength = rowValue.length;
-    difference.projectionLength = projected.length;
-    const shorter = Math.min(rowValue.length, projected.length);
-    let i = 0;
-    while (i < shorter && sameJson(rowValue[i], asStored(projected[i]))) i++;
-    difference.firstDifferentIndex = i;
-  }
-  return difference;
-}
-
 /** Whether the projection check runs: RUN_PROJECTION_CHECK (true/1/on). Off when unset. */
 export function projectionCheckEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return ['true', '1', 'on', 'yes'].includes(String(env.RUN_PROJECTION_CHECK ?? '').trim().toLowerCase());
@@ -305,6 +215,7 @@ export class RunProjectionCheckService implements OnModuleInit, OnModuleDestroy 
   readonly enabled = projectionCheckEnabled();
   readonly checker: RunProjectionChecker;
   private stop?: () => void;
+  private stopLogMismatches?: () => void;
   private summaryTimer?: NodeJS.Timeout;
   private lastSummaryChecks = 0;
 
@@ -320,6 +231,13 @@ export class RunProjectionCheckService implements OnModuleInit, OnModuleDestroy 
   }
 
   onModuleInit(): void {
+    // A reader served a run from its log and the row cache differed (durable
+    // runs step 5, run-log-source.ts): reported and counted as a mismatch
+    // found here would be, whether or not writes are checked.
+    this.stopLogMismatches = onLogMismatch((mismatch) => {
+      this.checker.stats.mismatches++;
+      this.report(mismatch);
+    });
     if (!this.enabled) return;
     this.stop = onRunWritten((written) => {
       const before = this.checker.stats.checks;
@@ -332,6 +250,8 @@ export class RunProjectionCheckService implements OnModuleInit, OnModuleDestroy 
   }
 
   onModuleDestroy(): void {
+    this.stopLogMismatches?.();
+    this.stopLogMismatches = undefined;
     this.stop?.();
     this.stop = undefined;
     if (this.summaryTimer) clearInterval(this.summaryTimer);
@@ -373,6 +293,7 @@ export class RunProjectionCheckService implements OnModuleInit, OnModuleDestroy 
       seq: mismatch.seq,
       fromSeq: mismatch.fromSeq,
       from: mismatch.from,
+      ...(mismatch.reader ? { reader: mismatch.reader } : {}),
       fields: mismatch.differences.map((d) => d.field),
       differences: mismatch.differences,
       ...(mismatch.foldError ? { foldError: mismatch.foldError } : {}),
@@ -384,6 +305,7 @@ export class RunProjectionCheckService implements OnModuleInit, OnModuleDestroy 
         runId: mismatch.runId,
         seq: mismatch.seq,
         fields: mismatch.differences.map((d) => d.field),
+        ...(mismatch.reader ? { reader: mismatch.reader } : {}),
         ...(mismatch.foldError ? { foldError: true } : {}),
       },
     });
