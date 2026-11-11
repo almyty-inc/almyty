@@ -441,6 +441,8 @@ function transactionalTools(quota: ReturnType<typeof quotaManager>) {
   const qb: any = {};
   for (const m of ['delete', 'from', 'where', 'andWhere']) qb[m] = jest.fn(() => qb);
   qb.execute = jest.fn().mockResolvedValue({ affected: 0 });
+  // The publisher reads the rows it already holds first: none here.
+  qb.getMany = jest.fn().mockResolvedValue([]);
   const toolRepoInTx: any = {
     createQueryBuilder: jest.fn(() => qb),
     create: jest.fn((x: any) => x),
