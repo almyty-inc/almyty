@@ -5,6 +5,7 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { RunEventDraft } from './run-events';
 import { RunChange, writeRun } from './run-event-writer';
 import { StepOutcome, claimRun, heldBy, holdLease, runLeaseConfig } from './run-lease';
+import { serveRunFromLog } from './run-log-source';
 import { CallFinished, StepJournal } from './run-resume';
 import { hidePersonalDataAlways } from './run-log-privacy';
 import { UnknownOutcomeCall, approvalReason, decisionForModel, needsCareOnResume, reattempt, tellModel, unknownWriteSettings } from './unknown-writes';
@@ -357,7 +358,7 @@ export class AgentStepProcessor {
   }
 
   private async processLeasedStep(runId: string, leaseOwner: string): Promise<'continue' | 'done' | 'waiting'> {
-    const run = await this.s.runRepository.findOne({
+    const row = await this.s.runRepository.findOne({
       where: { id: runId },
       relations: { agent: true },
       // Narrow the joined agent: `pipeline` and `metadata` are the two
@@ -365,10 +366,13 @@ export class AgentStepProcessor {
       // path. Still one query.
       select: { agent: { ...AGENT_STEP_COLUMNS } } as any,
     });
-    if (!run) {
+    if (!row) {
       this.s.logger.warn(`Run ${runId} not found, skipping`);
       return 'done';
     }
+    // The step works on the run as its log describes it, not the row's cache
+    // of it (durable runs step 5, run-log-source.ts).
+    const { run } = await serveRunFromLog(this.s.runRepository, row, 'step');
     // The claim's token: every write this step makes is fenced on it (heldBy).
     run.leaseOwner = leaseOwner;
 

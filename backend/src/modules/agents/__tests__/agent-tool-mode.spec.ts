@@ -18,6 +18,7 @@ import { REFUND_TOOL, gatedExecutor } from '../../tools/__tests__/gated-executor
 import { META_TOOL_DEFINITIONS } from '../../tool-discovery/meta-tools';
 import { decideToolMode, estimateToolTokens, thresholdTokens, toolModeProblems, toolModeSettings } from '../agent-tool-mode';
 import { anthropicText, anthropicTool, runAgent } from './autonomous-harness';
+import { writeRun } from '../run-event-writer';
 
 /**
  * Tool mode (docs/design/code-mode.md, part E): how an agent shows the
@@ -223,7 +224,8 @@ describe('tool mode: an approval rule holds a call made through call_tool', () =
 
     const [row] = await harness.approvalRequests.find({ where: { runId: 'run-1' } });
     await harness.approvalRequests.update({ id: row.id }, { status: 'approved' });
-    await result.runRepository.update({ id: 'run-1' }, { status: AgentRunStatus.RUNNING });
+    // Resumed through writeRun, as the runtime does: the log is the run's state (durable runs step 5).
+    await writeRun(result.runRepository as any, { id: 'run-1' }, { status: AgentRunStatus.RUNNING });
     await result.drive();
 
     expect(mockedAxios).toHaveBeenCalledTimes(1);

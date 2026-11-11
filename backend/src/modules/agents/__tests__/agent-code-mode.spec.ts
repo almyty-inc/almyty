@@ -14,6 +14,10 @@ import { NodeSandboxService } from '../../tools/node-sandbox/node-sandbox.servic
 import { CodeModeService } from '../../code-mode/code-mode.service';
 import { RUN_CODE } from '../../tool-discovery/meta-tools';
 import { anthropicText, anthropicTool, runAgent } from './autonomous-harness';
+import { writeRun } from '../run-event-writer';
+
+/** Resume a waiting run the way the runtime does, through writeRun: the log is the run's state (durable runs step 5). */
+const resume = (result: { runRepository: any }) => writeRun(result.runRepository, { id: 'run-1' }, { status: AgentRunStatus.RUNNING });
 
 jest.setTimeout(60_000);
 
@@ -143,7 +147,7 @@ describe('code mode: an autonomous run', () => {
 
     // A person approves: both run, through the executor, with the approval, under the script.
     approvalRows[0].status = 'approved';
-    await result.runRepository.update({ id: 'run-1' }, { status: AgentRunStatus.RUNNING });
+    await resume(result);
     await result.drive();
     expect(executeTool).toHaveBeenCalledTimes(3);
     for (const call of executeTool.mock.calls.slice(1)) {
@@ -176,7 +180,7 @@ describe('code mode: an autonomous run', () => {
     });
     approvalRows[0].status = 'rejected';
     approvalRows[0].decisionReason = 'not this week';
-    await result.runRepository.update({ id: 'run-1' }, { status: AgentRunStatus.RUNNING });
+    await resume(result);
     await result.drive();
     expect(executeTool).toHaveBeenCalledTimes(1);
     expect(executions.rows()[0]).toMatchObject({ status: 'rejected' });

@@ -52,6 +52,8 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # Durable runs: every run write is compared with its event log (docs/design/durable-runs.md).
       - RUN_PROJECTION_CHECK=true
+      # Durable runs step 5: a run's state is read from its event log; the row is a cache.
+      - RUN_LOG_SOURCE_OF_TRUTH=true
     depends_on:
       postgres:
         condition: service_healthy

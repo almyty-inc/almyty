@@ -14,11 +14,13 @@ import { DataSource, Repository } from 'typeorm';
 
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { AgentRun, AgentMode, AgentRunStatus } from '../../entities/agent-run.entity';
+import { AgentRunEvent } from '../../entities/agent-run-event.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-events.helper';
 import { mergeMetadata, writeRun } from '../../modules/agents/run-event-writer';
+import { projectRunEvents, storedRunState } from '../../modules/agents/run-events';
 import { RunProjectionCheckService } from '../../modules/agents/run-projection-check';
 import { watchRunProjection } from '../fake-run-events';
 
@@ -117,33 +119,55 @@ describeIfDb('durable runs step 2 (real Postgres and Redis)', () => {
     }
   });
 
-  it('a write around writeRun: logged and counted in usage_metrics, the write itself committed', async () => {
+  it.each([
+    // Step 2 alone: the write starts from the row, the check after it finds the difference at the new head.
+    ['false', 'check'],
+    // Step 5: the write's own read of the log finds it at the head it read, starts from the log, and repairs the row.
+    ['true', 'write'],
+  ])('a write around writeRun (RUN_LOG_SOURCE_OF_TRUTH=%s): logged and counted in usage_metrics, the write itself committed', async (source, found) => {
     const previous = process.env.RUN_PROJECTION_CHECK;
+    const previousSource = process.env.RUN_LOG_SOURCE_OF_TRUTH;
     process.env.RUN_PROJECTION_CHECK = 'true';
+    process.env.RUN_LOG_SOURCE_OF_TRUTH = source;
     const service = new RunProjectionCheckService(new MetricsRecorderService(ds.getRepository(UsageMetric)));
     jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
     jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined);
     service.onModuleInit();
     try {
       const run = await newRun();
-      await writeRun(runs, { id: run.id }, { currentStep: 1 });
+      const first = await writeRun(runs, { id: run.id }, { currentStep: 1 });
       await runs.update({ id: run.id }, { workingMemory: { injected: 'outside the log' } } as any);
       const written = await writeRun(runs, { id: run.id }, { currentStep: 2 });
       expect(written).toBeTruthy();
-      expect((await runs.findOneByOrFail({ id: run.id })).currentStep).toBe(2);
+      const row = await runs.findOneByOrFail({ id: run.id });
+      expect(row.currentStep).toBe(2);
 
       let rows: UsageMetric[] = [];
       for (let i = 0; i < 50 && !rows.length; i++) {
         rows = await ds.getRepository(UsageMetric).find({ where: { type: 'run_projection_mismatch' as any, organizationId: orgId } });
+        rows = rows.filter((r) => r.dimensions?.runId === run.id);
         if (!rows.length) await new Promise((r) => setTimeout(r, 20));
       }
       expect(rows).toHaveLength(1);
-      expect(rows[0].dimensions).toEqual({ runId: run.id, seq: written!.headSeq, fields: ['workingMemory'] });
+      if (found === 'check') {
+        expect(rows[0].dimensions).toEqual({ runId: run.id, seq: written!.headSeq, fields: ['workingMemory'] });
+        expect(row.workingMemory).toEqual({ injected: 'outside the log' });
+      } else {
+        expect(rows[0].dimensions).toEqual({ runId: run.id, seq: first!.headSeq, fields: ['workingMemory'], reader: 'write' });
+        // The log won: the row cache is the projection again.
+        expect(row.workingMemory).toEqual(first!.workingMemory ?? null);
+        const log = await ds.getRepository(AgentRunEvent).find({ where: { runId: run.id }, order: { seq: 'ASC' } });
+        const { headSeq, ...state } = projectRunEvents(log);
+        expect(headSeq).toBe(row.headSeq);
+        expect(state).toEqual(storedRunState(row));
+      }
       expect(JSON.stringify(rows[0])).not.toContain('outside the log');
     } finally {
       service.onModuleDestroy();
       if (previous === undefined) delete process.env.RUN_PROJECTION_CHECK;
       else process.env.RUN_PROJECTION_CHECK = previous;
+      if (previousSource === undefined) delete process.env.RUN_LOG_SOURCE_OF_TRUTH;
+      else process.env.RUN_LOG_SOURCE_OF_TRUTH = previousSource;
     }
   });
 

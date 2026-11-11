@@ -24,7 +24,9 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { AgentRunEvent } from '../../entities/agent-run-event.entity';
 import { Organization } from '../../entities/organization.entity';
 import { AgentRuntimeEventsHelper } from '../../modules/agents/agent-runtime-events.helper';
+import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
 import { projectRunEvents, storedRunState } from '../../modules/agents/run-events';
+import { ProjectionMismatch, onLogMismatch, resetRunLogSource } from '../../modules/agents/run-log-source';
 import { claimRun } from '../../modules/agents/run-lease';
 import { TOOL_CHARGE, TOOL_EMAIL, answers, callsTools, externalService, never, resumeAgent, resumeRun, resumeWorkers } from '../../modules/agents/__tests__/resume-harness';
 import { watchRunProjection } from '../fake-run-events';
@@ -272,5 +274,71 @@ describeIfDb('durable runs step 4: resume and idempotency keys (real Postgres an
     expect(w.toolCalls.map((c) => c.toolId)).toEqual([TOOL_CHARGE, TOOL_EMAIL]);
     expect(w.modelCalls).toHaveLength(3);
     await expectSound(runId);
+  });
+
+  it('step 5, the log is the source of truth: a run whose row cache was corrupted is served and resumed from its log, and the cache is repaired', async () => {
+    const mismatches: ProjectionMismatch[] = [];
+    const stop = onLogMismatch((m) => mismatches.push(m));
+    const previous = process.env.RUN_LOG_SOURCE_OF_TRUTH;
+    process.env.RUN_LOG_SOURCE_OF_TRUTH = 'true';
+    try {
+      // The same run left alone, for comparison.
+      const clean = await start([callsTools([charge]), answers('Charged 40 EUR.')]);
+      expect(await drive(clean.w.worker(), clean.runId)).toBe('done');
+      const uninterrupted = await rowOf(clean.runId);
+
+      const { runId, service, w } = await start([callsTools([charge]), answers('Charged 40 EUR.')]);
+      expect(await w.worker().processStep(runId)).toBe('continue');
+      const logged = await rowOf(runId);
+      expect(logged.steps.length).toBeGreaterThan(0);
+
+      // Something writes the row around writeRun: its steps and working
+      // memory no longer are what the log says.
+      await ds.query(`UPDATE agent_runs SET steps = $2, "workingMemory" = $3 WHERE id = $1`, [
+        runId,
+        JSON.stringify([]),
+        JSON.stringify({ corrupted: 'SECRET-CONTENT' }),
+      ]);
+      // Nothing held in memory: the projection comes from the log in Postgres.
+      resetRunLogSource();
+
+      // The run view serves the log.
+      const runtime: any = Object.create(AgentRuntimeService.prototype);
+      Object.assign(runtime, { logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn() }, runRepository: runs });
+      const viewed: AgentRun = await runtime.getRun(runId, orgId, agentId);
+      expect(viewed.steps).toEqual(logged.steps);
+      expect(viewed.workingMemory).toEqual(logged.workingMemory);
+      expect(mismatches).toHaveLength(1);
+      expect(mismatches[0]).toMatchObject({ runId, seq: logged.headSeq, from: 'log', reader: 'run_view' });
+      expect(mismatches[0].differences.map((d) => d.field).sort()).toEqual(['steps', 'workingMemory']);
+      expect(JSON.stringify(mismatches)).not.toContain('SECRET-CONTENT');
+      // A read writes nothing: the row is still the corrupted cache.
+      expect((await rowOf(runId)).steps).toEqual([]);
+
+      // The next step resumes from the log and finishes the run.
+      expect(await drive(w.worker(), runId)).toBe('done');
+
+      const { log, row } = await expectSound(runId);
+      expect(row.status).toBe(AgentRunStatus.COMPLETED);
+      expect(row.steps.map((s: any) => s.type)).toEqual(uninterrupted.steps.map((s: any) => s.type));
+      expect(row.steps.slice(0, logged.steps.length)).toEqual(logged.steps);
+      expect(row.workingMemory).not.toHaveProperty('corrupted');
+      expect(row.totalCost).toBeCloseTo(uninterrupted.totalCost, 10);
+      expect(row.totalTokens).toBe(uninterrupted.totalTokens);
+      expect(service.effects).toHaveLength(1);
+      expect(w.modelCalls).toHaveLength(2);
+      // The repair is not on the log: its events describe the run, not the cache.
+      expect(ofType(log, 'steps_reset')).toHaveLength(0);
+      expect(ofType(log, 'step_replaced')).toHaveLength(0);
+
+      // Repaired: served again from a cold read, nothing differs.
+      resetRunLogSource();
+      await runtime.getRun(runId, orgId, agentId);
+      expect(mismatches).toHaveLength(1);
+    } finally {
+      stop();
+      if (previous === undefined) delete process.env.RUN_LOG_SOURCE_OF_TRUTH;
+      else process.env.RUN_LOG_SOURCE_OF_TRUTH = previous;
+    }
   });
 });
