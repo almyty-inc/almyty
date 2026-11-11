@@ -14,6 +14,10 @@ import { AgentRunStatus } from '../../../entities/agent-run.entity';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 import { REFUND_TOOL, gatedExecutor } from '../../tools/__tests__/gated-executor.harness';
 import { anthropicText, anthropicTool, runAgent } from './autonomous-harness';
+import { writeRun } from '../run-event-writer';
+
+/** Resume a waiting run the way the runtime does, through writeRun: the log is the run's state (durable runs step 5). */
+const resume = (result: { runRepository: any }) => writeRun(result.runRepository, { id: 'run-1' }, { status: AgentRunStatus.RUNNING });
 
 /**
  * The autonomous runtime and an approval policy's amount rule, end to
@@ -82,7 +86,7 @@ describe('approval over an amount in an autonomous agent', () => {
     expect(harness.audit.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'held' }));
 
     // A second look while it is still pending changes nothing.
-    await result.runRepository.update({ id: 'run-1' }, { status: AgentRunStatus.RUNNING });
+    await resume(result);
     await result.drive();
     expect(mockedAxios).not.toHaveBeenCalled();
     expect(result.runRepository.row('run-1')!.status).toBe(AgentRunStatus.WAITING_APPROVAL);
@@ -90,7 +94,7 @@ describe('approval over an amount in an autonomous agent', () => {
     // Approved (what ApprovalsService.decide and the runtime's listener do).
     const [row] = await harness.approvalRequests.find({ where: { runId: 'run-1' } });
     await harness.approvalRequests.update({ id: row.id }, { status: 'approved' });
-    await result.runRepository.update({ id: 'run-1' }, { status: AgentRunStatus.RUNNING });
+    await resume(result);
     await result.drive();
 
     expect(mockedAxios).toHaveBeenCalledTimes(1);
