@@ -464,7 +464,7 @@ export class AgentsController {
       }
 
       const duplicate = await this.agentsService.createAgent({
-        name: `${original.name} (Copy)`,
+        name: await this.agentsService.freeAgentName(organizationId, `${original.name} (Copy)`),
         description: original.description,
         pipeline: original.pipeline,
         variables: original.variables,

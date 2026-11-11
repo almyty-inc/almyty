@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS } from '../agents.service';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
@@ -1495,6 +1495,72 @@ describe('AgentsService', () => {
       expect(result.total).toBe(1);
       expect(result.page).toBe(1);
       expect(result.totalPages).toBe(1);
+    });
+  });
+
+  // ── one name per agent in an organization ───────────────────────────────
+
+  describe('agent names are unique in an organization', () => {
+    const dto: CreateAgentInput = { name: 'Invoices', pipeline: makeValidPipeline() };
+
+    it('refuses to create an agent with a name another agent has, whatever the case and spaces', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      agentRepo.findOne.mockResolvedValue({ id: 'agent-2' });
+
+      await expect(service.createAgent({ ...dto, name: ' invoices ' }, 'org-1', 'user-1')).rejects.toThrow(ConflictException);
+      await expect(service.createAgent({ ...dto, name: ' invoices ' }, 'org-1', 'user-1')).rejects.toThrow(
+        'An agent called "invoices" already exists here. Choose another name.',
+      );
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('creates an agent whose name is free, stored without surrounding spaces', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      agentRepo.findOne.mockResolvedValue(null);
+      agentRepo.create.mockImplementation((a: any) => a);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const saved = await service.createAgent({ ...dto, name: ' Invoices ' }, 'org-1', 'user-1');
+      expect(saved.name).toBe('Invoices');
+    });
+
+    it('refuses to rename an agent to another agent\'s name', async () => {
+      const agent = makeAgent({ name: 'Support' });
+      agentRepo.findOne.mockResolvedValueOnce(agent).mockResolvedValueOnce({ id: 'agent-2' });
+
+      await expect(service.updateAgent('agent-1', { name: 'Invoices' }, 'org-1')).rejects.toThrow(ConflictException);
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('lets an agent keep its own name, or change only its case', async () => {
+      const agent = makeAgent({ name: 'Invoices' });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const saved = await service.updateAgent('agent-1', { name: 'INVOICES' }, 'org-1');
+      expect(saved.name).toBe('INVOICES');
+    });
+
+    it('answers a name taken in a race (the unique index) the same way', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      agentRepo.findOne.mockResolvedValue(null);
+      agentRepo.create.mockImplementation((a: any) => a);
+      agentRepo.save.mockRejectedValue(Object.assign(new Error('duplicate key value violates unique constraint "IDX_agents_org_name_unique"'), { code: '23505', constraint: 'IDX_agents_org_name_unique' }));
+
+      await expect(service.createAgent(dto, 'org-1', 'user-1')).rejects.toThrow(ConflictException);
+    });
+
+    it('gives a copy or an import the first free name', async () => {
+      const taken = new Set(['invoices (copy)', 'invoices (copy) (2)']);
+      agentRepo.findOne.mockImplementation(async (opts: any) => {
+        const sql: string = opts.where.name.getSql('name');
+        const wanted = String(opts.where.name.objectLiteralParameters.agentName).trim().toLowerCase();
+        expect(sql).toContain('LOWER(TRIM(name))');
+        return taken.has(wanted) ? { id: 'x' } : null;
+      });
+
+      await expect(service.freeAgentName('org-1', 'Invoices (Copy)')).resolves.toBe('Invoices (Copy) (3)');
+      await expect(service.freeAgentName('org-1', 'Support (Copy)')).resolves.toBe('Support (Copy)');
     });
   });
 });
