@@ -11,7 +11,7 @@ import { Slider } from '@/components/ui/slider'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
-import { readableToolName } from '@/lib/tool-names'
+import { distinctToolNames } from '@/lib/tool-names'
 import { pluralized } from '@/lib/utils'
 import { Disclosure } from '@/components/ui/disclosure'
 import { CodeEditor } from '@/components/ui/code-editor'
@@ -355,6 +355,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
   const [showAllTools, setShowAllTools] = useState(false)
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
   const toolList = tools as Array<Pick<Tool, 'id' | 'name'>>
+  const toolNames = useMemo(() => distinctToolNames(toolList as any[]), [toolList])
 
   return (
     <div className="space-y-3">
@@ -439,7 +440,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
                     {groups.map(([source, groupTools]) => {
                       const q = toolSearch.toLowerCase()
                       const filtered = toolSearch
-                        ? (groupTools as any[]).filter((t) => t.name?.toLowerCase().includes(q) || readableToolName(t).toLowerCase().includes(q))
+                        ? (groupTools as any[]).filter((t) => t.name?.toLowerCase().includes(q) || (toolNames.get(t.id) ?? '').toLowerCase().includes(q))
                         : (groupTools as any[])
                       if (filtered.length === 0) return null
                       const groupIds = (groupTools as any[]).map((t) => t.id)
@@ -473,7 +474,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
                                   }}
                                 />
                                 <label htmlFor={id} className="min-w-0 cursor-pointer truncate text-sm" title={tool.name}>
-                                  {readableToolName(tool)}
+                                  {toolNames.get(tool.id)}
                                 </label>
                               </div>
                             )
@@ -519,6 +520,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
 // --- Tool call ---
 function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; nodes: Node[]; tools: any[]; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const toolList = tools as Array<Pick<Tool, 'id' | 'name'> & { operation?: { name?: string | null } | null }>
+  const toolNames = useMemo(() => distinctToolNames(toolList as any[]), [toolList])
   const tool = tools.find((t) => t.id === node.data.toolId)
   const params = toolParameters(tool)
   const mapping = node.data.parameterMapping
@@ -538,7 +540,7 @@ function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; node
               toolId: v,
               toolName: picked?.name || '',
               // What the step shows on the canvas; toolName stays the name agents call.
-              toolLabel: picked ? readableToolName(picked) : '',
+              toolLabel: picked ? toolNames.get(picked.id) ?? '' : '',
             })
           }}
         >
@@ -554,7 +556,7 @@ function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; node
             {toolList.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">No tools yet. Make some from an API, or under Tools.</div>}
             {toolList.map((t) => (
               <SelectItem key={t.id} value={t.id} title={t.name}>
-                {readableToolName(t)}
+                {toolNames.get(t.id)}
               </SelectItem>
             ))}
           </SelectContent>

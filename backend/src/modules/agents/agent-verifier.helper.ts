@@ -73,6 +73,41 @@ export function stripClosingFence(text: string): string {
   return text.slice(0, end);
 }
 
+/** Per tool result and in all: what a checker is shown of the run's evidence. */
+const EVIDENCE_PER_RESULT = 8_000;
+const EVIDENCE_TOTAL = 40_000;
+
+/**
+ * What an autonomous run was asked and what its tools returned: the ground a
+ * checker judges the final answer against. Without it a checker had only the
+ * answer, so "is this version what npm returned?" was judged from the
+ * checker's own (stale) knowledge, and a correct answer was failed and sent
+ * back for revision (lodash 4.18.1 "is not the latest, 4.17.21 is").
+ * Bounded so a run that read large payloads cannot blow the checker's context.
+ */
+export function runEvidence(run: { input?: unknown; steps?: Array<{ type?: string; input?: any; output?: unknown; error?: unknown }> }): string {
+  const parts: string[] = [];
+  const request = run.input && typeof run.input === 'object' && 'message' in (run.input as any) ? (run.input as any).message : run.input;
+  if (request !== undefined && request !== null && request !== '') {
+    parts.push(`REQUEST:\n${typeof request === 'string' ? request : JSON.stringify(request)}`);
+  }
+  let used = 0;
+  for (const step of run.steps ?? []) {
+    if (step?.type !== 'tool_call') continue;
+    const tool = step.input?.tool ?? step.input?.toolName ?? 'tool';
+    const args = step.input?.parameters ? ` ${JSON.stringify(step.input.parameters)}` : '';
+    const raw = step.error ? `ERROR ${String((step.error as any)?.message ?? step.error)}` : typeof step.output === 'string' ? step.output : JSON.stringify(step.output ?? null);
+    const body = raw.length > EVIDENCE_PER_RESULT ? `${raw.slice(0, EVIDENCE_PER_RESULT)}… (cut)` : raw;
+    if (used + body.length > EVIDENCE_TOTAL) {
+      parts.push(`${tool}${args}: (left out: the evidence limit was reached)`);
+      continue;
+    }
+    used += body.length;
+    parts.push(`${tool}${args}:\n${body}`);
+  }
+  return parts.join('\n\n');
+}
+
 /**
  * Shared verifier: a refute-only checker panel that judges an OUTPUT against a
  * SPEC. Each checker runs in its own bounded context with its own provider/model
@@ -99,6 +134,8 @@ export class AgentVerifierHelper {
       spec?: string;
       checkers: CheckerConfig[];
       policy?: VerifyPolicy;
+      /** What the answer must agree with: the request and the tool results (see runEvidence). */
+      evidence?: string;
     },
     organizationId: string,
     /** Who the checker calls act as: the run's principal (see LlmChatHelper.chat). */
@@ -112,10 +149,11 @@ export class AgentVerifierHelper {
         : JSON.stringify(opts.target, null, 2);
     const spec = opts.spec || '';
     const checkers = Array.isArray(opts.checkers) ? opts.checkers : [];
+    const evidence = opts.evidence?.trim() || '';
 
     const checkerResults = await Promise.all(
       checkers.map((checker, i) =>
-        this.runChecker(checker, i, targetText, spec, organizationId, userId, signal),
+        this.runChecker(checker, i, targetText, spec, organizationId, userId, signal, evidence),
       ),
     );
 
@@ -179,6 +217,7 @@ export class AgentVerifierHelper {
     organizationId: string,
     userId: string | ExecutionPrincipal | undefined,
     signal?: AbortSignal,
+    evidence = '',
   ): Promise<CheckerResult> {
     const name = checker?.name || `checker_${index + 1}`;
     if (!checker?.providerId && !checker?.routing) {
@@ -195,6 +234,14 @@ export class AgentVerifierHelper {
       `You are a verifier. Your ONLY job is to find what is WRONG with the OUTPUT ` +
       `relative to the SPEC. Do not praise, summarize, or restate. Hunt for ` +
       `violations, missing requirements, unsupported claims, and contradictions.` +
+      // Without it a checker took its training cutoff for today and failed
+      // real papers dated last week as "from the future".
+      ` Today is ${new Date().toISOString().slice(0, 10)}; a date on or before it is not in the future.` +
+      (evidence
+        ? `\n\nThe EVIDENCE is what the agent was asked and what its tools returned in this run. ` +
+          `Judge every factual claim against it: a claim is wrong only if the EVIDENCE contradicts it or does not support it. ` +
+          `Never use your own knowledge of versions, dates, prices or other facts to overrule the EVIDENCE; it is newer than you.`
+        : '') +
       (checker.instructions ? `\n\nFocus: ${checker.instructions}` : '') +
       `\n\nReply with ONLY a JSON object, no prose, no code fences:\n` +
       `{"verdict":"pass"|"fail","failures":[{"rule":"<short rule violated>","evidence":"<quote or location>"}],"passed_rules":["<rule satisfied>"]}\n` +
@@ -202,6 +249,7 @@ export class AgentVerifierHelper {
 
     const userPrompt =
       `SPEC (rules to enforce):\n${spec || '(no explicit spec — judge for correctness, completeness, and internal consistency)'}\n\n` +
+      (evidence ? `EVIDENCE (ground truth for this run):\n${evidence}\n\n` : '') +
       `OUTPUT (to check):\n${targetText}`;
 
     try {

@@ -36,7 +36,8 @@ import {
   type HostedChatMessage,
 } from '@/lib/hosted-chat'
 
-// An answer renders through AssistantMarkdown, the same renderer as an agent's Try it.
+// An answer renders through AssistantMarkdown, the same renderer as an agent's
+// Try it: GitHub-flavoured (tables render as tables), line breaks kept.
 export { assistantMarkdownComponents }
 
 /**

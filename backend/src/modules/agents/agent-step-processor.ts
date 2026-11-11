@@ -14,7 +14,7 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
+import { AgentVerifierHelper, VerifyPanelResult, runEvidence } from './agent-verifier.helper';
 import { ALWAYS_ON_COMPACTION, AgentContextCompactor, carriedContextSummary } from './agent-context-compactor.helper';
 import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
@@ -3166,7 +3166,8 @@ export class AgentStepProcessor {
     if (!this.hasFinalOutputVerification(agent, finalContent)) return null;
     const cfg = agent.agentConfig!.verify!;
     const panel = await this.verifier.runPanel(
-      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy },
+      // The checker judges the answer against what the run was asked and what its tools returned.
+      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy, evidence: runEvidence(run as any) },
       run.organizationId,
       principalOfRun(run),
     );
