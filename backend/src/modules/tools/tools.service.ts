@@ -522,6 +522,11 @@ export class ToolsService {
 
     if (filters.status) {
       queryBuilder.andWhere('tool.status = :status', { status: filters.status });
+    } else {
+      // A deleted tool is a soft-deleted row kept for history: it is not in
+      // the catalog. Without this, deleting a tool left it listed, and the
+      // retired copies of a runner's tools showed up eleven times over.
+      queryBuilder.andWhere('tool.status <> :_deleted', { _deleted: ToolStatus.DELETED });
     }
 
     if (filters.categoryIds?.length > 0) {

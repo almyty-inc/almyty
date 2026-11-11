@@ -975,6 +975,22 @@ describe('ToolsService', () => {
       expect(qb.andWhere).toHaveBeenCalledWith('tool.status = :status', { status: ToolStatus.ACTIVE });
     });
 
+    // Deleted tools are soft-deleted rows. Listed, a runner's retired
+    // copies showed eleven times over in the tool list.
+    it('leaves deleted tools out unless the deleted status is asked for', async () => {
+      const qb = makeQueryBuilder([], 0);
+      toolRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getTools(baseFilters);
+
+      expect(qb.andWhere).toHaveBeenCalledWith('tool.status <> :_deleted', { _deleted: ToolStatus.DELETED });
+
+      const qb2 = makeQueryBuilder([], 0);
+      toolRepo.createQueryBuilder.mockReturnValue(qb2);
+      await service.getTools({ ...baseFilters, status: ToolStatus.DELETED });
+      expect(qb2.andWhere).not.toHaveBeenCalledWith('tool.status <> :_deleted', expect.anything());
+    });
+
     it('should apply categoryIds filter', async () => {
       const qb = makeQueryBuilder([], 0);
       toolRepo.createQueryBuilder.mockReturnValue(qb);
