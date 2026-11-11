@@ -3,20 +3,28 @@
  *
  * Owns the operation search/method filter state and the expanded
  * operation: clicking a row opens its details (full endpoint with copy,
- * parameters, related tools) in place under the row. Used by the API
- * detail page (`pages/api-detail.tsx`).
+ * parameters, related tools, or "Make a tool" when it has none) in place
+ * under the row. "Choose operations" opens the import's operation picker
+ * in place, to add or take out operations. Used by the API detail page
+ * (`pages/api-detail.tsx`).
  */
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Code, Plus, Search, Upload } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, ChevronRight, Code, ListChecks, Plus, Search, Upload } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
+import { OperationPicker } from '@/components/apis/operation-picker'
 
 import { Api, ApiOperation, ApiType, Tool } from '@/types'
+import { apisApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { pluralized } from '@/lib/utils'
 
 /** An API connected as a bare address (Manual HTTP), with no description to import. */
@@ -36,11 +44,66 @@ interface OperationsTabProps {
   onOpenSchemaImport: () => void
 }
 
+/** No operation is new on the API page: the picker opens on the current pick. */
+const NO_NEW_OPERATIONS: string[] = []
+
+/**
+ * The operation picker of the import, opened in place on the API page to
+ * add or take out operations. Tools already made keep their ids; a tool of
+ * an operation taken out is not deleted, so the page says so.
+ */
+function ChooseOperations({ apiId, total, onDone }: { apiId: string; total: number; onDone: () => void }) {
+  const queryClient = useQueryClient()
+  // The picker reads the same query; the limit is needed before it renders.
+  const outline = useQuery({
+    queryKey: ['api-operation-outline', apiId],
+    queryFn: () => apisApi.getOperationOutline(apiId),
+  })
+  const generate = useMutation({
+    mutationFn: (jobId: string) => apisApi.pollImportStatus(apiId, jobId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['tools'] }),
+        queryClient.invalidateQueries({ queryKey: ['api-operations', apiId] }),
+        queryClient.invalidateQueries({ queryKey: ['api-operation-outline', apiId] }),
+      ])
+      onDone()
+    },
+  })
+  return (
+    <div className="mb-6 space-y-3 rounded-md border p-4" data-testid="choose-operations">
+      {outline.data ? (
+        generate.isPending ? (
+          <p role="status" className="text-sm">Making the tools...</p>
+        ) : (
+          <OperationPicker apiId={apiId} total={total} limit={outline.data.limit} newOperationIds={NO_NEW_OPERATIONS} onStarted={(jobId) => generate.mutate(jobId)} />
+        )
+      ) : outline.isError ? (
+        <QueryError error={outline.error} onRetry={() => outline.refetch()} title="Couldn't load the operations" />
+      ) : (
+        <LoadingSpinner />
+      )}
+      <p className="text-sm text-muted-foreground">
+        Tools already made stay as they are. Taking an operation out does not delete its tool; delete that on the tool's page.
+      </p>
+      {generate.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {getApiErrorMessage(generate.error, 'The tools were not made.')}
+        </p>
+      )}
+      <Button variant="ghost" size="sm" onClick={onDone}>
+        Close
+      </Button>
+    </div>
+  )
+}
+
 export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }: OperationsTabProps) {
   const navigate = useNavigate()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [operationSearch, setOperationSearch] = useState('')
   const [methodFilter, setMethodFilter] = useState<string>('ALL')
+  const [picking, setPicking] = useState(false)
 
   const filteredOperations = operations.filter((operation: ApiOperation) => {
     const matchesSearch = !operationSearch ||
@@ -62,15 +125,24 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                 {pluralized(operations.length, 'operation')} parsed from schema
               </p>
             </div>
-            {api.schema && (
-              <Button variant="outline" size="sm" onClick={onOpenSchemaImport}>
-                <Upload className="mr-2 h-4 w-4" />
-                Update the description
-              </Button>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {operations.length > 0 && (
+                <Button variant="outline" size="sm" aria-expanded={picking} onClick={() => setPicking((open) => !open)}>
+                  <ListChecks className="mr-2 h-4 w-4" />
+                  Choose operations
+                </Button>
+              )}
+              {api.schema && (
+                <Button variant="outline" size="sm" onClick={onOpenSchemaImport}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Update the description
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
+          {picking && <ChooseOperations apiId={api.id} total={operations.length} onDone={() => setPicking(false)} />}
           {operations.length === 0 ? (
             <div className="text-center py-12">
               <Code className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -260,10 +332,54 @@ function OperationDetails({
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">No tools generated for this operation yet</p>
+            <MakeTool apiId={api.id} operationId={operation.id} />
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * "Make a tool" for an operation without one: an operation of a large API
+ * that was not picked at import, or one whose tool was deleted. Makes that
+ * one tool; the API's other tools are left as they are.
+ */
+function MakeTool({ apiId, operationId }: { apiId: string; operationId: string }) {
+  const queryClient = useQueryClient()
+  const make = useMutation({
+    mutationFn: () => apisApi.makeOperationTool(apiId, operationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tools'] })
+      queryClient.invalidateQueries({ queryKey: ['api-operations', apiId] })
+      queryClient.invalidateQueries({ queryKey: ['api-operation-outline', apiId] })
+    },
+  })
+  if (make.isSuccess) {
+    return (
+      <p role="status" className="text-sm">
+        Made the tool{' '}
+        <Link to={`/tools/${make.data.toolId}`} className="font-medium underline underline-offset-2">
+          {make.data.toolName}
+        </Link>
+        .
+      </p>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm text-muted-foreground">No tool made from this operation yet.</p>
+        <Button size="sm" variant="outline" onClick={() => make.mutate()} disabled={make.isPending}>
+          <Plus className="mr-2 h-4 w-4" />
+          {make.isPending ? 'Making the tool...' : 'Make a tool'}
+        </Button>
+      </div>
+      {make.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {getApiErrorMessage(make.error, 'The tool was not made.')}
+        </p>
+      )}
     </div>
   )
 }

@@ -2,7 +2,8 @@ import { localTime, resolveTimeZone } from '../../common/utils/current-time';
 
 /**
  * Values a schedule's message can use, filled in at each run in the
- * organization's time zone:
+ * schedule's time zone (the organization's for a schedule saved without
+ * one):
  *
  *   {{today}}        the date of the run, 2026-11-11
  *   {{now}}          the date and time of the run, 2026-11-11T08:00:00+01:00

@@ -41,6 +41,7 @@ import { STEP_NAMES } from '../step-values'
 import { MachineProblem } from '@/components/runners/machine-problem'
 import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
 import { useLiveRun, type LiveRunConnection } from '@/hooks/use-live-run'
+import { AssistantMarkdown } from '@/components/hosted-chat/assistant-markdown'
 
 interface RunsTabProps {
   /** Autonomous runs. */
@@ -53,6 +54,25 @@ interface RunsTabProps {
   openRunId?: string
 }
 
+/**
+ * A run's output. Text is the agent's answer, rendered from its markdown
+ * the way Try it and the web chat render it (an agent's tables showed as
+ * pipes here); anything else is shown as JSON.
+ */
+export function RunOutput({ output }: { output: unknown }) {
+  if (typeof output === 'string') {
+    return (
+      <div data-testid="run-output" className="bg-muted rounded p-3 text-sm break-words max-h-[400px] overflow-auto">
+        <AssistantMarkdown>{output}</AssistantMarkdown>
+      </div>
+    )
+  }
+  return (
+    <div data-testid="run-output" className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
+      {JSON.stringify(output, null, 2)}
+    </div>
+  )
+}
 /** Whether any of the run's calls went through routing, so there is a route to show. */
 export function runRouted(run: Pick<AgentRun, 'steps'>): boolean {
   return (run.steps ?? []).some((s) => !!(s.output as any)?.routing)
@@ -312,9 +332,7 @@ function RunRow({
               {run.output && (
                 <div>
                   <h4 className="text-sm font-medium mb-1">Output</h4>
-                  <div className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
-                    {typeof run.output === 'string' ? run.output : JSON.stringify(run.output, null, 2)}
-                  </div>
+                  <RunOutput output={run.output} />
                 </div>
               )}
               {/* Promote a completed run to a reusable skill, in place */}
@@ -439,9 +457,7 @@ function ExecutionRow({
               {exec.output !== undefined && exec.output !== null && (
                 <div>
                   <h4 className="text-sm font-medium mb-1">Output</h4>
-                  <div className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
-                    {typeof exec.output === 'string' ? exec.output : JSON.stringify(exec.output, null, 2)}
-                  </div>
+                  <RunOutput output={exec.output} />
                 </div>
               )}
             </div>

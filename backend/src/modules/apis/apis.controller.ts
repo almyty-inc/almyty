@@ -19,6 +19,7 @@ import {
   UploadedFile,
   UseInterceptors,
   Optional,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { readFile } from 'fs/promises';
@@ -557,6 +558,24 @@ export class ApisController {
       data: { jobId: job.id, status: 'processing', selected },
       message: 'Making tools from the picked operations',
     };
+  }
+
+  /**
+   * Make the tool of one operation (or remake it in place, keeping its id):
+   * "Make a tool" on an operation of a large API that was not picked.
+   */
+  @Post(':id/operations/:operationId/tool')
+  @Roles('admin', 'owner')
+  async makeOperationTool(
+    @Request() req,
+    @Param('id') id: string,
+    @Param('operationId', ParseUUIDPipe) operationId: string,
+  ) {
+    const orgId = req.user.currentOrganizationId;
+    const api = await this.apisService.findOne(id, orgId, { id: req.user.sub || req.user.id });
+    if (!api) throw new NotFoundException('API not found');
+    const result = await this.apisService.makeOperationTool(id, api.organizationId, operationId, req.user.id ?? null);
+    return { success: true, data: result, message: 'Tool made from the operation' };
   }
 
   @Get(':id/resources')
