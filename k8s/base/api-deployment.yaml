@@ -317,6 +317,15 @@ spec:
               name: almyty-config
               key: RUN_PROJECTION_CHECK
               optional: true
+        # Durable runs step 5: readers serve a run's state from its event log
+        # and the row is its cache (docs/design/durable-runs.md). "false" in
+        # the base config map until staging shows no projection mismatches.
+        - name: RUN_LOG_SOURCE_OF_TRUTH
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: RUN_LOG_SOURCE_OF_TRUTH
+              optional: true
         # V8 old-space defaults to ~1.5 GB regardless of the cgroup
         # memory limit. Pin it just under the container limit so a
         # rogue request can't get killed mid-allocation. Container

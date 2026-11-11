@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Workspace } from '../../entities/workspace.entity';
 import { releaseRunWorkspaces } from '../workspace/run-end-release';
 import { notDone, writeRun } from './run-event-writer';
+import { serveRunFromLog, serveRunsFromLog } from './run-log-source';
 import type { StepOutcome } from './run-lease';
 import type { RunEventDraft } from './run-events';
 import { InjectQueue } from '@nestjs/bull';
@@ -550,7 +551,9 @@ export class AgentRuntimeService implements OnModuleInit {
       relations: { agent: true },
     });
     if (!run) throw new NotFoundException('Run not found');
-    return run;
+    // The run as its log describes it; the row's state is a cache of that
+    // (durable runs step 5, run-log-source.ts).
+    return (await serveRunFromLog(this.runRepository, run, 'run_view')).run;
   }
 
   /**
@@ -574,6 +577,10 @@ export class AgentRuntimeService implements OnModuleInit {
    * the same one `tools.service.ts` and `gateways.service.ts` already use.
    * `workingMemory` is projected away — it is the run's scratch state and
    * nothing in the list response emits it.
+   *
+   * Each run is served from its log (run-log-source.ts): the Runs tab
+   * starts a live view from the listed run and its `headSeq`, and folds the
+   * events after it, so the two have to be the same projection.
    */
   async listRuns(agentId: string, organizationId: string, page = 1, limit = 20) {
     const take = Math.min(
@@ -582,13 +589,14 @@ export class AgentRuntimeService implements OnModuleInit {
     );
     const currentPage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const skip = (currentPage - 1) * take;
-    const [data, total] = await this.runRepository.findAndCount({
+    const [rows, total] = await this.runRepository.findAndCount({
       where: { agentId, organizationId },
       order: { createdAt: 'DESC' },
       select: AGENT_RUN_LIST_COLUMNS,
       skip,
       take,
     });
+    const data = await serveRunsFromLog(this.runRepository, rows, 'run_list');
     return { data, total, page: currentPage, limit: take, totalPages: Math.ceil(total / take) };
   }
 

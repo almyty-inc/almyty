@@ -12,8 +12,12 @@
  * last failed, and it re-asks when what it holds has gone stale.
  */
 
+import { searchTools } from './tool-search.js';
+
 export interface ToolSummary {
   name: string;
+  /** The display title the gateway gives (the operation's summary), when it gives one. */
+  title?: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
 }
@@ -101,12 +105,13 @@ export class ToolCatalog {
     if (this.isStale()) await this.refresh();
   }
 
-  /** Substring match over names and descriptions, the cheapest thing that works. */
+  /**
+   * The tools a query names, best first: its words (stopwords dropped)
+   * matched across name, title and description (tool-search.ts). An empty
+   * query lists everything.
+   */
   search(query: string): ToolSummary[] {
-    const q = query.trim().toLowerCase();
-    if (!q) return this.toolList;
-    return this.toolList.filter((t) =>
-      t.name.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q));
+    return searchTools(this.toolList, query);
   }
 }
 

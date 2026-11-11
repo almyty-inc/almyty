@@ -4,6 +4,7 @@ import { FindOptionsWhere, In, IsNull, Not, Repository } from 'typeorm';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { AgentRunEvent } from '../../entities/agent-run-event.entity';
 import { RunEventDraft, RunEventRecord, asStored, baselineOf, commitEvents, runStartedEvent } from './run-events';
+import { logIsSourceOfTruth, runLogProjections, serveRunFromLog } from './run-log-source';
 
 /**
  * The columns of a run whose changes are logged (run-events.ts), plus
@@ -126,8 +127,20 @@ export async function writeRun(
       : undefined;
   const result = await runs.manager.transaction(async (tx) => {
     const repo = tx.getRepository(AgentRun);
-    const row = await repo.findOne({ where, lock: { mode: 'pessimistic_write' }, ...(select ? { select: select as any } : {}) });
-    if (!row) return null;
+    const locked = await repo.findOne({ where, lock: { mode: 'pessimistic_write' }, ...(select ? { select: select as any } : {}) });
+    if (!locked) return null;
+    // The log is the source of truth (durable runs step 5, run-log-source.ts):
+    // a write that reads the whole row starts from the run as its log
+    // describes it, and writes back whatever field the row held differently.
+    // The lease and progress writes read only a few columns and change none
+    // of the run's state.
+    let row = locked;
+    let repair: RunChange = {};
+    if (!select) {
+      const served = await serveRunFromLog(tx, locked, 'write', runs.manager);
+      row = served.run;
+      repair = Object.fromEntries(served.differences.map((d) => [d.field, (row as any)[d.field]])) as RunChange;
+    }
     const asked = typeof change === 'function' ? change(row) : change;
     if (!asked) return null;
     const head = row.headSeq ?? 0;
@@ -168,7 +181,10 @@ export async function writeRun(
     const next = Object.assign(Object.create(Object.getPrototypeOf(row)), row, patch) as AgentRun;
     const events = commitEvents(baselineOf(row), next, next.steps, notes);
     const headSeq = head + events.length;
-    const res = await repo.update({ id: row.id, headSeq: head }, { ...patch, headSeq } as any);
+    // The fields the row cache held differently from the log are written
+    // too (the change's own values win where it sets them): the row is the
+    // projection again once this commits.
+    const res = await repo.update({ id: row.id, headSeq: head }, { ...repair, ...patch, headSeq } as any);
     if ((res.affected ?? 0) === 0) return null;
     const records = events.map((e, i) => ({ runId: row.id, seq: head + i + 1, type: e.type, step: e.step, payload: e.payload }));
     await tx.getRepository(AgentRunEvent).insert(records.map((r) => ({ ...r })));
@@ -176,9 +192,14 @@ export async function writeRun(
     committed.push({ before: row, after: next, events: records });
     return next;
   });
-  // Committed: tell whoever watches run writes (the projection check, the
-  // live run views). Nothing they do can fail or slow down the write.
-  for (const written of committed) notifyRunWritten(written);
+  // Committed: the projection this process keeps for the run moves on with
+  // what the write appended, then whoever watches run writes is told (the
+  // projection check, the live run views). Nothing they do can fail or slow
+  // down the write.
+  for (const written of committed) {
+    if (logIsSourceOfTruth()) runLogProjections.advance(runs.manager, written.after.id, written.before.headSeq ?? 0, written.events);
+    notifyRunWritten(written);
+  }
   return result;
 }
 

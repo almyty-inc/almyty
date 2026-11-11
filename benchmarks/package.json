@@ -1,0 +1,17 @@
+{
+  "name": "almyty-benchmarks",
+  "private": true,
+  "type": "module",
+  "description": "Token and import-time benchmarks for almyty, against a local stack",
+  "scripts": {
+    "bench": "node run.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "js-tiktoken": "1.0.21",
+    "yaml": "2.9.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

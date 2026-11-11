@@ -1,10 +1,10 @@
 # Durable agent runs
 
-Status: accepted. Being built step by step (see Rollout). Done: step 1,
-the event log written alongside the run row, step 2, the projection
-checked against the row on every write and live run views replayed from
-the log, step 3, run leases, and step 4, resume from the log and
-idempotency keys.
+Status: accepted. Built step by step (see Rollout). Done: step 1, the
+event log written alongside the run row, step 2, the projection checked
+against the row on every write and live run views replayed from the log,
+step 3, run leases, step 4, resume from the log and idempotency keys, and
+step 5, the log as the source of truth (switched on per environment).
 
 ## In plain words
 
@@ -133,7 +133,9 @@ in step 2).
    expires; tool calls carry their key. *Done* (see Step 4 as built,
    below).
 5. **The log is the source of truth.** `steps` and `workingMemory` on the
-   row become a cache of the projection.
+   row become a cache of the projection. *Done* (see Step 5 as built,
+   below), behind `RUN_LOG_SOURCE_OF_TRUTH`, off in production until
+   staging's projection check shows no mismatches.
 
 Not on the log: creating the run (its INSERT is what `run_started` records
 at the first write) and deleting it (its events go with it). Every other
@@ -612,6 +614,87 @@ costs are left as they are. A filter that fails, or a run that can no
 longer be found, hides the arguments altogether.
 
 The lease settings above decide when a step is picked up again.
+
+## Step 5 as built: the log is the source of truth
+
+**What a run is.** A run's state (status, step, totals, output, error,
+steps, working memory, metadata) is what its log folds into
+(`foldRunEvents`). The row's columns hold the same values as a cache,
+written by `writeRun` as before. Every reader that decides something from
+a run's state serves the log's (`serveRunFromLog`,
+`backend/src/modules/agents/run-log-source.ts`):
+
+- `writeRun`, under its row lock: the change (a function of the row, for a
+  merge) and the diff its events describe start from the run as the log
+  has it. Lease writes and step progress read only a few columns and change
+  none of the state, so they do not read the log.
+- The step processor, when it loads a run for its step: what the step
+  resumes from (held calls, change sets, waking calls and unknown outcomes
+  in working memory, the steps so far) is the log's. Its progress
+  (`StepJournal`) was already read from the log.
+- The run view (`AgentRuntimeService.getRun`, and so `getRunForViewer`,
+  the API-key route and everything else that loads a run through it:
+  cancel, input, the trace).
+- The runs list (`listRuns`): the Runs tab starts a live view from the
+  listed run and its `headSeq` and folds the events after it, so the list
+  serves the same projection.
+- SSE replay was already served from the log (step 2).
+
+A run with no events (created before the log, or nothing written since its
+INSERT; `headSeq` 0) is served from its row. So is a run whose log does
+not fold (a gap, a repeat, no `run_started`, or a log that ends before the
+row's `headSeq`): there is nothing better to serve, and the fold error is
+reported. Queries that select runs by a column (`status`, `nextWakeAt`, the
+lease) still read the row; the next write keeps those in step.
+
+**When the row and the log disagree.** The log wins. The difference is
+reported the way the projection check reports one: a warning
+(`event: run_projection_mismatch`, with `from: log` and `reader`: `write`,
+`step`, `run_view` or `run_list`; per field a hash of each side, never a
+value) and a `run_projection_mismatch` metric with the run's organization,
+counted by the monitoring sample like any other. It is reported once for
+as long as it stands: the same difference read again, or after step
+progress moved the head, is not reported again. This happens whether or
+not `RUN_PROJECTION_CHECK` is on. The next write of the run repairs the
+row: its UPDATE sets every field that differed to the log's value along
+with its own change. The repair is not on the log; the log already says
+what the run is, and the write's events describe only its own change.
+
+**What it costs.** Each process keeps the projections it has read or
+written, least recently used out first, within `RUN_LOG_CACHE_MB` (default
+64). A seq once written never changes, so a kept projection is never
+wrong, only behind: a reader folds the events after it, one indexed read
+of the primary key, and a write moves it on with the events it appended.
+A run a process has not seen (another pod wrote it last, or it was
+evicted) is read from its first event, 1,000 events a query. Whatever a
+reader is handed is a copy: changing it changes nothing kept.
+
+**The switch.** `RUN_LOG_SOURCE_OF_TRUTH`: `true`, `1`, `on` or `yes`
+turns it on, `false`, `0`, `off` or `no` off. Unset, it is on everywhere
+but `NODE_ENV=production`. The development compose file and
+`.env.example` turn it on; the base Kubernetes config map, which is
+production's, sets it to `"false"` until staging's projection check has
+shown no mismatches over real runs. Off, every reader uses the row as
+before step 5.
+
+| Variable | Default | What |
+|---|---|---|
+| `RUN_LOG_SOURCE_OF_TRUTH` | on, off where `NODE_ENV=production` | Serve a run's state from its log; the row is a cache. |
+| `RUN_LOG_CACHE_MB` | 64 | Memory the log's projections may keep, per process. |
+
+**Tests.** `run-log-source.spec.ts` drives it over the fake repositories:
+the run view and the runs list serve a corrupted row's log and report the
+difference once; a run with no events or a log that does not fold is
+served from its row; the next write starts from the log and repairs the
+row; and a step resumes an approved held call that the row cache had lost.
+`run-resume.integration.spec.ts` (real Postgres and Redis) corrupts a
+run's steps and working memory with a plain UPDATE between two steps: the
+run view serves the log, the next step resumes from it and finishes with
+the same steps, cost and tokens as the run left alone, the call made once,
+and the row folds back out of the log. `run-log-replay.integration.spec.ts`
+shows the same write around `writeRun` with the switch off (found by the
+projection check after the write) and on (found by the write, and
+repaired).
 
 ## The worker-kill test
 
