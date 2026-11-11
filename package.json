@@ -4,6 +4,8 @@
   "description": "almyty - Universal API to AI Tool Gateway System",
   "main": "index.js",
   "scripts": {
+    "bench": "cd benchmarks && npm ci --no-audit --no-fund && node run.mjs",
+    "bench:test": "cd benchmarks && npm ci --no-audit --no-fund && npm test",
     "check": "node scripts/check.js",
     "changeset": "changeset",
     "version-packages": "node scripts/release-packages.js version",
