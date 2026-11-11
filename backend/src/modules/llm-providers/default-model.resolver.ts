@@ -190,6 +190,32 @@ export class DefaultModelResolver {
   }
 
   /**
+   * Another model to try when `exclude` turned out to be one the key may
+   * not use (a plan that leaves out the configured model). Picked the
+   * same way as the default, from what the vendor lists and the
+   * connection offers; undefined when there is nothing else.
+   */
+  async alternative(provider: LlmProvider, exclude: string[]): Promise<string | undefined> {
+    const allowed = allowedModelList(provider);
+    const hidden = hiddenModelList(provider);
+    let ids: string[];
+    if (allowed) {
+      ids = allowed;
+    } else {
+      try {
+        ids = (await this.modelsHelper.fetchModelsFromProvider(provider))
+          .map((m) => m.id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      } catch {
+        return undefined;
+      }
+    }
+    const pool = ids.filter((id) => !exclude.includes(id) && !hidden.includes(id));
+    if (pool.length === 0) return undefined;
+    return pickPreferredModel(provider.type, pool) ?? pool.find((id) => !NOT_A_DEFAULT.test(id));
+  }
+
+  /**
    * Drop the cached choice, e.g. after the vendor said the model is gone.
    * Also records WHEN, so a resolution already waiting on the vendor's
    * model list cannot install its pre-retirement pick afterwards.

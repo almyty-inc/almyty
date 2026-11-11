@@ -18,7 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ModelPicker, asProviderList, useProviderList } from '@/components/model-picker'
+import { ModelPicker, asProviderList, firstUsableModel, useModelCards, useProviderList } from '@/components/model-picker'
 
 import { agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -42,6 +42,7 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
   const { success, error: errorNotif } = useNotifications()
 
   const providers = asProviderList(useProviderList().data)
+  const cards = useModelCards().data ?? []
 
   const v = agent.agentConfig?.verify
   const [enabled, setEnabled] = useState(v?.enabled ?? false)
@@ -169,12 +170,15 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
                     size="sm"
                     variant="ghost"
                     className="gap-1"
-                    onClick={() =>
+                    onClick={() => {
+                      // A new reviewer starts on a model that can be used now,
+                      // never on a connection whose models cannot.
+                      const start = firstUsableModel(providers, cards)
                       setCheckers((c) => [
                         ...c,
-                        { name: '', providerId: providers[0]?.id || '', model: '', instructions: '' },
+                        { name: '', providerId: start?.providerId ?? '', model: start?.model ?? '', instructions: '' },
                       ])
-                    }
+                    }}
                   >
                     <Plus className="h-3.5 w-3.5" /> Add reviewer
                   </Button>

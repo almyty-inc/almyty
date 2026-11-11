@@ -59,7 +59,7 @@ export interface AgentMemoryItem {
 
 interface MemoryTabProps {
   agentId: string
-  /** The memory the agent's runs use (agentMemoryScope); the organization's shared memory when absent. */
+  /** The memory the agent's runs use (agentMemoryScope); the agent's own when absent. */
   scope?: { scope_type: MemoryScopeType; scope_id: string }
   memories: AgentMemoryItem[]
   /**
@@ -105,7 +105,7 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
     mutationFn: async () => {
       return memoriesApi.put({
         mode: 'memory',
-        scope: scope ?? { scope_type: 'workspace', scope_id: orgId! },
+        scope: scope ?? { scope_type: 'agent', scope_id: `${orgId}:agent:${agentId}` },
         content: newMemoryContent,
         tier: tierForLegacyType(newMemoryType),
         tags: newMemoryTags.split(',').map(t => t.trim()).filter(Boolean),

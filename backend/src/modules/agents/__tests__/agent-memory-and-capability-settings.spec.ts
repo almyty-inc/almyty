@@ -22,11 +22,11 @@ describe('memory settings', () => {
   const run = (over: Record<string, any> = {}) =>
     ({ id: 'run-1', organizationId: 'org-1', userId: 'u-1', endUserId: null, metadata: {}, ...over }) as any;
 
-  it('defaults to what the agent did before these settings: almyty, shared, saved only when asked, kept until deleted', () => {
+  it("defaults to almyty, the agent's own memory, saved only when asked, kept until deleted", () => {
     expect(memorySettings({ enabled: true })).toEqual({
       enabled: true,
       account: NATIVE_MEMORY_ACCOUNT,
-      whose: 'shared',
+      whose: 'agent',
       save: 'asked',
       neverSave: [],
       retentionDays: null,

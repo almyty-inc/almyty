@@ -25,9 +25,9 @@ export interface Availability {
   detail?: string
 }
 
-/** A provider whose last key check failed. */
+/** A provider whose last key check failed (not one whose key works over models that do not). */
 export function providerCheckFailed(provider?: ProviderHealth | null): boolean {
-  if (!provider) return false
+  if (!provider || (provider as { keyChecked?: boolean }).keyChecked === true) return false
   const state = providerCheck(provider).state
   return state === 'rejected' || state === 'failed'
 }

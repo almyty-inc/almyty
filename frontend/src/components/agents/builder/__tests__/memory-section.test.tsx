@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event'
 
 import { renderWithProviders } from '@/test/setup'
 import { MemorySection } from '../memory-section'
+import { agentMemoryScope } from '../../agent-memory-scope'
 import { memoriesApi } from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({
@@ -73,5 +74,27 @@ describe("an agent's own memory account", () => {
     await user.click(account)
     await user.click(await screen.findByRole('option', { name: 'almyty' }))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ account: 'almyty-native', credentialId: null }))
+  })
+
+  // A new agent's memory read "Shared by all agents" and its Memory tab
+  // showed every other agent's memories.
+  it("starts as this agent's own memory, and turning memory on writes that down", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const { unmount } = renderWithProviders(<MemorySection value={{ enabled: true }} onChange={onChange} />)
+    expect(await screen.findByRole('combobox', { name: 'Whose memory' })).toHaveTextContent("This agent's own")
+    unmount()
+
+    renderWithProviders(<MemorySection value={{}} onChange={onChange} />)
+    await user.click(screen.getByRole('switch', { name: /Remember between conversations/ }))
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true, whose: 'agent' }))
+  })
+})
+
+describe('agentMemoryScope', () => {
+  it("is the agent's own unless shared was picked", () => {
+    expect(agentMemoryScope(undefined, 'org-1', 'a1')).toEqual({ scope_type: 'agent', scope_id: 'org-1:agent:a1' })
+    expect(agentMemoryScope({ enabled: true }, 'org-1', 'a1')).toEqual({ scope_type: 'agent', scope_id: 'org-1:agent:a1' })
+    expect(agentMemoryScope({ enabled: true, whose: 'shared' }, 'org-1', 'a1')).toEqual({ scope_type: 'workspace', scope_id: 'org-1' })
   })
 })
