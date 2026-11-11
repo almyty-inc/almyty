@@ -133,7 +133,7 @@ export function ApprovalInspector({ row, compact = false, className }: ApprovalI
             Review the action
           </p>
           {!compact && (
-            <h2 className="flex min-w-0 flex-wrap items-center gap-2 font-heading text-xl font-semibold tracking-[-0.02em]">
+            <h2 className="flex min-w-0 items-center gap-2 font-heading text-xl font-semibold tracking-[-0.02em]">
               <Bot className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
               {!row.agentId ? (
                 // A held tool call no agent made.

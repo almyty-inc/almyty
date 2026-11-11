@@ -258,7 +258,7 @@ function RunRow({
                             </div>
                           )}
                         </div>
-                        <div className="text-xs tabular-nums text-muted-foreground shrink-0 text-right">
+                        <div className="ml-auto text-xs tabular-nums text-muted-foreground shrink-0 text-right sm:ml-0">
                           {step.duration ? formatDuration(step.duration) : ''}
                           {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
                         </div>
