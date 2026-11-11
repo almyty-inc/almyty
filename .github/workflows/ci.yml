@@ -507,9 +507,20 @@ jobs:
           tail -n 50 "$RUNNER_TEMP/web.log"
           exit 1
 
+      # The runner image already carries Chromium's system libraries, so the
+      # browser alone is downloaded. apt runs only when Chromium cannot start,
+      # and then with short timeouts: an unreachable Ubuntu mirror used to
+      # hold this step for ten minutes before failing.
       - name: Install Chromium
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 6
+        run: |
+          npx playwright install chromium
+          if ! node -e "require('@playwright/test').chromium.launch().then(b => b.close()).catch(() => process.exit(1))"; then
+            echo "Chromium needs system libraries; installing them"
+            echo 'Acquire::Retries "2"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts > /dev/null
+            npx playwright install-deps chromium
+          fi
 
       - name: Run the journey
         working-directory: frontend
