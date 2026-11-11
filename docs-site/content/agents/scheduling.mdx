@@ -25,6 +25,22 @@ While you choose, the page says the schedule back in plain words, for example *E
 
 The agent has to be active. A schedule on an agent that is still a draft never runs, so saving one is refused until you activate it.
 
+## Dates in the message
+
+A message can name the day it runs and the last time it ran. Write one of these in the message, and it is filled in at each run:
+
+| Write | What the agent gets | Example |
+|---|---|---|
+| `{{today}}` | The date of the run | 2026-11-11 |
+| `{{now}}` | The date and time of the run | 2026-11-11T08:00:00+01:00 |
+| `{{last_run_at}}` | When the last successful run of this schedule started. On the first run, when the schedule was set up. | 2026-11-10T08:00:04+01:00 |
+
+So *"List the papers published since `{{last_run_at}}`"* asks for exactly what is new since the last report, even after a run failed or was skipped. The page lists these values under the message, so you do not have to remember them.
+
+Dates and times are in your organization's time zone: the one on the profile of the organization's owner (**Settings → Your account**), or the schedule's own time zone when the owner has not set one, else UTC. For an agent you drew step by step, they are filled in in a `"message"` field of **What the agent is given**; the rest of it is passed on as you wrote it.
+
+Every agent is also told today's date and the organization's time zone on its own, whenever it calls a model, so "yesterday" or "this week" in a message already means the right days.
+
 ## Send the result to
 
 Every result is kept in the agent's run history. You can also send it on:
@@ -91,7 +107,7 @@ Each scheduled run costs what a normal run of the agent costs. Look at **Avg cos
 | `days` | number[] | `days` | 0 = Sunday to 6 = Saturday |
 | `dayOfMonth` | number or `"last"` | `monthly` | 1 to 28, or the last day of the month |
 | `timezone` | string | `days`, `monthly` | IANA name such as `Europe/Berlin`; defaults to the caller's profile time zone, then UTC |
-| `input` | object | all | Passed to every run. An autonomous agent is sent `input.message` |
+| `input` | object | all | Passed to every run. An autonomous agent is sent `input.message`. `{{today}}`, `{{now}}` and `{{last_run_at}}` in `input.message` are filled in at each run; nothing else in `input` is changed |
 | `deliverTo` | object or null | all | `{ "kind": "webhook" }` or `{ "kind": "channel", "channelId": "...", "to": "..." }` |
 
 ```bash

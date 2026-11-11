@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, OnModuleInit, Optional, forwardRef } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Raw, Repository } from 'typeorm';
 import { InjectQueue, Process, Processor } from '@nestjs/bull';
 import { Job, Queue } from 'bull';
 
@@ -50,6 +50,8 @@ export interface AgentScheduleConfig extends Partial<ScheduleTiming> {
   deliverTo?: ScheduleDelivery | null;
   /** Set when the scheduler paused this schedule on its own (see pauseForBrokenModel). */
   pausedReason?: AgentModelIssue;
+  /** When the schedule was first set up (ISO 8601): {{last_run_at}} before its first successful run. */
+  createdAt?: string;
 }
 
 /** What the schedule endpoints say about a schedule, besides its stored settings. */
@@ -75,7 +77,15 @@ import { claimDelivery } from './run-event-writer';
 import { runsOnAutonomousRuntime } from './agent-invocation';
 import { ScheduledResult } from './scheduled-result-poster';
 import { runInputOf } from './input-schema';
+import { inputUsesScheduleTemplate, scheduleTemplateValues, withFilledMessage } from './schedule-template';
+import { resolveTimeZone } from '../../common/utils/current-time';
+import { OrganizationTimeZoneService } from '../llm-providers/organization-time-zone.service';
 
+/** When a schedule was first set up, if it says. */
+export function scheduleCreatedAt(schedule: { createdAt?: unknown } | null | undefined): Date | null {
+  const at = typeof schedule?.createdAt === 'string' ? new Date(schedule.createdAt) : null;
+  return at && !Number.isNaN(at.getTime()) ? at : null;
+}
 /** What a scheduled tick asks an autonomous agent: the input's message, else the input itself. */
 export function scheduledTask(input: Record<string, any> | null | undefined): string {
   if (typeof input?.message === 'string' && input.message.trim()) return input.message;
@@ -195,6 +205,9 @@ export class AgentSchedulerService implements OnModuleInit {
     // Who an unattended run acts as: the owner, or the agent itself (agent_identity).
     @Optional()
     private readonly identity?: AgentIdentityService,
+    // The organization's time zone, for the values in a schedule's message.
+    @Optional()
+    private readonly timeZones?: OrganizationTimeZoneService,
   ) {}
 
   async onModuleInit() {
@@ -264,6 +277,8 @@ export class AgentSchedulerService implements OnModuleInit {
       ...validated,
       input: runInputOf(request.input ?? input, agent.pipeline),
       ...(deliverTo ? { deliverTo } : {}),
+      // Kept across edits: {{last_run_at}} on the first run is this.
+      createdAt: scheduleCreatedAt(agent.settings?.schedule)?.toISOString() ?? new Date().toISOString(),
     } as AgentScheduleConfig;
     // Re-enabling is the acknowledgement: whoever did it has seen the note.
     delete settings.modelIssue;
@@ -286,6 +301,49 @@ export class AgentSchedulerService implements OnModuleInit {
       .findOne({ where: { id: userId }, select: { id: true, timezone: true } as any })
       .catch(() => null);
     return user?.timezone ?? null;
+  }
+
+  /**
+   * The template step of a scheduled run: the input with {{last_run_at}},
+   * {{today}} and {{now}} filled in in its message text, in the
+   * organization's time zone (the schedule's own zone when the
+   * organization has none, then UTC). Only `input.message` is touched.
+   */
+  async fillTemplate(
+    agent: Agent,
+    schedule: AgentScheduleConfig,
+    input: Record<string, any> | null | undefined,
+  ): Promise<Record<string, any>> {
+    if (!input || !inputUsesScheduleTemplate(input)) return input ?? {};
+    const orgZone = this.timeZones ? await this.timeZones.configuredZoneOf(agent.organizationId) : null;
+    const zone = resolveTimeZone(orgZone, schedule?.timezone);
+    const lastRunAt =
+      (await this.lastSuccessfulRunStart(agent)) ?? scheduleCreatedAt(schedule) ?? agent.createdAt ?? new Date();
+    return withFilledMessage(input, scheduleTemplateValues(new Date(), lastRunAt, zone));
+  }
+
+  /** When the schedule's previous successful run started, if it had one. */
+  private async lastSuccessfulRunStart(agent: Agent): Promise<Date | null> {
+    const scheduled = Raw((alias) => `(${alias})::jsonb ->> 'triggerType' = 'scheduled'`);
+    try {
+      if (runsOnAutonomousRuntime(agent)) {
+        const run = await this.runRepo?.findOne({
+          where: { agentId: agent.id, status: AgentRunStatus.COMPLETED, metadata: scheduled },
+          order: { createdAt: 'DESC' },
+          select: { id: true, createdAt: true },
+        });
+        return run?.createdAt ?? null;
+      }
+      const execution = await this.executionRepo.findOne({
+        where: { agentId: agent.id, status: AgentExecutionStatus.COMPLETED, metadata: scheduled },
+        order: { createdAt: 'DESC' },
+        select: { id: true, createdAt: true },
+      });
+      return execution?.createdAt ?? null;
+    } catch (err: any) {
+      this.logger.warn(`[SCHEDULED_RUN] Could not read the last run of agent ${agent.id}: ${err?.message ?? err}`);
+      return null;
+    }
   }
 
   /** Validate where the result goes; null for nowhere else. */
@@ -744,7 +802,7 @@ export class AgentSchedulerService implements OnModuleInit {
       return;
     }
 
-    const { agentId, organizationId, input } = job.data;
+    const { agentId, organizationId, input: scheduledInput } = job.data;
 
     if (!agentId || !organizationId) {
       this.logger.warn(`[SCHEDULED_RUN] Missing agentId/organizationId in job payload — dropping`);
@@ -828,8 +886,10 @@ export class AgentSchedulerService implements OnModuleInit {
       // pipeline, which finished at once with no output.
       // The run gets its input in the shape a manual run sends it, an
       // object: a schedule saved with bare text has it put in the declared
-      // input field (runInputOf).
-      const runInput = runInputOf(input, agent.pipeline);
+      // input field (runInputOf). Then the template step fills
+      // {{last_run_at}}, {{today}} and {{now}} in its text fields
+      // (schedule-template.ts), whatever the field is called.
+      const runInput = await this.fillTemplate(agent, schedule, runInputOf(scheduledInput, agent.pipeline));
       if (runsOnAutonomousRuntime(agent)) {
         if (!this.runtime) throw new Error('The autonomous runtime is not available on this server');
         await this.runtime.startRun(agent.id, organizationId, runUser, scheduledRunInput(runInput), {

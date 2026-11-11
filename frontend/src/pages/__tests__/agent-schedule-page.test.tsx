@@ -190,6 +190,38 @@ describe('/agents/:id/schedule', () => {
     await waitFor(() => expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ input: { message: 'Summarise yesterday.' } })))
   }, 20_000)
 
+  it('names the values a message can use next to it, and sends them as written', async () => {
+    const user = userEvent.setup()
+    api.getById.mockResolvedValue({ ...agent(), mode: 'autonomous' })
+    renderAtRoute(<AgentSchedulePage />, AT)
+    await screen.findByRole('heading', { name: 'Set up a schedule' })
+
+    // Inline, as the message field's description: no dialog to open.
+    const message = screen.getByLabelText('Message')
+    const hint = document.getElementById(message.getAttribute('aria-describedby') ?? '')
+    expect(hint).toHaveTextContent('{{today}}')
+    expect(hint).toHaveTextContent('{{now}}')
+    expect(hint).toHaveTextContent('{{last_run_at}}')
+    expect(hint).toHaveTextContent('when the schedule was set up')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    // The scheduler fills them in at each run; the page stores them as typed.
+    fireEvent.change(message, { target: { value: 'Papers since {{last_run_at}}, today {{today}}.' } })
+    await user.click(screen.getByRole('button', { name: 'Save schedule' }))
+    await waitFor(() =>
+      expect(api.schedule).toHaveBeenCalledWith(
+        'a1',
+        expect.objectContaining({ input: { message: 'Papers since {{last_run_at}}, today {{today}}.' } }),
+      ),
+    )
+  }, 20_000)
+
+  it('names the values next to a workflow agent’s input too', async () => {
+    renderAtRoute(<AgentSchedulePage />, AT)
+    await screen.findByRole('heading', { name: 'Set up a schedule' })
+    expect(screen.getByText(/In a "message" field: You can write \{\{today\}\}/)).toBeInTheDocument()
+  }, 20_000)
+
   it('runs on the last day of every month', async () => {
     const user = userEvent.setup()
     renderAtRoute(<AgentSchedulePage />, AT)
