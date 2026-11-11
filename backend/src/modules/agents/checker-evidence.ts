@@ -16,8 +16,12 @@
 
 /** Evidence budget when the checker's context window is not known, in characters. */
 export const EVIDENCE_DEFAULT_CHARS = 120_000;
-/** The most evidence any checker is shown, whatever its window. */
-export const EVIDENCE_MAX_CHARS = 400_000;
+/**
+ * The most evidence any checker is shown, whatever its window: about 50k
+ * tokens. Every check and every revision pays for it again, and the staged
+ * shortening keeps every item of a large list well inside this.
+ */
+export const EVIDENCE_MAX_CHARS = 160_000;
 const EVIDENCE_MIN_CHARS = 4_000;
 /** Conservative: JSON runs nearer three characters a token than four. */
 const CHARS_PER_TOKEN = 3;

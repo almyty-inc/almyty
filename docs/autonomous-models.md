@@ -145,7 +145,8 @@ These rules hold for the verify gate and the strategy checks alike
 - A checker sees the request, today's date and every tool result of the
   run. The amount is sized to the checker model's context window (half
   of it, from its model card), 120,000 characters when the window is
-  unknown, and never more than 400,000.
+  unknown, and never more than 160,000 (about 50,000 tokens), since every
+  check and every revision pays for it again.
 - A tool result too large for its share is shortened without losing
   items: a JSON result keeps every item with its identifying fields (id,
   name, title, tag, version, date, url, doi) and drops long fields such as

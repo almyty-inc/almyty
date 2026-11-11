@@ -113,7 +113,7 @@ describe('the checker sees every item of a long tool result', () => {
     expect(evidenceBudget(2_000_000)).toBe(EVIDENCE_MAX_CHARS);
     expect(evidenceBudget(16_000)).toBeLessThan(EVIDENCE_DEFAULT_CHARS);
     // What the prompt else carries comes off the evidence.
-    expect(evidenceBudget(200_000, 50_000)).toBe(evidenceBudget(200_000) - 50_000);
+    expect(evidenceBudget(80_000, 50_000)).toBe(evidenceBudget(80_000) - 50_000);
   });
 
   it("reads the checker's context window from its model card (the step processor)", async () => {
