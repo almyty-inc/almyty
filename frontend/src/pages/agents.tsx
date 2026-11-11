@@ -334,7 +334,7 @@ export function AgentsPage() {
                 </div>
               )}
               {/* A deliberate scroll region on a phone: five columns do not fit 390px. */}
-              <div className="overflow-x-auto" role="region" aria-label="Agents" tabIndex={0}>
+              <div className="relative overflow-x-auto" role="region" aria-label="Agents" tabIndex={0}>
               <table className="w-full min-w-[40rem]">
                 <thead>
                   <tr className="border-b">
