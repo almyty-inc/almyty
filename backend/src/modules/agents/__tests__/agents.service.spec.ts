@@ -1507,10 +1507,21 @@ describe('AgentsService', () => {
       organizationRepo.findOne.mockResolvedValue(makeOrganization());
       agentRepo.findOne.mockResolvedValue({ id: 'agent-2' });
 
-      await expect(service.createAgent({ ...dto, name: ' invoices ' }, 'org-1', 'user-1')).rejects.toThrow(ConflictException);
       await expect(service.createAgent({ ...dto, name: ' invoices ' }, 'org-1', 'user-1')).rejects.toThrow(
-        'An agent called "invoices" already exists here. Choose another name.',
+        'That name is already in use in this organization; pick another.',
       );
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('says nothing about the agent holding the name, which may be someone else\'s private agent', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      // The clash is another user's private agent.
+      agentRepo.findOne.mockResolvedValue({ id: 'agent-9', name: 'Payroll', visibility: 'private', createdBy: 'user-2' });
+
+      const refusal = await service.createAgent({ ...dto, name: 'Payroll' }, 'org-1', 'user-1').catch((e) => e);
+      expect(refusal).toBeInstanceOf(ConflictException);
+      const text = JSON.stringify(refusal.getResponse());
+      for (const leak of ['Payroll', 'agent-9', 'user-2', 'private']) expect(text).not.toContain(leak);
       expect(agentRepo.save).not.toHaveBeenCalled();
     });
 

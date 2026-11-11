@@ -49,7 +49,7 @@ vi.mock('@/components/agents/builder/canvas-area', () => ({ CanvasArea: () => nu
 vi.mock('@/components/agents/builder/test-panel', () => ({ TestPanel: () => null }))
 vi.mock('@/lib/analytics', () => ({ captureEvent: vi.fn() }))
 
-const TAKEN = 'An agent called "Invoices" already exists here. Choose another name.'
+const TAKEN = 'That name is already in use in this organization; pick another.'
 
 const pipeline = {
   nodes: [

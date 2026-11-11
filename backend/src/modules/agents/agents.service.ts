@@ -222,6 +222,14 @@ export const DEFAULT_EXECUTIONS_PAGE_SIZE = 20;
 /** Hard ceiling on one page of executions. */
 export const MAX_EXECUTIONS_PAGE_SIZE = 100;
 
+/**
+ * Why a create or rename was refused for its name. Neutral on purpose: the
+ * agent holding the name may be another person's private agent, and naming
+ * it, its owner or even echoing the name back as "an agent called X" would
+ * tell the caller it exists.
+ */
+export const AGENT_NAME_IN_USE = 'That name is already in use in this organization; pick another.';
+
 @Injectable()
 export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
@@ -669,6 +677,10 @@ export class AgentsService {
    * finds one (`findByName`). Case and surrounding spaces do not make a
    * name different. `exceptId` is the agent being renamed. The unique index
    * on ("organizationId", LOWER(name)) backs this up against a race.
+   *
+   * The refusal says nothing about the other agent -- not its name back,
+   * owner or visibility -- since it may be someone's private agent the
+   * caller cannot see (AGENT_NAME_IN_USE).
    */
   async assertNameFree(organizationId: string, name: string, exceptId?: string): Promise<void> {
     const clash = await this.agentRepository.findOne({
@@ -676,7 +688,7 @@ export class AgentsService {
       select: { id: true },
     });
     if (clash && clash.id !== exceptId) {
-      throw new ConflictException(`An agent called "${name.trim()}" already exists here. Choose another name.`);
+      throw new ConflictException(AGENT_NAME_IN_USE);
     }
   }
 
@@ -689,7 +701,7 @@ export class AgentsService {
       return await this.agentRepository.save(agent);
     } catch (err: any) {
       if (String(err?.code) === '23505' && /agents_org_name/i.test(String(err?.constraint ?? err?.message ?? ''))) {
-        throw new ConflictException(`An agent called "${(agent.name ?? '').trim()}" already exists here. Choose another name.`);
+        throw new ConflictException(AGENT_NAME_IN_USE);
       }
       throw err;
     }
