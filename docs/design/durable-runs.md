@@ -3,7 +3,8 @@
 Status: accepted. Being built step by step (see Rollout). Done: step 1,
 the event log written alongside the run row, step 2, the projection
 checked against the row on every write and live run views replayed from
-the log, and step 3, run leases.
+the log, step 3, run leases, and step 4, resume from the log and
+idempotency keys.
 
 ## In plain words
 
@@ -22,13 +23,14 @@ from the last event, without doing a paid call or a side effect twice.
 
 - **A dead worker strands its run.** The run sits `running` until the
   reaper times it out, and the step's work is lost. There is no lease to
-  expire and no record of how far the step got. (Step 3: the lease expires
-  and another worker takes the run over, on the log; the step starts over
-  until step 4 resumes it.)
+  expire and no record of how far the step got. (Steps 3 and 4: the lease
+  expires, another worker takes the run over, on the log, and resumes the
+  step from what it had done.)
 - **Retries can repeat side effects.** The step CAS (`commitStep`, guarded
   on `currentStep` and a non-terminal status) stops a duplicate commit,
   but not a duplicate tool call made before the commit: a retried job
-  calls the tool again.
+  calls the tool again. (Closed by step 4: a call finished is not made
+  again, and one whose outcome is unknown goes out with its first key.)
 - **State is rewritten, not appended.** `steps` and `workingMemory` are
   written whole on every commit. What changed in a step is not recorded
   anywhere, only the result.
@@ -87,6 +89,8 @@ Event types (`backend/src/modules/agents/run-events.ts`):
 | `input_received` | A person's input resumed a waiting run (the message by id; its words stay in the conversation). |
 | `delivery_claimed` | A finished run's result claimed for posting (schedule or always-on), once. |
 | `lease_taken_over` | A worker claimed the run after the lease of the one processing it expired (step 3): the new `attempt` and when the old lease lapsed. |
+| `model_answered` | Step progress (step 4): the model's answer, written before anything acts on it. |
+| `tool_started` / `tool_finished` | Step progress (step 4): a call about to be made, with its idempotency key, and what it came to. |
 | `waiting_input`, `status_changed`, `run_completed`, `run_failed` | Status transitions. |
 | `step_committed` | Last event of every write: status, step, cost, tokens, tool calls, time, and output and error when they changed. |
 
@@ -126,7 +130,8 @@ in step 2).
    machine waits to `nextWakeAt`. The queue only nudges. *Done* (see Step 3
    as built, below).
 4. **Resume and idempotency keys.** Resume from the log after a lease
-   expires; tool calls carry their key.
+   expires; tool calls carry their key. *Done* (see Step 4 as built,
+   below).
 5. **The log is the source of truth.** `steps` and `workingMemory` on the
    row become a cache of the projection.
 
@@ -377,8 +382,8 @@ lock as before, and the commit's status guard keeps a cancel final.
 
 **Takeover.** A claim that finds the lease expired takes the run over:
 `attempt` + 1, and `lease_taken_over` on the log (`attempt`, `lapsedAt`;
-the worker's identity is not on the log). In this step the taken-over
-step starts over; resuming from the log is step 4.
+the worker's identity is not on the log). The taken-over step resumes from
+its progress on the log (step 4, below).
 
 **The takeover cap.** `takeovers` (migration
 `AgentRunTakeovers1791001000000`, a lease column like `attempt`, so not in
@@ -426,6 +431,188 @@ time ends the run at its third takeover (by default) instead of being
 taken over until its own limits (duration, steps, cost) or the reaper end
 it.
 
+## Step 4 as built: resume and idempotency keys
+
+**A step writes its progress.** While it works, before its commit, a step
+puts what it has done on the run's log (`StepJournal`,
+`backend/src/modules/agents/run-resume.ts`):
+
+| Event | When | What it carries |
+|---|---|---|
+| `model_answered` | The model answered, before anything acts on the answer. | The response as the provider layer returned it (message, tool calls with their arguments, cost, usage, model, routing), how many messages the call was made with, the role, and what compaction folded before the call (its summary, cost and tokens), when it folded anything. |
+| `tool_started` | Before each call is made. | `callIndex` (the call's place in the step), its idempotency key, the tool, and the arguments it is made with (the real ones; see Arguments on the log, below). |
+| `tool_attempted` | Before and after each further try of a write whose outcome was lost (Unknown outcomes, below). | The key, the try's number and phase (`started`, `finished`), and once finished its outcome, HTTP status, error and result (capped, personal data hidden). |
+| `tool_finished` | Once the call's outcome is known. | The key, what the step reads of the call afterwards (its result and error, capped and with personal data hidden, as the stored steps are), the steps it recorded (stored the same way), what it added to cost, tokens and the tool-call ledger, working memory or metadata when it changed them, and what it left for the rest of the step (a call held for approval, a call waiting on a machine, a change set, a machine failure). |
+
+They are markers: nothing in the fold changes, and the commit that follows
+describes the step exactly as before, so the projection, the live views
+and every reader of the log stay as they were (they skip types they do not
+know). The write is `writeRun` with `{ progress: true }`: it locks the row,
+reads only the columns that guard it, appends the notes with no
+`step_committed` after them, and moves `headSeq` (and `updatedAt`, which
+the reaper reads as progress). It is guarded like the step's commit: the
+run still at the step, not finished, and held by this worker's lease
+(`heldBy`). A refused write stops the step where it is: a call is never
+made unless its `tool_started` landed, and a cancelled run keeps the cost
+of the answer already paid for (`abandonIfTerminal`). The projection
+check moves a cached projection over progress without comparing anything
+(`RunWritten.progress`).
+
+**Where a step's progress is.** Every event a write appends carries the
+step the run was at. The commit that moves a run to step N is written at
+step N - 1, and a step number is never processed again once its commit
+lands, so step N's progress is the tail of the log at step N. A step reads
+it from the end, newest first, 100 events a page, until an event of
+another step: one indexed read of the primary key in the common case. A
+write someone else makes during the step (a channel's metadata, an
+approval request) sits in that tail and does not cut it short.
+
+**Resume.** Every step reads its progress before it does anything (a
+takeover after a lapsed lease, a retried job, or, almost always, nothing):
+
+- The model answered an earlier attempt: it is not asked again. Its
+  answer, cost and tokens are the step's, the role is charged once, and
+  what compaction folded before the call is put back without folding
+  again. The live `llm.response` goes out once more with `resumed: true`.
+  The assistant message with the tool calls is saved only if the earlier
+  attempt did not save it.
+- A call has `tool_finished`: it is not made again. Its outcome stands in
+  for it (`replayCall`): its steps, totals, working memory and the step's
+  own bookkeeping, so the commit is the one an uninterrupted step would
+  have written. Its conversation message was saved before its
+  `tool_finished`, so it is not saved twice.
+- A call has `tool_started` and no `tool_finished`: the worker died in
+  the call, or between the call returning and its outcome landing on the
+  log, and nobody knows whether it ran. A read, or a call to a tool that
+  takes an idempotency key, is made again, with the key it was first made
+  with. A write or delete to a tool that takes none is not: it is tried
+  again with backoff, the model is told, and a person decides (Unknown
+  outcomes, below).
+- Anything else runs as it would have.
+
+The calls of a step made before the model is asked, held calls once
+approved, change sets once decided and calls that found their machine
+waking (`runApprovedCalls`, `retryWakingCalls`), are journaled the same
+way: change sets first, then held calls, by their place in the step.
+
+**Idempotency keys.** A call's key is `runId:step:callIndex`
+(`idempotencyKey`), the same on every attempt of the step. It is on the
+log with the call (`tool_started`, `tool_finished`), checked there before
+the call, and handed to the tool executor as
+`ToolExecutionOptions.idempotencyKey`, which keeps it across its own
+retries. A tool accepts one when its operation declares an
+`Idempotency-Key` or `X-Idempotency-Key` header (any case), or its HTTP
+config sets one (`idempotencyHeader`, `operation-header-params.ts`): the
+call sends the key as that header, in place of whatever the model put
+there. A tool that declares none is sent no key; for it, a call the log
+does not know the outcome of is made again when it reads, and tried again
+with care when it writes (Unknown outcomes, below).
+
+**The takeover cap.** Resuming does not change what the cap counts:
+`takeovers` goes back to 0 only when a step commits, so a step that makes
+progress on each attempt and still takes its worker down every time ends
+the run at `RUN_MAX_TAKEOVERS` like before, and every attempt before that
+resumes from the last one's progress. A call finished on any attempt is
+made once.
+
+**What is not resumed.** Only the step's own model call and its tool calls
+are on the log. A strategy's further calls on a final answer (cascade's
+checker, best-of-n and panel candidates and judge, the composed answer,
+the verify panel) and the explore phase are made again by a step that
+resumes after them; so are the calls a `run_code` script makes inside its
+one call, and a sub-agent call that was started and not finished starts
+its child run again. Built-in tools (memory, wait, input) and teammates are
+journaled like any call but get no key: they make no outside call of their
+own.
+
+**Unknown outcomes.** A call on the log as started and not finished, to
+a tool that writes or deletes (its side-effect class, `tool-side-effect.ts`)
+and takes no idempotency key, is not made again silently
+(`backend/src/modules/agents/unknown-writes.ts`). Making it again could do
+the same thing twice, a second email or a second payment, and nobody
+would know. Instead:
+
+1. It is tried again, up to `RUN_UNKNOWN_WRITE_RETRIES` times, waiting
+   `RUN_UNKNOWN_WRITE_BACKOFF_MS` before the first try and twice as long
+   before each next one. It stops at the first try with a definite
+   outcome: the tool succeeded, the service refused it (a 4xx other than
+   408 and 429), or it never reached the service (no such tool, no
+   access, held by an approval rule). A timeout, a network error, a 5xx,
+   408 or 429, or a machine still starting is no answer, and the next try
+   follows. Each try is on the log twice, as `tool_attempted`: before it
+   is made (`phase: started`) and once it came back (`phase: finished`,
+   its outcome, HTTP status, error and result, capped and with personal
+   data hidden). A try that another death cut off is counted as one that
+   got no answer, and the step that picks up next goes on from the tries
+   already made.
+2. Whatever came of the tries, the model is told plainly, as the call's
+   result: an earlier attempt may already have gone through, the tool
+   takes no idempotency key, how many tries were made and what each came
+   to (the last one's result when it succeeded), and not to make the call
+   again itself.
+3. The run waits for a person. The step asks for an approval of kind
+   `unknown_outcome` (the same approvals as held calls, on the Approvals
+   page and in the approval notifications) carrying the call, its
+   arguments with personal data hidden, and the tries; the call goes on
+   working memory as `unknownOutcomeCalls` (tool, approval and each try's
+   outcome, no arguments and no results), and the run is
+   `waiting_approval` once the step commits, like a held call. The log
+   says so with `approval_requested` (kind `unknown_outcome`).
+4. Once the person decides (`approval_decided`, kind `unknown_outcome`),
+   the run carries on whatever the decision, like a change set: a
+   rejection does not cancel it. The next step adds the decision to the
+   call's result before the model is asked anything. Approved: a person
+   checked it and the agent carries on. Rejected, or left until the
+   request expired: the agent is told to treat the action as not done,
+   not to make the call again, and to carry on without it. Nothing is
+   sent again or undone either way.
+
+Reads, and tools that take a key, are made again as described above. The
+same holds for held calls once approved and calls retried after a waking
+machine: one of those cut off mid-call goes through the same tries,
+telling and approval.
+
+| Variable | Default | What |
+|---|---|---|
+| `RUN_UNKNOWN_WRITE_RETRIES` | 3 | How many times a keyless write whose outcome was lost is tried again (a whole number from 0 to 10; 0 tries nothing and still asks a person). |
+| `RUN_UNKNOWN_WRITE_BACKOFF_MS` | 1000 | The wait before the first try; each next try waits twice as long (1 s, 2 s, 4 s by default). |
+
+**Arguments on the log.** `model_answered` and `tool_started` keep a
+call's real arguments: a step that resumes reads them from the log
+(`StepJournal`) and makes the call with them, so every try above sends
+the real values. Everywhere the log is read out, the arguments are shown
+with personal data hidden (`backend/src/modules/agents/run-log-privacy.ts`):
+
+- The run streams, `GET /agents/:id/runs/:runId/stream` and the API-key
+  route, send every page of the log they read through the run log view
+  (`AgentRuntimeEventsHelper.setRunLogView`, set by the runtime service on
+  start). What a live view folds the log into, the run as the dashboard
+  rebuilds it, is therefore built from hidden arguments too.
+- The run view (`GET /agents/:id/runs/:runId` and the API-key route)
+  answers with the run's held calls (`gatedToolCalls`, `wakingToolCalls`,
+  `unknownOutcomeCalls`) and its steps the same way
+  (`AgentRuntimeService.getRunForViewer`).
+- A visitor's reply stream reads only the runtime events, which carry no
+  arguments, never the log. Nothing exports the log today; a guard spec
+  (`run-log-privacy.spec.ts`) fails when code outside resume, the writer
+  and the live view starts reading `agent_run_events`, so a new reader
+  goes through `eventsForViewers` from the start.
+
+The hiding always applies, whatever the organization set. The arguments
+go through the organization's own PII filter first
+(`ToolExecutorService.hidePersonalData`, the pii-filter plugin, so its
+custom patterns and any compliance policy apply), then through the same
+plugin's detector with its shipped settings (emails, card numbers, SSNs,
+phone numbers, IP addresses; `hidePersonalDataAlways`), so an
+organization with the filter off still gets them hidden. The approval for
+a lost write shows its arguments the same way. Stored steps and tool
+results keep the organization's rule; only what a viewer of the log gets
+is hidden unconditionally. Only arguments are touched; ids, states and
+costs are left as they are. A filter that fails, or a run that can no
+longer be found, hides the arguments altogether.
+
+The lease settings above decide when a step is picked up again.
+
 ## The worker-kill test
 
 The acceptance test for steps 3 and 4: start a run whose step makes a tool
@@ -434,3 +621,20 @@ returned and before the commit, and let the lease expire. The run must
 finish on another worker with the side effect made exactly once, the model
 asked no more times than without the kill, cost counted once, and a viewer
 connected throughout seeing every event once and in order.
+
+It is `run-resume.integration.spec.ts` (real Postgres and Redis): the dying
+worker stops at its commit and never writes or renews again, three workers
+race to pick the run up and one takes it over, and a viewer subscribed to
+the run's log from seq 0 sees it whole. The same spec kills a worker inside
+its call (the call goes out again with its first key, and the service makes
+it once) and runs a step into the takeover cap; `run-resume.spec.ts` drives
+the same cases over the fake repositories.
+
+`unknown-writes.integration.spec.ts` (real Postgres and Redis) kills a
+worker inside a call to a keyless write: the run is taken over, the call
+is tried again with backoff and the run waits for a person; approved, it
+carries on to the end without the call made again; rejected, the model is
+told to carry on without it; and a viewer on the run's SSE stream never
+sees the email address in the call's arguments while every try sends the
+real one. `unknown-writes.spec.ts` and `run-log-privacy.spec.ts` drive
+the same over the fake repositories.

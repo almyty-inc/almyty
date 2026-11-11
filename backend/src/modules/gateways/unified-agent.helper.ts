@@ -457,7 +457,8 @@ export class UnifiedAgentHelper {
     }
 
     if (req.method === 'GET' && !subAction) {
-      const run = await this.runtimeService.getRun(runId, organization.id);
+      // Held calls' arguments with personal data hidden (agents/run-log-privacy.ts).
+      const run = await this.runtimeService.getRunForViewer(runId, organization.id);
       return res.json({ success: true, data: run });
     }
 

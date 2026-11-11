@@ -30,15 +30,20 @@ export function runEventsTable() {
       return { identifiers: list.map((e) => ({ runId: e.runId, seq: e.seq })), generatedMaps: [], raw: [] };
     }),
     /**
-     * The read a live run view replays from: a run's events after a seq
-     * (`seq: MoreThan(n)`), in seq order, a page at a time.
+     * The reads of a run's events: after a seq (`seq: MoreThan(n)`, a
+     * live run view replaying), or up to one (`seq: LessThanOrEqual(n)`,
+     * a step reading its own progress back from the end), in seq order or,
+     * with `order: { seq: 'DESC' }`, newest first, a page at a time.
      */
     find: jest.fn(async (options: any = {}) => {
       const where = options.where ?? {};
-      const after = where.seq && typeof where.seq === 'object' && where.seq.type === 'moreThan' ? Number(where.seq.value) : -Infinity;
+      const op = where.seq && typeof where.seq === 'object' ? where.seq : null;
+      const after = op?.type === 'moreThan' ? Number(op.value) : -Infinity;
+      const upTo = op?.type === 'lessThanOrEqual' ? Number(op.value) : Infinity;
+      const desc = String(options.order?.seq ?? 'ASC').toUpperCase() === 'DESC';
       const found = rows
-        .filter((r) => (where.runId === undefined || r.runId === where.runId) && r.seq > after)
-        .sort((a, b) => a.seq - b.seq);
+        .filter((r) => (where.runId === undefined || r.runId === where.runId) && r.seq > after && r.seq <= upTo)
+        .sort((a, b) => (desc ? b.seq - a.seq : a.seq - b.seq));
       return (options.take ? found.slice(0, options.take) : found).map((r) => cloneRow(r));
     }),
   };

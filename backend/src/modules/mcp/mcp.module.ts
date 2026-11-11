@@ -11,6 +11,8 @@ import { McpOAuthController } from './controllers/mcp-oauth.controller';
 import { McpOAuthDiscoveryController } from './controllers/mcp-oauth-discovery.controller';
 import { McpService } from './mcp.service';
 import { AlmytyMcpService } from './almyty-mcp.service';
+import { ManagementRouteInvoker } from './management/route-invoker.service';
+import { ManagementOperationsService } from './management/management-operations.service';
 import { McpSessionService } from './mcp-session.service';
 import { UtcpService } from './utcp.service';
 import { GatewayResolverService } from './services/gateway-resolver.service';
@@ -84,6 +86,8 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
     McpContentHandler,
     McpServerRequestService,
     AlmytyMcpService,
+    ManagementRouteInvoker,
+    ManagementOperationsService,
     McpService,
     McpSessionService,
     UtcpService,

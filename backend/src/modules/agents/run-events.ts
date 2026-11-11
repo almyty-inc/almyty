@@ -18,6 +18,14 @@ import type { AgentRun } from '../../entities/agent-run.entity';
  * `input_received`, `waiting_input`, `compaction`, `delivery_claimed`,
  * `lease_taken_over`, `run_completed`, `run_failed`) say what happened in
  * the words a reader or a stream wants and change nothing in the fold.
+ *
+ * Step progress (durable runs step 4, run-resume.ts) is markers too:
+ * `model_answered`, `tool_started`, `tool_attempted` and `tool_finished`
+ * are written while a step works, before its commit, so a worker that picks
+ * the step up again resumes from them instead of asking the model or making
+ * a call again (`tool_attempted`: one more try of a write whose outcome
+ * was lost, unknown-writes.ts). They change nothing in the fold; the commit
+ * that follows them describes the step as before.
  */
 export const RUN_EVENT_TYPES = [
   'run_started',
@@ -38,12 +46,19 @@ export const RUN_EVENT_TYPES = [
   'status_changed',
   'delivery_claimed',
   'lease_taken_over',
+  'model_answered',
+  'tool_started',
+  'tool_finished',
+  'tool_attempted',
   'run_completed',
   'run_failed',
   'step_committed',
 ] as const;
 
 export type RunEventType = (typeof RUN_EVENT_TYPES)[number];
+
+/** Events a step writes while it works, before its commit (durable runs step 4, run-resume.ts). */
+export const STEP_PROGRESS_TYPES: readonly RunEventType[] = ['model_answered', 'tool_started', 'tool_attempted', 'tool_finished'];
 
 /** An event before it has a seq. */
 export interface RunEventDraft {
@@ -165,6 +180,9 @@ function approvalsWaiting(memory: any): Map<string, Record<string, any>> {
   for (const set of Array.isArray(memory.pendingChangeSets) ? memory.pendingChangeSets : []) {
     if (set?.approvalId) out.set(set.approvalId, asStored({ approvalId: set.approvalId, kind: 'change_set', codeExecutionId: set.codeExecutionId, toolCallId: set.toolCallId }));
   }
+  for (const call of Array.isArray(memory.unknownOutcomeCalls) ? memory.unknownOutcomeCalls : []) {
+    if (call?.approvalId) out.set(call.approvalId, asStored({ approvalId: call.approvalId, kind: 'unknown_outcome', tool: call.toolName, toolCallId: call.toolCallId }));
+  }
   return out;
 }
 
@@ -188,6 +206,27 @@ function stepEvents(step: Step, index: number, nextCall: () => number, at: numbe
 }
 
 /**
+ * The first event of a run's log: the row as it stood before its first
+ * write, the input-side state a fold starts from. Opens the log whichever
+ * write comes first, a commit or a step's progress (run-event-writer.ts).
+ */
+export function runStartedEvent(base: RunBaseline): RunEventDraft {
+  return {
+    type: 'run_started',
+    step: base.currentStep,
+    payload: {
+      status: base.status,
+      currentStep: base.currentStep,
+      output: base.output,
+      error: base.error,
+      workingMemory: base.workingMemory,
+      metadata: base.metadata,
+      steps: base.steps,
+    },
+  };
+}
+
+/**
  * What a write changes, as events, in order. `steps` is the array as the
  * row will store it (capped, personal data hidden), index-aligned with the
  * baseline's. `notes` are markers the writer recorded that leave no other
@@ -205,21 +244,7 @@ export function commitEvents(base: RunBaseline, run: CommittedRun, steps: Step[]
 
   // The first commit of a run opens its log with what the row held before
   // it: the input-side state a fold starts from.
-  if (base.headSeq === 0) {
-    events.push({
-      type: 'run_started',
-      step: at,
-      payload: {
-        status: base.status,
-        currentStep: base.currentStep,
-        output: base.output,
-        error: base.error,
-        workingMemory: base.workingMemory,
-        metadata: base.metadata,
-        steps: base.steps,
-      },
-    });
-  }
+  if (base.headSeq === 0) events.push(runStartedEvent(base));
 
   events.push(...notes.map((n) => ({ ...n, step: n.step ?? at, payload: asStored(n.payload) })));
 

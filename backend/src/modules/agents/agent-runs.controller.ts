@@ -208,7 +208,8 @@ export class AgentRunsController {
       // actually belongs to this agent. Previously the :id was
       // decorative — any runId in the caller's org resolved through
       // any /agents/:id/runs/:runId URL.
-      const run = await this.runtimeService.getRun(runId, organizationId, id);
+      // Held calls' arguments with personal data hidden (run-log-privacy.ts).
+      const run = await this.runtimeService.getRunForViewer(runId, organizationId, id);
       return { success: true, data: run };
     } catch (error) {
       throw new HttpException(

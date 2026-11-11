@@ -70,7 +70,21 @@ Only you, from your own address on that channel, can decide there; anyone else i
 
 ## If nobody decides
 
-A request that nobody decides expires after 24 hours, and the work is cancelled with the reason "approval expired".
+A request that nobody decides expires after 24 hours, and the work is cancelled with the reason "approval expired". A check after a cut-off step (below) is the exception: the assistant is told nobody checked, treats the action as not done, and carries on without it.
+
+## When a step was cut off
+
+Sometimes the machine running an assistant stops in the middle of an action, for example during a restart. almyty picks the work up again on another machine, but it cannot always tell whether the action already went through: the message may already be sent, the order already placed.
+
+Most tools are simply asked again: looking something up twice does no harm, and a tool that accepts an idempotency key does the action only once however often it is asked. For a tool that changes something and has no such key, asking again could do it twice. So instead:
+
+1. **almyty tries again, carefully.** Up to three more times, waiting a little longer each time (1, 2, then 4 seconds), and it stops as soon as one try gives a clear answer.
+2. **The assistant is told.** It reads that the action may already have happened, and what each try came to, so it does not repeat it on its own.
+3. **A person checks.** The request appears on the **Approvals** page like any other, showing the tool, what it was asked to do (with personal details such as email addresses hidden) and each try. Check with the service if you need to.
+   - **Approve** and the assistant carries on.
+   - **Reject** and the assistant is told to treat the action as not done and to carry on without it. The run is not cancelled.
+
+Nothing is sent again or undone by your decision; it tells the assistant how to go on. Self-hosting? The number of tries and the first wait are the `RUN_UNKNOWN_WRITE_RETRIES` and `RUN_UNKNOWN_WRITE_BACKOFF_MS` settings.
 
 ## Approval rules for the whole organization
 
@@ -91,6 +105,7 @@ The runtime creates an `ApprovalRequest` row, sets the run to `waiting_approval`
 - **Page refresh**: the Approvals page checks for new requests every 10 seconds.
 - **Approve in chat**: an agent with Always on and an owner's channel posts each request of its runs there, with Approve and Reject buttons on Telegram, Slack, Microsoft Teams and Discord, and "reply yes or no" everywhere. Only the owner's own address on that channel decides; the decision goes through the same `approve`/`reject` as the page, so whichever is first wins. Audited as `channel_approval`. On Slack, set the app's **Interactivity Request URL** to the channel's webhook URL; on Discord, leave the application's **Interactions Endpoint URL** empty so presses arrive on the bot's connection. Details in `docs/always-on.md`.
 - **API**: list pending approvals, approve and reject over REST; responses only include approvals the caller can see. See the [API reference](/api-reference/authentication).
+- **Calls whose outcome was lost**: an autonomous run whose worker stopped in the middle of a call to a tool that writes or deletes and takes no idempotency key (no `Idempotency-Key` header) tries the call again up to `RUN_UNKNOWN_WRITE_RETRIES` times (default 3), waiting `RUN_UNKNOWN_WRITE_BACKOFF_MS` (default 1000, doubling) before each try and stopping at the first definite outcome, and then asks for an approval with `payload.kind: "unknown_outcome"`, `payload.tool`, `payload.parameters` (personal data always hidden: the organization's PII filter, then the built-in detector, even when the filter is off) and `payload.attempts` (each try's number, outcome and HTTP status). The run resumes whatever the decision; the decision is added to the call's result for the model. Design: `docs/design/durable-runs.md`, Unknown outcomes.
 
 ### Amount rules
 

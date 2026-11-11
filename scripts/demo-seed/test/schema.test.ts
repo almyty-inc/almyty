@@ -60,8 +60,8 @@ test('only someone who signs in through SSO may have no password', () => {
 test('paths, timeouts and headless walks are checked', () => {
   assert.throws(() => parseWalk(walk({ shots: { one: { path: 'public/one.png', title: 'One', sources: ['x'] } } })), /screenshots/)
   assert.throws(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: -1 }, { shot: 'one' }] })), /steps\.0/)
-  // Up to half an hour, for real coding assistants at work; no longer.
-  assert.doesNotThrow(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: 1_500_000 }, { shot: 'one' }] })))
-  assert.throws(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: 1_800_001 }, { shot: 'one' }] })), /steps\.0\.timeout/)
+  // Up to two hours, for real coding assistants at work; no longer.
+  assert.doesNotThrow(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: 3_600_000 }, { shot: 'one' }] })))
+  assert.throws(() => parseWalk(walk({ steps: [{ waitFor: { text: 'x' }, timeout: 7_200_001 }, { shot: 'one' }] })), /steps\.0\.timeout/)
   assert.throws(() => parseWalk(walk({ headless: true })), /headless walk takes no screenshots/)
 })

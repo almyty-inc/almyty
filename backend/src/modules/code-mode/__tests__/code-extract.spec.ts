@@ -12,7 +12,10 @@ describe('extract()', () => {
   it('stays linear on long whitespace inside a fence', () => {
     const started = Date.now();
     expect(() => parseJsonAnswer('```' + ' '.repeat(200_000) + 'x')).toThrow();
-    expect(Date.now() - started).toBeLessThan(1000);
+    // A backtracking regex takes minutes on this input; a linear one takes
+    // milliseconds. 5s leaves room for a loaded CI runner (it took 1.18s once)
+    // and still catches the quadratic case.
+    expect(Date.now() - started).toBeLessThan(5000);
   });
 
   it('returns a value that matches the schema, charged, or throws', async () => {
