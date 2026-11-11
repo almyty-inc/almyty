@@ -1,0 +1,51 @@
+{
+  "specs": [
+    {
+      "id": "open-meteo",
+      "label": "Open-Meteo forecast",
+      "apiName": "Open-Meteo",
+      "url": "https://raw.githubusercontent.com/open-meteo/open-meteo/954c561b9868d81a28bfc280a971c13474ea3191/openapi/forecast.yml",
+      "sha256": "19cf8b43174a67d1964772e566fa7d438bb4d0a0d810a75a1f07a2c71d42a066",
+      "fileName": "forecast.yml",
+      "baseUrl": "https://api.open-meteo.com",
+      "task": {
+        "what": "Current temperature in Berlin",
+        "queries": ["weather forecast"],
+        "keywords": ["weather forecast"],
+        "target": { "method": "GET", "endpoint": "/v1/forecast" },
+        "arguments": { "latitude": "52.52", "longitude": "13.41", "current": ["temperature_2m"] }
+      }
+    },
+    {
+      "id": "github-issues",
+      "label": "GitHub REST, issues tag",
+      "apiName": "GitHub",
+      "url": "https://raw.githubusercontent.com/github/rest-api-description/cff9ea6e1362fab34771b0af6b95d7fd2caf2813/descriptions/api.github.com/api.github.com.json",
+      "sha256": "b1807bbb9b79466d4c11ba869db9e2642568e7e493554bc1eb69dc4b06aee48b",
+      "fileName": "github-issues.json",
+      "subset": { "tag": "issues", "sha256": "2ec08ebe5303d49135a962b2c1929c86507ec7f4e0339dd40fa09357251266a5" },
+      "task": {
+        "what": "Read issue #1 of octocat/Hello-World",
+        "queries": ["get an issue", "read issue"],
+        "keywords": ["get an issue", "issue"],
+        "target": { "method": "GET", "endpoint": "/repos/{owner}/{repo}/issues/{issue_number}" },
+        "arguments": { "owner": "octocat", "repo": "Hello-World", "issue_number": 1 }
+      }
+    },
+    {
+      "id": "stripe",
+      "label": "Stripe API (full)",
+      "apiName": "Stripe",
+      "url": "https://raw.githubusercontent.com/stripe/openapi/6763e1a3f199026b0893cf190d95130d3700c045/openapi/spec3.json",
+      "sha256": "7cff4cc46d0654101a36a3302f7544640f5f73e4f3cad6f264f0e23c19fa1776",
+      "fileName": "stripe-spec3.json",
+      "task": {
+        "what": "Look up customer cus_bench0001",
+        "queries": ["retrieve a customer", "get customer"],
+        "keywords": ["retrieve a customer", "customer"],
+        "target": { "method": "GET", "endpoint": "/v1/customers/{customer}" },
+        "arguments": { "customer": "cus_bench0001" }
+      }
+    }
+  ]
+}
