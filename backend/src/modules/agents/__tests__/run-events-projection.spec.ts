@@ -120,9 +120,11 @@ describe('the run event log folds back into the stored run', () => {
     });
     expectLogMatchesRow(result);
 
-    // Approved, and resumed the way the runtime's listener does it.
+    // Approved, and resumed the way the runtime's listener does it: through
+    // writeRun, so the resume is on the log (a write around it is not the
+    // run's state any more, durable runs step 5).
     await harness.approvalRequests.update({ id: approval.id }, { status: 'approved' });
-    await result.runRepository.update({ id: 'run-1' }, { status: AgentRunStatus.RUNNING });
+    await writeRun(result.runRepository as any, { id: 'run-1', status: AgentRunStatus.WAITING_APPROVAL }, { status: AgentRunStatus.RUNNING });
     await result.drive();
 
     expect(result.runRepository.row('run-1')!.status).toBe(AgentRunStatus.COMPLETED);
