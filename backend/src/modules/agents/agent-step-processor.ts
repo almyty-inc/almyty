@@ -784,7 +784,8 @@ export class AgentStepProcessor {
         ? (answered.response as ChatResponse)
         : await this.s.llmProvidersService.chatStream(
             providerId,
-            chatRequest,
+            // Today's date and the organization's time zone (current-time.ts).
+            { ...chatRequest, currentTime: true },
             run.organizationId,
             // As the run's principal, inherited: a gateway run reaches its
             // gateway team's providers and keys, never the run row's user's.
@@ -2115,7 +2116,7 @@ export class AgentStepProcessor {
     try {
       response = await this.s.llmProvidersService.chatStream(
         providerId,
-        answerRequest,
+        { ...answerRequest, currentTime: true },
         run.organizationId,
         principalOfRun(run),
         (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), step, chunk),
@@ -2324,7 +2325,8 @@ export class AgentStepProcessor {
       grantsLeft: grantsLeftFor(config, run.workingMemory?.codeGrantsUsed),
       limits,
       extract: buildExtract({
-        chat: (providerId, request) => this.s.llmProvidersService.chat(providerId, request as any, run.organizationId, principal),
+        chat: (providerId, request) =>
+          this.s.llmProvidersService.chat(providerId, { ...(request as any), currentTime: true }, run.organizationId, principal),
         extractor: config?.extractor ?? null,
         routing: organization?.settings?.defaultRouting ?? null,
       }),

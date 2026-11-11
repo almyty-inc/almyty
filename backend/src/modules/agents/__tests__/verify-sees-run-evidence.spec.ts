@@ -56,8 +56,9 @@ describe('a final-answer checker sees the run evidence', () => {
     const [system, user] = chat.mock.calls[0][1].messages;
     expect(system.content).not.toMatch(/EVIDENCE/);
     expect(user.content).not.toMatch(/EVIDENCE/);
-    // Every checker knows today's date: one failed papers from last week as "future".
-    expect(system.content).toContain(`Today is ${new Date().toISOString().slice(0, 10)}`);
+    // Every checker knows today's date, in the organization's time zone: one
+    // failed papers from last week as "future" (current-time.ts adds it).
+    expect(chat.mock.calls[0][1].currentTime).toBe(true);
   });
 
   it('is what the autonomous final-output verification passes', () => {

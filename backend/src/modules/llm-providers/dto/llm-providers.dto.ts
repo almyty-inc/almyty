@@ -125,6 +125,13 @@ export interface ChatRequest {
    * ChatResponse.routing). `model` is then ignored.
    */
   routing?: RoutingPolicy;
+  /**
+   * Tell the model today's date and the organization's time zone: a
+   * [CURRENT TIME] block in the system prompt (common/utils/current-time.ts).
+   * Every model call a run makes sets it; a guard test holds the agents
+   * module to that (run-calls-know-the-date.spec.ts).
+   */
+  currentTime?: boolean;
 }
 
 

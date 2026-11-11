@@ -22,6 +22,8 @@ import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { preferredBinding, providerProfile } from './provider-profile';
 import { assertModelAllowed } from './allowed-models';
 import { ExecutionAccessService, type ExecutionPrincipal, asPrincipal } from '../../common/authorization/execution-access.service';
+import { withCurrentTime } from '../../common/utils/current-time';
+import { OrganizationTimeZoneService } from './organization-time-zone.service';
 
 @Injectable()
 export class LlmChatHelper {
@@ -52,11 +54,25 @@ export class LlmChatHelper {
     // Optional for hand-built specs; the tool executor refuses the rest
     // at call time either way.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
+    // The organization's time zone, for a request with `currentTime`.
+    // Optional for hand-built specs, which are told the date in UTC.
+    @Optional() private readonly timeZones?: OrganizationTimeZoneService,
   ) {}
 
   /** The tools of `tools` the principal may run; everything when the check is not wired. */
   private async offeredTools(tools: Tool[], principal: ExecutionPrincipal): Promise<Tool[]> {
     return this.executionAccess ? this.executionAccess.filterExecutable(principal, tools) : tools;
+  }
+
+  /**
+   * A request with `currentTime` gets today's date and the organization's
+   * time zone in its system prompt (common/utils/current-time.ts). Added
+   * once: a prompt that already has it is left alone.
+   */
+  private async datedRequest(request: ChatRequest, organizationId: string): Promise<ChatRequest> {
+    if (!request?.currentTime) return request;
+    const zone = this.timeZones ? await this.timeZones.zoneOf(organizationId) : 'UTC';
+    return { ...request, messages: withCurrentTime(request.messages, new Date(), zone) };
   }
 
   /**
@@ -76,6 +92,7 @@ export class LlmChatHelper {
     const principal = asPrincipal(caller);
     // The user the conversation is recorded under; a gateway is none.
     const userId = principal.kind === 'user' ? (principal.userId ?? undefined) : undefined;
+    request = await this.datedRequest(request, organizationId);
     try {
       // With a routing policy the catalog chooses the model. The head of
       // the plan stands in as the session's provider; the runner walks the
@@ -307,6 +324,7 @@ export class LlmChatHelper {
     // Who the call acts as; see chat().
     const principal = asPrincipal(caller);
     const userId = principal.kind === 'user' ? (principal.userId ?? undefined) : undefined;
+    request = await this.datedRequest(request, organizationId);
     // If no chunk callback, or skipToolExecution is false (agentic loop),
     // fall through to the non-streaming path to avoid complexity.
     if (!onChunk) {
