@@ -122,13 +122,13 @@ Skills are shared through a [Skills gateway](/gateways/skills), and coding assis
 
 ## Memory
 
-Turn on **Remember between conversations** and the agent looks up what it saved earlier before it answers. For example, it can remember that a customer prefers email. Then choose:
+Turn on **Remember between conversations** and the agent looks up what it saved earlier at the start of every run, before it answers; the run shows this as a **memory_recall** step with how many memories it found. For example, it can remember that a customer prefers email. Then choose:
 
 | Setting | Choices |
 |---|---|
 | **Memory account** | almyty's own memory, an outside memory service (Mem0, Zep, Supermemory and others) your organization has set up, or an account of the agent's own: anyone who can edit the agent can connect one with **Add a memory account**. |
-| **Whose memory** | **Each person has their own**, **This agent's own**, or **Shared by all agents**. |
-| **What it saves** | **Facts it learns** (after each conversation, the agent's main model picks out what is worth keeping), **Whole conversations**, or **Only when asked**. |
+| **Whose memory** | **This agent's own** (the default), **Each person has their own**, or **Shared by all agents**, which every agent set to share reads and writes. |
+| **What it saves** | **Facts it learns** (after each conversation, the agent's main model picks out what is worth keeping), **Whole conversations**, or **Only when asked**. Nothing is saved from an answer that failed its verification. |
 | **Never save** | Rules, one per line, such as "payment details". Every save is checked first, and what the rules cover is taken out. |
 | **How long it keeps memories** | **Until deleted**, or **For a number of days**. |
 

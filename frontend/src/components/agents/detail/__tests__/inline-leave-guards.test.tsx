@@ -54,6 +54,8 @@ vi.mock('@/components/model-picker', () => ({
   ModelPicker: () => null,
   asProviderList: () => [],
   useProviderList: () => ({ data: [] }),
+  useModelCards: () => ({ data: [] }),
+  firstUsableModel: () => undefined,
 }))
 
 beforeEach(() => {
