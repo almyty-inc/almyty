@@ -20,11 +20,12 @@ import type { AgentRun } from '../../entities/agent-run.entity';
  * the words a reader or a stream wants and change nothing in the fold.
  *
  * Step progress (durable runs step 4, run-resume.ts) is markers too:
- * `model_answered`, `tool_started` and `tool_finished` are written while a
- * step works, before its commit, so a worker that picks the step up again
- * resumes from them instead of asking the model or making a call again.
- * They change nothing in the fold; the commit that follows them describes
- * the step as before.
+ * `model_answered`, `tool_started`, `tool_attempted` and `tool_finished`
+ * are written while a step works, before its commit, so a worker that picks
+ * the step up again resumes from them instead of asking the model or making
+ * a call again (`tool_attempted`: one more try of a write whose outcome
+ * was lost, unknown-writes.ts). They change nothing in the fold; the commit
+ * that follows them describes the step as before.
  */
 export const RUN_EVENT_TYPES = [
   'run_started',
@@ -48,6 +49,7 @@ export const RUN_EVENT_TYPES = [
   'model_answered',
   'tool_started',
   'tool_finished',
+  'tool_attempted',
   'run_completed',
   'run_failed',
   'step_committed',
@@ -56,7 +58,7 @@ export const RUN_EVENT_TYPES = [
 export type RunEventType = (typeof RUN_EVENT_TYPES)[number];
 
 /** Events a step writes while it works, before its commit (durable runs step 4, run-resume.ts). */
-export const STEP_PROGRESS_TYPES: readonly RunEventType[] = ['model_answered', 'tool_started', 'tool_finished'];
+export const STEP_PROGRESS_TYPES: readonly RunEventType[] = ['model_answered', 'tool_started', 'tool_attempted', 'tool_finished'];
 
 /** An event before it has a seq. */
 export interface RunEventDraft {
@@ -177,6 +179,9 @@ function approvalsWaiting(memory: any): Map<string, Record<string, any>> {
   }
   for (const set of Array.isArray(memory.pendingChangeSets) ? memory.pendingChangeSets : []) {
     if (set?.approvalId) out.set(set.approvalId, asStored({ approvalId: set.approvalId, kind: 'change_set', codeExecutionId: set.codeExecutionId, toolCallId: set.toolCallId }));
+  }
+  for (const call of Array.isArray(memory.unknownOutcomeCalls) ? memory.unknownOutcomeCalls : []) {
+    if (call?.approvalId) out.set(call.approvalId, asStored({ approvalId: call.approvalId, kind: 'unknown_outcome', tool: call.toolName, toolCallId: call.toolCallId }));
   }
   return out;
 }

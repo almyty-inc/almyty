@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentRunEvent } from '../../entities/agent-run-event.entity';
 import { RunWritten, onRunWritten } from './run-event-writer';
+import { RunLogView, runLogView } from './run-log-privacy';
 
 const RUNTIME_EMITTER_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 const TERMINAL_EVENT_TYPES = ['run.completed', 'run.failed', 'run.cancelled'];
@@ -68,6 +69,8 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
   private readonly runEmitters = new Map<string, EventEmitter>();
   private emitterSweepTimer?: NodeJS.Timeout;
   private cleanupHook?: (runId: string) => Promise<void>;
+  /** Until the runtime service sets its own (setRunLogView), every argument is hidden. */
+  private runLogView: RunLogView = runLogView(async () => null, async (data) => data);
   private stopWatchingWrites?: () => void;
   /** How often a resumable view reads the log while nothing is announced (RUN_LOG_IDLE_READ_MS). */
   logIdleReadMs = RUN_LOG_IDLE_READ_MS;
@@ -111,6 +114,16 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
    */
   setCleanupHook(hook: (runId: string) => Promise<void>): void {
     this.cleanupHook = hook;
+  }
+
+  /**
+   * The view every page of a run's log goes through before a live run view
+   * sends it: tool-call arguments with personal data hidden
+   * (run-log-privacy.ts). Set once at construction time by the runtime
+   * service; until it is, nothing with arguments is sent at all.
+   */
+  setRunLogView(view: RunLogView): void {
+    this.runLogView = view;
   }
 
   ensureRunEmitter(runId: string): EventEmitter {
@@ -342,14 +355,17 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
     let aborted = false;
 
     // Send the log after `last`, contiguously. A seq that is not the next
-    // one ends the read: it is sent once the one before it can be.
+    // one ends the read: it is sent once the one before it can be. Each page
+    // goes out through the run log view: tool-call arguments with personal
+    // data hidden (run-log-privacy.ts).
     const drain = async (): Promise<void> => {
       for (;;) {
         const rows = await log.find({ where: { runId, seq: MoreThan(last) }, order: { seq: 'ASC' }, take: RUN_LOG_PAGE });
-        for (const row of rows) {
+        const shown = await this.runLogView(runId, rows);
+        for (const [i, row] of rows.entries()) {
           if (row.seq !== last + 1) return;
           last = row.seq;
-          onLog(row);
+          onLog(shown[i] ?? row);
           if (row.type === 'step_committed' && TERMINAL_RUN_STATES.includes(row.payload?.status)) {
             if (loggedEndAt === null) loggedEndAt = Date.now();
           }
