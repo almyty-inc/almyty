@@ -44,7 +44,7 @@ import { resolveCredentials } from './auth.js';
 import { AlmytyProxy, upstreamEraFromEnv } from './proxy.js';
 import { ToolCatalog, searchResultText, uniquePromptNames, upstreamErrorText } from './catalog.js';
 import { EXIT, EXIT_CODE_HELP, exitCodeFor } from './exit-codes.js';
-import { gatewayToolConfig, passThroughResult } from './registration.js';
+import { executeResult, gatewayToolConfig, passThroughResult } from './registration.js';
 import { VERSION } from './version.js';
 
 
@@ -224,7 +224,9 @@ function buildServer(era: 'legacy' | 'modern', deps: ServerDeps, discoveredAlrea
       },
       async (args) => {
         try {
-          return textResult(await proxy.callTool(args.tool_name, args.parameters as Record<string, unknown>));
+          // The gateway's result, isError included: an upstream failure (a
+          // 401 from the API behind the tool, say) is a failed call, not data.
+          return executeResult(await proxy.callToolResult(args.tool_name, args.parameters as Record<string, unknown>));
         } catch (error) {
           return errorResult(error);
         }
