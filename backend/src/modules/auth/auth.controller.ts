@@ -312,6 +312,42 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  // Each call ends sessions and mints a new one; a handful per quarter
+  // hour is more than anyone reacting to a lost laptop needs.
+  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
+  @Post('sessions/revoke-others')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Sign out every other device: ends all other sessions and re-issues this session as a new cookie',
+  })
+  @ApiResponse({ status: 200, description: 'Other sessions ended; the new session is the httpOnly cookie, the body carries no token' })
+  @ApiResponse({ status: 403, description: 'Not a signed-in session (an API key cannot do this)' })
+  async revokeOtherSessions(
+    @CurrentUser() user: User,
+    @Req() req: ExpressRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const userAgent = req.headers?.['user-agent'];
+    const { tokens, signedOut } = await this.authService.revokeOtherSessions(user, {
+      sessionId: (user as any).sessionId,
+      organizationId: (user as any).currentOrganizationId,
+      ipAddress: clientIpOf(req),
+      userAgent: typeof userAgent === 'string' ? userAgent : undefined,
+    });
+
+    // The caller's old token died with the rest; the new session is the
+    // httpOnly cookie, and only the cookie.
+    res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
+
+    return {
+      success: true,
+      data: { signedOut, ...browserSession(tokens) },
+      message: 'Signed out of every other device',
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('profile')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get current user profile' })

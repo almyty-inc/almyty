@@ -7,10 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { authApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
+import { pluralized } from '@/lib/utils'
 
 export function SecurityTab() {
   const { success, error } = useNotifications()
@@ -40,6 +42,25 @@ export function SecurityTab() {
   // never dismissed the banner would never find the working one.
   const resendVerification = useMutation({
     mutationFn: () => authApi.resendVerification(),
+  })
+
+  // Ends every other session and keeps this one: the response re-issues
+  // this browser's httpOnly cookie, so nothing here touches a token.
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const revokeOthers = useMutation({
+    mutationFn: () => authApi.revokeOtherSessions(),
+    onSuccess: (data) => {
+      const count = data?.signedOut ?? 0
+      success(
+        'Signed out of other devices',
+        count > 0
+          ? `Ended ${pluralized(count, 'other session')}. You're still signed in here.`
+          : "There were no other sessions. You're still signed in here.",
+      )
+    },
+    onError: (err: any) => {
+      error('Could not sign out other devices', getApiErrorMessage(err, 'Please try again.'))
+    },
   })
 
   const changePasswordMutation = useMutation({
@@ -199,23 +220,38 @@ export function SecurityTab() {
             </div>
           </div>
           
-          <div className="mt-4 pt-4 border-t">
-            {/* "Revoke All Other Sessions" was here with no handler, under
-                the promise "This will sign you out of all other devices".
-                It signed nobody out of anything, and there is no endpoint
-                behind it -- /auth has logout and nothing that revokes
-                other sessions. A security control that reports nothing and
-                does nothing is worse than an absent one, because someone
-                who suspects a compromise believes they have acted. */}
-            {/* An account without a password has none to change. Setting a
-                first one through the emailed link ends every session too
-                (confirming a reset bumps tokenVersion), so that is its way. */}
+          <div className="mt-4 pt-4 border-t space-y-3">
+            {/* Ends every other session (other browsers, the desktop app,
+                clients signed in through /auth/token) and keeps this one: the server
+                bumps tokenVersion, ends the session rows and re-issues this
+                browser's httpOnly cookie. Works the same with or without a
+                password. API keys are separate and keep working. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                Signs you out everywhere else. You stay signed in here.
+              </p>
+              <Button
+                variant="outline"
+                data-testid="sign-out-others"
+                disabled={revokeOthers.isPending}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Sign out other devices?',
+                    confirmLabel: 'Sign out other devices',
+                  })
+                  if (ok) revokeOthers.mutate()
+                }}
+              >
+                {revokeOthers.isPending ? 'Signing out...' : 'Sign out other devices'}
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground" data-testid="sessions-note">
               {noPassword
-                ? "You can't sign out other devices from here yet. To cut off another device, set a password with the emailed link above, which ends every session."
-                : "You can't sign out other devices from here yet. To cut off another device, change your password, which ends every session signed in with the old one."}
+                ? 'Setting a password with the emailed link above also signs out every other device. API keys keep working; remove them under API keys.'
+                : 'Changing your password also signs out every other device. API keys keep working; remove them under API keys.'}
             </p>
           </div>
+          {confirmDialog}
         </CardContent>
       </Card>
 

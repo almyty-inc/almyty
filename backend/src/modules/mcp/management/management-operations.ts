@@ -626,6 +626,7 @@ exclude('Sign-in, sign-up and session handling: an MCP client is already signed 
   'AuthController.token',
   'AuthController.refresh',
   'AuthController.logout',
+  'AuthController.revokeOtherSessions',
   'AuthController.forgotPassword',
   'AuthController.resetPassword',
   'AuthController.changePassword',
