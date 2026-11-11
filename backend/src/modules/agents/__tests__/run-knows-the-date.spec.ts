@@ -79,6 +79,19 @@ describe('a run is told the current date and time', () => {
       expect(dated.messages[0].content).toContain('UTC');
     });
 
+    it('as of the moment a request names, so two calls of one step say the same', async () => {
+      const h = helper('Europe/Berlin');
+      const at = new Date('2026-10-12T06:30:00.123Z');
+      const draft = await h.datedRequest({ ...request, currentTime: at }, 'org-1');
+      await new Promise((r) => setTimeout(r, 5));
+      const answer = await h.datedRequest({ ...request, currentTime: at }, 'org-1');
+      expect(answer.messages[0].content).toBe(draft.messages[0].content);
+      expect(draft.messages[0].content).toContain('(2026-10-12T06:30:00.123Z)');
+      // A moment that went through JSON (a stored step) still reads.
+      const stored = await h.datedRequest({ ...request, currentTime: at.toISOString() as any }, 'org-1');
+      expect(stored.messages[0].content).toBe(draft.messages[0].content);
+    });
+
     it('and leaves a request that does not ask alone', async () => {
       const plain = { ...request };
       expect(await helper('Asia/Tokyo').datedRequest(plain, 'org-1')).toBe(plain);

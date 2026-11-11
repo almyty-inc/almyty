@@ -66,13 +66,16 @@ export class LlmChatHelper {
 
   /**
    * A request with `currentTime` gets today's date and the organization's
-   * time zone in its system prompt (common/utils/current-time.ts). Added
-   * once: a prompt that already has it is left alone.
+   * time zone in its system prompt (common/utils/current-time.ts): as of
+   * now, or as of the moment it names. Added once: a prompt that already
+   * has it is left alone.
    */
   private async datedRequest(request: ChatRequest, organizationId: string): Promise<ChatRequest> {
     if (!request?.currentTime) return request;
     const zone = this.timeZones ? await this.timeZones.zoneOf(organizationId) : 'UTC';
-    return { ...request, messages: withCurrentTime(request.messages, new Date(), zone) };
+    const named = request.currentTime === true ? null : new Date(request.currentTime as Date | string);
+    const at = named && !Number.isNaN(named.getTime()) ? named : new Date();
+    return { ...request, messages: withCurrentTime(request.messages, at, zone) };
   }
 
   /**
