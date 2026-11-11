@@ -74,6 +74,7 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { claimDelivery } from './run-event-writer';
 import { runsOnAutonomousRuntime } from './agent-invocation';
 import { ScheduledResult } from './scheduled-result-poster';
+import { runInputOf } from './input-schema';
 
 /** What a scheduled tick asks an autonomous agent: the input's message, else the input itself. */
 export function scheduledTask(input: Record<string, any> | null | undefined): string {
@@ -82,6 +83,14 @@ export function scheduledTask(input: Record<string, any> | null | undefined): st
   return 'Do your scheduled task now.';
 }
 
+/**
+ * A scheduled autonomous run's input, as Try it and the API send one:
+ * `{ message }`. An input that already has a message is kept whole.
+ */
+export function scheduledRunInput(input: Record<string, any> | null | undefined): Record<string, any> {
+  if (typeof input?.message === 'string' && input.message.trim()) return input;
+  return { message: scheduledTask(input) };
+}
 /** A finished workflow execution, as the poster reads it. */
 export function resultOfExecution(execution: AgentExecution): ScheduledResult {
   return {
@@ -253,7 +262,7 @@ export class AgentSchedulerService implements OnModuleInit {
     settings.schedule = {
       enabled: true,
       ...validated,
-      input: request.input ?? input,
+      input: runInputOf(request.input ?? input, agent.pipeline),
       ...(deliverTo ? { deliverTo } : {}),
     } as AgentScheduleConfig;
     // Re-enabling is the acknowledgement: whoever did it has seen the note.
@@ -817,9 +826,13 @@ export class AgentSchedulerService implements OnModuleInit {
       // same dispatch every other entry point makes (runsOnAutonomousRuntime).
       // Sending an autonomous agent to the workflow engine ran its (empty)
       // pipeline, which finished at once with no output.
+      // The run gets its input in the shape a manual run sends it, an
+      // object: a schedule saved with bare text has it put in the declared
+      // input field (runInputOf).
+      const runInput = runInputOf(input, agent.pipeline);
       if (runsOnAutonomousRuntime(agent)) {
         if (!this.runtime) throw new Error('The autonomous runtime is not available on this server');
-        await this.runtime.startRun(agent.id, organizationId, runUser, scheduledTask(input), {
+        await this.runtime.startRun(agent.id, organizationId, runUser, scheduledRunInput(runInput), {
           principal,
           // Where the result goes is decided now and carried by the run, so
           // it is posted when the run finishes (deliverScheduledRun), on
@@ -834,7 +847,7 @@ export class AgentSchedulerService implements OnModuleInit {
         organizationId,
         runUser,
         {
-          input,
+          input: runInput,
           metadata: { triggerType: 'scheduled' },
           principal,
         },

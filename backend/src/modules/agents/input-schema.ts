@@ -108,3 +108,30 @@ export class InputSchemaViolation extends Error {
     this.name = 'InputSchemaViolation';
   }
 }
+
+/**
+ * The field a run's text goes in: the input node's first required field,
+ * else its first declared field, else `message` -- what Try it, chats and
+ * the Run panel send.
+ */
+export function declaredInputField(pipeline: { nodes?: Array<{ type?: string; data?: any; config?: any }> } | null | undefined): string {
+  const node = (pipeline?.nodes ?? []).find((n) => n?.type === 'input');
+  const schema = (node?.data || node?.config || {}).schema;
+  const props = schema && typeof schema === 'object' && schema.properties && typeof schema.properties === 'object' ? Object.keys(schema.properties) : [];
+  const required = Array.isArray(schema?.required) ? schema.required.filter((k: unknown) => typeof k === 'string') : [];
+  return required[0] ?? props[0] ?? 'message';
+}
+
+/**
+ * A run's input in the shape a manual run sends: an object. Text (a
+ * schedule saved with a bare string, say) goes in the declared input
+ * field; an object is kept as it is.
+ */
+export function runInputOf(
+  input: unknown,
+  pipeline: Parameters<typeof declaredInputField>[0],
+): Record<string, any> {
+  if (input === null || input === undefined) return {};
+  if (typeof input === 'object' && !Array.isArray(input)) return input as Record<string, any>;
+  return { [declaredInputField(pipeline)]: typeof input === 'string' ? input : JSON.stringify(input) };
+}

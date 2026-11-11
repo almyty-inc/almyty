@@ -98,13 +98,14 @@ describe('a scheduled tick, end to end', () => {
     const started: any[] = [];
     let scheduler: AgentSchedulerService;
     const runtime = {
-      startRun: jest.fn(async (_agentId: string, _org: string, userId: string | null, task: string, options: any) => {
+      startRun: jest.fn(async (_agentId: string, _org: string, userId: string | null, task: any, options: any) => {
         started.push({ task, options });
         const result = await runAgent({
           models: null,
           members: [OWNER],
           agent: { ...agent, toolIds: [] },
-          userMessage: task,
+          // startRun writes an object input as its JSON, as for Try it.
+          userMessage: typeof task === 'string' ? task : JSON.stringify(task),
           run: { userId, metadata: options.metadata, principal: options.principal },
           streams: { [MODEL]: [anthropicText(MODEL, 90, ['Sales were up 4% yesterday. ', 'Returns fell.'], 14)] },
         });
@@ -156,7 +157,8 @@ describe('a scheduled tick, end to end', () => {
 
     expect(engineSpy).not.toHaveBeenCalled();
     expect(runtime.startRun).toHaveBeenCalledTimes(1);
-    expect(started[0].task).toBe('Write the morning sales summary.');
+    // The same shape Try it and the API start a run with.
+    expect(started[0].task).toEqual({ message: 'Write the morning sales summary.' });
     expect(started[0].options.metadata).toMatchObject({ triggerType: 'scheduled', scheduledDelivery: deliverTo });
 
     const run = runs.repo.row('run-1');
