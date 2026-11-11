@@ -78,6 +78,18 @@ const storage = diskStorage({
   filename: (_req, _file, cb) => cb(null, randomUUID()),
 });
 
+/** Every interceptor TempFileInterceptor made. mixin() renames the class, so it is known by identity. */
+const OPTIONAL_UPLOADS = new WeakSet<object>();
+
+/**
+ * Is `interceptor` a TempFileInterceptor? The upload it handles is
+ * optional: with no file the route reads its JSON body. The management MCP
+ * runs such a route without it (mcp/management/route-invoker.service.ts).
+ */
+export function isOptionalUploadInterceptor(interceptor: unknown): boolean {
+  return typeof interceptor === 'function' && OPTIONAL_UPLOADS.has(interceptor);
+}
+
 /**
  * The FileInterceptor for `field`, with disk storage, uploadLimits(maxBytes) and
  * cleanup. Module-level multer options (a MulterModule fileFilter) still
@@ -122,5 +134,7 @@ export function TempFileInterceptor(field: string, maxBytes: number): Type<NestI
     }
   }
 
-  return mixin(TempFileMixin);
+  const interceptor = mixin(TempFileMixin);
+  OPTIONAL_UPLOADS.add(interceptor);
+  return interceptor;
 }

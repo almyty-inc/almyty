@@ -8,7 +8,7 @@ import { AuthSession } from '../../entities/auth-session.entity';
 /** How long a session lives without a refresh. Matches the refresh token. */
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export type SessionRevokeReason = 'logout' | 'refresh_reuse';
+export type SessionRevokeReason = 'logout' | 'refresh_reuse' | 'signed_out_elsewhere';
 
 /**
  * Whether the session a token names is still live: present, for this
@@ -98,5 +98,19 @@ export class AuthSessionService {
       { id: sessionId, revokedAt: IsNull(), ...(userId ? { userId } : {}) },
       { revokedAt: new Date(), revokedReason: reason },
     );
+  }
+
+  /**
+   * End every session of `userId` that is still open, the caller's
+   * included (it is replaced with a fresh one by the caller). Answers how
+   * many of them were live, so "sign out other devices" can say how many
+   * other sessions it ended.
+   */
+  async revokeAllForUser(userId: string, reason: SessionRevokeReason): Promise<number> {
+    const live = await this.sessions.count({
+      where: { userId, revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
+    });
+    await this.sessions.update({ userId, revokedAt: IsNull() }, { revokedAt: new Date(), revokedReason: reason });
+    return live;
   }
 }

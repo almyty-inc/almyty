@@ -88,6 +88,8 @@ import { AccessPolicyService } from '../common/authorization/access-policy.servi
 import { ExecutionAccessService } from '../common/authorization/execution-access.service';
 import { McpService } from '../modules/mcp/mcp.service';
 import { AlmytyMcpService } from '../modules/mcp/almyty-mcp.service';
+import { ManagementRouteInvoker } from '../modules/mcp/management/route-invoker.service';
+import { ManagementOperationsService } from '../modules/mcp/management/management-operations.service';
 import { McpSessionService } from '../modules/mcp/mcp-session.service';
 
 // Gateways
@@ -95,6 +97,7 @@ import { GatewaysService } from '../modules/gateways/gateways.service';
 
 // Organizations
 import { OrganizationsService } from '../modules/organizations/organizations.service';
+import { OrganizationsController } from '../modules/organizations/organizations.controller';
 import { OrganizationsInvitesHelper } from '../modules/organizations/organizations-invites.helper';
 import { TeamMembershipHelper } from '../modules/organizations/team-membership.helper';
 import { ResourceHandoverHelper } from '../modules/organizations/resource-handover.helper';
@@ -190,6 +193,10 @@ const mockRedis = {
             ? { extra: { options: `-c search_path=${schema},public` } }
             : {}),
           entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
+          // The entities outside entities/ (canonical memory) are registered
+          // by forFeature below, as AppModule lists them: without this an
+          // organization delete fails on CanonicalMemorySoftcapWarning.
+          autoLoadEntities: true,
           migrations: [__dirname + '/../migrations/*{.ts,.js}'],
           migrationsRun: true,
           dropSchema: isolated,
@@ -231,6 +238,9 @@ const mockRedis = {
     McpOAuthDiscoveryController,
     McpOAuthController,
     UnifiedEndpointController,
+    // A real platform route for the management MCP's operations to run
+    // (management-mcp-operations.integration.spec.ts).
+    OrganizationsController,
   ],
 
   providers: [
@@ -263,6 +273,9 @@ const mockRedis = {
     // Who may run what (AuthorizationModule in the real app).
     ExecutionAccessService,
     AlmytyMcpService,
+    // The management MCP's REST-twin authorization and its operations.
+    ManagementRouteInvoker,
+    ManagementOperationsService,
     McpSessionService,
 
     // McpService has deep dependency chain (ToolsService, ToolExecutorService, etc.)

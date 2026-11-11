@@ -2700,9 +2700,9 @@
       "id": "examples-multi-vendor-coding-fleet-00-result",
       "title": "Coding lead: the report of a run",
       "path": "screenshots/examples/multi-vendor-coding-fleet/00-result.png",
-      "capturedAt": "2026-10-28T13:25:50.313Z",
+      "capturedAt": "2026-11-07T10:48:57.851Z",
       "status": "current",
-      "sha256": "e0e77219f29042015fb255708ad1d1afd0f1abd812c7fe2a72b53c0203770314",
+      "sha256": "9a8ce3346cb312d0206580e08ef73a8d6c11ac9af1faa7f56dbdf9df9437255f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2713,7 +2713,7 @@
         "frontend/src/components/agents"
       ],
       "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
-      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed, walks/tidewater): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-multi-vendor-coding-fleet-01-model",
@@ -2855,9 +2855,9 @@
       "id": "examples-multi-vendor-coding-fleet-08-try",
       "title": "Coding lead: Try it",
       "path": "screenshots/examples/multi-vendor-coding-fleet/08-try.png",
-      "capturedAt": "2026-10-28T13:25:48.902Z",
+      "capturedAt": "2026-11-07T10:48:57.152Z",
       "status": "current",
-      "sha256": "428d6b23c802cd14855fba15c5ee69e6aeff32dcd4f482ff7ba5fc18daa36303",
+      "sha256": "64f68f5e0ccfb4215889c602a38680767a387fe6edd66e590257565fe4c17695",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2868,15 +2868,15 @@
         "frontend/src/components/agents"
       ],
       "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
-      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed, walks/tidewater): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-multi-vendor-coding-fleet-09-run",
       "title": "Coding lead: the run step by step",
       "path": "screenshots/examples/multi-vendor-coding-fleet/09-run.png",
-      "capturedAt": "2026-10-28T13:25:56.876Z",
+      "capturedAt": "2026-11-07T10:49:16.894Z",
       "status": "current",
-      "sha256": "5420966c67f2dd38ca9a0b298eabeb51e322a62896869c66df923b63e4daf266",
+      "sha256": "c774627d0ddce2ade4f5ef5764702e1792b72b804e5fe6a7c273458119ed3a9e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2887,7 +2887,7 @@
         "frontend/src/components/agents"
       ],
       "sourceDigest": "d7e3b2fe5ac9a7eb3f0a2c55a8ffb56b5777e2be0bb9b441b9879c2a3052f6fa",
-      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed/usecases/engineering-guides.mjs): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
+      "notes": "Example guide step, walked through the UI on the local demo stack (scripts/demo-seed, walks/tidewater): real public API descriptions (GitHub, PagerDuty), a local stand-in for GitHub, PagerDuty, Slack and a SOAP stock system, a scripted stand-in model, and for the coding fleet the real Claude Code and Codex CLIs on the runner machine; fictional people and companies. Not staging or production data."
     },
     {
       "id": "examples-nightly-data-quality-digest-00-slack-report",

@@ -27,6 +27,7 @@ the route level, on top of the global 100 req/60s throttle:
 | `POST /auth/token` | 10 per 5 minutes per IP |
 | `POST /auth/forgot-password` | 5 per hour per IP |
 | `POST /auth/refresh` | 20 per 5 minutes per IP |
+| `POST /auth/sessions/revoke-others` | 5 per 15 minutes per IP |
 | `GET /auth/check-organization-name` | 30 per minute per IP |
 | `POST /:org/:gw/register` (OAuth dynamic client registration) | 10 per 5 minutes per IP |
 
@@ -238,3 +239,20 @@ curl -X POST https://api.almyty.com/auth/logout \
 ```
 
 This invalidates the current token server-side.
+
+## Sign out other devices
+
+In the app: **Settings > Security > Active sessions > Sign out other devices**. It works the same whether you sign in with a password or through your organization's single sign-on.
+
+```bash
+curl -X POST https://api.almyty.com/auth/sessions/revoke-others \
+  --cookie "access_token=$SESSION_COOKIE"
+```
+
+Every other session you have ends: other browsers, the desktop app, and clients signed in through `/auth/token`, whose refresh tokens stop working too. The session you call from stays signed in on a new `access_token` cookie set in the response; the cookie you sent stops working. The body carries no token:
+
+```json
+{ "success": true, "data": { "signedOut": 2, "expiresIn": 86400 } }
+```
+
+`signedOut` is how many other sessions were ended. The action is recorded in the audit log as `sessions_revoke`. API keys are not sessions and keep working; revoke them separately. An API key cannot call this endpoint (`403 SESSION_REQUIRED`).

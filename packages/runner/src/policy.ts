@@ -23,7 +23,7 @@
  *     binary of a spawn, every command a shell line starts).
  */
 import { realpathSync } from 'fs';
-import { resolve, sep } from 'path';
+import { basename, dirname, join, resolve, sep } from 'path';
 import { RunnerConfig, RunnerError, RUNNER_ERROR_CODES } from './types.js';
 
 // Env vars a payload must never override: they redirect which binary runs
@@ -249,12 +249,25 @@ function assertShellBinariesAllowed(config: RunnerConfig, cmd: string): void {
   }
 }
 
-function canonical(p: string): string {
+/**
+ * The path with every symlink resolved. A path that does not exist yet (a
+ * workspace folder about to be made) resolves through its nearest existing
+ * parent, so it compares like its root: on macOS /tmp is a link to
+ * /private/tmp, and /tmp/x/new was refused under a root of /tmp/x.
+ */
+export function canonical(p: string): string {
   const abs = resolve(p);
-  try {
-    return realpathSync(abs); // resolve symlinks to block escape via a link
-  } catch {
-    return abs; // path may legitimately not exist yet
+  const rest: string[] = [];
+  let dir = abs;
+  for (;;) {
+    try {
+      return join(realpathSync(dir), ...rest); // resolve symlinks to block escape via a link
+    } catch {
+      const parent = dirname(dir);
+      if (parent === dir) return abs;
+      rest.unshift(basename(dir));
+      dir = parent;
+    }
   }
 }
 
