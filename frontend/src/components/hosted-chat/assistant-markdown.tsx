@@ -3,11 +3,23 @@
  * and in a notification's preview (an always-on agent's report). Raw HTML
  * is skipped, and images become links (see `img` below). A caller that
  * needs different elements -- a notification row is a button, so it
- * cannot hold a link -- passes `components` to override some of them. */
-import { lazy, Suspense } from 'react'
+ * cannot hold a link -- passes `components` to override some of them.
+ *
+ * GitHub-flavoured markdown, so an agent's tables render as tables and not
+ * as a paragraph of pipes, and a single line break stays a line break: an
+ * agent writes "Total: 40\nDue: Friday" meaning two lines, and markdown's
+ * own rule would join them. Both are loaded with the renderer, off the
+ * first paint. */
+import { lazy, Suspense, type ComponentProps } from 'react'
 import type { Components } from 'react-markdown'
 
-const ReactMarkdown = lazy(() => import('react-markdown'))
+export const MarkdownRenderer = lazy(() =>
+  Promise.all([import('react-markdown'), import('remark-gfm'), import('remark-breaks')]).then(([md, gfm, breaks]) => ({
+    default: (props: ComponentProps<typeof md.default>) => (
+      <md.default remarkPlugins={[gfm.default, breaks.default]} {...props} />
+    ),
+  })),
+)
 
 export function AssistantMarkdown({
   children,
@@ -18,12 +30,12 @@ export function AssistantMarkdown({
 }) {
   return (
     <Suspense fallback={<span className="whitespace-pre-wrap">{children}</span>}>
-      <ReactMarkdown
+      <MarkdownRenderer
         skipHtml
         components={components ? { ...assistantMarkdownComponents, ...components } : assistantMarkdownComponents}
       >
         {children}
-      </ReactMarkdown>
+      </MarkdownRenderer>
     </Suspense>
   )
 }
@@ -72,4 +84,12 @@ export const assistantMarkdownComponents: Components = {
   blockquote: ({ children }) => (
     <blockquote className="mb-3 border-l-2 border-current/30 pl-3 last:mb-0">{children}</blockquote>
   ),
+  // Agents answer with tables (a dependency report, an FX note); a wide one scrolls inside the bubble.
+  table: ({ children }) => (
+    <div className="mb-3 overflow-x-auto last:mb-0">
+      <table className="w-full border-collapse text-left text-[0.92em]">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => <th className="border-b border-current/30 px-2 py-1 font-semibold">{children}</th>,
+  td: ({ children }) => <td className="border-b border-current/10 px-2 py-1 align-top">{children}</td>,
 }

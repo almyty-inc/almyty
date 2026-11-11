@@ -63,6 +63,9 @@ import { AccessCard } from './access-card'
 import { AssistantMarkdown } from '@/components/hosted-chat/assistant-markdown'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
+import { useNavigate } from 'react-router-dom'
+import { UnverifiedNote } from './verify-step'
+import { inputSchemaOf, messageInput } from '../step-values'
 import type { Agent, AgentExecution, AgentRun, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
 
 interface OverviewTabProps {
@@ -121,6 +124,17 @@ function runModels(run: AgentRun): string[] {
 }
 
 /**
+ * The answer as Try it renders it. A text answer is markdown; a structured
+ * one (a workflow's Output step can hand back an object) is shown as a JSON
+ * block, so its lines and indentation stay as they are.
+ */
+export function tryItAnswer(run: any, text: string | undefined): string {
+  const raw = run?.output
+  if (raw !== null && raw !== undefined && typeof raw !== 'string') return '```json\n' + (text ?? '') + '\n```'
+  return text ?? ''
+}
+
+/**
  * An answer long enough that it scrolls inside its box: Try it offers "Show
  * all" for it. The box grows to most of the screen before it scrolls.
  */
@@ -151,11 +165,14 @@ export function OverviewTab({
   // runs are kept apart, but both are this agent's runs. Newest first.
   const recentRuns = React.useMemo(() => recentRunRows(executions, runs), [executions, runs])
   const { success, error: errorNotif } = useNotifications()
+  const navigate = useNavigate()
 
   const [testInput, setTestInput] = useState('')
   // What was sent: shown above the answer after the box clears.
   const [testQuestion, setTestQuestion] = useState<string | null>(null)
   const [testOutput, setTestOutput] = useState<string | null>(null)
+  // The run Try it made, for its verdict.
+  const [testRun, setTestRun] = useState<unknown>(null)
   const [outputExpanded, setOutputExpanded] = useState(false)
   const [testError, setTestError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
@@ -192,15 +209,20 @@ export function OverviewTab({
     const message = testInput
     setTestLoading(true)
     setTestOutput(null)
+    setTestRun(null)
     setTestError(null)
     setOutputExpanded(false)
     setTestQuestion(message)
+    // The message goes in the field the agent's input step declares (an
+    // agent that starts with "invoices" is given {invoices}, not {message}).
+    const input = messageInput(agent.mode === 'autonomous' ? undefined : inputSchemaOf(agent.pipeline?.nodes as any), message)
     // An autonomous run is answered while it is still going; wait for it.
-    invokeAndSettle(agent.id, { message })
+    invokeAndSettle(agent.id, input)
       .then((run: any) => {
         const outcome = runOutcome(run)
         if (outcome.error) setTestError(outcome.error)
-        else setTestOutput(outcome.output ?? '')
+        else setTestOutput(tryItAnswer(run, outcome.output))
+        setTestRun(run)
         setTestInput('')
       })
       .catch((err: unknown) => {
@@ -280,6 +302,7 @@ export function OverviewTab({
               )}
               {testOutput && (
                 <div className="space-y-1">
+                  <UnverifiedNote run={testRun} />
                   <div
                     role="status"
                     aria-live="polite"
@@ -406,13 +429,28 @@ export function OverviewTab({
                 </TableHeader>
                 <TableBody>
                   {recentRuns.map((row) => (
-                    <TableRow key={`${row.kind}-${row.id}`}>
+                    // A row opens its run on the Runs tab, workflow runs and autonomous runs alike.
+                    <TableRow
+                      key={`${row.kind}-${row.id}`}
+                      data-testid={`recent-run-${row.id}`}
+                      className="cursor-pointer hover:bg-muted/50"
+                      tabIndex={0}
+                      aria-label={`Open the run of ${formatDateTime(row.createdAt)}`}
+                      onClick={() => navigate(`/agents/${agent.id}/runs/${row.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/agents/${agent.id}/runs/${row.id}`)
+                        }
+                      }}
+                    >
                       <TableCell>
                         <Badge variant={(row.kind === 'run' ? runStatusVariant[row.status] : execStatusVariant[row.status]) || 'secondary'}>
                           {row.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
                           {row.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
                           {runStatusLabel(row.status)}
                         </Badge>
+                        <UnverifiedNote run={row.kind === 'run' ? row.run : row.exec} compact />
                         <DeliveryNote outcome={(row.kind === 'run' ? row.run.metadata : row.exec.metadata)?.channelDelivery} />
                         <WaitingApprovalNote run={(row.kind === 'run' ? row.run : row.exec) as { status: string; error?: string | null }} />
                       </TableCell>

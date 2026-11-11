@@ -74,9 +74,9 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
   )
 }
 
-/** Run-level verification verdict banner, from `run.metadata.verify`. */
+/** Run-level verification verdict banner, from `run.metadata.verify` (or, when a run did not record one, its last blocking check). */
 export function VerifySummary({ run }: { run: AgentRun }) {
-  const v = run.metadata?.verify
+  const v = run.metadata?.verify ?? (unverifiedAnswer(run) ? { verdict: 'fail', exhausted: true } : null)
   if (!v) return null
   const passed = v.verdict === 'pass'
   const revisions = typeof v.revisions === 'number' ? v.revisions : 0
@@ -97,6 +97,62 @@ export function VerifySummary({ run }: { run: AgentRun }) {
         </span>
       )}
       {v.exhausted && <span>· budget exhausted</span>}
+    </div>
+  )
+}
+
+type VerdictCarrier = {
+  status?: string
+  metadata?: Record<string, any> | null
+  steps?: Array<{ type?: string; input?: any; output?: any }> | null
+} | null | undefined
+
+/**
+ * Whether a finished run's answer went out although its checkers still
+ * failed it: the revisions ran out and the run completed with the last
+ * draft. The run records that in `metadata.verify`; a run checked in patch
+ * mode only in its last blocking `verify` step, so both are read.
+ */
+export function unverifiedAnswer(run: VerdictCarrier): boolean {
+  if (!run || (run.status && run.status !== 'completed')) return false
+  const v = run.metadata?.verify
+  if (v && typeof v.verdict === 'string') return v.verdict !== 'pass'
+  const steps = Array.isArray(run.steps) ? run.steps : []
+  const last = [...steps]
+    .reverse()
+    .find((s) => s?.type === 'verify' && s.output?.advisory !== true && s.input?.mode !== 'mid_loop')
+  return !!last && last.output?.verdict !== 'pass' && last.output?.exhausted === true
+}
+
+const UNVERIFIED_LINE = 'Not verified: the checkers still found problems with this answer when the revisions ran out.'
+
+/**
+ * The marker on an answer its checkers failed. `compact` is the badge for a
+ * row in a list; otherwise a line above the answer.
+ */
+export function UnverifiedNote({ run, compact, className = '' }: { run: unknown; compact?: boolean; className?: string }) {
+  if (!unverifiedAnswer(run as VerdictCarrier)) return null
+  if (compact) {
+    return (
+      <Badge
+        variant="outline"
+        title={UNVERIFIED_LINE}
+        data-testid="unverified-badge"
+        className={`ml-1 gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 ${className}`}
+      >
+        <ShieldAlert className="h-3 w-3" aria-hidden />
+        Not verified
+      </Badge>
+    )
+  }
+  return (
+    <div
+      role="note"
+      data-testid="unverified-note"
+      className={`flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-200 ${className}`}
+    >
+      <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden />
+      <span>{UNVERIFIED_LINE}</span>
     </div>
   )
 }
