@@ -80,6 +80,27 @@ import { userPrincipal } from '../../common/authorization/execution-access.servi
 import { ManagementOperationsService } from './management/management-operations.service';
 import { ManagementRouteInvoker } from './management/route-invoker.service';
 import { CURATED_AUTHORIZATION, CURATED_PARAMS, CURATED_TOOL_ROUTES } from './management/management-operations';
+import { secretArgumentPaths, secretRefusal } from './management/secret-arguments';
+
+/**
+ * Arguments of a curated tool that are an agent's own input, handed to the
+ * run as they are (an input field may well be called `token`); every other
+ * argument is checked for secrets (secret-arguments.ts).
+ */
+export const CURATED_PASS_THROUGH: Record<string, string[]> = {
+  invoke_agent: ['input', 'variables', 'metadata'],
+};
+
+/** The app page a curated tool's refused secret goes to instead. */
+const CURATED_SECRET_PAGE: Record<string, string> = {
+  add_provider: '/models/providers/new',
+  create_api: '/apis',
+  update_api: '/apis',
+  add_auth_to_gateway: '/gateways',
+};
+
+/** The meta-tools that run operations check their operation's arguments themselves. */
+const OPERATION_TOOLS = new Set(['search_operations', 'get_operation', 'call_read_operation', 'call_write_operation', 'call_destructive_operation']);
 
 interface AssignmentSummary {
   toolsAssigned: number;
@@ -118,7 +139,7 @@ function summarizeAssignment(result: any): AssignmentSummary {
 
 const TOOLS = [
   { name: 'list_apis', description: 'List all connected APIs', inputSchema: { type: 'object', properties: {} } },
-  { name: 'create_api', description: 'Connect a new API. `baseUrl` is required: every generated tool builds its request URL from it, so an API without one produces tools that are blocked at run time. Pass `authentication` to set auth (e.g. {type:"api_key",config:{parameter:"X-Key",location:"header",apiKey:"..."}}).', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] }, baseUrl: { type: 'string', description: 'http:// or https:// root the generated tools call. Required.' }, description: { type: 'string' }, version: { type: 'string' }, headers: { type: 'object', description: 'Default headers sent on every call.', additionalProperties: true }, authentication: { type: 'object', description: 'API auth: {type, config}', additionalProperties: true }, rateLimits: { type: 'object', description: '{requestsPerSecond, requestsPerMinute, requestsPerHour}', additionalProperties: true } }, required: ['name', 'type', 'baseUrl'] } },
+  { name: 'create_api', description: 'Connect a new API. `baseUrl` is required: every generated tool builds its request URL from it, so an API without one produces tools that are blocked at run time. `authentication` sets how calls authenticate (e.g. {type:"api_key",config:{parameter:"X-Key",location:"header"}}); the key itself is a secret, added on the API\'s page in the app, and a call carrying one is refused.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] }, baseUrl: { type: 'string', description: 'http:// or https:// root the generated tools call. Required.' }, description: { type: 'string' }, version: { type: 'string' }, headers: { type: 'object', description: 'Default headers sent on every call (no secrets: an Authorization or key header is refused).', additionalProperties: true }, authentication: { type: 'object', description: 'API auth: {type, config}, without the secret', additionalProperties: true }, rateLimits: { type: 'object', description: '{requestsPerSecond, requestsPerMinute, requestsPerHour}', additionalProperties: true } }, required: ['name', 'type', 'baseUrl'] } },
   { name: 'update_api', description: 'Update an existing API. Use to change baseUrl, headers, authentication, or rateLimits without deleting.', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, name: { type: 'string' }, baseUrl: { type: 'string' }, headers: { type: 'object', additionalProperties: true }, authentication: { type: 'object', description: 'API auth: {type, config}', additionalProperties: true }, rateLimits: { type: 'object', additionalProperties: true } }, required: ['apiId'] } },
   { name: 'import_schema', description: 'Import schema + generate tools (async — returns a jobId). Pass either schemaUrl OR schemaContent.', inputSchema: { type: 'object', properties: { apiId: { type: 'string' }, schemaUrl: { type: 'string' }, schemaContent: { type: 'string', description: 'Inline schema content (use instead of schemaUrl)' }, generateTools: { type: 'boolean' } }, required: ['apiId'] } },
   { name: 'check_import_status', description: 'Check the status of a schema import job', inputSchema: { type: 'object', properties: { jobId: { type: 'string', description: 'Job ID returned by import_schema' } }, required: ['jobId'] } },
@@ -130,7 +151,7 @@ const TOOLS = [
   { name: 'delete_gateway', description: 'Delete a gateway by ID', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string', description: 'Gateway ID to delete' } }, required: ['gatewayId'] } },
   { name: 'create_gateway', description: 'Create a gateway. Each gateway serves one protocol. A gateway is an MCP server, a UTCP manual or an Agent Skills bundle (mcp, utcp, skills); tools are auto-assigned. A web chat, website widget, messaging channel or A2A endpoint is a channel on an agent (add_channel) and is refused here. Only ACTIVE tools can be attached — freshly generated tools are DRAFT, so run activate_tool first or read `toolsSkipped` in the result to see exactly what was left off.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'utcp', 'skills'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign (tool-kind only)' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs (tool-kind only)' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true for tool-kind.' }, configuration: { type: 'object', description: 'Gateway-type-specific config. MCP: {transport: http} (every gateway answers over Streamable HTTP; sse, the legacy HTTP+SSE transport, is deprecated in MCP 2026-07-28 and only accepted for older configurations). UTCP: {protocol: http|tcp}. Defaults are sensible per type.', additionalProperties: true } }, required: ['name', 'type'] } },
   { name: 'assign_tools_to_gateway', description: 'Assign tools to a gateway by tool IDs or by API name (assigns all tools from that API). Only ACTIVE tools attach; DRAFT ones come back in `toolsSkipped` with a reason — activate_tool them and call again. `toolsAssigned` is the number that actually attached, not the number requested.', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Tool IDs to assign' }, apiName: { type: 'string', description: 'Assign all tools from this API (by name)' } }, required: ['gatewayId'] } },
-  { name: 'add_auth_to_gateway', description: 'Add an auth method to a gateway. Per-type `configuration`: api_key needs {keyHeader} and/or {keyQuery} (defaults to x-api-key / api_key when omitted); jwt REQUIRES {secret} — a gateway-specific one, not the platform JWT secret; bearer_token, basic_auth, oauth2 and none need no configuration (they validate against org API keys, user credentials and issued OAuth tokens respectively).', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, type: { type: 'string', enum: ['api_key', 'bearer_token', 'basic_auth', 'oauth2', 'jwt', 'none'], description: 'Auth type to add' }, configuration: { type: 'object', description: 'Type-specific config. Required for jwt ({secret}); optional for api_key ({keyHeader, keyQuery}); ignored by the rest.', additionalProperties: true } }, required: ['gatewayId', 'type'] } },
+  { name: 'add_auth_to_gateway', description: 'Add an auth method to a gateway. Per-type `configuration`: api_key takes {keyHeader} and/or {keyQuery} (defaults to x-api-key / api_key when omitted); bearer_token, basic_auth, oauth2 and none need no configuration (they validate against org API keys, user credentials and issued OAuth tokens respectively). jwt needs a signing secret, so it is added on the gateway\'s page in the app: no MCP call carries a secret. Mint a key callers use with the gateways.create_api_key operation.', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, type: { type: 'string', enum: ['api_key', 'bearer_token', 'basic_auth', 'oauth2', 'none'], description: 'Auth type to add' }, configuration: { type: 'object', description: 'Type-specific config: optional for api_key ({keyHeader, keyQuery}); ignored by the rest.', additionalProperties: true } }, required: ['gatewayId', 'type'] } },
   { name: 'remove_auth_from_gateway', description: 'Remove an auth method from a gateway', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, authId: { type: 'string', description: 'Auth config ID to remove' } }, required: ['gatewayId', 'authId'] } },
   { name: 'list_agents', description: 'List all agents', inputSchema: { type: 'object', properties: {} } },
   // Mirrors CreateAgentDto (agents/dto/create-agent.dto.ts). `status` is
@@ -180,7 +201,7 @@ const TOOLS = [
   { name: 'get_run', description: 'Where an autonomous agent run stands: its status, its output once finished, and what it waits for (a question for you, or an approval). invoke_agent returns the run id; follow it with this.', inputSchema: { type: 'object', properties: { runId: { type: 'string' } }, required: ['runId'] } },
   { name: 'answer_run', description: 'Answer the question an autonomous agent run asked (get_run shows it as waitingFor.question). The run continues with the answer.', inputSchema: { type: 'object', properties: { runId: { type: 'string' }, answer: { type: 'string', description: 'Your answer, in plain words.' } }, required: ['runId', 'answer'] } },
   { name: 'list_providers', description: 'List providers', inputSchema: { type: 'object', properties: {} } },
-  { name: 'add_provider', description: 'Add a provider', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string' }, apiKey: { type: 'string' } }, required: ['name', 'type', 'apiKey'] } },
+  { name: 'add_provider', description: 'Add a model provider that needs no API key: Ollama, or a custom endpoint without a key (apiUrl). A provider with an API key is connected in the app, where the key goes straight into the credentials vault (Models, Connect provider); no MCP call carries a key.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string' }, apiUrl: { type: 'string', description: 'Where the provider answers, e.g. http://localhost:11434 for Ollama.' } }, required: ['name', 'type'] } },
   // -- Channels on an agent: where people (or other agents) reach it --
   { name: 'list_channels', description: "List an agent's channels: web chat, website widget, messaging platforms, A2A, desktop and terminal apps", inputSchema: { type: 'object', properties: { agentId: { type: 'string' } }, required: ['agentId'] } },
   { name: 'add_channel', description: 'Add a channel to an agent. web = web chat on its own link, widget = chat bubble for a website, a2a = other agents, tui/desktop = downloadable apps, the rest are messaging platforms whose keys come from a credential on Credentials, picked with `credentialId`. Keys sent in `configuration` are refused.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, type: { type: 'string', enum: CHANNEL_TYPE_NAMES }, name: { type: 'string', description: 'What to call it, unique among the agent\'s channels. The type\'s label when left out.' }, slug: { type: 'string', description: 'Web chat address or download name. Made from the agent name when left out.' }, configuration: { type: 'object', description: 'Platform settings that are not keys, e.g. a desktop app {bundleId}.', additionalProperties: true }, credentialId: { type: 'string', description: 'The credential holding the platform keys.' } }, required: ['agentId', 'type'] } },
@@ -224,7 +245,7 @@ const TOOLS = [
   // ── Runners + workspaces: execution on a machine you own ──
   { name: 'list_runners', description: 'Your registered runners and the workspaces opened on them. A runner is a daemon on some machine (laptop, VM, CI box) that accepts dispatched work; only one in an online or busy state accepts anything, so check `state` and `lastHeartbeatAt` before assuming work will land. Read-only: a runner registers itself, and dispatching to one needs a live session this server cannot open for you.', inputSchema: { type: 'object', properties: {} } },
   // ── Organization ──
-  { name: 'list_org_members', description: 'Members of the calling organization with their roles (owner, admin, member, viewer) and join dates — useful for picking a grant principal or an approver. Read-only: invites, role changes and removals are not exposed here.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'list_org_members', description: 'Members of the calling organization with their roles (owner, admin, member, viewer) and join dates — useful for picking a grant principal or an approver. Read-only: invites, role changes and removals are the operations members.invite, members.revoke_invite, members.update_role and members.remove.', inputSchema: { type: 'object', properties: {} } },
   // ── Cost governance ──
   { name: 'list_budgets', description: 'Spend budgets: the cents ceiling per period, optionally scoped to one agent or one provider, and whether a breach only warns (warn_log) or rejects the run (reject). An organization with no rows here has no cost ceiling at all.', inputSchema: { type: 'object', properties: {} } },
   { name: 'get_spend', description: 'Actual spend for the current period: total cents, a timeseries and a per-agent breakdown. period=month (default) or day.', inputSchema: { type: 'object', properties: { period: { type: 'string', enum: ['day', 'month'] }, granularity: { type: 'string', enum: ['day', 'week', 'month'], description: 'Timeseries bucket. Default day.' } } } },
@@ -243,7 +264,7 @@ const TOOLS = [
   // confirms every destructive operation.
   {
     name: 'search_operations',
-    description: 'Find a platform operation that has no tool of its own. Nearly everything the dashboard does is one: agent versions, schedules, roles and constraints; runs and their traces; channel domains, visitor sign-in and visitor data; API operations and keys; creating and editing tools; gateway tools, keys and stats; credentials; providers; model cards and deployments; memory accounts; runners and environments; approval rules and policies; budgets; analytics; notifications; the audit log; versions; files; teams; users; and the enterprise roles, policies, SSO, compliance and billing pages. Returns each match with its name, what it does, its effect (read, write or destructive) and the tool that runs it. Read get_operation for its arguments before calling it.',
+    description: 'Find a platform operation that has no tool of its own. Nearly everything the dashboard does is one: agent versions, schedules, roles and constraints; runs and their traces; channel domains and visitor data; API operations; writing and editing tools; editing a gateway, its tools, keys and stats; credentials (never their secrets: adding or rotating one is done in the app); providers; model cards and deployments; memory accounts; runners and environments; approval rules and policies; budgets; analytics; notifications; the audit log; versions; files; the organization, its members, invites and teams; users; platform API keys and access keys; data retention; and the enterprise roles, policies, SSO, encryption keys, compliance and billing. Returns each match with its name, what it does, its effect (read, write or destructive) and the tool that runs it. Read get_operation for its arguments before calling it. No operation takes a secret as an argument.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -358,7 +379,7 @@ function managementAnnotations(name: string) {
 }
 
 /** The management tools as tools/list serves them: name, title, description, schema, annotations. */
-const MANAGEMENT_TOOLS = TOOLS.map((tool) => ({
+export const MANAGEMENT_TOOLS = TOOLS.map((tool) => ({
   name: tool.name,
   title: managementTitle(tool.name),
   description: tool.description,
@@ -550,6 +571,12 @@ export class AlmytyMcpService {
       throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, `Tool not found: ${name}`);
     }
     try {
+      // No MCP argument carries a secret: an API key, a header value, a JWT
+      // secret is added in the app. Refused before anything runs.
+      if (!OPERATION_TOOLS.has(name)) {
+        const secrets = secretArgumentPaths(args ?? {}, { passThrough: CURATED_PASS_THROUGH[name] });
+        if (secrets.length) throw new Error(secretRefusal(name, secrets, CURATED_SECRET_PAGE[name]));
+      }
       await this.authorizeCurated(name, args, orgId, userId);
       if (name === 'invoke_agent' && ctx.era === 'modern') {
         return await this.invokeAgentModern(args, orgId, userId, ctx, params);
@@ -858,7 +885,9 @@ export class AlmytyMcpService {
         return { runId: run.id, status: 'running', next: 'The run continues with your answer. Call get_run to follow it.' };
       }
       case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId, caller: { id: userId } });
-      case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
+      // Keyless only: a provider's API key is a secret, added in the app
+      // (callTool refuses an `apiKey` before this runs).
+      case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: args.apiUrl ? { apiUrl: String(args.apiUrl) } : {} }, orgId, userId);
 
       // -- Channels on an agent --
       case 'list_channels': {
