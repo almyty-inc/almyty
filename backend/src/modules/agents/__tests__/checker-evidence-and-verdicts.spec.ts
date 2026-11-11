@@ -117,7 +117,9 @@ describe('the checker sees every item of a long tool result', () => {
   });
 
   it("reads the checker's context window from its model card (the step processor)", async () => {
-    const works = openAlexWorks(40);
+    // Too big for a small window, small enough to fit whole under the cap.
+    const works = openAlexWorks(12);
+    expect(JSON.stringify(works).length).toBeLessThan(EVIDENCE_MAX_CHARS);
     const run = { id: 'run-1', organizationId: 'org-1', steps: [toolStep('openalex_search_works', works)] };
     const withWindow = (contextLength: number | null) => {
       const findOne = jest.fn().mockResolvedValue(contextLength ? { id: 'm', contextLength } : null);
