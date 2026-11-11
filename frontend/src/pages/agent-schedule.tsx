@@ -119,6 +119,10 @@ export function timingFromForm(form: ScheduleForm): ScheduleRequest {
   return { kind: 'days', time: form.time, days: daysOf(form), timezone: form.timezone }
 }
 
+/** The values a schedule's message can use, filled in by the scheduler (schedule-template.ts). */
+export const SCHEDULE_VALUES_HINT =
+  'You can write {{today}} for the date of the run, {{now}} for its date and time, and {{last_run_at}} for when the last successful run started (on the first run, when the schedule was set up). They are filled in at each run, in your organization’s time zone.'
+
 /** Whether the destination of a channel is typed, given what the channel offers and what was picked. */
 function typesDestination(channel: PostChannelOption | undefined, form: ScheduleForm): boolean {
   if (!channel) return false
@@ -448,7 +452,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
           title="What it should do each time"
           description="Written the way you would ask it in a chat. The agent gets this message on every run."
         >
-          <Field id="schedule-message" label="Message">
+          <Field id="schedule-message" label="Message" hint={SCHEDULE_VALUES_HINT}>
             <Textarea
               id="schedule-message"
               rows={4}
@@ -464,6 +468,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
           description="The same input every run, written as JSON. Leave {} if the agent needs nothing."
         >
           <CodeEditor value={form.input} onChange={(value) => set({ input: value })} language="json" height="100px" />
+          <p className="text-xs text-muted-foreground">In a &quot;message&quot; field: {SCHEDULE_VALUES_HINT}</p>
         </FormSection>
       )}
 
