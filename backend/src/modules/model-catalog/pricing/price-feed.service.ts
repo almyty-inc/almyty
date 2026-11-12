@@ -52,6 +52,8 @@ export interface FeedPrice {
   currency: 'USD';
   source: PriceFeedSource;
   contextLength?: number;
+  /** The most tokens one reply may hold. */
+  maxOutputTokens?: number;
   inputs?: FeedInputs;
 }
 
@@ -62,6 +64,7 @@ export interface PriceQuote {
   /** 'native' is only ever returned for an Ollama server someone runs, which is free per token. */
   source: PriceFeedSource | 'native';
   contextLength?: number;
+  maxOutputTokens?: number;
   inputs?: FeedInputs;
   fetchedAt: Date;
   /** Set when OpenRouter prices the same model more than the threshold away. */
@@ -435,6 +438,10 @@ export class PriceFeedService implements OnModuleInit {
         if (row.contextLength == null && quote.contextLength) {
           next.contextLength = quote.contextLength;
         }
+        // The most a reply may hold: an answer checker asks for that much room (checkerOutputLimit).
+        if (quote.maxOutputTokens && row.maxOutputTokens !== quote.maxOutputTokens) {
+          next.maxOutputTokens = quote.maxOutputTokens;
+        }
         // The inputs the feed says the model takes (image, PDF), onto keys
         // the card does not set yet: an operator's explicit value stays.
         const capabilities = withFeedInputs(row.capabilities, quote.inputs);
@@ -502,6 +509,7 @@ export class PriceFeedService implements OnModuleInit {
     if (row.pricingSource !== next.pricingSource) return true;
     if (!samePricing(row.pricing, next.pricing ?? null)) return true;
     if (next.contextLength !== undefined && row.contextLength !== next.contextLength) return true;
+    if (next.maxOutputTokens !== undefined && row.maxOutputTokens !== next.maxOutputTokens) return true;
     if (next.capabilities !== undefined && JSON.stringify(row.capabilities ?? {}) !== JSON.stringify(next.capabilities)) return true;
     if (JSON.stringify(row.metadata ?? null) !== JSON.stringify(next.metadata ?? null)) return true;
     const previous = row.pricingFetchedAt ? new Date(row.pricingFetchedAt).getTime() : null;
@@ -569,6 +577,8 @@ export class PriceFeedService implements OnModuleInit {
       const price: FeedPrice = { inPerMTok, outPerMTok, currency: 'USD', source: 'feed:litellm' };
       const contextLength = Number(raw.max_input_tokens);
       if (Number.isFinite(contextLength) && contextLength > 0) price.contextLength = contextLength;
+      const maxOutput = Number(raw.max_output_tokens);
+      if (Number.isFinite(maxOutput) && maxOutput > 0) price.maxOutputTokens = maxOutput;
       // Which inputs besides text the model takes: LiteLLM's own flags.
       if (raw.supports_vision === true || raw.supports_pdf_input === true) {
         price.inputs = { image: raw.supports_vision === true, pdf: raw.supports_pdf_input === true };
@@ -613,6 +623,8 @@ export class PriceFeedService implements OnModuleInit {
       const price: FeedPrice = { inPerMTok, outPerMTok, currency: 'USD', source: 'feed:openrouter' };
       const contextLength = Number(model.context_length);
       if (Number.isFinite(contextLength) && contextLength > 0) price.contextLength = contextLength;
+      const maxOutput = Number(model.top_provider?.max_completion_tokens);
+      if (Number.isFinite(maxOutput) && maxOutput > 0) price.maxOutputTokens = maxOutput;
       // Which inputs besides text the model takes, where OpenRouter lists them.
       const modalities: unknown = model.architecture?.input_modalities;
       if (Array.isArray(modalities)) price.inputs = { image: modalities.includes('image'), pdf: modalities.includes('file') };

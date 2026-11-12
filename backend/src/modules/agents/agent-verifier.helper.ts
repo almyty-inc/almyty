@@ -4,9 +4,10 @@ import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 import type { ChatResponse } from '../llm-providers/llm-providers.service';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
-import { SHORTENED_MARK } from './checker-evidence';
+import { SHORTENED_MARK, leftOutFieldsOf } from './checker-evidence';
 import { falseVersionOrder } from './version-order';
-import { confirmsClaim, listedAsConfirmed, presentInEvidence } from './checker-guards';
+import { falseDateArithmetic, windowNote } from './date-arithmetic';
+import { aboutLeftOutField, confirmsClaim, listedAsConfirmed, presentInEvidence } from './checker-guards';
 
 /** Verdict-merge policy for a verify node's checker panel. */
 export type VerifyPolicy = 'all_pass' | 'majority' | 'any_fail_blocks';
@@ -92,11 +93,27 @@ export function stripClosingFence(text: string): string {
 }
 
 /**
- * Output budget of a checker call when its config sets none. Not the
- * provider's default: Anthropic's is 1,024 tokens, which cut a dozen-item
- * verdict off mid-JSON (run b9803830).
+ * Output budget of a checker call when its config sets none and its
+ * model's most output is not known. Not the provider's default:
+ * Anthropic's is 1,024 tokens, which cut a dozen-item verdict off
+ * mid-JSON (run b9803830).
  */
 export const CHECKER_MAX_TOKENS = 4_096;
+/**
+ * Output budget of a checker call whose model card says it may write at
+ * least this much. 4,096 cut a verdict on eight packages off (run 560ef789).
+ */
+export const CHECKER_ROOMY_MAX_TOKENS = 8_192;
+
+/**
+ * A checker's output budget from its model card's most output tokens:
+ * 8,192 where the model allows it, the model's own most where that is
+ * less, and 4,096 when the card does not say.
+ */
+export function checkerOutputLimit(maxOutputTokens?: number | null): number {
+  if (typeof maxOutputTokens !== 'number' || !(maxOutputTokens > 0)) return CHECKER_MAX_TOKENS;
+  return Math.min(CHECKER_ROOMY_MAX_TOKENS, Math.floor(maxOutputTokens));
+}
 
 /** What a person reads when no checker could give a verdict. Code: verification_unavailable. */
 export const UNAVAILABLE_RULE = 'the checker could not give a verdict';
@@ -237,6 +254,13 @@ function failuresClosed(text: string, at: number): boolean {
 
 export { runEvidence, evidenceBudget, SHORTENED_MARK } from './checker-evidence';
 
+/** The request at the head of the evidence (runEvidence writes it first), or ''. */
+function requestOf(evidence: string): string {
+  if (!evidence.startsWith('REQUEST:\n')) return '';
+  const end = evidence.indexOf('\n\n');
+  return evidence.slice('REQUEST:\n'.length, end === -1 ? undefined : end);
+}
+
 /**
  * Each checker's verdict, for the verify step it is recorded on: why one
  * gave none ("the checker's reply was cut off at its output limit ...")
@@ -281,6 +305,14 @@ export class AgentVerifierHelper {
       policy?: VerifyPolicy;
       /** What the answer must agree with: the request and the tool results (see runEvidence). */
       evidence?: string;
+      /**
+       * The agent's own instructions: the standard the answer is held to.
+       * A checker that applied stricter rules of its own failed issues the
+       * agent's rules let in ("labels or titles", run b60bacad).
+       */
+      rules?: string;
+      /** Today, for the day arithmetic the checker's failures state. Defaults to the time of the call. */
+      now?: Date;
     },
     organizationId: string,
     /** Who the checker calls act as: the run's principal (see LlmChatHelper.chat). */
@@ -295,10 +327,11 @@ export class AgentVerifierHelper {
     const spec = opts.spec || '';
     const checkers = Array.isArray(opts.checkers) ? opts.checkers : [];
     const evidence = opts.evidence?.trim() || '';
+    const extra = { rules: opts.rules?.trim() || '', now: opts.now ?? new Date() };
 
     const checkerResults = await Promise.all(
       checkers.map((checker, i) =>
-        this.runChecker(checker, i, targetText, spec, organizationId, userId, signal, evidence),
+        this.runChecker(checker, i, targetText, spec, organizationId, userId, signal, evidence, extra),
       ),
     );
 
@@ -372,6 +405,7 @@ export class AgentVerifierHelper {
     userId: string | ExecutionPrincipal | undefined,
     signal?: AbortSignal,
     evidence = '',
+    extra: { rules?: string; now?: Date } = {},
   ): Promise<CheckerResult> {
     const name = checker?.name || `checker_${index + 1}`;
     if (!checker?.providerId && !checker?.routing) {
@@ -384,11 +418,21 @@ export class AgentVerifierHelper {
       };
     }
 
+    const rules = extra.rules ?? '';
+    const now = extra.now ?? new Date();
+    // The window the request names, as dates: checkers estimated day
+    // counts ("34 days ago ... within 30 days") and failed correct answers.
+    const dates = windowNote([requestOf(evidence), spec, rules], now);
     const maxTokens = checker.maxTokens && checker.maxTokens > 0 ? checker.maxTokens : CHECKER_MAX_TOKENS;
     const systemPrompt =
       `You are a verifier. Your ONLY job is to find what is WRONG with the OUTPUT ` +
       `relative to the SPEC. Do not praise, summarize, or restate. Hunt for ` +
       `violations, missing requirements, unsupported claims, and contradictions.` +
+      (rules
+        ? `\n\nThe AGENT INSTRUCTIONS are the rules the agent was given, and the standard you judge the OUTPUT by. ` +
+          `Judge against the agent's stated rules, never stricter rules of your own: where they allow alternatives ` +
+          `("labels or titles"), an item that meets any one of them meets the rule. Do not add requirements they do not state.`
+        : '') +
       (evidence
         ? `\n\nThe EVIDENCE is what the agent was asked and what its tools returned in this run. ` +
           `Judge every factual claim against it. You refute; you do not need to confirm. Fail a claim only when:\n` +
@@ -396,18 +440,24 @@ export class AgentVerifierHelper {
           `- the EVIDENCE that would hold it is complete and does not hold it.\n` +
           `A tool result marked "${SHORTENED_MARK} ...]" or "[result left out ...]" is incomplete: items, fields and text were left out of what you see. ` +
           `Never fail a claim only because it is absent from shortened evidence; absence counts only where the evidence is complete. ` +
+          `A field the note names under "fields left out" is not in what you see: never fail a claim about that field, ` +
+          `neither as wrong nor as missing from the OUTPUT. ` +
           `Never use your own knowledge of versions, dates, prices or other facts to overrule the EVIDENCE; it is newer than you. ` +
-          `Compare version numbers part by part as integers: 4.18.1 is newer than 4.17.21, because 18 > 17.`
+          `Compare version numbers part by part as integers: 4.18.1 is newer than 4.17.21, because 18 > 17. ` +
+          `Work out every difference between dates by counting the days from the dates themselves; never estimate it.`
         : '') +
       (checker.instructions ? `\n\nFocus: ${checker.instructions}` : '') +
       `\n\nReply with ONLY a JSON object, no prose, no code fences:\n` +
-      `{"verdict":"pass"|"fail","failures":[{"claim":"<the wrong claim, quoted from the OUTPUT>","rule":"<what is wrong, briefly>","evidence":"<${evidence ? 'the EVIDENCE that contradicts it' : 'quote or location'}>"}],"confirmed":["<a claim you checked and found right>"]}\n` +
+      `{"verdict":"pass"|"fail","failures":[{"claim":"<the wrong claim, quoted from the OUTPUT>","rule":"<what is wrong, briefly>","evidence":"<${evidence ? 'the EVIDENCE that contradicts it' : 'quote or location'}>"}],"confirmed":["<the id, number, name or version of an item you found right>"]}\n` +
       `"failures" holds only claims that are wrong. A claim you checked and found right or acceptable goes in "confirmed", never in "failures": ` +
       `an entry in "failures" that says the claim is correct is a mistake. ` +
-      `Keep each entry short. "verdict" is "fail" when "failures" lists anything, else "pass".`;
+      `Each "confirmed" entry is only the item's id, number, name or version ("#67421", "lodash"), never a sentence. ` +
+      `Keep each failure short. "verdict" is "fail" when "failures" lists anything, else "pass".`;
 
     const userPrompt =
+      (rules ? `AGENT INSTRUCTIONS (the standard to judge by):\n${rules}\n\n` : '') +
       `SPEC (rules to enforce):\n${spec || '(no explicit spec — judge for correctness, completeness, and internal consistency)'}\n\n` +
+      (dates ? `DATES:\n${dates}\n\n` : '') +
       (evidence ? `EVIDENCE (ground truth for this run):\n${evidence}\n\n` : '') +
       `OUTPUT (to check):\n${targetText}`;
 
@@ -479,7 +529,7 @@ export class AgentVerifierHelper {
         };
       }
 
-      const read = this.readFailures(parsed, name, evidence);
+      const read = this.readFailures(parsed, name, evidence, now);
       // A 'fail' that names no failure still blocks: synthesize one so the
       // failure list is never silently empty on a fail. A fail whose every
       // listed item turned out not to be a failure (marked correct, or
@@ -542,18 +592,24 @@ export class AgentVerifierHelper {
    *  - its own reason or evidence says the claim is correct ("which is
    *    correct", "is acceptable", "no failure here": confirmsClaim);
    *  - its reason states a false version order ("4.18.1 < 4.17.21");
+   *  - its reason states false day arithmetic ("2026-10-09 is within 30
+   *    days of 2026-11-12"; date-arithmetic.ts);
    *  - it says the item is absent, invented or not found, and the item's
    *    DOI, id, number, version or title is in the evidence
-   *    (presentInEvidence).
+   *    (presentInEvidence);
+   *  - it is about a field the evidence left out (a shortening note names
+   *    it; aboutLeftOutField): the checker never saw that field.
    * Each item left out is said, with why, on the verify step.
    */
   readFailures(
     parsed: ParsedVerdict,
     checker: string,
     evidence = '',
+    now: Date = new Date(),
   ): { failures: VerifyFailure[]; listed: number; discarded: Array<{ rule: string; reason: string }> } {
     const items = Array.isArray(parsed.failures) ? parsed.failures : [];
     const confirmed = Array.isArray(parsed.confirmed) ? parsed.confirmed.map((c: any) => String(c ?? '')).filter(Boolean) : [];
+    const leftOut = evidence.includes(SHORTENED_MARK) ? leftOutFieldsOf(evidence) : [];
     const failures: VerifyFailure[] = [];
     const discarded: Array<{ rule: string; reason: string }> = [];
     for (const f of items) {
@@ -581,9 +637,19 @@ export class AgentVerifierHelper {
         discarded.push({ rule, reason: wrongOrder });
         continue;
       }
+      const wrongDays = falseDateArithmetic(words, now);
+      if (wrongDays) {
+        discarded.push({ rule, reason: `its day arithmetic is wrong: ${wrongDays}` });
+        continue;
+      }
       const present = presentInEvidence({ claim, rule, evidence: evidenceText }, evidence);
       if (present) {
         discarded.push({ rule, reason: `it says the item is absent, but ${present} is in the tool results` });
+        continue;
+      }
+      const leftOutField = aboutLeftOutField({ rule, evidence: evidenceText }, leftOut);
+      if (leftOutField) {
+        discarded.push({ rule, reason: `it is about ${leftOutField}, which the evidence left out` });
         continue;
       }
       failures.push({ rule, evidence: evidenceText, checker, ...(claim ? { claim } : {}) });
