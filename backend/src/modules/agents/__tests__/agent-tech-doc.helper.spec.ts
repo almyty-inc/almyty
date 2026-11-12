@@ -428,6 +428,30 @@ describe('AgentTechDocHelper', () => {
       expect(md).toContain('Never delete production data');
     });
 
+    // "Success rate" counted finished runs and ignored the checks.
+    it('says Completed and, for checked runs, Checks passed, not a success rate', async () => {
+      agentsService.getAgent.mockResolvedValue({ ...autonomousAgent(), checkedExecutions: 8, passedCheckExecutions: 2 });
+      const doc = await helper.build('agent-1', ORG, VIEWER);
+      expect(doc.loggingAndTraceability.executions).toMatchObject({
+        successRatePercent: 90,
+        completedPercent: 90,
+        checked: 8,
+        checksPassed: 2,
+        checksPassedPercent: 25,
+      });
+      const md = helper.renderMarkdown(doc);
+      expect(md).toContain('9 completed (90%)');
+      expect(md).toContain('- Checks passed: 2 of 8 checked runs (25%)');
+      expect(md).not.toMatch(/success rate/i);
+    });
+
+    it('leaves Checks passed out when no run was checked', async () => {
+      agentsService.getAgent.mockResolvedValue(autonomousAgent());
+      const doc = await helper.build('agent-1', ORG, VIEWER);
+      expect(doc.loggingAndTraceability.executions.checksPassedPercent).toBeNull();
+      expect(helper.renderMarkdown(doc)).not.toContain('Checks passed');
+    });
+
     // An imported API's tool descriptions carry HTML and line breaks; either
     // one broke the Markdown table it sat in.
     it('keeps a table row whole when a description has HTML, pipes or several lines', async () => {

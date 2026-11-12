@@ -299,6 +299,8 @@ export interface Agent {
       checkers?: Array<{ name?: string; providerId?: string; model?: string; instructions?: string }>
       policy?: 'all_pass' | 'majority' | 'any_fail_blocks'
       spec?: string
+      /** Whether a failed final-answer check sends the answer back for fixes. Off by default: the check only reports. */
+      revise?: boolean
       maxReviseLoops?: number
       triggers?: Array<'on_final_output' | 'every_n_steps' | 'on_tool_result'>
       everyNSteps?: number
@@ -332,7 +334,12 @@ export interface Agent {
   metadata?: Record<string, any>
   webhookUrl?: string
   totalExecutions: number
+  /** Runs that finished ("Completed"), whatever their answer's check said. */
   successfulExecutions: number
+  /** Finished runs whose final answer a checker gave a verdict on. */
+  checkedExecutions?: number
+  /** Of those, the runs whose check passed ("Checks passed"). */
+  passedCheckExecutions?: number
   totalCost: number
   averageExecutionTime: number
   lastExecutedAt?: string

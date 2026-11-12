@@ -1,19 +1,34 @@
 import React, { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Bot, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { Bot, CheckCircle2, Clock, ShieldCheck, XCircle } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { agentsApi } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent } from '@/lib/agent-run-numbers'
+import { cn, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { Agent, AgentExecution } from '@/types'
 
 import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatDate, formatMs, formatNumber } from './format'
 import { StatCard } from './stat-card'
+
+/** A share's card tint: none from 90%, amber from 70%, red below. Both halves: a light-only tint is invisible in dark mode. */
+function rateTint(percent: number): string {
+  if (percent >= 90) return ''
+  return percent >= 70
+    ? 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-900/40 dark:bg-yellow-900/20'
+    : 'border-red-200 bg-red-50/50 dark:border-red-900/40 dark:bg-red-900/20'
+}
+
+/** The same thresholds for a share in a table cell. */
+function rateText(percent: number): string {
+  if (percent >= 90) return 'text-green-600 dark:text-green-400'
+  return percent >= 70 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'
+}
 
 export function AgentsTab() {
   const { currentOrganization } = useOrganizationStore()
@@ -64,13 +79,19 @@ export function AgentsTab() {
     let total7d = 0
     let totalSuccess = 0
     let totalExecs = 0
+    let totalChecked = 0
+    let totalPassed = 0
+    let anyCheck = false
     let totalTime = 0
     let timedExecs = 0
     const perAgent: Array<{
       agent: Agent
       executions24h: number
       executions7d: number
-      successRate: number
+      /** "Completed": the share of runs that finished, whatever their check said. */
+      completed: number
+      /** "Checks passed", for an agent with a check (agent-run-numbers.ts). */
+      checks: ReturnType<typeof checksPassed>
       avgTime: number
       recentFailures: AgentExecution[]
       /** The executions request for this agent failed; its figures are not zeros. */
@@ -106,6 +127,12 @@ export function AgentsTab() {
       total7d += a7d
       totalSuccess += agent.successfulExecutions
       totalExecs += agent.totalExecutions
+      const checks = checksPassed(agent)
+      if (checks) {
+        anyCheck = true
+        totalChecked += checks.checked
+        totalPassed += checks.passed
+      }
       if (aTimed > 0) {
         totalTime += aTime
         timedExecs += aTimed
@@ -115,12 +142,11 @@ export function AgentsTab() {
         agent,
         executions24h: a24h,
         executions7d: a7d,
-        successRate:
+        completed:
           executions.length > 0
             ? Math.round((aSuccess / executions.length) * 100)
-            : agent.totalExecutions > 0
-              ? Math.round((agent.successfulExecutions / agent.totalExecutions) * 100)
-              : 0,
+            : completedPercent(agent) ?? 0,
+        checks,
         avgTime: aTimed > 0 ? aTime / aTimed : agent.averageExecutionTime,
         recentFailures: failures.slice(0, 3),
         unavailable,
@@ -137,7 +163,11 @@ export function AgentsTab() {
     return {
       total24h,
       total7d,
-      overallSuccessRate: totalExecs > 0 ? Math.round((totalSuccess / totalExecs) * 100) : 0,
+      overallCompleted: totalExecs > 0 ? Math.round((totalSuccess / totalExecs) * 100) : 0,
+      // Only when some agent has a check: the others have nothing to pass.
+      overallChecks: anyCheck
+        ? { percent: totalChecked > 0 ? Math.round((totalPassed / totalChecked) * 100) : null }
+        : null,
       avgExecutionTime: timedExecs > 0 ? totalTime / timedExecs : 0,
       perAgent,
       recentFailures: allFailures,
@@ -167,23 +197,23 @@ export function AgentsTab() {
   return (
     <div className="space-y-6">
       {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-2 gap-3 ${agentStats.overallChecks ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
         <StatCard icon={Bot} label="Executions (24h)" value={formatNumber(agentStats.total24h)} />
         <StatCard icon={Bot} label="Executions (7d)" value={formatNumber(agentStats.total7d)} />
         <StatCard
           icon={CheckCircle2}
-          label="Success rate"
-          value={`${agentStats.overallSuccessRate}%`}
-          className={
-            agentStats.overallSuccessRate >= 90
-              ? ''
-              : agentStats.overallSuccessRate >= 70
-                // Both halves: a light-only tint is invisible in dark
-                // mode, which is the same defect the toast variants had.
-                ? 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-900/40 dark:bg-yellow-900/20'
-                : 'border-red-200 bg-red-50/50 dark:border-red-900/40 dark:bg-red-900/20'
-          }
+          label={COMPLETED_LABEL}
+          value={`${agentStats.overallCompleted}%`}
+          className={rateTint(agentStats.overallCompleted)}
         />
+        {agentStats.overallChecks && (
+          <StatCard
+            icon={ShieldCheck}
+            label={CHECKS_PASSED_LABEL}
+            value={agentStats.overallChecks.percent === null ? '--' : `${agentStats.overallChecks.percent}%`}
+            className={agentStats.overallChecks.percent === null ? '' : rateTint(agentStats.overallChecks.percent)}
+          />
+        )}
         <StatCard
           icon={Clock}
           label="Avg run time"
@@ -206,13 +236,14 @@ export function AgentsTab() {
                   <th className={`${TH} text-right`}>Total execs</th>
                   <th className={`${TH} text-right`}>24h</th>
                   <th className={`${TH} text-right`}>7d</th>
-                  <th className={`${TH} text-right`}>Success rate</th>
+                  <th className={`${TH} text-right`}>{COMPLETED_LABEL}</th>
+                  <th className={`${TH} text-right`}>{CHECKS_PASSED_LABEL}</th>
                   <th className={`${TH} text-right`}>Avg time</th>
                   <th className={`${TH} text-right`}>Cost</th>
                 </tr>
               </thead>
               <tbody>
-                {agentStats.perAgent.map(({ agent, executions24h, executions7d, successRate, avgTime, unavailable }) => (
+                {agentStats.perAgent.map(({ agent, executions24h, executions7d, completed, checks, avgTime, unavailable }) => (
                   <tr key={agent.id} className="border-b last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-3">
                       <Link to={`/agents/${agent.id}`} className="font-medium hover:underline text-sm">
@@ -243,7 +274,7 @@ export function AgentsTab() {
                     */}
                     {unavailable ? (
                       <td
-                        colSpan={4}
+                        colSpan={3}
                         data-testid={`agent-stats-unavailable-${agent.id}`}
                         className="px-4 py-3 text-right text-xs text-muted-foreground italic"
                       >
@@ -254,21 +285,29 @@ export function AgentsTab() {
                         <td className="px-4 py-3 text-right text-muted-foreground">{executions24h}</td>
                         <td className="px-4 py-3 text-right text-muted-foreground">{executions7d}</td>
                         <td className="px-4 py-3 text-right">
-                          <span
-                            className={cn(
-                              'font-medium',
-                              successRate >= 90
-                                ? 'text-green-600 dark:text-green-400'
-                                : successRate >= 70
-                                  ? 'text-yellow-600 dark:text-yellow-400'
-                                  : 'text-red-600 dark:text-red-400',
-                            )}
-                          >
-                            {successRate}%
-                          </span>
+                          <span className={cn('font-medium', rateText(completed))}>{completed}%</span>
                         </td>
-                        <td className="px-4 py-3 text-right text-muted-foreground">{formatMs(avgTime)}</td>
                       </>
+                    )}
+                    {/* From the agent's own counts, so it does not depend on the runs request. */}
+                    <td className="px-4 py-3 text-right" data-testid={`agent-checks-passed-${agent.id}`}>
+                      {checks && checks.percent !== null ? (
+                        <span
+                          className={cn('font-medium', rateText(checks.percent))}
+                          title={`${checks.passed.toLocaleString('en-US')} of ${pluralized(checks.checked, 'checked run')}`}
+                        >
+                          {checks.percent}%
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground" title={checks ? 'No run checked yet' : 'This agent has no check'}>
+                          --
+                        </span>
+                      )}
+                    </td>
+                    {unavailable ? (
+                      <td className="px-4 py-3 text-right text-muted-foreground">--</td>
+                    ) : (
+                      <td className="px-4 py-3 text-right text-muted-foreground">{formatMs(avgTime)}</td>
                     )}
                     <td className="px-4 py-3 text-right text-muted-foreground">
                       {agent.totalCost > 0 ? `$${agent.totalCost.toFixed(4)}` : '--'}

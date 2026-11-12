@@ -19,12 +19,17 @@ const CONFIRMS: RegExp[] = [
   /\bmatch(?:es|ed)? (?:the )?(?:evidence|tool|npm|returned|result|search)/gi,
   /\b(?:this|the) claim (?:is a )?pass(?:es)?\b/gi,
   /(?:^|[,;:(] ?)correct[.)]?$/gim,
+  // "All packages from package.json are in the table", "all 8 packages are
+  // present in the table" (run 6933d7e2): the answer has every item, which
+  // is what a claim of completeness says. Only where the answer is named:
+  // "all releases are listed in the tool results" says nothing about the answer.
+  /\ball\b(?:[^;:\n.]|\.(?=\S)){0,60}?\b(?:are|were)\s+(?:all\s+)?(?:(?:present|included|listed|shown|covered)\s+)?in\s+the\s+(?:table|output|answer|list|report|summary)\b/gi,
 ];
 /** A denial just before a confirmation: "is not correctly classified", "does not match the evidence". */
 const DENIED_BEFORE = /(?:\bnot|\bnever|n't)\s+(?:\w+\s+)?$/i;
 /** A real error named after the last confirmation: "the version is correct but the date is wrong". */
 const ERROR_AFTER =
-  /\b(?:incorrect(?:ly)?|wrong|contradict\w*|(?:does|do|did)\s+not\s+match|(?:doesn't|don't|didn't)\s+match|not\s+(?:stated|supported|present|shown|found|listed|in\s+the\s+(?:evidence|tool\s+results?|results?))|unsupported|invented|fabricated|mismatch(?:es)?|differs?)\b/i;
+  /\b(?:incorrect(?:ly)?|wrong|contradict\w*|(?:does|do|did)\s+not\s+match|(?:doesn't|don't|didn't)\s+match|not\s+(?:stated|supported|present|shown|found|listed|in\s+the\s+(?:evidence|tool\s+results?|results?))|unsupported|invented|fabricated|mismatch(?:es)?|differs?|except|other\s+than|apart\s+from|missing|omit(?:s|ted)?|left\s+out)\b/i;
 
 /**
  * The words in a failure's own reason or evidence that say the claim is

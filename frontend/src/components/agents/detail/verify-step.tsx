@@ -177,7 +177,8 @@ function lastBlockingCheck(run: VerdictCarrier) {
 
 /**
  * Whether a finished run's answer went out without passing its check: the
- * checkers still failed it when the revisions ran out, or no checker could
+ * checkers failed it (by default the check only reports; with revising on,
+ * they still failed it when the revisions ran out), or no checker could
  * give a verdict. The run records that in `metadata.verify`; a run checked
  * in patch mode only in its last blocking `verify` step, so both are read.
  */
@@ -186,7 +187,7 @@ export function unverifiedAnswer(run: VerdictCarrier): boolean {
   const v = run.metadata?.verify
   if (v && typeof v.verdict === 'string') return v.verdict !== 'pass'
   const last = lastBlockingCheck(run)
-  return !!last && last.output?.verdict !== 'pass' && (last.output?.exhausted === true || last.output?.unavailable === true)
+  return !!last && last.output?.verdict !== 'pass' && (last.output?.exhausted === true || last.output?.unavailable === true || last.output?.reportOnly === true)
 }
 
 /** Whether the answer went out unchecked: no checker could give a verdict on it. Nothing was found wrong with it. */
@@ -197,7 +198,8 @@ export function uncheckedAnswer(run: VerdictCarrier): boolean {
   return lastBlockingCheck(run)?.output?.unavailable === true
 }
 
-const UNVERIFIED_LINE = `${CHECK_FAILED}: the checkers still found problems with this answer when the revisions ran out.`
+/** True in both modes: the check reports, or the revisions ran out. */
+const UNVERIFIED_LINE = `${CHECK_FAILED}: the checkers found problems with this answer.`
 const UNCHECKED_LINE = `${NOT_CHECKED}: the check could not be done, so no checker gave a verdict on this answer.`
 
 /**
