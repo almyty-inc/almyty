@@ -73,7 +73,10 @@ export function factsPrompt(rules: string[]): string {
     'preferences and decisions that would help in a later conversation. Each fact is one short sentence that makes ' +
     'sense on its own and keeps the specifics: names, ids, versions, dates and numbers as the exchange gave them. ' +
     'A fact too vague to act on later ("the user is interested in a topic") is not worth keeping, and neither is ' +
-    `a guess or a conclusion the exchange does not back. Answer with JSON only: {"facts": ["..."]}, at most ${FACTS_PER_RUN_MAX} facts, or {"facts": []} ` +
+    'a guess or a conclusion the exchange does not back. ' +
+    'Never keep the state of a tool, a service or a call as a fact: an error, a timeout, an outage, a rate limit, ' +
+    'a search that failed or found nothing, or what the assistant could not do. It was true for a moment, and a later ' +
+    `conversation would read it as lasting. Answer with JSON only: {"facts": ["..."]}, at most ${FACTS_PER_RUN_MAX} facts, or {"facts": []} ` +
     'when nothing is worth keeping.' +
     (rules.length ? `\n\nNever include anything these rules cover:\n${rulesBlock(rules)}` : '')
   );
@@ -93,6 +96,29 @@ export function verificationFailed(run: Pick<AgentRun, 'steps' | 'metadata'>): b
   if (last) return last.output?.verdict !== 'pass';
   const meta = run.metadata?.verify?.verdict;
   return typeof meta === 'string' && meta !== 'pass';
+}
+
+/**
+ * The tools of the agent the run called that never returned a result:
+ * every call of each errored. A tool the agent has (a `toolId` on the
+ * step) is what the answer draws on; the built-in memory and agent tools
+ * are not. An answer that says "the search timed out" can pass its check
+ * (it is honest) and still leave nothing worth remembering: the facts
+ * saved from runs 6c7bd4a5 and b8cc6429 were "the assistant experienced a
+ * server timeout error".
+ */
+export function failedTools(run: Pick<AgentRun, 'steps'>): string[] {
+  const calls = new Map<string, { name: string; ok: boolean }>();
+  for (const step of run.steps ?? []) {
+    if (step?.type !== 'tool_call' || !step.input?.toolId) continue;
+    const id = String(step.input.toolId);
+    const seen = calls.get(id) ?? { name: String(step.input.tool ?? step.input.toolName ?? id), ok: false };
+    if (!step.error) seen.ok = true;
+    calls.set(id, seen);
+  }
+  return Array.from(calls.values())
+    .filter((c) => !c.ok)
+    .map((c) => c.name);
 }
 
 /** The facts in a facts call's answer; [] when it is not the asked-for shape. */
@@ -284,13 +310,20 @@ export class AgentMemoryKeeper {
     // An answer the verification panel rejected (it ran out of revisions
     // with the checks still failing) is not saved: facts drawn from it carry
     // the very conclusion the checks refuted, and a later run would recall
-    // it as true.
-    if (verificationFailed(run)) {
+    // it as true. Nor is a run whose tool never answered: what it leaves is
+    // the outage, not a fact (failedTools).
+    const broken = failedTools(run);
+    const skipped = verificationFailed(run)
+      ? 'the answer did not pass verification'
+      : broken.length
+        ? `a tool call failed: ${broken.join(', ')}`
+        : null;
+    if (skipped) {
       run.steps.push({
         type: 'memory_save',
         role: stampOf(team.main),
         input: { save: s.save, scope: scope.scope_type, account: s.account },
-        output: { saved: 0, skipped: 'the answer did not pass verification' },
+        output: { saved: 0, skipped },
         cost: 0,
         duration: 0,
         timestamp: new Date().toISOString(),

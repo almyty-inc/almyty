@@ -165,13 +165,22 @@ const LAST_N = [
   /\b(\d{1,4})[- ]days?\s+(?:look[- ]?back|window)\b/i,
 ];
 
+/** A window a request names: its first day and today, as days since the epoch and as ISO dates. */
+export interface RequestWindow {
+  start: number;
+  today: number;
+  startIso: string;
+  todayIso: string;
+  /** The day count, for "look back N days"; absent for "since D". */
+  days?: number;
+}
+
 /**
  * The date window a request names ("look back 7 days", "last 30 days",
- * "since 2026-11-01"), as explicit dates for the checker: it estimated
- * day counts and got them wrong. The first of `texts` that names one
- * wins (the request before the agent's own rules). Null when none does.
+ * "since 2026-11-01"). The first of `texts` that names one wins (the
+ * request before the agent's own rules). Null when none does.
  */
-export function windowNote(texts: Array<string | undefined | null>, now: Date): string | null {
+export function requestWindow(texts: Array<string | undefined | null>, now: Date): RequestWindow | null {
   const today = dayOfDate(now);
   for (const text of texts) {
     if (!text) continue;
@@ -180,16 +189,34 @@ export function windowNote(texts: Array<string | undefined | null>, now: Date): 
       if (!m) continue;
       const n = Number(m[1]);
       if (!(n > 0)) continue;
-      const start = isoOfDay(today - n);
-      return (
-        `Today is ${isoOfDay(today)} (UTC). The ${n}-day window runs from ${start} to ${isoOfDay(today)}: ` +
-        `a date on or after ${start} is inside it, an earlier date is outside it.`
-      );
+      return { start: today - n, today, startIso: isoOfDay(today - n), todayIso: isoOfDay(today), days: n };
     }
     const since = SINCE.exec(text);
-    if (since && datesIn(since[1]).length) {
-      return `Today is ${isoOfDay(today)} (UTC). The window starts on ${since[1]}: a date on or after ${since[1]} is inside it, an earlier date is outside it.`;
-    }
+    const found = since ? datesIn(since[1]) : [];
+    if (found.length) return { start: found[0].day, today, startIso: found[0].text, todayIso: isoOfDay(today) };
   }
   return null;
+}
+
+/** The calendar day (days since the epoch) an ISO date or timestamp starts with, or null. */
+export function dayOfIso(text: unknown): number | null {
+  if (typeof text !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(text.trim());
+  return m ? dayOf(Number(m[1]), Number(m[2]), Number(m[3])) : null;
+}
+
+/**
+ * The window a request names, as explicit dates for the checker: it
+ * estimated day counts and got them wrong. Null when none is named.
+ */
+export function windowNote(texts: Array<string | undefined | null>, now: Date): string | null {
+  const w = requestWindow(texts, now);
+  if (!w) return null;
+  if (w.days !== undefined) {
+    return (
+      `Today is ${w.todayIso} (UTC). The ${w.days}-day window runs from ${w.startIso} to ${w.todayIso}: ` +
+      `a date on or after ${w.startIso} is inside it, an earlier date is outside it.`
+    );
+  }
+  return `Today is ${w.todayIso} (UTC). The window starts on ${w.startIso}: a date on or after ${w.startIso} is inside it, an earlier date is outside it.`;
 }

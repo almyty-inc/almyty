@@ -7,7 +7,7 @@ import {
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
-import type { OperationOutline } from '@/types'
+import type { AgentExecution, AgentRun, OperationOutline } from '@/types'
 import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 import type { AgentWakeRow, AlwaysOnInput, AlwaysOnView } from '@/lib/always-on'
 
@@ -152,6 +152,24 @@ export function extractData<T = any>(response: AxiosResponse): T {
     return body.data as T
   }
   return body as T
+}
+
+/** One page of a list and how many there are in all. */
+export interface PageOf<T> {
+  items: T[]
+  /** Every item the list holds, across pages; the page's length when the response gives no pagination. */
+  total: number
+}
+
+/**
+ * A paged list response, `{ success, data: [...], pagination: { total } }`,
+ * as its items and total. extractData keeps only `data`, so a count shown
+ * from it was the page size ("20 runs" for an agent with 70).
+ */
+export function pageOf<T>(body: any): PageOf<T> {
+  const items: T[] = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : []
+  const total = Number(body?.pagination?.total)
+  return { items, total: Number.isFinite(total) && total >= items.length ? total : items.length }
 }
 
 /**
@@ -997,6 +1015,12 @@ export const agentsApi = {
   listWakes: (id: string, limit = 20) => apiGet<AgentWakeRow[]>(`/agents/${id}/always-on/wakes`, { params: { limit } }),
   // Runs (autonomous mode)
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
+  /** One page of runs with its pagination: `total` is every run of the agent, not the page size. */
+  listRunsPage: (id: string, params?: any): Promise<PageOf<AgentRun>> =>
+    api.get(`/agents/${id}/runs`, { params }).then((r) => pageOf<AgentRun>(r.data)),
+  /** One page of workflow runs with its pagination. */
+  getExecutionsPage: (id: string, params?: any): Promise<PageOf<AgentExecution>> =>
+    api.get(`/agents/${id}/executions`, { params }).then((r) => pageOf<AgentExecution>(r.data)),
   getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
 }
 

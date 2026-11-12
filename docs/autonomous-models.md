@@ -144,11 +144,15 @@ Experimental, and not claimed to save money (see `docs/strategies.md`).
 The agent's own check (`agentConfig.verify`) gives a verdict and its
 reasons, and by default that is all it does. The answer goes out as the
 agent wrote it. When the check did not pass, the answer carries one line
-above it, "Note: this answer's check didn't pass: <first reason>.", or
+above it, "Note: this answer's check didn't pass: <reason>.", or
 "Note: this answer could not be checked" when no checker gave a verdict.
+The reason is the strongest failure: one the platform counted itself
+(an item outside the window, below) first, then a claim the evidence
+contradicts, then a broken rule. A reason longer than 160 characters is
+cut and ends in "…", with no full stop after it.
 The verdict and reasons are on the run (`metadata.verify`, with
-`reportOnly: true`) and on its `verify` step, and nothing is saved to
-memory from an answer whose check did not pass.
+`reportOnly: true`) and on its `verify` step, in the same order, and
+nothing is saved to memory from an answer whose check did not pass.
 
 In 30 runs on staging the checker failed nine correct answers and passed
 two wrong ones, and in eleven runs the revisions it asked for deleted
@@ -192,9 +196,10 @@ These rules hold for the verify gate and the strategy checks alike
   fields (id, name, title, tag, version, date, url, doi), and of a nested
   object (an author, a venue) its short identifying leaves such as
   `display_name`. Long text and large or deep structures go first. Only
-  when that still does not fit are items left out. A shortened result
-  always says so on its first line, and names every field left out by
-  path, grouped under its list item:
+  when that still does not fit are items left out. An empty list or an
+  empty string is never left out (`labels: []` says the issue has no
+  labels). A shortened result always says so on its first line, and names
+  every field left out by path, grouped under its list item:
   `[result shortened: every item is shown; fields left out: results[].{abstract (text), authorships[].raw_affiliation_strings (list)}; ...]`.
 - A step payload over 32 KB is stored the same way (`persist-cap.ts`): a
   JSON result stays valid JSON as
@@ -204,13 +209,24 @@ These rules hold for the verify gate and the strategy checks alike
   the steps, either is shown as shortened, never as the whole result.
   Storing is idempotent, so a step replayed from the run log is stored as
   the log holds it.
-- A checker only refutes. It fails a claim when the evidence contradicts
-  it, or when the evidence that would hold it is complete and does not.
-  Absence from shortened evidence is not grounds to fail, and neither is
-  a field the shortening note says was left out.
+- A checker only refutes, and fails two kinds of thing: a claim the
+  evidence contradicts (or that the evidence would hold, complete, and
+  does not), and an item that breaks a rule the agent's instructions, the
+  spec or the checker's focus state. Absence from shortened evidence is
+  not grounds to fail, and neither is a field the shortening note says
+  was left out. What is relevant or on topic is not the checker's call
+  unless a rule makes it one.
+- A failure that rests on a rule quotes the words of the instructions it
+  relies on, in its `instruction` field.
 - When the request names a window ("look back 7 days", "since
   2026-11-01"), the checker is given its first and last day, and told to
-  count the days between dates rather than estimate them.
+  count the days between dates rather than estimate them. The platform
+  also checks it itself (`window-check.ts`): an item the answer lists
+  under a heading that says "new" ("## New releases") whose date in the
+  tool results (`published_at`, `publication_date`, ...) is before the
+  window is a failure of the `window check`, whatever the checkers said.
+  Only dates the tool results give that item are used; an item they give
+  no date for is left alone.
 - A checker replies with real failures in `failures` and, in
   `confirmed`, only the ids, numbers, names or versions of what it found
   right (`VERDICT_SCHEMA`; sent as a JSON schema to OpenAI, Azure OpenAI
@@ -220,9 +236,13 @@ These rules hold for the verify gate and the strategy checks alike
     confirmed;
   - its own reason or evidence says the claim is right ("which is
     correct", "is acceptable", "no failure here", "all packages are in
-    the table"), unless it goes on to name a real error ("the tag is
-    correct but the date is wrong", "all are in the table except
-    lodash");
+    the table", "which qualifies it", "so this is outdated-minor" for a
+    claim that says outdated-minor), unless it goes on to name a real
+    error ("the tag is correct but the date is wrong", "all are in the
+    table except lodash"). A complaint about wording ("the note
+    incorrectly states X when it should clarify Y") is not a real error.
+    "Qualifies it" is not read as agreement where the failure says the
+    item was wrongly left out;
   - it states a false version order, in any phrasing ("4.18.1 <
     4.17.21", "less than", "older than the requested version"):
     versions are compared part by part as numbers. A version set beside
@@ -239,8 +259,22 @@ These rules hold for the verify gate and the strategy checks alike
     evidence (`checker-guards.ts`);
   - it is about a field the evidence left out ("the evidence does not
     give the first author" where `results[].authorships[].author` was
-    left out).
-  Each one left out is noted on the `verify` step with why.
+    left out);
+  - it says how many items a tool returned ("the tool returned 15
+    works") and no list of items in the tool results has that many. A
+    total the result reports about the whole collection (OpenAlex
+    `meta.count`) is not what was returned. Nothing is judged when a
+    result was left out or cut off;
+  - it judges relevance ("off-topic", "not relevant", "unrelated",
+    "should be excluded") and neither the agent's instructions, the spec
+    nor the checker's focus make relevance a rule, unless it also names
+    a contradiction with the evidence;
+  - it rests on the agent's instructions and quotes nothing from them
+    (a quote is a passage of at least four words; a label such as
+    'security' is not one), or quotes words that are not in them.
+  Each one left out is noted on the `verify` step with why. Each one
+  kept says what it rests on (`kind`: `evidence` or `rule`; a platform
+  finding is `deterministic`).
 - A checker call asks for 8,192 output tokens where its model card says
   the model may write that much (the card's most output comes from the
   price feed), the model's own most where that is less, and 4,096 when
@@ -323,7 +357,11 @@ The agent's other two sections are read by the same loop, on every step.
   and saves each fact (tier `long`); `conversations` saves the exchange
   (tier `project`); `asked` saves nothing on its own, and `store_memory`
   says so to the model. The after-run save is a `memory_save` step, and its
-  calls are the run's cost.
+  calls are the run's cost. Nothing is saved after a run whose answer
+  check did not pass, or in which a tool of the agent never answered
+  (every call of it errored: "a tool call failed: openalex_search_works"
+  on the step), and the facts call is told never to keep the state of a
+  tool or a service (an error, a timeout, an outage) as a fact.
 - `neverSave` rules screen every write with a main-role call first (the
   facts call carries them in its own prompt); `NOTHING` or a failed check
   means nothing is written.

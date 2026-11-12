@@ -52,6 +52,11 @@ interface RunsTabProps {
   agentId?: string
   /** A run to show opened, from a link to /agents/:id/runs/:runId. */
   openRunId?: string
+  /**
+   * How many runs the agent has in all (the lists' `pagination.total`).
+   * The lists hold one page, so their length is the page size.
+   */
+  total?: number
 }
 
 /**
@@ -85,7 +90,7 @@ export function stepMachineError(step: { output?: unknown }): MachineProblemInfo
   return { sentence: m.sentence, detail: typeof m.detail === 'string' ? m.detail : null }
 }
 
-export function RunsTab({ runs, executions = [], agentId, openRunId }: RunsTabProps) {
+export function RunsTab({ runs, executions = [], agentId, openRunId, total }: RunsTabProps) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(openRunId ?? null)
   // A link to another run while this tab is showing opens that one.
   useEffect(() => {
@@ -101,13 +106,15 @@ export function RunsTab({ runs, executions = [], agentId, openRunId }: RunsTabPr
     [runs, executions],
   )
   const toggle = (id: string) => setExpandedRunId(expandedRunId === id ? null : id)
+  // Every run of the agent, not the page listed below it.
+  const count = typeof total === 'number' && total >= rows.length ? total : rows.length
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Runs</CardTitle>
-          <Badge variant="outline">{pluralized(rows.length, 'run')}</Badge>
+          <Badge variant="outline">{pluralized(count, 'run')}</Badge>
         </div>
         <CardDescription className="text-xs">
           Every run of this agent, step by step. Open one to see what each step did.

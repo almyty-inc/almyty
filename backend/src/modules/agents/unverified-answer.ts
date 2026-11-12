@@ -19,6 +19,8 @@
  * `unverified-answer-delivery.spec.ts` guards that.
  */
 
+import { strongestFirst } from './checker-guards';
+
 export const UNVERIFIED_ANSWER_LEAD = "Note: this answer's check didn't pass";
 
 /**
@@ -30,7 +32,7 @@ export const UNCHECKED_ANSWER_LEAD = 'Note: this answer could not be checked';
 
 const MAX_REASON = 160;
 
-type Failure = { rule?: unknown; evidence?: unknown; code?: unknown } | null | undefined;
+type Failure = { rule?: unknown; evidence?: unknown; code?: unknown; kind?: unknown; instruction?: unknown } | null | undefined;
 
 /** Whether these failures say no checker gave a verdict (agent-verifier.helper.ts mergeVerdicts). */
 export function checkUnavailable(failures: Failure[] | null | undefined): boolean {
@@ -39,13 +41,17 @@ export function checkUnavailable(failures: Failure[] | null | undefined): boolea
 }
 
 /**
- * The short reason: the first failed rule, one line. The evidence is left
- * out on purpose: it quotes what the checker read (tool results, documents),
- * which a visitor may not be meant to see.
+ * The short reason: the strongest failed rule, one line. Strongest is a
+ * finding the platform counted itself (an item outside the window), then
+ * a claim the evidence contradicts, then a rule failure: a misread rule
+ * led the note while a real error sat behind it (runs 887a8bfe,
+ * dda8789a). The evidence is left out on purpose: it quotes what the
+ * checker read (tool results, documents), which a visitor may not be
+ * meant to see.
  */
 export function unverifiedReason(failures: Failure[] | null | undefined): string {
   if (checkUnavailable(failures)) return 'the checker could not give a verdict';
-  const rule = (failures ?? [])
+  const rule = strongestFirst((failures ?? []).filter(Boolean))
     .map((f) => (typeof f?.rule === 'string' ? f.rule : ''))
     .map((r) => trimTrailingDots(r.replace(/\s+/g, ' ').trim()))
     .find((r) => r.length > 0);
@@ -60,10 +66,11 @@ function trimTrailingDots(text: string): string {
   return text.slice(0, end);
 }
 
-/** The marker line for these failures. */
+/** The marker line for these failures. A reason cut short ends in "…" and takes no full stop after it. */
 export function unverifiedLine(failures: Failure[] | null | undefined): string {
   const lead = checkUnavailable(failures) ? UNCHECKED_ANSWER_LEAD : UNVERIFIED_ANSWER_LEAD;
-  return `${lead}: ${unverifiedReason(failures)}.`;
+  const reason = unverifiedReason(failures);
+  return `${lead}: ${reason}${/[.!?…]$/.test(reason) ? '' : '.'}`;
 }
 
 /** The answer with the marker line above it. Marking twice is a no-op. */
