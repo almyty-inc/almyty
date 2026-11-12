@@ -118,9 +118,12 @@ function leadingIdentifier(line: string): string | null {
   return url ? url[1] : null;
 }
 
+/** A DOI: "10." + registrant digits + "/" (not an IP address). */
+const DOI_KEY = /^(?:doi:)?10\.\d{4,9}\//;
+
 function lookupKeys(id: string): string[] {
   const k = lower(id);
-  if (k.startsWith('#') || /^https?:/.test(k) || /^10\./.test(k)) return [k];
+  if (k.startsWith('#') || /^https?:/.test(k) || DOI_KEY.test(k)) return [k];
   return [k, k.replace(/^v(?=\d)/, ''), `v${k.replace(/^v(?=\d)/, '')}`];
 }
 
