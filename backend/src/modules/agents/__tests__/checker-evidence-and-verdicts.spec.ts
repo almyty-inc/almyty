@@ -233,7 +233,7 @@ describe('what a person reads when the check could not be done', () => {
 
   it('is never sent back for revision (the final-answer gate and the patch strategy)', () => {
     const src = readFileSync(join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
-    expect(src).toContain('if (!verifyPanel.passed && !verifyPanel.unavailable && revisions < maxLoops)');
+    expect(src).toContain('if (revise && !verifyPanel.passed && !verifyPanel.unavailable && revisions < maxLoops)');
     expect(src).toContain('if (!check.passed && !check.unavailable && revisions < maxLoops)');
   });
 });

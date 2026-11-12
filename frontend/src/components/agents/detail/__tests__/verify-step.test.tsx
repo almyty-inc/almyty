@@ -91,7 +91,30 @@ describe('a check no checker could give a verdict on', () => {
 
   it('keeps the "found problems" line for an answer the checkers did fail', () => {
     render(<UnverifiedNote run={{ status: 'completed', metadata: { verify: { verdict: 'fail', exhausted: true } } }} />)
-    expect(screen.getByTestId('unverified-note')).toHaveTextContent(/still found problems/)
+    expect(screen.getByTestId('unverified-note')).toHaveTextContent(/found problems with this answer/)
+  })
+
+  // By default the check only reports: no revision ran, so the line must
+  // not say the revisions ran out.
+  it('marks a reported (not revised) failed check without talking about revisions', () => {
+    const reported = { status: 'completed', metadata: { verify: { verdict: 'fail', revisions: 0, exhausted: false, reportOnly: true } } }
+    render(
+      <>
+        <UnverifiedNote run={reported} />
+        <VerifySummary run={reported as unknown as AgentRun} />
+      </>,
+    )
+    expect(screen.getByTestId('unverified-note')).toHaveTextContent("Check didn't pass: the checkers found problems with this answer.")
+    expect(document.body).not.toHaveTextContent(/revisions ran out|budget exhausted/)
+  })
+
+  it('reads a report-only last check as an unverified answer when the run recorded no verdict', () => {
+    const run = {
+      status: 'completed',
+      steps: [{ type: 'verify', output: { verdict: 'fail', reportOnly: true, exhausted: false, failures: [{ rule: 'wrong total' }] } }],
+    }
+    render(<UnverifiedNote run={run} compact />)
+    expect(screen.getByTestId('unverified-badge')).toHaveTextContent("Check didn't pass")
   })
 
   it('shows on the step why each checker gave no verdict', () => {

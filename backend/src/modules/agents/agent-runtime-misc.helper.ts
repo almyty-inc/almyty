@@ -130,13 +130,16 @@ export class AgentRuntimeMiscHelper {
   /**
    * Atomically bump an agent's running stats. Mirrors the helper in
    * AgentExecutionEngine; both paths used to do a load-modify-save pair
-   * which lost increments under concurrency.
+   * which lost increments under concurrency. `check` is the final-answer
+   * check's verdict when a checker gave one: it feeds "Checks passed",
+   * kept apart from "Completed" (`success`), which ignores checks.
    */
   async bumpAgentStats(
     agentId: string,
     success: boolean,
     executionTime: number,
     cost: number,
+    check?: 'pass' | 'fail',
   ): Promise<void> {
     try {
       await this.agentRepository
@@ -147,6 +150,12 @@ export class AgentRuntimeMiscHelper {
           successfulExecutions: success
             ? () => '"successfulExecutions" + 1'
             : () => '"successfulExecutions"',
+          ...(check
+            ? {
+                checkedExecutions: () => '"checkedExecutions" + 1',
+                ...(check === 'pass' ? { passedCheckExecutions: () => '"passedCheckExecutions" + 1' } : {}),
+              }
+            : {}),
           totalCost: () => `"totalCost" + ${Number(cost) || 0}`,
           averageExecutionTime: () =>
             `ROUND("averageExecutionTime" + (${Number(executionTime) || 0} - "averageExecutionTime") / ("totalExecutions" + 1))`,

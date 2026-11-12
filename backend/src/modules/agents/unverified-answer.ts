@@ -1,11 +1,13 @@
 /**
  * The marker on an answer whose check did not pass.
  *
- * An autonomous run with a verify panel on its final output revises its
- * answer until the checkers pass it or the revisions run out. When they run
- * out, the run still completes with the last draft and that draft is
- * delivered. It is delivered marked: one plain line above the answer says
- * the check did not pass and why, in short.
+ * An autonomous run with a verify panel on its final output has the
+ * answer checked. By default the check only reports: a failed check does
+ * not send the answer back, and the run completes with the answer as
+ * written. With `verify.revise` on, the answer is revised until the
+ * checkers pass it or the revisions run out, and then the last draft is
+ * delivered. Either way it is delivered marked: one plain line above the
+ * answer says the check did not pass and why, in short.
  *
  * The marker is put on the answer itself, once, where the run completes
  * (agent-step-processor.ts): on `run.output` and on the assistant message

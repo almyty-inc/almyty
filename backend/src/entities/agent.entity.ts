@@ -255,10 +255,13 @@ export class Agent {
     runAs?: 'owner' | 'agent';
     /**
      * Autonomous verify: a refute-only checker panel reviews the agent's final
-     * answer. On failure (within the revision budget) the failures are fed back
-     * as synthetic user feedback and the agent loops again. Checkers pick their
-     * vendor per-checker via providerId (multi-vendor = different-vendor
-     * provider entities). Mirrors the pipeline `verify` node's config.
+     * answer and gives its verdict and reasons. By default that is all it
+     * does: the answer goes out as written, with a note when its check did
+     * not pass. With `revise` on, a failed check sends the answer back with
+     * the failures as synthetic user feedback, up to `maxReviseLoops` times.
+     * Checkers pick their vendor per-checker via providerId (multi-vendor =
+     * different-vendor provider entities). Mirrors the pipeline `verify`
+     * node's config.
      */
     verify?: {
       enabled?: boolean;
@@ -272,10 +275,18 @@ export class Agent {
       }>;
       policy?: 'all_pass' | 'majority' | 'any_fail_blocks';
       spec?: string;
+      /**
+       * Whether a failed final-answer check sends the answer back for fixes.
+       * Off (absent) by default: revisions changed correct answers in real
+       * runs, and each round is another model call. Only the final-answer
+       * check reads it; the strategies' own checks (cascade, best_of_n,
+       * explore_extract_patch) escalate as designed.
+       */
+      revise?: boolean;
       maxReviseLoops?: number;
       /**
-       * When verify fires. `on_final_output` (default) gates the final answer
-       * and can send it back for revision. `every_n_steps` and `on_tool_result`
+       * When verify fires. `on_final_output` (default) checks the final answer
+       * (and, with `revise`, can send it back). `every_n_steps` and `on_tool_result`
        * are advisory mid-run checks that inject course-correction feedback
        * without ending the run.
        */
@@ -375,8 +386,21 @@ export class Agent {
   @Column({ default: 0 })
   totalExecutions: number;
 
+  /** Runs that finished. "Completed" in the UI; it says nothing about whether an answer's check passed. */
   @Column({ default: 0 })
   successfulExecutions: number;
+
+  /**
+   * Finished runs whose final answer the checker gave a verdict on
+   * (agentConfig.verify). A run no checker could give a verdict on is
+   * not counted: it was not checked.
+   */
+  @Column({ default: 0 })
+  checkedExecutions: number;
+
+  /** Of `checkedExecutions`, the runs whose check passed. "Checks passed" in the UI. */
+  @Column({ default: 0 })
+  passedCheckExecutions: number;
 
   @Column({ type: 'float', default: 0 })
   totalCost: number;
