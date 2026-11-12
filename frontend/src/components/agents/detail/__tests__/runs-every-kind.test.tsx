@@ -111,7 +111,7 @@ describe('an answer whose checks still failed', () => {
     )
     const badges = screen.getAllByTestId('unverified-badge')
     expect(badges).toHaveLength(2)
-    expect(badges[0]).toHaveTextContent('Not verified')
+    expect(badges[0]).toHaveTextContent("Check didn't pass")
   })
 
   it('is marked in Try it', async () => {
@@ -121,7 +121,7 @@ describe('an answer whose checks still failed', () => {
     const box = screen.getByRole('textbox', { name: 'Message' })
     fireEvent.change(box, { target: { value: 'Check March' } })
     fireEvent.keyDown(box, { key: 'Enter' })
-    expect(await screen.findByTestId('unverified-note')).toHaveTextContent('Not verified')
+    expect(await screen.findByTestId('unverified-note')).toHaveTextContent("Check didn't pass")
   })
 })
 

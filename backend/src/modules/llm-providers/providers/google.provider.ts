@@ -7,6 +7,7 @@ import { ChatRequest, ChatResponse } from '../llm-providers.service';
 import { callLlmProviderHttp, llmCallOptionsFor } from './safe-request';
 import { contentAsText, toGeminiParts } from '../content-parts';
 import { requireModel } from '../model-errors';
+import { geminiResponseFormat } from '../structured-output';
 
 
 /**
@@ -34,6 +35,8 @@ export async function callGoogle(
       temperature: request.temperature ?? conversation.context?.temperature,
       topP: request.topP ?? conversation.context?.topP,
       topK: request.topK ?? conversation.context?.topK,
+      // A reply in a JSON schema, when one is asked for (structured-output.ts).
+      ...(geminiResponseFormat(request, provider.type) ?? {}),
     },
   };
 

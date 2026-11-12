@@ -157,3 +157,35 @@ describe('an autonomous run with several models', () => {
     expect(screen.getByTestId('run-step-0')).toHaveTextContent('$0.0020')
   })
 })
+
+// Run 92f17cec: the answer check was $0.0453 of the run's $0.0623, and
+// "Cost by role" showed only the main role's $0.0170.
+describe('cost by role includes the answer check', () => {
+  const main = { name: 'Main', purpose: 'main', kind: 'model', cost: 0.017, tokens: 38854, calls: 4 }
+
+  it('shows the line the run recorded for it', () => {
+    openRun(
+      run({
+        status: 'completed',
+        metadata: { strategy: 'single', roleCosts: { main, answer_check: { name: 'Answer check', purpose: 'checker', kind: 'model', cost: 0.0453, tokens: 38000, calls: 3 } } },
+        steps: [],
+      }),
+    )
+    expect(screen.getByTestId('role-cost-answer_check')).toHaveTextContent(/Answer check\s*Checker\s*3\s*38,000\s*\$0\.0453/)
+  })
+
+  it('adds it from the verify steps of a run that did not record it', () => {
+    openRun(
+      run({
+        status: 'completed',
+        metadata: { strategy: 'single', roleCosts: { main } },
+        steps: [
+          { type: 'verify', timestamp: '2026-11-12T00:00:01Z', cost: 0.0152, output: { verdict: 'fail', failures: [] } },
+          { type: 'verify', timestamp: '2026-11-12T00:00:02Z', cost: 0.0149, output: { verdict: 'fail', failures: [] } },
+          { type: 'verify', timestamp: '2026-11-12T00:00:03Z', cost: 0.0152, output: { verdict: 'fail', exhausted: true, failures: [] } },
+        ],
+      }),
+    )
+    expect(screen.getByTestId('role-cost-answer_check')).toHaveTextContent(/Answer check\s*Checker\s*3\s*0\s*\$0\.0453/)
+  })
+})

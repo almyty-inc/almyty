@@ -12,7 +12,7 @@ const run = (metadata: any): AgentRun => ({ metadata } as AgentRun)
 describe('VerifyStepCard', () => {
   it('renders a passing gate verdict', () => {
     render(<VerifyStepCard step={step({ output: { verdict: 'pass', failures: [] } })} index={0} />)
-    expect(screen.getByText('Passed verification')).toBeInTheDocument()
+    expect(screen.getByText('Check passed')).toBeInTheDocument()
     expect(screen.getByText('blocking')).toBeInTheDocument()
   })
 
@@ -29,7 +29,7 @@ describe('VerifyStepCard', () => {
         index={1}
       />,
     )
-    expect(screen.getByText('Failed verification')).toBeInTheDocument()
+    expect(screen.getByText("Check didn't pass")).toBeInTheDocument()
     expect(screen.getByText('revision 2')).toBeInTheDocument()
     expect(screen.getByText(/missing total/)).toBeInTheDocument()
     expect(screen.getByText(/no sum line/)).toBeInTheDocument()
@@ -55,12 +55,12 @@ describe('VerifySummary', () => {
 
   it('renders a passing verdict', () => {
     render(<VerifySummary run={run({ verify: { verdict: 'pass', revisions: 0 } })} />)
-    expect(screen.getByText('Verification passed')).toBeInTheDocument()
+    expect(screen.getByText('Check passed')).toBeInTheDocument()
   })
 
   it('renders a failed verdict with revisions and exhausted budget', () => {
     render(<VerifySummary run={run({ verify: { verdict: 'fail', revisions: 2, exhausted: true } })} />)
-    expect(screen.getByText('Verification failed')).toBeInTheDocument()
+    expect(screen.getByText("Check didn't pass")).toBeInTheDocument()
     expect(screen.getByText(/2 revisions/)).toBeInTheDocument()
     expect(screen.getByText(/budget exhausted/)).toBeInTheDocument()
   })
@@ -77,8 +77,8 @@ describe('a check no checker could give a verdict on', () => {
 
   it('says the check could not be done, not that problems were found', () => {
     render(<VerifySummary run={unchecked} />)
-    expect(screen.getByText('Verification could not be done')).toBeInTheDocument()
-    expect(screen.queryByText('Verification failed')).not.toBeInTheDocument()
+    expect(screen.getByText('Not checked')).toBeInTheDocument()
+    expect(screen.queryByText("Check didn't pass")).not.toBeInTheDocument()
   })
 
   it('marks the answer as not checked', () => {
@@ -108,8 +108,64 @@ describe('a check no checker could give a verdict on', () => {
         index={0}
       />,
     )
-    expect(screen.getByText('Check could not be done: no checker gave a verdict')).toBeInTheDocument()
+    expect(screen.getByText('Not checked: no checker gave a verdict')).toBeInTheDocument()
     expect(screen.getByTestId('verify-checker-notes')).toHaveTextContent(/checker_1: the checker's reply was cut off at its output limit/)
-    expect(screen.queryByText('Failed verification')).not.toBeInTheDocument()
+    expect(screen.queryByText("Check didn't pass")).not.toBeInTheDocument()
+  })
+})
+
+// The runs list said "Not verified" and the run view "Verification failed"
+// for the same run. One plain wording everywhere, as on the answer itself.
+describe('one wording for a check', () => {
+  const failed = {
+    status: 'completed',
+    metadata: { verify: { verdict: 'fail', revisions: 2, exhausted: true, reason: 'Paper not found in the tool results for the query' } },
+  } as unknown as AgentRun
+
+  it('the runs list badge, the answer note and the run banner all say "Check didn\'t pass"', () => {
+    render(
+      <>
+        <UnverifiedNote run={failed} compact />
+        <UnverifiedNote run={failed} />
+        <VerifySummary run={failed} />
+      </>,
+    )
+    expect(screen.getByTestId('unverified-badge')).toHaveTextContent("Check didn't pass")
+    expect(screen.getByTestId('unverified-note')).toHaveTextContent(/^Check didn't pass: /)
+    expect(screen.getByTestId('verify-summary')).toHaveTextContent("Check didn't pass")
+    expect(document.body).not.toHaveTextContent(/Not verified|Verification failed|Failed verification/)
+  })
+
+  it('the banner shows the first reason', () => {
+    render(<VerifySummary run={failed} />)
+    expect(screen.getByTestId('verify-summary-reason')).toHaveTextContent('Paper not found in the tool results for the query')
+  })
+
+  it('the banner falls back to the last check\'s first failure', () => {
+    const run = {
+      status: 'completed',
+      steps: [{ type: 'verify', input: { mode: 'patch' }, output: { verdict: 'fail', exhausted: true, failures: [{ rule: '' }, { rule: 'Version mismatch for lodash' }] } }],
+    } as unknown as AgentRun
+    render(<VerifySummary run={run} />)
+    expect(screen.getByTestId('verify-summary-reason')).toHaveTextContent('Version mismatch for lodash')
+  })
+
+  it('a check that could not be done says "Not checked" everywhere', () => {
+    const unchecked = { status: 'completed', metadata: { verify: { verdict: 'fail', unavailable: true } } } as unknown as AgentRun
+    render(
+      <>
+        <UnverifiedNote run={unchecked} compact />
+        <VerifySummary run={unchecked} />
+      </>,
+    )
+    expect(screen.getByTestId('unverified-badge')).toHaveTextContent('Not checked')
+    expect(screen.getByTestId('verify-summary')).toHaveTextContent('Not checked')
+  })
+})
+
+describe('a verify card shows what the checker read', () => {
+  it('shows its input tokens', () => {
+    render(<VerifyStepCard step={step({ cost: 0.0151, tokens: { input: 48213, output: 412 }, output: { verdict: 'fail', failures: [] } })} index={0} />)
+    expect(screen.getByTestId('verify-input-tokens')).toHaveTextContent('48,213 tokens read')
   })
 })
