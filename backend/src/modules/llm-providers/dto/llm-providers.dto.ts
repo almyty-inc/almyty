@@ -135,6 +135,14 @@ export interface ChatRequest {
    * (run-calls-know-the-date.spec.ts).
    */
   currentTime?: boolean | Date;
+  /**
+   * Ask for a reply that is a JSON object of this JSON schema (structured
+   * output). Sent only to a provider whose API takes one
+   * (`supportsStructuredOutput`); every other provider gets the request
+   * without it, so a caller still says the format in its prompt and reads
+   * the reply tolerantly.
+   */
+  responseFormat?: { name: string; schema: Record<string, any> };
 }
 
 

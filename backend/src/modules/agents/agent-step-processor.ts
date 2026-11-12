@@ -28,7 +28,7 @@ import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
 import { markUnverifiedAnswer, unverifiedReason } from './unverified-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
-import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy, checkerOf } from './autonomous-strategy.runner';
+import { ANSWER_CHECK_ROLE, AutonomousStrategyRunner, answeredBy, chargeRole, checkTokens, checkedBy, checkerOf } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
 import { hitDetail, type ApprovalGateHit } from '../tools/tool-approval-gate.service';
 import { NamedTool, readableToolName } from '../tools/tool-readable-name';
@@ -1571,6 +1571,7 @@ export class AgentStepProcessor {
               input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
               output: { verdict: 'fail', escalateTo: team.main.key, failures: check.failures, ...checkedBy(check) },
               cost: check.cost,
+              tokens: checkTokens(check),
               duration: checkDuration,
               timestamp: new Date().toISOString(),
             });
@@ -1593,6 +1594,7 @@ export class AgentStepProcessor {
             input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
             output: { verdict: 'pass', failures: [], ...checkedBy(check) },
             cost: check.cost,
+            tokens: checkTokens(check),
             duration: checkDuration,
             timestamp: new Date().toISOString(),
           });
@@ -1668,6 +1670,7 @@ export class AgentStepProcessor {
               input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
               output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, checkers: checkerVerdicts(check), ...checkedBy(check) },
               cost: check.cost,
+              tokens: checkTokens(check),
               duration: checkDuration,
               timestamp: new Date().toISOString(),
             });
@@ -1692,6 +1695,7 @@ export class AgentStepProcessor {
               ...checkedBy(check),
             },
             cost: check.cost,
+            tokens: checkTokens(check),
             duration: checkDuration,
             timestamp: new Date().toISOString(),
           });
@@ -1775,9 +1779,11 @@ export class AgentStepProcessor {
             });
             run.steps.push({
               type: 'verify',
+              role: ANSWER_CHECK_ROLE,
               input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
               output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures, checkers: checkerVerdicts(verifyPanel) },
               cost: verifyPanel.cost,
+              tokens: checkTokens(verifyPanel),
               duration: verifyStepDuration,
               timestamp: new Date().toISOString(),
             });
@@ -1802,6 +1808,7 @@ export class AgentStepProcessor {
           const exhausted = !verifyPanel.passed && !unavailable && revisions >= maxLoops;
           run.steps.push({
             type: 'verify',
+            role: ANSWER_CHECK_ROLE,
             input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
             output: {
               verdict: verifyPanel.verdict,
@@ -1811,6 +1818,7 @@ export class AgentStepProcessor {
               checkers: checkerVerdicts(verifyPanel),
             },
             cost: verifyPanel.cost,
+            tokens: checkTokens(verifyPanel),
             duration: verifyStepDuration,
             timestamp: new Date().toISOString(),
           });
@@ -3213,6 +3221,8 @@ export class AgentStepProcessor {
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
+    // The check's spend is a line of "Cost by role", like a strategy's checker.
+    chargeRole(run, ANSWER_CHECK_ROLE, panel.cost, panel.tokens);
     return panel;
   }
 
@@ -3295,12 +3305,15 @@ export class AgentStepProcessor {
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
+    chargeRole(run, ANSWER_CHECK_ROLE, panel.cost, panel.tokens);
 
     run.steps.push({
       type: 'verify',
+      role: ANSWER_CHECK_ROLE,
       input: { mode: 'mid_loop', policy: panel.policy, checkers: panel.checkers.length },
-      output: { verdict: panel.verdict, advisory: true, failures: panel.failures },
+      output: { verdict: panel.verdict, advisory: true, failures: panel.failures, checkers: checkerVerdicts(panel) },
       cost: panel.cost,
+      tokens: checkTokens(panel),
       timestamp: new Date().toISOString(),
     });
 

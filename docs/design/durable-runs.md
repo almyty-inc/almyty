@@ -446,6 +446,12 @@ puts what it has done on the run's log (`StepJournal`,
 | `tool_attempted` | Before and after each further try of a write whose outcome was lost (Unknown outcomes, below). | The key, the try's number and phase (`started`, `finished`), and once finished its outcome, HTTP status, error and result (capped, personal data hidden). |
 | `tool_finished` | Once the call's outcome is known. | The key, what the step reads of the call afterwards (its result and error, capped and with personal data hidden, as the stored steps are), the steps it recorded (stored the same way), what it added to cost, tokens and the tool-call ledger, working memory or metadata when it changed them, and what it left for the rest of the step (a call held for approval, a call waiting on a machine, a change set, a machine failure). |
 
+"Capped" is one function for the log and the row (`capPersistedPayload`,
+`persist-cap.ts`): a JSON payload over 32 KB is shortened item by item and
+stays valid JSON with a note, other text is cut and says so. It is
+idempotent, so the steps a resumed step replays from `tool_finished`,
+capped again on commit, are stored exactly as the log holds them.
+
 They are markers: nothing in the fold changes, and the commit that follows
 describes the step exactly as before, so the projection, the live views
 and every reader of the log stay as they were (they skip types they do not
