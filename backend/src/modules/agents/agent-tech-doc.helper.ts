@@ -121,8 +121,15 @@ export interface AgentTechnicalDocumentation {
   loggingAndTraceability: {
     executions: {
       total: number;
+      /** Runs that finished, whatever their answer's check said. */
       successful: number;
+      /** Kept for readers of the old field; the same number as `completedPercent`. */
       successRatePercent: number;
+      completedPercent: number;
+      /** Finished runs a checker gave a verdict on, and how many passed (null percent when none was checked). */
+      checked: number;
+      checksPassed: number;
+      checksPassedPercent: number | null;
       averageExecutionTimeMs: number;
       totalCostUsd: number;
       lastExecutedAt: Date | null;
@@ -169,9 +176,14 @@ export function markdownCell(text: string): string {
 /** Snapshot fields that change on every save and say nothing about the agent. */
 const NOISE_FIELDS = new Set([
   'updatedAt', 'createdAt', 'version', 'metadata', 'totalExecutions', 'successfulExecutions',
-  'averageExecutionTime', 'totalCost', 'lastExecutedAt',
+  'checkedExecutions', 'passedCheckExecutions', 'averageExecutionTime', 'totalCost', 'lastExecutedAt',
 ]);
 
+/** `part` of `whole` as a percent with one decimal, or null when `whole` is zero. */
+function percentOf(part: number | null | undefined, whole: number | null | undefined): number | null {
+  if (!whole) return null;
+  return Math.round(((part ?? 0) / whole) * 1000) / 10;
+}
 /** The top-level fields that differ between two snapshots of the agent. */
 export function changedFields(before: Record<string, any> | null, after: Record<string, any> | null): string[] {
   if (!before || !after) return [];
@@ -373,9 +385,11 @@ export class AgentTechDocHelper {
         executions: {
           total: agent.totalExecutions ?? 0,
           successful: agent.successfulExecutions ?? 0,
-          successRatePercent: agent.totalExecutions
-            ? Math.round(((agent.successfulExecutions ?? 0) / agent.totalExecutions) * 1000) / 10
-            : 0,
+          successRatePercent: percentOf(agent.successfulExecutions, agent.totalExecutions) ?? 0,
+          completedPercent: percentOf(agent.successfulExecutions, agent.totalExecutions) ?? 0,
+          checked: agent.checkedExecutions ?? 0,
+          checksPassed: agent.passedCheckExecutions ?? 0,
+          checksPassedPercent: percentOf(agent.passedCheckExecutions, agent.checkedExecutions),
           averageExecutionTimeMs: agent.averageExecutionTime ?? 0,
           totalCostUsd: agent.totalCost ?? 0,
           lastExecutedAt: agent.lastExecutedAt ?? null,
@@ -566,8 +580,13 @@ export class AgentTechDocHelper {
     lines.push('## 6. Logging and Traceability');
     lines.push('');
     lines.push(
-      `- Pipeline executions: ${l.executions.total} total, ${l.executions.successful} successful (${l.executions.successRatePercent}% success rate)`,
+      `- Pipeline executions: ${l.executions.total} total, ${l.executions.successful} completed (${l.executions.completedPercent}%)`,
     );
+    if (l.executions.checksPassedPercent !== null) {
+      lines.push(
+        `- Checks passed: ${l.executions.checksPassed} of ${l.executions.checked} checked runs (${l.executions.checksPassedPercent}%)`,
+      );
+    }
     lines.push(`- Autonomous runs: ${l.autonomousRuns.total}`);
     lines.push(`- Average execution time: ${l.executions.averageExecutionTimeMs} ms`);
     lines.push(`- Accumulated cost: $${l.executions.totalCostUsd}`);

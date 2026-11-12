@@ -37,16 +37,8 @@ export function storeMemoryDescription(agent: Pick<Agent, 'memoryConfig'>): stri
  */
 const DEFAULT_HISTORY_MESSAGES = 100;
 
-/**
- * The date and time a run's model is told, in UTC with the weekday, so
- * "today", "this week" and "three days ago" resolve to real dates.
- */
-export function describeNow(now: Date): string {
-  const weekday = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
-  const date = now.toISOString().slice(0, 10);
-  const time = now.toISOString().slice(11, 16);
-  return `It is ${weekday}, ${date}, ${time} UTC (${now.toISOString()}).`;
-}
+// The date and time a run's model is told (common/utils/current-time.ts).
+export { describeNow } from '../../common/utils/current-time';
 
 @Injectable()
 export class AgentRuntimeBuilders {
@@ -106,9 +98,9 @@ export class AgentRuntimeBuilders {
       parts.push(`[ALWAYS ON]\nYou work in the background for your owner, who is not watching. ${REPORT_RULE}`);
     }
 
-    // [CURRENT TIME] -- a model does not know what day it is. "What is on
-    // my calendar today" or "follow up after three days" needs the date.
-    parts.push(`[CURRENT TIME]\n${describeNow(new Date())}`);
+    // [CURRENT TIME] is not written here: every model call of the run is
+    // given it when it is made (`currentTime: true`, common/utils/current-time.ts),
+    // in the organization's time zone.
 
     // [CONSTRAINTS] — hard rules learned from past failures (opt-in)
     if (agent.agentConfig?.constraints?.enabled && run.organizationId) {

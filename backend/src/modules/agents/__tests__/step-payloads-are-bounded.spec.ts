@@ -33,10 +33,13 @@ describe('persisted step payloads are bounded', () => {
     expect(bound(steps)).toEqual(steps);
   });
 
-  it('truncates the input side too, which tool arguments can fill', () => {
+  it('bounds the input side too, which tool arguments can fill, and says it did', () => {
     const [step] = bound([{ type: 'tool_call', input: { blob: 'y'.repeat(200_000) } }]);
 
-    expect(String(step.input)).toMatch(/truncated from/);
+    // A JSON payload stays JSON: the long text is cut and the note says so.
+    expect(JSON.stringify(step.input).length).toBeLessThanOrEqual(32 * 1024);
+    expect(step.input._shortened).toMatch(/^\[result shortened: .*long texts cut/);
+    expect(step.input.result.blob).toMatch(/^y+…$/);
   });
 
   it('keeps null and undefined as themselves rather than stringifying them', () => {

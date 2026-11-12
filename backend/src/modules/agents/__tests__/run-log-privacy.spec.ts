@@ -260,11 +260,19 @@ describe('run-log-privacy: every reader of the log', () => {
   /**
    * Where the log's rows are read. Resume reads the real arguments
    * (run-resume.ts); the writer reads only the head under its lock; the
-   * live view sends each page through the run log view. A new reader (an
-   * export, a report) belongs on this list only once it goes through
-   * eventsForViewers.
+   * live view sends each page through the run log view; the log as source
+   * of truth (run-log-source.ts) folds the events into the row's state,
+   * which holds what the row holds (the fold skips the step progress that
+   * carries real arguments), and its readers serve it the way they served
+   * the row. A new reader (an export, a report) belongs on this list only
+   * once it goes through eventsForViewers.
    */
-  const READERS = new Set(['modules/agents/run-resume.ts', 'modules/agents/run-event-writer.ts', 'modules/agents/agent-runtime-events.helper.ts']);
+  const READERS = new Set([
+    'modules/agents/run-resume.ts',
+    'modules/agents/run-event-writer.ts',
+    'modules/agents/agent-runtime-events.helper.ts',
+    'modules/agents/run-log-source.ts',
+  ]);
 
   it('reads agent_run_events rows only where the arguments are either needed or hidden', () => {
     const reading = files(root)

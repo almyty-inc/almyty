@@ -418,7 +418,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
-          <RunsTab runs={runs} agentId={agent.id} openRunId={runId} />
+          <RunsTab runs={runs} executions={executions} agentId={agent.id} openRunId={runId} />
         </TabsContent>
 
         <TabsContent value="memory" className="space-y-4">

@@ -36,15 +36,17 @@ Whatever the mode, the person asking gets one answer. Each step of a run records
 
 ## Verification
 
-Verification is a second opinion before the agent answers. Reviewer models each try to find a reason the answer is wrong; if they find one, the agent fixes it and tries again.
+Verification is a second opinion on the agent's answer. Reviewer models each try to find a reason the answer is wrong, and say what they found.
+
+By default that is all they do. The answer goes out as the agent wrote it, and when the check didn't pass, it starts with a line such as "Note: this answer's check didn't pass: the total does not match the invoices." If no reviewer could give a verdict, the line says the answer could not be checked. The run shows the verdict and the reasons either way.
 
 To set it up, open the agent's **Overview** tab and, on the **Models & verification** card, click **Configure verification**:
 
 1. Turn on **Enable verification**.
-2. Add reviewers. Each is a model with its own focus, such as "check every order fact against the tool results".
-3. Choose the **Merge policy**, which decides how the reviewers' verdicts combine.
-4. Pick the **Triggers**, which decide when they run.
-5. Set **Max revise loops** (how many times the agent may fix and retry), then click **Save verification**.
+2. Leave **Let the checker send the answer back for fixes** off unless you want the agent to rework failed answers (see below).
+3. Add reviewers. Each is a model with its own focus, such as "check every order fact against the tool results".
+4. Choose the **Merge policy**, which decides how the reviewers' verdicts combine.
+5. Pick the **Triggers**, which decide when they run, then click **Save verification**.
 
 | Merge policy | The answer passes when |
 |--------|------------------------|
@@ -54,8 +56,18 @@ To set it up, open the agent's **Overview** tab and, on the **Models & verificat
 
 | Trigger | What it does |
 |---|---|
-| **On final output (block + revise)** | The answer is checked before it goes out. On a failure the agent gets the feedback and revises, up to the revise limit (two by default), then finishes. The run records the verdict, how many revisions it used, and whether it ran out. |
+| **On final output** | The answer is checked before it goes out. The run records the verdict and the reasons, and the answer carries the note when the check didn't pass. |
 | **Every N steps (advisory)** or **On tool result (advisory)** | A check during the run that adds a course-correction note without stopping it. |
+
+### Sending answers back for fixes
+
+Turn on **Let the checker send the answer back for fixes** and a failed check goes back to the agent with the reviewers' reasons, so it can try again, up to **Max revise loops** times (two by default). If the check still fails after the last round, the answer goes out with the note.
+
+Reviewers are sometimes wrong, and a reworked answer can lose things that were right the first time. Each round is also another model call. That is why this is off by default.
+
+### The numbers on the agent
+
+The agent's header and the **Agents** tab of Analytics show **Completed**, the share of runs that finished. For an agent with verification they also show **Checks passed**, the share of checked runs whose check passed. A run no reviewer could give a verdict on isn't counted.
 
 Workflow agents can do the same with a Verify step.
 
@@ -122,13 +134,13 @@ Skills are shared through a [Skills gateway](/gateways/skills), and coding assis
 
 ## Memory
 
-Turn on **Remember between conversations** and the agent looks up what it saved earlier before it answers. For example, it can remember that a customer prefers email. Then choose:
+Turn on **Remember between conversations** and the agent looks up what it saved earlier at the start of every run, before it answers; the run shows this as a **memory_recall** step with how many memories it found. For example, it can remember that a customer prefers email. Then choose:
 
 | Setting | Choices |
 |---|---|
 | **Memory account** | almyty's own memory, an outside memory service (Mem0, Zep, Supermemory and others) your organization has set up, or an account of the agent's own: anyone who can edit the agent can connect one with **Add a memory account**. |
-| **Whose memory** | **Each person has their own**, **This agent's own**, or **Shared by all agents**. |
-| **What it saves** | **Facts it learns** (after each conversation, the agent's main model picks out what is worth keeping), **Whole conversations**, or **Only when asked**. |
+| **Whose memory** | **This agent's own** (the default), **Each person has their own**, or **Shared by all agents**, which every agent set to share reads and writes. |
+| **What it saves** | **Facts it learns** (after each conversation, the agent's main model picks out what is worth keeping), **Whole conversations**, or **Only when asked**. Nothing is saved from an answer that failed its verification. |
 | **Never save** | Rules, one per line, such as "payment details". Every save is checked first, and what the rules cover is taken out. |
 | **How long it keeps memories** | **Until deleted**, or **For a number of days**. |
 
@@ -160,7 +172,7 @@ $ npx @almyty/agents run support-orchestrator \
 
 See the [Agents CLI](/cli/agents) for the full command set. Any client can also call an active agent through the [OpenAI-compatible API](/api-reference/openai-compatible).
 
-- Verification lives in `agentConfig.verify` (`enabled`, `checkers`, `policy`: `all_pass`, `majority` or `any_fail_blocks`, `triggers`: `on_final_output`, `every_n_steps`, `on_tool_result`, `maxReviseLoops`, default 2). The same checking logic backs the workflow `verify` node.
+- Verification lives in `agentConfig.verify` (`enabled`, `checkers`, `policy`: `all_pass`, `majority` or `any_fail_blocks`, `triggers`: `on_final_output`, `every_n_steps`, `on_tool_result`, `revise`: whether a failed final-answer check sends the answer back, off when absent, `maxReviseLoops`, default 2). The same checking logic backs the workflow `verify` node. An agent's `checkedExecutions` and `passedCheckExecutions` count its checked runs and those whose check passed; `successfulExecutions` counts runs that finished.
 - Context compaction lives in `modelConfig.compaction`: `enabled`, `maxContextTokens`, `keepRecentMessages` (default 8), `strategy` (`summarize` or `truncate`), and an optional `providerId`/`model` for the summariser.
 - Promoted skills are stored as `SKILL.md` and are also served over REST.
 - Tool mode lives in `agentConfig.toolMode` (`direct`, `discover`, `code` or `auto`), `agentConfig.toolModeThresholdTokens` and `agentConfig.pinnedToolIds`. In `discover` the tools array is `search_tools`, `get_tool`, `call_tool`, the pinned tools and the built-ins, the same on every step. `call_tool` runs through the same executor, approval rules and audit as a direct call, and only reaches the agent's own tools. `auto` estimates the definitions at four characters per token and compares them with `AGENT_TOOL_MODE_THRESHOLD_PERCENT` (default 3) of the main model card's `contextLength`, or with `AGENT_TOOL_MODE_FALLBACK_TOKENS` (default 4000) when there is no card or the role is routed. `AGENT_TOOL_MODE_DEFAULT` (default `auto`) applies when an agent sets nothing. The decision is kept in the run's `workingMemory.toolMode`.

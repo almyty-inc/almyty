@@ -141,6 +141,10 @@ export class Model {
   @Column({ type: 'integer', nullable: true })
   contextLength: number | null;
 
+  /** The most tokens the model writes in one reply, from the price feed (LiteLLM max_output_tokens, OpenRouter top_provider.max_completion_tokens). */
+  @Column({ type: 'integer', nullable: true })
+  maxOutputTokens: number | null;
+
   /** Effective price: the override when set, else the feed. */
   @Column({ type: 'json', nullable: true })
   pricing: ModelPricing | null;

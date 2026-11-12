@@ -28,6 +28,8 @@ import { Organization } from '../../entities/organization.entity';
 
 import { AgentExecutionEngine } from '../../modules/agents/agent-execution.engine';
 import { AgentExecutionStateHelper } from '../../modules/agents/agent-execution-state.helper';
+import { AgentRuntimeMiscHelper } from '../../modules/agents/agent-runtime-misc.helper';
+import { AgentCheckCounts1791001400000 } from '../../migrations/1791001400000-AgentCheckCounts';
 import { ToolExecutorService } from '../../modules/tools/tool-executor.service';
 import { ToolStatsHelper } from '../../modules/tools/tool-stats.helper';
 import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
@@ -205,6 +207,90 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
       expect(after.totalExecutions).toBe(50);
       expect(after.successfulExecutions).toBe(50);
       expect(Number(after.totalCost)).toBeCloseTo(0.05, 4);
+    });
+  });
+
+  // ── AgentRuntimeMiscHelper.bumpAgentStats (autonomous runs) ─────
+  //
+  // "Completed" counts finished runs; "Checks passed" counts checked runs
+  // whose final-answer check passed. Both are columns bumped in the same
+  // UPDATE, so their SQL is checked against the real schema here.
+
+  describe('AgentRuntimeMiscHelper.bumpAgentStats with a check verdict', () => {
+    let agentRepo: Repository<Agent>;
+    let misc: AgentRuntimeMiscHelper;
+
+    beforeAll(() => {
+      agentRepo = ds.getRepository(Agent);
+      misc = new AgentRuntimeMiscHelper(agentRepo, {} as any, {} as any);
+    });
+
+    const fixture = (name: string) =>
+      agentRepo.save({
+        name,
+        organizationId: orgId,
+        status: AgentStatus.ACTIVE,
+        pipeline: { nodes: [], edges: [] } as any,
+      } as any) as Promise<Agent>;
+
+    it('counts a passed, a failed and an unchecked run apart from Completed', async () => {
+      const agent = await fixture('fixture-agent-checks');
+
+      await misc.bumpAgentStats(agent.id, true, 100, 0, 'pass');
+      await misc.bumpAgentStats(agent.id, true, 100, 0, 'fail');
+      await misc.bumpAgentStats(agent.id, true, 100, 0);
+      await misc.bumpAgentStats(agent.id, false, 100, 0);
+
+      const after = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(after.totalExecutions).toBe(4);
+      expect(after.successfulExecutions).toBe(3);
+      expect(after.checkedExecutions).toBe(2);
+      expect(after.passedCheckExecutions).toBe(1);
+    });
+
+    it('is atomic under concurrent calls', async () => {
+      const agent = await fixture('fixture-agent-checks-race');
+      await Promise.all(
+        Array.from({ length: 30 }, (_, i) => misc.bumpAgentStats(agent.id, true, 10, 0, i % 3 === 0 ? 'fail' : 'pass')),
+      );
+      const after = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(after.checkedExecutions).toBe(30);
+      expect(after.passedCheckExecutions).toBe(20);
+    });
+  });
+
+  // ── Migration AgentCheckCounts: the counts from runs already recorded ──
+
+  describe('AgentCheckCounts migration backfill', () => {
+    it('counts checked and passed runs, leaving out unchecked, unavailable and unfinished ones', async () => {
+      const agent = (await ds.getRepository(Agent).save({
+        name: 'fixture-agent-backfill',
+        organizationId: orgId,
+        status: AgentStatus.ACTIVE,
+        pipeline: { nodes: [], edges: [] } as any,
+      } as any)) as Agent;
+      const run = (status: string, verify: Record<string, unknown> | null) =>
+        ds.query(
+          `INSERT INTO agent_runs ("agentId", "organizationId", status, metadata) VALUES ($1, $2, $3, $4)`,
+          [agent.id, orgId, status, verify ? JSON.stringify({ verify }) : null],
+        );
+      await run('completed', { verdict: 'pass' });
+      await run('completed', { verdict: 'pass' });
+      await run('completed', { verdict: 'fail', reportOnly: true });
+      await run('completed', { verdict: 'fail', unavailable: true });
+      await run('completed', null);
+      await run('failed', { verdict: 'pass' });
+
+      const qr = ds.createQueryRunner();
+      try {
+        await new AgentCheckCounts1791001400000().up(qr);
+      } finally {
+        await qr.release();
+      }
+
+      const after = await ds.getRepository(Agent).findOneByOrFail({ id: agent.id });
+      expect(after.checkedExecutions).toBe(3);
+      expect(after.passedCheckExecutions).toBe(2);
     });
   });
 

@@ -16,6 +16,16 @@ describe('isModelNotFoundResponse', () => {
     expect(isModelNotFoundResponse(404, undefined)).toBe(false);
     expect(isModelNotFoundResponse(500, { error: { message: 'model overloaded' } })).toBe(false);
   });
+
+  // The key is accepted; only that model is outside the key's plan.
+  it('counts a model the plan leaves out, also on a 403', () => {
+    expect(isModelNotFoundResponse(403, { message: 'This model is not available in your subscription tier' })).toBe(true);
+    expect(isModelNotFoundResponse(400, { message: 'This model is not available in your subscription tier' })).toBe(true);
+    expect(isModelNotFoundResponse(403, { error: { message: 'Project does not have access to model gpt-5' } })).toBe(true);
+    // A refused key is still a refused key.
+    expect(isModelNotFoundResponse(403, { error: { message: 'Forbidden' } })).toBe(false);
+    expect(isModelNotFoundResponse(401, { message: 'This model is not available in your subscription tier' })).toBe(false);
+  });
 });
 
 describe('ModelNotFoundError', () => {

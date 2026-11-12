@@ -121,8 +121,10 @@ Experimental, and not claimed to save money (see `docs/strategies.md`).
   with tools.
 - The checker verifies the main role's answer. A failure goes back to the
   main role as a revision, within the verify gate's `maxReviseLoops`
-  (default 2); an exhausted budget completes with the last answer and
-  says so.
+  (default 2), whether or not the final-answer check's `revise` is on:
+  this is the strategy's own check. An exhausted budget completes with
+  the last answer and says so. A check no checker could give a verdict on
+  is not revised.
 
 ### What every strategy keeps
 
@@ -136,6 +138,121 @@ Experimental, and not claimed to save money (see `docs/strategies.md`).
   run could start it.
 - The agent's own verify gate (`agentConfig.verify`) still reviews the
   final answer, after the strategy has chosen it.
+
+### The final-answer check reports; sending back is opt-in
+
+The agent's own check (`agentConfig.verify`) gives a verdict and its
+reasons, and by default that is all it does. The answer goes out as the
+agent wrote it. When the check did not pass, the answer carries one line
+above it, "Note: this answer's check didn't pass: <first reason>.", or
+"Note: this answer could not be checked" when no checker gave a verdict.
+The verdict and reasons are on the run (`metadata.verify`, with
+`reportOnly: true`) and on its `verify` step, and nothing is saved to
+memory from an answer whose check did not pass.
+
+In 30 runs on staging the checker failed nine correct answers and passed
+two wrong ones, and in eleven runs the revisions it asked for deleted
+correct data. So sending the answer back is a setting of its own,
+`agentConfig.verify.revise`, off unless the agent turns it on ("Let the
+checker send the answer back for fixes"). With it on, a failed check
+goes back to the agent with the failures, up to `maxReviseLoops` times
+(default 2), and every round is another model call; when the rounds run
+out, the last answer goes out with the same note. An agent saved before
+the setting existed has no `revise`, so it reports.
+
+This is the final-answer check only. The checks inside a strategy
+(cascade, best of N, explore-extract-patch) escalate, choose or revise
+as each strategy describes above.
+
+The agent's header and analytics show two numbers: **Completed**, the
+share of runs that finished, and, for an agent with a check, **Checks
+passed**, the share of checked runs whose check passed
+(`agents.checkedExecutions`, `agents.passedCheckExecutions`; a run no
+checker gave a verdict on is not counted).
+### What a checker sees, and what counts as a failure
+
+These rules hold for the verify gate and the strategy checks alike
+(`agent-verifier.helper.ts`, `checker-evidence.ts`).
+
+- A checker sees the agent's own instructions, the request, today's date
+  and every tool result of the run. It judges the answer by the agent's
+  stated rules and is told never to apply stricter rules of its own:
+  where the rules allow alternatives ("labels or titles"), an item that
+  meets any one of them meets the rule.
+- The tool results are the ones the model that wrote the answer read:
+  whole, from the run's conversation, not the copies on the stored steps
+  (a run without a conversation falls back to the steps). The messages
+  are in the database, so a step resumed on another worker reads the
+  same. The amount is sized to the checker model's context window (half
+  of it, from its model card), 120,000 characters when the window is
+  unknown, and never more than 160,000 (about 50,000 tokens), since every
+  check and every revision pays for it again.
+- Only a result too large for that budget is shortened, and without
+  losing items: a JSON result keeps every item with its identifying
+  fields (id, name, title, tag, version, date, url, doi), and of a nested
+  object (an author, a venue) its short identifying leaves such as
+  `display_name`. Long text and large or deep structures go first. Only
+  when that still does not fit are items left out. A shortened result
+  always says so on its first line, and names every field left out by
+  path, grouped under its list item:
+  `[result shortened: every item is shown; fields left out: results[].{abstract (text), authorships[].raw_affiliation_strings (list)}; ...]`.
+- A step payload over 32 KB is stored the same way (`persist-cap.ts`): a
+  JSON result stays valid JSON as
+  `{"_shortened": "[result shortened: ...]", "result": ...}` with every
+  item's identifying fields, and text that is not JSON is cut and ends
+  `… (truncated from N characters; only the first K are kept)`. Read from
+  the steps, either is shown as shortened, never as the whole result.
+  Storing is idempotent, so a step replayed from the run log is stored as
+  the log holds it.
+- A checker only refutes. It fails a claim when the evidence contradicts
+  it, or when the evidence that would hold it is complete and does not.
+  Absence from shortened evidence is not grounds to fail, and neither is
+  a field the shortening note says was left out.
+- When the request names a window ("look back 7 days", "since
+  2026-11-01"), the checker is given its first and last day, and told to
+  count the days between dates rather than estimate them.
+- A checker replies with real failures in `failures` and, in
+  `confirmed`, only the ids, numbers, names or versions of what it found
+  right (`VERDICT_SCHEMA`; sent as a JSON schema to OpenAI, Azure OpenAI
+  and Gemini, which take one, and said in the prompt to every other
+  provider). A failure does not count when:
+  - the checker marks it as not failed, or also lists its claim as
+    confirmed;
+  - its own reason or evidence says the claim is right ("which is
+    correct", "is acceptable", "no failure here", "all packages are in
+    the table"), unless it goes on to name a real error ("the tag is
+    correct but the date is wrong", "all are in the table except
+    lodash");
+  - it states a false version order, in any phrasing ("4.18.1 <
+    4.17.21", "less than", "older than the requested version"):
+    versions are compared part by part as numbers. A version set beside
+    itself ("^1.6.0 means >=1.6.0") is never read as a false order;
+  - it states false day arithmetic ("2026-10-09 is within 30 days of
+    2026-11-12", "33 days ago" for a date 38 days back): the days are
+    counted (`date-arithmetic.ts`). Only a statement whose two dates are
+    both written in the same sentence is judged: the date right after
+    it, or today's date when the sentence writes it and means it. A
+    count measured from anything else ("4 days before the window
+    start") is left alone, and the failure counts;
+  - it says the item is absent, not found, invented or fabricated, and
+    the item's DOI, id, issue number, URL, version or title is in the
+    evidence (`checker-guards.ts`);
+  - it is about a field the evidence left out ("the evidence does not
+    give the first author" where `results[].authorships[].author` was
+    left out).
+  Each one left out is noted on the `verify` step with why.
+- A checker call asks for 8,192 output tokens where its model card says
+  the model may write that much (the card's most output comes from the
+  price feed), the model's own most where that is less, and 4,096 when
+  the card does not say, unless the checker sets its own. A reply cut
+  off mid-way is read up to its last complete item.
+- When no checker gives a verdict, the answer is not sent back for
+  revision, even with revising on. The run completes, the `verify` step
+  says why each checker gave none, and the answer is marked "Note: this
+  answer could not be checked".
+- Where an answer is sent back (revising on, or a strategy's own check),
+  the revision is told to change only what a failure names and to keep
+  every other fact its tool results support.
 - Hosted chat: a Single run composes its answer with a no-tools call and
   streams it (`final-answer.ts`). Every other strategy checks or chooses
   among candidate answers, so, like a verify gate, it holds everything
@@ -157,6 +274,11 @@ runs every strategy through the hosted chat with a different model per
 role and checks each step's model and the visitor's answer.
 `run.metadata.roleCosts` totals each role (`cost`, `tokens`, `calls`) and
 `run.metadata.strategy` names the strategy. The run detail shows both.
+The agent's own answer check (`agentConfig.verify`) is a line of its own,
+`answer_check`, so the lines add up to the run's cost; a revision is a
+call of the role that revises. Each `verify` step records the checker's
+`tokens` (`input` is mostly the evidence), and its card shows the input
+tokens.
 
 ## Cost
 

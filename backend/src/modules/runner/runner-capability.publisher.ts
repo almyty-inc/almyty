@@ -39,62 +39,22 @@ export class RunnerCapabilityPublisher {
   ) {}
 
   /**
-   * Mint Tool rows for every published capability. Idempotent —
-   * re-registration of the same runner upserts on (organizationId,
-   * runnerId, method) by deleting and re-inserting in one transaction.
-   * Cheaper than reconciling field-by-field and lets us pick up
-   * description / schema changes without a migration.
+   * Make the runner's Tool rows match its capabilities. Idempotent: a
+   * re-registration (every daemon restart) updates the rows already
+   * there in place, so their ids survive. Agents hold tools by id
+   * (`agents.toolIds`) and gateways through `gateway_tools`, which
+   * cascades on delete; minting fresh rows on each restart silently
+   * dropped the runner's tools from every agent and gateway using them.
    */
   async publish(runner: Runner): Promise<Tool[]> {
-    const names = RunnerCapabilityPublisher.CAPABILITIES.map(
-      (cap) => `runner.${runner.name}.${cap.method}`,
-    );
-    return this.tools.manager.transaction(async (mgr) => {
-      const repo = mgr.getRepository(Tool);
-      // Two deletes, because two different things can hold these rows.
-      //
-      // By runnerId: `runnerConfig` is a json column, so a criteria object
-      // cannot reach into it -- `repo.delete({ runnerConfig: { runnerId } })`
-      // matched nothing, the previous rows survived, and republishing
-      // re-inserted the same names. That produced duplicate tools silently
-      // until tools_org_name_uq existed.
-      //
-      // By name: a runner that was replaced, renamed or reaped can leave a
-      // row still holding `runner.<name>.<method>` under a DIFFERENT runner
-      // id, which the first delete cannot see and the unique index refuses
-      // on insert. Publishing is meant to be idempotent -- the newest
-      // registration owns the name.
-      await repo
-        .createQueryBuilder()
-        .delete()
-        .from(Tool)
-        .where(`"runnerConfig"->>'runnerId' = :runnerId`, { runnerId: runner.id })
-        .execute();
-      await repo
-        .createQueryBuilder()
-        .delete()
-        .from(Tool)
-        .where('"organizationId" = :organizationId AND name IN (:...names)', {
-          organizationId: runner.organizationId,
-          names,
-        })
-        .execute();
-      // Counted after the deletes and on the same transaction, so a
-      // re-registration that only replaces its own rows needs no slots.
-      await assertToolQuota(
-        mgr,
-        runner.organizationId,
-        RunnerCapabilityPublisher.CAPABILITIES.length,
-      );
-      const rows: Tool[] = [];
-      for (const cap of RunnerCapabilityPublisher.CAPABILITIES) {
-        const row = repo.create({
+    const rows = await this.tools.manager.transaction((mgr) =>
+      this.sync(mgr, {
+        organizationId: runner.organizationId,
+        ownerKey: 'runnerId',
+        ownerId: runner.id,
+        build: (cap) => ({
           name: `runner.${runner.name}.${cap.method}`,
           description: cap.description,
-          type: ToolType.FUNCTION,
-          status: ToolStatus.ACTIVE,
-          version: '1.0.0',
-          organizationId: runner.organizationId,
           // The tools inherit the runner's visibility and owner. They
           // used to be minted with the column defaults -- org-wide, no
           // owner -- so every member of the organization saw and could
@@ -103,7 +63,6 @@ export class RunnerCapabilityPublisher {
           visibility: runner.visibility ?? 'org',
           teamId: runner.visibility === 'team' ? runner.teamId : null,
           createdBy: runner.ownerUserId,
-          parameters: cap.parameters,
           runnerConfig: {
             runnerId: runner.id,
             runnerName: runner.name,
@@ -114,14 +73,82 @@ export class RunnerCapabilityPublisher {
             source: `runner:${runner.name}`,
             ownerUserId: runner.ownerUserId,
           },
-        } as Partial<Tool>);
-        rows.push(await repo.save(row));
+        }),
+      }),
+    );
+    this.logger.log(
+      `published ${rows.length} capabilities for runner ${runner.name} (${runner.id})`,
+    );
+    return rows;
+  }
+
+  /**
+   * The upsert behind publish and publishEnvironment, in one transaction.
+   *
+   * Each capability keeps one live row: the owner's own row for that
+   * method (renamed if the runner was renamed), else a live row already
+   * holding the name (a replaced or reaped runner's -- the newest
+   * registration owns the name). Every other row the owner or the names
+   * hold is deleted: leftovers of an earlier bug, retired copies, and the
+   * rows of a method no longer published.
+   */
+  private async sync(
+    mgr: EntityManager,
+    opts: {
+      organizationId: string;
+      ownerKey: 'runnerId' | 'environmentId';
+      ownerId: string;
+      build: (cap: CapabilityDef) => Partial<Tool>;
+    },
+  ): Promise<Tool[]> {
+    const repo = mgr.getRepository(Tool);
+    const wanted = RunnerCapabilityPublisher.CAPABILITIES.map((cap) => ({ cap, fields: opts.build(cap) }));
+    const names = wanted.map((w) => w.fields.name as string);
+    // `runnerConfig` is a json column, so a criteria object cannot reach
+    // into it; the owner is matched with ->> in SQL.
+    const held = await repo
+      .createQueryBuilder('t')
+      .where(
+        `t."organizationId" = :organizationId AND (t."runnerConfig"->>'${opts.ownerKey}' = :ownerId OR t.name IN (:...names))`,
+        { organizationId: opts.organizationId, ownerId: opts.ownerId, names },
+      )
+      .getMany();
+
+    const live = held.filter((t) => t.status !== ToolStatus.DELETED);
+    const kept = new Map<string, Tool>();
+    const taken = new Set<string>();
+    const pick = (match: (t: Tool) => boolean) => live.find((t) => !taken.has(t.id) && match(t));
+    for (const { cap, fields } of wanted) {
+      const ours = (t: Tool) => (t.runnerConfig as any)?.[opts.ownerKey] === opts.ownerId && t.runnerConfig?.method === cap.method;
+      const row = pick((t) => ours(t) && t.name === fields.name) ?? pick(ours) ?? pick((t) => t.name === fields.name);
+      if (row) {
+        kept.set(cap.method, row);
+        taken.add(row.id);
       }
-      this.logger.log(
-        `published ${rows.length} capabilities for runner ${runner.name} (${runner.id})`,
-      );
-      return rows;
-    });
+    }
+
+    const drop = held.filter((t) => !taken.has(t.id)).map((t) => t.id);
+    if (drop.length > 0) {
+      await repo.createQueryBuilder().delete().from(Tool).where('id IN (:...ids)', { ids: drop }).execute();
+    }
+    // Counted after the deletes and on the same transaction: only the
+    // capabilities with no row yet take a slot.
+    await assertToolQuota(mgr, opts.organizationId, wanted.length - kept.size);
+
+    const rows: Tool[] = [];
+    for (const { cap, fields } of wanted) {
+      const values = {
+        ...fields,
+        type: ToolType.FUNCTION,
+        status: ToolStatus.ACTIVE,
+        version: '1.0.0',
+        organizationId: opts.organizationId,
+        parameters: cap.parameters,
+      } as Partial<Tool>;
+      const existing = kept.get(cap.method);
+      rows.push(await repo.save(existing ? Object.assign(existing, values) : repo.create(values)));
+    }
+    return rows;
   }
 
   /**
@@ -161,35 +188,17 @@ export class RunnerCapabilityPublisher {
     visibility: 'private' | 'team' | 'org';
     teamId: string | null;
   }): Promise<Tool[]> {
-    const names = RunnerCapabilityPublisher.CAPABILITIES.map((cap) => `env.${env.name}.${cap.method}`);
-    return this.tools.manager.transaction(async (mgr) => {
-      const repo = mgr.getRepository(Tool);
-      await repo
-        .createQueryBuilder()
-        .delete()
-        .from(Tool)
-        .where(`"runnerConfig"->>'environmentId' = :environmentId`, { environmentId: env.id })
-        .execute();
-      await repo
-        .createQueryBuilder()
-        .delete()
-        .from(Tool)
-        .where('"organizationId" = :organizationId AND name IN (:...names)', { organizationId: env.organizationId, names })
-        .execute();
-      await assertToolQuota(mgr, env.organizationId, RunnerCapabilityPublisher.CAPABILITIES.length);
-      const rows: Tool[] = [];
-      for (const cap of RunnerCapabilityPublisher.CAPABILITIES) {
-        const row = repo.create({
+    return this.tools.manager.transaction((mgr) =>
+      this.sync(mgr, {
+        organizationId: env.organizationId,
+        ownerKey: 'environmentId',
+        ownerId: env.id,
+        build: (cap) => ({
           name: `env.${env.name}.${cap.method}`,
           description: `${cap.description} Runs on the hosted environment ${env.name}, in your own workspace there.`,
-          type: ToolType.FUNCTION,
-          status: ToolStatus.ACTIVE,
-          version: '1.0.0',
-          organizationId: env.organizationId,
           visibility: env.visibility ?? 'private',
           teamId: env.visibility === 'team' ? env.teamId : null,
           createdBy: env.ownerUserId,
-          parameters: cap.parameters,
           runnerConfig: {
             environmentId: env.id,
             environmentName: env.name,
@@ -197,11 +206,9 @@ export class RunnerCapabilityPublisher {
             requiresWorkspace: cap.requiresWorkspace,
           },
           metadata: { source: `environment:${env.name}`, ownerUserId: env.ownerUserId },
-        } as Partial<Tool>);
-        rows.push(await repo.save(row));
-      }
-      return rows;
-    });
+        }),
+      }),
+    );
   }
 
   /** Drop an environment's tool rows (the environment was deleted). */

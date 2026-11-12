@@ -899,15 +899,86 @@ describe('AgentRuntimeService (integration)', () => {
       expect(stored.steps.some(s => s.type === 'verify')).toBe(true);
       // No revision feedback message was injected.
       expect(
-        messageStore.some(m => m.role === 'user' && String(m.content).includes('verification panel')),
+        messageStore.some(m => m.role === 'user' && String(m.content).includes('reviewed your answer')),
       ).toBe(false);
       expect(
         messageStore.find(m => m.role === 'assistant' && m.runId === run.id)?.metadata?.internal,
       ).not.toBe(true);
     });
 
-    it('sends the answer back for revision when the panel fails (within budget)', async () => {
+    // 30 staging runs: revisions after a failed check deleted correct data
+    // in 11 of them. By default the check reports; it does not revise.
+    it('by default reports a failed check and delivers the answer unchanged, marked, without a revision round', async () => {
       agentStore.push(verifyAgent());
+      llmService.chat.mockResolvedValue(
+        checkerReply('{"verdict":"fail","failures":[{"rule":"the total does not match the invoices","evidence":"secret row 7"}]}'),
+      );
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.status).toBe(AgentRunStatus.COMPLETED);
+      expect(stored.workingMemory?.verifyRevisions ?? 0).toBe(0);
+      expect(messageStore.some(m => m.role === 'user' && String(m.content).includes('reviewed your answer'))).toBe(false);
+      expect(messageStore.some(m => m.metadata?.internalPurpose === 'verification_candidate')).toBe(false);
+      expect(stored.metadata?.verify).toMatchObject({
+        verdict: 'fail',
+        revisions: 0,
+        exhausted: false,
+        reportOnly: true,
+        reason: 'the total does not match the invoices',
+      });
+      const line = "Note: this answer's check didn't pass: the total does not match the invoices.";
+      expect(String(stored.output).startsWith(line)).toBe(true);
+      const reply = messageStore.find(m => m.role === 'assistant' && m.runId === run.id && !m.metadata?.internal);
+      expect(String(reply?.content).startsWith(line)).toBe(true);
+      const verify = stored.steps.filter(s => s.type === 'verify');
+      expect(verify).toHaveLength(1);
+      expect(verify[0].output).toMatchObject({ verdict: 'fail', reportOnly: true, exhausted: false });
+      expect(verify[0].output.failures[0].rule).toBe('the total does not match the invoices');
+    });
+
+    it('counts the check toward "Checks passed", apart from "Completed"', async () => {
+      agentStore.push(verifyAgent());
+      llmService.chat.mockResolvedValue(checkerReply('{"verdict":"fail","failures":[{"rule":"wrong total","evidence":"x"}]}'));
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+      const qb = mockAgentRepo.createQueryBuilder();
+      qb.set.mockClear();
+
+      await service.processStep(run.id);
+
+      const sets = qb.set.mock.calls.map((c: any[]) => c[0]);
+      const bump = sets.find((s: any) => s && 'totalExecutions' in s);
+      expect(bump).toBeDefined();
+      expect(bump.successfulExecutions()).toBe('"successfulExecutions" + 1');
+      expect(bump.checkedExecutions()).toBe('"checkedExecutions" + 1');
+      expect(bump.passedCheckExecutions).toBeUndefined();
+    });
+
+    it('counts a passed check as passed, and an answer nobody could check not at all', async () => {
+      agentStore.push(verifyAgent());
+      llmService.chat.mockResolvedValue(checkerReply('{"verdict":"pass"}'));
+      const passed = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+      const qb = mockAgentRepo.createQueryBuilder();
+      qb.set.mockClear();
+      await service.processStep(passed.id);
+      let bump = qb.set.mock.calls.map((c: any[]) => c[0]).find((s: any) => s && 'totalExecutions' in s);
+      expect(bump.checkedExecutions()).toBe('"checkedExecutions" + 1');
+      expect(bump.passedCheckExecutions()).toBe('"passedCheckExecutions" + 1');
+
+      llmService.chat.mockResolvedValue({ ...checkerReply('x'), message: { role: 'assistant', content: '{"verdict":"fail","failures":[{"rule":"a', finishReason: 'max_tokens' } });
+      const unchecked = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+      qb.set.mockClear();
+      await service.processStep(unchecked.id);
+      bump = qb.set.mock.calls.map((c: any[]) => c[0]).find((s: any) => s && 'totalExecutions' in s);
+      expect(bump.checkedExecutions).toBeUndefined();
+      expect(bump.passedCheckExecutions).toBeUndefined();
+    });
+
+    it('sends the answer back for revision when the panel fails and revising is on (within budget)', async () => {
+      agentStore.push(verifyAgent({ revise: true }));
       llmService.chat.mockResolvedValue(
         checkerReply('{"verdict":"fail","failures":[{"rule":"missing total","evidence":"no sum line"}]}'),
       );
@@ -920,7 +991,7 @@ describe('AgentRuntimeService (integration)', () => {
       expect(stored.status).toBe(AgentRunStatus.RUNNING);
       expect(stored.workingMemory?.verifyRevisions).toBe(1);
       const critique = messageStore.find(
-        m => m.role === 'user' && String(m.content).includes('verification panel'),
+        m => m.role === 'user' && String(m.content).includes('reviewed your answer'),
       );
       expect(critique).toBeDefined();
       expect(String(critique!.content)).toContain('missing total');
@@ -938,7 +1009,7 @@ describe('AgentRuntimeService (integration)', () => {
     });
 
     it('completes anyway once the revision budget is exhausted', async () => {
-      agentStore.push(verifyAgent({ maxReviseLoops: 1 }));
+      agentStore.push(verifyAgent({ revise: true, maxReviseLoops: 1 }));
       llmService.chat.mockResolvedValue(
         checkerReply('{"verdict":"fail","failures":[{"rule":"still wrong","evidence":"x"}]}'),
       );
@@ -956,6 +1027,62 @@ describe('AgentRuntimeService (integration)', () => {
       expect(
         messageStore.find(m => m.role === 'assistant' && m.runId === run.id)?.metadata?.internal,
       ).not.toBe(true);
+    });
+
+    it('delivers an answer whose check still failed with the marker line, on the run and in the conversation', async () => {
+      agentStore.push(verifyAgent({ revise: true, maxReviseLoops: 1 }));
+      llmService.chat.mockResolvedValue(
+        checkerReply('{"verdict":"fail","failures":[{"rule":"the total does not match the invoices","evidence":"secret row 7"}]}'),
+      );
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+      run.workingMemory = { verifyRevisions: 1 };
+      await mockRunRepo.save(run);
+
+      await service.processStep(run.id);
+
+      const stored = runStore.find(r => r.id === run.id)!;
+      const line = "Note: this answer's check didn't pass: the total does not match the invoices.";
+      expect(String(stored.output).startsWith(line)).toBe(true);
+      // The evidence quotes what the checker read; it stays off the answer.
+      expect(String(stored.output)).not.toContain('secret row 7');
+      expect(stored.metadata?.verify?.reason).toBe('the total does not match the invoices');
+      const reply = messageStore.find(m => m.role === 'assistant' && m.runId === run.id && !m.metadata?.internal);
+      expect(String(reply?.content).startsWith(line)).toBe(true);
+    });
+
+    it('delivers a passed answer unmarked', async () => {
+      agentStore.push(verifyAgent());
+      llmService.chat.mockResolvedValue(checkerReply('{"verdict":"pass"}'));
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+
+      await service.processStep(run.id);
+
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(String(stored.output)).not.toContain("check didn't pass");
+    });
+
+    // Run b9803830: every checker reply was cut off, nothing was read, and
+    // the answer was sent back for two paid revisions nobody could judge,
+    // then marked "check didn't pass: verification_unavailable".
+    it('does not revise an answer no checker could give a verdict on, and says it was not checked', async () => {
+      agentStore.push(verifyAgent({ revise: true }));
+      llmService.chat.mockResolvedValue({ ...checkerReply('{"verdict":"fail","failures":[{"rule":"a'), message: { role: 'assistant', content: '{"verdict":"fail","failures":[{"rule":"a', finishReason: 'max_tokens' } });
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.status).toBe(AgentRunStatus.COMPLETED);
+      expect(stored.workingMemory?.verifyRevisions ?? 0).toBe(0);
+      expect(messageStore.some(m => m.role === 'user' && String(m.content).includes('reviewed your answer'))).toBe(false);
+      expect(stored.metadata?.verify).toMatchObject({ verdict: 'fail', unavailable: true, exhausted: false, reason: 'the checker could not give a verdict' });
+      expect(String(stored.output).startsWith('Note: this answer could not be checked: the checker could not give a verdict.')).toBe(true);
+      expect(String(stored.output)).not.toContain('verification_unavailable');
+      // The step says why: the reply hit the output limit.
+      const verify = stored.steps.filter(s => s.type === 'verify').pop()!;
+      expect(verify.output.unavailable).toBe(true);
+      expect(verify.output.checkers[0].error).toMatch(/cut off at its output limit \(4096 tokens\)/);
     });
 
     it('does not run the panel when verify is disabled', async () => {

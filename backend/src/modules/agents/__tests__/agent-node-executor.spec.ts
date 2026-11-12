@@ -1408,7 +1408,10 @@ describe('AgentNodeExecutor', () => {
         'org-1',
       );
       expect(res.output.verdict).toBe('fail');
-      expect(res.output.failures[0].rule).toBe('verification_unavailable');
+      // The code is for machines; the rule is what a person reads.
+      expect(res.output.failures[0].code).toBe('verification_unavailable');
+      expect(res.output.failures[0].rule).toBe('the checker could not give a verdict');
+      expect(res.output.failures[0].evidence).toBe(`vendor-a: the checker's reply could not be read as a verdict: "not json at all"`);
     });
 
     it('parses a JSON verdict wrapped in code fences', async () => {

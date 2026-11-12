@@ -1,0 +1,545 @@
+{
+  "generatedAt": "2026-11-11T15:14:53.136Z",
+  "machine": {
+    "cpu": "Apple M2 Pro",
+    "cores": 10,
+    "memoryGiB": 32,
+    "os": "Darwin 27.0.0 arm64",
+    "node": "v24.14.1",
+    "docker": "29.9.2",
+    "commit": "d35bc88895c894118f7485b8f66277929889ab7c",
+    "loadAverage": [
+      36.09,
+      51.82,
+      46.78
+    ]
+  },
+  "method": {
+    "tokenizer": "o200k_base",
+    "anthropic": "not run: no ANTHROPIC_API_KEY in the environment",
+    "toolText": "compact JSON of [{name, description, input_schema}] per tool list",
+    "runs": 5
+  },
+  "specs": [
+    {
+      "id": "open-meteo",
+      "label": "Open-Meteo forecast",
+      "source": {
+        "url": "https://raw.githubusercontent.com/open-meteo/open-meteo/954c561b9868d81a28bfc280a971c13474ea3191/openapi/forecast.yml",
+        "sha256": "19cf8b43174a67d1964772e566fa7d438bb4d0a0d810a75a1f07a2c71d42a066",
+        "subset": null
+      },
+      "imported": {
+        "sha256": "19cf8b43174a67d1964772e566fa7d438bb4d0a0d810a75a1f07a2c71d42a066"
+      },
+      "bytes": 137096,
+      "operations": 1,
+      "toolCount": 1,
+      "import": {
+        "runs": [
+          {
+            "ms": 216,
+            "tools": 1
+          },
+          {
+            "ms": 211,
+            "tools": 1
+          },
+          {
+            "ms": 168,
+            "tools": 1
+          },
+          {
+            "ms": 224,
+            "tools": 1
+          },
+          {
+            "ms": 217,
+            "tools": 1
+          }
+        ],
+        "stats": {
+          "n": 5,
+          "min": 168,
+          "median": 216,
+          "max": 224
+        }
+      },
+      "targetTool": "open_meteo_get_v1_forecast",
+      "tokens": {
+        "full": {
+          "initial": 519,
+          "tools": 1,
+          "perToolMean": 519,
+          "rawListBytes": 2488,
+          "anthropic": null
+        },
+        "code": {
+          "initial": 612,
+          "toolNames": [
+            "search_tools",
+            "get_tool",
+            "run_code"
+          ],
+          "anthropic": null
+        },
+        "proxy": {
+          "initialAll": 1387,
+          "initialGatewayOnly": 251,
+          "toolNames": [
+            "almyty_execute",
+            "almyty_search",
+            "almyty_list_apis",
+            "almyty_create_api",
+            "almyty_import_schema",
+            "almyty_list_gateways",
+            "almyty_create_gateway",
+            "almyty_assign_tool",
+            "almyty_list_agents",
+            "almyty_create_agent",
+            "almyty_invoke_agent",
+            "almyty_list_providers",
+            "almyty_add_provider"
+          ],
+          "anthropic": null
+        }
+      },
+      "task": {
+        "what": "Current temperature in Berlin",
+        "full": {
+          "turns": 1,
+          "perTurnInput": [
+            519
+          ],
+          "finalContext": 554,
+          "cumulativeInput": 519,
+          "outputTokens": 35,
+          "callOutcome": {
+            "isError": false,
+            "head": "{ \"latitude\": 52.512604, \"longitude\": 13.419517, \"generationtime_ms\": 0.02288818359375, \"utc_offset_seconds\": 0, \"timezone\": \"GMT\", \"timezone_abbreviation\": \"GM"
+          }
+        },
+        "code": {
+          "turns": 3,
+          "perTurnInput": [
+            612,
+            694,
+            2057
+          ],
+          "finalContext": 2102,
+          "cumulativeInput": 3363,
+          "outputTokens": 78,
+          "searches": [
+            {
+              "query": "weather forecast",
+              "rank": 1,
+              "call": 13,
+              "result": 69
+            }
+          ],
+          "searchFoundTarget": true,
+          "getToolResultTokens": 1343,
+          "script": "return await openMeteo.getV1Forecast({\"latitude\":\"52.52\",\"longitude\":\"13.41\",\"current\":[\"temperature_2m\"]})",
+          "callOutcome": {
+            "isError": false,
+            "head": "{ \"status\": \"completed\", \"result\": { \"latitude\": 52.512604, \"longitude\": 13.419517, \"generationtime_ms\": 0.036716461181640625, \"utc_offset_seconds\": 0, \"timezon"
+          }
+        },
+        "proxyNoSkill": {
+          "turns": 2,
+          "perTurnInput": [
+            1387,
+            1455
+          ],
+          "finalContext": 1501,
+          "cumulativeInput": 2842,
+          "outputTokens": 61,
+          "searches": [
+            {
+              "query": "weather forecast",
+              "found": true,
+              "call": 15,
+              "result": 53
+            }
+          ],
+          "searchFoundTarget": true,
+          "callOutcome": {
+            "isError": false,
+            "head": "{ \"latitude\": 52.512604, \"longitude\": 13.419517, \"generationtime_ms\": 0.03600120544433594, \"utc_offset_seconds\": 0, \"timezone\": \"GMT\", \"timezone_abbreviation\": "
+          }
+        },
+        "proxyWithSkill": {
+          "turns": 3,
+          "perTurnInput": [
+            1387,
+            1455,
+            2115
+          ],
+          "finalContext": 2161,
+          "cumulativeInput": 4957,
+          "outputTokens": 61,
+          "skillPromptTokens": 660,
+          "prompts": [
+            "almyty-overview",
+            "skill-open-meteo-tools"
+          ]
+        }
+      }
+    },
+    {
+      "id": "github-issues",
+      "label": "GitHub REST, issues tag",
+      "source": {
+        "url": "https://raw.githubusercontent.com/github/rest-api-description/cff9ea6e1362fab34771b0af6b95d7fd2caf2813/descriptions/api.github.com/api.github.com.json",
+        "sha256": "b1807bbb9b79466d4c11ba869db9e2642568e7e493554bc1eb69dc4b06aee48b",
+        "subset": {
+          "tag": "issues"
+        }
+      },
+      "imported": {
+        "sha256": "2ec08ebe5303d49135a962b2c1929c86507ec7f4e0339dd40fa09357251266a5"
+      },
+      "bytes": 324104,
+      "operations": 66,
+      "toolCount": 66,
+      "import": {
+        "runs": [
+          {
+            "ms": 480,
+            "tools": 66
+          },
+          {
+            "ms": 337,
+            "tools": 66
+          },
+          {
+            "ms": 422,
+            "tools": 66
+          },
+          {
+            "ms": 487,
+            "tools": 66
+          },
+          {
+            "ms": 343,
+            "tools": 66
+          }
+        ],
+        "stats": {
+          "n": 5,
+          "min": 337,
+          "median": 422,
+          "max": 487
+        }
+      },
+      "targetTool": "github_issues_get",
+      "tokens": {
+        "full": {
+          "initial": 22413,
+          "tools": 66,
+          "perToolMean": 340,
+          "rawListBytes": 105732,
+          "anthropic": null
+        },
+        "code": {
+          "initial": 612,
+          "toolNames": [
+            "search_tools",
+            "get_tool",
+            "run_code"
+          ],
+          "anthropic": null
+        },
+        "proxy": {
+          "initialAll": 1387,
+          "initialGatewayOnly": 251,
+          "toolNames": [
+            "almyty_execute",
+            "almyty_search",
+            "almyty_list_apis",
+            "almyty_create_api",
+            "almyty_import_schema",
+            "almyty_list_gateways",
+            "almyty_create_gateway",
+            "almyty_assign_tool",
+            "almyty_list_agents",
+            "almyty_create_agent",
+            "almyty_invoke_agent",
+            "almyty_list_providers",
+            "almyty_add_provider"
+          ],
+          "anthropic": null
+        }
+      },
+      "task": {
+        "what": "Read issue #1 of octocat/Hello-World",
+        "full": {
+          "turns": 1,
+          "perTurnInput": [
+            22413
+          ],
+          "finalContext": 22439,
+          "cumulativeInput": 22413,
+          "outputTokens": 26,
+          "callOutcome": {
+            "isError": false,
+            "head": "{ \"url\": \"https://api.github.com/repos/octocat/Hello-World/issues/1\", \"repository_url\": \"https://api.github.com/repos/octocat/Hello-World\", \"labels_url\": \"https"
+          }
+        },
+        "code": {
+          "turns": 4,
+          "perTurnInput": [
+            612,
+            2741,
+            4573,
+            5462
+          ],
+          "finalContext": 5498,
+          "cumulativeInput": 13388,
+          "outputTokens": 78,
+          "searches": [
+            {
+              "query": "get an issue",
+              "rank": null,
+              "call": 14,
+              "result": 2115
+            },
+            {
+              "query": "read issue",
+              "rank": 5,
+              "call": 13,
+              "result": 1819
+            }
+          ],
+          "searchFoundTarget": true,
+          "getToolResultTokens": 874,
+          "script": "return await gitHub.issuesGet({\"owner\":\"octocat\",\"repo\":\"Hello-World\",\"issue_number\":1})",
+          "callOutcome": {
+            "isError": false,
+            "head": "{ \"status\": \"completed\", \"result\": { \"url\": \"https://api.github.com/repos/octocat/Hello-World/issues/1\", \"repository_url\": \"https://api.github.com/repos/octocat"
+          }
+        },
+        "proxyNoSkill": {
+          "turns": 3,
+          "perTurnInput": [
+            1387,
+            1500,
+            4200
+          ],
+          "finalContext": 4237,
+          "cumulativeInput": 7087,
+          "outputTokens": 67,
+          "searches": [
+            {
+              "query": "get an issue",
+              "found": false,
+              "call": 16,
+              "result": 97
+            },
+            {
+              "query": "issue",
+              "found": false,
+              "call": 14,
+              "result": 2686
+            }
+          ],
+          "searchFoundTarget": false,
+          "callOutcome": {
+            "isError": false,
+            "head": "{ \"url\": \"https://api.github.com/repos/octocat/Hello-World/issues/1\", \"repository_url\": \"https://api.github.com/repos/octocat/Hello-World\", \"labels_url\": \"https"
+          }
+        },
+        "proxyWithSkill": {
+          "turns": 4,
+          "perTurnInput": [
+            1387,
+            1500,
+            4200,
+            33381
+          ],
+          "finalContext": 33418,
+          "cumulativeInput": 40468,
+          "outputTokens": 67,
+          "skillPromptTokens": 29181,
+          "prompts": [
+            "almyty-overview",
+            "skill-github-issues-tools"
+          ]
+        }
+      }
+    },
+    {
+      "id": "stripe",
+      "label": "Stripe API (full)",
+      "source": {
+        "url": "https://raw.githubusercontent.com/stripe/openapi/6763e1a3f199026b0893cf190d95130d3700c045/openapi/spec3.json",
+        "sha256": "7cff4cc46d0654101a36a3302f7544640f5f73e4f3cad6f264f0e23c19fa1776",
+        "subset": null
+      },
+      "imported": {
+        "sha256": "7cff4cc46d0654101a36a3302f7544640f5f73e4f3cad6f264f0e23c19fa1776"
+      },
+      "bytes": 8317513,
+      "operations": 612,
+      "toolCount": 612,
+      "import": {
+        "runs": [
+          {
+            "ms": 3678,
+            "tools": 612
+          },
+          {
+            "ms": 3521,
+            "tools": 612
+          },
+          {
+            "ms": 3663,
+            "tools": 612
+          },
+          {
+            "ms": 3770,
+            "tools": 612
+          },
+          {
+            "ms": 3161,
+            "tools": 612
+          }
+        ],
+        "stats": {
+          "n": 5,
+          "min": 3161,
+          "median": 3663,
+          "max": 3770
+        }
+      },
+      "targetTool": "stripe_get_customers_customer",
+      "tokens": {
+        "full": {
+          "initial": 409045,
+          "tools": 612,
+          "perToolMean": 668,
+          "rawListBytes": 1799210,
+          "anthropic": null
+        },
+        "code": {
+          "initial": 612,
+          "toolNames": [
+            "search_tools",
+            "get_tool",
+            "run_code"
+          ],
+          "anthropic": null
+        },
+        "proxy": {
+          "initialAll": 1387,
+          "initialGatewayOnly": 251,
+          "toolNames": [
+            "almyty_execute",
+            "almyty_search",
+            "almyty_list_apis",
+            "almyty_create_api",
+            "almyty_import_schema",
+            "almyty_list_gateways",
+            "almyty_create_gateway",
+            "almyty_assign_tool",
+            "almyty_list_agents",
+            "almyty_create_agent",
+            "almyty_invoke_agent",
+            "almyty_list_providers",
+            "almyty_add_provider"
+          ],
+          "anthropic": null
+        }
+      },
+      "task": {
+        "what": "Look up customer cus_bench0001",
+        "full": {
+          "turns": 1,
+          "perTurnInput": [
+            409045
+          ],
+          "finalContext": 409064,
+          "cumulativeInput": 409045,
+          "outputTokens": 19,
+          "callOutcome": {
+            "isError": true,
+            "head": "HTTP 401: Request failed with status code 401"
+          }
+        },
+        "code": {
+          "turns": 3,
+          "perTurnInput": [
+            612,
+            1282,
+            1565
+          ],
+          "finalContext": 1593,
+          "cumulativeInput": 3459,
+          "outputTokens": 58,
+          "searches": [
+            {
+              "query": "retrieve a customer",
+              "rank": 1,
+              "call": 14,
+              "result": 656
+            }
+          ],
+          "searchFoundTarget": true,
+          "getToolResultTokens": 267,
+          "script": "return await stripe.getCustomersCustomer({\"customer\":\"cus_bench0001\"})",
+          "callOutcome": {
+            "isError": true,
+            "head": "{ \"status\": \"failed\", \"error\": { \"message\": \"HTTP 401: Request failed with status code 401\", \"tool\": \"stripe.getCustomersCustomer\" }, \"calls\": { \"made\": 1, \"ran"
+          }
+        },
+        "proxyNoSkill": {
+          "turns": 3,
+          "perTurnInput": [
+            1387,
+            1493,
+            2509
+          ],
+          "finalContext": 2539,
+          "cumulativeInput": 5389,
+          "outputTokens": 60,
+          "searches": [
+            {
+              "query": "retrieve a customer",
+              "found": false,
+              "call": 16,
+              "result": 90
+            },
+            {
+              "query": "customer",
+              "found": false,
+              "call": 14,
+              "result": 1002
+            }
+          ],
+          "searchFoundTarget": false,
+          "callOutcome": {
+            "isError": false,
+            "head": "HTTP 401: Request failed with status code 401"
+          }
+        },
+        "proxyWithSkill": {
+          "turns": 4,
+          "perTurnInput": [
+            1387,
+            1493,
+            2509,
+            262525
+          ],
+          "finalContext": 262555,
+          "cumulativeInput": 267914,
+          "outputTokens": 60,
+          "skillPromptTokens": 260016,
+          "prompts": [
+            "almyty-overview",
+            "skill-stripe-tools"
+          ]
+        }
+      }
+    }
+  ]
+}

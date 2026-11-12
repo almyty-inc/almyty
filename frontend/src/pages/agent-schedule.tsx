@@ -111,13 +111,18 @@ function daysOf(form: ScheduleForm): number[] {
 /** The timing half of a request, which the preview and the save share. */
 export function timingFromForm(form: ScheduleForm): ScheduleRequest {
   if (form.kind === 'interval') {
-    return { kind: 'interval', intervalMinutes: form.unit === 'hours' ? form.every * 60 : form.every }
+    // The zone does not time the runs; it dates {{today}} and the other values in the message.
+    return { kind: 'interval', intervalMinutes: form.unit === 'hours' ? form.every * 60 : form.every, timezone: form.timezone }
   }
   if (form.kind === 'monthly') {
     return { kind: 'monthly', time: form.time, dayOfMonth: form.dayOfMonth, timezone: form.timezone }
   }
   return { kind: 'days', time: form.time, days: daysOf(form), timezone: form.timezone }
 }
+
+/** The values a schedule's message can use, filled in by the scheduler (schedule-template.ts). */
+export const SCHEDULE_VALUES_HINT =
+  'You can write {{today}} for the date of the run, {{now}} for its date and time, and {{last_run_at}} for when the last successful run started (on the first run, when the schedule was set up). They are filled in at each run, in the schedule’s time zone.'
 
 /** Whether the destination of a channel is typed, given what the channel offers and what was picked. */
 function typesDestination(channel: PostChannelOption | undefined, form: ScheduleForm): boolean {
@@ -216,7 +221,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
   const preview = useQuery({
     queryKey: ['agent-schedule-preview', agent.id, debouncedKey],
     queryFn: () => agentsApi.previewSchedule(agent.id, JSON.parse(debouncedKey)),
-    enabled: form.kind !== 'interval',
+    enabled: form.kind !== 'interval' || form.every >= 1,
     retry: false,
   })
 
@@ -334,40 +339,47 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
             </Field>
           </div>
         ) : (
-          <Field id="schedule-every" label="Every">
-            <div id="schedule-every-group" className="flex gap-2">
-              <Input
-                id="schedule-every"
-                type="number"
-                min={1}
-                className="w-28"
-                value={form.every}
-                onChange={(e) => set({ every: parseInt(e.target.value, 10) || 0 })}
-              />
-              <Select value={form.unit} onValueChange={(v) => set({ unit: v as 'minutes' | 'hours' })}>
-                <SelectTrigger className="w-36" aria-label="Unit">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="minutes">minutes</SelectItem>
-                  <SelectItem value="hours">hours</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field id="schedule-every" label="Every">
+              <div id="schedule-every-group" className="flex gap-2">
+                <Input
+                  id="schedule-every"
+                  type="number"
+                  min={1}
+                  className="w-28"
+                  value={form.every}
+                  onChange={(e) => set({ every: parseInt(e.target.value, 10) || 0 })}
+                />
+                <Select value={form.unit} onValueChange={(v) => set({ unit: v as 'minutes' | 'hours' })}>
+                  <SelectTrigger className="w-36" aria-label="Unit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minutes">minutes</SelectItem>
+                    <SelectItem value="hours">hours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </Field>
+            <Field id="schedule-timezone" label="Time zone" hint="Used for the dates in the message: {{today}}, {{now}} and {{last_run_at}}.">
+              <TimeZoneSelect id="schedule-timezone" value={form.timezone} onChange={(z) => set({ timezone: z })} />
+            </Field>
+          </div>
         )}
 
         <div className="flex items-start gap-3 rounded-md border bg-muted/40 p-3" data-testid="schedule-summary">
           <CalendarClock className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <div className="space-y-1 text-sm">
             <p className="font-medium">{describeSchedule(timing)}</p>
-            {form.kind !== 'interval' && preview.data?.nextRuns?.length ? (
+            {preview.data?.nextRuns?.length ? (
               <p className="text-muted-foreground">
                 Next runs: {preview.data.nextRuns.map((r) => formatRunTime(r, preview.data?.timezone)).join('; ')}
               </p>
             ) : null}
             {form.kind === 'interval' && (
-              <p className="text-muted-foreground">Counted from when you save it.</p>
+              <p className="text-muted-foreground">
+                The runs line up with the clock, not with when you save, so the first one can come sooner than a full interval.
+              </p>
             )}
           </div>
         </div>
@@ -448,7 +460,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
           title="What it should do each time"
           description="Written the way you would ask it in a chat. The agent gets this message on every run."
         >
-          <Field id="schedule-message" label="Message">
+          <Field id="schedule-message" label="Message" hint={SCHEDULE_VALUES_HINT}>
             <Textarea
               id="schedule-message"
               rows={4}
@@ -464,6 +476,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
           description="The same input every run, written as JSON. Leave {} if the agent needs nothing."
         >
           <CodeEditor value={form.input} onChange={(value) => set({ input: value })} language="json" height="100px" />
+          <p className="text-xs text-muted-foreground">In a &quot;message&quot; field: {SCHEDULE_VALUES_HINT}</p>
         </FormSection>
       )}
 

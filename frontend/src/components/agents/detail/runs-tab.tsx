@@ -1,8 +1,9 @@
 /**
- * Runs tab for the agent detail page. Lists autonomous agent runs
- * with expandable step-by-step detail, thread, output, and errors.
+ * Runs tab for the agent detail page. Lists every run of the agent --
+ * workflow runs and autonomous runs -- with expandable step-by-step
+ * detail, thread, output, and errors.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
   XCircle,
@@ -26,26 +27,52 @@ import {
 
 import { formatDateTime, pluralized } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/empty-state'
-import { runStatusVariant, formatDuration } from './constants'
-import type { AgentRun } from '@/types'
-import { VerifyStepCard, VerifySummary } from './verify-step'
+import { execStatusVariant, runStatusVariant, formatDuration } from './constants'
+import type { AgentExecution, AgentRun } from '@/types'
+import { UnverifiedNote, VerifyStepCard, VerifySummary } from './verify-step'
 import { CodeStepCard, isCodeStep } from './code-step'
 import { PromoteRunSection } from './promote-run-section'
 import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
 import { DeliveryNote } from './schedule-card'
+import { executionModels } from './routing-attribution'
+import { runStatusLabel } from './waiting-approval'
+import { STEP_NAMES } from '../step-values'
 import { MachineProblem } from '@/components/runners/machine-problem'
 import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
 import { useLiveRun, type LiveRunConnection } from '@/hooks/use-live-run'
+import { AssistantMarkdown } from '@/components/hosted-chat/assistant-markdown'
 
 interface RunsTabProps {
+  /** Autonomous runs. */
   runs: AgentRun[]
+  /** Workflow runs, listed with them. */
+  executions?: AgentExecution[]
   /** Needed to fetch a run's route trace, which is scoped by agent. */
   agentId?: string
   /** A run to show opened, from a link to /agents/:id/runs/:runId. */
   openRunId?: string
 }
 
+/**
+ * A run's output. Text is the agent's answer, rendered from its markdown
+ * the way Try it and the web chat render it (an agent's tables showed as
+ * pipes here); anything else is shown as JSON.
+ */
+export function RunOutput({ output }: { output: unknown }) {
+  if (typeof output === 'string') {
+    return (
+      <div data-testid="run-output" className="bg-muted rounded p-3 text-sm break-words max-h-[400px] overflow-auto">
+        <AssistantMarkdown>{output}</AssistantMarkdown>
+      </div>
+    )
+  }
+  return (
+    <div data-testid="run-output" className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
+      {JSON.stringify(output, null, 2)}
+    </div>
+  )
+}
 /** Whether any of the run's calls went through routing, so there is a route to show. */
 export function runRouted(run: Pick<AgentRun, 'steps'>): boolean {
   return (run.steps ?? []).some((s) => !!(s.output as any)?.routing)
@@ -58,39 +85,40 @@ export function stepMachineError(step: { output?: unknown }): MachineProblemInfo
   return { sentence: m.sentence, detail: typeof m.detail === 'string' ? m.detail : null }
 }
 
-export function RunsTab({ runs, agentId, openRunId }: RunsTabProps) {
+export function RunsTab({ runs, executions = [], agentId, openRunId }: RunsTabProps) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(openRunId ?? null)
   // A link to another run while this tab is showing opens that one.
   useEffect(() => {
     if (openRunId) setExpandedRunId(openRunId)
   }, [openRunId])
+  // Workflow runs and autonomous runs, newest first: both are this agent's runs.
+  const rows = useMemo(
+    () =>
+      [
+        ...runs.map((run) => ({ kind: 'run' as const, id: run.id, createdAt: run.createdAt, run })),
+        ...executions.map((exec) => ({ kind: 'execution' as const, id: exec.id, createdAt: exec.createdAt, exec })),
+      ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    [runs, executions],
+  )
+  const toggle = (id: string) => setExpandedRunId(expandedRunId === id ? null : id)
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Autonomous runs</CardTitle>
-          <Badge variant="outline">{pluralized(runs.length, 'run')}</Badge>
+          <CardTitle className="text-base">Runs</CardTitle>
+          <Badge variant="outline">{pluralized(rows.length, 'run')}</Badge>
         </div>
         <CardDescription className="text-xs">
-          Runs this agent made in autonomous mode, step by step
+          Every run of this agent, step by step. Open one to see what each step did.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {runs.length === 0 ? (
-          // A tab called "Runs" that never shows the run you just made is a
-          // trap. This one only ever lists autonomous runs; a workflow agent's
-          // runs land under Recent runs on Overview, so say so.
+        {rows.length === 0 ? (
           <EmptyState
             icon={Bot}
-            title="No autonomous runs yet"
-            description={
-              <>
-                Runs appear here once this agent runs in autonomous mode. A workflow agent&rsquo;s runs
-                are listed under <span className="font-medium">Recent runs</span> on the Overview tab
-                instead.
-              </>
-            }
+            title="No runs yet"
+            description="Every time this agent runs (from Try it, the Run button, a webhook, a schedule or a chat) the run is listed here."
           />
         ) : (
           <div className="overflow-x-auto">
@@ -108,15 +136,25 @@ export function RunsTab({ runs, agentId, openRunId }: RunsTabProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {runs.map((run) => (
-                  <RunRow
-                    key={run.id}
-                    run={run}
-                    agentId={agentId}
-                    expanded={expandedRunId === run.id}
-                    onToggle={() => setExpandedRunId(expandedRunId === run.id ? null : run.id)}
-                  />
-                ))}
+                {rows.map((row) =>
+                  row.kind === 'run' ? (
+                    <RunRow
+                      key={`run-${row.id}`}
+                      run={row.run}
+                      agentId={agentId}
+                      expanded={expandedRunId === row.id}
+                      onToggle={() => toggle(row.id)}
+                    />
+                  ) : (
+                    <ExecutionRow
+                      key={`execution-${row.id}`}
+                      exec={row.exec}
+                      agentId={agentId}
+                      expanded={expandedRunId === row.id}
+                      onToggle={() => toggle(row.id)}
+                    />
+                  ),
+                )}
               </TableBody>
             </Table>
           </div>
@@ -177,6 +215,7 @@ function RunRow({
             {run.status === 'running' && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
             {run.status.replace('_', ' ')}
           </Badge>
+          <UnverifiedNote run={run} compact />
           <DeliveryNote outcome={run.metadata?.channelDelivery} />
         </TableCell>
         <TableCell className="text-sm max-w-[200px] truncate">
@@ -293,13 +332,134 @@ function RunRow({
               {run.output && (
                 <div>
                   <h4 className="text-sm font-medium mb-1">Output</h4>
-                  <div className="bg-muted rounded p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-auto">
-                    {typeof run.output === 'string' ? run.output : JSON.stringify(run.output, null, 2)}
-                  </div>
+                  <RunOutput output={run.output} />
                 </div>
               )}
               {/* Promote a completed run to a reusable skill, in place */}
               {run.status === 'completed' && <PromoteRunSection runId={run.id} />}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  )
+}
+
+/** A workflow run in the list: the same columns, and its steps (one per step of the workflow) when opened. */
+function ExecutionRow({
+  exec,
+  agentId,
+  expanded,
+  onToggle,
+}: {
+  exec: AgentExecution
+  agentId?: string
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const steps = Object.entries(exec.nodeResults || {})
+  const routed = steps.some(([, r]) => !!r?.routing)
+  const models = executionModels(exec.nodeResults)
+  return (
+    <>
+      <TableRow
+        className="cursor-pointer hover:bg-muted/50"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        data-testid={`execution-row-${exec.id}`}
+        onClick={() => onToggle()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onToggle()
+          }
+        }}
+      >
+        <TableCell className="px-2">
+          {expanded
+            ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </TableCell>
+        <TableCell>
+          <Badge variant={execStatusVariant[exec.status] || 'secondary'}>
+            {exec.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+            {exec.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
+            {exec.status === 'running' && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            {runStatusLabel(exec.status)}
+          </Badge>
+          <UnverifiedNote run={exec} compact />
+          <DeliveryNote outcome={exec.metadata?.channelDelivery} />
+        </TableCell>
+        <TableCell className="text-sm max-w-[200px] truncate">
+          {exec.input ? JSON.stringify(exec.input).slice(0, 80) : '--'}
+        </TableCell>
+        <TableCell className="text-sm">{steps.length}</TableCell>
+        <TableCell className="text-sm">
+          {exec.totalCost > 0 ? `$${exec.totalCost.toFixed(4)}` : '--'}
+        </TableCell>
+        <TableCell className="text-sm">
+          {exec.totalTokens > 0 ? exec.totalTokens.toLocaleString() : '--'}
+        </TableCell>
+        <TableCell className="text-sm">
+          {exec.executionTime > 0 ? formatDuration(exec.executionTime) : '--'}
+        </TableCell>
+        <TableCell className="text-sm text-muted-foreground">
+          {formatDateTime(exec.createdAt)}
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow>
+          <TableCell colSpan={8} className="bg-muted/30 p-4">
+            <div className="w-0 min-w-full space-y-4" data-testid={`execution-detail-${exec.id}`}>
+              {models.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {models.length === 1 ? 'Model' : 'Models'}: <span className="text-foreground">{models.join(', ')}</span>
+                </p>
+              )}
+              {agentId && routed && (
+                <div>
+                  <h4 className="mb-2 text-sm font-medium">Route</h4>
+                  <RouteTraceTimeline agentId={agentId} executionId={exec.id} />
+                </div>
+              )}
+              {steps.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Steps</h4>
+                  <div className="space-y-2">
+                    {steps.map(([nodeId, r], idx) => (
+                      <div key={nodeId} className="flex items-start gap-3 p-2 rounded bg-background dark:bg-muted/40 border text-sm">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs font-mono text-muted-foreground">#{idx + 1}</span>
+                          <Badge variant="outline" className="text-[10px]">{STEP_NAMES[r?.nodeType ?? ''] ?? nodeId}</Badge>
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          {(r as any)?.model && <div className="text-xs text-muted-foreground">{(r as any).model}</div>}
+                          {r?.output !== undefined && r?.output !== null && (
+                            <div className="text-xs truncate">
+                              Out: {typeof r.output === 'string' ? r.output : JSON.stringify(r.output)}
+                            </div>
+                          )}
+                          {r?.error && <div className="text-xs text-destructive truncate">Error: {r.error}</div>}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground shrink-0 text-right">
+                          {r?.executionTime ? formatDuration(r.executionTime) : ''}
+                          {r?.cost ? ` / $${r.cost.toFixed(4)}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {exec.error && (
+                <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">{exec.error}</div>
+              )}
+              {exec.output !== undefined && exec.output !== null && (
+                <div>
+                  <h4 className="text-sm font-medium mb-1">Output</h4>
+                  <RunOutput output={exec.output} />
+                </div>
+              )}
             </div>
           </TableCell>
         </TableRow>

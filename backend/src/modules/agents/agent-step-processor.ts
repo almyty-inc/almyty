@@ -5,6 +5,7 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { RunEventDraft } from './run-events';
 import { RunChange, writeRun } from './run-event-writer';
 import { StepOutcome, claimRun, heldBy, holdLease, runLeaseConfig } from './run-lease';
+import { serveRunFromLog } from './run-log-source';
 import { CallFinished, StepJournal } from './run-resume';
 import { hidePersonalDataAlways } from './run-log-privacy';
 import { UnknownOutcomeCall, approvalReason, decisionForModel, needsCareOnResume, reattempt, tellModel, unknownWriteSettings } from './unknown-writes';
@@ -13,7 +14,8 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
+import { AgentVerifierHelper, CheckerConfig, VerifyPanelResult, checkerOutputLimit, checkerVerdicts, evidenceBudget, runEvidence } from './agent-verifier.helper';
+import { RunToolResult, toolResultsFromMessages } from './checker-evidence';
 import { ALWAYS_ON_COMPACTION, AgentContextCompactor, carriedContextSummary } from './agent-context-compactor.helper';
 import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
@@ -25,8 +27,9 @@ import { agentApiIds, agentEnvironmentId, agentRunnerId, callsAgents, mayCallAge
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
+import { markUnverifiedAnswer, unverifiedReason } from './unverified-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
-import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
+import { ANSWER_CHECK_ROLE, AutonomousStrategyRunner, answeredBy, chargeRole, checkTokens, checkedBy, checkerOf } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
 import { hitDetail, type ApprovalGateHit } from '../tools/tool-approval-gate.service';
 import { NamedTool, readableToolName } from '../tools/tool-readable-name';
@@ -122,6 +125,8 @@ export const AGENT_STEP_COLUMNS = {
   webhookUrl: true,
   totalExecutions: true,
   successfulExecutions: true,
+  checkedExecutions: true,
+  passedCheckExecutions: true,
   totalCost: true,
   averageExecutionTime: true,
   lastExecutedAt: true,
@@ -357,7 +362,7 @@ export class AgentStepProcessor {
   }
 
   private async processLeasedStep(runId: string, leaseOwner: string): Promise<'continue' | 'done' | 'waiting'> {
-    const run = await this.s.runRepository.findOne({
+    const row = await this.s.runRepository.findOne({
       where: { id: runId },
       relations: { agent: true },
       // Narrow the joined agent: `pipeline` and `metadata` are the two
@@ -365,10 +370,13 @@ export class AgentStepProcessor {
       // path. Still one query.
       select: { agent: { ...AGENT_STEP_COLUMNS } } as any,
     });
-    if (!run) {
+    if (!row) {
       this.s.logger.warn(`Run ${runId} not found, skipping`);
       return 'done';
     }
+    // The step works on the run as its log describes it, not the row's cache
+    // of it (durable runs step 5, run-log-source.ts).
+    const { run } = await serveRunFromLog(this.s.runRepository, row, 'step');
     // The claim's token: every write this step makes is fenced on it (heldBy).
     run.leaseOwner = leaseOwner;
 
@@ -511,23 +519,20 @@ export class AgentStepProcessor {
         return await this.explorePhase(run, agent, team, runner, resolvedLimits, expectedStep, stepStart);
       }
 
-      // Recall memories if memory is enabled: from the scope and the account
-      // the agent's Memory section names (AgentMemoryKeeper).
+      // Memory on: the run looks up what it saved before, once, at its start,
+      // and every step carries what it found (AgentMemoryKeeper.recallAtStart,
+      // recorded as a memory_recall step). The model does not have to think
+      // of calling recall_memory for it.
       const memory = new AgentMemoryKeeper(this.s, runner);
       let memoryContext = '';
       if (agent.memoryConfig?.enabled) {
         try {
-          const recentMessages = run.conversationId
-            ? await this.s.messageRepository.find({ where: { conversationId: run.conversationId, role: MessageRole.USER as any }, order: { createdAt: 'DESC' }, take: 1 })
-            : [];
-          const lastUserMessage = recentMessages[0];
-          if (lastUserMessage) {
-            memoryContext = await memory.recallContext(
-              agent,
-              run,
-              typeof lastUserMessage.content === 'string' ? lastUserMessage.content : JSON.stringify(lastUserMessage.content),
-            );
-          }
+          memoryContext = await memory.recallAtStart(agent, run, async () => {
+            if (!run.conversationId) return '';
+            const [last] = await this.s.messageRepository.find({ where: { conversationId: run.conversationId, role: MessageRole.USER as any }, order: { createdAt: 'DESC' }, take: 1 });
+            if (!last) return '';
+            return typeof last.content === 'string' ? last.content : JSON.stringify(last.content);
+          });
         } catch (err) {
           this.s.logger.warn(`Failed to recall memories for run ${runId}: ${err.message}`);
         }
@@ -757,6 +762,9 @@ export class AgentStepProcessor {
         tools: allToolDefs.length > 0 ? allToolDefs : undefined,
         skipToolExecution: true, // We handle tool execution ourselves
         ...(routing ? { routing } : {}),
+        // The moment the model is told it is: fixed for the step, so the
+        // step's answer call (composeAnswer) says exactly the same.
+        currentTime: new Date(),
       };
 
       // Call the LLM
@@ -780,7 +788,9 @@ export class AgentStepProcessor {
         ? (answered.response as ChatResponse)
         : await this.s.llmProvidersService.chatStream(
             providerId,
-            chatRequest,
+            // Today's date and the organization's time zone (current-time.ts),
+            // as of this step.
+            { ...chatRequest, currentTime: chatRequest.currentTime ?? true },
             run.organizationId,
             // As the run's principal, inherited: a gateway run reaches its
             // gateway team's providers and keys, never the run row's user's.
@@ -1517,6 +1527,10 @@ export class AgentStepProcessor {
       } else {
         // No tool calls — the agent has a final response
         let finalContent = responseMessage.content || '';
+        // The failures of a check that did not pass, for the note on the answer (unverified-answer.ts).
+        let failedCheck: Array<{ rule?: unknown; evidence?: unknown }> | null = null;
+        // The final-answer check's verdict, for the agent's "Checks passed"; unset when nothing was checked.
+        let answerCheck: 'pass' | 'fail' | undefined;
         // What the recorded final step says about the call that wrote it.
         let finalCall: FinalCall = {
           cost: stepCost,
@@ -1536,7 +1550,13 @@ export class AgentStepProcessor {
           // a failed check sends the step to the main role, which redoes it
           // as the next step. An unreadable verdict is a fail, so "we could
           // not tell" escalates rather than passing an unchecked draft.
-          const check = await runner.check(run, team.checker!, finalContent, agent.agentConfig?.verify?.spec);
+          const check = await runner.check(
+            run,
+            team.checker!,
+            finalContent,
+            agent.agentConfig?.verify?.spec,
+            await this.prepareCheck(run, agent, [checkerOf(team.checker!)], finalContent, agent.agentConfig?.verify?.spec),
+          );
           if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
           const checkDuration = Date.now() - stepStart;
           if (!check.passed) {
@@ -1556,6 +1576,7 @@ export class AgentStepProcessor {
               input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
               output: { verdict: 'fail', escalateTo: team.main.key, failures: check.failures, ...checkedBy(check) },
               cost: check.cost,
+              tokens: checkTokens(check),
               duration: checkDuration,
               timestamp: new Date().toISOString(),
             });
@@ -1578,6 +1599,7 @@ export class AgentStepProcessor {
             input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
             output: { verdict: 'pass', failures: [], ...checkedBy(check) },
             cost: check.cost,
+            tokens: checkTokens(check),
             duration: checkDuration,
             timestamp: new Date().toISOString(),
           });
@@ -1610,12 +1632,19 @@ export class AgentStepProcessor {
           // The main role acted on the brief; the checker verifies. A
           // failure goes back to the main role to revise, within the same
           // revision budget the verify gate uses.
-          const check = await runner.check(run, team.checker!, finalContent, agent.agentConfig?.verify?.spec);
+          const check = await runner.check(
+            run,
+            team.checker!,
+            finalContent,
+            agent.agentConfig?.verify?.spec,
+            await this.prepareCheck(run, agent, [checkerOf(team.checker!)], finalContent, agent.agentConfig?.verify?.spec),
+          );
           if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
           const maxLoops = agent.agentConfig?.verify?.maxReviseLoops ?? 2;
           const revisions = run.workingMemory?.patchRevisions ?? 0;
           const checkDuration = Date.now() - stepStart;
-          if (!check.passed && revisions < maxLoops) {
+          // A check no checker could give a verdict on is not sent back for revision.
+          if (!check.passed && !check.unavailable && revisions < maxLoops) {
             run.workingMemory = { ...(run.workingMemory || {}), patchRevisions: revisions + 1 };
             if (run.conversationId) {
               const candidate = Message.createAssistantMessage(run.conversationId, finalContent);
@@ -1644,8 +1673,9 @@ export class AgentStepProcessor {
               type: 'verify',
               role: stampOf(team.checker!),
               input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, ...checkedBy(check) },
+              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, checkers: checkerVerdicts(check), ...checkedBy(check) },
               cost: check.cost,
+              tokens: checkTokens(check),
               duration: checkDuration,
               timestamp: new Date().toISOString(),
             });
@@ -1656,15 +1686,37 @@ export class AgentStepProcessor {
             this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'revising' });
             return 'continue';
           }
+          const unavailable = !check.passed && check.unavailable === true;
           run.steps.push({
             type: 'verify',
             role: stampOf(team.checker!),
             input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-            output: { verdict: check.verdict, exhausted: !check.passed, failures: check.failures, ...checkedBy(check) },
+            output: {
+              verdict: check.verdict,
+              exhausted: !check.passed && !unavailable,
+              ...(unavailable ? { unavailable: true } : {}),
+              failures: check.failures,
+              checkers: checkerVerdicts(check),
+              ...checkedBy(check),
+            },
             cost: check.cost,
+            tokens: checkTokens(check),
             duration: checkDuration,
             timestamp: new Date().toISOString(),
           });
+          if (!check.passed) {
+            failedCheck = check.failures ?? [];
+            run.metadata = {
+              ...(run.metadata || {}),
+              verify: {
+                verdict: check.verdict,
+                revisions,
+                exhausted: !unavailable,
+                ...(unavailable ? { unavailable: true } : {}),
+                reason: unverifiedReason(check.failures),
+              },
+            };
+          }
         }
         if (escalated) run.workingMemory = { ...(run.workingMemory || {}), cascadeEscalated: false };
 
@@ -1685,17 +1737,21 @@ export class AgentStepProcessor {
         }
 
         // Autonomous verify gate: a refute-only checker panel reviews the
-        // final answer. On failure within the revision budget, the failures
-        // are fed back as synthetic user feedback and the agent loops again
-        // instead of completing.
+        // final answer and gives its verdict and reasons. By default that is
+        // all: the answer goes out as written, marked when the check did not
+        // pass. Revisions changed correct answers in real runs, so sending
+        // the answer back (the failures fed back as synthetic user feedback,
+        // the agent looping again) happens only when the agent turns
+        // `verify.revise` on, within its revision budget.
         const verifyPanel = await this.runAutonomousVerify(run, agent, finalContent);
         if (verifyPanel) {
           const cfg = agent.agentConfig?.verify;
+          const revise = cfg?.revise === true;
           const maxLoops = cfg?.maxReviseLoops ?? 2;
           const revisions = run.workingMemory?.verifyRevisions ?? 0;
           const verifyStepDuration = Date.now() - stepStart;
 
-          if (!verifyPanel.passed && revisions < maxLoops) {
+          if (revise && !verifyPanel.passed && !verifyPanel.unavailable && revisions < maxLoops) {
             // Send the answer back for revision.
             run.workingMemory = { ...(run.workingMemory || {}), verifyRevisions: revisions + 1 };
             this.escalateRouteOnVerifyFail(run, agent, verifyPanel, llmResponse);
@@ -1732,9 +1788,11 @@ export class AgentStepProcessor {
             });
             run.steps.push({
               type: 'verify',
+              role: ANSWER_CHECK_ROLE,
               input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures },
+              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures, checkers: checkerVerdicts(verifyPanel) },
               cost: verifyPanel.cost,
+              tokens: checkTokens(verifyPanel),
               duration: verifyStepDuration,
               timestamp: new Date().toISOString(),
             });
@@ -1750,17 +1808,28 @@ export class AgentStepProcessor {
             return 'continue';
           }
 
-          // Passed, or the revision budget is exhausted: record the verdict and
-          // let the run complete with this answer.
+          // Passed, report-only (the default), the revision budget is
+          // exhausted, or no checker could give a verdict: record it and let
+          // the run complete with this answer. A check that could not be
+          // done is not a failure to fix: revising on it paid for new drafts
+          // nobody could judge (run b9803830), so it is never sent back.
+          const unavailable = !verifyPanel.passed && verifyPanel.unavailable === true;
+          const exhausted = revise && !verifyPanel.passed && !unavailable && revisions >= maxLoops;
+          const reportOnly = !revise ? { reportOnly: true } : {};
           run.steps.push({
             type: 'verify',
+            role: ANSWER_CHECK_ROLE,
             input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
             output: {
               verdict: verifyPanel.verdict,
-              exhausted: !verifyPanel.passed && revisions >= maxLoops,
+              exhausted,
+              ...reportOnly,
+              ...(unavailable ? { unavailable: true } : {}),
               failures: verifyPanel.failures,
+              checkers: checkerVerdicts(verifyPanel),
             },
             cost: verifyPanel.cost,
+            tokens: checkTokens(verifyPanel),
             duration: verifyStepDuration,
             timestamp: new Date().toISOString(),
           });
@@ -1769,13 +1838,29 @@ export class AgentStepProcessor {
             verify: {
               verdict: verifyPanel.verdict,
               revisions,
-              exhausted: !verifyPanel.passed && revisions >= maxLoops,
+              exhausted,
+              ...reportOnly,
+              ...(unavailable ? { unavailable: true } : {}),
+              ...(!verifyPanel.passed ? { reason: unverifiedReason(verifyPanel.failures) } : {}),
             },
           };
+          failedCheck = verifyPanel.passed ? null : (verifyPanel.failures ?? []);
+          // What "Checks passed" counts: a check no checker gave a verdict on was not a check.
+          if (!unavailable) answerCheck = verifyPanel.passed ? 'pass' : 'fail';
+        }
+
+        // The answer's check did not pass (report-only, or the revisions ran
+        // out): it is delivered, marked. The marker goes on the answer itself,
+        // so every surface that reads it (the conversation, run.output)
+        // carries it.
+        if (failedCheck) {
+          finalContent = markUnverifiedAnswer(finalContent, failedCheck);
+          if (finalMsg) finalMsg.content = finalContent;
         }
 
         // Verification candidates are only committed to customer-visible
-        // history after they pass (or exhaust the configured revision budget).
+        // history once the check is done (passed, reported, or the
+        // configured revision budget exhausted).
         if (finalMsg) await this.s.messageRepository.save(finalMsg);
 
         run.status = AgentRunStatus.COMPLETED;
@@ -1814,7 +1899,7 @@ export class AgentStepProcessor {
         if (!(await this.commitStep(run, expectedStep))) return 'done';
 
         // Update agent stats atomically (see bumpAgentStats rationale).
-        await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
+        await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost, answerCheck);
 
         this.s.emitEvent(runId, 'run.completed', { output: run.output });
 
@@ -2111,7 +2196,9 @@ export class AgentStepProcessor {
     try {
       response = await this.s.llmProvidersService.chatStream(
         providerId,
-        answerRequest,
+        // The draft's moment: the answer call stands for the same step, so
+        // it sends the same system prompt, date included.
+        { ...answerRequest, currentTime: chatRequest.currentTime ?? true },
         run.organizationId,
         principalOfRun(run),
         (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), step, chunk),
@@ -2320,7 +2407,8 @@ export class AgentStepProcessor {
       grantsLeft: grantsLeftFor(config, run.workingMemory?.codeGrantsUsed),
       limits,
       extract: buildExtract({
-        chat: (providerId, request) => this.s.llmProvidersService.chat(providerId, request as any, run.organizationId, principal),
+        chat: (providerId, request) =>
+          this.s.llmProvidersService.chat(providerId, { ...(request as any), currentTime: true }, run.organizationId, principal),
         extractor: config?.extractor ?? null,
         routing: organization?.settings?.defaultRouting ?? null,
       }),
@@ -3141,14 +3229,101 @@ export class AgentStepProcessor {
   ): Promise<VerifyPanelResult | null> {
     if (!this.hasFinalOutputVerification(agent, finalContent)) return null;
     const cfg = agent.agentConfig!.verify!;
+    // The checker judges the answer against what the run was asked, what
+    // its tools returned and the agent's own rules.
+    const check = await this.prepareCheck(run, agent, cfg.checkers!, finalContent, cfg.spec);
     const panel = await this.verifier.runPanel(
-      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy },
+      { target: finalContent, spec: cfg.spec, checkers: check.checkers, policy: cfg.policy, evidence: check.evidence, rules: check.rules },
       run.organizationId,
       principalOfRun(run),
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
+    // The check's spend is a line of "Cost by role", like a strategy's checker.
+    chargeRole(run, ANSWER_CHECK_ROLE, panel.cost, panel.tokens);
     return panel;
+  }
+
+  /**
+   * What a checker panel is given to judge this run's answer:
+   * - the evidence (runEvidence): the request and the tool results the
+   *   model that wrote the answer read, whole, from the run's conversation
+   *   (the stored steps for a run without one), shortened only when it
+   *   would not fit the smallest context window among the checkers (a
+   *   model card's context length, or the minimum a routed checker's
+   *   policy demands; unknown windows get the default budget);
+   * - the agent's own instructions, the standard the answer is held to;
+   * - each checker with the output budget its model card allows
+   *   (checkerOutputLimit), unless the checker sets its own.
+   */
+  async prepareCheck(
+    run: AgentRun,
+    agent: Pick<Agent, 'instructions'> | null | undefined,
+    checkers: CheckerConfig[],
+    target: string,
+    spec?: string,
+  ): Promise<{ evidence: string; rules: string; checkers: CheckerConfig[] }> {
+    const rules = (agent?.instructions ?? '').trim();
+    const cards = await this.checkerCards(run, checkers ?? []);
+    const windows: number[] = [];
+    (checkers ?? []).forEach((checker, i) => {
+      if (checker?.routing) {
+        if (typeof checker.routing.minContextLength === 'number' && checker.routing.minContextLength > 0) windows.push(checker.routing.minContextLength);
+        return;
+      }
+      const contextLength = cards[i]?.contextLength;
+      if (contextLength && contextLength > 0) windows.push(contextLength);
+    });
+    const window = windows.length ? Math.min(...windows) : null;
+    const toolResults = await this.toolResultsOfRun(run);
+    const evidence = runEvidence(run as any, {
+      budgetChars: evidenceBudget(window, (target?.length ?? 0) + (spec?.length ?? 0) + rules.length),
+      toolResults,
+    });
+    const sized = (checkers ?? []).map((checker, i) =>
+      checker && !(checker.maxTokens && checker.maxTokens > 0) ? { ...checker, maxTokens: checkerOutputLimit(cards[i]?.maxOutputTokens) } : checker,
+    );
+    return { evidence, rules, checkers: sized };
+  }
+
+  /** Each checker's model card (its context window and most output), or null when it has none. */
+  private async checkerCards(run: AgentRun, checkers: CheckerConfig[]): Promise<Array<{ contextLength: number | null; maxOutputTokens: number | null } | null>> {
+    return Promise.all(
+      checkers.map(async (checker) => {
+        if (checker?.routing || !checker?.providerId || !checker.model) return null;
+        try {
+          const card = await this.s.toolRepository.manager.getRepository(Model).findOne({
+            where: { organizationId: run.organizationId, providerId: checker.providerId, vendorModelId: checker.model },
+            select: { id: true, contextLength: true, maxOutputTokens: true },
+          });
+          return card ? { contextLength: card.contextLength ?? null, maxOutputTokens: card.maxOutputTokens ?? null } : null;
+        } catch (err) {
+          this.s.logger.warn(`No model card for the checker on run ${run.id}: ${(err as Error)?.message}`);
+          return null;
+        }
+      }),
+    );
+  }
+
+  /**
+   * The run's tool results as its conversation holds them: whole, as the
+   * model that wrote the answer read them (toolResultsFromMessages). Read
+   * from the database, so a step resumed on another worker reads the same.
+   * Undefined when the run has no conversation or no tool results in it.
+   */
+  private async toolResultsOfRun(run: AgentRun): Promise<RunToolResult[] | undefined> {
+    if (!run.conversationId || !this.s.messageRepository) return undefined;
+    try {
+      const messages = await this.s.messageRepository.find({
+        where: { conversationId: run.conversationId, runId: run.id } as any,
+        order: { createdAt: 'ASC' } as any,
+      });
+      const results = toolResultsFromMessages(messages as any[]);
+      return results.length ? results : undefined;
+    } catch (err) {
+      this.s.logger.warn(`Could not read the tool results of run ${run.id} for its checker: ${(err as Error)?.message}`);
+      return undefined;
+    }
   }
 
   private hasFinalOutputVerification(agent: Agent, finalContent: string): boolean {
@@ -3202,12 +3377,15 @@ export class AgentStepProcessor {
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
+    chargeRole(run, ANSWER_CHECK_ROLE, panel.cost, panel.tokens);
 
     run.steps.push({
       type: 'verify',
+      role: ANSWER_CHECK_ROLE,
       input: { mode: 'mid_loop', policy: panel.policy, checkers: panel.checkers.length },
-      output: { verdict: panel.verdict, advisory: true, failures: panel.failures },
+      output: { verdict: panel.verdict, advisory: true, failures: panel.failures, checkers: checkerVerdicts(panel) },
       cost: panel.cost,
+      tokens: checkTokens(panel),
       timestamp: new Date().toISOString(),
     });
 

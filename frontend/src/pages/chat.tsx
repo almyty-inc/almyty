@@ -16,7 +16,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { ModelPicker } from '@/components/model-picker'
+import { ModelPicker, firstUsableModel, useModelCards } from '@/components/model-picker'
 import { llmProvidersApi } from '@/lib/api'
 import { toolsQuery } from '@/lib/list-queries'
 import { formatDate, pluralized } from '@/lib/utils'
@@ -88,17 +88,22 @@ export function ChatPage() {
 
   const activeProviders = providers.filter((p: any) => p.status === 'active')
 
-  // Auto-select first active provider.
+  // Start on a model that can be used now (firstUsableModel): an active
+  // provider whose models are usable, never one that cannot answer.
   //
   // No fallback to providers[0]: it selected an INACTIVE provider, whose
   // name then sat in the header as the chosen one while the dropdown --
   // which lists active providers only -- opened on an empty list, and
   // sending posted to a provider that cannot answer.
+  const cards = useModelCards().data
   useEffect(() => {
-    if (!selectedProviderId && activeProviders.length > 0) {
-      setSelectedProviderId(activeProviders[0].id)
+    if (selectedProviderId || !cards) return
+    const start = firstUsableModel(activeProviders, cards)
+    if (start) {
+      setSelectedProviderId(start.providerId)
+      setSelectedModel(start.model)
     }
-  }, [activeProviders, selectedProviderId])
+  }, [activeProviders, cards, selectedProviderId])
 
   // Scroll to bottom on new messages
   useEffect(() => {

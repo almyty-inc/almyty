@@ -96,12 +96,12 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 
 | | Routes |
 | --- | ---: |
-| Controller routes (src/modules + ee/modules) | 590 |
+| Controller routes (src/modules + ee/modules) | 591 |
 | Excluded (an MCP client must not or cannot use them) | 143 |
-| In scope | 447 |
-| Covered by a dedicated tool | 79 (17.7%) |
-| Covered by an operation | 368 (82.3%) |
-| Covered in total | 447 (100.0%) |
+| In scope | 448 |
+| Covered by a dedicated tool | 79 (17.6%) |
+| Covered by an operation | 369 (82.4%) |
+| Covered in total | 448 (100.0%) |
 | Held for a product decision | 0 (0.0%) |
 
 ## By resource
@@ -112,7 +112,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | agent-channels | 21 | 12 | 8 | 0 | 1 |
 | agent-constraints | 4 | 0 | 4 | 0 | 0 |
 | agents | 65 | 10 | 46 | 0 | 9 |
-| apis | 30 | 6 | 20 | 0 | 4 |
+| apis | 31 | 6 | 21 | 0 | 4 |
 | approvals | 9 | 3 | 6 | 0 | 0 |
 | audit-log | 2 | 0 | 2 | 0 | 0 |
 | auth | 19 | 0 | 5 | 0 | 14 |
@@ -359,6 +359,7 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | apis | `GET /apis/:id/operations` (ApisController.getOperations) | `apis.list_operations` (read) | operation |
 | apis | `GET /apis/:id/operations/outline` (ApisController.getOperationOutline) | `apis.get_operation_outline` (read) | operation |
 | apis | `POST /apis/:id/operations/selection` (ApisController.selectOperations) | `apis.select_operations` (write) | operation |
+| apis | `POST /apis/:id/operations/:operationId/tool` (ApisController.makeOperationTool) | `apis.make_operation_tool` (write) | operation |
 | apis | `GET /apis/:id/resources` (ApisController.getResources) | `apis.list_resources` (read) | operation |
 | apis | `POST /apis/:id/test-connection` (ApisController.testConnection) | `apis.test_connection` (write) | operation |
 | apis | `GET /apis/:id/schemas` (ApisController.getSchemas) | `apis.list_schemas` (read) | operation |

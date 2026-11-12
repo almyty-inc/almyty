@@ -98,7 +98,8 @@ describe('buildCollaborationContext', () => {
 describe('AgentsService refuses an invalid collaboration at save time', () => {
   const service = () => {
     const agentRepository = {
-      findOne: jest.fn(async () => ({ id: 'ag-1', organizationId: 'org-1', mode: 'autonomous', metadata: {} })),
+      // The agent being updated; no other agent has the name being saved.
+      findOne: jest.fn(async (opts: any) => (opts?.where?.name ? null : { id: 'ag-1', organizationId: 'org-1', mode: 'autonomous', metadata: {} })),
       save: jest.fn(async (a: any) => a),
       create: jest.fn((a: any) => a),
       // Providers: p1 is org-wide, p-mine is user-1's private one,

@@ -16,7 +16,8 @@
  * that names a role.
  */
 
-import { STEP_NAMES } from '../step-values'
+import type { Node } from '@xyflow/react'
+import { STEP_NAMES, brokenRefs, inputFieldOf } from '../step-values'
 
 export interface GraphNode {
   id: string
@@ -59,6 +60,8 @@ export function stepName(node: GraphNode): string {
 export interface BuilderIssue {
   text: string
   nodeIds: string[]
+  /** On the list, but no reason to refuse the save: the server accepts it. */
+  advisory?: boolean
 }
 
 function joinNames(names: string[]): string {
@@ -81,7 +84,7 @@ export function validateWorkflowGraph(
   edges: GraphEdge[],
   options: { hasDefaultRouting?: boolean } = {},
 ): string[] {
-  return workflowIssues(nodes, edges, options).map((issue) => issue.text)
+  return workflowIssues(nodes, edges, options).filter((issue) => !issue.advisory).map((issue) => issue.text)
 }
 
 /** The same checks, each tied to the nodes it is about. */
@@ -215,6 +218,30 @@ export function workflowIssues(
     // is its own item the user can click to find.
     for (const orphan of nodes.filter((n) => !visited.has(n.id) && !unreachableOutputs.includes(n))) {
       add(`${stepName(orphan)}: connect it, or delete it`, orphan)
+    }
+  }
+
+  // A value read from an input field that was renamed or removed, or from a
+  // step that was deleted, is empty at run time. The server accepts it, so
+  // it does not stop a save; it is still on the list, because the run will
+  // not do what the step says.
+  for (const ref of brokenRefs(nodes as Node[])) {
+    const node = nodes.find((n) => n.id === ref.nodeId)
+    if (!node) continue
+    if (ref.kind === 'input') {
+      errors.push({
+        text: `${stepName(node)}: reads “${inputFieldOf(ref.path)}”, which the Input step no longer has`,
+        nodeIds: [node.id],
+        advisory: true,
+      })
+    } else {
+      const m = /^nodes\.([^.[\s]+)\.output(?:\.(.+))?$/.exec(ref.path)
+      const what = m ? `${m[1]} › ${m[2] ?? 'Result'}` : ref.path
+      errors.push({
+        text: `${stepName(node)}: reads ${what}, a step that no longer exists`,
+        nodeIds: [node.id],
+        advisory: true,
+      })
     }
   }
 

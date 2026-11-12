@@ -125,6 +125,24 @@ export interface ChatRequest {
    * ChatResponse.routing). `model` is then ignored.
    */
   routing?: RoutingPolicy;
+  /**
+   * Tell the model today's date and the organization's time zone: a
+   * [CURRENT TIME] block in the system prompt (common/utils/current-time.ts).
+   * `true` tells it the time of the call; a Date tells it that moment, so
+   * two calls that stand for one step (an autonomous step's draft and its
+   * no-tools answer call) send the same system prompt. Every model call a
+   * run makes sets it; a guard test holds the agents module to that
+   * (run-calls-know-the-date.spec.ts).
+   */
+  currentTime?: boolean | Date;
+  /**
+   * Ask for a reply that is a JSON object of this JSON schema (structured
+   * output). Sent only to a provider whose API takes one
+   * (`supportsStructuredOutput`); every other provider gets the request
+   * without it, so a caller still says the format in its prompt and reads
+   * the reply tolerantly.
+   */
+  responseFormat?: { name: string; schema: Record<string, any> };
 }
 
 

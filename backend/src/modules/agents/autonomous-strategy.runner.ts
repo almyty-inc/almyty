@@ -109,6 +109,19 @@ export function checkedBy(
   };
 }
 
+/** What a check read and wrote, for the verify step it is recorded on: the run view shows the input tokens on each check. */
+export function checkTokens(panel: Pick<VerifyPanelResult, 'inputTokens' | 'outputTokens'>): { input: number; output: number } {
+  return { input: panel.inputTokens ?? 0, output: panel.outputTokens ?? 0 };
+}
+
+/**
+ * The agent's own answer check (`agentConfig.verify`): its checkers are
+ * not a strategy role, but what they cost is the run's, and "Cost by role"
+ * left it out (run 92f17cec: $0.0453 of $0.0623). Its spend is a line of
+ * its own.
+ */
+export const ANSWER_CHECK_ROLE: RoleStamp = { key: 'answer_check', name: 'Answer check', purpose: 'checker', kind: 'model' };
+
 /** The request a model role makes: the base request on the role's model and sampling. */
 export function requestFor(role: ModelRoleCall, base: ChatRequest): ChatRequest {
   const { routing: _routing, model: _model, temperature: _t, maxTokens: _m, ...rest } = base;
@@ -180,7 +193,8 @@ export class AutonomousStrategyRunner {
     try {
       const response = await this.s.llmProvidersService.chatStream(
         role.providerId,
-        requestFor(role, request),
+        // Every role -- worker, judge, checker, summariser -- is told today's date.
+        { ...requestFor(role, request), currentTime: true },
         run.organizationId,
         principalOfRun(run),
         () => undefined,
@@ -231,11 +245,27 @@ export class AutonomousStrategyRunner {
   /**
    * The checker role's refute-only verdict on `target`, through the
    * shared verifier. An error or unreadable verdict is a fail: "we could
-   * not tell" must never pass an unchecked answer.
+   * not tell" must never pass an unchecked answer. `prepared` is what the
+   * caller has for the check (AgentStepProcessor.prepareCheck): the
+   * evidence, the agent's own rules, and the checker with its output budget.
    */
-  async check(run: AgentRun, checker: ModelRoleCall, target: string, spec?: string): Promise<VerifyPanelResult> {
+  async check(
+    run: AgentRun,
+    checker: ModelRoleCall,
+    target: string,
+    spec?: string,
+    prepared?: { evidence?: string; rules?: string; checkers?: CheckerConfig[] },
+  ): Promise<VerifyPanelResult> {
+    const sized = prepared?.checkers?.[0];
     const panel = await this.verifier.runPanel(
-      { target, spec, checkers: [checkerOf(checker)], policy: 'any_fail_blocks' },
+      {
+        target,
+        spec,
+        checkers: [sized ?? checkerOf(checker)],
+        policy: 'any_fail_blocks',
+        ...(prepared?.evidence ? { evidence: prepared.evidence } : {}),
+        ...(prepared?.rules ? { rules: prepared.rules } : {}),
+      },
       run.organizationId,
       principalOfRun(run),
     );

@@ -175,6 +175,12 @@ export interface LlmProviderCredentialRefs {
    * read this one rule.
    */
   keyChecked?: boolean;
+  /**
+   * Not a column. How many models the connection lists and how many of
+   * them can be used now (LlmProvidersService.attachModelCounts), so a
+   * key that works over models that do not is said plainly.
+   */
+  modelCounts?: { listed: number; usable: number };
 }
 
 /**

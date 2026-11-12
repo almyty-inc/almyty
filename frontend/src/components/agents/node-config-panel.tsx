@@ -11,7 +11,8 @@ import { Slider } from '@/components/ui/slider'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
-import { readableToolName } from '@/lib/tool-names'
+import { distinctToolNames } from '@/lib/tool-names'
+import { pluralized } from '@/lib/utils'
 import { Disclosure } from '@/components/ui/disclosure'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
@@ -23,7 +24,7 @@ import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
 import { ModelPicker, type ModelSelection, type ProviderOption } from '@/components/model-picker'
 import type { Tool, Agent } from '@/types'
 import type { RoutingPolicy } from '@/types/models'
-import { STEP_NAMES, earlierSteps } from './step-values'
+import { STEP_NAMES, earlierSteps, renameInputRefs, stepsReadingInput } from './step-values'
 import { StepCatalog, StepTextMode, StepValueField, StepValueSelect } from './step-value-field'
 import { OtherValues, ToolStepInputs, mappingEntries, toMapping, toolParameters, type MappingEntry } from './tool-step-inputs'
 import { AgentSelect } from './agent-select'
@@ -172,7 +173,7 @@ function StepPanel({ node, nodes, edges, onUpdateNode, onDeleteNode, onClose }: 
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {nodeType === 'input' && <InputConfig node={node} updateData={updateData} />}
+            {nodeType === 'input' && <InputConfig node={node} nodes={nodes} updateData={updateData} onUpdateNode={onUpdateNode} />}
             {nodeType === 'output' && <OutputConfig node={node} updateData={updateData} />}
             {nodeType === 'llm_call' && <LlmCallConfig node={node} tools={tools} updateData={updateData} onUpdateNode={onUpdateNode} />}
             {nodeType === 'tool_call' && <ToolCallConfig node={node} nodes={nodes} tools={tools} onUpdateNode={onUpdateNode} />}
@@ -218,12 +219,36 @@ const FIELD_TYPES = [
  * the API send; it is shown, and only written once something changes. The
  * whole schema is under Advanced.
  */
-function InputConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+function InputConfig({
+  node,
+  nodes = [],
+  updateData,
+  onUpdateNode,
+}: {
+  node: Node
+  nodes?: Node[]
+  updateData: UpdateDataFn
+  onUpdateNode?: (nodeId: string, data: NodeData) => void
+}) {
   const schema = (node.data.schema as Record<string, any>) || {}
   const props: Record<string, any> = schema.properties && typeof schema.properties === 'object' ? schema.properties : {}
   const declared = Object.keys(props)
   const rows = declared.length > 0 ? declared : ['message']
   const current = declared.length > 0 ? props : { message: { type: 'string' } }
+  // The last rename, from the name the field had before typing began: each
+  // keystroke renames, so "message" -> "m" -> ... -> "invoices" is one rename.
+  const [renamed, setRenamed] = useState<{ from: string; to: string } | null>(null)
+  const staleReaders = useMemo(
+    () => (renamed && renamed.from !== renamed.to && !(renamed.from in current) ? stepsReadingInput(nodes, renamed.from) : []),
+    [renamed, nodes, current],
+  )
+  const updateReaders = () => {
+    if (!renamed || !onUpdateNode) return
+    for (const { id, data } of renameInputRefs(nodes, renamed.from, renamed.to)) onUpdateNode(id, data as NodeData)
+    // Updating a step selects it; keep this one open.
+    onUpdateNode(node.id, node.data)
+    setRenamed(null)
+  }
 
   const write = (nextProps: Record<string, any>, required?: string[]) => {
     const req = (required ?? (Array.isArray(schema.required) ? schema.required : [])).filter((k: string) => k in nextProps)
@@ -234,6 +259,7 @@ function InputConfig({ node, updateData }: { node: Node; updateData: UpdateDataF
     for (const k of Object.keys(current)) next[k === from ? to : k] = current[k]
     const required = (Array.isArray(schema.required) ? schema.required : []).map((k: string) => (k === from ? to : k))
     write(next, required)
+    setRenamed((r) => (r && r.to === from ? { from: r.from, to } : { from, to }))
   }
   const retype = (key: string, type: string) => write({ ...current, [key]: { ...current[key], type } })
   const remove = (key: string) => {
@@ -279,6 +305,19 @@ function InputConfig({ node, updateData }: { node: Node; updateData: UpdateDataF
           Add a field
         </Button>
       </div>
+      {staleReaders.length > 0 && renamed && (
+        // Renaming a field leaves the steps that read it reading nothing.
+        // Offer to point them at the new name, here, in one click.
+        <div role="note" data-testid="input-rename-refs" className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+          <p>
+            {pluralized(staleReaders.length, 'step')} still {staleReaders.length === 1 ? 'reads' : 'read'} &ldquo;{renamed.from}&rdquo;, which is now
+            called &ldquo;{renamed.to}&rdquo;.
+          </p>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={updateReaders}>
+            Update {staleReaders.length === 1 ? 'it' : 'them'} to read &ldquo;{renamed.to}&rdquo;
+          </Button>
+        </div>
+      )}
       <StepAdvanced node={node}>
         <div>
           <Label>Schema</Label>
@@ -316,6 +355,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
   const [showAllTools, setShowAllTools] = useState(false)
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
   const toolList = tools as Array<Pick<Tool, 'id' | 'name'>>
+  const toolNames = useMemo(() => distinctToolNames(toolList as any[]), [toolList])
 
   return (
     <div className="space-y-3">
@@ -400,7 +440,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
                     {groups.map(([source, groupTools]) => {
                       const q = toolSearch.toLowerCase()
                       const filtered = toolSearch
-                        ? (groupTools as any[]).filter((t) => t.name?.toLowerCase().includes(q) || readableToolName(t).toLowerCase().includes(q))
+                        ? (groupTools as any[]).filter((t) => t.name?.toLowerCase().includes(q) || (toolNames.get(t.id) ?? '').toLowerCase().includes(q))
                         : (groupTools as any[])
                       if (filtered.length === 0) return null
                       const groupIds = (groupTools as any[]).map((t) => t.id)
@@ -434,7 +474,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
                                   }}
                                 />
                                 <label htmlFor={id} className="min-w-0 cursor-pointer truncate text-sm" title={tool.name}>
-                                  {readableToolName(tool)}
+                                  {toolNames.get(tool.id)}
                                 </label>
                               </div>
                             )
@@ -480,6 +520,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
 // --- Tool call ---
 function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; nodes: Node[]; tools: any[]; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const toolList = tools as Array<Pick<Tool, 'id' | 'name'> & { operation?: { name?: string | null } | null }>
+  const toolNames = useMemo(() => distinctToolNames(toolList as any[]), [toolList])
   const tool = tools.find((t) => t.id === node.data.toolId)
   const params = toolParameters(tool)
   const mapping = node.data.parameterMapping
@@ -499,7 +540,7 @@ function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; node
               toolId: v,
               toolName: picked?.name || '',
               // What the step shows on the canvas; toolName stays the name agents call.
-              toolLabel: picked ? readableToolName(picked) : '',
+              toolLabel: picked ? toolNames.get(picked.id) ?? '' : '',
             })
           }}
         >
@@ -515,7 +556,7 @@ function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; node
             {toolList.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">No tools yet. Make some from an API, or under Tools.</div>}
             {toolList.map((t) => (
               <SelectItem key={t.id} value={t.id} title={t.name}>
-                {readableToolName(t)}
+                {toolNames.get(t.id)}
               </SelectItem>
             ))}
           </SelectContent>

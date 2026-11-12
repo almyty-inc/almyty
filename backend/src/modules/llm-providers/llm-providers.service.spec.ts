@@ -1058,6 +1058,36 @@ describe('LlmProvidersService', () => {
       expect(catalog.syncInBackground).not.toHaveBeenCalled();
     });
 
+    // Mistral on staging: the key worked and listed 41 models, but the
+    // configured model was outside the key's plan, so the check failed and
+    // none of the 41 ever became usable.
+    it('a configured model the key may not use is retried with another listed model, and the key passes', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      jest.spyOn(modelsHelperInstance, 'fetchModelsFromProvider').mockResolvedValue([{ id: 'gpt-4o-mini' }, { id: 'gpt-4.1' }] as any);
+      const call = jest.spyOn(runnerInstance as any, 'callLlmProvider')
+        .mockRejectedValueOnce(new ModelNotFoundError('gpt-4o-mini', 'provider-1', 'openai', 'This model is not available in your subscription tier'))
+        .mockResolvedValueOnce({
+          message: { role: MessageRole.ASSISTANT, content: 'hi' },
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          model: 'gpt-4.1', cost: 0, responseTime: 5,
+        });
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(true);
+      expect(result.probedModel).toBe('gpt-4.1');
+      expect(call).toHaveBeenLastCalledWith(p, expect.objectContaining({ model: 'gpt-4.1' }), expect.anything(), []);
+      expect(llmProviderRepository.update).toHaveBeenCalledWith({ id: 'provider-1' }, expect.objectContaining({ isHealthy: true }));
+      expect(catalog.recordExternalValidation).toHaveBeenCalledWith(
+        'org-1', 'provider-1', 'gpt-4o-mini', expect.objectContaining({ passed: false, source: 'health_check' }),
+      );
+      expect(catalog.recordExternalValidation).toHaveBeenCalledWith(
+        'org-1', 'provider-1', 'gpt-4.1', expect.objectContaining({ passed: true, source: 'health_check' }),
+      );
+    });
+
     it('an ordinary health check failure records nothing on the catalog', async () => {
       const p = baseProvider();
       llmProviderRepository.findOne.mockResolvedValue(p);
