@@ -129,12 +129,32 @@ export function StepRoleLine({ step }: { step: AgentRunStep }) {
   )
 }
 
-/** The run's cost split by role, from `run.metadata.roleCosts`. Nothing for runs without it. */
+/**
+ * The answer check's spend on a run that did not put it in `roleCosts`:
+ * its `verify` steps with no role. Runs recorded before the check had a
+ * line of its own left it out, so "Cost by role" did not add up to the
+ * run's cost (run 92f17cec: the check was $0.0453 of $0.0623).
+ */
+function unchargedChecks(run: AgentRun, roleCosts: Record<string, RoleCost>): RoleCost | null {
+  if (roleCosts.answer_check) return null
+  const steps = (Array.isArray(run.steps) ? run.steps : []).filter((s) => s?.type === 'verify' && !s.role && (s.cost || 0) > 0)
+  if (steps.length === 0) return null
+  return {
+    name: 'Answer check',
+    purpose: 'checker',
+    calls: steps.length,
+    cost: steps.reduce((sum, s) => sum + (s.cost || 0), 0),
+    tokens: steps.reduce((sum, s) => sum + tokenCount(s.tokens as RoleCost['tokens']), 0),
+  }
+}
+
+/** The run's cost split by role, from `run.metadata.roleCosts`, the answer check included. Nothing for runs without it. */
 export function RoleCostTable({ run }: { run: AgentRun }) {
   const roleCosts = run.metadata?.roleCosts as Record<string, RoleCost> | undefined
   const strategy = run.metadata?.strategy as AutonomousStrategyKey | undefined
   if (!roleCosts || typeof roleCosts !== 'object') return null
-  const rows = Object.entries(roleCosts).sort(([, a], [, b]) => (b?.cost || 0) - (a?.cost || 0))
+  const checks = unchargedChecks(run, roleCosts)
+  const rows = Object.entries(checks ? { ...roleCosts, answer_check: checks } : roleCosts).sort(([, a], [, b]) => (b?.cost || 0) - (a?.cost || 0))
   if (rows.length === 0) return null
   return (
     <div data-testid="role-costs">

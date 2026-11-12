@@ -34,6 +34,79 @@ const REQUEST_MAX = 20_000;
 export const SHORTENED_MARK = '[result shortened';
 
 /**
+ * A stored JSON result that was too large to store whole is kept as
+ * `{"_shortened": "<note>", "result": <the result, shortened>}`
+ * (persist-cap.ts): still valid JSON, every item with its identifying
+ * fields, and a note that says what was left out. The run is reloaded
+ * from storage between steps, so this is what a checker reads.
+ */
+export const SHORTENED_KEY = '_shortened';
+
+export interface ShortenedResult {
+  [SHORTENED_KEY]: string;
+  result: unknown;
+}
+
+/** The stored envelope of a shortened result (an object, or its JSON text), or null. */
+export function shortenedResultOf(value: unknown): ShortenedResult | null {
+  let v = value;
+  if (typeof v === 'string') {
+    if (!v.startsWith(`{"${SHORTENED_KEY}":`)) return null;
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return null;
+  const note = (v as Record<string, unknown>)[SHORTENED_KEY];
+  const keys = Object.keys(v);
+  if (typeof note !== 'string' || !note.startsWith(SHORTENED_MARK) || keys.length !== 2 || !keys.includes('result')) return null;
+  return v as ShortenedResult;
+}
+
+/**
+ * A JSON result shortened to fit `cap` characters as stored, item by item
+ * (fitResult), in its envelope; null when it is not JSON or cannot be
+ * shortened to valid JSON that fits.
+ */
+export function shortenForStore(parsed: unknown, raw: string, cap: number): ShortenedResult | null {
+  if (parsed === null || typeof parsed !== 'object') return null;
+  let allowance = cap - 600;
+  for (let attempt = 0; attempt < 4 && allowance > 0; attempt++) {
+    const { body, note } = fitResult(raw, parsed, allowance);
+    let result: unknown;
+    try {
+      result = JSON.parse(body);
+    } catch {
+      return null;
+    }
+    const envelope: ShortenedResult = {
+      [SHORTENED_KEY]: note ?? `${SHORTENED_MARK}: ${raw.length.toLocaleString('en-US')} chars stored in part]`,
+      result,
+    };
+    const size = JSON.stringify(envelope).length;
+    if (size <= cap) return envelope;
+    allowance -= size - cap + 200;
+  }
+  return null;
+}
+
+/**
+ * Text a store cut at its limit ends `… (truncated from N characters...)`
+ * (persist-cap.ts withTruncationMarker). Read back, it is the kept start
+ * and the full length, so it is shown as shortened, not as the whole result.
+ */
+const CUT_TEXT_END = /… \(truncated from (\d+) characters[^()]*\)$/;
+
+export function cutTextOf(text: string): { kept: string; total: number } | null {
+  const tail = text.slice(-120);
+  const m = CUT_TEXT_END.exec(tail);
+  if (!m) return null;
+  return { kept: text.slice(0, text.length - (tail.length - m.index)), total: Number(m[1]) };
+}
+
+/**
  * How many characters of evidence a checker gets: half its context window
  * when the window is known (less what else the prompt carries), else a
  * default, never more than EVIDENCE_MAX_CHARS.
@@ -73,12 +146,24 @@ export function runEvidence(run: RunLike, opts: { budgetChars?: number } = {}): 
     .map((step) => {
       const tool = step.input?.tool ?? step.input?.toolName ?? 'tool';
       const args = step.input?.parameters ? ` ${JSON.stringify(step.input.parameters)}` : '';
-      const raw = step.error
-        ? `ERROR ${String((step.error as any)?.message ?? step.error)}`
-        : typeof step.output === 'string'
-          ? step.output
-          : JSON.stringify(step.output ?? null) ?? 'null';
-      return { head: `${tool}${args}`, raw, value: step.error ? undefined : step.output };
+      if (step.error) return { head: `${tool}${args}`, raw: `ERROR ${String((step.error as any)?.message ?? step.error)}`, value: undefined, stored: undefined };
+      // What the store already left out of a large result says so here,
+      // on the line that names the tool, like any other shortening.
+      let value: unknown = step.output;
+      let stored: string | undefined;
+      const envelope = shortenedResultOf(value);
+      if (envelope) {
+        stored = envelope[SHORTENED_KEY];
+        value = envelope.result;
+      } else if (typeof value === 'string') {
+        const cut = cutTextOf(value);
+        if (cut) {
+          stored = `${SHORTENED_MARK}: the stored result was cut; only the first ${cut.kept.length.toLocaleString('en-US')} of ${cut.total.toLocaleString('en-US')} chars were kept]`;
+          value = cut.kept;
+        }
+      }
+      const raw = typeof value === 'string' ? value : JSON.stringify(value ?? null) ?? 'null';
+      return { head: `${tool}${args}`, raw, value, stored };
     });
 
   const allowances = shareOut(results.map((r) => r.raw.length), Math.max(0, budget - used));
@@ -90,7 +175,8 @@ export function runEvidence(run: RunLike, opts: { budgetChars?: number } = {}): 
     const allowance = Math.min(Math.max(allowances[i], MIN_PER_RESULT), budget - used);
     const { body, note } = fitResult(r.raw, r.value, allowance);
     used += body.length;
-    parts.push(note ? `${r.head}: ${note}\n${body}` : `${r.head}:\n${body}`);
+    const notes = [r.stored, note].filter(Boolean).join(' ');
+    parts.push(notes ? `${r.head}: ${notes}\n${body}` : `${r.head}:\n${body}`);
   });
   return parts.join('\n\n');
 }
@@ -172,7 +258,7 @@ function noteOf(notes: Notes, rawLength: number, bodyLength: number, cutEnd = fa
 }
 
 /** The result as JSON: the step's own object, or a string that parses as an object or array. */
-function asJson(value: unknown, raw: string): unknown {
+export function asJson(value: unknown, raw: string): unknown {
   if (value !== null && typeof value === 'object') return value;
   const text = raw.trim();
   if (!(text.startsWith('{') || text.startsWith('['))) return undefined;

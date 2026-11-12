@@ -11,6 +11,16 @@ import { formatDuration } from './constants'
 import type { AgentRun, AgentRunStep } from '@/types'
 import { StepRoleLine } from './run-roles'
 import { pluralized } from '@/lib/utils'
+
+/**
+ * One wording for a check everywhere a run is shown (the runs list, the run
+ * view, its banner and its steps), matching the line on the answer itself
+ * ("Note: this answer's check didn't pass", unverified-answer.ts).
+ */
+export const CHECK_PASSED = 'Check passed'
+export const CHECK_FAILED = "Check didn't pass"
+export const NOT_CHECKED = 'Not checked'
+
 interface VerifyFailure {
   rule?: string
   evidence?: string
@@ -35,6 +45,7 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
   const failures: VerifyFailure[] = Array.isArray(out.failures) ? out.failures : []
   const checkers: CheckerVerdict[] = Array.isArray(out.checkers) ? out.checkers : []
   const checkerLines = checkers.filter((c) => c?.error || c?.note)
+  const inputTokens = Number(step.tokens?.input) || 0
 
   return (
     <div
@@ -63,12 +74,12 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
         <StepRoleLine step={step} />
         <div className="text-xs font-medium">
           {passed
-            ? 'Passed verification'
+            ? CHECK_PASSED
             : unavailable
-              ? 'Check could not be done: no checker gave a verdict'
+              ? `${NOT_CHECKED}: no checker gave a verdict`
               : advisory
                 ? 'Flagged issues (advisory)'
-                : 'Failed verification'}
+                : CHECK_FAILED}
           {out.exhausted ? ' — revision budget exhausted' : ''}
         </div>
         {failures.length > 0 && !unavailable && (
@@ -98,22 +109,30 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
       <div className="text-[10px] text-muted-foreground shrink-0 text-right">
         {step.duration ? formatDuration(step.duration) : ''}
         {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
+        {/* What the checker read: the evidence is most of it, and it is paid again on every check. */}
+        {inputTokens > 0 && <div data-testid="verify-input-tokens">{pluralized(inputTokens, 'token')} read</div>}
       </div>
     </div>
   )
 }
 
-/** Run-level verification verdict banner, from `run.metadata.verify` (or, when a run did not record one, its last blocking check). */
+/**
+ * Run-level check banner, from `run.metadata.verify` (or, when a run did not
+ * record one, its last blocking check), with the first reason when the
+ * check did not pass.
+ */
 export function VerifySummary({ run }: { run: AgentRun }) {
   const v = run.metadata?.verify ?? (unverifiedAnswer(run) ? { verdict: 'fail', exhausted: true } : null)
   if (!v) return null
   const passed = v.verdict === 'pass'
   const unavailable = !passed && uncheckedAnswer(run)
   const revisions = typeof v.revisions === 'number' ? v.revisions : 0
+  const reason = passed ? '' : firstReason(run)
 
   return (
     <div
-      className={`flex items-center gap-2 p-2 rounded text-xs ${
+      data-testid="verify-summary"
+      className={`flex items-start gap-2 p-2 rounded text-xs ${
         passed
           ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
           : unavailable
@@ -121,18 +140,26 @@ export function VerifySummary({ run }: { run: AgentRun }) {
             : 'bg-destructive/10 text-destructive'
       }`}
     >
-      {passed ? <CheckCircle2 className="h-4 w-4" /> : unavailable ? <ShieldAlert className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-      <span className="font-medium">
-        {passed ? 'Verification passed' : unavailable ? 'Verification could not be done' : 'Verification failed'}
-      </span>
-      {revisions > 0 && (
-        <span>
-          · {pluralized(revisions, 'revision')}
-        </span>
-      )}
-      {v.exhausted && <span>· budget exhausted</span>}
+      {passed ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : unavailable ? <ShieldAlert className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
+      <div className="min-w-0 space-y-0.5">
+        <div className="flex flex-wrap items-center gap-x-2">
+          <span className="font-medium">{passed ? CHECK_PASSED : unavailable ? NOT_CHECKED : CHECK_FAILED}</span>
+          {revisions > 0 && <span>· {pluralized(revisions, 'revision')}</span>}
+          {v.exhausted && <span>· budget exhausted</span>}
+        </div>
+        {reason && <div data-testid="verify-summary-reason">{reason}</div>}
+      </div>
     </div>
   )
+}
+
+/** The first reason a check did not pass: the one the run recorded, else the last blocking check's first failure. */
+function firstReason(run: VerdictCarrier): string {
+  const recorded = run?.metadata?.verify?.reason
+  if (typeof recorded === 'string' && recorded.trim()) return recorded.trim()
+  const failures = lastBlockingCheck(run)?.output?.failures
+  const first = Array.isArray(failures) ? failures.find((f: any) => typeof f?.rule === 'string' && f.rule.trim()) : null
+  return first ? String(first.rule).trim() : ''
 }
 
 type VerdictCarrier = {
@@ -170,8 +197,8 @@ export function uncheckedAnswer(run: VerdictCarrier): boolean {
   return lastBlockingCheck(run)?.output?.unavailable === true
 }
 
-const UNVERIFIED_LINE = 'Not verified: the checkers still found problems with this answer when the revisions ran out.'
-const UNCHECKED_LINE = 'Not checked: the check could not be done, so no checker gave a verdict on this answer.'
+const UNVERIFIED_LINE = `${CHECK_FAILED}: the checkers still found problems with this answer when the revisions ran out.`
+const UNCHECKED_LINE = `${NOT_CHECKED}: the check could not be done, so no checker gave a verdict on this answer.`
 
 /**
  * The marker on an answer that went out without passing its check.
@@ -190,7 +217,7 @@ export function UnverifiedNote({ run, compact, className = '' }: { run: unknown;
         className={`ml-1 gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 ${className}`}
       >
         <ShieldAlert className="h-3 w-3" aria-hidden />
-        {unchecked ? 'Not checked' : 'Not verified'}
+        {unchecked ? NOT_CHECKED : CHECK_FAILED}
       </Badge>
     )
   }

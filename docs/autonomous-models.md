@@ -153,13 +153,34 @@ These rules hold for the verify gate and the strategy checks alike
   bodies and abstracts first. Only when that still does not fit are
   items left out. A shortened result always says so on its first line:
   `[result shortened: 4 of 10 items shown in results; ...]`.
+- The run is reloaded from storage between steps, so the checker reads
+  the stored steps. A step payload over 32 KB is stored the same way
+  (`persist-cap.ts`): a JSON result stays valid JSON as
+  `{"_shortened": "[result shortened: ...]", "result": ...}` with every
+  item's identifying fields, and text that is not JSON is cut and ends
+  `… (truncated from N characters; only the first K are kept)`. The
+  checker reads either as shortened, never as the whole result. Storing
+  is idempotent, so a step replayed from the run log is stored as the log
+  holds it.
 - A checker only refutes. It fails a claim when the evidence contradicts
   it, or when the evidence that would hold it is complete and does not.
   Absence from shortened evidence is not grounds to fail.
-- Only items a checker marks as failed count. An item it marks as correct
-  does not, and neither does one whose reason states a false version
-  order ("4.18.1 is older than 4.17.21"): versions are compared part by
-  part as numbers. Both are noted on the `verify` step.
+- A checker replies with real failures in `failures` and what it found
+  right in `confirmed` (`VERDICT_SCHEMA`; sent as a JSON schema to
+  OpenAI, Azure OpenAI and Gemini, which take one, and said in the prompt
+  to every other provider). A failure does not count when:
+  - the checker marks it as not failed, or also lists its claim as
+    confirmed;
+  - its own reason or evidence says the claim is right ("which is
+    correct", "is acceptable", "no failure here"), unless it goes on to
+    name a real error ("the tag is correct but the date is wrong");
+  - it states a false version order, in any phrasing ("4.18.1 <
+    4.17.21", "less than", "older than the requested version"):
+    versions are compared part by part as numbers;
+  - it says the item is absent, not found, invented or fabricated, and
+    the item's DOI, id, issue number, URL, version or title is in the
+    evidence (`checker-guards.ts`).
+  Each one left out is noted on the `verify` step with why.
 - A checker call asks for 4,096 output tokens unless the checker sets its
   own. A reply cut off mid-way is read up to its last complete item.
 - When no checker gives a verdict, the answer is not sent back for
@@ -189,6 +210,11 @@ runs every strategy through the hosted chat with a different model per
 role and checks each step's model and the visitor's answer.
 `run.metadata.roleCosts` totals each role (`cost`, `tokens`, `calls`) and
 `run.metadata.strategy` names the strategy. The run detail shows both.
+The agent's own answer check (`agentConfig.verify`) is a line of its own,
+`answer_check`, so the lines add up to the run's cost; a revision is a
+call of the role that revises. Each `verify` step records the checker's
+`tokens` (`input` is mostly the evidence), and its card shows the input
+tokens.
 
 ## Cost
 
