@@ -177,7 +177,7 @@ describe('a checker reply is never cut off by the provider default', () => {
     const panel = await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'x', checkers: [{ name: 'c', providerId: 'p' }] }, 'org-1');
     expect(panel.verdict).toBe('fail');
     expect(panel.unavailable).toBeUndefined();
-    expect(panel.failures).toEqual([{ claim: 'x is 3', rule: 'x is 2 in the evidence', evidence: 'x: 2', checker: 'c' }]);
+    expect(panel.failures).toEqual([{ claim: 'x is 3', rule: 'x is 2 in the evidence', evidence: 'x: 2', checker: 'c', kind: 'evidence' }]);
     expect(panel.checkers[0].note).toMatch(/cut off at its output limit \(4096 tokens\); it was read up to its last complete item/);
   });
 

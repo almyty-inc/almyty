@@ -89,17 +89,14 @@ export function AgentDetailPage() {
     retry: false,
   })
 
-  // Fetch executions
+  // Fetch executions: one page, and how many there are in all.
   const { data: executionsData, error: executionsError, refetch: refetchExecutions } = useQuery({
     queryKey: ['agent-executions', id],
-    queryFn: async () => {
-      const d = await agentsApi.getExecutions(id!, { limit: 20 })
-      return Array.isArray(d) ? d : d?.executions || []
-    },
+    queryFn: () => agentsApi.getExecutionsPage(id!, { limit: 20 }),
     enabled: !!id,
   })
 
-  const executions: AgentExecution[] = Array.isArray(executionsData) ? executionsData : []
+  const executions: AgentExecution[] = executionsData?.items ?? []
 
   // Fetch version history
   const { data: versionsData } = useQuery({
@@ -150,16 +147,15 @@ export function AgentDetailPage() {
   const auditLog: AgentAuditEntry[] = Array.isArray(auditLogData) ? auditLogData : []
 
   // Fetch runs (autonomous mode). An autonomous agent's runs are its
-  // Recent runs on Overview too, so they are read there as well.
+  // Recent runs on Overview too, so they are read there as well. The page
+  // holds the latest runs; the total counts every run of the agent.
   const { data: runsData, error: runsError, refetch: refetchRuns } = useQuery({
     queryKey: ['agent-runs', id],
-    queryFn: async () => {
-      const d = await agentsApi.listRuns(id!)
-      return Array.isArray(d) ? d : d?.data || []
-    },
+    queryFn: () => agentsApi.listRunsPage(id!),
     enabled: !!id && (activeTab === 'runs' || (activeTab === 'overview' && agent?.mode === 'autonomous')),
   })
-  const runs: AgentRun[] = Array.isArray(runsData) ? runsData : []
+  const runs: AgentRun[] = runsData?.items ?? []
+  const runsTotal = (runsData?.total ?? runs.length) + (executionsData?.total ?? executions.length)
 
   // Fetch memories: the memory this agent's runs read and write, per its
   // Memory section (whose memory: its own, each person's, or shared).
@@ -418,7 +414,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
-          <RunsTab runs={runs} executions={executions} agentId={agent.id} openRunId={runId} />
+          <RunsTab runs={runs} executions={executions} agentId={agent.id} openRunId={runId} total={runsTotal} />
         </TabsContent>
 
         <TabsContent value="memory" className="space-y-4">

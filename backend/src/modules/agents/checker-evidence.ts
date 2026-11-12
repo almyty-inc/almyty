@@ -534,7 +534,10 @@ function holdsLeaf(v: unknown): boolean {
  * identifying leaves of nested objects: long text and large or deep
  * structures go first. Level 4 drops nested objects whole. Every level
  * keeps every item of a list unless `maxItems` says otherwise. Each field
- * left out is recorded by its path.
+ * left out is recorded by its path. An empty list and an empty string are
+ * kept at every level: they say the item has none (`labels: []`), which is
+ * what a claim of an invented label is checked against, and they cost a
+ * few characters (run 8a5070c8 stored "fields left out: labels (list)").
  */
 function compact(v: unknown, level: Level, notes: Notes, path: string, depth: number, maxItems: number): unknown {
   if (depth > MAX_DEPTH) return '…';
@@ -558,6 +561,10 @@ function compact(v: unknown, level: Level, notes: Notes, path: string, depth: nu
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(v as Record<string, unknown>)) {
     const childPath = path ? `${path}.${key}` : key;
+    if (value === '' || (Array.isArray(value) && value.length === 0)) {
+      out[key] = value;
+      continue;
+    }
     if (isIdentityKey(key)) {
       out[key] = typeof value === 'string' ? cutText(value, IDENTITY_STRING_LIMIT, notes) : compact(value, level, notes, childPath, depth + 1, maxItems);
       continue;
