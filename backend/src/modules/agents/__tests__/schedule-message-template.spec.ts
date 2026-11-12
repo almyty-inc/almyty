@@ -183,5 +183,40 @@ describe('the values in a schedule message', () => {
       const edited = await scheduler.scheduleAgent('agent-a', 'org-1', { kind: 'interval', intervalMinutes: 30, input: { message: 'y' } });
       expect((edited.settings as any).schedule.createdAt).toBe(createdAt);
     });
+
+    // Run d0bde308: an interval schedule set up in Europe/Berlin filled
+    // {{today}} and {{last_run_at}} in UTC, because an interval dropped its zone.
+    it('an interval schedule keeps its zone and dates its message there', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-11T23:30:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
+      const input = { message: 'Since {{last_run_at}}, today {{today}}' };
+      const agent: any = { ...autonomous(input), settings: {} };
+      const { scheduler, runtime, tick } = build(agent, { orgZone: null });
+
+      const saved = await scheduler.scheduleAgent('agent-a', 'org-1', {
+        kind: 'interval',
+        intervalMinutes: 15,
+        timezone: 'Europe/Berlin',
+        input,
+      });
+      expect((saved.settings as any).schedule).toMatchObject({ kind: 'interval', intervalMinutes: 15, timezone: 'Europe/Berlin' });
+
+      await tick(input);
+      // 23:30 UTC is already the 12th in Berlin; in UTC it would still be the 11th.
+      expect((runtime.startRun.mock.calls[0] as any[])[3]).toEqual({
+        message: 'Since 2026-11-12T00:30:00+01:00, today 2026-11-12',
+      });
+    });
+
+    it('the zone the schedule page shows wins over the organization’s', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-11T23:30:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
+      const input = { message: 'Today {{today}}' };
+      const agent: any = autonomous(input);
+      agent.settings.schedule.timezone = 'Europe/Berlin';
+      const { runtime, tick } = build(agent, { orgZone: 'America/New_York' });
+
+      await tick(input);
+
+      expect((runtime.startRun.mock.calls[0] as any[])[3]).toEqual({ message: 'Today 2026-11-12' });
+    });
   });
 });

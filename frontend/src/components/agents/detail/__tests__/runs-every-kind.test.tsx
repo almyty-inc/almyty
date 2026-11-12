@@ -136,3 +136,33 @@ describe('Try it renders an answer like hosted chat', () => {
     expect(container.querySelector('p br')).not.toBeNull()
   }, 20000)
 })
+
+// Found on staging: the run view showed an answer's table as pipe text,
+// while Try it and the web chat rendered it.
+describe('the run view renders an answer like Try it', () => {
+  const answer = 'Due this week:\n\n| Invoice | Amount |\n| --- | --- |\n| INV-7 | 30 |'
+
+  it('renders an autonomous run’s output as markdown', async () => {
+    renderWithProviders(<RunsTab runs={[run('r-1', '2026-11-10T10:00:00Z', { output: answer })]} agentId="a-1" openRunId="r-1" />)
+    const output = screen.getByTestId('run-output')
+    expect(await within(output).findByRole('table', undefined, { timeout: 15000 })).toBeInTheDocument()
+    expect(within(output).getByRole('cell', { name: 'INV-7' })).toBeInTheDocument()
+    expect(output).not.toHaveTextContent('| --- |')
+  }, 20000)
+
+  it('renders a workflow run’s text output as markdown, and an object as JSON', async () => {
+    renderWithProviders(
+      <RunsTab
+        runs={[]}
+        executions={[exec('e-1', '2026-11-10T11:00:00Z', { output: answer }), exec('e-2', '2026-11-10T10:00:00Z', { output: { total: 40 } as any })]}
+        agentId="a-1"
+        openRunId="e-1"
+      />,
+    )
+    const output = within(screen.getByTestId('execution-detail-e-1')).getByTestId('run-output')
+    expect(await within(output).findByRole('table', undefined, { timeout: 15000 })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('execution-row-e-2'))
+    expect(within(screen.getByTestId('execution-detail-e-2')).getByTestId('run-output')).toHaveTextContent('"total": 40')
+  }, 20000)
+})

@@ -4,7 +4,8 @@
  * Files area: 1,600+, against a limit of 1,000). Operations are filed by
  * tag, or by path prefix when they have none; a group's box picks every
  * operation in it that the search shows. Used on "Finish connecting"
- * (`pages/api-setup.tsx`) when the import says `selectionRequired`.
+ * (`pages/api-setup.tsx`) when the import says `selectionRequired`, and on
+ * the API page's "Choose operations" (`detail/operations-tab.tsx`).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
