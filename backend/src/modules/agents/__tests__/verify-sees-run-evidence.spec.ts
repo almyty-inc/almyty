@@ -64,8 +64,9 @@ describe('a final-answer checker sees the run evidence', () => {
   it('is what the autonomous final-output verification passes', () => {
     const src = readFileSync(join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
     const verify = src.slice(src.indexOf('private async runAutonomousVerify'), src.indexOf('private hasFinalOutputVerification'));
-    expect(verify).toMatch(/evidence: await this\.checkerEvidence\(run/);
+    expect(verify).toMatch(/const check = await this\.prepareCheck\(run, agent, cfg\.checkers!/);
+    expect(verify).toMatch(/evidence: check\.evidence, rules: check\.rules/);
     // ...and that is runEvidence, sized to the checkers' context window.
-    expect(verify).toMatch(/return runEvidence\(run as any, \{ budgetChars: evidenceBudget\(window/);
+    expect(verify).toMatch(/const evidence = runEvidence\(run as any, \{\s*budgetChars: evidenceBudget\(window/);
   });
 });

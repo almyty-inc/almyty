@@ -14,7 +14,8 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentVerifierHelper, CheckerConfig, VerifyPanelResult, checkerVerdicts, evidenceBudget, runEvidence } from './agent-verifier.helper';
+import { AgentVerifierHelper, CheckerConfig, VerifyPanelResult, checkerOutputLimit, checkerVerdicts, evidenceBudget, runEvidence } from './agent-verifier.helper';
+import { RunToolResult, toolResultsFromMessages } from './checker-evidence';
 import { ALWAYS_ON_COMPACTION, AgentContextCompactor, carriedContextSummary } from './agent-context-compactor.helper';
 import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
@@ -1550,7 +1551,7 @@ export class AgentStepProcessor {
             team.checker!,
             finalContent,
             agent.agentConfig?.verify?.spec,
-            await this.checkerEvidence(run, [checkerOf(team.checker!)], finalContent, agent.agentConfig?.verify?.spec),
+            await this.prepareCheck(run, agent, [checkerOf(team.checker!)], finalContent, agent.agentConfig?.verify?.spec),
           );
           if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
           const checkDuration = Date.now() - stepStart;
@@ -1632,7 +1633,7 @@ export class AgentStepProcessor {
             team.checker!,
             finalContent,
             agent.agentConfig?.verify?.spec,
-            await this.checkerEvidence(run, [checkerOf(team.checker!)], finalContent, agent.agentConfig?.verify?.spec),
+            await this.prepareCheck(run, agent, [checkerOf(team.checker!)], finalContent, agent.agentConfig?.verify?.spec),
           );
           if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
           const maxLoops = agent.agentConfig?.verify?.maxReviseLoops ?? 2;
@@ -3213,9 +3214,11 @@ export class AgentStepProcessor {
   ): Promise<VerifyPanelResult | null> {
     if (!this.hasFinalOutputVerification(agent, finalContent)) return null;
     const cfg = agent.agentConfig!.verify!;
+    // The checker judges the answer against what the run was asked, what
+    // its tools returned and the agent's own rules.
+    const check = await this.prepareCheck(run, agent, cfg.checkers!, finalContent, cfg.spec);
     const panel = await this.verifier.runPanel(
-      // The checker judges the answer against what the run was asked and what its tools returned.
-      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy, evidence: await this.checkerEvidence(run, cfg.checkers!, finalContent, cfg.spec) },
+      { target: finalContent, spec: cfg.spec, checkers: check.checkers, policy: cfg.policy, evidence: check.evidence, rules: check.rules },
       run.organizationId,
       principalOfRun(run),
     );
@@ -3227,31 +3230,85 @@ export class AgentStepProcessor {
   }
 
   /**
-   * The run's evidence for these checkers (runEvidence), sized to the
-   * smallest context window among them: a model card's context length, or
-   * the minimum a routed checker's policy demands. Unknown windows get the
-   * default budget.
+   * What a checker panel is given to judge this run's answer:
+   * - the evidence (runEvidence): the request and the tool results the
+   *   model that wrote the answer read, whole, from the run's conversation
+   *   (the stored steps for a run without one), shortened only when it
+   *   would not fit the smallest context window among the checkers (a
+   *   model card's context length, or the minimum a routed checker's
+   *   policy demands; unknown windows get the default budget);
+   * - the agent's own instructions, the standard the answer is held to;
+   * - each checker with the output budget its model card allows
+   *   (checkerOutputLimit), unless the checker sets its own.
    */
-  async checkerEvidence(run: AgentRun, checkers: CheckerConfig[], target: string, spec?: string): Promise<string> {
+  async prepareCheck(
+    run: AgentRun,
+    agent: Pick<Agent, 'instructions'> | null | undefined,
+    checkers: CheckerConfig[],
+    target: string,
+    spec?: string,
+  ): Promise<{ evidence: string; rules: string; checkers: CheckerConfig[] }> {
+    const rules = (agent?.instructions ?? '').trim();
+    const cards = await this.checkerCards(run, checkers ?? []);
     const windows: number[] = [];
-    for (const checker of checkers ?? []) {
+    (checkers ?? []).forEach((checker, i) => {
       if (checker?.routing) {
         if (typeof checker.routing.minContextLength === 'number' && checker.routing.minContextLength > 0) windows.push(checker.routing.minContextLength);
-        continue;
+        return;
       }
-      if (!checker?.providerId || !checker.model) continue;
-      try {
-        const card = await this.s.toolRepository.manager.getRepository(Model).findOne({
-          where: { organizationId: run.organizationId, providerId: checker.providerId, vendorModelId: checker.model },
-          select: { id: true, contextLength: true },
-        });
-        if (card?.contextLength && card.contextLength > 0) windows.push(card.contextLength);
-      } catch (err) {
-        this.s.logger.warn(`No model card for the checker evidence budget on run ${run.id}: ${(err as Error)?.message}`);
-      }
-    }
+      const contextLength = cards[i]?.contextLength;
+      if (contextLength && contextLength > 0) windows.push(contextLength);
+    });
     const window = windows.length ? Math.min(...windows) : null;
-    return runEvidence(run as any, { budgetChars: evidenceBudget(window, (target?.length ?? 0) + (spec?.length ?? 0)) });
+    const toolResults = await this.toolResultsOfRun(run);
+    const evidence = runEvidence(run as any, {
+      budgetChars: evidenceBudget(window, (target?.length ?? 0) + (spec?.length ?? 0) + rules.length),
+      toolResults,
+    });
+    const sized = (checkers ?? []).map((checker, i) =>
+      checker && !(checker.maxTokens && checker.maxTokens > 0) ? { ...checker, maxTokens: checkerOutputLimit(cards[i]?.maxOutputTokens) } : checker,
+    );
+    return { evidence, rules, checkers: sized };
+  }
+
+  /** Each checker's model card (its context window and most output), or null when it has none. */
+  private async checkerCards(run: AgentRun, checkers: CheckerConfig[]): Promise<Array<{ contextLength: number | null; maxOutputTokens: number | null } | null>> {
+    return Promise.all(
+      checkers.map(async (checker) => {
+        if (checker?.routing || !checker?.providerId || !checker.model) return null;
+        try {
+          const card = await this.s.toolRepository.manager.getRepository(Model).findOne({
+            where: { organizationId: run.organizationId, providerId: checker.providerId, vendorModelId: checker.model },
+            select: { id: true, contextLength: true, maxOutputTokens: true },
+          });
+          return card ? { contextLength: card.contextLength ?? null, maxOutputTokens: card.maxOutputTokens ?? null } : null;
+        } catch (err) {
+          this.s.logger.warn(`No model card for the checker on run ${run.id}: ${(err as Error)?.message}`);
+          return null;
+        }
+      }),
+    );
+  }
+
+  /**
+   * The run's tool results as its conversation holds them: whole, as the
+   * model that wrote the answer read them (toolResultsFromMessages). Read
+   * from the database, so a step resumed on another worker reads the same.
+   * Undefined when the run has no conversation or no tool results in it.
+   */
+  private async toolResultsOfRun(run: AgentRun): Promise<RunToolResult[] | undefined> {
+    if (!run.conversationId || !this.s.messageRepository) return undefined;
+    try {
+      const messages = await this.s.messageRepository.find({
+        where: { conversationId: run.conversationId, runId: run.id } as any,
+        order: { createdAt: 'ASC' } as any,
+      });
+      const results = toolResultsFromMessages(messages as any[]);
+      return results.length ? results : undefined;
+    } catch (err) {
+      this.s.logger.warn(`Could not read the tool results of run ${run.id} for its checker: ${(err as Error)?.message}`);
+      return undefined;
+    }
   }
 
   private hasFinalOutputVerification(agent: Agent, finalContent: string): boolean {

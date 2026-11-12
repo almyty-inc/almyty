@@ -188,3 +188,45 @@ export function listedAsConfirmed(claim: string | undefined, confirmed: string[]
     return k === c || (k.length >= 15 && c.length >= 15 && (k.includes(c) || c.includes(k)));
   });
 }
+
+/** Words that say something is missing: from the evidence, or from the answer. */
+const MISSING =
+  /\b(?:omit(?:s|ted|ting)?|missing|absent|lacks?|lacking|not (?:provided|given|specified|listed|included|shown|present|available|found|stated|mentioned|named|supported)|(?:does|do|did)(?:n't| not) (?:provide|specify|list|include|show|contain|give|mention|name|have|state|support)|unsupported|cannot be (?:verified|confirmed)|can't be (?:verified|confirmed)|unverifiable)\b/i;
+
+function escapeRe(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The names a left-out path goes by in prose: the fields after its list item ("primary_location", "source"). */
+function namesOf(path: string): string[] {
+  const at = path.lastIndexOf('[].');
+  const tail = at === -1 ? path : path.slice(at + 3);
+  return tail
+    .split('.')
+    .map((s) => s.replace(/\[\]$/, ''))
+    .filter((s) => s.length >= 3);
+}
+
+/**
+ * For a failure about a field the evidence left out ("evidence does not
+ * provide the first author", "output omits the venue" where the note says
+ * `results[].authorships[].author` or `results[].primary_location.source`
+ * was left out), the path it is about, or null. The checker never saw
+ * that field, so it can neither find it missing nor find it wrong by its
+ * absence (runs 5f990f9e, f734e7d6). `leftOut` is what the evidence's
+ * shortening notes name (checker-evidence.ts leftOutFieldsOf).
+ */
+export function aboutLeftOutField(failure: { rule?: string; evidence?: string }, leftOut: string[]): string | null {
+  if (!leftOut.length) return null;
+  const words = `${failure.rule ?? ''}\n${failure.evidence ?? ''}`;
+  if (!MISSING.test(words)) return null;
+  for (const path of leftOut) {
+    for (const name of namesOf(path)) {
+      const variants = new Set([name, name.replace(/_/g, ' ')]);
+      for (const v of variants) {
+        if (new RegExp(`(?<![\\w])${escapeRe(v)}s?(?![\\w])`, 'i').test(words)) return path;
+      }
+    }
+  }
+  return null;
+}

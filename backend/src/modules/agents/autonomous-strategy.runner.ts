@@ -245,12 +245,27 @@ export class AutonomousStrategyRunner {
   /**
    * The checker role's refute-only verdict on `target`, through the
    * shared verifier. An error or unreadable verdict is a fail: "we could
-   * not tell" must never pass an unchecked answer.
+   * not tell" must never pass an unchecked answer. `prepared` is what the
+   * caller has for the check (AgentStepProcessor.prepareCheck): the
+   * evidence, the agent's own rules, and the checker with its output budget.
    */
-  async check(run: AgentRun, checker: ModelRoleCall, target: string, spec?: string, evidence?: string): Promise<VerifyPanelResult> {
+  async check(
+    run: AgentRun,
+    checker: ModelRoleCall,
+    target: string,
+    spec?: string,
+    prepared?: { evidence?: string; rules?: string; checkers?: CheckerConfig[] },
+  ): Promise<VerifyPanelResult> {
+    const sized = prepared?.checkers?.[0];
     const panel = await this.verifier.runPanel(
-      // What the run was asked and what its tools returned, when the caller has it (runEvidence).
-      { target, spec, checkers: [checkerOf(checker)], policy: 'any_fail_blocks', ...(evidence ? { evidence } : {}) },
+      {
+        target,
+        spec,
+        checkers: [sized ?? checkerOf(checker)],
+        policy: 'any_fail_blocks',
+        ...(prepared?.evidence ? { evidence: prepared.evidence } : {}),
+        ...(prepared?.rules ? { rules: prepared.rules } : {}),
+      },
       run.organizationId,
       principalOfRun(run),
     );
