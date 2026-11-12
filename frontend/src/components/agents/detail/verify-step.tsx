@@ -110,7 +110,7 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
         {step.duration ? formatDuration(step.duration) : ''}
         {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
         {/* What the checker read: the evidence is most of it, and it is paid again on every check. */}
-        {inputTokens > 0 && <div data-testid="verify-input-tokens">{inputTokens.toLocaleString()} tokens read</div>}
+        {inputTokens > 0 && <div data-testid="verify-input-tokens">{pluralized(inputTokens, 'token')} read</div>}
       </div>
     </div>
   )
