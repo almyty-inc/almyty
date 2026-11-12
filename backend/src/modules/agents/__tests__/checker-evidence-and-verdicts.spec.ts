@@ -63,7 +63,7 @@ describe('the checker sees every item of a long tool result', () => {
     }
     expect(evidence.length).toBeLessThanOrEqual(12_000 + 500);
     // It says it was shortened, that no item was dropped, and what was.
-    expect(evidence).toMatch(/openalex_search_works: \[result shortened: every item is shown; long fields left out: [^\]]*abstract_inverted_index/);
+    expect(evidence).toMatch(/openalex_search_works: \[result shortened: every item is shown; fields left out: [^\n]*results\[\]\.abstract_inverted_index \(object\)/);
   });
 
   it('keeps every GitHub release tag and date, the newest included, dropping the bodies first', () => {
@@ -123,17 +123,19 @@ describe('the checker sees every item of a long tool result', () => {
     const run = { id: 'run-1', organizationId: 'org-1', steps: [toolStep('openalex_search_works', works)] };
     const withWindow = (contextLength: number | null) => {
       const findOne = jest.fn().mockResolvedValue(contextLength ? { id: 'm', contextLength } : null);
-      const self = { s: { toolRepository: { manager: { getRepository: () => ({ findOne }) } }, logger: { warn: jest.fn() } } };
+      const self = Object.assign(Object.create(AgentStepProcessor.prototype), {
+        s: { toolRepository: { manager: { getRepository: () => ({ findOne }) } }, logger: { warn: jest.fn() } },
+      });
       return { self, findOne };
     };
     const small = withWindow(8_000);
-    const smallEvidence = await (AgentStepProcessor.prototype as any).checkerEvidence.call(small.self, run, [{ providerId: 'p', model: 'tiny' }], 'answer');
+    const smallEvidence = (await small.self.prepareCheck(run, null, [{ providerId: 'p', model: 'tiny' }], 'answer')).evidence;
     expect(small.findOne).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 'org-1', providerId: 'p', vendorModelId: 'tiny' } }));
     expect(smallEvidence.length).toBeLessThanOrEqual(evidenceBudget(8_000, 'answer'.length) + 500);
     expect(smallEvidence).toContain('[result shortened');
 
     const large = withWindow(1_000_000);
-    const largeEvidence = await (AgentStepProcessor.prototype as any).checkerEvidence.call(large.self, run, [{ providerId: 'p', model: 'huge' }], 'answer');
+    const largeEvidence = (await large.self.prepareCheck(run, null, [{ providerId: 'p', model: 'huge' }], 'answer')).evidence;
     expect(largeEvidence).toContain(JSON.stringify(works));
   });
 
@@ -149,7 +151,7 @@ describe('the checker sees every item of a long tool result', () => {
 
   it('wires the evidence into the strategy checks too (cascade and patch)', () => {
     const src = readFileSync(join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
-    expect(src.match(/runner\.check\(\s*run,\s*team\.checker!,\s*finalContent,\s*agent\.agentConfig\?\.verify\?\.spec,\s*await this\.checkerEvidence\(/g)).toHaveLength(2);
+    expect(src.match(/runner\.check\(\s*run,\s*team\.checker!,\s*finalContent,\s*agent\.agentConfig\?\.verify\?\.spec,\s*await this\.prepareCheck\(run, agent,/g)).toHaveLength(2);
   });
 });
 
