@@ -209,6 +209,8 @@ export const AGENT_LIST_COLUMNS = [
   'webhookUrl',
   'totalExecutions',
   'successfulExecutions',
+  'checkedExecutions',
+  'passedCheckExecutions',
   'totalCost',
   'averageExecutionTime',
   'lastExecutedAt',

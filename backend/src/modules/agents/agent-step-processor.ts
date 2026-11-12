@@ -125,6 +125,8 @@ export const AGENT_STEP_COLUMNS = {
   webhookUrl: true,
   totalExecutions: true,
   successfulExecutions: true,
+  checkedExecutions: true,
+  passedCheckExecutions: true,
   totalCost: true,
   averageExecutionTime: true,
   lastExecutedAt: true,
@@ -1525,8 +1527,10 @@ export class AgentStepProcessor {
       } else {
         // No tool calls — the agent has a final response
         let finalContent = responseMessage.content || '';
-        // The failures of a check that still failed when its revisions ran out (unverified-answer.ts).
+        // The failures of a check that did not pass, for the note on the answer (unverified-answer.ts).
         let failedCheck: Array<{ rule?: unknown; evidence?: unknown }> | null = null;
+        // The final-answer check's verdict, for the agent's "Checks passed"; unset when nothing was checked.
+        let answerCheck: 'pass' | 'fail' | undefined;
         // What the recorded final step says about the call that wrote it.
         let finalCall: FinalCall = {
           cost: stepCost,
@@ -1733,17 +1737,21 @@ export class AgentStepProcessor {
         }
 
         // Autonomous verify gate: a refute-only checker panel reviews the
-        // final answer. On failure within the revision budget, the failures
-        // are fed back as synthetic user feedback and the agent loops again
-        // instead of completing.
+        // final answer and gives its verdict and reasons. By default that is
+        // all: the answer goes out as written, marked when the check did not
+        // pass. Revisions changed correct answers in real runs, so sending
+        // the answer back (the failures fed back as synthetic user feedback,
+        // the agent looping again) happens only when the agent turns
+        // `verify.revise` on, within its revision budget.
         const verifyPanel = await this.runAutonomousVerify(run, agent, finalContent);
         if (verifyPanel) {
           const cfg = agent.agentConfig?.verify;
+          const revise = cfg?.revise === true;
           const maxLoops = cfg?.maxReviseLoops ?? 2;
           const revisions = run.workingMemory?.verifyRevisions ?? 0;
           const verifyStepDuration = Date.now() - stepStart;
 
-          if (!verifyPanel.passed && !verifyPanel.unavailable && revisions < maxLoops) {
+          if (revise && !verifyPanel.passed && !verifyPanel.unavailable && revisions < maxLoops) {
             // Send the answer back for revision.
             run.workingMemory = { ...(run.workingMemory || {}), verifyRevisions: revisions + 1 };
             this.escalateRouteOnVerifyFail(run, agent, verifyPanel, llmResponse);
@@ -1800,13 +1808,14 @@ export class AgentStepProcessor {
             return 'continue';
           }
 
-          // Passed, the revision budget is exhausted, or no checker could
-          // give a verdict: record it and let the run complete with this
-          // answer. A check that could not be done is not a failure to fix:
-          // revising on it paid for new drafts nobody could judge (run
-          // b9803830), so it is never sent back for revision.
+          // Passed, report-only (the default), the revision budget is
+          // exhausted, or no checker could give a verdict: record it and let
+          // the run complete with this answer. A check that could not be
+          // done is not a failure to fix: revising on it paid for new drafts
+          // nobody could judge (run b9803830), so it is never sent back.
           const unavailable = !verifyPanel.passed && verifyPanel.unavailable === true;
-          const exhausted = !verifyPanel.passed && !unavailable && revisions >= maxLoops;
+          const exhausted = revise && !verifyPanel.passed && !unavailable && revisions >= maxLoops;
+          const reportOnly = !revise ? { reportOnly: true } : {};
           run.steps.push({
             type: 'verify',
             role: ANSWER_CHECK_ROLE,
@@ -1814,6 +1823,7 @@ export class AgentStepProcessor {
             output: {
               verdict: verifyPanel.verdict,
               exhausted,
+              ...reportOnly,
               ...(unavailable ? { unavailable: true } : {}),
               failures: verifyPanel.failures,
               checkers: checkerVerdicts(verifyPanel),
@@ -1829,23 +1839,28 @@ export class AgentStepProcessor {
               verdict: verifyPanel.verdict,
               revisions,
               exhausted,
+              ...reportOnly,
               ...(unavailable ? { unavailable: true } : {}),
               ...(!verifyPanel.passed ? { reason: unverifiedReason(verifyPanel.failures) } : {}),
             },
           };
           failedCheck = verifyPanel.passed ? null : (verifyPanel.failures ?? []);
+          // What "Checks passed" counts: a check no checker gave a verdict on was not a check.
+          if (!unavailable) answerCheck = verifyPanel.passed ? 'pass' : 'fail';
         }
 
-        // The checks ran out of revisions and the answer still failed: it is
-        // delivered, marked. The marker goes on the answer itself, so every
-        // surface that reads it (the conversation, run.output) carries it.
+        // The answer's check did not pass (report-only, or the revisions ran
+        // out): it is delivered, marked. The marker goes on the answer itself,
+        // so every surface that reads it (the conversation, run.output)
+        // carries it.
         if (failedCheck) {
           finalContent = markUnverifiedAnswer(finalContent, failedCheck);
           if (finalMsg) finalMsg.content = finalContent;
         }
 
         // Verification candidates are only committed to customer-visible
-        // history after they pass (or exhaust the configured revision budget).
+        // history once the check is done (passed, reported, or the
+        // configured revision budget exhausted).
         if (finalMsg) await this.s.messageRepository.save(finalMsg);
 
         run.status = AgentRunStatus.COMPLETED;
@@ -1884,7 +1899,7 @@ export class AgentStepProcessor {
         if (!(await this.commitStep(run, expectedStep))) return 'done';
 
         // Update agent stats atomically (see bumpAgentStats rationale).
-        await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
+        await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost, answerCheck);
 
         this.s.emitEvent(runId, 'run.completed', { output: run.output });
 

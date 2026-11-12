@@ -66,10 +66,15 @@ export function falseVersionOrder(text: string): string | null {
       const gap = sentence.slice(a.end, b.start);
       const after = sentence.slice(b.end, b.end + 20);
       if (NEGATION.test(gap) || /^\s*(?:(?:is|was)\s+)?(?:false|wrong|incorrect|not true)\b/i.test(after)) continue;
-      const saysLower = LOWER.has(word);
       const cmp = compareVersions(a.v, b.v);
-      if (saysLower && cmp >= 0) return `${a.v} is not older than ${b.v}: ${cmp === 0 ? 'they are the same version' : `${a.v} is the newer one`}`;
-      if (!saysLower && cmp <= 0) return `${a.v} is not newer than ${b.v}: ${cmp === 0 ? 'they are the same version' : `${b.v} is the newer one`}`;
+      // The same version on both sides is never a false order claim: it is a
+      // range read as ">=1.6.0" next to "^1.6.0", or a version set beside
+      // itself. Dropping it once took a correct premise out of a check while
+      // the failures that followed from it stayed (run 6933d7e2).
+      if (cmp === 0) continue;
+      const saysLower = LOWER.has(word);
+      if (saysLower && cmp > 0) return `${a.v} is not older than ${b.v}: ${a.v} is the newer one`;
+      if (!saysLower && cmp < 0) return `${a.v} is not newer than ${b.v}: ${b.v} is the newer one`;
     }
   }
   return null;

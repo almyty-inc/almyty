@@ -101,4 +101,39 @@ describe('verification settings, edited on the agent page', () => {
     const checkers = (agentsApi.update as any).mock.calls[0][1].agentConfig.verify.checkers
     expect(checkers[1]).toMatchObject({ providerId: 'p-openai', model: 'gpt-4.1' })
   })
+
+  // Revisions changed correct answers in real runs: by default the checker
+  // only reports, and sending the answer back is a choice per agent.
+  it('reports only by default, and saves revising only when turned on', async () => {
+    renderWithProviders(<AgentConfigPanel agent={agent()} />)
+    expect(screen.getByTestId('verify-mode-badge')).toHaveTextContent('Reports only')
+    fireEvent.click(screen.getByRole('button', { name: /Configure verification/ }))
+    await screen.findByTestId('verify-config-editor')
+
+    const toggle = screen.getByRole('switch', { name: 'Let the checker send the answer back for fixes' })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByTestId('verify-revise-help')).toHaveTextContent(/can change correct answers and costs a model call per round/)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Save verification$/ }))
+    await waitFor(() => expect(agentsApi.update).toHaveBeenCalledTimes(1))
+    expect((agentsApi.update as any).mock.calls[0][1].agentConfig.verify.revise).toBe(false)
+  })
+
+  it('saves revise: true when the switch is turned on', async () => {
+    renderWithProviders(<AgentConfigPanel agent={agent()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Configure verification/ }))
+    await screen.findByTestId('verify-config-editor')
+    fireEvent.click(screen.getByRole('switch', { name: 'Let the checker send the answer back for fixes' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Save verification$/ }))
+    await waitFor(() => expect(agentsApi.update).toHaveBeenCalledTimes(1))
+    expect((agentsApi.update as any).mock.calls[0][1].agentConfig.verify.revise).toBe(true)
+  })
+
+  it('says so on the panel when an agent sends answers back', () => {
+    const a = agent()
+    a.agentConfig!.verify!.revise = true
+    renderWithProviders(<AgentConfigPanel agent={a} />)
+    expect(screen.getByTestId('verify-mode-badge')).toHaveTextContent('Sends back for fixes · 2 revisions')
+  })
 })

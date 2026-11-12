@@ -60,9 +60,22 @@ const WINDOW =
 /** A stated count: "33 days ago", "34 days before the current date", "38 days before 2026-11-12". */
 const COUNT = /\b(\d{1,4})\s+(?:full\s+|calendar\s+)?days?\s+(ago|before|earlier|back|prior|old)\b(?:\s+(?:the\s+)?(?:current\s+(?:date|time)|today|now|run\s+date))?/gi;
 
-/** The date right after a statement ("... of 2026-11-12"), when there is one within a few characters. */
+/** The words that name today as the reference ("of the current date", "before today"). */
+const TODAY_WORDS = /\b(?:current\s+(?:date|time)|today|now|run\s+date)\b/i;
+/** A reference other than today named right after a count ("4 days earlier than the window start"). */
+const OTHER_REFERENCE = /^\s*(?:than|from|after|before|since|prior\s+to|of)\b/i;
+
+/**
+ * The date right after a statement ("... of 2026-11-12"), when there is one
+ * within a few characters. A range there ("(2026-10-13 to 2026-11-12)") is
+ * a window: its end is the reference, not its start.
+ */
 function dateRightAfter(sentence: string, at: number, dates: Found[]): Found | undefined {
-  return dates.find((d) => d.start >= at && sentence.slice(at, d.start).trim().length <= 3);
+  const first = dates.find((d) => d.start >= at && sentence.slice(at, d.start).trim().length <= 3);
+  if (!first) return undefined;
+  const second = dates.find((d) => d.start >= first.end);
+  if (second && /^\s*(?:to|through|until|till|-|–|—)\s*$/i.test(sentence.slice(first.end, second.start))) return second;
+  return first;
 }
 
 /** The date a statement is about: the nearest before it that is not the reference day. */
@@ -74,27 +87,48 @@ function subjectBefore(dates: Found[], at: number, refDay: number): Found | unde
 const ATTRIBUTED = /\b(?:output|answer|report|claims?|claimed|says|said|states|stated|lists|listed|treats?|presents?|calls?)\b|["“]/i;
 
 /**
+ * The reference day of a statement, only when the sentence states it as a
+ * date: the date right after the statement, or today when the statement
+ * means today (it names it, or names no reference at all) and today's date
+ * is written in the same sentence. Null otherwise: a checker that measured
+ * from something else ("4 days before the window start") is not judged by
+ * counting from today (run 7c905dfe, a false pass).
+ */
+function referenceDay(sentence: string, statement: string, end: number, dates: Found[], today: number | null, namesOther: boolean): number | null {
+  const right = dateRightAfter(sentence, end, dates);
+  if (right) return right.day;
+  if (today === null || namesOther) return null;
+  if (!dates.some((d) => d.day === today)) return null;
+  return TODAY_WORDS.test(statement) || !OTHER_REFERENCE.test(sentence.slice(end)) ? today : null;
+}
+
+/**
  * The first false day-arithmetic statement in `text`, in plain words, or
  * null when every statement it can read is true or there is none. A
  * window ("D is within N days of R") is false when D and R are more than
  * N calendar days apart, or for "outside", fewer than N; a count ("D, K
  * days ago") is false when it is off by more than a day (a time of day
- * can move it by one). Without a stated reference date the reference is
- * `now`; without `now` such a statement is not judged. A statement the
- * failure attributes to the answer ("the OUTPUT says D is within ...")
- * is what it refutes, not its own arithmetic, and is not judged.
+ * can move it by one). Both dates of the comparison must be written in
+ * the same sentence: the reference is the date right after the statement,
+ * or today when the sentence writes today's date and means it. A
+ * statement measured from anything else is not judged, and the failure
+ * stays. A statement the failure attributes to the answer ("the OUTPUT
+ * says D is within ...") is what it refutes, not its own arithmetic, and
+ * is not judged.
  */
 export function falseDateArithmetic(text: string, now?: Date): string | null {
   if (!text) return null;
   const today = now ? dayOfDate(now) : null;
   for (const sentence of sentences(text)) {
     const dates = datesIn(sentence);
-    if (!dates.length) continue;
+    if (dates.length < 2) continue;
     for (const m of sentence.matchAll(WINDOW)) {
       const at = m.index ?? 0;
       if (ATTRIBUTED.test(sentence.slice(0, at))) continue;
       const end = at + m[0].length;
-      const ref = dateRightAfter(sentence, end, dates)?.day ?? today;
+      // "within 30 days of the release date": a reference named, not today and not a date.
+      const namesOther = /\b(?:of|from|before|since|prior\s+to)\s+(?:the\s+)?$/i.test(m[0]);
+      const ref = referenceDay(sentence, m[0], end, dates, today, namesOther);
       if (ref === null) continue;
       const subject = subjectBefore(dates, at, ref);
       if (!subject) continue;
@@ -110,8 +144,9 @@ export function falseDateArithmetic(text: string, now?: Date): string | null {
       const at = m.index ?? 0;
       if (ATTRIBUTED.test(sentence.slice(0, at))) continue;
       const end = at + m[0].length;
-      const explicit = /^(before|prior)$/i.test(m[2]) ? dateRightAfter(sentence, end, dates) : undefined;
-      const ref = explicit?.day ?? today;
+      // "4 days before the window start": before/prior name their reference; only a date or today counts.
+      const namesOther = /^(before|prior)$/i.test(m[2]) && !TODAY_WORDS.test(m[0]) && !dateRightAfter(sentence, end, dates);
+      const ref = referenceDay(sentence, m[0], end, dates, today, namesOther);
       if (ref === null) continue;
       const subject = subjectBefore(dates, at, ref);
       if (!subject) continue;

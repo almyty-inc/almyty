@@ -261,7 +261,7 @@ describe('4. day arithmetic is counted, not taken from the checker', () => {
   });
 
   it('drops a day count that is off by more than a day', () => {
-    expect(falseDateArithmetic('v5.3.0 was published 2026-10-09, which is 25 days before the current date.', now)).toBe('2026-10-09 is 34 days before 2026-11-12, not 25');
+    expect(falseDateArithmetic('v5.3.0 was published 2026-10-09, which is 25 days before the current date (2026-11-12).', now)).toBe('2026-10-09 is 34 days before 2026-11-12, not 25');
     expect(falseDateArithmetic('Updated 2026-10-05, 30 days before 2026-11-12.', now)).toMatch(/38 days before 2026-11-12, not 30/);
   });
 
