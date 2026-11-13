@@ -1,0 +1,70 @@
+{
+  "J3 GraphQL import (Countries) and run a query tool": {
+    "finding": "A tool generated from a GraphQL import cannot run: the call goes out with no query and the endpoint answers 400.",
+    "rootCause": "backend/src/modules/schema-parser/parsers/graphql-parser.service.ts:110-127 (extractOperations never sets operation.metadata.query) + backend/src/modules/tools/executors/tool-protocol.executor.ts:223 (query = parameters.query || operation.metadata?.query, so undefined unless the caller writes the query)"
+  },
+  "J3 gRPC import (grpcbin proto) and run a unary call": {
+    "finding": "A tool generated from a .proto has none of its request message's fields as inputs (only the grpc-encoding header), so DummyUnary cannot be given f_string.",
+    "rootCause": "backend/src/modules/schema-parser/parsers/protobuf-parser.service.ts:172-179 puts the fields under parameters.body.message.properties; backend/src/modules/tools/tools-operation.helper.ts:282-345 lifts only body.variables (GraphQL) and body.schema into tool parameters"
+  },
+  "J3 JavaScript tool reads a parameter the way the form says (directly as its name)": {
+    "finding": "Create tool says a JavaScript tool reads its inputs as params.<name> or directly as <name>; both fail at run time ('n is not defined'). Only parameters.<name> works.",
+    "rootCause": "frontend/src/components/tools/tool-form.tsx:779 (the hint) vs backend/src/modules/tools/node-sandbox/sandbox-worker.ts:360 (the function is built with only parameters, credentials, require, tools)"
+  },
+  "answers one question with --message and exits 0": {
+    "finding": "chat-cli cannot reach an agent by its bare name after the documented `almyty login`: 'Cannot tell which organization to use'.",
+    "rootCause": "packages/client/src/credentials.ts:96-111 (getOrgSlugFromToken only decodes a JWT; the browser login stores an almyty_ API key plus organizationId, auth-cli/src/index.ts:135-140) used by packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "reads the question from a pipe with --stdin": {
+    "finding": "chat-cli: bare agent name refused after `almyty login` (see 'answers one question with --message and exits 0').",
+    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "keeps stdout clean, so it can be piped": {
+    "finding": "chat-cli: bare agent name refused after `almyty login`.",
+    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "--json prints one parseable object carrying usage, model and ids": {
+    "finding": "chat-cli: bare agent name refused after `almyty login`.",
+    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "reports a token count for an answer that completed": {
+    "finding": "chat-cli: bare agent name refused after `almyty login`.",
+    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "--resume continues the conversation it is given": {
+    "finding": "chat-cli: bare agent name refused after `almyty login`.",
+    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "emits no colour when NO_COLOR is set": {
+    "finding": "chat-cli: bare agent name refused after `almyty login`.",
+    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "honours ALMYTY_AGENT, which is how a compiled terminal app knows its agent": {
+    "finding": "chat-cli: a bare ALMYTY_AGENT is refused after `almyty login` for the same reason.",
+    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "--no-stream still produces the answer": {
+    "finding": "chat-cli: bare agent name refused after `almyty login`.",
+    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  },
+  "puts nothing but protocol on stdout": {
+    "finding": "@almyty/mcp-server answers nothing when the client sends its requests and closes stdin while discovery is still running (~2.5 s for the QA org's 100 tools): the process exits 0 with an empty stdout. Kept open, it answers.",
+    "rootCause": "packages/mcp-server/src/index.ts:444-447 (the first message waits up to ALMYTY_DISCOVERY_WAIT_MS for discovery inside the serveStdio factory; on stdin EOF the transport closes and the queued requests are dropped)"
+  },
+  "registers the two skill-first tools and the management tools": {
+    "finding": "mcp-server: requests sent before stdin closes are dropped while discovery runs (see 'puts nothing but protocol on stdout').",
+    "rootCause": "packages/mcp-server/src/index.ts:444-447"
+  },
+  "answers a malformed request with a JSON-RPC error rather than dying": {
+    "finding": "mcp-server: requests sent before stdin closes are dropped while discovery runs.",
+    "rootCause": "packages/mcp-server/src/index.ts:444-447"
+  },
+  "reports a stale token on the tool call rather than as a raw 401": {
+    "finding": "mcp-server: no reply to the tool call before stdin closes (probably the same dropped-request path).",
+    "rootCause": "packages/mcp-server/src/index.ts:444-447"
+  },
+  "list --json never returns a secret value": {
+    "finding": "credentials list --json prints each credential's config with its secret fields (\"apiKey\":\"********\"); a plaintext value longer than 8 characters comes back as its first and last 4 characters.",
+    "rootCause": "backend/src/modules/credentials/credentials.service.ts:554-576 (maskCredential keeps config, masking to 4+****+4) passed through by packages/credentials-cli/src/index.ts:492-494"
+  }
+}
