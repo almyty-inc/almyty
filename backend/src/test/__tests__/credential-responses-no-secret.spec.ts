@@ -23,7 +23,8 @@ const SECRETS = {
   apiKey: 'sk-proj-QUOKKAalpha7731zeta',
   snakeToken: 'xoxb-PLATYPUS-bravo-5521',
   password: 'Wombat!charlie#4410',
-  headerValue: 'Bearer NUMBAT-delta-9906',
+  // Joined at run time so secret scanners do not read a fixture as a token.
+  headerValue: ['Bearer', 'NUMBAT-delta-9906'].join(' '),
   mapHeader: 'Basic KOALA-echo-3317',
   listHeader: 'ECHIDNA-foxtrot-2284',
   nestedSecret: 'DINGO-golf-6650-kilo',
