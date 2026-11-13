@@ -146,7 +146,8 @@ export class Agent {
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 
-  @Column({ type: 'varchar', default: 'workflow' })
+  // A new agent starts autonomous (migration AgentModeDefaultAutonomous).
+  @Column({ type: 'varchar', default: 'autonomous' })
   mode: 'workflow' | 'autonomous';
 
   @Column({ type: 'text', nullable: true })

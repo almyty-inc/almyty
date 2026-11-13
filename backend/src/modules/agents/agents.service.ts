@@ -40,6 +40,17 @@ import { collectAgentReferences, collectProviderReferences } from './agent-refer
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { usableProviders } from '../llm-providers/private-provider';
 
+/**
+ * The mode a new agent gets when the request names none: autonomous, the
+ * agent works out its own steps toward a goal. A request that brings a
+ * pipeline (nodes to run) without naming a mode is a workflow, since an
+ * autonomous agent would never run those nodes.
+ */
+export function defaultAgentMode(input: { mode?: 'workflow' | 'autonomous'; pipeline?: { nodes?: unknown[] } | null }): 'workflow' | 'autonomous' {
+  if (input.mode) return input.mode;
+  return Array.isArray(input.pipeline?.nodes) && input.pipeline!.nodes!.length > 0 ? 'workflow' : 'autonomous';
+}
+
 export interface AgentSearchFilters {
   search?: string;
   status?: AgentStatus;
@@ -569,8 +580,10 @@ export class AgentsService {
         { organizationId, visibility: scope.visibility, teamId: scope.teamId, ownerUserId: userId },
         userId,
       );
+      // A new agent starts autonomous; a workflow is one click away. A
+      // caller that sends a pipeline and no mode means a workflow.
+      const mode = defaultAgentMode(createDto);
       // Validate pipeline (only for workflow mode)
-      const mode = createDto.mode || 'workflow';
       if (mode === 'workflow' && createDto.pipeline) {
         this.validation.validatePipeline(createDto.pipeline);
       }
