@@ -26,7 +26,8 @@ interface AuthState {
   /** True once checkAuth has answered (either way); layouts redirect only after that. */
   authChecked: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => Promise<void>
+  /** Creates the account and emails a confirmation link; opens no session. */
+  register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => Promise<{ email: string }>
   /** Resolves false when the server never confirmed the session was ended. */
   logout: () => Promise<boolean>
   updateProfile: (data: Partial<User>) => Promise<void>
@@ -97,35 +98,14 @@ export const useAuthStore = create<AuthState>()(
 
       register: async (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => {
         set({ isLoading: true })
-        // Same reasoning as login(): wipe any prior session's
-        // currentOrganization so the next /auth/profile call carries the
-        // new user's identity, not the stale id.
-        clearOrganizationSelection()
-        armOrganizationContextRecovery()
         try {
-          await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken })
-
-          // The session is the httpOnly cookie the backend set; the body
-          // carries no token (see the login() comment).
-
-          // Fetch user profile to populate organization data
-          const profileResponse = await authApi.getProfile()
-          const user = profileResponse
-
-          localStorage.setItem('user', JSON.stringify(user))
-
-          // Initialize organization store from user data
-          const { initializeFromUser } = useOrganizationStore.getState()
-          initializeFromUser(user)
-
-          // Identify only after a successful registration (contract basis).
-          identifyForAnalytics(user)
-
-          set({
-            user,
-            isAuthenticated: true,
-            isLoading: false,
-          })
+          // Sign-up opens no session: signing in needs the address confirmed
+          // first (the backend refuses an unconfirmed one with
+          // EMAIL_NOT_VERIFIED), so it sets no cookie and there is no
+          // profile to fetch. The page tells the person to check their email.
+          const registration = await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken })
+          set({ isLoading: false })
+          return { email: registration?.email ?? email }
         } catch (error) {
           set({ isLoading: false })
           throw error

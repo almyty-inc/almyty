@@ -273,11 +273,11 @@ describe('AuthService', () => {
 
       const result = await service.register(createUserDto);
 
-      expect(result).toEqual({
-        accessToken: 'mock-token',
-        refreshToken: 'mock-token',
-        expiresIn: 86400,
-      });
+      // No session for an unconfirmed address: login refuses one with
+      // EMAIL_NOT_VERIFIED, so tokens minted here would open the app only
+      // until they expired and then lock the new user out.
+      expect(result).toEqual({ email: createUserDto.email, verificationRequired: true });
+      expect(jwtService.sign).not.toHaveBeenCalled();
 
       // Verify password was actually hashed with bcrypt
       expect(savedUser.passwordHash).toBeDefined();
@@ -357,7 +357,7 @@ describe('AuthService', () => {
 
       const result = await service.register(createUserDto, { referralCode: 'ABCD2345' });
 
-      expect(result.accessToken).toBe('mock-token');
+      expect(result.verificationRequired).toBe(true);
     });
 
     it('auto-provisions the default "Everyone" team and joins the owner as LEAD on register', async () => {
@@ -519,7 +519,7 @@ describe('AuthService', () => {
       it('accepts a normal domain', async () => {
         mockSuccessfulRegistration();
         const result = await service.register(createUserDto);
-        expect(result.accessToken).toBe('mock-token');
+        expect(result.verificationRequired).toBe(true);
       });
     });
 
@@ -530,7 +530,7 @@ describe('AuthService', () => {
 
         const result = await service.register(createUserDto);
 
-        expect(result.accessToken).toBe('mock-token');
+        expect(result.verificationRequired).toBe(true);
         expect(captchaService.verify).not.toHaveBeenCalled();
       });
 
@@ -553,7 +553,7 @@ describe('AuthService', () => {
 
         const result = await service.register({ ...createUserDto, captchaToken: 'good' });
 
-        expect(result.accessToken).toBe('mock-token');
+        expect(result.verificationRequired).toBe(true);
         expect(captchaService.verify).toHaveBeenCalledWith('good', undefined);
       });
     });

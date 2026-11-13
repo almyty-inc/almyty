@@ -99,6 +99,31 @@ describe('App authed routing', () => {
     await screen.findByText('Dashboard Marker')
     expect(checkAuth).toHaveBeenCalled()
   })
+
+  // Nobody on a sign-in or sign-up page has a session to restore: asking
+  // /auth/profile there logged two 401s in every visitor's console.
+  it.each([
+    ['/auth/register', 'Sign up'],
+    ['/auth/login', 'Sign in'],
+    ['/auth/forgot-password', /reset|password/i],
+  ])('does not ask for the profile on %s', async (path, heading) => {
+    checkAuth.mockClear()
+    renderAt(path)
+    await screen.findByRole('heading', { name: heading })
+    expect(checkAuth).not.toHaveBeenCalled()
+  })
+
+  it('restores the session once the visitor leaves the auth pages', async () => {
+    checkAuth.mockClear()
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: ['/auth/login'] })
+    render(<RouterProvider router={router} />)
+    await screen.findByRole('heading', { name: 'Sign in' })
+    expect(checkAuth).not.toHaveBeenCalled()
+
+    await router.navigate('/dashboard')
+    await screen.findByText('Dashboard Marker')
+    await waitFor(() => expect(checkAuth).toHaveBeenCalledTimes(1))
+  })
 })
 
 describe('App hosted-chat dispatch', () => {

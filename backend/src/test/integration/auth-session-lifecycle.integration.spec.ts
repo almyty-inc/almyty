@@ -201,11 +201,14 @@ describeIfDb('account lifecycle (real HTTP, real Postgres)', () => {
       expect(JSON.stringify(res.body)).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
     });
 
-    it('registration answers the same way', async () => {
+    // Registration opens no session at all: login refuses an unconfirmed
+    // address, so a cookie here only worked until it expired.
+    it('registration carries no token and sets no session cookie', async () => {
+      const email = `register-body-${SUFFIX}@test.com`;
       const res = await request(app.getHttpServer())
         .post('/auth/register')
         .send({
-          email: `register-body-${SUFFIX}@test.com`,
+          email,
           password: PASSWORD,
           firstName: 'R',
           lastName: 'B',
@@ -213,8 +216,10 @@ describeIfDb('account lifecycle (real HTTP, real Postgres)', () => {
         })
         .expect(201);
 
-      expect(res.body.data).not.toHaveProperty('accessToken');
-      expect(res.body.data).not.toHaveProperty('refreshToken');
+      expect(res.body.data).toEqual({ email, verificationRequired: true });
+      expect(res.headers['set-cookie'] ?? []).not.toEqual(
+        expect.arrayContaining([expect.stringMatching(/^access_token=/)]),
+      );
     });
 
     it('the non-browser login returns tokens and sets no cookie, and refuses a page', async () => {

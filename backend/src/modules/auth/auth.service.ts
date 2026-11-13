@@ -81,6 +81,12 @@ export interface AuthTokens {
   expiresIn: number;
 }
 
+/** What sign-up answers: no session, only that the address needs confirming. */
+export interface Registration {
+  email: string;
+  verificationRequired: true;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -118,7 +124,7 @@ export class AuthService {
   async register(
     createUserDto: CreateUserDto,
     context?: { referralCode?: string; ipAddress?: string },
-  ): Promise<AuthTokens> {
+  ): Promise<Registration> {
     // ── Signup abuse protection (runs before any DB write) ───────────────
 
     // 1. CAPTCHA gate. No-op when unconfigured (ships dark); when a secret is
@@ -277,16 +283,13 @@ export class AuthService {
     // transaction): the verification link email and the welcome
     // notification must never fail a successful registration.
     //
-    // VERIFICATION GATE (current behavior, deliberately left non-blocking):
-    // a fresh account is unverified (verifiedAt = null) and login + the app
-    // work fully while unverified — validateUser() only checks isActive. The
-    // only feature gated on verification today is referral-reward payout
-    // (referrals.service checks verifiedAt/isVerified). Making login itself
-    // hard-require verification would lock out the entire existing unverified
-    // user base and contradicts the documented non-blocking design, so the
-    // gate here stays at "send the verification email + show the in-app
-    // banner". The robust abuse defenses are the per-IP rate limit, disposable
-    // rejection, gmail-alias dedupe, and (when enabled) CAPTCHA above.
+    // VERIFICATION GATE: a fresh account is unverified (verifiedAt = null)
+    // and validateUser() refuses it a session with EMAIL_NOT_VERIFIED until
+    // the link in this email is opened. So register() hands out no session
+    // either: the sign-up page shows "check your email" with a resend, and
+    // the person signs in after confirming. The abuse defenses that run
+    // before that are the per-IP rate limit, disposable rejection,
+    // gmail-alias dedupe, and (when enabled) CAPTCHA above.
     this.requestEmailVerification(savedUser.id).catch(() => {});
     if (this.notifications) {
       const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
@@ -323,8 +326,10 @@ export class AuthService {
         .catch(() => {});
     }
 
-    // Generate tokens (outside the transaction — purely read-side)
-    return this.generateTokens(savedUser);
+    // No session: signing in needs a confirmed address (validateUser), so
+    // a token minted here would open the app until it expired and then
+    // lock the new user out. The caller tells them to check their email.
+    return { email: savedUser.email, verificationRequired: true };
   }
 
   async login(loginDto: LoginDto): Promise<AuthTokens> {
