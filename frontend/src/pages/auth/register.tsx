@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -41,9 +41,14 @@ const registerSchema = z.object({
 type RegisterFormData = z.infer<typeof registerSchema>
 
 export function RegisterPage() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const inviteToken = searchParams.get('invite')
   const referralCode = searchParams.get('ref')
+  // Where to sign in once the address is confirmed; an invite comes back.
+  const signInTo = inviteToken
+    ? `/auth/login?returnTo=${encodeURIComponent(`/invite/accept?token=${encodeURIComponent(inviteToken)}`)}`
+    : '/auth/login'
 
   // Referral attribution for ?ref= links: ask the backend to set the
   // attribution cookie on the API origin so registration picks it up
@@ -88,9 +93,15 @@ export function RegisterPage() {
       return
     }
     try {
-      const { email } = await registerUser(data.email, data.password, data.firstName, data.lastName, data.organizationName, captchaToken || undefined)
+      const { email, verificationRequired } = await registerUser(data.email, data.password, data.firstName, data.lastName, data.organizationName, captchaToken || undefined)
       // No session yet: signing in needs the confirmed address. An invite
-      // is accepted after that sign-in (returnTo below).
+      // is accepted after that sign-in (returnTo below). An address the
+      // server confirmed at once (a test stack's AUTO_VERIFY_EMAIL_DOMAIN)
+      // goes straight to sign-in.
+      if (!verificationRequired) {
+        navigate(signInTo)
+        return
+      }
       setRegisteredEmail(email)
     } catch (err: any) {
       setRegisterError(getApiErrorMessage(err, 'Please check your information and try again.'))
@@ -98,9 +109,6 @@ export function RegisterPage() {
   }
 
   if (registeredEmail) {
-    const signInTo = inviteToken
-      ? `/auth/login?returnTo=${encodeURIComponent(`/invite/accept?token=${encodeURIComponent(inviteToken)}`)}`
-      : '/auth/login'
     return (
       <CheckEmail
         email={registeredEmail}

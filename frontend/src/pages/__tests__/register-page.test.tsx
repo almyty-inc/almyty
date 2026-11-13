@@ -52,7 +52,7 @@ describe('RegisterPage', () => {
     vi.clearAllMocks()
     ctl.search = ''
     ctl.captcha = false
-    ctl.register.mockResolvedValue({ email: 'dana@example.com' })
+    ctl.register.mockResolvedValue({ email: 'dana@example.com', verificationRequired: true })
   })
 
   // Accepting them is required, so they have to be readable: they were
@@ -139,6 +139,20 @@ describe('RegisterPage', () => {
       'href',
       `/auth/login?returnTo=${encodeURIComponent('/invite/accept?token=tok-1')}`,
     )
+  })
+
+  // A test stack's AUTO_VERIFY_EMAIL_DOMAIN confirms the address at once:
+  // there is no email to wait for, so sign-in is next.
+  it('goes straight to sign-in when the server already confirmed the address', async () => {
+    ctl.register.mockResolvedValue({ email: 'dana@example.com', verificationRequired: false })
+    const user = userEvent.setup()
+    render(<RegisterPage />)
+
+    await fillValidForm(user)
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await waitFor(() => expect(ctl.navigate).toHaveBeenCalledWith('/auth/login'))
+    expect(screen.queryByRole('heading', { name: 'Check your email' })).not.toBeInTheDocument()
   })
 
   it('says an unticked human check under the check itself', async () => {

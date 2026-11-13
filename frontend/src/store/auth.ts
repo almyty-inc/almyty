@@ -27,7 +27,7 @@ interface AuthState {
   authChecked: boolean
   login: (email: string, password: string) => Promise<void>
   /** Creates the account and emails a confirmation link; opens no session. */
-  register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => Promise<{ email: string }>
+  register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => Promise<{ email: string; verificationRequired: boolean }>
   /** Resolves false when the server never confirmed the session was ended. */
   logout: () => Promise<boolean>
   updateProfile: (data: Partial<User>) => Promise<void>
@@ -105,7 +105,12 @@ export const useAuthStore = create<AuthState>()(
           // profile to fetch. The page tells the person to check their email.
           const registration = await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken })
           set({ isLoading: false })
-          return { email: registration?.email ?? email }
+          return {
+            email: registration?.email ?? email,
+            // False only for an address the server confirmed at once (a
+            // test stack's AUTO_VERIFY_EMAIL_DOMAIN); anything else waits.
+            verificationRequired: registration?.verificationRequired !== false,
+          }
         } catch (error) {
           set({ isLoading: false })
           throw error

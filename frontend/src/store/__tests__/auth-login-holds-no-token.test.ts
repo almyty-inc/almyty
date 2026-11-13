@@ -69,7 +69,7 @@ describe('signing in keeps no token in the page', () => {
 
     const result = await useAuthStore.getState().register('u@example.com', 'pw', 'U', 'Ser', 'Org')
 
-    expect(result).toEqual({ email: 'u@example.com' })
+    expect(result).toEqual({ email: 'u@example.com', verificationRequired: true })
     expect(authApi.getProfile).not.toHaveBeenCalled()
     expect(useAuthStore.getState().isAuthenticated).toBe(false)
     expect(useAuthStore.getState().user).toBeNull()
