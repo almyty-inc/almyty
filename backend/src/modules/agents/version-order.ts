@@ -25,11 +25,12 @@ const VERSION = /v?\d{1,9}(?:\.\d{1,9}){1,4}/gi;
 /**
  * A stated order between two things: a symbol (`<`, `<=`, `≤`, `>`, ...)
  * or a comparative with "than" ("older than", "less than", "more recent
- * than"). "Lower" means the first is the older one; "higher" the newer.
- * An arrow ("->", "=>", "<-") is not a comparison.
+ * than", "a lower minor version than"). "Lower" means the first is the
+ * older one; "higher" the newer. An arrow ("->", "=>", "<-") is not a
+ * comparison.
  */
 const COMPARISON =
-  /(?<![-=<>])(<=|>=|≤|≥|<(?![-=<])|>(?![=>]))|\b(older|earlier|lower|smaller|less(?: recent)?|newer|later|higher|greater|bigger|larger|more recent)\s+than\b/gi;
+  /(?<![-=<>])(<=|>=|≤|≥|<(?![-=<])|>(?![=>]))|\b(older|earlier|lower|smaller|less(?: recent)?|newer|later|higher|greater|bigger|larger|more recent)\s+(?:(?:minor|major|patch)\s+)?(?:versions?\s+)?than\b/gi;
 const LOWER = new Set(['<', '<=', '≤', 'older', 'earlier', 'lower', 'smaller', 'less', 'less recent']);
 /** Words that leave no plain order statement: "4.18.1 is wrongly older than 4.17.21". */
 const NEGATION = /\bnot\b|n't\b|\bnever\b|\bfalse\b|\bwrong\b|\bincorrect\b/i;

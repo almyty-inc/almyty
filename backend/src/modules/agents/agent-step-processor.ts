@@ -22,7 +22,7 @@ import { AgentConstraintsService } from '../agent-constraints/agent-constraints.
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
-import { AgentMemoryKeeper } from './agent-memory.keeper';
+import { AgentMemoryKeeper, recordReportedItems } from './agent-memory.keeper';
 import { agentApiIds, agentEnvironmentId, agentRunnerId, callsAgents, mayCallAgent } from './agent-capabilities';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
@@ -71,7 +71,7 @@ import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
 import { MACHINE_FAILED, type MachineProblem, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
-import { claimsSkippedAsReported } from './answer-checks';
+import { speaksOfEarlierReports } from './answer-checks';
 
 /** How many of an agent's earlier answers a "skipped as already reported" claim is checked against, and from how many days back. */
 export const EARLIER_ANSWERS_MAX = 50;
@@ -1874,6 +1874,9 @@ export class AgentStepProcessor {
 
         run.status = AgentRunStatus.COMPLETED;
         run.output = finalContent;
+        // With memory on, the ids of the items this answer reported go on
+        // the run, committed with it: the next run of the agent is given them.
+        if (agent.memoryConfig?.enabled) recordReportedItems(run);
 
         const stepDuration = Date.now() - finalCall.startedAt;
         run.steps.push({
@@ -3299,7 +3302,8 @@ export class AgentStepProcessor {
     const sized = (checkers ?? []).map((checker, i) =>
       checker && !(checker.maxTokens && checker.maxTokens > 0) ? { ...checker, maxTokens: checkerOutputLimit(cards[i]?.maxOutputTokens) } : checker,
     );
-    const earlier = claimsSkippedAsReported(target ?? '') ? await this.earlierAnswersOf(run) : undefined;
+    // Read only where the answer or the agent's instructions speak of items reported before (a skip, "new" items).
+    const earlier = speaksOfEarlierReports(target ?? '', rules) ? await this.earlierAnswersOf(run) : undefined;
     return { evidence, rules, checkers: sized, ...(earlier ? { earlier } : {}), ...(toolResults ? { toolResults } : {}) };
   }
 

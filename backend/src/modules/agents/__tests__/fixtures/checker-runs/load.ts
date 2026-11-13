@@ -91,6 +91,19 @@ export const RC7 = [
   'rc7-DC3-6f04ad1d',
 ] as const;
 
+export const RC8 = [
+  'rc8-RD1-d99aa38d',
+  'rc8-RD2-bc75f6f1',
+  'rc8-RD3-e31b4553',
+  'rc8-RD4-d13c5d50',
+  'rc8-RW1-64f3b08a',
+  'rc8-RW2-d3757bc9',
+  'rc8-RW3-6d6a8e80',
+  'rc8-DC1-22a3aee0',
+  'rc8-DC2-986e43dd',
+  'rc8-DC3-988ea008',
+] as const;
+
 /**
  * The run's tool results as its conversation held them, for the code
  * checks (toolResultsFromMessages): each release's notes whole
