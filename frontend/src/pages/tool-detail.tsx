@@ -17,7 +17,8 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 
 import { CodeBlock } from '@/components/ui/code-block'
-import { toolsApi, workspacesApi } from '@/lib/api'
+import { toolsApi, workspacesApi, type ToolRunEnvelope } from '@/lib/api'
+import { toolRunOutcome } from '@/lib/tool-run-outcome'
 import { toolQuery } from '@/lib/list-queries'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { formatDateTime, pluralized } from '@/lib/utils'
@@ -77,23 +78,16 @@ export function ToolDetailPage() {
       setSentParameters(parameters)
       return toolsApi.execute(id!, { parameters }, currentOrganization.id)
     },
-    onSuccess: (response: any) => {
-      // API returns { success, data?, error?, message?, metadata? }.
-      // A 200 OK with success:false means the executor refused (tool
-      // in draft state, parameter validation, rate-limited, etc.).
-      // Don't surface that as a green Success toast.
-      const ok = response?.success !== false
-      setExecutionResult({
-        success: ok,
-        data: ok ? response : undefined,
-        error: ok ? undefined : (response?.error || 'Tool execution failed'),
-        message: response?.message,
-        fullError: ok ? undefined : response,
-      })
-      if (ok) {
+    onSuccess: (response: ToolRunEnvelope) => {
+      // A 200 OK can still be a failed run: the upstream answered 4xx/5xx,
+      // the executor refused (draft, validation, rate limit). toolRunOutcome
+      // reads the envelope's own success flag.
+      const outcome = toolRunOutcome(response)
+      setExecutionResult(outcome)
+      if (outcome.success) {
         notifications.success('Tool executed', 'The run finished successfully.')
       } else {
-        notifications.error('Execution failed', response?.error || response?.message || 'Tool execution returned success=false')
+        notifications.error('Execution failed', outcome.statusCode ? `${outcome.error} (HTTP ${outcome.statusCode})` : outcome.error!)
       }
     },
     onError: (error: Error & { response?: { data?: Record<string, any>; status?: number }; config?: { url?: string; method?: string } }) => {
