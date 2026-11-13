@@ -442,7 +442,11 @@ export class AuthController {
     @CurrentUser() user: User,
     @Body() createApiKeyDto: CreateApiKeyDto,
   ) {
-    const { apiKey, keyData } = await this.authService.createApiKey(user.id, createApiKeyDto);
+    const { apiKey, keyData } = await this.authService.createApiKey(
+      user.id,
+      createApiKeyDto,
+      (user as any).currentOrganizationId,
+    );
 
     return {
       success: true,
@@ -452,6 +456,9 @@ export class AuthController {
           id: keyData.id,
           name: keyData.name,
           keyPrefix: keyData.keyPrefix,
+          // The CLI login page hands this org to the CLI with the key, so
+          // the org the CLI saves is the one the key is scoped to.
+          organizationId: keyData.organizationId ?? null,
           scopes: keyData.scopes,
           expiresAt: keyData.expiresAt,
           createdAt: keyData.createdAt,

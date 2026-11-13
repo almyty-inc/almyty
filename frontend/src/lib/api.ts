@@ -362,7 +362,7 @@ export const authApi = {
   revokeOtherSessions: () =>
     apiPost<{ signedOut: number; expiresIn: number }>('/auth/sessions/revoke-others'),
 
-  createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
+  createApiKey: (data: { name: string; organizationId?: string; scopes?: string[]; expiresAt?: string }) =>
     apiPost('/auth/api-keys', data),
 
   /** Your own API keys, newest first; only the first characters of each. */

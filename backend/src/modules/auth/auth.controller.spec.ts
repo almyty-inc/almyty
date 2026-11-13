@@ -458,6 +458,19 @@ describe('AuthController', () => {
       expect(result.message).toBe('API key created successfully');
       expect(result.data.apiKey).toBe('api-key-value');
     });
+
+    it("passes the caller's current org and returns the org the key is scoped to", async () => {
+      const mockUser = { id: 'user-1', currentOrganizationId: 'org-session' } as any;
+      authService.createApiKey.mockResolvedValue({
+        apiKey: 'api-key-value',
+        keyData: { id: 'key-1', name: 'CLI login', keyPrefix: 'almyty_12', organizationId: 'org-session' } as any,
+      });
+
+      const result = await controller.createApiKey(mockUser, { name: 'CLI login' });
+
+      expect(authService.createApiKey).toHaveBeenCalledWith('user-1', { name: 'CLI login' }, 'org-session');
+      expect(result.data.keyData.organizationId).toBe('org-session');
+    });
   });
 
   describe('forgotPassword', () => {

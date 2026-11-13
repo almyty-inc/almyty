@@ -638,7 +638,11 @@ export class AuthService implements OnModuleInit {
     return { tokens, signedOut };
   }
 
-  async createApiKey(userId: string, createApiKeyDto: CreateApiKeyDto): Promise<{ apiKey: string; keyData: ApiKey }> {
+  async createApiKey(
+    userId: string,
+    createApiKeyDto: CreateApiKeyDto,
+    currentOrganizationId?: string,
+  ): Promise<{ apiKey: string; keyData: ApiKey }> {
     // Neither scopes nor rate limits are implemented for PLATFORM keys,
     // and both were accepted and stored anyway.
     //
@@ -668,10 +672,17 @@ export class AuthService implements OnModuleInit {
       );
     }
 
-    // Default the org scope to the user's single org when the caller
-    // doesn't provide one (e.g. the CLI login flow mints a key from
-    // the frontend without an explicit org ID).
-    let orgId = createApiKeyDto.organizationId;
+    // Which org the key is scoped to, in order: the one the body names,
+    // else the org the caller is working in on this request (the
+    // X-Organization-Id the web app sends, already checked for
+    // membership by the strategy), else the user's only org.
+    //
+    // The middle step is what the CLI login needs. A key minted without
+    // an org by a member of two orgs was stored with none, and the
+    // runner, which sends the org saved at login as X-Organization-Id,
+    // was then refused by ApiKeyStrategy: "API key is not scoped to the
+    // requested organization".
+    let orgId = createApiKeyDto.organizationId || currentOrganizationId || undefined;
 
     // A caller-supplied org has to be one the caller actually belongs to.
     //
