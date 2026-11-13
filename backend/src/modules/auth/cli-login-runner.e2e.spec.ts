@@ -35,9 +35,9 @@ import { serveOnLoopback } from '../../test/http';
  * registration was refused: "401 API key is not scoped to the requested
  * organization".
  *
- * The runner half needs packages/runner's dependencies installed; the
- * backend CI leg does not install them, so there it is skipped. Run
- * `npm ci` in packages/runner to exercise it.
+ * The runner half needs packages/runner's dependencies installed. The
+ * backend CI leg installs them, and under CI=true their absence fails this
+ * spec. Locally it skips until `npm ci` has run in packages/runner.
  */
 const REPO = resolve(__dirname, '../../../..');
 const RUNNER_DIR = join(REPO, 'packages/runner');
@@ -89,6 +89,18 @@ async function readBody(req: http.IncomingMessage): Promise<any> {
   for await (const chunk of req) chunks.push(chunk as Buffer);
   const text = Buffer.concat(chunks).toString('utf8');
   return text ? JSON.parse(text) : {};
+}
+
+// Under CI a missing runner install is a broken pipeline, not a reason to
+// skip: the backend leg installs packages/runner for exactly this spec.
+if (!runnerInstalled && process.env.CI === 'true') {
+  describe('CLI login, then runner start, for a member of two orgs', () => {
+    it('has packages/runner installed', () => {
+      throw new Error(
+        `packages/runner dependencies are missing (${TSX}). The backend CI leg must run npm ci in packages/runner.`,
+      );
+    });
+  });
 }
 
 (runnerInstalled ? describe : describe.skip)('CLI login, then runner start, for a member of two orgs', () => {
@@ -158,6 +170,16 @@ async function readBody(req: http.IncomingMessage): Promise<any> {
     });
     apiUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     workDir = mkdtempSync(join(tmpdir(), 'almyty-cli-login-e2e-'));
+  });
+
+  // console is silenced in specs; one line on stdout lets a CI log show
+  // that the real runner ran here rather than the suite skipping.
+  let runnerRegistrations = 0;
+  afterEach(() => {
+    runnerRegistrations += registeredIn.length;
+  });
+  afterAll(() => {
+    process.stdout.write(`cli-login-runner e2e: real runner registered ${runnerRegistrations} time(s)\n`);
   });
 
   afterEach(async () => {
