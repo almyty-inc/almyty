@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Users, Plus, UserPlus, Trash2, Settings } from 'lucide-react'
 
@@ -318,7 +319,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
           </CardHeader>
           <CardContent className="space-y-4">
             {inviting && (
-              <form
+              <Form
                 onSubmit={(e) => { e.preventDefault(); handleInviteMember() }}
                 className="space-y-4 rounded-lg border bg-muted/30 p-4"
                 aria-label="Invite member"
@@ -355,7 +356,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                   submitLabel={inviteMemberMutation.isPending ? 'Sending...' : 'Send invitation'}
                   submitting={inviteMemberMutation.isPending}
                 />
-              </form>
+              </Form>
             )}
             {membersLoading ? (
               <LoadingSpinner />
@@ -472,7 +473,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
           </CardHeader>
           <CardContent className="space-y-4">
             {creatingTeam && (
-              <form
+              <Form
                 onSubmit={(e) => { e.preventDefault(); handleCreateTeam() }}
                 className="space-y-4 rounded-lg border bg-muted/30 p-4"
                 aria-label="Create team"
@@ -499,7 +500,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                   submitLabel={createTeamMutation.isPending ? 'Creating...' : 'Create team'}
                   submitting={createTeamMutation.isPending}
                 />
-              </form>
+              </Form>
             )}
             {teamsLoading ? (
               <LoadingSpinner />
@@ -581,7 +582,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                     </div>
 
                     {editTeamId === team.id && (
-                      <form
+                      <Form
                         onSubmit={(e) => { e.preventDefault(); handleEditTeam() }}
                         className="mb-3 space-y-4 rounded-lg border bg-muted/30 p-4"
                         aria-label={`Edit team ${team.name}`}
@@ -599,11 +600,11 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           submitLabel={editTeamMutation.isPending ? 'Saving...' : 'Save changes'}
                           submitting={editTeamMutation.isPending}
                         />
-                      </form>
+                      </Form>
                     )}
 
                     {addToTeamId === team.id && (
-                      <form
+                      <Form
                         onSubmit={(e) => { e.preventDefault(); handleAddToTeam(team) }}
                         className="mb-3 space-y-4 rounded-lg border bg-muted/30 p-4"
                         aria-label={`Add member to ${team.name}`}
@@ -644,7 +645,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           submitLabel={addToTeamMutation.isPending ? 'Adding...' : 'Add member'}
                           submitting={addToTeamMutation.isPending}
                         />
-                      </form>
+                      </Form>
                     )}
                     
                     {team.members && team.members.length > 0 && (

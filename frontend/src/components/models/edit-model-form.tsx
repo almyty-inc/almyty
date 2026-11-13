@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { Form } from '@/components/ui/form'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
@@ -83,7 +84,7 @@ export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditMode
   const feedSource = card ? PRICING_SOURCE_LABELS[card.pricingSource] || card.pricingSource : ''
 
   return (
-          <form onSubmit={submit} className="space-y-4" noValidate aria-label="Model settings">
+          <Form onSubmit={submit} className="space-y-4" noValidate aria-label="Model settings">
             <div>
               <Label htmlFor="edit-name">Name</Label>
               <Input id="edit-name" className="mt-1" {...form.register('name')} />
@@ -156,6 +157,6 @@ export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditMode
               </Button>
             </div>
             {guard.element}
-          </form>
+          </Form>
   )
 }

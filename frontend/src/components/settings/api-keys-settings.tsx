@@ -10,6 +10,7 @@
  * anywhere else: not in a query cache, not in storage.
  */
 import { useMemo, useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Copy, KeyRound, Plus } from 'lucide-react'
@@ -198,7 +199,7 @@ export function ApiKeysSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           {creating && (
-            <form
+            <Form
               noValidate
               aria-label="New API key"
               className="space-y-4 rounded-lg border bg-muted/30 p-4"
@@ -233,7 +234,7 @@ export function ApiKeysSettings() {
                 />
               </Field>
               <InlineFormActions onCancel={() => setCreating(false)} submitLabel="Make key" submitting={create.isPending} />
-            </form>
+            </Form>
           )}
 
           {generatedKey && (

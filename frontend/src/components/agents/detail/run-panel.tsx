@@ -9,6 +9,7 @@
  * Agent" over a "Run Agent" button, reporting an "Invocation Failed".
  */
 import React, { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Play, Loader2, X } from 'lucide-react'
 
@@ -140,7 +141,7 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
         </Button>
       </div>
 
-      <form onSubmit={submit} noValidate className="space-y-4">
+      <Form onSubmit={submit} noValidate className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="invoke-input">Input JSON</Label>
           <CodeEditor
@@ -165,7 +166,7 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
             )}
           </Button>
         </div>
-      </form>
+      </Form>
 
       {invokeResult && (
         <div className="space-y-2">

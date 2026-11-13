@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Check, X, Clock, AlertCircle, Bot } from 'lucide-react'
@@ -288,7 +289,7 @@ export function ApprovalsPage() {
                   )
                 })()}
                 {decisionFor?.row.id === row.id && (
-                  <form
+                  <Form
                     className="mt-3 space-y-3 rounded-lg border bg-background dark:bg-muted/40 p-3 text-sm text-foreground"
                     aria-label={decisionFor.intent === 'approve' ? 'Approve this action' : 'Reject this action'}
                     onSubmit={(e) => {
@@ -321,7 +322,7 @@ export function ApprovalsPage() {
                       submitVariant={decisionFor.intent === 'approve' ? 'default' : 'destructive'}
                       submitting={approveMutation.isPending || rejectMutation.isPending}
                     />
-                  </form>
+                  </Form>
                 )}
               </CardContent>
             </Card>

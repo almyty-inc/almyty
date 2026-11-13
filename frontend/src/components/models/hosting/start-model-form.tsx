@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -72,7 +73,7 @@ export function StartModelForm({ adapter, credentialId, onSubmit, onCancel, subm
   for (const [k, v] of Object.entries(errors)) if (k.startsWith('config.')) configErrors[k.slice('config.'.length)] = v
 
   return (
-    <form onSubmit={submit} className="space-y-4" noValidate aria-label="Start a model">
+    <Form onSubmit={submit} className="space-y-4" noValidate aria-label="Start a model">
       <div>
         <Label htmlFor="start-model-repo">Which model?</Label>
         <Input
@@ -172,7 +173,7 @@ export function StartModelForm({ adapter, credentialId, onSubmit, onCancel, subm
           </Button>
         )}
       </div>
-    </form>
+    </Form>
   )
 }
 

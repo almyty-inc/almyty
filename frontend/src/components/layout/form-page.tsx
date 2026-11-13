@@ -34,6 +34,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Form } from '@/components/ui/form'
 import type { LeaveGuard } from '@/hooks/use-leave-guard'
 import { cn } from '@/lib/utils'
 
@@ -142,7 +143,7 @@ export function FormPage({
       <PageHeader title={title} description={description} actions={actions} className="mb-6" />
 
       {onSubmit ? (
-        <form ref={formRef} noValidate onSubmit={handleSubmit}>
+        <Form ref={formRef} noValidate onSubmit={handleSubmit}>
           {body}
           <div
             className="sticky bottom-0 z-10 -mx-4 mt-8 flex flex-wrap items-center gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6"
@@ -163,7 +164,7 @@ export function FormPage({
               </Button>
             </div>
           </div>
-        </form>
+        </Form>
       ) : (
         body
       )}

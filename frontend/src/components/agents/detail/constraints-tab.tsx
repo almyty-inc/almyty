@@ -3,6 +3,7 @@
  * Lists learned/manual constraints, toggles active state, and adds new ones.
  */
 import { useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ShieldAlert, Plus, Trash2, Loader2 } from 'lucide-react'
 
@@ -82,7 +83,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <form
+        <Form
           className="flex gap-2"
           onSubmit={(e) => {
             e.preventDefault()
@@ -99,7 +100,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
             {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             Add
           </Button>
-        </form>
+        </Form>
 
         {isLoading ? (
           <div className="flex justify-center py-6">

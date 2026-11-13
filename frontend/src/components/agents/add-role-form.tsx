@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 
 import { Input } from '@/components/ui/input'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
@@ -58,7 +59,7 @@ export function AddRoleForm({ existingKeys, neededKeys = [], onCreate, onCancel,
 
   return (
     <>
-      <form
+      <Form
         data-testid="add-role-form"
         aria-label="Add a role"
         noValidate
@@ -124,7 +125,7 @@ export function AddRoleForm({ existingKeys, neededKeys = [], onCreate, onCancel,
           submitting={saving}
           submitDisabled={!canCreate}
         />
-      </form>
+      </Form>
       {guard.element}
     </>
   )
