@@ -10,9 +10,9 @@ import { authApi } from '../../lib/api'
 // into X-Organization-Id on the very first /auth/profile call,
 // the backend correctly rejected it with "Not a member of the
 // requested organization", and the UI rendered it as
-// "Invalid credentials". This test asserts that login(), register(),
-// and logout() all wipe almyty-org-store before letting any
-// authenticated request fire.
+// "Invalid credentials". This test asserts that login() and logout()
+// wipe almyty-org-store before letting any authenticated request fire.
+// (register() opens no session, so it makes no authenticated request.)
 
 vi.mock('../../lib/api', () => ({
   authApi: {
@@ -39,16 +39,6 @@ describe('useAuthStore — wipes almyty-org-store on auth transitions', () => {
     })
 
     await useAuthStore.getState().login('a@b.c', 'pw').catch(() => {})
-  })
-
-  it('register() removes almyty-org-store before authenticating', async () => {
-    localStorage.setItem('almyty-org-store', JSON.stringify({ state: { currentOrganization: { id: 'stale' } } }))
-    ;(authApi.register as any).mockImplementation(async () => {
-      expect(localStorage.getItem('almyty-org-store')).toBeNull()
-      return { accessToken: 't', user: null }
-    })
-
-    await useAuthStore.getState().register('a@b.c', 'pw', 'a', 'b', 'org').catch(() => {})
   })
 
   it('logout() removes almyty-org-store', async () => {
