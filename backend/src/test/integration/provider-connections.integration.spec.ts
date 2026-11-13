@@ -98,6 +98,7 @@ describeIfDb('provider connections: several per provider, hidden models (real Po
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       logging: false,
     });

@@ -3,7 +3,7 @@ import { join } from 'path';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import { DataSource } from 'typeorm';
+import { DataSource, QueryRunner } from 'typeorm';
 
 import { GatewayEndpointAccess1791000000000 } from '../../migrations/1791000000000-GatewayEndpointAccess';
 import { GatewayAuthService } from '../../modules/gateways/gateway-auth.service';
@@ -66,7 +66,7 @@ async function migratedUpTo(schema: string): Promise<DataSource> {
     extra: { options: `-c search_path=${schema},public` },
     entities: [join(__dirname, '..', '..', 'entities', '*.entity{.ts,.js}')],
     migrations: migrationsBefore(TARGET),
-    migrationsTransactionMode: 'all',
+    migrationsTransactionMode: 'each',
     logging: false,
   });
   await ds.initialize();
@@ -96,13 +96,17 @@ async function runTarget(ds: DataSource, direction: 'up' | 'down' = 'up'): Promi
  */
 async function catchUpToHead(ds: DataSource): Promise<void> {
   for (const Migration of migrationsAfter(TARGET)) {
+    const migration = new Migration() as { transaction?: boolean; up(q: QueryRunner): Promise<void> };
     const runner = ds.createQueryRunner();
-    await runner.startTransaction();
+    // As TypeORM's 'each' mode does: one transaction per migration, none for
+    // one that says `transaction = false` (CREATE INDEX CONCURRENTLY).
+    const inTransaction = migration.transaction !== false;
+    if (inTransaction) await runner.startTransaction();
     try {
-      await (new Migration() as { up(q: typeof runner): Promise<void> }).up(runner);
-      await runner.commitTransaction();
+      await migration.up(runner);
+      if (inTransaction) await runner.commitTransaction();
     } catch (error) {
-      await runner.rollbackTransaction();
+      if (inTransaction) await runner.rollbackTransaction();
       throw error;
     } finally {
       await runner.release();

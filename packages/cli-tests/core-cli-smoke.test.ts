@@ -21,8 +21,10 @@
  * write into a temp project directory and clean up after themselves.
  *
  * Run:
- *   cd packages/cli-tests
- *   RUN_CLI_SMOKE=1 npx vitest run
+ *   npm run gate:staging     (repo root: signs the CLI in as the staging QA
+ *                             user in a throwaway HOME, runs these, revokes
+ *                             the login's key afterwards)
+ *   or, against your own login: cd packages/cli-tests && RUN_CLI_SMOKE=1 npx vitest run
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -339,9 +341,25 @@ describe.skipIf(GATED)('core CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     });
 
     it('an ambiguous bare ref exits 2 rather than guessing', () => {
-      const { exitCode } = runOrFail('skills-cli', ['install', 'e', '--yes', '--dry-run']);
-      // 2 for ambiguous, 4 for no match — either is a refusal, never 0.
-      expect([EXIT.USAGE, EXIT.NOT_FOUND]).toContain(exitCode);
+      // A query is only ambiguous if the account's skill search finds more
+      // than one skill for it, so find one instead of assuming a letter is.
+      const ambiguous = 'aeiourstn'.split('').find((q) => {
+        try {
+          return JSON.parse(run('skills-cli', ['search', q, '--json'])).length > 1;
+        } catch {
+          return false;
+        }
+      });
+      if (!ambiguous) {
+        // The account's hub has fewer than two skills: nothing can be
+        // ambiguous, but a bare ref that matches nothing must still refuse.
+        console.warn('Fewer than two searchable skills; checking the no-match refusal instead');
+        const { exitCode } = runOrFail('skills-cli', ['install', `zz-no-such-skill-${Date.now()}`, '--yes', '--dry-run']);
+        expect(exitCode).toBe(EXIT.NOT_FOUND);
+        return;
+      }
+      const { exitCode } = runOrFail('skills-cli', ['install', ambiguous, '--yes', '--dry-run']);
+      expect(exitCode).toBe(EXIT.USAGE);
     });
 
     it('the old auth commands point at @almyty/auth and exit 2', () => {

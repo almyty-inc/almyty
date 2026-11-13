@@ -94,6 +94,7 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
       extra: { options: '-c search_path=utcp_spec_test,public' },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       logging: false,

@@ -46,7 +46,10 @@ export class ProtobufParserService implements SchemaParser {
       if (typeof rawSchema === 'string' && rawSchema.length > MAX_PROTO_BYTES) {
         throw new Error(`Protobuf schema exceeds max size of ${MAX_PROTO_BYTES} bytes`);
       }
-      const root = protobuf.parse(rawSchema).root;
+      // Field names as the .proto writes them (f_string, not fString):
+      // the gRPC caller loads the proto with keepCase too, so these are
+      // the keys a request message is encoded from.
+      const root = protobuf.parse(rawSchema, { keepCase: true }).root;
       
       // One budget for the whole parse: operations and resources draw
       // from the same allowance, so the total emitted is bounded even
@@ -177,17 +180,8 @@ export class ProtobufParserService implements SchemaParser {
                 properties: this.getMessageProperties(root, method.requestType, budget),
               },
             },
-            header: {
-              'Content-Type': {
-                type: 'string',
-                default: 'application/grpc',
-              },
-              'grpc-encoding': {
-                type: 'string',
-                description: 'gRPC encoding',
-                enum: ['identity', 'gzip'],
-              },
-            },
+            // No headers: the gRPC client sets its own transport headers
+            // (content-type, grpc-encoding, te); none is a caller's input.
           },
           responses: {
             '200': {
@@ -302,8 +296,9 @@ export class ProtobufParserService implements SchemaParser {
     for (const field of message.fieldsArray) {
       if (budget.left <= 0) break;
       budget.left--;
+      const value = this.fieldValueSchema(field);
       properties[field.name] = {
-        type: this.mapProtobufTypeToJsonType(field.type),
+        ...value,
         description: field.comment || `Field: ${field.name}`,
         required: field.required,
         repeated: field.repeated,
@@ -315,15 +310,31 @@ export class ProtobufParserService implements SchemaParser {
       if (field.repeated) {
         properties[field.name] = {
           type: 'array',
-          items: {
-            type: this.mapProtobufTypeToJsonType(field.type),
-          },
+          items: value,
           description: field.comment || `Repeated field: ${field.name}`,
         };
       }
     }
 
     return properties;
+  }
+
+  /**
+   * The JSON schema of one value of a field. An enum is a string, one of
+   * its value names: the gRPC caller encodes a name (`ENUM_1`), and the
+   * reply carries names too.
+   */
+  private fieldValueSchema(field: protobuf.Field): Record<string, any> {
+    let resolved: protobuf.ReflectionObject | null = null;
+    try {
+      resolved = field.resolve().resolvedType;
+    } catch {
+      // An unresolvable type (an import that was not given) stays an object.
+    }
+    if (resolved instanceof protobuf.Enum) {
+      return { type: 'string', enum: Object.keys(resolved.values) };
+    }
+    return { type: this.mapProtobufTypeToJsonType(field.type) };
   }
 
   private getMessageProperties(

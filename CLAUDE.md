@@ -154,8 +154,11 @@ cd backend && npm run test
 # Frontend tests
 cd frontend && npm test -- --run
 
-# E2E tests against staging
-cd frontend && npx playwright test --config=playwright.staging.config.ts
+# Staging gate (run from this machine before every release): /health/ready,
+# frontend/tests/staging as the QA user (.env.staging-qa.local, no keys, no
+# stubs) and the CLI smoke tests; writes gate-report.md. Product faults behind
+# failing tests are recorded in scripts/gate-findings.json, never skipped.
+npm run gate:staging
 
 # Health check
 curl http://localhost:4000/health

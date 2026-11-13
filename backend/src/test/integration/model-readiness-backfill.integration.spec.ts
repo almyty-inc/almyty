@@ -107,6 +107,7 @@ describeIfDb('model readiness on cards made before the rule (real Postgres)', ()
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       logging: false,
     });

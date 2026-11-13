@@ -24,6 +24,7 @@ import { Organization } from '../../../entities/organization.entity';
 import { sanitizeHeaders } from '../../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { decideToolEgress } from './tool-egress';
+import { graphqlOperationRequest, graphqlTargetUrl } from './graphql-operation-request';
 import {
   decideToolRequest,
   effectiveMaxResponseBytes,
@@ -33,7 +34,6 @@ import { ToolGrpcExecutor } from './tool-grpc.executor';
 import {
   ToolExecutionOptions,
   ToolExecutionResult,
-  GraphQLRequest,
   SOAPRequest,
 } from '../tool-execution.types';
 import {
@@ -44,26 +44,6 @@ import {
 
 const MAX_CONTENT_LENGTH = 10 * 1024 * 1024;
 const MAX_BODY_LENGTH = 5 * 1024 * 1024;
-
-/**
- * Join an API baseUrl with an operation endpoint path, idempotently
- * — i.e. if the user already pasted the full path into baseUrl
- * (`https://countries.trevorblades.com/graphql`) and the operation
- * endpoint is also `/graphql`, don't end up with `/graphql/graphql`.
- *
- * Rules:
- *   - empty endpoint  → return baseUrl
- *   - baseUrl already ends with the endpoint path → return baseUrl
- *   - otherwise → strip trailing `/` from baseUrl, ensure exactly
- *     one `/` between, append endpoint
- */
-function joinApiUrl(baseUrl: string, endpoint?: string): string {
-  if (!endpoint) return baseUrl;
-  const base = (baseUrl || '').replace(/(?<!\/)\/+$/, '');
-  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  if (base.endsWith(path)) return base;
-  return `${base}${path}`;
-}
 
 @Injectable()
 export class ToolProtocolExecutor {
@@ -193,7 +173,7 @@ export class ToolProtocolExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
-    const targetUrl = joinApiUrl(api.baseUrl, operation.endpoint);
+    const targetUrl = graphqlTargetUrl(api.baseUrl, operation.endpoint);
 
     const urlCheck = await decideToolEgress(targetUrl, api.organizationId ?? tool.organizationId, this.organizations);
     if (urlCheck.error) {
@@ -207,24 +187,13 @@ export class ToolProtocolExecutor {
       return this.blocked(gqlOpPolicy.reason!, startTime);
     }
 
-    // If the caller passed an explicit `variables` object, use it.
-    // Otherwise, treat the remaining parameters as variables — but
-    // strip the three meta keys so they don't leak into the GraphQL
-    // variables payload alongside the operation that describes them.
-    let graphqlVariables: Record<string, any> | undefined;
-    if (parameters.variables !== undefined) {
-      graphqlVariables = parameters.variables;
-    } else {
-      const { query: _q, variables: _v, operationName: _o, ...rest } = parameters;
-      graphqlVariables = rest;
+    const graphqlRequest = graphqlOperationRequest(operation, parameters);
+    if (!graphqlRequest.query) {
+      return this.failure(
+        `GraphQL tool ${tool.name} has no query to send. Import the API again, or pass a query.`,
+        startTime,
+      );
     }
-
-    const graphqlRequest: GraphQLRequest = {
-      query: parameters.query || operation.metadata?.query,
-      variables: graphqlVariables,
-      operationName: parameters.operationName,
-    };
-
     const config: AxiosRequestConfig = {
       method: 'POST',
       url: targetUrl,

@@ -95,6 +95,7 @@ describeIfDb('a team connection is attached only where its team is the audience 
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
     });
     await ds.initialize();

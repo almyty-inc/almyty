@@ -38,6 +38,7 @@ import {
   installSandboxNetGuard,
   lockSandboxNetGuard,
 } from './sandbox-net-guard';
+import { SANDBOX_BINDINGS, bareParameterNames } from './sandbox-parameter-names';
 
 /**
  * ALLOWLIST of Node built-ins that user sandbox code may require().
@@ -351,15 +352,26 @@ async function run() {
 
   try {
     // Step 5 — create an AsyncFunction from the user code. The
-    // function receives `parameters`, `credentials`, `require`,
-    // and (conditionally) `tools` as arguments. We pass them as
-    // positional args to the generated function so user code
-    // can reference them as if they were free identifiers.
+    // function receives `parameters` (and `params`, the same object),
+    // `credentials`, `require`, and (conditionally) `tools` as
+    // arguments, then each parameter whose name can be a variable
+    // bound to its value, as Create tool promises (see
+    // sandbox-parameter-names.ts for which names are left out). They
+    // are positional args, so user code references them as if they
+    // were free identifiers.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-    const fn = new AsyncFunction('parameters', 'credentials', 'require', 'tools', code);
+    const bare = bareParameterNames(parameters);
+    const fn = new AsyncFunction(...SANDBOX_BINDINGS, ...bare, code);
 
-    const result = await fn(parameters, credentials, sandboxRequire, tools);
+    const result = await fn(
+      parameters,
+      parameters,
+      credentials,
+      sandboxRequire,
+      tools,
+      ...bare.map((name) => (parameters as Record<string, unknown>)[name]),
+    );
 
     const output: WorkerOutput = { success: true, data: result };
     parentPort!.postMessage(output);

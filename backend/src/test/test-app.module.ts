@@ -199,6 +199,7 @@ const mockRedis = {
           autoLoadEntities: true,
           migrations: [__dirname + '/../migrations/*{.ts,.js}'],
           migrationsRun: true,
+          migrationsTransactionMode: 'each',
           dropSchema: isolated,
           logging: false,
         } as any;

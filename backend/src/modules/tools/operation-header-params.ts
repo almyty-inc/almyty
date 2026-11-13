@@ -7,16 +7,23 @@
  * they are tool inputs like path and query parameters, and the HTTP
  * executor sends them as headers. Headers the credential or the executor
  * set themselves are never inputs: a tool argument must not replace the key,
- * and a SOAP call names its own SOAPAction.
+ * and a SOAP call names its own SOAPAction. Transport headers are not
+ * inputs either: gRPC's own (`grpc-encoding`, `grpc-timeout`, `te`) are
+ * set by the gRPC client, never by the caller.
  */
-const NOT_AN_INPUT = new Set(['authorization', 'proxy-authorization', 'cookie', 'content-type', 'content-length', 'host', 'accept', 'soapaction']);
+const NOT_AN_INPUT = new Set(['authorization', 'proxy-authorization', 'cookie', 'content-type', 'content-length', 'host', 'accept', 'soapaction', 'te']);
+
+function isInput(name: string): boolean {
+  const lower = name.toLowerCase();
+  return !NOT_AN_INPUT.has(lower) && !lower.startsWith('grpc-');
+}
 
 export function operationHeaderParams(
   operation: { parameters?: { header?: Record<string, any> } | null } | null | undefined,
 ): Array<[string, any]> {
   const declared = operation?.parameters?.header;
   if (!declared || typeof declared !== 'object') return [];
-  return Object.entries(declared).filter(([name]) => !NOT_AN_INPUT.has(name.toLowerCase()));
+  return Object.entries(declared).filter(([name]) => isInput(name));
 }
 
 /** The header names that carry an idempotency key, by the conventions APIs publish them under. */

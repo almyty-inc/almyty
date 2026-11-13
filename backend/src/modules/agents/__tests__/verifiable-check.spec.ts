@@ -73,7 +73,7 @@ describe("an item's field against the tool's value for that same item", () => {
       expect.objectContaining({
         field: 'DOI',
         item: '"From Legal Databases to AI-Assisted Justice: A Risk-Sensiti…"',
-        rule: '"From Legal Databases to AI-Assisted Justice: A Risk-Sensiti…": the answer says it has no DOI, but the tool results give 10.17613/zf92n-68j61',
+        rule: '"From Legal Databases to AI-Assisted Justice: A Risk-Sensiti…": the answer says it has no DOI ("DOI: None"), but the tool results give 10.17613/zf92n-68j61',
       }),
     ]);
   });
@@ -119,7 +119,7 @@ describe("a package's update kind against its versions", () => {
 
 describe('the window check stays, and names its item and field', () => {
   it('v5.3.0 listed as new, dated before the window (RW3 e342b57f)', () => {
-    expect(findingsOf('rc6-RW3-e342b57f')).toEqual([
+    expect(findingsOf('rc6-RW3-e342b57f').filter((f) => f.code === 'outside_window')).toEqual([
       expect.objectContaining({ item: 'v5.3.0', field: 'published at', code: 'outside_window', kind: 'deterministic' }),
     ]);
   });

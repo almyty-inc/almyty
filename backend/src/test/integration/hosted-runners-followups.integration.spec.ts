@@ -140,7 +140,7 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       extra: { options: `-c search_path=${SCHEMA},public` },
       entities: [join(__dirname, '..', '..', 'entities', '*.entity{.ts,.js}')],
       migrations: [join(__dirname, '..', '..', 'migrations', '*{.ts,.js}')],
-      migrationsTransactionMode: 'all',
+      migrationsTransactionMode: 'each',
       logging: false,
     });
     await ds.initialize();

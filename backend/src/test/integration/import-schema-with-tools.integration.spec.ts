@@ -137,6 +137,7 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
       extra: { options: '-c search_path=import_schema_test,public' },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       logging: false,
