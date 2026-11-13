@@ -96,6 +96,13 @@ export const api = axios.create({
 })
 
 /**
+ * How long the browser waits for a tool run. Longer than the longest
+ * timeout a tool may have (5 minutes, MAX_TOOL_TIMEOUT_MS on the server),
+ * so the server's own timeout answer always arrives first.
+ */
+export const TOOL_RUN_CLIENT_TIMEOUT_MS = 330_000
+
+/**
  * Base URL of the API host as configured on the axios instance.
  *
  * Used to build user-facing URLs that live on the API host (the unified
@@ -730,8 +737,13 @@ export const toolsApi = {
   // comes back as 200 { success: false, data: <upstream body>, error }, and
   // extractData would keep only the upstream body, so the caller could not
   // tell it failed.
+  //
+  // The server bounds a run by the tool's own timeout (30 s by default, up
+  // to 5 minutes). The client-wide 30 s gave up at the same moment the
+  // server's default deadline fired, so a slow or unreachable upstream
+  // showed as a network timeout instead of the server's answer.
   execute: (id: string, data: any, organizationId: string): Promise<ToolRunEnvelope> =>
-    api.post(`/organizations/${organizationId}/tools/${id}/execute`, data).then((r) => r.data),
+    api.post(`/organizations/${organizationId}/tools/${id}/execute`, data, { timeout: TOOL_RUN_CLIENT_TIMEOUT_MS }).then((r) => r.data),
 
   // Export formats
   getSkill: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/skill`),
