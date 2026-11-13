@@ -23,8 +23,8 @@ import type { Tool } from '@/types'
 import {
   RUNNER_HEARTBEAT_POLL_MS,
   RUNNER_INSTALL_COMMAND,
-  RUNNER_LOGIN_COMMAND,
   isPendingRunner,
+  runnerLoginCommand,
   runnerStartCommand,
   runnerStateLabel,
   runnerStateVariant,
@@ -233,7 +233,7 @@ export function RunnerDetailPage() {
             This runner has never connected. Start it on its machine with{' '}
             <code className="text-foreground">{runnerStartCommand()}</code>
             {' '}after <code className="text-foreground">{RUNNER_INSTALL_COMMAND}</code> and{' '}
-            <code className="text-foreground">{RUNNER_LOGIN_COMMAND}</code>, or delete it.
+            <code className="text-foreground">{runnerLoginCommand()}</code>, or delete it.
           </CardContent>
         </Card>
       )}

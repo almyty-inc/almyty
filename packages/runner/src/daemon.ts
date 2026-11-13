@@ -69,6 +69,22 @@ interface ConnectOptions {
 }
 
 /**
+ * The error `runner start` prints when registration is refused. A 401
+ * "not scoped to the requested organization" means the saved login key
+ * belongs to a different organization than the one this runner asked for
+ * (a key minted before logins were scoped, or an --org / ALMYTY_ORG_ID
+ * override). The raw server text alone gave no way forward.
+ */
+export function registerFailureMessage(status: number, body: string, organizationId?: string): string {
+  const base = `register failed: ${status} ${body}`;
+  if (status === 401 && /not scoped to the requested organization/i.test(body)) {
+    return `${base}\nThe saved login is for a different organization than ${organizationId ?? 'the one requested'}. ` +
+      'Run `almyty login` again and pick the organization this runner should join.';
+  }
+  return base;
+}
+
+/**
  * Runner daemon. Responsibilities, in order:
  *
  *   1. Resolve config (defaults <- files <- env <- flags).
@@ -164,7 +180,7 @@ export class RunnerDaemon {
     });
     if (!regResp.ok) {
       const text = await regResp.text();
-      throw new Error(`register failed: ${regResp.status} ${text}`);
+      throw new Error(registerFailureMessage(regResp.status, text, resolved.organizationId));
     }
     const regBody = await regResp.json() as { data: { runner: { id: string; name: string }; effectiveConfig: typeof resolved.config } };
     this.runnerId = regBody.data.runner.id;
