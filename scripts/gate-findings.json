@@ -74,5 +74,9 @@
   "J7 agent key works with the model the Integration snippet names": {
     "finding": "The agent page's Integration snippet tells callers to send model \"agent:<agent-name-slug>\" with their key, but a key made in the agent's own API access is refused for that model (401 \"This is a gateway API key. Use it against the gateway endpoint.\"). Only \"agent:<uuid>\" works.",
     "rootCause": "frontend/src/components/agents/detail/integration-snippets.tsx:31,43,55,72 (snippet uses slugify(agent.name)) vs backend/src/modules/agents/agent-api-access.service.ts:21 (authenticateTarget accepts only a uuid ref and returns null for a name), so the request falls to backend/src/modules/agents/compat-auth.helper.ts:43 (authenticateCompatKey refuses any key carrying a gatewayId)"
+  },
+  "J12 runner set up with the documented commands runs a shell tool here, then stops and is deleted": {
+    "finding": "Deleting a runner from its page gets no answer for over 3 minutes once that runner has served an agent run's shell tool: Delete stays pending and the page never leaves; the runner is gone minutes later. The same DELETE answers in about 100 ms for a runner that never served a run (never connected, connected, or offline with a workspace made through POST /workspaces).",
+    "rootCause": "backend/src/modules/runner/runner.service.ts:722-731 (deleteRunner): the staging log shows the request reach RunnerCapabilityPublisher.unpublish (runner-capability.publisher.ts:160-171, 'unpublished 3 capabilities') and then nothing; this.runners.remove(runner) at runner.service.ts:729 does not return. Likely a row lock on the run's workspace/runner rows held by the agent-run workspace path (backend/src/modules/runner/run-workspace.service.ts); not confirmed against pg_stat_activity."
   }
 }
