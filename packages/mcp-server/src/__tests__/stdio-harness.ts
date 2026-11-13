@@ -51,6 +51,12 @@ export interface StdioServer {
   messages: Message[];
   stderr(): string;
   send(message: Record<string, unknown>): void;
+  /** Write a raw line (a malformed message, say). */
+  sendRaw(line: string): void;
+  /** Close the server's stdin, as a client that has said everything does. */
+  endInput(): void;
+  /** Settles with the exit code once the process has exited. */
+  exited: Promise<number | null>;
   response(id: number): Promise<Message>;
   stop(): void;
 }
@@ -62,6 +68,7 @@ export function startServer(env: Record<string, string>, args: string[] = ['acme
     cwd: packageDir,
     env: { ...process.env, HOME: home, USERPROFILE: home, ALMYTY_TOKEN: 'test-token', ...env },
   });
+  const exited = new Promise<number | null>((resolve) => child.once('exit', (code) => resolve(code)));
   const messages: Message[] = [];
   let stderr = '';
   let buffered = '';
@@ -81,6 +88,9 @@ export function startServer(env: Record<string, string>, args: string[] = ['acme
     messages,
     stderr: () => stderr,
     send: (message) => child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`),
+    sendRaw: (line) => child.stdin.write(`${line}\n`),
+    endInput: () => child.stdin.end(),
+    exited,
     async response(id: number) {
       await waitFor(() => messages.some((m) => m.id === id && (m.result !== undefined || m.error !== undefined)), `response ${id}`);
       return messages.find((m) => m.id === id && (m.result !== undefined || m.error !== undefined))!;
