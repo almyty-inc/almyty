@@ -23,9 +23,9 @@ test.describe('J1 sign up and sign in', () => {
     await page.goto('/analytics')
     // Every counter of the overview is zero.
     const overview = page.getByRole('tabpanel', { name: 'Overview' }).or(page.getByRole('main'))
-    await expect(overview.first()).toContainText(/Requests \(24h\)\s*0\b/)
-    await expect(overview.first()).toContainText(/Tool executions \(7d\)\s*0\b/)
-    await expect(overview.first()).toContainText(/Model calls \(24h\)\s*0\b/)
+    await expect(overview.first()).toContainText(/Requests \(24h\)\s*0(?![\d.])/)
+    await expect(overview.first()).toContainText(/Tool executions \(7d\)\s*0(?![\d.])/)
+    await expect(overview.first()).toContainText(/Model calls \(24h\)\s*0(?![\d.])/)
     await page.goto('/agents')
     await expect(page.getByRole('main').getByText(/no agents/i).first()).toBeVisible()
     await page.goto('/apis')

@@ -49,7 +49,8 @@ test.describe('J4/J5 autonomous agent with a real tool', () => {
     const agentName = gate.name('weather-agent')
     await page.goto('/agents/new')
     await page.getByRole('textbox', { name: 'Agent name' }).fill(agentName)
-    await page.getByRole('button', { name: 'Autonomous' }).click()
+    // A new agent starts autonomous.
+    await expect(page.getByRole('button', { name: 'Autonomous' }), 'Create agent should open in Autonomous mode').toHaveAttribute('aria-pressed', 'true')
     await pickModel(page, page.getByRole('combobox', { name: 'Model' }), MAIN_MODEL)
     await page.getByRole('textbox', { name: 'Instructions' }).fill(
       'You report weather. Always call the Open-Meteo forecast tool for the numbers ' +

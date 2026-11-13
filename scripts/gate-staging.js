@@ -227,8 +227,12 @@ async function cliLogin(qa, startedAt) {
     const context = await browser.newContext({ storageState: path.join(GATE_DIR, '.auth', 'qa.json') });
     const page = await context.newPage();
     await page.goto(loginUrl);
+    // The QA user is in several organizations: wait until the page has
+    // loaded them and offers the picker, as a person would see it.
     const picker = page.locator('#cli-organization');
-    if (await picker.count()) await picker.selectOption({ label: qa.org });
+    await picker.waitFor({ state: 'visible', timeout: 30_000 });
+    await page.waitForFunction(() => document.querySelectorAll('#cli-organization option').length > 1);
+    await picker.selectOption({ label: qa.org });
     await page.getByRole('button', { name: 'Connect CLI' }).click();
     const code = await Promise.race([exited, new Promise((r) => setTimeout(() => r('timeout'), 60_000))]);
     if (code !== 0) {
