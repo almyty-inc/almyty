@@ -22,7 +22,7 @@ import { AgentConstraintsService } from '../agent-constraints/agent-constraints.
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
-import { AgentMemoryKeeper, recordReportedItems } from './agent-memory.keeper';
+import { AgentMemoryKeeper, alreadyReportedBlock } from './agent-memory.keeper';
 import { agentApiIds, agentEnvironmentId, agentRunnerId, callsAgents, mayCallAgent } from './agent-capabilities';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
@@ -71,7 +71,7 @@ import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
 import { MACHINE_FAILED, type MachineProblem, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
-import { speaksOfEarlierReports } from './answer-checks';
+import { earlierReportedItems, forbidsRepeats, speaksOfEarlierReports } from './answer-checks';
 
 /** How many of an agent's earlier answers a "skipped as already reported" claim is checked against, and from how many days back. */
 export const EARLIER_ANSWERS_MAX = 50;
@@ -540,6 +540,14 @@ export class AgentStepProcessor {
         } catch (err) {
           this.s.logger.warn(`Failed to recall memories for run ${runId}: ${err.message}`);
         }
+      }
+
+      // An agent told to leave out what it already reported is told what
+      // that is: the items its earlier answers listed, from the same answers
+      // and by the same rule the answer check holds it to. Read once, at the
+      // start of the run; buildMessages puts it beside the instructions.
+      if (forbidsRepeats(agent.instructions ?? '') && run.workingMemory?.alreadyReported === undefined) {
+        await this.alreadyReportedFor(run);
       }
 
       // Explore, extract, patch: the main role works from the brief the
@@ -1874,9 +1882,6 @@ export class AgentStepProcessor {
 
         run.status = AgentRunStatus.COMPLETED;
         run.output = finalContent;
-        // With memory on, the ids of the items this answer reported go on
-        // the run, committed with it: the next run of the agent is given them.
-        if (agent.memoryConfig?.enabled) recordReportedItems(run);
 
         const stepDuration = Date.now() - finalCall.startedAt;
         run.steps.push({
@@ -3302,7 +3307,7 @@ export class AgentStepProcessor {
     const sized = (checkers ?? []).map((checker, i) =>
       checker && !(checker.maxTokens && checker.maxTokens > 0) ? { ...checker, maxTokens: checkerOutputLimit(cards[i]?.maxOutputTokens) } : checker,
     );
-    // Read only where the answer or the agent's instructions speak of items reported before (a skip, "new" items).
+    // Read only where the agent's instructions forbid repeating earlier reports, or the answer says it skipped some.
     const earlier = speaksOfEarlierReports(target ?? '', rules) ? await this.earlierAnswersOf(run) : undefined;
     return { evidence, rules, checkers: sized, ...(earlier ? { earlier } : {}), ...(toolResults ? { toolResults } : {}) };
   }
@@ -3310,17 +3315,25 @@ export class AgentStepProcessor {
   /**
    * What this agent's earlier completed runs answered, newest first: the
    * last EARLIER_ANSWERS_MAX of them, from the last EARLIER_ANSWERS_DAYS
-   * days, outputs only. Read only for an answer that says it skipped
-   * items as already reported. Undefined when they cannot be read, so the
-   * claim is then not checked rather than checked against nothing.
+   * days, outputs only; for a visitor's run, only that visitor's. The one
+   * source of both the answer check's "reported before" and the list a run
+   * is told to leave out (alreadyReportedFor). Undefined when they cannot
+   * be read, so nothing is then checked against nothing.
    */
-  private async earlierAnswersOf(run: AgentRun): Promise<string[] | undefined> {
+  async earlierAnswersOf(run: AgentRun): Promise<string[] | undefined> {
     if (!run.agentId || !this.s.runRepository) return undefined;
     try {
       const before = run.createdAt instanceof Date ? run.createdAt : new Date();
       const since = new Date(before.getTime() - EARLIER_ANSWERS_DAYS * 86_400_000);
       const rows = await this.s.runRepository.find({
-        where: { agentId: run.agentId, organizationId: run.organizationId, status: AgentRunStatus.COMPLETED, createdAt: Between(since, before), id: Not(run.id) } as FindOptionsWhere<AgentRun>,
+        where: {
+          agentId: run.agentId,
+          organizationId: run.organizationId,
+          status: AgentRunStatus.COMPLETED,
+          createdAt: Between(since, before),
+          id: Not(run.id),
+          ...(run.endUserId ? { endUserId: run.endUserId } : {}),
+        } as FindOptionsWhere<AgentRun>,
         select: { id: true, output: true, createdAt: true } as any,
         order: { createdAt: 'DESC' } as any,
         take: EARLIER_ANSWERS_MAX,
@@ -3332,6 +3345,21 @@ export class AgentStepProcessor {
       this.s.logger.warn(`Could not read the earlier answers of agent ${run.agentId} for the check of run ${run.id}: ${(err as Error)?.message}`);
       return undefined;
     }
+  }
+
+  /**
+   * The "[ALREADY REPORTED — DO NOT LIST AGAIN]" section of this run's
+   * prompt, kept on the run (`workingMemory.alreadyReported`) so every step
+   * reads the same: the items the agent's earlier answers listed
+   * (earlierReportedItems over earlierAnswersOf), exactly what the answer
+   * check will hold this answer to. '' when there are none.
+   */
+  async alreadyReportedFor(run: AgentRun): Promise<string> {
+    const earlier = await this.earlierAnswersOf(run);
+    const items = earlier ? earlierReportedItems(earlier) : [];
+    const block = alreadyReportedBlock(items);
+    run.workingMemory = { ...(run.workingMemory ?? {}), alreadyReported: block, alreadyReportedItems: items.length };
+    return block;
   }
 
   /** Each checker's model card (its context window and most output), or null when it has none. */

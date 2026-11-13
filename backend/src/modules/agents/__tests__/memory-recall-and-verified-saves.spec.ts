@@ -58,7 +58,7 @@ describe('recall at the start of a run', () => {
     expect(query).toMatchObject({ scope: { scope_type: 'agent', scope_id: 'org-1:agent:agent-1' }, query: 'Check billing-service again and tell me what changed since your last check' });
     expect(conversationQuery).not.toHaveBeenCalled();
     expect(context).toContain('billing-service pinned lodash');
-    expect(r.steps).toEqual([expect.objectContaining({ type: 'memory_recall', output: { found: 1, reportedItems: 0 } })]);
+    expect(r.steps).toEqual([expect.objectContaining({ type: 'memory_recall', output: { found: 1 } })]);
   });
 
   it('looks up once per run: later steps read the same memories, not a search on the verifier\'s feedback', async () => {

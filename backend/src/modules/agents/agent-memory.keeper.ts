@@ -1,6 +1,5 @@
 import type { Agent } from '../../entities/agent.entity';
-import { Not } from 'typeorm';
-import { AgentRunStatus, type AgentRun } from '../../entities/agent-run.entity';
+import type { AgentRun } from '../../entities/agent-run.entity';
 import type { ChatRequest } from '../llm-providers/llm-providers.service';
 import { MemoryError, type MemoryItem, type Provenance, type RankedItem, type ScopeRef, type Tier } from '../memory/canonical/canonical.types';
 import type { PutInput } from '../memory/canonical/dto/canonical-memory.dto';
@@ -19,8 +18,7 @@ import {
 import { runMayWriteSharedMemory } from './memory-autosave.policy';
 import { principalOfRun } from '../../common/authorization/execution-access.service';
 import type { AgentAccountUse } from '../memory/canonical/memory-accounts.service';
-import { reportedItemsOf } from './answer-checks';
-import { runEvidence } from './checker-evidence';
+import type { EarlierItem } from './answer-checks';
 
 /** The most facts one run adds. */
 export const FACTS_PER_RUN_MAX = 5;
@@ -142,47 +140,33 @@ export function parseFacts(content: string): string[] {
   }
 }
 
-/** The most item ids one run records as reported. */
-export const REPORTED_ITEMS_MAX = 50;
-/** How many of the agent's earlier runs a run is told the reported items of, newest first, and the most ids that makes. */
-export const REPORTED_RUNS_MAX = 20;
-export const REPORTED_IDS_MAX = 200;
+/** The most already-reported items a run's prompt lists. */
+export const ALREADY_REPORTED_MAX = 100;
 
 /**
- * The items a finished run's answer reported, by the one id each is best
- * known by (an OpenAlex id, else an issue number, else a DOI), from the
- * items its tool results identify. [] when the answer lists none.
+ * The "already reported" section of a run's prompt: each item the agent's
+ * earlier answers listed (earlierReportedItems, the very list the answer
+ * check holds it to), newest first, by id, title and DOI, as the tool
+ * results show them. In rc9 a bare list of ids under "Relevant memories",
+ * after five prose facts, covered only runs made after #1174, and the
+ * model re-listed 7 of its items (run fc270572). '' when there are none.
  */
-export function reportedItemIds(run: Pick<AgentRun, 'input' | 'output' | 'steps'>): string[] {
-  const answer = asText(run.output).trim();
-  if (!answer) return [];
-  return reportedItemsOf(answer, runEvidence(run as any))
-    .map((it) => it.id)
-    .slice(0, REPORTED_ITEMS_MAX);
-}
-
-/**
- * Keeps on the finished run (`metadata.reportedItems`) the ids of the
- * items its answer reported. They are state, not a memory: every later run
- * of the agent is given them (AgentMemoryKeeper.reportedBefore), where a
- * memory of them lost the similarity ranking to prose facts and no run
- * ever saw it (rc8, runs bc75f6f1 to d13c5d50).
- */
-export function recordReportedItems(run: AgentRun): void {
-  const ids = reportedItemIds(run);
-  if (!ids.length) return;
-  run.metadata = { ...(run.metadata ?? {}), reportedItems: ids };
-}
-
-/** The "Items you already reported" block a run's prompt carries, or '' when there are none. */
-export function reportedBlock(ids: string[]): string {
-  if (!ids.length) return '';
+export function alreadyReportedBlock(items: EarlierItem[]): string {
+  if (!items.length) return '';
+  const lines = items.slice(0, ALREADY_REPORTED_MAX).map((it) => {
+    const id = it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? '';
+    const doi = it.dois[0] ? `DOI ${it.dois[0]}` : '';
+    const title = it.title ? `"${it.title.length > 100 ? `${it.title.slice(0, 99)}…` : it.title}"` : '';
+    return `- ${[id, title, doi].filter(Boolean).join(' — ')}`;
+  });
   return (
-    '\n\n## Items you already reported\n' +
-    'Your earlier answers reported these items, newest first. Leave out any of them your tools return again, and say how many you left out:\n' +
-    ids.join(', ')
+    `[ALREADY REPORTED — DO NOT LIST AGAIN]\n` +
+    `Your earlier answers already reported these ${items.length > lines.length ? `${lines.length} (of ${items.length})` : lines.length} items. ` +
+    `Your instructions say to leave out what you already reported: when your tools return any of them again, do not list it, ` +
+    `and count it as skipped. Match by id, DOI or title.\n${lines.join('\n')}`
   );
 }
+
 /** The most of one recalled memory put in front of the model. */
 export const RECALL_ITEM_MAX_CHARS = 2000;
 
@@ -281,58 +265,17 @@ export class AgentMemoryKeeper {
       error = `Failed to recall memories: ${err?.message ?? err}`;
       this.s.logger.warn(`${error} (run ${run.id})`);
     }
-    // What the agent reported before, by id, always: not ranked against the
-    // request like a memory, which prose facts outranked every time.
-    const reported = await this.reportedBefore(agent, run);
-    const context = recallBlock(ranked) + reportedBlock(reported);
-    run.workingMemory = { ...(run.workingMemory ?? {}), memoryRecall: { context, found: ranked.length, reportedItems: reported.length } };
+    const context = recallBlock(ranked);
+    run.workingMemory = { ...(run.workingMemory ?? {}), memoryRecall: { context, found: ranked.length } };
     run.steps.push({
       type: 'memory_recall',
       input: { scope: scope.scope_type, account: s.account },
-      output: { found: ranked.length, reportedItems: reported.length, ...(query ? {} : { skipped: 'nothing to search with' }) },
+      output: { found: ranked.length, ...(query ? {} : { skipped: 'nothing to search with' }) },
       duration: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
       ...(error ? { error } : {}),
     });
     return context;
-  }
-
-  /**
-   * The ids of the items this agent's earlier completed runs reported
-   * (their `metadata.reportedItems`), newest first, without repeats: the
-   * last REPORTED_RUNS_MAX runs, at most REPORTED_IDS_MAX ids. For a memory
-   * that is each person's own, only the runs of the same person or
-   * visitor. [] when they cannot be read.
-   */
-  async reportedBefore(agent: Pick<Agent, 'id' | 'memoryConfig'>, run: AgentRun): Promise<string[]> {
-    if (!this.s.runRepository) return [];
-    const s = this.settings(agent);
-    const own = s.whose === 'person' && run.principal?.kind !== 'agent';
-    if (own && !run.userId && !run.endUserId) return [];
-    try {
-      const rows = await this.s.runRepository.find({
-        where: {
-          agentId: agent.id,
-          organizationId: run.organizationId,
-          status: AgentRunStatus.COMPLETED,
-          id: Not(run.id),
-          ...(own ? (run.userId ? { userId: run.userId } : { endUserId: run.endUserId }) : {}),
-        } as any,
-        select: { id: true, metadata: true, createdAt: true } as any,
-        order: { createdAt: 'DESC' } as any,
-        take: REPORTED_RUNS_MAX,
-      });
-      const ids: string[] = [];
-      for (const row of rows as AgentRun[]) {
-        const listed = row.metadata?.reportedItems;
-        if (!Array.isArray(listed)) continue;
-        for (const id of listed) if (typeof id === 'string' && !ids.includes(id) && ids.length < REPORTED_IDS_MAX) ids.push(id);
-      }
-      return ids;
-    } catch (err: any) {
-      this.s.logger.warn(`Failed to read what agent ${agent.id} reported before, for run ${run.id}: ${err?.message ?? err}`);
-      return [];
-    }
   }
 
   /** The recall_memory tool. */
@@ -422,9 +365,9 @@ export class AgentMemoryKeeper {
 
     let entries: string[] = [];
     let dropped = false;
-    // The ids of the items the answer reported are not a fact to rank by
-    // similarity: they are the run's reportedItems (recordReportedItems),
-    // and every later run of the agent is given them (reportedBlock).
+    // What the answer reported is not a fact to rank by similarity: every
+    // later run is given it from the agent's earlier answers
+    // (alreadyReportedBlock, the list the answer check holds it to).
     if (s.save === 'facts') {
       const answer = await this.runner.callModel(run, team.main, request(factsPrompt(s.neverSave), exchange));
       entries = answer.error ? [] : parseFacts(answer.content);

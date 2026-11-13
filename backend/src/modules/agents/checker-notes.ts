@@ -14,7 +14,7 @@
  */
 import { falseVersionOrder } from './version-order';
 import { falseDateArithmetic } from './date-arithmetic';
-import { countsAddUp, followsSortRule, issueQualifies, issueRuleOf, toolItems, type ToolItem } from './answer-checks';
+import { countsAddUp, datedEntries, followsSortRule, issueQualifies, issueRuleOf, toolItems, toolListLength, type ToolItem } from './answer-checks';
 
 export type NoteJudgement = 'false' | 'true' | null;
 
@@ -81,49 +81,114 @@ const TITLE_QUALIFIES = /\btitle (?:indicates|suggests|describes|names|says)\b/i
 const SAYS_NO_PROBLEM_LABEL =
   /\b(?:no|without|lacks?|does not have|doesn't have)\b[^.;]{0,30}\b(?:bug|qualifying|problem|regression|security)\b[^.;]{0,30}\blabels?\b|\b(?:does not|doesn't) have (?:any )?labels? (?:indicating|that indicate|matching)/i;
 
+/** "Only issue #7532 ... meets the selection criteria": a note that no other listed issue does. */
+const ONLY_ONE_QUALIFIES = /\bonly (?:issue |the issue )?#?(\d{2,9})\b[^.\n]{0,80}\b(?:meets|qualif|matches)/i;
+
 /**
- * "Issue 64807 ... should not have been included": a note on whether an
- * issue meets the agent's rule for a problem, judged by the same rule
- * (issueQualifies); or on whether it has a problem label at all. Only a
- * note that is about one issue, named near its start, is read.
+ * "Issue 64807 ... should not have been included": a note on whether the
+ * issues it names meet the agent's rule for a problem, judged by the same
+ * rule (issueQualifies), for each issue it names near its start ("#7506 /
+ * #7538 / #7510 ... should not be included"); or on whether they have a
+ * problem label at all; or that only one listed issue qualifies.
  */
-function issueClaim(text: string, items: ToolItem[], instructions: string): NoteJudgement {
-  const rule = issueRuleOf(instructions);
+function issueClaim(text: string, items: ToolItem[], ctx: NoteContext): NoteJudgement {
+  const rule = issueRuleOf(ctx.instructions);
   if (!rule) return null;
-  const named = itemsNamed(text.slice(0, 40), items).filter((it) => it.numbers.length);
-  if (named.length !== 1) return null;
-  const facts = issueQualifies(named[0], rule);
-  if (SAYS_NOT_PROBLEM.test(text) && !TITLE_QUALIFIES.test(text)) return facts.qualifies === null ? null : facts.qualifies ? 'false' : 'true';
-  // A note about its labels alone: true where none is a problem label, false where one is.
-  if (SAYS_NO_PROBLEM_LABEL.test(text)) return facts.problemLabel ? 'false' : 'true';
-  if (SAYS_PROBLEM.test(text)) return facts.qualifies === null ? null : facts.qualifies ? 'true' : 'false';
+  const only = ONLY_ONE_QUALIFIES.exec(text);
+  if (only) {
+    // Every other issue the answer lists that the rule lets in shows the note false.
+    const others = datedEntries(ctx.answer, ctx.evidence)
+      .map((e) => e.item)
+      .filter((it) => it.numbers.length && !it.numbers.includes(`#${only[1]}`));
+    if (others.some((it) => issueQualifies(it, rule).qualifies === true)) return 'false';
+    return null;
+  }
+  // Every issue the note names: a claim about some of them ("#67391 has 'security' but #67455 and #67457 have no bug labels") is read only where all agree.
+  const named = itemsNamed(text, items).filter((it) => it.numbers.length);
+  if (!named.length) return null;
+  const facts = named.map((it) => issueQualifies(it, rule));
+  const all = (pick: (f: (typeof facts)[number]) => boolean | null): boolean | null =>
+    facts.every((f) => pick(f) === true) ? true : facts.every((f) => pick(f) === false) ? false : null;
+  const qualifies = all((f) => f.qualifies);
+  if (SAYS_NOT_PROBLEM.test(text) && !TITLE_QUALIFIES.test(text)) return qualifies === null ? null : qualifies ? 'false' : 'true';
+  // A note about their labels alone: true where none is a problem label, false where one is.
+  if (SAYS_NO_PROBLEM_LABEL.test(text)) {
+    const labelled = all((f) => f.problemLabel);
+    return labelled === null ? null : labelled ? 'false' : 'true';
+  }
+  if (SAYS_PROBLEM.test(text)) return qualifies === null ? null : qualifies ? 'true' : 'false';
   return null;
 }
 
-/** "Sorting order is correct": a note on the table's order, against the order the instructions give. */
+/** Words of a note that speak of the order of the answer's items by date. */
+const DATE_ORDER = /\b(?:descending|ascending|newest first|oldest first|most recent first|reverse chronological|chronological)\b/i;
+
+/**
+ * "Sorting order is correct": a note on the table's order, against the
+ * order the instructions give; "the order of papers matches the
+ * descending publication date order" (run 37f14fe1), against the dates the
+ * answer gives its items.
+ */
 function sortClaim(text: string, ctx: NoteContext): NoteJudgement {
   if (!/\bsort|\border(?:ed)?\b/i.test(text)) return null;
-  const says = /\b(?:correctly sorted|sorted correctly|is correctly ordered|sort(?:ing)? order is correct|order is correct|is sorted|properly sorted)\b/i.test(text) && !DENIES.test(text)
+  const affirms = /\b(?:correctly sorted|sorted correctly|is correctly ordered|sort(?:ing)? order is correct|order is correct|is sorted|properly sorted|order (?:of [\w ]{1,30})?matches|are (?:listed |sorted |ordered )?in [\w ]{0,30}order|follows? the [\w ]{0,30}order)\b/i;
+  const says = affirms.test(text) && !DENIES.test(text)
     ? true
-    : /\bnot (?:correctly )?sorted|\bsort(?:ing)? order is (?:wrong|incorrect)|\bout of order\b/i.test(text)
+    : /\bnot (?:correctly )?(?:sorted|ordered|in [\w ]{0,30}order)|\bsort(?:ing)? order is (?:wrong|incorrect)|\bout of order\b/i.test(text)
       ? false
       : null;
   if (says === null) return null;
+  if (DATE_ORDER.test(text)) {
+    const days = datedEntries(ctx.answer, ctx.evidence)
+      .map((e) => e.day)
+      .filter((d): d is string => !!d);
+    if (days.length < 2) return null;
+    const ascending = /\b(?:ascending|oldest first|chronological)\b/i.test(text) && !/\breverse chronological\b/i.test(text);
+    const ordered = days.every((d, i) => i === 0 || (ascending ? d >= days[i - 1] : d <= days[i - 1]));
+    return says === ordered ? 'true' : 'false';
+  }
   const sorted = followsSortRule(ctx.answer, ctx.instructions);
   if (sorted === null) return null;
   return says === sorted ? 'true' : 'false';
 }
 
-/** "The skip count is inconsistent with the total returned": a note on whether the answer's counts add up. */
+/**
+ * "The skip count is inconsistent with the total returned": a note on
+ * whether the answer's counts add up; "the tool returned 11 works" (run
+ * b37987d4, the tool returned 10): a count it gives the tool's list.
+ */
 function countClaim(text: string, ctx: NoteContext): NoteJudgement {
-  if (!/\b(?:skip|skipped|returned|count|total)\b/i.test(text)) return null;
-  const says = /\b(?:inconsistent|does not add up|doesn't add up|do not add up|count is (?:wrong|incorrect)|counts? (?:are|is) (?:wrong|incorrect))\b/i.test(text)
+  // A count the note gives the tool's list: a wrong one shows the note false; a right one shows nothing yet.
+  const toolSaid = /\btool (?:returned|returns|gave|provides|provided|has|lists)\s+(?:only\s+)?(\d{1,4})\b/i.exec(text);
+  const length = toolSaid ? toolListLength(ctx.answer, ctx.evidence) : null;
+  if (toolSaid && length !== null && Number(toolSaid[1]) !== length) return 'false';
+  const says = /\b(?:skip|skipped|returned|count|total)\b/i.test(text) &&
+    /\b(?:inconsistent|does not add up|doesn't add up|do not add up|count is (?:wrong|incorrect)|counts? (?:are|is) (?:wrong|incorrect))\b/i.test(text)
     ? false
     : null;
-  if (says === null) return null;
+  if (says === null) return toolSaid && length !== null ? 'true' : null;
   const adds = countsAddUp(ctx.answer, ctx.evidence);
   if (adds === null) return null;
   return says === adds ? 'true' : 'false';
+}
+
+/** Words of a note that call an item's date wrong. */
+const DATE_WORDS = /\b(?:published(?:_at)?|publication date|release date|date|updated(?:_at)?|released)\b/i;
+
+/**
+ * "v26.13.1 published_at date is wrong; should be 2026-11-11T16:44:25Z,
+ * not just 2026-11-11" (run 8ca1dcf2): a note on the dates the answer
+ * gives the items it names, against the tool's (dateFindings). False where
+ * every date it names agrees, true where one does not.
+ */
+function dateClaim(text: string, items: ToolItem[], ctx: NoteContext): NoteJudgement {
+  if (!DATE_WORDS.test(text) || !/\b(?:wrong|incorrect|should be|does not match|doesn't match|mismatch)\b/i.test(text)) return null;
+  // By label: each lookup reads the tool results afresh, so the same item is not the same object.
+  const named = new Set(itemsNamed(text, items).map((it) => it.label));
+  if (!named.size) return null;
+  const dated = datedEntries(ctx.answer, ctx.evidence).filter((e) => named.has(e.item.label) && e.day);
+  if (!dated.length) return null;
+  return dated.every((e) => e.agrees) ? 'false' : 'true';
 }
 
 /** Findings about the answer as a whole: a note about them names their field, not an item. */
@@ -162,7 +227,8 @@ export function judgeNoteBy(text: string, ctx: NoteContext): { verdict: NoteJudg
   const items = toolItems(ctx.evidence).items;
   const checks: Array<[string, () => NoteJudgement]> = [
     ['tool field', () => booleanClaim(text, items)],
-    ['issue rule', () => issueClaim(text, items, ctx.instructions)],
+    ['issue rule', () => issueClaim(text, items, ctx)],
+    ['date field', () => dateClaim(text, items, ctx)],
     ['sort order', () => sortClaim(text, ctx)],
     ['counts', () => countClaim(text, ctx)],
     ['code finding', () => findingClaim(text, ctx)],
@@ -179,21 +245,39 @@ export function judgeNote(text: string, ctx: NoteContext): NoteJudgement {
   return judgeNoteBy(text, ctx).verdict;
 }
 
+/** In plain words, what showed a hidden note false. */
+const SHOWN_FALSE_BY: Record<string, string> = {
+  'version order': 'the versions compare the other way',
+  'day arithmetic': 'the day count is wrong',
+  'tool field': "the tool results give that field the other value",
+  'issue rule': "the agent's rule lets the issue in by its labels or title",
+  'date field': 'the answer gives the date the tool results give',
+  'sort order': 'the answer is not in that order',
+  counts: "the tool results and the answer's own counts say otherwise",
+  'code finding': 'a code check found that claim wrong',
+};
+
 /**
- * The notes to show: those the code shows false are left out, those it
- * shows true are marked `checked`. `dropped` counts what was left out, by
- * checker, for the checker's line on the step.
+ * The notes to show, and the ones hidden: a note the code shows false is
+ * hidden, kept with what showed it false (`why`) so a reviewer can audit
+ * it on the run ("Hidden: proven false by the tool results"); one it shows
+ * true is marked `checked`. `dropped` counts the hidden ones by checker.
  */
-export function screenNotes<N extends { checker: string; text: string; checked?: boolean }>(notes: N[], ctx: NoteContext): { notes: N[]; dropped: Map<string, number> } {
+export function screenNotes<N extends { checker: string; text: string; checked?: boolean; why?: string }>(
+  notes: N[],
+  ctx: NoteContext,
+): { notes: N[]; hidden: N[]; dropped: Map<string, number> } {
   const kept: N[] = [];
+  const hidden: N[] = [];
   const dropped = new Map<string, number>();
   for (const n of notes) {
-    const verdict = judgeNote(n.text, ctx);
+    const { verdict, by } = judgeNoteBy(n.text, ctx);
     if (verdict === 'false') {
       dropped.set(n.checker, (dropped.get(n.checker) ?? 0) + 1);
+      hidden.push({ ...n, why: SHOWN_FALSE_BY[by ?? ''] ?? 'the tool results show it false' });
       continue;
     }
     kept.push(verdict === 'true' ? { ...n, checked: true } : n);
   }
-  return { notes: kept, dropped };
+  return { notes: kept, hidden, dropped };
 }

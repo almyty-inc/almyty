@@ -221,6 +221,9 @@ const NUMBERED = /^ {0,3}(\d{1,3})[.)][ \t](.*)$/;
 const RULE_LINE = /^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$/;
 /** A heading that leads with what identifies an item: a version or tag, an issue number. */
 const IDENTIFIER_HEAD = /^[*_`"[(]*(?:v?\d{1,6}\.\d{1,6}(?:\.\d{1,6})?\b|#\d{1,9}\b)/i;
+/** A top-level bullet, and the word it may name its item's kind with first ("Issue #7532", "Release v5.3.0"). */
+const BULLET = /^ ?[-*+][ \t](.*)$/;
+const BULLET_LEAD = /^[*_`]{0,2}(?:issue|pr|pull request|release|tag|version)[ \t]+/i;
 
 /** The answer as entries, its numbered lists, and what it says outside them. */
 export function parseAnswer(answer: string): ParsedAnswer {
@@ -271,6 +274,14 @@ export function parseAnswer(answer: string): ParsedAnswer {
       lastNumber = n;
       numberedLists[numberedLists.length - 1]++;
       current = { kind: 'numbered', head: numbered[2], list: numberedLists.length - 1, lines: [numbered[2]], text: '', ...(under ? { under } : {}) };
+      blankBefore = false;
+      continue;
+    }
+    // A top-level bullet that leads with what identifies an item ("- Issue #7532: ...", "- **v5.3.0** ...") is an entry like a heading's (run 941cb583).
+    const bullet = BULLET.exec(line);
+    if (bullet && IDENTIFIER_HEAD.test(bullet[1].replace(BULLET_LEAD, '').trim())) {
+      flush();
+      current = { kind: 'section', head: bullet[1].trim(), lines: [bullet[1].trim()], text: '', ...(under ? { under } : {}) };
       blankBefore = false;
       continue;
     }
@@ -361,7 +372,8 @@ function entryTitle(entry: AnswerEntry): string {
   if (entry.kind !== 'numbered') return '';
   let s = entry.head.replace(/^\s*\[#?\d+\]\([^)]*\)\s*/, '').replace(/^\s*\[#?\d+\]\s*/, '').replace(/^#\d+\s*[:.-]?\s*/, '');
   s = bare(s);
-  const cut = [' - ', ' – ', ' — ', ' | ', ' (http', ' DOI'].map((m) => s.indexOf(m)).filter((at) => at > 0);
+  // A title in quotes, then the rest of a sentence: '"GraphAgents: ...," 2026-11-11, by ...'.
+  const cut = [' - ', ' – ', ' — ', ' | ', ' (http', ' DOI', ',” ', '," ', '" (', '” ('].map((m) => s.indexOf(m)).filter((at) => at > 0);
   if (cut.length) s = s.slice(0, Math.min(...cut));
   return s.trim();
 }
@@ -402,15 +414,27 @@ export function valueList(text: string): string[] {
   return Array.from(new Set(unwrap(text).split(/[,;|]/).map((part) => normalValue(part)).filter(Boolean)));
 }
 
-/** Whether a value the answer gives says there is none: "none", "(none)", "[N/A]", "", "-". */
+/**
+ * Words a value starts with when it says there is none, as a word of their
+ * own (not "no-response", "not-planned"): "none indicating bug/security
+ * explicitly" (run 8ca1dcf2), "Unknown (preprint, ...)", "N/A - no direct
+ * DOI", "no labels", "not available".
+ */
+const NONE_START = /^(?:none|null|nil|n\/a|unknown|missing|no|not available|not given|not provided|not listed)(?=$|[\s,.;:()[\]])/i;
+
+/**
+ * Whether a value the answer gives says there is none: "none", "(none)",
+ * "[N/A]", "", "-", or a phrase that starts with a none word. The one test
+ * every check uses (valueList, labels, the none-claim check, names).
+ */
 function noneLike(text: string): boolean {
   const s = unwrap(text);
-  return !s || NONE_VALUE.test(s);
+  return !s || NONE_VALUE.test(s) || NONE_START.test(s);
 }
 
-/** Whether a value says there is none, or starts by saying so: "Unknown (preprint, Université Bordeaux Montaigne)". */
+/** noneLike, by the name its callers read it by: a value that starts by saying there is none. */
 function startsNone(text: string): boolean {
-  return noneLike(text) || /^(?:unknown|none|n\/a|not given|not available|not listed|missing)\b/i.test(unwrap(text));
+  return noneLike(text);
 }
 
 function keysOfEntry(entry: AnswerEntry): EntryKeys {
@@ -936,6 +960,7 @@ function releaseNoteFindings(entry: AnswerEntry, items: ToolItem[], by: string |
     const term = /^cve-\d{4}-\d{4,7}$/.test(key) || isIdentifier(word) || notes.vocabulary.has(key) || severityOf(key) !== null;
     if (term && !terms.includes(key)) terms.push(key);
   }
+  for (const name of dependencyNamesOf(said)) if (!terms.includes(name)) terms.push(name);
   // A term counts as mentioned where a word of the notes starts with it: "buffer" is in "retain buffers".
   // A severity word counts where the notes say it in any of its words ("security": a CVE id).
   const missing = terms.filter((t) => !(severityOf(t) ?? [t]).some((w) => hasWordStart(text, w)));
@@ -953,6 +978,55 @@ function releaseNoteFindings(entry: AnswerEntry, items: ToolItem[], by: string |
     ),
   ];
 }
+/** Words that stand before a version in prose without naming a package: "aligned with v24.22.3", "from 4.17 to 4.18". */
+const NOT_A_PACKAGE = new Set([
+  'a', 'an', 'and', 'as', 'at', 'by', 'for', 'from', 'in', 'is', 'of', 'on', 'or', 'since', 'than', 'the', 'to', 'v', 'version', 'versions', 'with', 'was',
+  'node', 'nodejs', 'node.js', 'release', 'releases', 'lts', 'current', 'latest', 'tag', 'branch', 'line', 'updated', 'upgraded', 'bumped', 'update', 'updates',
+  'others', 'other', 'more', 'etc', 'several', 'various', 'misc', 'patch', 'minor', 'major', 'security',
+]);
+
+function packageName(word: string): string | null {
+  let name = word.trim().toLowerCase();
+  while (name && '.,;:'.includes(name[name.length - 1])) name = name.slice(0, -1);
+  return /^[a-z@][a-z0-9_./@-]{1,40}$/.test(name) && !NOT_A_PACKAGE.has(name) && !/^v?\d/.test(name) ? name : null;
+}
+
+/** Words that say a line speaks of updated packages. */
+const UPDATE_CONTEXT = /\b(?:updat|upgrad|bump|dependenc|deps\b)/i;
+
+/**
+ * The packages and dependencies a release's summary says the release
+ * updated, in a line that speaks of updates: a name with a version
+ * ("undici updated to version 7.30.2", run 8ca1dcf2; never a release tag,
+ * "fixes paralleling v26.13.1") and each one-word item of a "dependency
+ * updates for ..." list ("brotli, llhttp, sqlite, undici, and npm", run
+ * 96f7b54a; not "and others", not "to patch several ..."). Each must be in
+ * that release's notes.
+ */
+function dependencyNamesOf(said: string): string[] {
+  const out: string[] = [];
+  const add = (word: string) => {
+    const name = packageName(word);
+    if (name && !out.includes(name)) out.push(name);
+  };
+  for (const line of said.split('\n')) {
+    if (!UPDATE_CONTEXT.test(line)) continue;
+    for (const m of line.matchAll(/([A-Za-z@][\w./@-]{1,40})\s+(?:(?:is\s+|was\s+)?(?:updated|upgraded|bumped)\s+)?(?:to\s+)?(?:version\s+)?\d{1,4}\.\d{1,4}(?:\.\d{1,6})?(?!\w|\.\d)/g)) add(m[1]);
+    const dep = /\b(?:dependenc(?:y|ies)|deps)\b[^.:\n]{0,40}?(?:\bfor\b|\bto\b|\bof\b|\bincluding\b|:)([^.\n]{1,300})/i.exec(line);
+    if (dep) {
+      for (const part of dep[1].split(/,|\band\b|\bor\b/)) {
+        // One name, perhaps with its version: "llhttp 9.4.4". Anything longer is prose, and ends the list.
+        const open = part.indexOf('(');
+        const words = (open === -1 ? part : part.slice(0, open)).trim().split(/\s+/).filter(Boolean);
+        if (!words.length) continue;
+        if (words.length > 2 || (words.length === 2 && !/^v?\d/.test(words[1]))) break;
+        add(words[0]);
+      }
+    }
+  }
+  return out;
+}
+
 
 /**
  * Severity words a summary can attribute to a release, with the words of
@@ -984,7 +1058,7 @@ const PROBLEM_LABELS = ['bug', 'confirmed-bug', 'regression', 'security', 'crash
  * could let in.
  */
 const PROBLEM_WORDS =
-  /\b(?:bugs?|regress|security|crash|vulnerab|cve|rce|exploit|segfault|segmentation|fail|error|broken|break|leak|hang|freez|panic|terminat|abort|incorrect|wrong|truncat|corrupt|overflow|deadlock|race|unexpected|invalid|unhandled|unable|cannot|can't|doesn't|does not|not work|mismatch|missing|undefined|throws?|exception|warning|flak|timeout|slow|stuck)/i;
+  /\b(?:bugs?|regress|security|crash|vulnerab|cve|rce|exploit|segfault|segmentation|fail|error|broken|break|leak|hang|freez|panic|terminat|abort|incorrect|wrong|truncat|corrupt|overflow|deadlock|race|unexpected|invalid|unhandled|unable|cannot|can't|doesn't|does not|not work|mismatch|missing|undefined|throws?|exception|warning|flak|timeout|slow|stuck|los(?:e|es|t|ing)\b)/i;
 
 /**
  * The rule an agent's instructions give for which issues to list as
@@ -1109,7 +1183,16 @@ const RETURNED_PATTERNS: RegExp[] = [
   new RegExp(`\\b(?:number|count|total)\\s+of\\s+(?:[\\w-]+\\s+){0,2}?(${NOUN})(?:\\s+[\\w-]+){0,4}?(?:[ \\t]*[:=][ \\t]*|[ \\t]+)(\\d{1,4})\\b`, 'i'),
   new RegExp(`\\b(${NOUN})\\s+(?:found|returned|retrieved)\\s*[:=]\\s*(\\d{1,4})\\b`, 'i'),
 ];
-const SKIPPED_PATTERNS: RegExp[] = [/\bskipped\s+(?:only\s+)?(\d{1,4})\b/i, /\b(\d{1,4})\s+(?:[\w-]+\s+){0,3}?(?:were\s+|was\s+)?skipped\b/i];
+/**
+ * A count the answer says it skipped, in any tense or word for it: "I
+ * skipped 10", "skipping 10 previously reported" (run b37987d4), "I skip
+ * 2", "left out 3", "omitting 1", "4 were excluded".
+ */
+const SKIP_VERB = '(?:skipp(?:ed|ing)|skips?|left out|leaving out|leaves? out|omit(?:ted|ting|s)?|exclud(?:ed|ing|es?)|dropp(?:ed|ing))';
+const SKIPPED_PATTERNS: RegExp[] = [
+  new RegExp(`\\b${SKIP_VERB}\\s+(?:only\\s+|the\\s+)?(\\d{1,4})\\b`, 'i'),
+  new RegExp(`\\b(\\d{1,4})\\s+(?:[\\w-]+\\s+){0,3}?(?:were\\s+|was\\s+|are\\s+|is\\s+)?(?:skipped|left out|omitted|excluded|dropped)\\b`, 'i'),
+];
 const COMPLETE_PATTERNS: RegExp[] = [
   new RegExp(`\\bno other\\s+(?:[\\w-]+\\s+){0,2}?${NOUN}\\b[^.\\n]{0,60}`, 'i'),
   new RegExp(`\\b(?:all|every)\\s+(?:of\\s+the\\s+)?(?:\\d{1,4}\\s+)?(?:[\\w-]+\\s+){0,2}?${NOUN}\\b[^.\\n]{0,40}?\\b(?:are|is)\\s+(?:listed|shown|included|below|above)\\b`, 'i'),
@@ -1237,6 +1320,35 @@ export function countFindings(parsed: ParsedAnswer, index: ToolItems, evidence: 
 }
 
 /**
+ * Each entry of the answer that names a tool item, in the answer's order:
+ * the item, the first date the entry gives (or null), and whether its
+ * dates agree with the tool's (dateFindings). For the note verifiers.
+ */
+export function datedEntries(answer: string, evidence: string): Array<{ item: ToolItem; day: string | null; agrees: boolean }> {
+  const index = toolItems(evidence);
+  const out: Array<{ item: ToolItem; day: string | null; agrees: boolean }> = [];
+  const toolDays = (it: ToolItem) =>
+    [...PUBLISHED, ...UPDATED, ...CREATED].map((f) => it.value[f]).filter((v): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)).map((v) => v.slice(0, 10));
+  for (const entry of parseAnswer(answer).entries) {
+    const { items } = itemsOfEntry(entry, index);
+    if (!items.length) continue;
+    const day = datesOf(entry)[0]?.day ?? null;
+    // A date the entry gives agrees where the tool gives the item that day in one of its date fields, and no labelled date of it differs.
+    const agrees = dateFindings(entry, items).length === 0 && (!day || items.some((it) => toolDays(it).includes(day)));
+    out.push({ item: items[0], day, agrees });
+  }
+  return out;
+}
+
+/** How many items the tool returned in the list the answer speaks of, or null where it cannot say. */
+export function toolListLength(answer: string, evidence: string): number | null {
+  if (PARTIAL.test(evidence)) return null;
+  const index = toolItems(evidence);
+  const { list } = shownAndList(parseAnswer(answer), index);
+  return list === -1 ? null : index.lists[list] ?? null;
+}
+
+/**
  * Whether the answer's own counts add up: the tool returned what it says,
  * and returned less skipped is what it lists ("returned 10, skipped 1",
  * 9 listed). Null where it states no returned or no skipped count.
@@ -1324,35 +1436,114 @@ function findWord(hay: string, needle: string, wholeWord: boolean): boolean {
 const SKIPPED_NAMED_MAX = 10;
 
 /**
- * Words that speak of items reported before, or of new ones: "already
- * reported", "reported before", "none were reported previously", "the
- * remaining 9 new papers", "earlier digests". In an answer or in the
- * agent's instructions ("leave out any paper you already reported"), they
- * make what the agent reported before something its answer can be held to.
+ * Words an answer uses when it presents what it lists as new: "the
+ * remaining 9 new papers", "none were reported previously". They only
+ * choose the finding's wording; whether the check runs is the agent's
+ * instructions' to say (forbidsRepeats).
  */
-const EARLIER_REPORTS =
-  /\b(?:already|previously|before|earlier)\b[^.\n]{0,40}\breported\b|\breported\b[^.\n]{0,40}\b(?:before|previously|earlier|already)\b|\bnew\s+(?:unique\s+)?(?:papers?|works?|items?|articles?|issues?|releases?|results?|entries|publications?)\b|\b(?:earlier|previous|prior)\s+digests?\b/i;
+const NEW_CLAIM =
+  /\bnew\s+(?:unique\s+)?(?:papers?|works?|items?|articles?|entries|publications?)\b|\b(?:none|not)\b[^.\n]{0,30}\b(?:reported|listed)\b[^.\n]{0,20}\b(?:before|previously|earlier)\b|\b(?:none|not)\s+(?:\w+\s+){0,2}?previously\s+reported\b/i;
 
-/** Whether an answer or the agent's instructions speak of items reported before: then the check reads the agent's earlier answers. */
+/**
+ * A rule in the agent's instructions against repeating what it reported
+ * before: "leave out any paper (by DOI or OpenAlex id) you already
+ * reported", "do not list issues reported in earlier runs". Only such a
+ * rule holds an answer to the agent's earlier answers; a heading "New
+ * releases" in the answer does not (run 8ca1dcf2).
+ */
+const NO_REPEAT_RULE =
+  /\b(?:leave out|skip|omit|exclude|drop|filter out|(?:do not|don't|never) (?:repeat|list|include|report|mention)|avoid (?:repeating|listing|reporting))\b[^.\n]{0,120}\b(?:already|previously|earlier|before)\b/i;
+
+/** Whether the agent's instructions forbid repeating what it reported before. */
+export function forbidsRepeats(instructions: string): boolean {
+  return NO_REPEAT_RULE.test(String(instructions ?? ''));
+}
+
+/** Whether the check reads the agent's earlier answers: its instructions forbid repeats, or the answer says it skipped items as already reported. */
 export function speaksOfEarlierReports(answer: string, instructions = ''): boolean {
-  return claimsSkippedAsReported(answer) || EARLIER_REPORTS.test(parseAnswer(answer).outside) || EARLIER_REPORTS.test(instructions ?? '');
+  return forbidsRepeats(instructions) || claimsSkippedAsReported(answer);
+}
+
+/** The platform's line above an answer whose check did not pass, or could not be made (unverified-answer.ts). */
+const PLATFORM_LEADS = ["Note: this answer's check didn't pass", 'Note: this answer could not be checked'];
+
+/**
+ * An earlier answer as its agent wrote it, and the platform's note above
+ * it: "Note: this answer's check didn't pass: ... 3 of them were never
+ * reported: W7225839018 ..." is the platform's, and reports nothing (run
+ * b37987d4 counted it as a report).
+ */
+export function splitPlatformNote(output: string): { body: string; note: string } {
+  const text = String(output ?? '');
+  if (!PLATFORM_LEADS.some((lead) => text.startsWith(lead))) return { body: text, note: '' };
+  const end = text.indexOf('\n\n');
+  return end === -1 ? { body: '', note: text } : { body: text.slice(end + 2), note: text.slice(0, end) };
+}
+
+/** An item an earlier answer listed in its body, by what identifies it. */
+export interface EarlierItem {
+  ids: string[];
+  dois: string[];
+  numbers: string[];
+  title: string;
+}
+
+/** The most earlier items read, and given to a run. */
+export const EARLIER_ITEMS_MAX = 200;
+
+/**
+ * What this agent's earlier answers reported, newest first, without
+ * repeats: each entry an answer's body listed (a numbered item, a row, a
+ * section), by its ids, DOIs, issue numbers and title. The platform's note
+ * is not read, and an item the note names (the check failed on it) does
+ * not count for that answer. The check holds an answer to these, and a run
+ * is given these (AgentMemoryKeeper.alreadyReported): one list, one rule.
+ */
+export function earlierReportedItems(earlier: string[]): EarlierItem[] {
+  const out: EarlierItem[] = [];
+  const seen = new Set<string>();
+  for (const output of earlier ?? []) {
+    const { body, note } = splitPlatformNote(output);
+    const failed = new Set<string>([
+      ...Array.from(note.matchAll(OPENALEX_ID), (m) => m[0].toLowerCase()),
+      ...Array.from(note.matchAll(DOI_IN_TEXT), (m) => doiKey(m[0])),
+      ...Array.from(note.matchAll(/#(\d{1,9})\b/g), (m) => `#${m[1]}`),
+    ]);
+    for (const entry of parseAnswer(body).entries) {
+      const keys = keysOfEntry(entry);
+      if ([...keys.ids, ...keys.dois, ...keys.numbers].some((k) => failed.has(k))) continue;
+      if (!keys.ids.length && !keys.dois.length && !keys.numbers.length && tight(keys.title).length < 20) continue;
+      // One item, however each answer wrote it: by any of its ids, DOIs, numbers, or its title.
+      const keysOf = [...keys.ids, ...keys.dois, ...keys.numbers, ...(tight(keys.title).length >= 20 ? [tight(keys.title)] : [])];
+      if (keysOf.some((k) => seen.has(k))) continue;
+      for (const k of keysOf) seen.add(k);
+      out.push({ ids: keys.ids, dois: keys.dois, numbers: keys.numbers, title: keys.title });
+      if (out.length >= EARLIER_ITEMS_MAX) return out;
+    }
+  }
+  return out;
+}
+
+/** Whether an earlier item is this tool item: a shared id, DOI or issue number, or the same title. */
+function sameItem(e: EarlierItem, it: ToolItem): boolean {
+  return (
+    e.ids.some((k) => it.ids.includes(k)) ||
+    e.dois.some((k) => it.dois.includes(k)) ||
+    e.numbers.some((k) => it.numbers.includes(k)) ||
+    (!!e.title && !!it.title && tight(it.title).length >= 20 && sameTitle(e.title, it.title))
+  );
 }
 
 /**
- * What this agent's earlier answers reported, as a lookup: an item is
- * found in them by its OpenAlex id, DOI, issue number, package name or
- * whole title. Null for an item with nothing to find it by.
+ * What this agent's earlier answers reported, as a lookup: whether a tool
+ * item is one of the items their bodies listed (earlierReportedItems).
+ * Null for an item with nothing to find it by.
  */
 function earlierReports(earlier: string[]): (it: ToolItem) => boolean | null {
-  const lower = earlier.join('\n').toLowerCase();
-  const tightAll = tight(lower);
+  const items = earlierReportedItems(earlier);
   return (it) => {
-    const keys: string[] = [...it.ids, ...it.dois];
-    for (const n of it.numbers) keys.push(n, `/issues/${n.slice(1)}`, `/pull/${n.slice(1)}`);
-    if (typeof it.value.version === 'string' && it.names[0]) keys.push(it.names[0]);
-    const titleKey = tight(it.title);
-    if (!keys.length && titleKey.length < 20) return null;
-    return keys.some((k) => hasWord(lower, k)) || (titleKey.length >= 20 && tightAll.includes(titleKey));
+    if (!it.ids.length && !it.dois.length && !it.numbers.length && tight(it.title).length < 20) return null;
+    return items.some((e) => sameItem(e, it));
   };
 }
 
@@ -1424,15 +1615,15 @@ export function skippedAsReportedFindings(answer: string, parsed: ParsedAnswer, 
 }
 
 /**
- * Items the answer lists as new that this agent's earlier answers already
- * reported. It runs where the answer or the agent's instructions speak of
- * items reported before: an answer that says "the remaining 9 new papers"
- * (run d13c5d50, all 9 reported by earlier runs) or "skipped 0 as none
- * were reported previously" claims each item it lists is new, and so does
- * any list from an agent told to leave out what it already reported.
+ * Items the answer lists that this agent's earlier answers already listed,
+ * for an agent whose instructions forbid repeats ("leave out any paper you
+ * already reported"). Each listed item is then a claim that it is new:
+ * "the remaining 9 new papers" (run d13c5d50, all 9 reported before). An
+ * item counts as reported only where an earlier answer's body listed it
+ * (earlierReportedItems).
  */
 export function listedAsNewFindings(answer: string, parsed: ParsedAnswer, index: ToolItems, evidence: string, earlier?: string[], instructions = ''): CodeFinding[] {
-  if (!earlier?.length || !index.items.length || PARTIAL.test(evidence) || !speaksOfEarlierReports(answer, instructions)) return [];
+  if (!earlier?.length || !index.items.length || PARTIAL.test(evidence) || !forbidsRepeats(instructions)) return [];
   const { shown, list } = shownAndList(parsed, index);
   const reported = earlierReports(earlier);
   const again = [...shown].filter((it) => it.list === list && reported(it) === true);
@@ -1440,7 +1631,7 @@ export function listedAsNewFindings(answer: string, parsed: ParsedAnswer, index:
   const named = again.slice(0, SKIPPED_NAMED_MAX).map(namedItem);
   const more = again.length > named.length ? ` and ${again.length - named.length} more` : '';
   const ids = again.map(itemId);
-  const saysNew = EARLIER_REPORTS.test(parsed.outside) || claimsSkippedAsReported(answer);
+  const saysNew = NEW_CLAIM.test(parsed.outside) || claimsSkippedAsReported(answer);
   const claim = saysNew ? 'as new' : 'though its instructions say to leave out what it already reported';
   return [
     finding(

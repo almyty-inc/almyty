@@ -92,6 +92,16 @@ export class AgentRuntimeBuilders {
     // [INSTRUCTIONS] — what to do
     parts.push(`[INSTRUCTIONS]\n${agent.instructions || 'You are a helpful autonomous agent.'}`);
 
+    // [ALREADY REPORTED — DO NOT LIST AGAIN] — right beside the task, for an
+    // agent told not to repeat earlier reports: what its earlier answers
+    // listed, the list its answer is checked against (alreadyReportedFor).
+    // Under "Relevant memories", as bare ids after the prose, the model
+    // re-listed items it was given (run fc270572).
+    const alreadyReported = run.workingMemory?.alreadyReported;
+    if (typeof alreadyReported === 'string' && alreadyReported.trim()) {
+      parts.push(alreadyReported.trim());
+    }
+
     // [ALWAYS ON] — a wake of the standing thread reports only what is worth
     // telling (always-on-report.ts): the rest is answered with the marker.
     if (run.metadata?.triggerType === 'always_on') {

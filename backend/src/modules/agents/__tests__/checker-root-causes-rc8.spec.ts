@@ -4,13 +4,9 @@
  * showed. Every fixture is a real run; the hand-checked truth is in
  * checker-verdicts-replay.spec.ts.
  */
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { codeFindings } from '../agent-verifier.helper';
 import { AgentStepProcessor } from '../agent-step-processor';
-import { AgentMemoryKeeper, REPORTED_RUNS_MAX, recordReportedItems, reportedBlock, reportedItemIds } from '../agent-memory.keeper';
-import { answerCodeFindings, followsSortRule, issueRuleOf, normalValue, speaksOfEarlierReports, toolItems, valueList } from '../answer-checks';
+import { answerCodeFindings, followsSortRule, issueRuleOf, normalValue, speaksOfEarlierReports, valueList } from '../answer-checks';
 import { judgeNote, judgeNoteBy } from '../checker-notes';
 import { falseVersionOrder } from '../version-order';
 import { RC5, RC6, RC7, RC8, earlierAnswers, evidenceOf, loadRun, wholeToolResults } from './fixtures/checker-runs/load';
@@ -139,80 +135,8 @@ describe('3. one value normaliser: lists in brackets, quotes or any order are th
   });
 });
 
-describe('4. what an agent reported is state every later run is given, not a memory ranked by similarity', () => {
-  const agent = { id: 'agent-1', name: 'Research digest', memoryConfig: { enabled: true, save: 'facts' } } as any;
-  const runOf = (name: string, over: Record<string, unknown> = {}): any => {
-    const fx = loadRun(name);
-    return {
-      id: name, agentId: 'agent-1', organizationId: 'org-1', userId: 'u-1', endUserId: null, conversationId: null, metadata: {}, workingMemory: {}, totalCost: 0,
-      status: 'completed', createdAt: new Date(fx.now), input: { message: fx.request }, output: fx.answer,
-      steps: fx.tools.map((t) => ({ type: 'tool_call', input: { tool: t.tool, toolId: 't-1', parameters: t.parameters }, output: t.output })),
-      ...over,
-    };
-  };
-  // What the similarity search found on staging for RD2: five prose facts, no id (rc8 mem snapshots).
-  const PROSE = [{ item: { id: 'm1', mode: 'memory', tier: 'long', content: 'The user is interested in large language model agents benchmarks since 2026-11-05.' }, score: 0.5 }];
-  function keeperWith(rows: any[]) {
-    const find = jest.fn().mockResolvedValue(rows);
-    const memoryAccounts = { search: jest.fn(async () => PROSE), put: jest.fn() };
-    const k = new AgentMemoryKeeper({ memoryAccounts, runRepository: { find }, logger: { warn: jest.fn() } } as any, { callModel: jest.fn() } as any);
-    return { k, find };
-  }
-
-  it('a finished run keeps the ids of the items its answer reported (RD1 d99aa38d: its 10 works)', () => {
-    const run = runOf('rc8-RD1-d99aa38d');
-    recordReportedItems(run);
-    expect(run.metadata.reportedItems).toHaveLength(10);
-    expect(run.metadata.reportedItems).toEqual(expect.arrayContaining(['W7167504345', 'W4416965058', 'W7128530100', 'W7159584895', 'W7212323002']));
-    expect(run.metadata.reportedItems.every((id: string) => /^W\d+$/.test(id))).toBe(true);
-    // An answer that lists nothing keeps nothing (RD2 bc75f6f1).
-    expect(reportedItemIds(runOf('rc8-RD2-bc75f6f1'))).toEqual([]);
-  });
-
-  it('run 2 is given run 1\'s ids though its similarity search finds only prose, and can skip exactly run 1\'s items', async () => {
-    const run1 = runOf('rc8-RD1-d99aa38d');
-    recordReportedItems(run1);
-    const { k, find } = keeperWith([{ id: run1.id, metadata: run1.metadata, createdAt: run1.createdAt }]);
-    const run2 = runOf('rc8-RD2-bc75f6f1', { metadata: {}, steps: [] });
-    const context = await k.recallAtStart(agent, run2, async () => '');
-    expect(context).toContain('The user is interested in large language model agents');
-    expect(context).toContain('## Items you already reported');
-    expect(run2.steps[0]).toMatchObject({ type: 'memory_recall', output: { found: 1, reportedItems: 10 } });
-    // Of RD2's ten works, exactly the four RD1 reported are in the block.
-    const rd2 = toolItems(evidenceOf(loadRun('rc8-RD2-bc75f6f1'))).items;
-    const given = rd2.filter((it) => it.ids.some((id) => context.includes(id.toUpperCase()))).map((it) => it.ids[0].toUpperCase());
-    expect(given.sort()).toEqual(['W4416965058', 'W7128530100', 'W7159584895', 'W7212323002']);
-    // Read for this agent only, completed runs, newest first, bounded.
-    expect(find.mock.calls[0][0]).toMatchObject({ where: { agentId: 'agent-1', organizationId: 'org-1', status: 'completed' }, order: { createdAt: 'DESC' }, take: REPORTED_RUNS_MAX });
-    // A run 2 that leaves out exactly those four, as already reported, passes the skip and new checks.
-    const fx = loadRun('rc8-RD2-bc75f6f1');
-    const kept = rd2.filter((it) => !given.includes(it.ids[0].toUpperCase()));
-    const answer = `The tool returned 10 works. I skipped 4 as already reported.\n\n${kept.map((it, i) => `${i + 1}. ${it.title}\n   - DOI: ${it.dois[0] ?? 'none'}`).join('\n')}`;
-    expect(codeFindings({ request: fx.request, answer, evidence: evidenceOf(fx), now: new Date(fx.now), instructions: fx.instructions, earlier: [run1.output] })).toEqual([]);
-  });
-
-  it('newest first, without repeats', async () => {
-    const { k } = keeperWith([
-      { id: 'b', metadata: { reportedItems: ['W2', 'W3'] } },
-      { id: 'a', metadata: { reportedItems: ['W1', 'W2'] } },
-      { id: 'c', metadata: {} },
-    ]);
-    expect(await k.reportedBefore(agent, runOf('rc8-RD2-bc75f6f1'))).toEqual(['W2', 'W3', 'W1']);
-    expect(reportedBlock(['W2', 'W3'])).toMatch(/Leave out any of them your tools return again[^\n]*\nW2, W3$/);
-    expect(reportedBlock([])).toBe('');
-  });
-
-  it("a memory that is each person's own gives a run only that person's reported items", async () => {
-    const { k, find } = keeperWith([]);
-    await k.reportedBefore({ ...agent, memoryConfig: { enabled: true, whose: 'person' } }, runOf('rc8-RD2-bc75f6f1', { userId: 'u-7' }));
-    expect(find.mock.calls[0][0].where).toMatchObject({ userId: 'u-7' });
-  });
-
-  it('the step processor records them on a completed run with memory on', () => {
-    const src = readFileSync(join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
-    expect(src).toMatch(/run\.status = AgentRunStatus\.COMPLETED;\s*run\.output = finalContent;[\s\S]{0,300}if \(agent\.memoryConfig\?\.enabled\) recordReportedItems\(run\);/);
-  });
-});
+// 4. What an agent reported is given to every later run: checker-root-causes-rc9.spec.ts (from the
+// earlier answers the check reads, since rc9; the run-state list of #1174 is gone).
 
 describe('5. severity words a summary gives a release must be in its notes', () => {
   it('RW2 d3757bc9: "critical" for v26.13.1, whose notes rate fixes High, Medium and Low', () => {
@@ -228,7 +152,8 @@ describe('5. severity words a summary gives a release must be in its notes', () 
     expect(findingsOf('rc8-RW2-d3757bc9', { answer: said }).filter((f) => /v26\.13\.1/.test(f.rule))).toEqual([expect.objectContaining({ rule: expect.stringMatching(/names breaking,/) })]);
   });
 
-  it.each([...RC5, ...RC6, ...RC7, ...RC8].filter((n) => /-RW/.test(n) && !['rc7-RW1-15fca65f', 'rc7-RW2-947d8e43', 'rc8-RW2-d3757bc9'].includes(n)))(
+  // rc6 RW2: "dependency updates to brotli" for v22.23.5, whose notes have none (a package name, checker-root-causes-rc9).
+  it.each([...RC5, ...RC6, ...RC7, ...RC8].filter((n) => /-RW/.test(n) && !['rc6-RW2-49ed3013', 'rc7-RW1-15fca65f', 'rc7-RW2-947d8e43', 'rc8-RW2-d3757bc9'].includes(n)))(
     'no release-notes finding on %s',
     (name) => {
       expect(findingsOf(name).filter((f) => f.code === 'release_notes')).toEqual([]);
