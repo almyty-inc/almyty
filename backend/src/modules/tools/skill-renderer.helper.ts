@@ -500,8 +500,9 @@ export class SkillRendererHelper {
     const endpoint = tool.operation?.endpoint || '';
     // The operation's own server first, as the executor calls it.
     const baseUrl = (operationServerUrl(tool.operation) ?? tool.operation?.api?.baseUrl)?.replace(/\/$/, '') || '';
-    return baseUrl
-      ? `${baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`
-      : endpoint;
+    if (!baseUrl) return endpoint;
+    // No path (a GraphQL operation): the API's address is the endpoint.
+    if (!endpoint) return baseUrl;
+    return `${baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
   }
 }
