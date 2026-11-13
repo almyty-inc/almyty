@@ -1,29 +1,25 @@
 /**
- * All forty staging runs of rounds rc5 to rc8 (2026-11-11 to 2026-11-13),
+ * All fifty staging runs of rounds rc5 to rc9 (2026-11-11 to 2026-11-13),
  * replayed end to end through the verdict logic. The stored tool results
  * become the evidence the checker is given (runEvidence). The code checks
  * run on the stored answer with what the step processor hands them: the
  * run's tool results whole, the agent's instructions, and, where the
- * answer or the instructions speak of items reported before, the agent's
- * earlier answers. The checker model's stored reply is played back through
- * runPanel, its notes through the note verifiers.
+ * instructions forbid repeating earlier reports or the answer says it
+ * skipped some, the agent's earlier answers. The checker model's stored
+ * reply is played back through runPanel, its notes through the note
+ * verifiers.
  *
  * The expected verdict is the ground truth: every value was checked by hand
  * against the live APIs (results.tsv of each round). Every research digest
  * runs on instructions that say "leave out any paper you already
- * reported", and each of the earlier ones claims it skipped none, or lists
- * papers as new, that earlier answers of the agent had reported (by DOI,
- * id or whole title, in research-digest-answers.json). The rounds before
- * rc8 counted that as the platform's fault (the agent never saw what it
- * had reported); it is a false claim in the answer all the same, and the
- * memory fix gives the agent what it needs to avoid it.
+ * reported", and each re-lists papers that the bodies of the agent's
+ * earlier answers listed (research-digest-answers.json); the platform's
+ * note above an earlier answer is not a report.
  *
  * | run | answer | expected |
  * |-----|--------|----------|
  * | rc5 RD1 c62aa29a | no: "DOI: None" for 10.17613/zf92n-68j61; all 10 reported before | fail |
- * | rc5 RD2 d4ad7da4 | no: "0 skipped", all 10 reported before | fail |
- * | rc5 RD3 7e4e631b | no: "skipped 0", all 10 reported before | fail |
- * | rc5 RD4 bd98321b | no: "skipped 0", all 10 reported before | fail |
+ * | rc5 RD2 d4ad7da4, RD3 7e4e631b, RD4 bd98321b | no: all 10 reported before | fail |
  * | rc5 RW1 8a5070c8 | partly: every value right; #67427 has no labels on that day | pass |
  * | rc5 RW2 887a8bfe | yes | pass |
  * | rc5 RW3 dda8789a | no: v5.3.0 outside the window | fail |
@@ -31,15 +27,15 @@
  * | rc5 DC2 6e00f1e9 | no: summary says 5 major over 6 rows | fail |
  * | rc6 RD1 db52dcca | no: lists 9 of 10, says no other matched; 9 reported before | fail |
  * | rc6 RD2 6432deb3 | no: "skipped 10", lists 10 | fail |
- * | rc6 RD3 e3acd95d, RD4 c76c1335 | no: listed as new, reported before | fail |
+ * | rc6 RD3 e3acd95d, RD4 c76c1335 | no: listed again, reported before | fail |
  * | rc6 RW1 22301018 | no: #67389 "Labels: aix", GitHub gives none | fail |
- * | rc6 RW2 49ed3013 | partly: #67427 had no labels that day; every value right | pass |
+ * | rc6 RW2 49ed3013 | no: v22.23.5 summary "dependency updates to brotli": its notes have no brotli | fail |
  * | rc6 RW3 e342b57f | no: v5.3.0 outside the window; #7588 (docs), #7427 (question) listed as bugs | fail |
  * | rc6 DC1/DC3 | yes | pass |
  * | rc6 DC2 bf05f68a | no: dotenv 16 -> 18 outdated-minor | fail |
  * | rc7 RD1 0f136ed8 | no: "DOI: <doi> (N/A - no direct DOI...)"; reported before | fail |
  * | rc7 RD2 af3c05c0 | no: 3 "already reported" works never reported | fail |
- * | rc7 RD3 07a3f5c7 | no: "skipped 0", RD1 reported all 10 25 s earlier | fail |
+ * | rc7 RD3 07a3f5c7 | no: RD1 reported all 10 25 s earlier | fail |
  * | rc7 RD4 fcf9e484 | no: "skipped 1" lists 10; 5 reported before | fail |
  * | rc7 RW1 15fca65f | no: v22.23.5 "crypto"; #67427 (question) as a bug | fail |
  * | rc7 RW2 947d8e43 | no: v22.23.5 "dns", "crypto"; #67354 (feature request) as a bug | fail |
@@ -54,12 +50,22 @@
  * | rc8 RW2 d3757bc9 | no: v26.13.1 "critical", v22.23.5 "crypto"; #67427, #67354 as bugs | fail |
  * | rc8 RW3 6d6a8e80 | no: v5.3.0 outside the window | fail |
  * | rc8 DC1/DC2/DC3 | yes | pass |
+ * | rc9 RD1 b79da115 | no: re-lists 5 reported works | fail |
+ * | rc9 RD2 b37987d4 | no: "skipping 10", lists 10; 3 reported before | fail |
+ * | rc9 RD3 fc270572 | no: "skipped 4", leaves out 3; 7 reported before | fail |
+ * | rc9 RD4 37f14fe1 | no: "skipped 1", lists 10; 7 reported before | fail |
+ * | rc9 RW1 8ca1dcf2 | no: v22.23.5 "undici" (not in its notes); #63826 (question) as a bug | fail |
+ * | rc9 RW2 96f7b54a | no: "crypto", "npm"; #63096 (feature request) as a bug; labels fs, stream, util/dotenv made up | fail |
+ * | rc9 RW3 941cb583 | no: v5.3.0 outside the window | fail |
+ * | rc9 DC1 9f8a4886 | yes (8/8 values; the sort rule is not a value) | pass |
+ * | rc9 DC2 0a487018 | no: dotenv 16 -> 18 outdated-minor | fail |
+ * | rc9 DC3 93f80a2e | no: summary says 5 outdated major over 4 rows | fail |
  */
 import { AgentVerifierHelper } from '../agent-verifier.helper';
 import { speaksOfEarlierReports } from '../answer-checks';
-import { RC5, RC6, RC7, RC8, earlierAnswers, evidenceOf, loadRun, wholeToolResults, type RunFixture } from './fixtures/checker-runs/load';
+import { RC5, RC6, RC7, RC8, RC9, earlierAnswers, evidenceOf, loadRun, wholeToolResults, type RunFixture } from './fixtures/checker-runs/load';
 
-const RUNS = [...RC5, ...RC6, ...RC7, ...RC8] as const;
+const RUNS = [...RC5, ...RC6, ...RC7, ...RC8, ...RC9] as const;
 type Run = (typeof RUNS)[number];
 
 const PASS: ReadonlySet<Run> = new Set<Run>([
@@ -67,7 +73,6 @@ const PASS: ReadonlySet<Run> = new Set<Run>([
   'rc5-RW2-887a8bfe',
   'rc5-DC1-2ee71e77',
   'rc5-DC3-c04b7a9b',
-  'rc6-RW2-49ed3013',
   'rc6-DC1-20f31553',
   'rc6-DC3-3e0e5b2f',
   'rc7-DC1-81411770',
@@ -76,6 +81,7 @@ const PASS: ReadonlySet<Run> = new Set<Run>([
   'rc8-DC1-22a3aee0',
   'rc8-DC2-986e43dd',
   'rc8-DC3-988ea008',
+  'rc9-DC1-9f8a4886',
 ]);
 const EXPECTED = Object.fromEntries(RUNS.map((r) => [r, PASS.has(r) ? 'pass' : 'fail'])) as Record<Run, 'pass' | 'fail'>;
 
@@ -100,6 +106,7 @@ const REASONS: Partial<Record<Run, RegExp[]>> = {
   'rc6-RD3-e3acd95d': [NEW(9)],
   'rc6-RD4-c76c1335': [NEW(9)],
   'rc6-RW1-22301018': [/^#67389: the answer gives the label aix, but the tool results give none$/],
+  'rc6-RW2-49ed3013': [/^v22\.23\.5: the answer's summary names brotli, but the release notes in the tool results never mention it$/],
   'rc6-RW3-e342b57f': [WINDOW, CATEGORY('7588', 'docs'), CATEGORY('7427', 'question')],
   'rc6-DC2-bf05f68a': [DOTENV],
   'rc7-RD1-0f136ed8': [LEGAL_DOI, NEW(10)],
@@ -121,6 +128,22 @@ const REASONS: Partial<Record<Run, RegExp[]>> = {
     CATEGORY('67354', 'feature request'),
   ],
   'rc8-RW3-6d6a8e80': [WINDOW],
+  'rc9-RD1-b79da115': [NEW(5)],
+  'rc9-RD2-b37987d4': [/^The answer says it skipped 10 of the 10 works the tool returned, so it should list 0, but it lists 10$/, NEW(3)],
+  'rc9-RD3-fc270572': [/^The answer says it skipped 4 of the 10 works the tool returned, so it should list 6, but it lists 7$/, NEW(7)],
+  'rc9-RD4-37f14fe1': [/^The answer says it skipped 1 of the 10 items the tool returned, so it should list 9, but it lists 10$/, NEW(7)],
+  'rc9-RW1-8ca1dcf2': [/^v22\.23\.5: the answer's summary names undici, but the release notes in the tool results never mention it$/, CATEGORY('63826', 'question')],
+  'rc9-RW2-96f7b54a': [
+    /^v26\.13\.1: the answer's summary names npm, but the release notes in the tool results never mention it$/,
+    /^v22\.23\.5: the answer's summary names crypto, but the release notes in the tool results never mention it$/,
+    CATEGORY('63096', 'feature request'),
+    /^#67429: the answer gives the label fs, but the tool results give none$/,
+    /^#67418: the answer gives the label stream, but the tool results give none$/,
+    /^#67400: the answer gives the labels util, dotenv, but the tool results give none$/,
+  ],
+  'rc9-RW3-941cb583': [WINDOW],
+  'rc9-DC2-0a487018': [DOTENV],
+  'rc9-DC3-93f80a2e': [/^The summary says 5 outdated major, but the table lists 4$/],
 };
 
 /**
@@ -162,7 +185,7 @@ export async function replay(name: Run) {
   );
 }
 
-describe('rc5 to rc8 runs replayed through the verdict logic', () => {
+describe('rc5 to rc9 runs replayed through the verdict logic', () => {
   it.each(RUNS.map((name) => [name, EXPECTED[name]] as const))('%s: %s', async (name, expected) => {
     const panel = await replay(name);
     expect(panel.verdict).toBe(expected);
@@ -179,7 +202,7 @@ describe('rc5 to rc8 runs replayed through the verdict logic', () => {
     expect(panel.failures.every((f) => f.kind === 'deterministic')).toBe(true);
   });
 
-  it('predicts all forty as the ground truth has them', async () => {
+  it('predicts all fifty as the ground truth has them', async () => {
     const predicted: Record<string, string> = {};
     for (const name of RUNS) predicted[name] = (await replay(name)).verdict;
     expect(predicted).toEqual(EXPECTED);
@@ -197,6 +220,21 @@ describe('rc5 to rc8 runs replayed through the verdict logic', () => {
     expect((await replay('rc8-DC2-986e43dd')).checkers[0].note).toMatch(/note not shown: the tool results show it false/);
   });
 
+  it('shows none of the rc9 checker notes the tool results prove false, and keeps each, with why, for an audit', async () => {
+    const run = async (name: Run) => {
+      const panel = await replay(name);
+      return { shown: (panel.notes ?? []).map((n) => n.text).join('\n'), hidden: panel.hiddenNotes ?? [] };
+    };
+    const rd2 = await run('rc9-RD2-b37987d4');
+    expect(rd2.shown).not.toMatch(/the tool returned 11 works/);
+    expect(rd2.hidden).toEqual([expect.objectContaining({ text: expect.stringMatching(/the tool returned 11 works/), why: expect.any(String) })]);
+    expect((await run('rc9-RD4-37f14fe1')).shown).not.toMatch(/matches the descending publication date order/);
+    const rw1 = await run('rc9-RW1-8ca1dcf2');
+    expect(rw1.shown).not.toMatch(/published_at date is wrong/);
+    expect(rw1.hidden.filter((n) => /published_at date is wrong/.test(n.text)).map((n) => n.why)).toEqual(Array(3).fill('the answer gives the date the tool results give'));
+    const rw3 = await run('rc9-RW3-941cb583');
+    expect(rw3.shown).not.toMatch(/Issue #7538 .*should not be included|should list only 1/);
+  });
   it('keeps notes the tool results prove right, marked checked, and leaves the rest as they were', async () => {
     const notes = (await replay('rc8-RW2-d3757bc9')).notes ?? [];
     expect(notes.find((n) => /Issue #67354 is labeled 'feature request'/.test(n.text))?.checked).toBe(true);

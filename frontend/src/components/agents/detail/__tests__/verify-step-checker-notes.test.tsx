@@ -56,4 +56,26 @@ describe('the verify step card', () => {
     expect(screen.getByTestId('verify-findings')).toHaveTextContent('dotenv: the answer says outdated-minor, but 16 to 18 is a major update')
     expect(screen.queryByTestId('checker-notes')).toBeNull()
   })
+
+  it('keeps notes the tool results prove false collapsed under "Hidden", with what showed them false, apart from the notes', () => {
+    render(
+      <VerifyStepCard
+        step={step({
+          verdict: 'fail',
+          reportOnly: true,
+          failures: [],
+          notes: [{ checker: 'Answer check', text: 'Plausible importance lines.' }],
+          hiddenNotes: [{ checker: 'Answer check', text: 'The output claims 10 works returned but the tool returned 11 works.', why: "the tool results and the answer's own counts say otherwise" }],
+        })}
+        index={0}
+      />,
+    )
+    const hidden = screen.getByTestId('hidden-checker-notes')
+    expect(hidden.tagName).toBe('DETAILS')
+    expect(hidden.hasAttribute('open')).toBe(false)
+    expect(hidden).toHaveTextContent('Hidden: proven false by the tool results (1)')
+    expect(hidden).toHaveTextContent(/the tool returned 11 works/)
+    expect(hidden).toHaveTextContent(/the answer's own counts say otherwise/)
+    expect(screen.getByTestId('checker-notes')).not.toHaveTextContent(/11 works/)
+  })
 })

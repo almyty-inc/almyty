@@ -147,7 +147,49 @@ function buildReport({ runId, startedAt, finishedAt, target, health, browser, cl
   return lines.join('\n');
 }
 
-module.exports = { playwrightRows, vitestRows, buildReport, firstLine, redact };
+/**
+ * The packages under `dir`, by npm name: where each lives, its built entry
+ * (main, else the first bin, else dist/index.js), whether it has a build
+ * script, and which of its dependencies are packages of this repo.
+ */
+function readLocalPackages(dir) {
+  const found = {};
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const file = path.join(dir, e.name, 'package.json');
+    if (!e.isDirectory() || !fs.existsSync(file)) continue;
+    const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!json.name) continue;
+    const bin = typeof json.bin === 'string' ? json.bin : Object.values(json.bin || {})[0];
+    found[json.name] = {
+      name: json.name,
+      dir: path.join(dir, e.name),
+      entry: path.join(dir, e.name, json.main || bin || 'dist/index.js'),
+      hasBuildScript: !!json.scripts?.build,
+      deps: Object.keys({ ...json.dependencies, ...json.peerDependencies }),
+    };
+  }
+  for (const p of Object.values(found)) p.localDeps = p.deps.filter((d) => found[d]);
+  return found;
+}
+
+/** `roots` and every local package they need, each after its dependencies. */
+function buildOrder(pkgs, roots) {
+  const order = [];
+  const state = {};
+  const visit = (name, trail) => {
+    if (state[name] === 'done') return;
+    if (state[name] === 'visiting') throw new Error(`dependency cycle: ${[...trail, name].join(' -> ')}`);
+    if (!pkgs[name]) throw new Error(`unknown local package ${name}`);
+    state[name] = 'visiting';
+    for (const dep of pkgs[name].localDeps) visit(dep, [...trail, name]);
+    state[name] = 'done';
+    order.push(name);
+  };
+  for (const r of roots) visit(r, []);
+  return order;
+}
+
+module.exports = { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder };
 
 // ── the run ─────────────────────────────────────────────────────────
 
@@ -284,15 +326,63 @@ async function revokeCliKeys(qa, startedAt) {
   }
 }
 
-async function runCli(qa, startedAt, notes) {
-  for (const pkg of CLI_PACKAGES) {
-    const dir = path.join(PACKAGES, pkg);
-    if (!fs.existsSync(path.join(dir, 'dist', 'index.js'))) {
-      ensureInstalled(dir);
-      log(`building ${pkg}`);
-      if (sh('npx', ['tsc'], { cwd: dir }) !== 0) throw new Error(`build failed: ${pkg}`);
+/**
+ * Build the CLI packages and every package of this repo they depend on
+ * (@almyty/client first), dependencies before dependants. Each local
+ * dependency is linked into the dependant's node_modules, so the smoke
+ * tests run this checkout's code, not a published copy -- and a link left
+ * by an earlier install never points at a package with no dist.
+ */
+function buildLocalPackages(roots) {
+  const pkgs = readLocalPackages(PACKAGES);
+  for (const name of buildOrder(pkgs, roots.map((dir) => dirToName(pkgs, dir)))) {
+    const pkg = pkgs[name];
+    ensureInstalled(pkg.dir);
+    for (const dep of pkg.localDeps) {
+      const link = path.join(pkg.dir, 'node_modules', ...dep.split('/'));
+      const target = pkgs[dep].dir;
+      let current = null;
+      try { current = fs.realpathSync(link); } catch { /* missing */ }
+      if (current !== fs.realpathSync(target)) {
+        fs.rmSync(link, { recursive: true, force: true });
+        fs.mkdirSync(path.dirname(link), { recursive: true });
+        fs.symlinkSync(path.relative(path.dirname(link), target), link, 'dir');
+      }
+    }
+    if (needsBuild(pkg)) {
+      log(`building ${path.relative(ROOT, pkg.dir)}`);
+      const args = pkg.hasBuildScript ? ['run', 'build'] : ['exec', '--', 'tsc'];
+      if (sh('npm', args, { cwd: pkg.dir }) !== 0) throw new Error(`build failed: ${path.basename(pkg.dir)}`);
     }
   }
+}
+
+function dirToName(pkgs, dir) {
+  const hit = Object.values(pkgs).find((p) => path.basename(p.dir) === dir);
+  if (!hit) throw new Error(`no package in packages/${dir}`);
+  return hit.name;
+}
+
+/** The entry is missing, or a source file is newer than it. */
+function needsBuild(pkg) {
+  if (!fs.existsSync(pkg.entry)) return true;
+  const built = fs.statSync(pkg.entry).mtimeMs;
+  const src = path.join(pkg.dir, 'src');
+  if (!fs.existsSync(src)) return false;
+  const stack = [src];
+  while (stack.length) {
+    const d = stack.pop();
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) stack.push(p);
+      else if (fs.statSync(p).mtimeMs > built) return true;
+    }
+  }
+  return false;
+}
+
+async function runCli(qa, startedAt, notes) {
+  buildLocalPackages(CLI_PACKAGES);
   const tests = path.join(PACKAGES, 'cli-tests');
   ensureInstalled(tests);
   log('CLI login as the QA user');
