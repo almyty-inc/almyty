@@ -236,7 +236,9 @@ describe('tool-execution-utils', () => {
     ])('reads a 100 KB condition of %s in linear time', (_label, condition) => {
       const started = Date.now();
       evaluateHttpSuccessCondition(condition, 200, {});
-      expect(Date.now() - started).toBeLessThan(250);
+      // The old regex took 7-23 s; 2 s still catches it and leaves room
+      // for a busy CI runner, where the linear read took 261 ms once.
+      expect(Date.now() - started).toBeLessThan(2000);
     });
   });
 
