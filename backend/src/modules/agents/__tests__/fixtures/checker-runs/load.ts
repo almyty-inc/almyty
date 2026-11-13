@@ -1,14 +1,24 @@
 /**
- * Real runs from staging (rounds rc5 and rc6, 2026-11-11 and 2026-11-12):
- * the request, the agent's instructions, the answer as the agent wrote it
- * (without the check's note line), every tool result as the run stored
- * it, and the stored verify step. The ground truth for each is in the
- * spec that uses it, checked by hand against the live APIs.
+ * Real runs from staging (rounds rc5, rc6 and rc7, 2026-11-11 to
+ * 2026-11-13): the request, the agent's instructions, the answer as the
+ * agent wrote it (without the check's note line), every tool result as the
+ * run stored it, and the stored verify step. The ground truth for each is
+ * in the spec that uses it, checked by hand against the live APIs.
+ *
+ * Two more files hold what the stored steps do not:
+ *  - release-bodies-live.json: the release notes of every release the
+ *    release-watcher runs listed, whole, from the GitHub API at 12:51 UTC
+ *    on 2026-11-13. A stored step keeps the first 500 characters of each;
+ *    the checker read the run's conversation, which holds them whole. Each
+ *    stored start was checked to be the start of the whole text.
+ *  - research-digest-answers.json: every answer the research-digest agent
+ *    gave up to RD4 of rc7, with when its run started (the agent's run
+ *    history on staging, read for the RD2 report).
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { runEvidence } from '../../../checker-evidence';
+import { runEvidence, type RunToolResult } from '../../../checker-evidence';
 
 export interface RunFixture {
   run: string;
@@ -54,3 +64,67 @@ export const RC6 = [
   'rc6-DC2-bf05f68a',
   'rc6-DC3-3e0e5b2f',
 ] as const;
+
+export const RC5 = [
+  'rc5-RD1-c62aa29a',
+  'rc5-RD2-d4ad7da4',
+  'rc5-RD3-7e4e631b',
+  'rc5-RD4-bd98321b',
+  'rc5-RW1-8a5070c8',
+  'rc5-RW2-887a8bfe',
+  'rc5-RW3-dda8789a',
+  'rc5-DC1-2ee71e77',
+  'rc5-DC2-6e00f1e9',
+  'rc5-DC3-c04b7a9b',
+] as const;
+
+export const RC7 = [
+  'rc7-RD1-0f136ed8',
+  'rc7-RD2-af3c05c0',
+  'rc7-RD3-07a3f5c7',
+  'rc7-RD4-fcf9e484',
+  'rc7-RW1-15fca65f',
+  'rc7-RW2-947d8e43',
+  'rc7-RW3-ab0c73df',
+  'rc7-DC1-81411770',
+  'rc7-DC2-e9cec629',
+  'rc7-DC3-6f04ad1d',
+] as const;
+
+/**
+ * The run's tool results as its conversation held them, for the code
+ * checks (toolResultsFromMessages): each release's notes whole
+ * (release-bodies-live.json), everything else as stored. A body whose
+ * stored start is not the start of the whole text is left as stored.
+ */
+export function wholeToolResults(fx: RunFixture): RunToolResult[] {
+  const bodies: Record<string, Record<string, string>> = JSON.parse(readFileSync(join(__dirname, 'release-bodies-live.json'), 'utf8'));
+  const restore = (rel: any, repo: Record<string, string>) => {
+    if (!rel || typeof rel !== 'object' || typeof rel.tag_name !== 'string' || typeof rel.body !== 'string') return rel;
+    const whole = repo[rel.tag_name];
+    const kept = rel.body.endsWith('…') ? rel.body.slice(0, -1) : rel.body;
+    return typeof whole === 'string' && whole.startsWith(kept) ? { ...rel, body: whole } : rel;
+  };
+  return fx.tools.map((t) => {
+    const p = t.parameters as { owner?: string; repo?: string } | undefined;
+    const repo = p?.owner && p?.repo ? bodies[`${p.owner}/${p.repo}`] : undefined;
+    const out = t.output as Record<string, any> | null;
+    let value: unknown = out && typeof out === 'object' && '_shortened' in out && 'result' in out ? out.result : out;
+    if (repo && /release/.test(t.tool)) value = Array.isArray(value) ? value.map((r) => restore(r, repo)) : restore(value, repo);
+    return { tool: t.tool, ...(t.parameters ? { parameters: t.parameters } : {}), content: typeof value === 'string' ? value : JSON.stringify(value), ...(t.error ? { error: true } : {}) };
+  });
+}
+
+/**
+ * What the research-digest agent answered before this run, newest first:
+ * the answers of its runs started before this one, at most `max` of them
+ * (the step processor reads the last EARLIER_ANSWERS_MAX completed runs).
+ */
+export function earlierAnswers(fx: RunFixture, max = 50): string[] {
+  const rows: Array<{ run: string; createdAt: string; output: string }> = JSON.parse(readFileSync(join(__dirname, 'research-digest-answers.json'), 'utf8'));
+  return rows
+    .filter((r) => r.createdAt < fx.now && !fx.run.endsWith(r.run))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, max)
+    .map((r) => r.output);
+}
