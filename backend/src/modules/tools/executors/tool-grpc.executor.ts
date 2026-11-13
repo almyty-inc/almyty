@@ -10,7 +10,7 @@ import { Operation } from '../../../entities/operation.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { decideToolRequest } from '../../../common/security/gateway-tool-policy';
 import { ToolAuthService } from '../services/tool-auth.service';
-import { GrpcCallerService } from './grpc-caller.service';
+import { DEFAULT_GRPC_TIMEOUT_MS, GrpcCallerService } from './grpc-caller.service';
 import { decideToolEgress } from './tool-egress';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tool-execution.types';
 import { getByDotPath, generateRequestId } from '../tool-execution-utils';
@@ -117,7 +117,7 @@ export class ToolGrpcExecutor {
       methodName: grpcConfig.methodName,
       request,
       metadata,
-      timeoutMs: options.timeout ?? tool.configuration?.timeout ?? 30000,
+      timeoutMs: this.timeoutFor(tool, api, options),
       pinDns: true,
       pinDnsExemptHost: egress.exemptHost,
     });
@@ -154,6 +154,19 @@ export class ToolGrpcExecutor {
       if (typeof v === 'string') metadata[k.toLowerCase()] = v;
     }
     return metadata;
+  }
+
+  /**
+   * How long a gRPC call may take: the caller's timeout, else the tool's,
+   * else the API's -- the setting an HTTP tool uses -- else the 30 s
+   * default. A zero or nonsense value falls through to the next one.
+   */
+  private timeoutFor(tool: Tool, api: Api | null, options: ToolExecutionOptions): number {
+    const candidates = [options.timeout, tool.configuration?.timeout, api?.timeoutMs];
+    for (const v of candidates) {
+      if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+    }
+    return DEFAULT_GRPC_TIMEOUT_MS;
   }
 
   // ─── gRPC (legacy operation-based) ─────────────────────────────
@@ -230,7 +243,7 @@ export class ToolGrpcExecutor {
       methodName,
       request: parameters || {},
       metadata,
-      timeoutMs: options.timeout ?? tool.configuration?.timeout ?? 30000,
+      timeoutMs: this.timeoutFor(tool, api, options),
       requestStream,
       responseStream,
       // baseUrl is tenant-written: dial the address the pinned lookup
