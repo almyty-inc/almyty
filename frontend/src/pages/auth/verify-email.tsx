@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, XCircle } from 'lucide-react'
 
@@ -112,7 +113,7 @@ function LinkDidNotWork() {
           </p>
         </div>
       ) : (
-        <form onSubmit={sendNewLink} className="w-full space-y-3 text-left">
+        <Form onSubmit={sendNewLink} className="w-full space-y-3 text-left">
           <div>
             <Label htmlFor="verify-email-address">Email address</Label>
             <Input
@@ -129,7 +130,7 @@ function LinkDidNotWork() {
           <Button type="submit" className="w-full" disabled={sending || !email.trim()} aria-disabled={sending}>
             {sending ? 'Sending…' : 'Send a new link'}
           </Button>
-        </form>
+        </Form>
       )}
 
       <Link to="/auth/login" className="text-sm font-medium text-primary hover:text-primary/80">

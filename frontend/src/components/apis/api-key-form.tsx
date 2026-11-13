@@ -11,6 +11,7 @@
  * Key card.
  */
 import { useEffect, useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 
@@ -154,7 +155,7 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
   const defaultName = type === 'basic' || type === 'oauth2' ? `${apiName} sign-in` : `${apiName} key`
 
   return (
-    <form onSubmit={submit} className="space-y-4" noValidate aria-label={`Key for ${apiName}`}>
+    <Form onSubmit={submit} className="space-y-4" noValidate aria-label={`Key for ${apiName}`}>
       {changing && type !== 'oauth2' ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -299,6 +300,6 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
         </div>
       )}
       {guard.element}
-    </form>
+    </Form>
   )
 }

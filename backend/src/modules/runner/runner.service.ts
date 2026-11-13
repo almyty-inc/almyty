@@ -99,6 +99,11 @@ export const DEFAULT_RUNNER_VISIBILITY: ResourceVisibility = 'private';
 
 const NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
+/** How long deleting a runner waits for any one row lock before answering 409. */
+const DELETE_LOCK_TIMEOUT_MS = 5_000;
+/** Postgres lock_not_available, raised when lock_timeout runs out. */
+const LOCK_NOT_AVAILABLE = '55P03';
+
 /**
  * A machine's hostname as a runner name: "Franes-MacBook-Pro.local"
  * becomes "franes-macbook-pro". The same rule as the runner package's
@@ -718,16 +723,50 @@ export class RunnerService {
     await this.deleteRunner(runner, manager);
   }
 
-  /** The one delete path: the runner's published tools go with it. */
+  /**
+   * The one delete path: the runner's published tools go with it, and its
+   * active workspaces are released first, all in one transaction.
+   *
+   * The delete takes row locks on the runner, its sessions and its
+   * workspaces (ON DELETE CASCADE). It used to run with no time bound, so a
+   * delete that met a lock held elsewhere (a run's workspace being written,
+   * the workspace tick stranding the runner's work) waited for as long as
+   * that holder did: the staging gate saw a runner that had served a run's
+   * shell tool get no answer for over three minutes. Now it waits at most
+   * DELETE_LOCK_TIMEOUT_MS for any lock and then answers 409, so the person
+   * can try again, instead of leaving the request hanging.
+   */
   private async deleteRunner(runner: Runner, manager?: EntityManager): Promise<void> {
-    // Drop published capabilities first so a concurrent dispatch can't
-    // race against deletion and find a tool whose runner is gone.
-    await this.capabilities.unpublish(runner.id, manager);
-    if (manager) {
-      await manager.getRepository(Runner).remove(runner);
-    } else {
-      await this.runners.remove(runner);
+    // Inside a caller's transaction (a departing member's removal), its
+    // own timeouts apply.
+    if (manager) return this.deleteRunnerIn(manager, runner);
+    try {
+      await this.runners.manager.transaction(async (tx) => {
+        await tx.query(`SET LOCAL lock_timeout = '${DELETE_LOCK_TIMEOUT_MS}ms'`);
+        await this.deleteRunnerIn(tx, runner);
+      });
+    } catch (err: any) {
+      const code = err?.code ?? err?.driverError?.code;
+      if (code === LOCK_NOT_AVAILABLE) {
+        this.logger.warn(`deleting runner ${runner.id} waited ${DELETE_LOCK_TIMEOUT_MS}ms for a lock and gave up`);
+        throw new ConflictException('The runner is busy finishing work. Try deleting it again in a moment.');
+      }
+      throw err;
     }
+  }
+
+  private async deleteRunnerIn(manager: EntityManager, runner: Runner): Promise<void> {
+    // Release its active workspaces first, the way a run's end does: the
+    // row lock on each is taken here, under the lock timeout, and the
+    // close is recorded before the cascade removes the rows.
+    await manager.getRepository(Workspace).update(
+      { runnerId: runner.id, status: WorkspaceStatus.ACTIVE },
+      { status: WorkspaceStatus.RELEASED, closedAt: new Date(), closeReason: { kind: 'released', detail: 'runner deleted' } },
+    );
+    // Drop published capabilities so a concurrent dispatch can't race
+    // against deletion and find a tool whose runner is gone.
+    await this.capabilities.unpublish(runner.id, manager);
+    await manager.getRepository(Runner).delete({ id: runner.id });
   }
 
   // ── internals ───────────────────────────────────────────────────────

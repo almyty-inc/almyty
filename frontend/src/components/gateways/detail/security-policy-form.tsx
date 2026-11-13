@@ -7,6 +7,7 @@
  * to the page, which persists it via updateToolConfig.
  */
 import React, { useState } from 'react'
+import { Form } from '@/components/ui/form'
 
 import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { Input } from '@/components/ui/input'
@@ -75,7 +76,7 @@ export function SecurityPolicyForm({
   const id = (name: string) => `${idPrefix}-${name}`
 
   return (
-    <form noValidate onSubmit={handleSubmit} className="space-y-4" aria-label="Security policy">
+    <Form noValidate onSubmit={handleSubmit} className="space-y-4" aria-label="Security policy">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field id={id('allowed-domains')} label="Allowed domains" hint="Comma-separated. Leave empty to allow all.">
           <Input
@@ -117,6 +118,6 @@ export function SecurityPolicyForm({
       </div>
       <InlineFormActions onCancel={onCancel} submitLabel="Save policy" submitting={isSaving} />
       {guard.element}
-    </form>
+    </Form>
   )
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { CredentialPicker } from '@/components/credentials/credential-picker'
@@ -105,11 +106,11 @@ function GatewayKeys({ gatewayId, readOnly }: { gatewayId: string; readOnly: boo
   return (
     <div className="space-y-3">
       {!readOnly && !creating && <Button type="button" size="sm" variant="outline" onClick={() => { setCreating(true); setSecret(null) }}>New key</Button>}
-      {creating && <form aria-label="New key" className="space-y-3" onSubmit={event => { event.preventDefault(); if (name.trim()) create.mutate(); else setError('Give the key a name.') }}>
+      {creating && <Form aria-label="New key" className="space-y-3" onSubmit={event => { event.preventDefault(); if (name.trim()) create.mutate(); else setError('Give the key a name.') }}>
         <Field id={`key-name-${gatewayId}`} label="Name"><Input value={name} onChange={event => setName(event.target.value)} autoComplete="off" /></Field>
         <Field id={`key-expiry-${gatewayId}`} label="Expires on" hint="Leave empty to keep it until you revoke it."><Input type="date" value={expiry} onChange={event => setExpiry(event.target.value)} /></Field>
         <InlineFormActions onCancel={() => setCreating(false)} submitLabel="Make key" submitting={create.isPending} />
-      </form>}
+      </Form>}
       {secret && <div data-sensitive-text data-testid="generated-api-key" className="space-y-3 rounded-lg border bg-muted p-4">
         <CopyField value={secret} label="API key" />
         <p className="text-sm">Copy it now. You won't see it again.</p>
@@ -159,7 +160,7 @@ function MethodForm({ type, configuration, onSave, onCancel, saving }: { type: S
     if (type === 'jwt') delete out.preset
     onSave(out)
   }
-  return <form className="space-y-4" aria-label={`Configure ${label}`} onSubmit={event => { event.preventDefault(); submit() }}>
+  return <Form className="space-y-4" aria-label={`Configure ${label}`} onSubmit={event => { event.preventDefault(); submit() }}>
     {type === 'basic_auth' && <>
       {users.map((user, index) => <div key={user.id ?? index} className="space-y-3 rounded border p-3">
         <Field id={`signin-user-${index}`} label={index === 0 ? 'Username' : `Username ${index + 1}`}><Input value={user.username} onChange={event => setUsers(old => old.map((row, i) => i === index ? { ...row, username: event.target.value } : row))} autoComplete="off" /></Field>
@@ -194,5 +195,5 @@ function MethodForm({ type, configuration, onSave, onCancel, saving }: { type: S
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <InlineFormActions onCancel={onCancel} submitLabel={`Save ${label}`} submitting={saving} />
     {guard.element}
-  </form>
+  </Form>
 }

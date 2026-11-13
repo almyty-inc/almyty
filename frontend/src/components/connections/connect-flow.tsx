@@ -11,11 +11,12 @@
  * (a nested form is invalid and would submit the outer one): its buttons
  * and Enter key call the handler directly.
  */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ExternalLink, KeyRound, Loader2, LockKeyhole, LogIn, Plug, Settings2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Form } from '@/components/ui/form'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -132,22 +133,12 @@ export function connectTitle(connector: Connector | null | undefined, rotateConn
   return connector ? `Add ${connector.displayName}` : 'Add credential'
 }
 
-/** A <form> on a page; a group that submits on its buttons and Enter when embedded. */
+/** A <form> on a page; a group that submits on its buttons and Enter when embedded (see components/ui/form). */
 export function FormBox({ embedded, onSubmit, children, className, testId, label }: { embedded?: boolean; onSubmit: (e: SyntheticEvent) => void; children: ReactNode; className?: string; testId?: string; label?: string }) {
-  if (!embedded) {
-    return (
-      <form onSubmit={onSubmit} className={className} noValidate data-testid={testId} aria-label={label}>
-        {children}
-      </form>
-    )
-  }
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') onSubmit(e)
-  }
   return (
-    <div role="group" className={className} data-testid={testId} aria-label={label} onKeyDown={onKeyDown}>
+    <Form nested={embedded} onSubmit={onSubmit} className={className} noValidate data-testid={testId} aria-label={label}>
       {children}
-    </div>
+    </Form>
   )
 }
 
