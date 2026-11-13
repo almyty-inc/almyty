@@ -288,6 +288,22 @@ export function formatConnector(c: any): string {
   return `${c.key}  ${c.displayName}  [${c.kind}]  ${methods}${c.custom ? '  (custom)' : ''}`;
 }
 
+/**
+ * A credential as the CLI prints it. The stored config never leaves: not
+ * its secrets, not even as masks (a mask is still a field a script could
+ * pass on). What is said instead is what a person needs: the service, the
+ * account, and whether it works.
+ */
+export function publicCredential(c: any): any {
+  if (!c || typeof c !== 'object') return c;
+  const { config: _config, configuration: _configuration, ...rest } = c;
+  const health = rest.health ?? {
+    status: rest.healthStatus ?? 'unknown',
+    checkedAt: rest.healthCheckedAt ?? null,
+    error: rest.healthError ?? null,
+  };
+  return { ...rest, health };
+}
 export function formatConnection(c: any): string {
   const health = c.health?.status ?? 'unknown';
   const label = c.accountLabel ? `  ${c.accountLabel}` : '';
@@ -491,13 +507,15 @@ async function main(): Promise<void> {
     }
     case 'list': {
       const res = await q('/credentials');
-      out(args, res.data, () => (res.data.length ? res.data.map(formatConnection).join('\n') : 'No credentials yet. Run: almyty credentials services'));
+      const rows = (res.data as any[]).map(publicCredential);
+      out(args, rows, () => (rows.length ? rows.map(formatConnection).join('\n') : 'No credentials yet. Run: almyty credentials services'));
       return;
     }
     case 'get': {
       const id = needArg(args.positional, 0, 'credential id', 'get <id>');
       const res = await q(`/credentials/${id}`);
-      out(args, res.data, () => formatConnectionDetail(res.data));
+      const row = publicCredential(res.data);
+      out(args, row, () => formatConnectionDetail(row));
       return;
     }
     case 'add': {
