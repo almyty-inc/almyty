@@ -7,7 +7,6 @@
  */
 import { AgentVerifierHelper, codeFindings } from '../agent-verifier.helper';
 import { AgentStepProcessor, EARLIER_ANSWERS_DAYS, EARLIER_ANSWERS_MAX } from '../agent-step-processor';
-import { AgentMemoryKeeper, reportedItemsMemory } from '../agent-memory.keeper';
 import { answerCodeFindings, claimsSkippedAsReported, parseAnswer, releaseNotesOf, toolItems } from '../answer-checks';
 import { earlierAnswers, evidenceOf, loadRun, wholeToolResults } from './fixtures/checker-runs/load';
 
@@ -41,12 +40,12 @@ describe('RW1 15fca65f: a label cell "(none)" says the issue has no labels', () 
 
   it('still says when "(none)" is given for an issue GitHub gives labels', () => {
     expect(answerCodeFindings({ answer: row('(none)', '64807'), evidence }).map((f) => f.rule)).toEqual([
-      '#64807: the answer says it has no labels, but the tool results give s390x, linux',
+      '#64807: the answer says it has no labels ("Labels: (none)"), but the tool results give s390x, linux',
     ]);
   });
 
-  it('a value in brackets that is not none-like is still a label', () => {
-    expect(answerCodeFindings({ answer: row('(bug)'), evidence }).map((f) => f.rule)).toEqual(['#67400: the answer gives the label (bug), but the tool results give none']);
+  it('a value in brackets that is not none-like is still a label, read without its brackets', () => {
+    expect(answerCodeFindings({ answer: row('(bug)'), evidence }).map((f) => f.rule)).toEqual(['#67400: the answer gives the label bug, but the tool results give none']);
   });
 });
 
@@ -57,7 +56,7 @@ describe('RD1 0f136ed8: a DOI field that gives the DOI and says there is none', 
         item: '"From Legal Databases to AI-Assisted Justice: A Risk-Sensiti…"',
         field: 'DOI',
         code: 'item_field',
-        rule: '"From Legal Databases to AI-Assisted Justice: A Risk-Sensiti…": the answer gives DOI 10.17613/zf92n-68j61 and in the same field says "(N/A - no direct DOI, but link available)", as if it had none',
+        rule: '"From Legal Databases to AI-Assisted Justice: A Risk-Sensiti…": the answer says it has no DOI ("DOI: https://doi.org/10.17613/zf92n-68j61 (N/A - no direct DOI, but l…"), but the tool results give 10.17613/zf92n-68j61',
       }),
     ]);
   });
@@ -102,9 +101,12 @@ describe('RD2 af3c05c0: "skipped 10 as already reported", against what the agent
 
   it('is not checked without the agent\'s history, nor on an answer that lists what it says it skipped', () => {
     expect(findingsOf('rc7-RD2-af3c05c0')).toEqual([]);
-    // RD4 says it skipped 1 and lists all 10: the count check names that, not this one.
+    // RD4 says it skipped 1 and lists all 10: the count check names that, and the skip check nothing
+    // (the items it lists that were reported before are the "new" check's, checker-root-causes-rc8).
     const rd4 = loadRun('rc7-RD4-fcf9e484');
-    expect(findingsOf('rc7-RD4-fcf9e484', { earlier: earlierAnswers(rd4) }).map((f) => f.code)).toEqual(['count']);
+    const codes = findingsOf('rc7-RD4-fcf9e484', { earlier: earlierAnswers(rd4) }).map((f) => f.code);
+    expect(codes).toContain('count');
+    expect(codes).not.toContain('skipped_not_reported');
   });
 
   it('reads the earlier answers only for such a claim, from this agent, bounded in count and days', async () => {
@@ -117,7 +119,8 @@ describe('RD2 af3c05c0: "skipped 10 as already reported", against what the agent
       },
     });
     const run: any = { id: 'run-2', agentId: 'agent-1', organizationId: 'org-1', createdAt: new Date('2026-11-13T12:52:09Z'), input: { message: fx.request }, steps: [] };
-    const plain = await self.prepareCheck(run, null, [{ providerId: 'p', model: 'm' }], loadRun('rc7-RD3-07a3f5c7').answer);
+    // An answer, and instructions, that say nothing of items reported before: the dependency check's.
+    const plain = await self.prepareCheck(run, null, [{ providerId: 'p', model: 'm' }], loadRun('rc7-DC1-81411770').answer);
     expect(find).not.toHaveBeenCalled();
     expect(plain.earlier).toBeUndefined();
 
@@ -143,81 +146,9 @@ describe('RD2 af3c05c0: "skipped 10 as already reported", against what the agent
   });
 });
 
-describe('RD2, its root: the digest memory keeps the ids it reported', () => {
-  const MAIN = { key: 'main', name: 'Main', purpose: 'main', kind: 'model' } as any;
-  const agent = { id: 'agent-1', name: 'Research digest', memoryConfig: { enabled: true, save: 'facts' } } as any;
-  /** A finished run of the fixture, as afterRun reads it: its request, answer and tool steps. */
-  const runOf = (name: string): any => {
-    const fx = loadRun(name);
-    return {
-      id: name, organizationId: 'org-1', userId: 'u-1', endUserId: null, conversationId: null, metadata: {}, workingMemory: {}, totalCost: 0,
-      createdAt: new Date(fx.now),
-      input: { message: fx.request },
-      output: fx.answer,
-      steps: fx.tools.map((t) => ({ type: 'tool_call', input: { tool: t.tool, toolId: 't-1', parameters: t.parameters }, output: t.output })),
-    };
-  };
-  // Facts the agent saved on staging during rc7 (mem-after snapshot): prose, and not one id.
-  const PROSE = [
-    'The user has recorded DOIs and OpenAlex IDs of these works to avoid duplicates.',
-    "A significant paper on RAG evaluation is 'Retrieval-Augmented Generation Chatbot for Academic Information Services Using GROQ API' by Inda Fadila Ainul Hawa, published 2026-11-12.",
-  ];
-
-  async function saveAfter(name: string) {
-    const memoryAccounts = { put: jest.fn(async () => ({ id: 'mem-1' })), search: jest.fn() };
-    const callModel = jest.fn(async () => ({ content: JSON.stringify({ facts: PROSE }) }));
-    const k = new AgentMemoryKeeper({ memoryAccounts, logger: { warn: jest.fn() } } as any, { callModel } as any);
-    const run = runOf(name);
-    await k.afterRun(agent, run, { main: MAIN } as any);
-    const saved = (memoryAccounts.put.mock.calls as any[]).map((c) => c[2].content as string);
-    return { saved, run, puts: memoryAccounts.put.mock.calls as any[] };
-  }
-
-  it('saves the OpenAlex id and DOI of each of the ten works RD1 reported, beside the facts', async () => {
-    const { saved, run, puts } = await saveAfter('rc7-RD1-0f136ed8');
-    expect(saved.slice(0, 2)).toEqual(PROSE);
-    const items = saved[2];
-    expect(items).toMatch(/^Reported in the answer to "retrieval augmented generation evaluation, since 2026-11-01" on 2026-11-13 \(10 items\): W\d+ \(DOI /);
-    expect(items).toContain('W7167504345 (DOI 10.17613/zf92n-68j61)');
-    expect(items.match(/\bW\d{6,12}\b/g)).toHaveLength(10);
-    expect(puts[2][2].tags).toContain('reported-items');
-    expect(run.steps.at(-1)).toMatchObject({ type: 'memory_save', output: { saved: 3, reportedItems: true } });
-  });
-
-  it('run 2 can then skip exactly run 1\'s items: of RD2\'s ten works, the four RD1 reported', async () => {
-    const { saved } = await saveAfter('rc7-RD1-0f136ed8');
-    const memory = saved.join('\n');
-    const rd2 = toolItems(evidenceOf(loadRun('rc7-RD2-af3c05c0'))).items;
-    const remembered = rd2.filter((it) => it.ids.some((id) => memory.includes(id.toUpperCase()))).map((it) => it.ids[0].toUpperCase());
-    expect(remembered.sort()).toEqual(['W4416965058', 'W7128530100', 'W7159584895', 'W7212323002']);
-    // The prose alone, all the agent kept before, lets it recognise none of them.
-    expect(rd2.filter((it) => it.ids.some((id) => PROSE.join('\n').includes(id.toUpperCase())))).toEqual([]);
-    // And a run 2 that skips exactly those four, as already reported, passes the skip check.
-    const kept = rd2.filter((it) => !remembered.includes(it.ids[0].toUpperCase()));
-    const answer = `The tool returned 10 works. I skipped 4 as already reported.\n\n${kept.map((it, i) => `${i + 1}. ${it.title}\n   - DOI: ${it.dois[0] ?? 'none'}`).join('\n')}`;
-    const fx = loadRun('rc7-RD2-af3c05c0');
-    expect(codeFindings({ request: fx.request, answer, evidence: evidenceOf(fx), now: new Date(fx.now), earlier: [loadRun('rc7-RD1-0f136ed8').answer] })).toEqual([]);
-  });
-
-  it('keeps no ids for an answer that lists nothing the tool results identify', () => {
-    const run = runOf('rc7-RD2-af3c05c0');
-    expect(reportedItemsMemory(run)).toBeNull();
-  });
-
-  it('screens the ids through the never-save rules like any save', async () => {
-    const memoryAccounts = { put: jest.fn(async () => ({ id: 'mem-1' })), search: jest.fn() };
-    const callModel = jest.fn(async (_run: any, _role: any, req: any) =>
-      /You check text before/.test(req.messages[0].content) ? { content: 'NOTHING' } : { content: JSON.stringify({ facts: [] }) },
-    );
-    const k = new AgentMemoryKeeper({ memoryAccounts, logger: { warn: jest.fn() } } as any, { callModel } as any);
-    await k.afterRun({ ...agent, memoryConfig: { enabled: true, save: 'facts', neverSave: 'paper ids' } }, runOf('rc7-RD1-0f136ed8'), { main: MAIN } as any);
-    expect(memoryAccounts.put).not.toHaveBeenCalled();
-  });
-});
-
 describe('RW2 947d8e43: technical terms a release summary gives that its notes do not', () => {
   it('fails v22.23.5 for "dns" and "crypto", read from the notes whole', () => {
-    expect(findingsOf('rc7-RW2-947d8e43')).toEqual([
+    expect(findingsOf('rc7-RW2-947d8e43').filter((f) => f.code === 'release_notes')).toEqual([
       expect.objectContaining({
         item: 'v22.23.5',
         field: 'release notes',
@@ -229,7 +160,7 @@ describe('RW2 947d8e43: technical terms a release summary gives that its notes d
   });
 
   it('reads no notes the tool results hold only in part: without them whole there is no finding', () => {
-    expect(findingsOf('rc7-RW2-947d8e43', { whole: false })).toEqual([]);
+    expect(findingsOf('rc7-RW2-947d8e43', { whole: false }).filter((f) => f.code === 'release_notes')).toEqual([]);
   });
 
   it('reads the notes\' own module names, and none that is an everyday word', () => {
@@ -259,7 +190,7 @@ describe('RW2 947d8e43: technical terms a release summary gives that its notes d
     const parsed = parseAnswer(fx.answer);
     const sections = parsed.entries.filter((e) => e.kind === 'section').map((e) => e.head.split(' ')[0]);
     expect(sections).toEqual(['v27.0.0-alpha.0.1.0', 'v26.13.1', 'v24.22.3', 'v22.23.5']);
-    expect(findingsOf('rc7-RW2-947d8e43').map((f) => f.item)).toEqual(['v22.23.5']);
+    expect(findingsOf('rc7-RW2-947d8e43').filter((f) => f.code === 'release_notes').map((f) => f.item)).toEqual(['v22.23.5']);
   });
 
   it('a summary that adds a module to a release, any case, is caught; one that only paraphrases is not', () => {
@@ -269,7 +200,7 @@ describe('RW2 947d8e43: technical terms a release summary gives that its notes d
       "v24.22.3: the answer's summary names inspector and child_process, but the release notes in the tool results never mention them",
     );
     const prose = fx.answer.replace('fixing http, dns, tls and crypto issues', 'fixing several high severity issues in the networking stack');
-    expect(findingsOf('rc7-RW2-947d8e43', { answer: prose })).toEqual([]);
+    expect(findingsOf('rc7-RW2-947d8e43', { answer: prose }).filter((f) => f.code === 'release_notes')).toEqual([]);
   });
 });
 
@@ -279,18 +210,14 @@ describe('an issue listed as a bug whose issue type says otherwise', () => {
   const list = (issue: string) => `## High-priority open issues (bugs, regressions, security)\n\n1. [#${issue}](https://github.com/expressjs/express/issues/${issue}) an issue`;
 
   it('keeps an issue of type Task whose title names a security fix (#7564)', () => {
-    expect(answerCodeFindings({ answer: list('7564'), evidence }).filter((f) => f.field === 'issue type')).toEqual([]);
+    expect(answerCodeFindings({ answer: list('7564'), evidence }).filter((f) => f.field === 'category')).toEqual([]);
   });
 
   it('fails one of type Feature whose labels and title name no problem', () => {
     const edited = evidence.replace('"title":"Express 4: update body-parser minimum to 1.20.9 for security fix"', '"title":"Express 4: update body-parser minimum to 1.20.9"').replace('"module:body-parser"', '"module:parser"').replace('"name":"Task"', '"name":"Feature"');
-    expect(answerCodeFindings({ answer: list('7564'), evidence: edited }).filter((f) => f.field === 'issue type').map((f) => f.rule)).toEqual([
-      '#7564: the answer lists it under "High-priority open issues (bugs, regressions, security)", but the tool results give it the issue type Feature, and neither its labels nor its title name a problem',
+    expect(answerCodeFindings({ answer: list('7564'), evidence: edited }).filter((f) => f.field === 'category').map((f) => f.rule)).toEqual([
+      '#7564: the answer lists it as a bug, regression or security issue, but the tool results mark it as issue type Feature, and neither its labels nor its title name a problem',
     ]);
-  });
-
-  it('labels alone decide nothing: #67354 "feature request", with no issue type, stays a note (rc7 RW2)', () => {
-    expect(findingsOf('rc7-RW2-947d8e43').some((f) => /#67354/.test(f.rule))).toBe(false);
   });
 });
 

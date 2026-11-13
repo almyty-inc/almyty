@@ -11,6 +11,7 @@ import { strongestFirst, type FailureKind } from './checker-guards';
 import { itemsOutsideWindow } from './window-check';
 import { answerCodeFindings, CODE_CHECKER, type WholeToolResult } from './answer-checks';
 import { verifiedRule, verifyCheckerFinding } from './checker-findings';
+import { screenNotes } from './checker-notes';
 
 /** Verdict-merge policy for a verify node's checker panel. */
 export type VerifyPolicy = 'all_pass' | 'majority' | 'any_fail_blocks';
@@ -49,6 +50,8 @@ export interface CheckerNote {
   claim?: string;
   /** For a failure the code could not verify, why it is a note. */
   why?: string;
+  /** The code showed the note right (checker-notes.ts). A note it showed wrong is not kept. */
+  checked?: boolean;
 }
 
 /**
@@ -305,7 +308,7 @@ function requestOf(evidence: string): string {
  * count, completeness and skip checks (answer-checks.ts). Each finding
  * names the item and the field, and decides the verdict on its own.
  */
-export function codeFindings(input: { request: string; answer: string; evidence: string; now: Date; earlier?: string[]; whole?: WholeToolResult[] }): VerifyFailure[] {
+export function codeFindings(input: { request: string; answer: string; evidence: string; now: Date; earlier?: string[]; whole?: WholeToolResult[]; instructions?: string }): VerifyFailure[] {
   const found: VerifyFailure[] = [...itemsOutsideWindow(input), ...answerCodeFindings(input)];
   const seen = new Set<string>();
   return found.filter((f) => (seen.has(f.rule) ? false : (seen.add(f.rule), true)));
@@ -471,12 +474,19 @@ export class AgentVerifierHelper {
     // out of a list said to be complete. These stand beside the checkers
     // as a check of their own, so a checker that passed over them (run
     // dda8789a) does not pass the answer.
-    const found = checkers.length && evidence ? codeFindings({ request: requestOf(evidence), answer: targetText, evidence, now: extra.now, earlier: opts.earlier, whole: opts.toolResults }) : [];
+    const found = checkers.length && evidence
+      ? codeFindings({ request: requestOf(evidence), answer: targetText, evidence, now: extra.now, earlier: opts.earlier, whole: opts.toolResults, instructions: extra.rules })
+      : [];
     const checkerResults: CheckerResult[] = found.length
       ? [...fromModels, { checker: CODE_CHECKER, verdict: 'fail', failures: found, passedRules: [] }]
       : fromModels;
 
     const merged = this.mergeVerdicts(checkerResults, policy);
+    // Every checker note through the same verifiers: one the code shows
+    // false is not shown, one it shows true is marked checked (checker-notes.ts).
+    const screened = evidence
+      ? screenNotes(merged.notes, { answer: targetText, evidence, instructions: extra.rules, findings: found, now: extra.now })
+      : { notes: merged.notes, dropped: new Map<string, number>() };
 
     return {
       verdict: merged.verdict,
@@ -484,17 +494,21 @@ export class AgentVerifierHelper {
       ...(merged.unavailable ? { unavailable: true } : {}),
       policy,
       failures: merged.failures,
-      notes: merged.notes,
+      notes: screened.notes,
       passedRules: merged.passedRules,
-      checkers: checkerResults.map((r) => ({
-        checker: r.checker,
-        verdict: r.verdict,
-        ...(r.error ? { error: r.error } : {}),
-        ...(r.note ? { note: r.note } : {}),
-        ...(r.model ? { model: r.model } : {}),
-        ...(r.providerId ? { providerId: r.providerId } : {}),
-        ...(r.routing ? { routing: r.routing } : {}),
-      })),
+      checkers: checkerResults.map((r) => {
+        const dropped = screened.dropped.get(r.checker);
+        const note = [r.note, dropped ? `${dropped} note${dropped === 1 ? '' : 's'} not shown: the tool results show ${dropped === 1 ? 'it' : 'them'} false` : ''].filter(Boolean).join('; ');
+        return {
+          checker: r.checker,
+          verdict: r.verdict,
+          ...(r.error ? { error: r.error } : {}),
+          ...(note ? { note } : {}),
+          ...(r.model ? { model: r.model } : {}),
+          ...(r.providerId ? { providerId: r.providerId } : {}),
+          ...(r.routing ? { routing: r.routing } : {}),
+        };
+      }),
       cost: checkerResults.reduce((s, r) => s + (r.cost || 0), 0),
       tokens: checkerResults.reduce((s, r) => s + (r.tokens || 0), 0),
       inputTokens: checkerResults.reduce((s, r) => s + (r.inputTokens || 0), 0),
