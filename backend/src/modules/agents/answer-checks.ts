@@ -1,28 +1,37 @@
 /**
  * Checks the platform makes itself on a final answer: counting and
- * comparing, never judging. Each reads the answer and the tool results,
- * and nothing else, and knows no API.
+ * comparing, never judging. Each reads the answer, the tool results and,
+ * for one check, what the agent answered before; none knows an API.
  *
  *  - An item's field against the tool's value for that same item: a date,
  *    a DOI, a version, labels, a title, a venue, a first author. The item
  *    is found by what identifies it (an OpenAlex id, an issue number, a
- *    package name, a title, a DOI).
+ *    package name, a title, a DOI). "(none)" and "[N/A]" say none. A DOI
+ *    field that gives the DOI and says there is none contradicts itself
+ *    (run 0f136ed8).
  *  - A package's update kind against its versions: "outdated-minor" for
  *    ^16.4.5 against 18.0.10 is wrong, 16 to 18 is a major update (run
  *    bf05f68a).
+ *  - The technical terms a release's summary names against that release's
+ *    notes: "dns" and "crypto" for v22.23.5, whose notes name neither (run
+ *    947d8e43). An issue listed as a bug whose issue type, labels and title
+ *    all say otherwise.
  *  - The answer's own counts against its own list and the tool's list:
  *    "the tool returned 10 works, I skipped 10" over a list of 10 (run
  *    6432deb3); "returned 10, skipped 0" over a list of 9 (run db52dcca).
  *  - Items the tool returned that the answer leaves out while it says its
  *    list is complete ("No other works matched", run db52dcca).
+ *  - Items it says it skipped as already reported that no earlier answer
+ *    of the agent reported (run af3c05c0).
  *  - A summary's counts against the table above it.
  *
  * Every finding names the item and the field, and says what is wrong in
- * plain words. In six rounds of runs these checks were right every time,
+ * plain words. In seven rounds of runs these checks were right every time,
  * and a checker model's judgement was not; so a finding here decides the
  * verdict on its own (agent-verifier.helper.ts).
  */
 
+import { asJson, cutTextOf } from './checker-evidence';
 import { evidenceJson } from './checker-guards';
 import { compareVersions } from './version-order';
 
@@ -177,6 +186,8 @@ export interface AnswerEntry {
   list?: number;
   /** For a row, its cells by the lower-cased header. */
   cells?: Record<string, string>;
+  /** The heading the entry stands under, when one that names no item comes before it ("High-priority open issues (bugs, regressions, security)"). */
+  under?: string;
 }
 
 export interface ParsedAnswer {
@@ -216,6 +227,8 @@ export function parseAnswer(answer: string): ParsedAnswer {
   let current: (AnswerEntry & { lines: string[] }) | null = null;
   let lastNumber = 0;
   let blankBefore = false;
+  // The last heading that does not name an item: what the entries after it are listed as.
+  let under = '';
   const flush = () => {
     if (!current) return;
     const { lines: body, ...entry } = current;
@@ -237,7 +250,7 @@ export function parseAnswer(answer: string): ParsedAnswer {
           const cells = cellsOf(row);
           const byHeader: Record<string, string> = {};
           head.forEach((h, k) => (byHeader[h || `column ${k + 1}`] = cells[k] ?? ''));
-          entries.push({ kind: 'row', head: cells[0] ?? '', text: row.trim(), cells: byHeader });
+          entries.push({ kind: 'row', head: cells[0] ?? '', text: row.trim(), cells: byHeader, ...(under ? { under } : {}) });
         }
       } else {
         outside.push(...block);
@@ -252,15 +265,18 @@ export function parseAnswer(answer: string): ParsedAnswer {
       if (!numberedLists.length || n !== lastNumber + 1) numberedLists.push(0);
       lastNumber = n;
       numberedLists[numberedLists.length - 1]++;
-      current = { kind: 'numbered', head: numbered[2], list: numberedLists.length - 1, lines: [numbered[2]], text: '' };
+      current = { kind: 'numbered', head: numbered[2], list: numberedLists.length - 1, lines: [numbered[2]], text: '', ...(under ? { under } : {}) };
       blankBefore = false;
       continue;
     }
     const heading = HEADING.exec(line);
     if (heading) {
       flush();
-      if (IDENTIFIER_HEAD.test(heading[1].trim())) current = { kind: 'section', head: heading[1].trim(), lines: [heading[1].trim()], text: '' };
-      else outside.push(line);
+      if (IDENTIFIER_HEAD.test(heading[1].trim())) current = { kind: 'section', head: heading[1].trim(), lines: [heading[1].trim()], text: '', ...(under ? { under } : {}) };
+      else {
+        outside.push(line);
+        under = heading[1].trim();
+      }
       blankBefore = false;
       continue;
     }
@@ -354,13 +370,26 @@ interface EntryKeys {
   title: string;
 }
 
-const NONE_VALUE = /^(?:none|null|n\/?a|not available|not given|not provided|unknown|no doi|-|—|–)\.?$/i;
+const NONE_VALUE = /^(?:none|null|n\/?a|not available|not given|not provided|unknown|no doi|no labels?|-|—|–)\.?$/i;
+
+/** A value without the brackets around it: "(none)" is "none", "[n/a]" is "n/a". */
+function unwrap(text: string): string {
+  let s = bare(text);
+  while (s.length >= 2 && '([{<'.includes(s[0]) && ')]}>'['([{<'.indexOf(s[0])] === s[s.length - 1]) s = bare(s.slice(1, -1));
+  return s;
+}
+
+/** Whether a value the answer gives says there is none: "none", "(none)", "[N/A]", "", "-". */
+function noneLike(text: string): boolean {
+  const s = unwrap(text);
+  return !s || NONE_VALUE.test(s);
+}
 
 function keysOfEntry(entry: AnswerEntry): EntryKeys {
   const text = entry.text;
   const dois = Array.from(new Set(Array.from(text.matchAll(DOI_IN_TEXT), (m) => doiKey(m[0]))));
   const doiLine = labelled(entry, /^doi$/);
-  const doiNone = doiLine !== null && NONE_VALUE.test(doiLine.trim());
+  const doiNone = doiLine !== null && !!unwrap(doiLine) && noneLike(doiLine);
   const ids = Array.from(new Set(Array.from(text.matchAll(OPENALEX_ID), (m) => m[0].toLowerCase())));
   const numbers = new Set<string>();
   const head = entry.kind === 'row' ? entry.head : entry.head.slice(0, 120);
@@ -474,13 +503,40 @@ function dateFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   return out;
 }
 
+/**
+ * Words in a DOI field, beside a DOI, that say the item has none: "DOI:
+ * https://doi.org/10.17613/zf92n-68j61 (N/A - no direct DOI, but link
+ * available)" (run 0f136ed8).
+ */
+const SAYS_NO_DOI = /\bn\/a\b|\bno\s+(?:direct\s+|real\s+|official\s+|valid\s+)?doi\b|\bdoi\s+(?:is\s+)?(?:not available|unavailable|missing)\b|\bnone\b|\bnot available\b/i;
+
+/** What a DOI field says besides its DOIs: the field with every DOI and DOI address taken out. */
+function besideDoi(line: string): string {
+  return line.replace(/\bhttps?:\/\/(?:dx\.)?doi\.org\/\S{1,300}/gi, ' ').replace(DOI_IN_TEXT, ' ');
+}
+
 function doiFindings(entry: AnswerEntry, items: ToolItem[], keys: EntryKeys): CodeFinding[] {
   const withDoi = items.filter((it) => 'doi' in it.value);
   if (!withDoi.length) return [];
   const it = withDoi[0];
   const tool = typeof it.value.doi === 'string' && it.value.doi ? doiKey(it.value.doi) : null;
   if (keys.dois.length) {
-    if (tool && keys.dois.includes(tool)) return [];
+    if (tool && keys.dois.includes(tool)) {
+      // The right DOI, and in the same field words that say there is none: the field contradicts itself.
+      const field = labelled(entry, /^doi$/);
+      const aside = field === null ? null : SAYS_NO_DOI.exec(besideDoi(field));
+      if (!field || !aside) return [];
+      return [
+        finding(
+          it.label,
+          'DOI',
+          `${it.label}: the answer gives DOI ${tool} and in the same field says "${short(besideDoi(field).trim(), 60)}", as if it had none`,
+          `doi: ${it.value.doi}`,
+          `DOI: ${field}`,
+          'item_field',
+        ),
+      ];
+    }
     const said = keys.dois[0];
     return [
       finding(
@@ -513,7 +569,7 @@ function labelFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   if (!it) return [];
   const tool = labelNames(it.value.labels)!;
   const toolSet = new Set(tool.map((l) => l.toLowerCase()));
-  const listed = NONE_VALUE.test(said.trim()) || !said.trim() ? [] : said.split(',').map((l) => bare(l).toLowerCase()).filter(Boolean);
+  const listed = noneLike(said) ? [] : said.split(',').map((l) => bare(l).toLowerCase()).filter(Boolean);
   const toolWords = tool.length ? tool.join(', ') : 'none';
   if (!listed.length) {
     return tool.length ? [finding(it.label, 'labels', `${it.label}: the answer says it has no labels, but the tool results give ${toolWords}`, `labels: ${toolWords}`, `Labels: ${said}`, 'item_field')] : [];
@@ -552,7 +608,7 @@ function nameFindings(entry: AnswerEntry, items: ToolItem[], by: string | null):
       const name = source.value && typeof source.value === 'object' ? (source.value as Obj).display_name : null;
       if (typeof name === 'string' && name.trim()) {
         if (!sameName(venue, name)) out.push(finding(it.label, 'venue', `${it.label}: the answer gives the venue as ${short(venue, 80)}, but the tool results give ${name}`, `primary_location.source.display_name: ${name}`, `Venue: ${venue}`, 'item_field'));
-      } else if ((source.value === null || name === null) && venue.trim() && !/^(?:unknown|none|n\/?a|not given|not available)\b/i.test(venue.trim())) {
+      } else if ((source.value === null || name === null) && unwrap(venue) && !/^(?:unknown|none|n\/?a|not given|not available)\b/i.test(unwrap(venue))) {
         out.push(finding(it.label, 'venue', `${it.label}: the answer gives the venue as ${short(venue, 80)}, but the tool results give it no venue`, 'primary_location.source: null', `Venue: ${venue}`, 'item_field'));
       }
     }
@@ -561,7 +617,7 @@ function nameFindings(entry: AnswerEntry, items: ToolItem[], by: string | null):
   if (author !== null && Array.isArray(it.value.authorships)) {
     const first = pathOf(it.value, ['authorships', '0', 'author', 'display_name']);
     const name = first.value;
-    if (typeof name === 'string' && name.trim() && !sameName(author, name) && !/^(?:unknown|none|n\/?a)\b/i.test(author.trim())) {
+    if (typeof name === 'string' && name.trim() && !sameName(author, name) && !/^(?:unknown|none|n\/?a)\b/i.test(unwrap(author))) {
       out.push(finding(it.label, 'first author', `${it.label}: the answer gives the first author as ${short(author, 60)}, but the tool results give ${name}`, `authorships[0].author.display_name: ${name}`, `First author: ${author}`, 'item_field'));
     }
   }
@@ -633,14 +689,208 @@ function packageFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   return out;
 }
 
+/**
+ * Subsystem names that are also everyday words or commit kinds ("doc",
+ * "test", "fix"): a summary says them in plain prose, so they are not read
+ * as a claim about the release.
+ */
+const PLAIN_SUBSYSTEMS = new Set([
+  'benchmark', 'build', 'chore', 'ci', 'console', 'deps', 'doc', 'docs', 'errors', 'events', 'feat', 'fix', 'lib', 'meta', 'misc', 'module', 'node', 'path', 'perf', 'policy', 'process', 'refactor',
+  'release', 'report', 'revert', 'src', 'stream', 'string', 'style', 'test', 'tests', 'tool', 'tools',
+]);
+
+function addSubsystems(text: string, into: Set<string>): void {
+  for (const part of text.split(/[,/]/)) {
+    const name = part.trim().toLowerCase();
+    if (/^[a-z][a-z0-9_]{1,24}$/.test(name) && !PLAIN_SUBSYSTEMS.has(name)) into.add(name);
+  }
+}
+
+/** Text without markdown's backslash escapes: release notes write "**child\_process**". */
+function unescapeMarkdown(text: string): string {
+  return text.replace(/\\([_*`[\]()#.-])/g, '$1');
+}
+
+function subsystemsOf(body: string, into: Set<string>): void {
+  for (const line of unescapeMarkdown(body).split('\n')) {
+    let at = line.indexOf('**');
+    while (at !== -1) {
+      const end = line.indexOf('**', at + 2);
+      if (end === -1) break;
+      if (line[end + 2] === ':' && end - at < 60) addSubsystems(line.slice(at + 2, end), into);
+      at = line.indexOf('**', end + 2);
+    }
+    const cve = line.indexOf('(CVE-');
+    if (cve !== -1) {
+      const close = line.indexOf(') ', cve);
+      const colon = close === -1 ? -1 : line.indexOf(':', close);
+      if (colon !== -1 && colon - close < 40) addSubsystems(line.slice(close + 2, colon), into);
+    }
+  }
+}
+
+/** Whether a release's notes are whole: not cut by the store ("… (truncated from") or by the evidence ("…"). */
+function isWholeText(text: string): boolean {
+  return !!text.trim() && !text.trimEnd().endsWith('…') && !cutTextOf(text);
+}
+
+/** A tool result read whole, as the run's conversation holds it (checker-evidence.ts RunToolResult). */
+export interface WholeToolResult {
+  content: string;
+  error?: boolean;
+}
+
+/**
+ * The release notes the tool results hold, by tag, and the subsystem
+ * names they use: the "**crypto**:" of a changelog line, the "http2:"
+ * after a CVE id. Those names are the tool's own vocabulary of modules,
+ * so a summary naming one says something the notes can confirm or not.
+ *
+ * Notes come from the tool results read whole (`whole`, the run's
+ * conversation) where the caller has them: the evidence a checker gets is
+ * cut to fit its budget, and a release list's notes are cut first. Notes
+ * cut anywhere are never compared, only read for their vocabulary.
+ */
+export interface ReleaseNotes {
+  byTag: Map<string, string>;
+  vocabulary: Set<string>;
+}
+
+export function releaseNotesOf(index: ToolItems, whole?: WholeToolResult[]): ReleaseNotes {
+  const byTag = new Map<string, string>();
+  const vocabulary = new Set<string>();
+  const add = (tag: unknown, body: unknown) => {
+    if (typeof tag !== 'string' || typeof body !== 'string' || !body.trim()) return;
+    subsystemsOf(body, vocabulary);
+    if (!isWholeText(body)) return;
+    const key = tag.trim().toLowerCase();
+    if (!byTag.has(key)) byTag.set(key, body);
+  };
+  const walk = (v: unknown, depth: number) => {
+    if (depth > 6 || v === null || typeof v !== 'object') return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x, depth + 1);
+      return;
+    }
+    const o = v as Obj;
+    if ('tag_name' in o && 'body' in o) {
+      add(o.tag_name, o.body);
+      return;
+    }
+    for (const x of Object.values(o)) walk(x, depth + 1);
+  };
+  for (const r of whole ?? []) {
+    if (r?.error || typeof r?.content !== 'string' || !r.content.includes('tag_name')) continue;
+    walk(asJson(undefined, r.content), 0);
+  }
+  for (const it of index.items) add(it.value.tag_name, it.value.body);
+  return { byTag, vocabulary };
+}
+
+/** Whether a word is a code identifier: "child_process", "subprocess.timedOut", "fs.cpSync". */
+function isIdentifier(word: string): boolean {
+  if (word.length < 4 || word.length > 60 || !/^[a-z]/i.test(word) || !/[a-z0-9]$/i.test(word)) return false;
+  if (!/^[A-Za-z0-9._]+$/.test(word) || word.includes('..') || word.includes('._') || word.includes('_.')) return false;
+  const joined = word.includes('_') || word.includes('.');
+  // A lower-case word joined by a dot ("e.g", "package.json") is prose or a file; one with an inner capital or an underscore is code.
+  return joined && (word.includes('_') || /[a-z][A-Z]/.test(word));
+}
+
+/**
+ * The technical terms a release's entry in the answer names (code
+ * identifiers, CVE ids, the subsystem names of the tool's release notes)
+ * against that release's notes in the tool results. A term its notes never
+ * mention, matched case-insensitively as a whole word, was not in the
+ * release: "fixing http, dns, tls and crypto issues" for v22.23.5, whose
+ * notes name neither dns nor crypto (run 947d8e43). Ordinary words are not
+ * terms, and notes the tool results hold only in part are not read.
+ */
+function releaseNoteFindings(entry: AnswerEntry, items: ToolItem[], by: string | null, notes: ReleaseNotes): CodeFinding[] {
+  if (by !== 'name' || entry.kind === 'row') return [];
+  const release = items.find((it) => typeof it.value.tag_name === 'string');
+  if (!release) return [];
+  const tag = String(release.value.tag_name);
+  const body = notes.byTag.get(tag.trim().toLowerCase());
+  if (!body) return [];
+  const text = unescapeMarkdown(body).toLowerCase();
+  // What the entry says about the release, without its heading line, links and addresses.
+  const said = entry.text
+    .split('\n')
+    .slice(1)
+    .join('\n')
+    .replace(/\]\([^)\s]{0,500}\)/g, ']')
+    .replace(/\bhttps?:\/\/\S{0,500}/g, ' ');
+  const terms: string[] = [];
+  for (const raw of said.split(/[\s,;:()[\]{}"'`*!?<>|]+/)) {
+    let word = raw;
+    while (word.endsWith('.')) word = word.slice(0, -1);
+    if (!word) continue;
+    const key = word.toLowerCase();
+    const term = /^cve-\d{4}-\d{4,7}$/.test(key) || isIdentifier(word) || notes.vocabulary.has(key);
+    if (term && !terms.includes(key)) terms.push(key);
+  }
+  // A term counts as mentioned where a word of the notes starts with it: "buffer" is in "retain buffers".
+  const missing = terms.filter((t) => !hasWordStart(text, t));
+  if (!missing.length) return [];
+  const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
+  const line = said.split('\n').find((l) => missing.some((t) => hasWord(l.toLowerCase(), t))) ?? said;
+  return [
+    finding(
+      tag,
+      'release notes',
+      `${tag}: the answer's summary names ${list}, but the release notes in the tool results never mention ${missing.length === 1 ? 'it' : 'them'}`,
+      `body of ${tag} (${body.length} characters) has no ${missing.join(', ')}`,
+      line.trim(),
+      'release_notes',
+    ),
+  ];
+}
+
+/** Issue types that are not a bug, a regression or a security problem. */
+const NOT_A_PROBLEM_TYPE = /^(?:feature|feature request|enhancement|task|question|documentation|docs|epic|chore|discussion)$/i;
+/** Words that say an item is a bug, a regression or a security problem: in a heading, a label or a title. */
+const PROBLEM_WORDS = /\b(?:bugs?|regressions?|security|crash(?:es|ing)?|vulnerab|cve|segfault|segmentation|fails?|failing|failure|errors?|broken|leaks?|hangs?|panic)/i;
+
+/**
+ * An issue the answer lists under a heading of bugs, regressions or
+ * security, whose issue type in the tool results says it is something else
+ * (GitHub's `type`: Feature, Task), and whose labels and title say nothing
+ * of a problem either. The agent's rules let an issue in by its labels or
+ * its title, so either one that names a problem keeps it in ("Express 4:
+ * update body-parser minimum for security fix", type Task). Labels alone
+ * ("feature request") decide nothing: whether a title indicates a bug is a
+ * judgement, and stays a checker note.
+ */
+function issueTypeFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
+  if (!entry.under || !PROBLEM_WORDS.test(entry.under)) return [];
+  const it = items.find((x) => x.numbers.length && x.value.type);
+  if (!it) return [];
+  const t = it.value.type;
+  const name = typeof t === 'string' ? t : t && typeof t === 'object' && typeof (t as Obj).name === 'string' ? ((t as Obj).name as string) : '';
+  if (!name || !NOT_A_PROBLEM_TYPE.test(name.trim())) return [];
+  const labels = labelNames(it.value.labels) ?? [];
+  if (PROBLEM_WORDS.test(it.title) || labels.some((l) => PROBLEM_WORDS.test(l))) return [];
+  return [
+    finding(it.label, 'issue type', `${it.label}: the answer lists it under "${short(entry.under, 80)}", but the tool results give it the issue type ${name}, and neither its labels nor its title name a problem`, `type: ${name}; labels: ${labels.join(', ') || 'none'}`, entry.head, 'item_field'),
+  ];
+}
+
 /** What each field check says about the entries the answer lists, item by item. */
-export function itemFieldFindings(parsed: ParsedAnswer, index: ToolItems): CodeFinding[] {
+export function itemFieldFindings(parsed: ParsedAnswer, index: ToolItems, notes: ReleaseNotes = releaseNotesOf(index)): CodeFinding[] {
   const out: CodeFinding[] = [];
   for (const entry of parsed.entries) {
     const { items, by } = itemsOfEntry(entry, index);
     if (!items.length) continue;
     const keys = keysOfEntry(entry);
-    out.push(...dateFindings(entry, items), ...doiFindings(entry, items, keys), ...labelFindings(entry, items), ...nameFindings(entry, items, by), ...packageFindings(entry, items));
+    out.push(
+      ...dateFindings(entry, items),
+      ...doiFindings(entry, items, keys),
+      ...labelFindings(entry, items),
+      ...nameFindings(entry, items, by),
+      ...packageFindings(entry, items),
+      ...releaseNoteFindings(entry, items, by, notes),
+      ...issueTypeFindings(entry, items),
+    );
   }
   return out;
 }
@@ -810,14 +1060,153 @@ export function summaryFindings(parsed: ParsedAnswer): CodeFinding[] {
 }
 
 /**
- * Every finding of these checks on an answer. The window check
- * (window-check.ts) is run beside them by the verifier.
+ * A claim that items were left out because an earlier answer already
+ * reported them: "I skipped 10 as already reported in the earlier digest"
+ * (run af3c05c0), "all were already reported in earlier digests".
  */
-export function answerCodeFindings(input: { answer: string; evidence: string }): CodeFinding[] {
+const REPORTED_BEFORE = /\b(?:already|previously)\s+(?:been\s+)?(?:reported|listed|covered|included|sent|shared|seen)\b|\b(?:earlier|previous|prior)\s+(?:digests?|runs?|reports?|answers?|summar(?:y|ies))\b/i;
+const LEFT_OUT = /\b(?:skipp|left out|leaves? out|omitt|exclud|dropp|filtered out)/i;
+
+/** Whether an answer says it left items out because an earlier answer already reported them. */
+export function claimsSkippedAsReported(answer: string): boolean {
+  const outside = parseAnswer(answer).outside;
+  const skipped = statedSkipped(outside);
+  if (skipped && skipped.n === 0) return false;
+  return REPORTED_BEFORE.test(outside) && (!!skipped || LEFT_OUT.test(outside) || /\ball\b[^.\n]{0,60}\balready\b/i.test(outside));
+}
+
+/** `needle` in `hay` (both lower case) with no letter, digit or underscore on either side. */
+function hasWord(hay: string, needle: string): boolean {
+  return findWord(hay, needle, true);
+}
+
+/** `needle` at the start of a word of `hay` (both lower case): "buffer" is in "buffers". */
+function hasWordStart(hay: string, needle: string): boolean {
+  return findWord(hay, needle, false);
+}
+
+function findWord(hay: string, needle: string, wholeWord: boolean): boolean {
+  if (!needle) return false;
+  const edge = (c: string | undefined) => !c || !/[a-z0-9_]/.test(c);
+  let at = hay.indexOf(needle);
+  while (at !== -1) {
+    if (edge(hay[at - 1]) && (!wholeWord || edge(hay[at + needle.length]))) return true;
+    at = hay.indexOf(needle, at + 1);
+  }
+  return false;
+}
+
+/** The most items one skip finding names. */
+const SKIPPED_NAMED_MAX = 10;
+
+/**
+ * Items the answer says it skipped as already reported, against what this
+ * agent's earlier answers actually reported. `earlier` is the output of
+ * the agent's earlier completed runs, newest first and bounded by the
+ * caller (EARLIER_ANSWERS_MAX). An item is found in them by its OpenAlex
+ * id, DOI, issue number, package name or whole title. A skipped item none
+ * of them holds was never reported: the answer dropped a new item and
+ * said it was old (run af3c05c0, 3 of its 10 "already reported" works).
+ * Only items the answer leaves out are checked, and only when the count it
+ * says it skipped (if it says one) is the count it leaves out.
+ */
+export function skippedAsReportedFindings(answer: string, parsed: ParsedAnswer, index: ToolItems, evidence: string, earlier?: string[]): CodeFinding[] {
+  if (!earlier || !index.items.length || PARTIAL.test(evidence) || !claimsSkippedAsReported(answer)) return [];
+  const shown = new Set<ToolItem>();
+  const byList = new Map<number, number>();
+  for (const e of parsed.entries) {
+    for (const it of itemsOfEntry(e, index).items) {
+      shown.add(it);
+      byList.set(it.list, (byList.get(it.list) ?? 0) + 1);
+    }
+  }
+  // The tool list the answer speaks of: the one most of its entries come from, else the longest list of identifiable items.
+  let list = -1;
+  let best = 0;
+  for (const [l, n] of byList) if (n > best) (best = n), (list = l);
+  if (list === -1) {
+    for (let l = 0; l < index.lists.length; l++) {
+      const n = index.items.filter((it) => it.list === l && (it.ids.length || it.dois.length || it.numbers.length)).length;
+      if (n > best) (best = n), (list = l);
+    }
+  }
+  if (list === -1) return [];
+  const skippedItems = index.items.filter((it) => it.list === list && !shown.has(it));
+  const stated = statedSkipped(parsed.outside);
+  if (!skippedItems.length || (stated && stated.n !== skippedItems.length)) return [];
+
+  const lower = earlier.join('\n').toLowerCase();
+  const tightAll = tight(lower);
+  const reported = (it: ToolItem): boolean | null => {
+    const keys: string[] = [...it.ids, ...it.dois];
+    for (const n of it.numbers) keys.push(n, `/issues/${n.slice(1)}`, `/pull/${n.slice(1)}`);
+    if (typeof it.value.version === 'string' && it.names[0]) keys.push(it.names[0]);
+    const titleKey = tight(it.title);
+    if (!keys.length && titleKey.length < 20) return null;
+    return keys.some((k) => hasWord(lower, k)) || (titleKey.length >= 20 && tightAll.includes(titleKey));
+  };
+  const never = skippedItems.filter((it) => reported(it) === false);
+  if (!never.length) return [];
+  const name = (it: ToolItem) => {
+    const id = it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? it.dois[0];
+    return id && !it.label.includes(id) ? `${id} ${it.label}` : it.label;
+  };
+  const named = never.slice(0, SKIPPED_NAMED_MAX).map(name);
+  const more = never.length > named.length ? ` and ${never.length - named.length} more` : '';
+  const where = earlier.length ? `none of this agent's last ${earlier.length} answers report ${never.length === 1 ? 'it' : 'them'}` : 'this agent has no earlier answer';
+  const ids = never.map((it) => it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? it.dois[0] ?? it.label);
+  return [
+    finding(
+      ids.slice(0, SKIPPED_NAMED_MAX).join(', '),
+      'already reported',
+      `The answer says it skipped ${skippedItems.length} ${skippedItems.length === 1 ? 'item' : 'items'} as already reported, but ${never.length} of them ${never.length === 1 ? 'was' : 'were'} never reported: ${named.join('; ')}${more} (${where})`,
+      `${never.length} skipped ${never.length === 1 ? 'item is' : 'items are'} in no earlier answer: ${ids.join(', ')}`,
+      statedSkipped(parsed.outside)?.words ?? short(parsed.outside, 120),
+      'skipped_not_reported',
+    ),
+  ];
+}
+
+/**
+ * The items an answer lists that its tool results identify, by their
+ * stable ids: what a later run needs to recognise them (agent-memory.keeper.ts).
+ */
+export function reportedItemsOf(answer: string, evidence: string): Array<{ id: string; doi?: string; title?: string }> {
+  if (!answer?.trim() || !evidence?.trim()) return [];
+  const parsed = parseAnswer(answer);
+  const index = toolItems(evidence);
+  const out: Array<{ id: string; doi?: string; title?: string }> = [];
+  const seen = new Set<ToolItem>();
+  for (const e of parsed.entries) {
+    for (const it of itemsOfEntry(e, index).items) {
+      if (seen.has(it)) continue;
+      seen.add(it);
+      const id = it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? it.dois[0];
+      if (!id) continue;
+      out.push({ id, ...(it.dois[0] && it.dois[0] !== id ? { doi: it.dois[0] } : {}), ...(it.title ? { title: short(it.title, 80) } : {}) });
+    }
+  }
+  return out;
+}
+
+/**
+ * Every finding of these checks on an answer. The window check
+ * (window-check.ts) is run beside them by the verifier. `earlier` is what
+ * this agent's earlier runs answered, when the caller has it: a claim that
+ * items were skipped as already reported is checked against it. `whole`
+ * is the run's tool results read whole, when the caller has them: release
+ * notes are compared from them, since the evidence cuts long texts.
+ */
+export function answerCodeFindings(input: { answer: string; evidence: string; earlier?: string[]; whole?: WholeToolResult[] }): CodeFinding[] {
   if (!input.answer?.trim() || !input.evidence?.trim()) return [];
   const parsed = parseAnswer(input.answer);
   const index = toolItems(input.evidence);
-  const out = [...itemFieldFindings(parsed, index), ...countFindings(parsed, index, input.evidence), ...summaryFindings(parsed)];
+  const out = [
+    ...itemFieldFindings(parsed, index, releaseNotesOf(index, input.whole)),
+    ...countFindings(parsed, index, input.evidence),
+    ...summaryFindings(parsed),
+    ...skippedAsReportedFindings(input.answer, parsed, index, input.evidence, input.earlier),
+  ];
   const seen = new Set<string>();
   return out.filter((f) => (seen.has(f.rule) ? false : (seen.add(f.rule), true)));
 }

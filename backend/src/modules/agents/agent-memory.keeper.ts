@@ -18,6 +18,8 @@ import {
 import { runMayWriteSharedMemory } from './memory-autosave.policy';
 import { principalOfRun } from '../../common/authorization/execution-access.service';
 import type { AgentAccountUse } from '../memory/canonical/memory-accounts.service';
+import { reportedItemsOf } from './answer-checks';
+import { runEvidence } from './checker-evidence';
 
 /** The most facts one run adds. */
 export const FACTS_PER_RUN_MAX = 5;
@@ -139,6 +141,29 @@ export function parseFacts(content: string): string[] {
   }
 }
 
+/** The most item ids one run's "reported items" memory keeps: it must fit RECALL_ITEM_MAX_CHARS when recalled. */
+export const REPORTED_ITEMS_MAX = 30;
+
+/**
+ * The items a finished run's answer reported, by the ids its tool results
+ * give them (an OpenAlex id and DOI, an issue number), as one memory:
+ * `Reported in the answer to "<request>" on 2026-11-13: W7167504345 (DOI
+ * 10.17613/zf92n-68j61); ...`. A later run recalls it with the same
+ * request, and can leave out exactly these items. Null when the answer
+ * lists no item its tool results identify.
+ */
+export function reportedItemsMemory(run: Pick<AgentRun, 'input' | 'metadata' | 'output' | 'steps' | 'createdAt'>): string | null {
+  const answer = asText(run.output).trim();
+  if (!answer) return null;
+  const items = reportedItemsOf(answer, runEvidence(run as any)).slice(0, REPORTED_ITEMS_MAX);
+  if (!items.length) return null;
+  const asked = recallQueryOf(run).replace(/\s+/g, ' ').slice(0, 200);
+  const day = (run.createdAt instanceof Date ? run.createdAt : new Date()).toISOString().slice(0, 10);
+  return (
+    `Reported in the answer to "${asked}" on ${day} (${items.length} item${items.length === 1 ? '' : 's'}): ` +
+    items.map((it) => (it.doi ? `${it.id} (DOI ${it.doi})` : it.id)).join('; ')
+  );
+}
 /** The most of one recalled memory put in front of the model. */
 export const RECALL_ITEM_MAX_CHARS = 2000;
 
@@ -337,9 +362,16 @@ export class AgentMemoryKeeper {
 
     let entries: string[] = [];
     let dropped = false;
+    // The ids of the items the answer reported, as the tool results give
+    // them: facts are a few sentences and kept none of them, so a later
+    // digest "skipped as already reported" papers it had never reported
+    // (run af3c05c0).
+    let reported: string | null = null;
     if (s.save === 'facts') {
       const answer = await this.runner.callModel(run, team.main, request(factsPrompt(s.neverSave), exchange));
       entries = answer.error ? [] : parseFacts(answer.content);
+      const items = reportedItemsMemory(run);
+      if (items) reported = await this.screen(run, team.main, items, s.neverSave);
     } else {
       const kept = await this.screen(run, team.main, exchange, s.neverSave);
       if (kept === null) dropped = true;
@@ -347,7 +379,8 @@ export class AgentMemoryKeeper {
     }
 
     let saved = 0;
-    for (const content of entries) {
+    const saves = [...entries.map((content) => ({ content, items: false })), ...(reported ? [{ content: reported, items: true }] : [])];
+    for (const { content, items } of saves) {
       try {
         await this.put(
           agent,
@@ -356,7 +389,7 @@ export class AgentMemoryKeeper {
           s,
           content,
           s.save === 'facts' ? 'long' : 'project',
-          ['auto-saved', s.save === 'facts' ? 'fact' : 'conversation'],
+          ['auto-saved', items ? 'reported-items' : s.save === 'facts' ? 'fact' : 'conversation'],
           s.save === 'facts' ? 'auto_save_facts' : 'auto_save_conversation',
           s.save === 'facts' ? 'fact' : 'episode',
         );
@@ -369,7 +402,7 @@ export class AgentMemoryKeeper {
       type: 'memory_save',
       role: stampOf(team.main),
       input: { save: s.save, scope: scope.scope_type, account: s.account },
-      output: { saved, ...(dropped ? { dropped: 'never-save rules' } : {}) },
+      output: { saved, ...(reported ? { reportedItems: true } : {}), ...(dropped ? { dropped: 'never-save rules' } : {}) },
       cost: (run.totalCost || 0) - costBefore,
       duration: Date.now() - startedAt,
       timestamp: new Date().toISOString(),

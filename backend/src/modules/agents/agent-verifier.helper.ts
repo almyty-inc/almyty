@@ -9,7 +9,7 @@ import { falseVersionOrder } from './version-order';
 import { falseDateArithmetic, windowNote } from './date-arithmetic';
 import { strongestFirst, type FailureKind } from './checker-guards';
 import { itemsOutsideWindow } from './window-check';
-import { answerCodeFindings, CODE_CHECKER } from './answer-checks';
+import { answerCodeFindings, CODE_CHECKER, type WholeToolResult } from './answer-checks';
 import { verifiedRule, verifyCheckerFinding } from './checker-findings';
 
 /** Verdict-merge policy for a verify node's checker panel. */
@@ -302,10 +302,10 @@ function requestOf(evidence: string): string {
 /**
  * The checks the platform makes itself on an answer, before any checker
  * model is asked: the request's window (window-check.ts) and the item,
- * count and completeness checks (answer-checks.ts). Each finding names
- * the item and the field, and decides the verdict on its own.
+ * count, completeness and skip checks (answer-checks.ts). Each finding
+ * names the item and the field, and decides the verdict on its own.
  */
-export function codeFindings(input: { request: string; answer: string; evidence: string; now: Date }): VerifyFailure[] {
+export function codeFindings(input: { request: string; answer: string; evidence: string; now: Date; earlier?: string[]; whole?: WholeToolResult[] }): VerifyFailure[] {
   const found: VerifyFailure[] = [...itemsOutsideWindow(input), ...answerCodeFindings(input)];
   const seen = new Set<string>();
   return found.filter((f) => (seen.has(f.rule) ? false : (seen.add(f.rule), true)));
@@ -432,6 +432,18 @@ export class AgentVerifierHelper {
       rules?: string;
       /** Today, for the day arithmetic the checker's failures state. Defaults to the time of the call. */
       now?: Date;
+      /**
+       * What this agent's earlier completed runs answered, newest first and
+       * bounded (AgentStepProcessor.prepareCheck). An answer that says it
+       * skipped items as already reported is checked against them.
+       */
+      earlier?: string[];
+      /**
+       * The run's tool results read whole (toolResultsFromMessages), when
+       * the caller has them. The code checks read release notes from them:
+       * the evidence cuts long texts to fit the checker's budget.
+       */
+      toolResults?: WholeToolResult[];
     },
     organizationId: string,
     /** Who the checker calls act as: the run's principal (see LlmChatHelper.chat). */
@@ -459,7 +471,7 @@ export class AgentVerifierHelper {
     // out of a list said to be complete. These stand beside the checkers
     // as a check of their own, so a checker that passed over them (run
     // dda8789a) does not pass the answer.
-    const found = checkers.length && evidence ? codeFindings({ request: requestOf(evidence), answer: targetText, evidence, now: extra.now }) : [];
+    const found = checkers.length && evidence ? codeFindings({ request: requestOf(evidence), answer: targetText, evidence, now: extra.now, earlier: opts.earlier, whole: opts.toolResults }) : [];
     const checkerResults: CheckerResult[] = found.length
       ? [...fromModels, { checker: CODE_CHECKER, verdict: 'fail', failures: found, passedRules: [] }]
       : fromModels;
@@ -655,8 +667,19 @@ export class AgentVerifierHelper {
         ...(Array.isArray(parsed.passed_rules) ? parsed.passed_rules.map((r: any) => String(r)) : []),
         ...(Array.isArray(parsed.confirmed) ? parsed.confirmed.map((r: any) => String(r)) : []),
       ];
+      // A reply read in part was cut off only when the provider says it hit
+      // its output limit, or it wrote as many tokens as it was allowed. A
+      // reply of 703 tokens under a limit of 8,192 was malformed, not cut
+      // off (run 81411770).
+      const cutOff = isCutOff(response?.message?.finishReason) || (usage.outputTokens > 0 && usage.outputTokens >= maxTokens);
       const readNotes = [
-        ...(parsed.truncated ? [`the checker's reply was cut off at its output limit (${maxTokens} tokens); it was read up to its last complete item`] : []),
+        ...(parsed.truncated
+          ? [
+              cutOff
+                ? `the checker's reply was cut off at its output limit (${maxTokens} tokens); it was read up to its last complete item`
+                : `the checker's reply was not well-formed JSON; it was read up to its last complete item`,
+            ]
+          : []),
         ...read.discarded.map((d) => `not counted: "${oneLine(d.rule, 120)}" (${d.reason})`),
       ];
 
