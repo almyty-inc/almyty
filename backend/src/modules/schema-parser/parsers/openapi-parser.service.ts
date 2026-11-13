@@ -5,6 +5,7 @@ import { OpenAPIV3 } from 'openapi-types';
 import { Operation, HttpMethod, OperationType } from '../../../entities/operation.entity';
 import { Resource, ResourceType } from '../../../entities/resource.entity';
 import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../interfaces/parser.interface';
+import { openApi3BaseUrl, ownServerUrl } from '../openapi-servers';
 
 /**
  * Hard size cap on incoming raw schemas. Bumped from 5 MB → 100 MB
@@ -272,6 +273,9 @@ export class OpenAPIParserService implements SchemaParser {
       operation.tags = parsedOp.tags;
       operation.deprecated = parsedOp.deprecated || false;
       operation.isActive = true;
+      // Its own server, when it has one (extractOperationsFromOpenAPI); a
+      // re-import that drops it clears it.
+      operation.metadata = parsedOp.metadata ?? null;
 
       operations.push(operation);
     }
@@ -300,6 +304,9 @@ export class OpenAPIParserService implements SchemaParser {
 
   private async extractOperationsFromOpenAPI(api: OpenAPIV3.Document): Promise<ParsedOperation[]> {
     const operations: ParsedOperation[] = [];
+    // The address the API itself gets (openapi-servers.ts). An operation
+    // whose own servers name another one keeps it, so its tool calls there.
+    const apiAddress = openApi3BaseUrl(api);
 
     for (const [path, pathItem] of Object.entries(api.paths || {})) {
       if (!pathItem) continue;
@@ -328,6 +335,10 @@ export class OpenAPIParserService implements SchemaParser {
           tags: opObject.tags,
           deprecated: opObject.deprecated,
         };
+        const ownServer = ownServerUrl(pathItem, opObject);
+        if (ownServer && ownServer !== apiAddress) {
+          parsedOperation.metadata = { serverUrl: ownServer };
+        }
 
         operations.push(parsedOperation);
       }

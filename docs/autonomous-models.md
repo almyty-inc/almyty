@@ -144,12 +144,13 @@ Experimental, and not claimed to save money (see `docs/strategies.md`).
 The agent's own check (`agentConfig.verify`) gives a verdict and its
 reasons, and by default that is all it does. The answer goes out as the
 agent wrote it. When the check did not pass, the answer carries one line
-above it, "Note: this answer's check didn't pass: <reason>.", or
+above it, "Note: this answer's check didn't pass: <reasons>.", or
 "Note: this answer could not be checked" when no checker gave a verdict.
-The reason is the strongest failure: one the platform counted itself
-(an item outside the window, below) first, then a claim the evidence
-contradicts, then a broken rule. A reason longer than 160 characters is
-cut and ends in "…", with no full stop after it.
+The reasons are the verdict findings (below), strongest first: what the
+platform found itself, then what a checker cited and the platform
+confirmed. Each names the item and what is wrong with it; up to three
+are given, then "and N more", each cut at 160 characters. An instruction
+is never shown as a reason, and checker notes are never on the answer.
 The verdict and reasons are on the run (`metadata.verify`, with
 `reportOnly: true`) and on its `verify` step, in the same order, and
 nothing is saved to memory from an answer whose check did not pass.
@@ -159,10 +160,11 @@ two wrong ones, and in eleven runs the revisions it asked for deleted
 correct data. So sending the answer back is a setting of its own,
 `agentConfig.verify.revise`, off unless the agent turns it on ("Let the
 checker send the answer back for fixes"). With it on, a failed check
-goes back to the agent with the failures, up to `maxReviseLoops` times
-(default 2), and every round is another model call; when the rounds run
-out, the last answer goes out with the same note. An agent saved before
-the setting existed has no `revise`, so it reports.
+goes back to the agent with its verdict findings, up to `maxReviseLoops`
+times (default 2), and every round is another model call; when the
+rounds run out, the last answer goes out with the same note. An agent
+saved before the setting existed has no `revise`, so it reports. A
+check that only reports carries no "blocking" badge on the run view.
 
 This is the final-answer check only. The checks inside a strategy
 (cascade, best of N, explore-extract-patch) escalate, choose or revise
@@ -172,17 +174,18 @@ The agent's header and analytics show two numbers: **Completed**, the
 share of runs that finished, and, for an agent with a check, **Checks
 passed**, the share of checked runs whose check passed
 (`agents.checkedExecutions`, `agents.passedCheckExecutions`; a run no
-checker gave a verdict on is not counted).
-### What a checker sees, and what counts as a failure
+checker gave a verdict on is not counted). A check passes when it has
+no verdict finding, whatever its checker notes say.
+
+### What a checker sees
 
 These rules hold for the verify gate and the strategy checks alike
 (`agent-verifier.helper.ts`, `checker-evidence.ts`).
 
 - A checker sees the agent's own instructions, the request, today's date
-  and every tool result of the run. It judges the answer by the agent's
-  stated rules and is told never to apply stricter rules of its own:
-  where the rules allow alternatives ("labels or titles"), an item that
-  meets any one of them meets the rule.
+  and every tool result of the run. It reads the agent's rules as
+  written, never stricter: where they allow alternatives ("labels or
+  titles"), an item that meets any one of them meets the rule.
 - The tool results are the ones the model that wrote the answer read:
   whole, from the run's conversation, not the copies on the stored steps
   (a run without a conversation falls back to the steps). The messages
@@ -194,12 +197,13 @@ These rules hold for the verify gate and the strategy checks alike
 - Only a result too large for that budget is shortened, and without
   losing items: a JSON result keeps every item with its identifying
   fields (id, name, title, tag, version, date, url, doi), and of a nested
-  object (an author, a venue) its short identifying leaves such as
-  `display_name`. Long text and large or deep structures go first. Only
-  when that still does not fit are items left out. An empty list or an
-  empty string is never left out (`labels: []` says the issue has no
-  labels). A shortened result always says so on its first line, and names
-  every field left out by path, grouped under its list item:
+  object (an author, a venue) its identifying leaves alone, such as
+  `display_name`, `id` and `type`, for every item alike. Long text and
+  large or deep structures go first. Only when that still does not fit
+  are items left out. An empty list or an empty string on an item is
+  never left out (`labels: []` says the issue has no labels). A
+  shortened result always says so on its first line, and names every
+  field left out by path, grouped under its list item:
   `[result shortened: every item is shown; fields left out: results[].{abstract (text), authorships[].raw_affiliation_strings (list)}; ...]`.
 - A step payload over 32 KB is stored the same way (`persist-cap.ts`): a
   JSON result stays valid JSON as
@@ -209,72 +213,79 @@ These rules hold for the verify gate and the strategy checks alike
   the steps, either is shown as shortened, never as the whole result.
   Storing is idempotent, so a step replayed from the run log is stored as
   the log holds it.
-- A checker only refutes, and fails two kinds of thing: a claim the
-  evidence contradicts (or that the evidence would hold, complete, and
-  does not), and an item that breaks a rule the agent's instructions, the
-  spec or the checker's focus state. Absence from shortened evidence is
-  not grounds to fail, and neither is a field the shortening note says
-  was left out. What is relevant or on topic is not the checker's call
-  unless a rule makes it one.
-- A failure that rests on a rule quotes the words of the instructions it
-  relies on, in its `instruction` field.
 - When the request names a window ("look back 7 days", "since
   2026-11-01"), the checker is given its first and last day, and told to
-  count the days between dates rather than estimate them. The platform
-  also checks it itself (`window-check.ts`): an item the answer lists
-  under a heading that says "new" ("## New releases") whose date in the
-  tool results (`published_at`, `publication_date`, ...) is before the
-  window is a failure of the `window check`, whatever the checkers said.
-  Only dates the tool results give that item are used; an item they give
-  no date for is left alone.
-- A checker replies with real failures in `failures` and, in
-  `confirmed`, only the ids, numbers, names or versions of what it found
-  right (`VERDICT_SCHEMA`; sent as a JSON schema to OpenAI, Azure OpenAI
-  and Gemini, which take one, and said in the prompt to every other
-  provider). A failure does not count when:
-  - the checker marks it as not failed, or also lists its claim as
-    confirmed;
-  - its own reason or evidence says the claim is right ("which is
-    correct", "is acceptable", "no failure here", "all packages are in
-    the table", "which qualifies it", "so this is outdated-minor" for a
-    claim that says outdated-minor), unless it goes on to name a real
-    error ("the tag is correct but the date is wrong", "all are in the
-    table except lodash"). A complaint about wording ("the note
-    incorrectly states X when it should clarify Y") is not a real error.
-    "Qualifies it" is not read as agreement where the failure says the
-    item was wrongly left out;
-  - it states a false version order, in any phrasing ("4.18.1 <
-    4.17.21", "less than", "older than the requested version"):
-    versions are compared part by part as numbers. A version set beside
-    itself ("^1.6.0 means >=1.6.0") is never read as a false order;
-  - it states false day arithmetic ("2026-10-09 is within 30 days of
-    2026-11-12", "33 days ago" for a date 38 days back): the days are
-    counted (`date-arithmetic.ts`). Only a statement whose two dates are
-    both written in the same sentence is judged: the date right after
-    it, or today's date when the sentence writes it and means it. A
-    count measured from anything else ("4 days before the window
-    start") is left alone, and the failure counts;
-  - it says the item is absent, not found, invented or fabricated, and
-    the item's DOI, id, issue number, URL, version or title is in the
-    evidence (`checker-guards.ts`);
-  - it is about a field the evidence left out ("the evidence does not
-    give the first author" where `results[].authorships[].author` was
-    left out);
-  - it says how many items a tool returned ("the tool returned 15
-    works") and no list of items in the tool results has that many. A
-    total the result reports about the whole collection (OpenAlex
-    `meta.count`) is not what was returned. Nothing is judged when a
-    result was left out or cut off;
-  - it judges relevance ("off-topic", "not relevant", "unrelated",
-    "should be excluded") and neither the agent's instructions, the spec
-    nor the checker's focus make relevance a rule, unless it also names
-    a contradiction with the evidence;
-  - it rests on the agent's instructions and quotes nothing from them
-    (a quote is a passage of at least four words; a label such as
-    'security' is not one), or quotes words that are not in them.
-  Each one left out is noted on the `verify` step with why. Each one
-  kept says what it rests on (`kind`: `evidence` or `rule`; a platform
-  finding is `deterministic`).
+  count the days between dates rather than estimate them.
+- A checker call asks for 8,192 output tokens where its model card says
+  the model may write that much (the card's most output comes from the
+  price feed), the model's own most where that is less, and 4,096 when
+  the card does not say, unless the checker sets its own. A reply cut
+  off mid-way is read up to its last complete item.
+
+### What decides the verdict
+
+A final answer's check fails only on something that can be shown wrong
+from the tool results. There are two kinds.
+
+**What the platform checks itself.** These compare and count; they do
+not judge (`window-check.ts`, `answer-checks.ts`):
+
+- An item listed under a heading that says "new" whose date in the tool
+  results is before the window the request names.
+- A field the answer gives an item that the tool results give that same
+  item differently: a publication or update date, a DOI (also "DOI:
+  none" for an item that has one), labels, the latest version, a title,
+  a venue, a first author. The item is found by its OpenAlex id, issue
+  number, package name, title or DOI; a field the tool results do not
+  hold is left alone.
+- A package's update kind against its versions: "outdated-minor" for
+  `^16.4.5` against 18.0.10 is wrong, because 16 to 18 is a major update.
+- The answer's own counts: "the tool returned 10 works" against the
+  tool's list, and "I skipped 10" against the entries it lists (it
+  should list the returned count less the skipped count). A summary's
+  counts ("5 packages have major updates") against its table.
+- Items the tool returned that the answer leaves out while it says its
+  list is complete ("No other works matched", "all ... are listed", or a
+  returned count together with a skipped count).
+
+Each finding names the item and the field and says what is wrong in
+plain words: "dotenv: the answer says outdated-minor, but 16 to 18 is a
+major update".
+
+**What a checker cites and the platform confirms.** A checker model
+reads the request, the agent's instructions, today's date, every tool
+result and the answer. It puts a contradiction in `failures` with the
+exact words of the answer (`claim`), the exact text of the tool results
+that shows it wrong (`evidence`), and what is wrong (`rule`). It counts
+only when the code confirms all of it (`checker-findings.ts`): the claim
+is in the answer, the evidence is in the tool results and is data of the
+item the claim is about, and where the field can be compared (a date,
+version, DOI, id, title, name, venue, author or label) the two values
+differ. A finding that states a false version order ("4.18.1 is not
+newer than 4.17.21") or false day arithmetic is not confirmed. A
+confirmed finding is written in the platform's words, naming the item
+and the field.
+
+**Checker notes.** Everything else a checker says is a checker note:
+whether an item meets the agent's rules, which items it picked or left
+out, relevance, wording, style, and every failure the code could not
+confirm. Notes are shown on the run's `verify` step under "Checker
+notes" and nowhere else: never on the answer, never in a visitor
+channel. They never change the verdict and never count against "Checks
+passed". In six rounds of runs on staging the platform's own checks were
+right every time, and a checker's rule and selection judgements were
+not; this is why only the first two kinds decide.
+
+The reply format is `VERDICT_SCHEMA`: `failures`, `notes`, and in
+`confirmed` only the ids, numbers, names or versions of what the checker
+found right (sent as a JSON schema to OpenAI, Azure OpenAI and Gemini,
+which take one, and said in the prompt to every other provider). An
+item the checker itself marks as not failed is neither a finding nor a
+note.
+
+A workflow's `verify` step and a mid-run review have no tool results to
+check against; there a checker's failure counts as it gives it, unless
+it states a false version order or false day arithmetic.
 - A checker call asks for 8,192 output tokens where its model card says
   the model may write that much (the card's most output comes from the
   price feed), the model's own most where that is less, and 4,096 when

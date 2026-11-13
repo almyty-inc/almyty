@@ -1217,6 +1217,44 @@ describe('AuthService', () => {
         expect.objectContaining({ organizationId: 'org-1' }),
       );
     });
+
+    // A member of two orgs minting a key with no org in the body (the CLI
+    // login page did exactly this) got a key scoped to nothing, and the
+    // runner sending its saved org was refused with 401.
+    it("scopes a key to the caller's current org when the body names none", async () => {
+      userOrganizationRepository.findOne.mockResolvedValue({
+        userId: 'user-1', organizationId: 'org-2', isActive: true, status: 'active',
+      } as any);
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        organizationMemberships: [{ organizationId: 'org-1' }, { organizationId: 'org-2' }],
+      } as any);
+      apiKeyRepository.create.mockImplementation((k: any) => k);
+      apiKeyRepository.save.mockImplementation(async (k: any) => k);
+
+      const { keyData } = await service.createApiKey('user-1', { name: 'cli' } as any, 'org-2');
+
+      expect(keyData.organizationId).toBe('org-2');
+    });
+
+    it('lets the org named in the body win over the current org', async () => {
+      userOrganizationRepository.findOne.mockResolvedValue({
+        userId: 'user-1', organizationId: 'org-1', isActive: true, status: 'active',
+      } as any);
+      apiKeyRepository.create.mockImplementation((k: any) => k);
+      apiKeyRepository.save.mockImplementation(async (k: any) => k);
+
+      const { keyData } = await service.createApiKey('user-1', { name: 'cli', organizationId: 'org-1' } as any, 'org-2');
+
+      expect(keyData.organizationId).toBe('org-1');
+    });
+
+    it('still checks membership of the current org it falls back to', async () => {
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.createApiKey('user-1', { name: 'cli' } as any, 'org-gone')).rejects.toThrow(ForbiddenException);
+      expect(apiKeyRepository.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('revokeApiKey', () => {

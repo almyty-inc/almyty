@@ -33,6 +33,9 @@ export interface WindowFinding {
   claim: string;
   code: string;
   kind: 'deterministic';
+  /** The item listed as new, and the date field that puts it outside the window. */
+  item: string;
+  field: string;
 }
 
 function lower(s: string): string {
@@ -184,6 +187,8 @@ export function itemsOutsideWindow(input: { request: string; answer: string; evi
         claim: line.trim(),
         code: OUTSIDE_WINDOW,
         kind: 'deterministic',
+        item: id,
+        field: d.field.replace(/_/g, ' '),
       });
     }
   }

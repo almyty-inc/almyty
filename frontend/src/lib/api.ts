@@ -154,6 +154,15 @@ export function extractData<T = any>(response: AxiosResponse): T {
   return body as T
 }
 
+/** What running a tool answers: the outcome, kept whole so a failed run reads as failed. */
+export interface ToolRunEnvelope {
+  success: boolean
+  data?: unknown
+  error?: string
+  message?: string
+  metadata?: { executionTime?: number; httpStatus?: number; url?: string; method?: string; [key: string]: unknown }
+}
+
 /** One page of a list and how many there are in all. */
 export interface PageOf<T> {
   items: T[]
@@ -353,7 +362,7 @@ export const authApi = {
   revokeOtherSessions: () =>
     apiPost<{ signedOut: number; expiresIn: number }>('/auth/sessions/revoke-others'),
 
-  createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
+  createApiKey: (data: { name: string; organizationId?: string; scopes?: string[]; expiresAt?: string }) =>
     apiPost('/auth/api-keys', data),
 
   /** Your own API keys, newest first; only the first characters of each. */
@@ -682,7 +691,7 @@ export const toolsApi = {
    * most 100 a page, so one request left an organization with Gmail (79
    * tools) and Google Calendar (37) showing 7 of Calendar's.
    */
-  getAll: async (organizationId?: string, params?: { limit?: number; page?: number; search?: string }) => {
+  getAll: async (organizationId?: string, params?: { limit?: number; page?: number; search?: string; apiId?: string }) => {
     const url = organizationId ? `/organizations/${organizationId}/tools` : '/tools'
     if (params) return apiGet(url, { params })
     const first: any = await apiGet(url, { params: { limit: TOOLS_PAGE, page: 1 } })
@@ -717,7 +726,12 @@ export const toolsApi = {
 
   update: (id: string, data: Record<string, any>, organizationId: string) => apiPut(`/organizations/${organizationId}/tools/${id}`, data),
 
-  execute: (id: string, data: any, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/execute`, data),
+  // The whole envelope, not extractData: a run whose upstream answered 4xx
+  // comes back as 200 { success: false, data: <upstream body>, error }, and
+  // extractData would keep only the upstream body, so the caller could not
+  // tell it failed.
+  execute: (id: string, data: any, organizationId: string): Promise<ToolRunEnvelope> =>
+    api.post(`/organizations/${organizationId}/tools/${id}/execute`, data).then((r) => r.data),
 
   // Export formats
   getSkill: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/skill`),

@@ -4,7 +4,6 @@ import { join } from 'path';
 import { AgentStepProcessor } from '../agent-step-processor';
 import { AgentVerifierHelper, VERDICT_SCHEMA } from '../agent-verifier.helper';
 import { SHORTENED_KEY, runEvidence, shortenedResultOf } from '../checker-evidence';
-import { confirmsClaim, presentInEvidence, saysAbsentFromEvidence } from '../checker-guards';
 import { STEP_PAYLOAD_CAP, capPersistedPayload } from '../persist-cap';
 import { falseVersionOrder } from '../version-order';
 
@@ -100,51 +99,46 @@ describe('1. a stored tool result keeps every item (persist cap is JSON-aware)',
   });
 });
 
-describe('2. only real failures count', () => {
+describe('2. only verified failures count', () => {
   const helper = new AgentVerifierHelper({} as any);
+  const evidence = 'REQUEST:\ndigest\n\nopenalex_search_works:\n{"results":[{"id":"https://openalex.org/W1","doi":null,"title":"A paper","publication_date":"2026-11-10"}]}';
 
-  it('a fail verdict whose items say the claim is correct passes (run 9fc02bae)', () => {
+  it('a fail verdict whose items say the claim is correct passes, its items kept as notes (run 9fc02bae)', () => {
+    const answer = '1. A paper\n   - DOI: none\n   - Venue for paper 4: ACM Journal';
     const read = helper.readFailures(
       {
         verdict: 'fail',
         failures: [
-          { claim: '2. DOI: none', rule: "DOI is listed as null in evidence, but output states 'none' which is acceptable; no failure here", evidence: '' },
+          { claim: 'DOI: none', rule: "DOI is listed as null in evidence, but output states 'none' which is acceptable; no failure here", evidence: '"doi":null' },
           { claim: 'Venue for paper 4: ACM Journal', rule: 'Matches evidence source display_name; no failure', evidence: '' },
-          { claim: 'DOI: https://doi.org/10.1145/3860323', rule: 'DOI matches evidence, correct', evidence: '' },
-          { claim: 'moment 2.31.0', rule: 'Version comparison error: the npm tool returned 2.31.0, which is correct. The classification is correct but the reasoning is incomplete.', evidence: '' },
         ],
       },
       'c',
+      evidence,
+      new Date(),
+      answer,
     );
     expect(read.failures).toHaveLength(0);
-    expect(read.discarded.map((d) => d.reason)).toEqual(Array(4).fill(expect.stringMatching(/its own words say the claim is right/)));
+    expect(read.notes.map((n) => n.text)).toHaveLength(2);
   });
 
-  it('keeps a failure that confirms one part and names a real error in another', () => {
-    expect(confirmsClaim('The tag is correct but the date is wrong: the release was published 2026-10-09')).toBeNull();
-    expect(confirmsClaim('Venue is acceptable but "Respai.de journal article" is not stated in evidence')).toBeNull();
-    expect(confirmsClaim('Version is not correctly classified')).toBeNull();
-    expect(confirmsClaim('The DOI does not match the evidence')).toBeNull();
+  it('an item the checker marks as not failed is neither a finding nor a note', () => {
+    const read = helper.readFailures({ verdict: 'fail', failures: [{ claim: 'x', rule: 'fine', status: 'pass' }] }, 'c', evidence, new Date(), 'x');
+    expect(read.failures).toEqual([]);
+    expect(read.notes).toEqual([]);
+    expect(read.discarded[0].reason).toMatch(/did not mark it as failed/);
   });
 
-  it('a claim the checker also lists as confirmed does not count', () => {
-    const read = helper.readFailures(
-      { verdict: 'fail', failures: [{ claim: 'axios latest version is 1.21.1', rule: 'Version mismatch' }], confirmed: ['axios latest version is 1.21.1'] },
-      'c',
-    );
-    expect(read.failures).toHaveLength(0);
-    expect(read.discarded[0].reason).toMatch(/also listed this claim as confirmed/);
-  });
-
-  it('asks for the verdict in a schema with a separate confirmed list', async () => {
-    const chat = jest.fn().mockResolvedValue({ message: { content: '{"verdict":"pass","failures":[],"confirmed":["lodash 4.18.1"]}' }, cost: 0.01, usage: { inputTokens: 900, outputTokens: 20, totalTokens: 920 } });
+  it('asks for the verdict in a schema with separate notes and confirmed lists', async () => {
+    const chat = jest.fn().mockResolvedValue({ message: { content: '{"verdict":"pass","failures":[],"notes":["style"],"confirmed":["lodash 4.18.1"]}' }, cost: 0.01, usage: { inputTokens: 900, outputTokens: 20, totalTokens: 920 } });
     const panel = await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'x', checkers: [{ providerId: 'p', model: 'm' }], evidence: 'e' }, 'org-1');
     const request = chat.mock.calls[0][1];
     expect(request.responseFormat).toEqual({ name: 'checker_verdict', schema: VERDICT_SCHEMA });
-    expect(VERDICT_SCHEMA.required).toEqual(['verdict', 'failures', 'confirmed']);
+    expect(VERDICT_SCHEMA.required).toEqual(['verdict', 'failures', 'notes', 'confirmed']);
     expect(request.messages[0].content).toMatch(/"confirmed":\[/);
     expect(request.messages[0].content).not.toMatch(/"status":"fail"/);
     expect(panel.passed).toBe(true);
+    expect(panel.notes).toEqual([{ checker: 'checker_1', text: 'style' }]);
     expect(panel.passedRules).toContain('lodash 4.18.1');
     expect(panel.inputTokens).toBe(900);
   });
@@ -193,7 +187,7 @@ describe('3. version order is read in any phrasing', () => {
   });
 });
 
-describe('4. absent or invented, against evidence that holds the item', () => {
+describe('4. absent or invented: a claim with no tool data to cite is a checker note', () => {
   const evidence = runEvidence({
     steps: [
       { type: 'tool_call', input: { tool: 'openalex_search_works' }, output: openAlexWorks() },
@@ -201,44 +195,19 @@ describe('4. absent or invented, against evidence that holds the item', () => {
     ],
   });
 
-  it('drops "not found" for a DOI the tool returned (run 0db5d8dd)', () => {
-    const hit = presentInEvidence(
-      { claim: '8. Work number 8 - DOI: https://doi.org/10.1007/s00287-026-01617-5', rule: 'Paper not found in the OpenAlex search results for the query', evidence: 'No paper with this title or DOI in the returned results.' },
-      evidence,
-    );
-    expect(hit).toBe('10.1007/s00287-026-01617-5');
-  });
-
-  it('drops "not found in evidence" for an issue number the tool returned (run 31423ff5)', () => {
-    expect(
-      presentInEvidence({ claim: '[#67285] crypto: X509Certificate returns "Bad time value"', rule: 'Issue listed but not found in evidence.', evidence: '' }, evidence),
-    ).toBe('#67285');
-  });
-
-  it('drops "invented" for a title the tool returned', () => {
-    expect(
-      presentInEvidence({ claim: 'Work number 3: a study of vision language model hallucination', rule: 'This paper appears invented', evidence: '' }, evidence),
-    ).toMatch(/Work number 3/);
-  });
-
-  it('keeps it when the item really is not in the evidence', () => {
-    expect(presentInEvidence({ claim: 'DOI: https://doi.org/10.1103/2lpt-bx5v', rule: 'DOI not found in the tool results', evidence: '' }, evidence)).toBeNull();
-  });
-
-  it('keeps an omission from the answer: "not in the OUTPUT" is not an absence from the evidence (run f924a19e)', () => {
-    expect(saysAbsentFromEvidence("It is listed in the search results but does not appear in the OUTPUT's list of high-priority issues")).toBe(false);
-    expect(presentInEvidence({ claim: '#67285 - X509Certificate', rule: "does not appear in the OUTPUT's list", evidence: '' }, evidence)).toBeNull();
-  });
-
-  it('notes on the step why a failure was not counted', async () => {
+  it('"not found" for a DOI the tool returned does not fail the answer (run 0db5d8dd), and is noted on the step', async () => {
+    const claim = '9. Work number 9 - DOI: https://doi.org/10.1007/s00287-026-01618-5';
     const reply = {
       verdict: 'fail',
-      failures: [{ claim: '9. Work number 9 - DOI: https://doi.org/10.1007/s00287-026-01618-5', rule: 'Paper not found in the OpenAlex search results', evidence: 'No such DOI in the returned results' }],
+      failures: [{ claim, rule: 'Paper not found in the OpenAlex search results', evidence: 'No such DOI in the returned results' }],
     };
     const chat = jest.fn().mockResolvedValue({ message: { content: JSON.stringify(reply) }, usage: {} });
-    const panel = await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'answer', checkers: [{ name: 'Source check', providerId: 'p', model: 'm' }], evidence }, 'org-1');
+    const panel = await new AgentVerifierHelper({ chat } as any).runPanel({ target: claim, checkers: [{ name: 'Source check', providerId: 'p', model: 'm' }], evidence }, 'org-1');
     expect(panel.passed).toBe(true);
-    expect(panel.checkers[0].note).toMatch(/not counted: "Paper not found.*10\.1007\/s00287-026-01618-5 is in the tool results/);
+    expect(panel.failures).toEqual([]);
+    expect(panel.notes).toEqual([
+      expect.objectContaining({ checker: 'Source check', text: 'Paper not found in the OpenAlex search results', why: 'the evidence it quotes is not in the tool results' }),
+    ]);
   });
 });
 

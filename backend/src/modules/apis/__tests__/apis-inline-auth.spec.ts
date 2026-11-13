@@ -131,4 +131,60 @@ describe('ApisService inline authentication', () => {
     // The row itself still only carries the reference.
     expect(api.authentication).toEqual({ type: 'bearer', config: { credentialId: row.id } });
   });
+
+  // Open-Meteo answers its bare address with 400. The test counted every
+  // 4xx as a failure and the page showed a red "Failed" with raw JSON.
+  describe('testApiConnection says what happened in plain words', () => {
+    const openMeteo = () => Object.assign(new Api(), {
+      id: 'api-1', name: 'Open-Meteo', organizationId: 'org-1', baseUrl: 'https://api.open-meteo.com', authentication: null,
+    });
+
+    it.each([400, 404, 401])('a host that answers %i on its address is reachable', async (status) => {
+      jest.spyOn(service, 'findOne').mockResolvedValue(openMeteo());
+      jest.spyOn(axios, 'get').mockResolvedValue({ status, headers: {}, data: { reason: 'Parameter latitude is missing', error: true } } as any);
+
+      const result = await service.testApiConnection('api-1', 'org-1');
+
+      expect(result.success).toBe(true);
+      expect(result.statusCode).toBe(status);
+      expect(result.message).toContain('api.open-meteo.com is reachable');
+      expect(result.message).toContain(`HTTP ${status}`);
+      expect(result.message).not.toMatch(/[{}]/);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('a server error is a failed test, said in words', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue(openMeteo());
+      jest.spyOn(axios, 'get').mockResolvedValue({ status: 503, headers: {}, data: '' } as any);
+
+      const result = await service.testApiConnection('api-1', 'org-1');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/^api\.open-meteo\.com answered with a server error \(HTTP 503\)/);
+      expect(result.error).toBe(result.message);
+    });
+
+    it('no answer at all is a failed test that names the host', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue(openMeteo());
+      jest.spyOn(axios, 'get').mockRejectedValue(Object.assign(new Error('connect ECONNREFUSED 1.2.3.4:443'), { code: 'ECONNREFUSED' }));
+
+      const result = await service.testApiConnection('api-1', 'org-1');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/^Could not reach api\.open-meteo\.com: /);
+      expect(result.message).not.toContain('ECONNREFUSED');
+    });
+
+    it('an address the server will not call is refused in words', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue(Object.assign(openMeteo(), { baseUrl: 'http://169.254.169.254/' }));
+      const get = jest.spyOn(axios, 'get');
+      get.mockClear();
+
+      const result = await service.testApiConnection('api-1', 'org-1');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/^This address can't be tested: /);
+      expect(get).not.toHaveBeenCalled();
+    });
+  });
 });

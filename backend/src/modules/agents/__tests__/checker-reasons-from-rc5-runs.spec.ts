@@ -1,5 +1,4 @@
 import { AgentVerifierHelper } from '../agent-verifier.helper';
-import { confirmsClaim, judgesRelevance, unquotedRule, wrongReturnedCount } from '../checker-guards';
 import { fitResult, runEvidence } from '../checker-evidence';
 import { itemsOutsideWindow } from '../window-check';
 import { markUnverifiedAnswer, unverifiedLine, unverifiedReason } from '../unverified-answer';
@@ -50,168 +49,48 @@ const digestEvidence = runEvidence(
   { toolResults: [{ tool: 'openalex_search_works', parameters: { search: 'retrieval augmented generation evaluation', per_page: 10 }, content: openAlexResult }] },
 );
 
-const read = (failures: any[], evidence: string, standard: { rules?: string; spec?: string; focus?: string } = {}) =>
-  new AgentVerifierHelper({} as any).readFailures({ verdict: 'fail', failures }, 'checker', evidence, now, standard);
+const read = (failures: any[], evidence: string, answer = '') =>
+  new AgentVerifierHelper({} as any).readFailures({ verdict: 'fail', failures }, 'checker', evidence, now, answer);
 
-describe('1a. a count of returned items the tool results do not hold (run 7e4e631b)', () => {
+describe('1. the opinions these runs failed answers on are checker notes', () => {
+  // Each was dropped by a wording guard before; each guard missed the next
+  // phrasing. None cites tool data that contradicts the answer.
   const invented = {
     rule: 'The tool returned 15 works, not 10; the output incorrectly states 10 works returned.',
     evidence: "The openalex_search_works tool returned 15 works in the 'results' array, but the output claims only 10 works returned.",
-    claim: 'Topic: retrieval augmented generation evaluation, since-date: 2026-10-01, number of works returned by tool: 10 (skipped 0 as none previously reported)',
+    claim: 'number of works returned by tool: 10 (skipped 0 as none previously reported)',
   };
-
-  it('is dropped: the result lists 10 works, and 2,591 is the total match count, not what was returned', () => {
-    expect(wrongReturnedCount(invented, digestEvidence)).toBe('it says the tool returned 15, but the tool results hold 10 or 3 or 1');
-    const r = read([invented], digestEvidence, { rules: DIGEST_RULES, focus: DIGEST_FOCUS });
-    expect(r.failures).toEqual([]);
-    expect(r.discarded[0].reason).toMatch(/says the tool returned 15, but the tool results hold 10/);
-  });
-
-  it('keeps a failure whose count is right', () => {
-    const right = { rule: 'The tool returned 10 works, but the output says 12 works were returned.', evidence: 'results holds 10 items', claim: 'how many: 12' };
-    expect(wrongReturnedCount(right, digestEvidence)).toBeNull();
-    expect(read([right], digestEvidence, { rules: DIGEST_RULES }).failures).toHaveLength(1);
-  });
-
-  it('says nothing when the count cannot be read: a result left out or cut off', () => {
-    const cut = `${digestEvidence}\n\nother_tool: [result left out: the evidence limit was reached]`;
-    expect(wrongReturnedCount(invented, cut)).toBeNull();
-    expect(wrongReturnedCount(invented, 'REQUEST:\nx\n\ntool:\nnot json')).toBeNull();
-  });
-});
-
-describe('1b. relevance is not the checker\'s to judge unless a rule makes it so (runs bd98321b, 7e4e631b)', () => {
   const offTopic = {
-    rule: "The topic is 'vision language model hallucination'; this paper is clinical and unrelated to vision language models or hallucination in AI, so including it is not relevant to the topic and violates the requirement to base relevance only on the title and topic.",
-    evidence: 'The paper is about clinical features of postictal state in epilepsy, unrelated to vision language model hallucination.',
-    claim: '9. Clinical features of the postictal state in adults with epilepsy: A cross‐sectional survey\n   - DOI: 10.1002/epi.70579',
-  };
-  const inventsRelevance = {
     rule: "The 'Why it matters' line invents relevance not supported by the title or metadata; the paper is unrelated to retrieval augmented generation evaluation.",
     evidence: 'The paper is about ultrasound tomography models, no mention of retrieval augmented generation evaluation.',
-    claim: '3. Title: Diff-ANO: Towards fast high-resolution ultrasound computed tomography ...',
+    claim: '3. Title: Diff-ANO',
   };
+  const qualifies = {
+    rule: 'Issue #7532 is listed as high-priority but does not have labels indicating bugs, regressions or security.',
+    evidence: 'Issue #7532 has labels: ["bug", "4.x", "5.x"]. The \'bug\' label is present, which qualifies it as a high-priority issue per the instructions.',
+    claim: '1. [#7532] req.subdomains splits an IPv6 host that contains dots',
+  };
+  const answer = 'Topic: rag, number of works returned by tool: 10 (skipped 0 as none previously reported)\n\n3. Title: Diff-ANO\n\n1. [#7532] req.subdomains splits an IPv6 host that contains dots';
 
-  it('drops them when neither the instructions, the spec nor the focus make relevance a rule', () => {
-    const standard = `${DIGEST_RULES}\n${DIGEST_FOCUS}`;
-    expect(judgesRelevance(offTopic, standard)).toBe('unrelated');
-    expect(judgesRelevance(inventsRelevance, standard)).toBe('invents relevance');
-    const r = read([offTopic, inventsRelevance], digestEvidence, { rules: DIGEST_RULES, focus: DIGEST_FOCUS });
+  it('none of them is a verdict finding; each is kept as a note for the run view', () => {
+    const r = read([invented, offTopic, qualifies], digestEvidence, answer);
     expect(r.failures).toEqual([]);
-    expect(r.discarded.map((d) => d.reason)).toEqual([
-      'it judges relevance ("unrelated"), which no rule of the agent makes a requirement',
-      'it judges relevance ("invents relevance"), which no rule of the agent makes a requirement',
-    ]);
+    expect(r.notes.map((n) => n.text)).toEqual([invented.rule, offTopic.rule, qualifies.rule]);
+    expect(r.notes.every((n) => typeof n.why === 'string' && n.why.length > 0)).toBe(true);
   });
 
-  it('keeps them where the instructions make relevance a rule', () => {
-    const rules = `${DIGEST_RULES} Only include papers relevant to the topic; leave out anything off-topic.`;
-    expect(judgesRelevance(offTopic, rules)).toBeNull();
-    // It rests on a rule, so it quotes it, as the checker is now asked to.
-    const quoting = { ...offTopic, instruction: 'Only include papers relevant to the topic' };
-    expect(read([quoting], digestEvidence, { rules }).failures).toEqual([expect.objectContaining({ kind: 'rule' })]);
-    expect(read([offTopic], digestEvidence, { rules }).discarded[0].reason).toBe('it names a rule but quotes nothing from the agent instructions');
-  });
-
-  it('keeps a failure that also names a contradiction with the evidence', () => {
-    const both = { rule: 'The title is wrong: the tool result gives a different title, and the paper is unrelated to the topic.', evidence: '' };
-    expect(judgesRelevance(both, DIGEST_RULES)).toBeNull();
-  });
-
-  it('tells the checker in the prompt', async () => {
-    const chat = jest.fn().mockResolvedValue({ message: { content: '{"verdict":"pass","failures":[],"confirmed":[]}' } });
+  it('asks the checker for the exact claim and tool data, and for everything else as notes', async () => {
+    const chat = jest.fn().mockResolvedValue({ message: { content: '{"verdict":"pass","failures":[],"notes":[],"confirmed":[]}' } });
     await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'x', checkers: [{ providerId: 'p' }], evidence: 'REQUEST:\nx', rules: DIGEST_RULES }, 'org-1');
     const [system] = chat.mock.calls[0][1].messages;
-    expect(system.content).toMatch(/You fail two kinds of thing only: a claim the EVIDENCE contradicts, and an item that breaks a rule/);
-    expect(system.content).toMatch(/never fail an item as "off-topic", "not relevant", "unrelated" or "should be excluded" unless/);
-  });
-});
-
-describe('1c. a rule failure quotes the instruction it relies on (run 887a8bfe)', () => {
-  const overridesSecurity = {
-    rule: "Issue 67391 has a 'feature request' label, not a bug/regression/security indicator. The 'security' label alone does not make it a high-priority bug; the instructions require labels like 'confirmed-bug', 'bug', 'regression', 'priority/critical', 'P0', 'P1', 'high-priority', or 'security'. While it has 'security', it is labeled 'feature request', which contradicts its inclusion as a high-priority issue.",
-    evidence:
-      'Issue 67391 labels from search results: ["feature request", "security"]. The instructions state to pick issues whose labels OR titles indicate bugs, regressions or security. However, a feature request labeled \'security\' is a feature request, not a bug or regression. The agent should have excluded it or clarified it is a security feature request, not a security bug.',
-    claim: "| 67391 | Remove or date-limit emSign Root CA - G1 before Mozilla's 2026-11-16 cutoff | feature request, security |",
-  };
-  const standard = `${WATCHER_RULES}\n${WATCHER_FOCUS}`;
-
-  it('drops one that names a rule and quotes nothing of it: a label name is not an instruction', () => {
-    expect(unquotedRule(overridesSecurity, standard)).toBe('it names a rule but quotes nothing from the agent instructions');
-    const r = read([overridesSecurity], '', { rules: WATCHER_RULES, focus: WATCHER_FOCUS });
-    expect(r.failures).toEqual([]);
-  });
-
-  it('keeps one that quotes the instruction as written (run 8a5070c8)', () => {
-    const quotes = {
-      rule: 'Issue #67427 has no labels indicating bug, regression, or security; it is a question/discussion, not a high-priority issue matching the filter criteria',
-      evidence:
-        "The search results show #67427 with labels: [] (empty). The agent instructions require filtering for labels like 'confirmed-bug, bug, regression, priority/critical, P0, P1, high-priority, security'. This issue has none of these.",
-    };
-    expect(unquotedRule(quotes, standard)).toBeNull();
-    const r = read([quotes], '', { rules: WATCHER_RULES, focus: WATCHER_FOCUS });
-    expect(r.failures).toEqual([expect.objectContaining({ kind: 'rule' })]);
-  });
-
-  it('reads the instruction the checker names, and drops it when the words are not in the instructions', () => {
-    const named = { rule: '#7547 is a dependency update, not a bug', evidence: 'labels: ["deps"]' };
-    expect(unquotedRule({ ...named, instruction: 'pick the ones whose labels or titles indicate bugs, regressions or security' }, standard)).toBeNull();
-    expect(unquotedRule({ ...named, instruction: 'only list issues labeled bug' }, standard)).toBe('the instruction it quotes is not in the agent instructions');
-    expect(unquotedRule({ ...named, instruction: 'security' }, standard)).toMatch(/too short to be a rule/);
-    const r = read([{ ...named, instruction: 'pick the ones whose labels or titles indicate bugs, regressions or security' }], '', { rules: WATCHER_RULES });
-    expect(r.failures).toEqual([expect.objectContaining({ kind: 'rule', instruction: 'pick the ones whose labels or titles indicate bugs, regressions or security' })]);
-  });
-
-  it('leaves a failure the evidence contradicts alone, and asks for no quote without agent instructions', () => {
-    const contradiction = { rule: 'The date of v5.3.0 is wrong: the tool results give 2026-10-09, the output says 2026-10-19.', evidence: 'published_at: 2026-10-09T12:50:31Z' };
-    expect(unquotedRule(contradiction, standard)).toBeNull();
-    expect(unquotedRule(overridesSecurity, '')).toBeNull();
-  });
-
-  it('asks the checker for the instruction in its reply', async () => {
-    const chat = jest.fn().mockResolvedValue({ message: { content: '{"verdict":"pass","failures":[],"confirmed":[]}' } });
-    await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'x', checkers: [{ providerId: 'p' }], evidence: 'REQUEST:\nx', rules: WATCHER_RULES }, 'org-1');
-    const [system] = chat.mock.calls[0][1].messages;
-    expect(system.content).toMatch(/must quote, in "instruction", the words of the AGENT INSTRUCTIONS it relies on/);
-    expect(chat.mock.calls[0][1].responseFormat.schema.properties.failures.items.required).toContain('instruction');
-  });
-});
-
-describe('1d/e. failures whose own words agree with the claim', () => {
-  it('"which qualifies it" confirms an item the answer lists (run dda8789a)', () => {
-    const words =
-      "Issue #7532 is listed as high-priority but does not have labels indicating bugs, regressions or security. The agent instructions require picking issues whose labels or titles indicate bugs, regressions or security. While #7532 has a 'bug' label, it should be verified it meets the criteria.\n" +
-      'Issue #7532 has labels: ["bug", "4.x", "5.x"]. The \'bug\' label is present, which qualifies it as a high-priority issue per the instructions.';
-    expect(confirmsClaim(words)).toBe('qualifies it');
-  });
-
-  it('but not where qualifying is why the item should have been listed (run 9b63b1d0)', () => {
-    const words =
-      'Issue #67391 has security label and should be included; exclusion is incorrect\n' +
-      'Issue 67391 in search results has labels: [{"name":"feature request"...}, {"name":"security"...}]. The security label qualifies it for inclusion per agent instructions.';
-    expect(confirmsClaim(words)).toBeNull();
-  });
-
-  it('nor where it goes on to name a real error', () => {
-    expect(confirmsClaim("The 'bug' label qualifies it, but the updated_at date is wrong: the tool gives 2026-11-10.")).toBeNull();
-  });
-
-  const momentClaim = 'moment | ^2.29.4 | 2.31.0 | outdated-minor | Minor update from 2.29 to 2.31';
-  const moment =
-    'Version comparison error: 2.31.0 is a patch update within minor 2.29, not a minor update to 2.31\n' +
-    "npm returned moment@2.31.0. Base is 2.29.4. The minor version increased from 29 to 31 (not 29 to 30), so this is outdated-minor, but the note incorrectly states 'from 2.29 to 2.31' when it should clarify the minor version jump.";
-
-  it('"so this is X, but the note incorrectly states ... when it should clarify" agrees with a claim that says X (run c04b7a9b)', () => {
-    expect(confirmsClaim(moment, momentClaim)).toBe('so this is outdated-minor');
-    const r = read([{ rule: moment.split('\n')[0], evidence: moment.split('\n')[1], claim: momentClaim }], '');
-    expect(r.failures).toEqual([]);
-  });
-
-  it('but not when the claim says something else, or a real error follows', () => {
-    expect(confirmsClaim(moment, 'moment | ^2.29.4 | 2.31.0 | up to date |')).toBeNull();
-    expect(confirmsClaim(moment)).toBeNull();
-    expect(confirmsClaim('Base is 2.29.4, so this is outdated-minor, but the latest version is wrong: npm returned 2.30.1.', momentClaim)).toBeNull();
-    expect(confirmsClaim('so this is wrong: npm returned 2.30.1', 'so this is wrong')).toBeNull();
+    expect(system.content).toMatch(/copied exactly, character for character/);
+    expect(system.content).toMatch(/"notes": everything else you would question/);
+    expect(system.content).toMatch(/never change the verdict/);
+    const schema = chat.mock.calls[0][1].responseFormat.schema;
+    expect(schema.properties.failures.items.required).toEqual(['claim', 'evidence', 'rule']);
+    expect(schema.required).toContain('notes');
+    expect(DIGEST_FOCUS).toBeTruthy();
+    expect(WATCHER_FOCUS).toBeTruthy();
   });
 });
 
@@ -237,7 +116,7 @@ describe('2. an item listed as new from before the window (run dda8789a)', () =>
         { tool: 'github_rest_api_repos_get_latest_release', parameters: { owner: 'expressjs', repo: 'express' }, content: JSON.stringify(releases[0]) },
         {
           tool: 'github_rest_api_search_issues_and_pull_requests',
-          content: JSON.stringify({ total_count: 1, items: [{ number: 7532, title: 'req.subdomains splits an IPv6 host that contains dots', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-11-11T12:53:26Z', labels: [{ name: 'bug' }] }] }),
+          content: JSON.stringify({ total_count: 1, items: [{ number: 7532, title: 'req.subdomains splits an IPv6 host that contains dots', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-11-11T12:53:26Z', labels: [{ name: 'bug' }, { name: '4.x' }, { name: '5.x' }] }] }),
         },
       ],
     },
@@ -283,6 +162,8 @@ describe('2. an item listed as new from before the window (run dda8789a)', () =>
         claim: '### v5.3.0',
         code: 'outside_window',
         kind: 'deterministic',
+        item: 'v5.3.0',
+        field: 'published at',
       },
     ]);
   });
@@ -308,7 +189,7 @@ describe('2. an item listed as new from before the window (run dda8789a)', () =>
       'org-1',
     );
     expect(panel.passed).toBe(false);
-    expect(panel.checkers.map((c) => [c.checker, c.verdict])).toEqual([['release-checker', 'pass'], ['window check', 'fail']]);
+    expect(panel.checkers.map((c) => [c.checker, c.verdict])).toEqual([['release-checker', 'pass'], ['code check', 'fail']]);
     expect(unverifiedLine(panel.failures)).toBe(
       "Note: this answer's check didn't pass: v5.3.0 is listed as new, but the tool results date it 2026-10-09, before the 30-day window (2026-10-13 to 2026-11-12).",
     );
@@ -346,11 +227,9 @@ describe('3. the note leads with the strongest reason, and ends once', () => {
   const contradicted = { rule: 'The DOI of item 3 does not match the tool results', evidence: '10.1088/1361-6420/aec045', checker: 'c', kind: 'evidence' as const };
   const counted = { rule: 'v5.3.0 is listed as new, but the tool results date it 2026-10-09', evidence: '', checker: 'window check', code: 'outside_window', kind: 'deterministic' as const };
 
-  it('puts what the platform counted first, then evidence contradictions, then rule failures', () => {
+  it('puts what the platform counted first, then evidence contradictions, and never a rule failure', () => {
     expect(unverifiedReason([ruleMisread, contradicted])).toBe(contradicted.rule);
-    expect(unverifiedReason([ruleMisread, contradicted, counted])).toBe(counted.rule);
-    // Failures stored before `kind` existed are read from their words.
-    expect(unverifiedReason([{ rule: ruleMisread.rule }, { rule: contradicted.rule }])).toBe(contradicted.rule);
+    expect(unverifiedReason([ruleMisread, contradicted, counted])).toBe(`${counted.rule}; ${contradicted.rule}`);
     const merged = new AgentVerifierHelper({} as any).mergeVerdicts(
       [
         { checker: 'a', verdict: 'fail', failures: [ruleMisread], passedRules: [] },

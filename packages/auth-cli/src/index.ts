@@ -8,7 +8,7 @@
  *   npx @almyty/auth whoami [--json] [--verify]
  */
 
-import { browserLogin } from './browser-login.js';
+import { browserLogin, confirmKeyOrganization } from './browser-login.js';
 import {
   CREDENTIALS_FILE,
   credentialSummary,
@@ -120,6 +120,18 @@ async function cmdLogin(args: ParsedArgs): Promise<void> {
       frontendUrl,
       openBrowser: args.flags['no-browser'] !== true,
     });
+    // The saved organization and the key's organization have to agree,
+    // or `runner start` is refused later with a 401. Check now and fail
+    // the login with the fix, instead of saving a pair that cannot work.
+    if (result.organizationId) {
+      const check = await confirmKeyOrganization(apiUrl, result.token, result.organizationId);
+      if (check === 'mismatch') {
+        throw new Error(
+          'the key this login created is not scoped to the organization you picked. ' +
+            'Run login again; if it repeats, the web app is older than this CLI.',
+        );
+      }
+    }
     saveCredentials({
       url: apiUrl,
       token: result.token,

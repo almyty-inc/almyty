@@ -1,7 +1,7 @@
 import { MessageRole } from '../../../entities/message.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { AgentModels } from '../autonomous-models';
-import { anthropicText, anthropicTool, FAIL, openaiText, PASS, runAgent } from './autonomous-harness';
+import { anthropicText, anthropicTool, confirmCheckerFindings, FAIL, openaiText, PASS, runAgent } from './autonomous-harness';
 
 jest.mock('../../llm-providers/providers/safe-request', () => ({
   ...jest.requireActual('../../llm-providers/providers/safe-request'),
@@ -75,6 +75,9 @@ describe('every strategy, with a different model in each role, answers the visit
 
   describe('Cascade', () => {
     const cascade = { strategy: 'cascade', roles: [MAIN, DRAFTER, CHECKER] } as unknown as AgentModels;
+    let restore: () => void = () => undefined;
+    beforeEach(() => (restore = confirmCheckerFindings()));
+    afterEach(() => restore());
 
     it('a passing check: the drafter answers, the checker passes it, the main model is never asked', async () => {
       const seen = await asVisitor(cascade, {

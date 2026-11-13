@@ -424,3 +424,37 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
     });
   });
 }
+
+/**
+ * Ask the API whether the key from a browser login is good for the
+ * organization the browser handed back with it, before saving the two
+ * side by side. The runner sends that saved organization on every call,
+ * and a key scoped to a different one (or to none) is refused with
+ * "API key is not scoped to the requested organization" -- which used to
+ * surface only later, at `runner start`, long after the login reported
+ * success.
+ *
+ * `mismatch` only on that exact refusal. An unreachable API or any other
+ * answer is `unknown`: the login is not failed over a network blip, and
+ * the other CLIs, which send no organization header, never hit this.
+ */
+export async function confirmKeyOrganization(
+  apiUrl: string,
+  token: string,
+  organizationId: string,
+): Promise<'ok' | 'mismatch' | 'unknown'> {
+  let res: Response;
+  try {
+    res = await fetch(`${apiUrl.replace(/\/$/, '')}/auth/profile`, {
+      headers: { Authorization: `Bearer ${token}`, 'X-Organization-Id': organizationId },
+    });
+  } catch {
+    return 'unknown';
+  }
+  if (res.ok) return 'ok';
+  if (res.status === 401) {
+    const text = await res.text().catch(() => '');
+    if (/not scoped to the requested organization|not valid for that organization/i.test(text)) return 'mismatch';
+  }
+  return 'unknown';
+}

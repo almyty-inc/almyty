@@ -33,6 +33,7 @@ import { assertWithinPerSchemaCap, maxToolsPerSchema } from '../tools/tool-quota
 import { toolDisplayName } from '../tools/tool-display-name';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
+import { answeredResult, ConnectionTestResult, refusedResult, unreachableResult } from './connection-test-result';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
 
 /** Page size for GET /apis when the caller does not ask for one. */
@@ -783,7 +784,7 @@ export class ApisService {
     apiId: string,
     organizationId: string,
     userId?: string,
-  ): Promise<{ success: boolean; statusCode?: number; responseTime?: number; error?: string }> {
+  ): Promise<ConnectionTestResult> {
     const api = await this.findOne(apiId, organizationId, userId ? { id: userId } : undefined);
 
     if (!api) {
@@ -799,10 +800,7 @@ export class ApisService {
     // the connectivity-check button would fetch it on their behalf.
     const validation = validateUrl(api.baseUrl);
     if (!validation.valid) {
-      return {
-        success: false,
-        error: `Refused to connect to API base URL: ${validation.error}`,
-      };
+      return refusedResult(validation.error ?? 'the address is not allowed');
     }
 
     try {
@@ -837,17 +835,12 @@ export class ApisService {
       });
       const responseTime = Date.now() - startTime;
 
-      return {
-        success: response.status < 400,
-        statusCode: response.status,
-        responseTime,
-      };
+      // Any answer short of a server error means the host is up: most
+      // APIs answer 400/401/404 on their bare address (connection-test-result.ts).
+      return answeredResult(api.baseUrl, response.status, responseTime);
     } catch (error) {
       // Never the errno: "ECONNREFUSED" vs a timeout says which ports answer.
-      return {
-        success: false,
-        error: outboundFailureDetail(error),
-      };
+      return unreachableResult(api.baseUrl, outboundFailureDetail(error));
     }
   }
 

@@ -414,7 +414,15 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
-          <RunsTab runs={runs} executions={executions} agentId={agent.id} openRunId={runId} total={runsTotal} />
+          <RunsTab
+            runs={runs}
+            executions={executions}
+            agentId={agent.id}
+            openRunId={runId}
+            total={runsTotal}
+            runsTotal={runsData?.total}
+            executionsTotal={executionsData?.total}
+          />
         </TabsContent>
 
         <TabsContent value="memory" className="space-y-4">

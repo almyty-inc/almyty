@@ -134,6 +134,13 @@ jobs:
         working-directory: backend
         run: npm ci --ignore-scripts
 
+      # cli-login-runner.e2e.spec.ts runs the real `almyty runner start`
+      # (packages/runner, through its own tsx) against the backend's auth
+      # code. It fails under CI without these, rather than skipping.
+      - name: Install runner dependencies for the login-to-runner e2e
+        working-directory: packages/runner
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       # The DB integration specs use spec-specific Postgres schemas
       # so parallel Jest workers don't collide on DROP TABLE cycles.
       # Create them up front — TypeORM's `schema` option assumes the
