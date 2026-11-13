@@ -56,13 +56,16 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
   const failed = step.output.status === 'failed'
   return (
     <div className={`rounded-lg border p-3 text-sm ${failed ? 'border-danger-border bg-danger-subtle' : 'bg-card'}`} data-testid={`run-step-${index}`}>
-      <div className="flex items-start gap-3">
+      {/* On a phone the summary drops to its own full-width line under the
+          step label and the Show script button, instead of being squeezed
+          into a one-word column between them. */}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1" data-testid="code-step-header">
         <div className="flex shrink-0 items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-teal-500/10 text-xs font-semibold tabular-nums text-teal-700 dark:text-teal-300" aria-label={`Step ${index + 1}`}>{index + 1}</span>
           <Code2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <Badge variant="outline" className="font-mono">script</Badge>
         </div>
-        <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="order-last min-w-0 basis-full space-y-0.5 sm:order-none sm:basis-0 sm:flex-1" data-testid="code-step-summary">
           <div className="text-sm">
             {calls ? (
               <>
@@ -78,7 +81,7 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
           </div>
           {step.error && <div className="truncate text-xs text-danger">Error: {step.error}</div>}
         </div>
-        <div className="flex shrink-0 items-center text-right text-xs tabular-nums text-muted-foreground">
+        <div className="ml-auto flex shrink-0 items-center text-right text-xs tabular-nums text-muted-foreground">
           {step.duration ? formatDuration(step.duration) : ''}
           {agentId && (
             <Button variant="outline" size="sm" className="ml-2 h-8 px-2.5 text-xs" onClick={() => setOpen((o) => !o)} aria-expanded={open}>

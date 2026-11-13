@@ -342,7 +342,8 @@ export function AgentsPage() {
                     <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Status</th>
                     <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Nodes</th>
                     <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Runs</th>
-                    <th className="h-11 px-4 text-right text-xs font-semibold text-muted-foreground"><span className="sr-only">Actions</span></th>
+                    {/* Pinned to the right edge so each row's menu stays on screen while the other columns scroll. */}
+                    <th className="sticky right-0 bg-card h-11 px-4 text-right text-xs font-semibold text-muted-foreground" data-testid="agents-actions-col"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -401,7 +402,7 @@ export function AgentsPage() {
                     )}
                   </td>
                   <td className="py-3 px-4 text-sm text-muted-foreground">{agent.totalExecutions || 0}</td>
-                  <td className="py-3 px-4 text-right">
+                  <td className="sticky right-0 bg-card py-3 px-4 text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Open actions menu">
@@ -476,7 +477,7 @@ export function AgentsPage() {
                 </td>
                 <td className="py-3 px-4 text-sm text-muted-foreground">-</td>
                 <td className="py-3 px-4 text-sm text-muted-foreground">{ea.totalRequests || 0}</td>
-                <td className="py-3 px-4 text-right" />
+                <td className="sticky right-0 bg-card py-3 px-4 text-right" />
               </tr>
             ))}
                 </tbody>

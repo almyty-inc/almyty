@@ -291,6 +291,22 @@ describe('AgentsPage', () => {
       })
     })
 
+
+    // On a phone the table scrolls inside its own region; the row menu is
+    // pinned to the right edge so it never needs a sideways swipe.
+    it('pins each row actions menu to the right edge of the scroll region', async () => {
+      renderAgentsPage()
+
+      const menus = await screen.findAllByRole('button', { name: 'Open actions menu' })
+      expect(menus.length).toBe(mockAgents.length)
+      for (const menu of menus) {
+        const cell = menu.closest('td')!
+        expect(cell.className).toMatch(/\bsticky\b/)
+        expect(cell.className).toMatch(/\bright-0\b/)
+        expect(cell.className).toMatch(/\bbg-card\b/)
+      }
+      expect(screen.getByTestId('agents-actions-col').className).toMatch(/\bsticky\b.*\bright-0\b/)
+    })
     it('should filter agents by search query', async () => {
       const user = userEvent.setup()
       renderAgentsPage()
