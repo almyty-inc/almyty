@@ -1,0 +1,14 @@
+{
+  "J3 GraphQL import (Countries) and run a query tool": {
+    "finding": "A tool generated from a GraphQL import cannot run: the call goes out with no query and the endpoint answers 400.",
+    "rootCause": "backend/src/modules/schema-parser/parsers/graphql-parser.service.ts:110-127 (extractOperations never sets operation.metadata.query) + backend/src/modules/tools/executors/tool-protocol.executor.ts:223 (query = parameters.query || operation.metadata?.query, so undefined unless the caller writes the query)"
+  },
+  "J3 gRPC import (grpcbin proto) and run a unary call": {
+    "finding": "A tool generated from a .proto has none of its request message's fields as inputs (only the grpc-encoding header), so DummyUnary cannot be given f_string.",
+    "rootCause": "backend/src/modules/schema-parser/parsers/protobuf-parser.service.ts:172-179 puts the fields under parameters.body.message.properties; backend/src/modules/tools/tools-operation.helper.ts:282-345 lifts only body.variables (GraphQL) and body.schema into tool parameters"
+  },
+  "J3 JavaScript tool reads a parameter the way the form says (directly as its name)": {
+    "finding": "Create tool says a JavaScript tool reads its inputs as params.<name> or directly as <name>; both fail at run time ('n is not defined'). Only parameters.<name> works.",
+    "rootCause": "frontend/src/components/tools/tool-form.tsx:779 (the hint) vs backend/src/modules/tools/node-sandbox/sandbox-worker.ts:360 (the function is built with only parameters, credentials, require, tools)"
+  }
+}
