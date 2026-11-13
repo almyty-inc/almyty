@@ -15,6 +15,7 @@ import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 
 import { getApiErrorMessage } from '@/lib/api-error'
 import { apisApi } from '@/lib/api'
+import { connectionTestMessage } from '@/lib/connection-test'
 import { toolsQuery } from '@/lib/list-queries'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
@@ -104,14 +105,12 @@ export function ApisPage() {
   const testApiMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => apisApi.testConnection(id),
     onSuccess: (result: any) => {
-      const reachable = result?.success !== false
-      const detail = [result?.statusCode, result?.responseTime ? `${result.responseTime}ms` : null]
-        .filter(Boolean)
-        .join(' · ')
-      if (reachable) {
-        success('Connection OK', detail || 'The API responded.')
+      // The server's sentence (connection-test.ts): a host answering 4xx on
+      // its bare address is reachable, and the message says so in words.
+      if (result?.success !== false) {
+        success('API is reachable', connectionTestMessage(result))
       } else {
-        error('Connection failed', result?.message || result?.error || 'The API did not respond.')
+        error('Connection failed', connectionTestMessage(result))
       }
     },
     onError: (err: any) => {
