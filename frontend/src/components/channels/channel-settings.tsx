@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Trash2 } from 'lucide-react'
@@ -47,6 +47,7 @@ import type { Agent } from '@/types'
 import { BuildPanel } from './build-panel'
 import { CHANNEL_STATUS } from './channel-meta'
 import { channelKeys, channelsTabPath } from './channel-page-loader'
+import { useDiscardUntouchedChannel } from './use-discard-untouched-channel'
 import {
   A2aChannelSettings,
   SurfaceFieldError,
@@ -140,6 +141,19 @@ export interface ChannelSettingsProps {
   channel: AgentChannel
   /** What the channel inherits from the agent, to tell its own settings apart. */
   inherited: EffectiveSettings
+}
+
+/** Where a platform's key comes from, said under its credential picker. */
+export const KEYS_SOURCE: Partial<Record<AgentChannel['type'], ReactNode>> = {
+  telegram: (
+    <>
+      The bot token from BotFather, Telegram&apos;s bot for making bots: open{' '}
+      <a href="https://t.me/botfather" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+        @BotFather
+      </a>
+      , send /newbot (or /token for a bot you already have), and paste the token it replies with.
+    </>
+  ),
 }
 
 /**
@@ -258,6 +272,9 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const surface = useSurfaceSettings(stored)
   const pageDirty = dirty || surface.dirty
   const guard = useLeaveGuard(pageDirty)
+  // Added a moment ago from Add channel and left without saving anything:
+  // the draft goes again when the page closes.
+  const keep = useDiscardUntouchedChannel(agent.id, stored)
   // Missing keys are said once someone tries to publish, not on first view.
   const [triedPublish, setTriedPublish] = useState(false)
 
@@ -283,6 +300,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       return saved
     },
     onSuccess: (saved) => {
+      keep()
       success('Saved', `${(saved ?? stored).name} is updated.`)
       if (!saved) return refresh()
       setCredentialTouched(false)
@@ -306,13 +324,17 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const setSigning = useMutation({
     mutationFn: (signingCredentialId: string) =>
       agentChannelsApi.update(agent.id, channel.id, { configuration: { signingCredentialId } }),
-    onSuccess: (saved) => refresh(saved),
+    onSuccess: (saved) => {
+      keep()
+      refresh(saved)
+    },
     onError: (err: unknown) => errorNotif('Could not change the certificate', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const publish = useMutation({
     mutationFn: () => (live ? agentChannelsApi.unpublish(agent.id, channel.id) : agentChannelsApi.publish(agent.id, channel.id)),
     onSuccess: (saved) => {
+      keep()
       success(
         live ? 'Unpublished' : 'Published',
         live ? 'It has stopped answering. Its settings and address are kept.' : 'It is answering now.',
@@ -330,6 +352,8 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const remove = useMutation({
     mutationFn: () => agentChannelsApi.remove(agent.id, channel.id),
     onSuccess: () => {
+      // Deleted already: nothing for the page closing to take away.
+      keep()
       success('Deleted', `${stored.name} is no longer a channel of ${agent.name}.`)
       queryClient.invalidateQueries({ queryKey: channelKeys.list(agent.id) })
       guard.leave(back)
@@ -448,7 +472,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const disclosureLine = stored.effective.branding.aiDisclosure?.trim() || DEFAULT_AI_DISCLOSURE
 
   /** The keys picker: only credentials of this service are offered. */
-  const keysPicker = (id: string, label: string, connectorKey: string, hint?: string) => (
+  const keysPicker = (id: string, label: string, connectorKey: string, hint?: ReactNode) => (
     <CredentialPicker
       id={id}
       label={label}
@@ -593,7 +617,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
         >
           {type === 'slack'
             ? keysPicker('channel-credential', 'Slack app', SLACK_APP_CONNECTOR_KEY)
-            : keysPicker('channel-credential', 'Credential', channelConnectorKey(type))}
+            : keysPicker('channel-credential', 'Credential', channelConnectorKey(type), KEYS_SOURCE[type])}
           {senderNamed && (
             <Field
               id="channel-sender-name"
@@ -675,7 +699,12 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
             channel={stored}
             signingCredentialId={(configuration.signingCredentialId as string | undefined) ?? ''}
             onSigningCredentialChange={(id) => setSigning.mutate(id)}
-            onAddCertificate={(kind) => navigate(`/agents/${agent.id}/channels/${channel.id}/signing/new?kind=${kind}`)}
+            onAddCertificate={(kind) => {
+              // Off to add a certificate for it: the channel is wanted.
+              keep()
+              navigate(`/agents/${agent.id}/channels/${channel.id}/signing/new?kind=${kind}`)
+            }}
+            onBuildStarted={keep}
           />
           {stored.lastBuild && (
             <div className="space-y-1 rounded-md border p-3 text-xs">

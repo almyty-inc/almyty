@@ -25,6 +25,8 @@ export interface BuildPanelProps {
   onSigningCredentialChange?: (credentialId: string) => void
   /** Opens the page that adds a certificate of this kind. */
   onAddCertificate?: (kind: 'apple' | 'authenticode') => void
+  /** A build was started: the channel is in use now. */
+  onBuildStarted?: () => void
 }
 
 /** Stands in for "nothing selected", because a Select cannot take ''. */
@@ -55,6 +57,7 @@ export function BuildPanel({
   signingCredentialId,
   onSigningCredentialChange,
   onAddCertificate,
+  onBuildStarted,
 }: BuildPanelProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
@@ -101,6 +104,7 @@ export function BuildPanel({
   const start = useMutation({
     mutationFn: () => agentChannelsApi.requestBuild(agentId, channel.id, { platform }),
     onSuccess: () => {
+      onBuildStarted?.()
       success('Build started', 'It will appear below when it finishes.')
       queryClient.invalidateQueries({ queryKey: ['channel-builds', agentId, channel.id] })
     },

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ChoiceTile, ChoiceTiles } from '@/components/connect/service-tiles'
 import { ChannelIcon } from '@/components/channels/channel-meta'
 import { WithAgent, channelKeys, channelsTabPath } from '@/components/channels/channel-page-loader'
+import type { JustAddedChannelState } from '@/components/channels/use-discard-untouched-channel'
 import { getApiErrorMessage } from '@/lib/api-error'
 import {
   ADDABLE_CHANNEL_TYPES,
@@ -28,7 +29,9 @@ export function channelTileLabel(type: ChannelType): string {
  * /agents/:id/channels/new -- pick a kind of channel.
  *
  * Picking one adds it to the agent and opens its page, where its settings
- * and its address live. Nothing goes live until it is published there.
+ * and its address live. Nothing goes live until it is published there, and
+ * a channel left on that page with nothing saved is taken away again
+ * (useDiscardUntouchedChannel).
  */
 export function AgentChannelNewPage() {
   const { id = '' } = useParams<{ id: string }>()
@@ -52,10 +55,11 @@ function AddChannel({ agent }: { agent: Agent }) {
   const add = useMutation({
     mutationFn: async ({ type, withWebChat }: { type: ChannelType; withWebChat?: boolean }) => {
       // The web chat first, so the desktop app is added opening it.
-      if (withWebChat) await agentChannelsApi.add(agent.id, { type: 'web' })
-      return agentChannelsApi.add(agent.id, { type })
+      const webChat = withWebChat ? await agentChannelsApi.add(agent.id, { type: 'web' }) : null
+      const channel = await agentChannelsApi.add(agent.id, { type })
+      return { channel, alsoAdded: webChat ? [webChat.id] : [] }
     },
-    onSuccess: (channel, { withWebChat }) => {
+    onSuccess: ({ channel, alsoAdded }, { withWebChat }) => {
       success(
         'Channel added',
         withWebChat
@@ -63,7 +67,9 @@ function AddChannel({ agent }: { agent: Agent }) {
           : `${channel.name} is on ${agent.name}.`,
       )
       queryClient.invalidateQueries({ queryKey: channelKeys.list(agent.id) })
-      navigate(`/agents/${agent.id}/channels/${channel.id}`)
+      // Its page takes it away again if it is left with nothing saved.
+      const state: JustAddedChannelState = { justAdded: { ids: [channel.id, ...alsoAdded] } }
+      navigate(`/agents/${agent.id}/channels/${channel.id}`, { state })
     },
     onError: (err: unknown) => {
       setPending(null)

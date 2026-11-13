@@ -1044,7 +1044,10 @@ export class AgentStepProcessor {
               run.currentStep++;
               run.executionTime += stepDuration;
               if (!(await this.commitStep(run, expectedStep))) return 'done';
-              this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'waiting_input' });
+              // request_approval answers waiting_input too, but the run waits
+              // on a person's approval: say which, so a visitor's page shows it.
+              const waitingOn = run.status === AgentRunStatus.WAITING_APPROVAL ? 'waiting_approval' : 'waiting_input';
+              this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: waitingOn });
               return 'waiting';
             }
 

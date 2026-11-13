@@ -68,7 +68,12 @@ export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditMode
       privacyTier: data.privacyTier as UpdateModelBody['privacyTier'],
       region: data.region ? data.region : null,
       contextLength: data.contextLength ?? null,
-      capabilities: compactCapabilities(data.capabilities) ?? {},
+      // What kind of model it is (`chat`, from the price feed) is not on the
+      // form; a save keeps it rather than dropping it.
+      capabilities: {
+        ...(card.capabilities?.chat !== undefined ? { chat: card.capabilities.chat } : {}),
+        ...(compactCapabilities(data.capabilities) ?? {}),
+      },
       pricingOverride: pricingFromForm(data),
     }
     await onSubmit(card.id, body)
