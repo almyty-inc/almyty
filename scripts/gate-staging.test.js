@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { playwrightRows, vitestRows, buildReport, firstLine, redact } = require('./gate-staging');
+const { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder } = require('./gate-staging');
 
 const playwrightReport = {
   suites: [
@@ -130,4 +130,25 @@ test('the report never carries a session cookie, JWT or almyty API key', () => {
   assert.doesNotMatch(md, /eyJ|almyty_abab/);
   assert.match(md, /<redacted>/);
   assert.strictEqual(redact('Bearer abc.def'), 'Bearer <redacted>');
+});
+// The CLI phase failed with "Cannot find module '@almyty/client'": it built
+// the CLIs but not packages/client, which they import.
+test('the CLI packages build after the local packages they import, @almyty/client before its users', () => {
+  const pkgs = readLocalPackages(path.join(__dirname, '..', 'packages'));
+  const cli = ['auth-cli', 'agents-cli', 'chat-cli', 'skills-cli', 'mcp-server', 'models-cli', 'credentials-cli', 'almyty-cli'];
+  const roots = cli.map((d) => Object.values(pkgs).find((p) => path.basename(p.dir) === d).name);
+  const order = buildOrder(pkgs, roots);
+  assert.ok(order.indexOf('@almyty/client') >= 0 && order.indexOf('@almyty/client') < order.indexOf('@almyty/agents'));
+  for (const name of order) {
+    for (const dep of pkgs[name].localDeps) {
+      assert.ok(order.indexOf(dep) < order.indexOf(name), `${dep} builds before ${name}`);
+    }
+  }
+  assert.ok(pkgs['@almyty/agents'].localDeps.includes('@almyty/client'));
+  for (const r of roots) assert.ok(order.includes(r), `${r} is built`);
+});
+
+test('buildOrder refuses a dependency cycle', () => {
+  const pkgs = { a: { localDeps: ['b'] }, b: { localDeps: ['a'] } };
+  assert.throws(() => buildOrder(pkgs, ['a']), /dependency cycle: a -> b -> a/);
 });
