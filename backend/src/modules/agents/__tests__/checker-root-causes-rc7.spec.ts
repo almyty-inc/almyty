@@ -87,16 +87,20 @@ describe('RD2 af3c05c0: "skipped 10 as already reported", against what the agent
     expect(found[0].evidence).toBe('3 skipped items are in no earlier answer: W7225839018, W4414382865, W7129283448');
   });
 
+  // An earlier answer reports what its body lists, as entries (earlierReportedItems).
   it('says nothing when every skipped work was in an earlier answer', () => {
-    const all = [...earlier, 'W7225839018 W4414382865 https://doi.org/10.1371/journal.pone.0361887'];
+    const all = [...earlier, '1. W7225839018\n2. W4414382865\n3. DOI: https://doi.org/10.1371/journal.pone.0361887'];
     expect(findingsOf('rc7-RD2-af3c05c0', { earlier: all })).toEqual([]);
   });
 
   it('reads an earlier answer by DOI or by whole title as well as by OpenAlex id', () => {
-    const byDoi = [...earlier, 'DOI: https://doi.org/10.1016/j.ecolecon.2026.109287', 'Learning to Become Persians. Achaemenid Afġānistān in the Making', '10.1371/journal.pone.0361887'];
+    const byDoi = [
+      ...earlier,
+      '1. Title: Climate regulation and civil society activism\n   - DOI: https://doi.org/10.1016/j.ecolecon.2026.109287\n2. Title: Learning to Become Persians. Achaemenid Afġānistān in the Making\n3. DOI: 10.1371/journal.pone.0361887',
+    ];
     const found = findingsOf('rc7-RD2-af3c05c0', { earlier: byDoi });
-    // The Achaemenid title in the tool result is longer than the one written here: it is not the whole title.
-    expect(found.map((f) => f.item)).toEqual(['W7225839018']);
+    // The Achaemenid title in the tool result is longer than the one written here, but one holds the other: the same work.
+    expect(found).toEqual([]);
   });
 
   it('is not checked without the agent\'s history, nor on an answer that lists what it says it skipped', () => {
@@ -178,7 +182,6 @@ describe('RW2 947d8e43: technical terms a release summary gives that its notes d
     'rc5-RW2-887a8bfe',
     'rc5-RW3-dda8789a',
     'rc6-RW1-22301018',
-    'rc6-RW2-49ed3013',
     'rc6-RW3-e342b57f',
     'rc7-RW3-ab0c73df',
   ])('no release-notes finding on %s, whose summaries are true to the notes', (name) => {

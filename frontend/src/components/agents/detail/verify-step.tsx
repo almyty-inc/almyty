@@ -34,6 +34,8 @@ interface CheckerNote {
   checker?: string
   text?: string
   claim?: string
+  /** For a hidden note: what in the tool results shows it false. */
+  why?: string
 }
 
 interface CheckerVerdict {
@@ -54,6 +56,7 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
   const blocking = !advisory && out.reportOnly !== true
   const failures: VerifyFailure[] = Array.isArray(out.failures) ? out.failures : []
   const notes: CheckerNote[] = Array.isArray(out.notes) ? out.notes.filter((n: CheckerNote) => typeof n?.text === 'string' && n.text.trim()) : []
+  const hiddenNotes: CheckerNote[] = Array.isArray(out.hiddenNotes) ? out.hiddenNotes.filter((n: CheckerNote) => typeof n?.text === 'string' && n.text.trim()) : []
   const checkers: CheckerVerdict[] = Array.isArray(out.checkers) ? out.checkers : []
   const checkerLines = checkers.filter((c) => c?.error || c?.note)
   const inputTokens = Number(step.tokens?.input) || 0
@@ -122,6 +125,23 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
               ))}
             </ul>
           </div>
+        )}
+        {hiddenNotes.length > 0 && (
+          // What a checker said that the tool results show is false: not shown as a note, kept here so a reviewer can audit it.
+          <details className="mt-2" data-testid="hidden-checker-notes">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+              Hidden: proven false by the tool results ({hiddenNotes.length})
+            </summary>
+            <ul className="mt-1 space-y-0.5">
+              {hiddenNotes.map((n, i) => (
+                <li key={i} className="text-xs text-muted-foreground">
+                  <span className="line-through">{n.text}</span>
+                  {n.why ? ` — ${n.why}` : ''}
+                  {n.checker ? ` (${n.checker})` : ''}
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
         {checkerLines.length > 0 && (
           <ul className="mt-1 space-y-0.5" data-testid="verify-checker-notes">
