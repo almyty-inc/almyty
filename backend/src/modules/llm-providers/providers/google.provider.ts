@@ -8,6 +8,7 @@ import { callLlmProviderHttp, llmCallOptionsFor } from './safe-request';
 import { contentAsText, toGeminiParts } from '../content-parts';
 import { requireModel } from '../model-errors';
 import { geminiResponseFormat } from '../structured-output';
+import { ANTHROPIC_UNCARDED_MAX_TOKENS } from './anthropic.provider';
 
 
 /**
@@ -146,7 +147,9 @@ export async function callCustomProvider(
     requestData = {
       model: request.model || provider.configuration.model,
       messages: request.messages.map((m) => ({ ...m, content: contentAsText(m.content) })),
-      max_tokens: request.maxTokens || conversation.context?.maxTokens,
+      // The Anthropic format needs a limit on every call; the runner sets the
+      // card's, and an uncarded model gets the same high one as Anthropic's own.
+      max_tokens: request.maxTokens || conversation.context?.maxTokens || ANTHROPIC_UNCARDED_MAX_TOKENS,
       temperature: request.temperature ?? conversation.context?.temperature,
     };
   } else {

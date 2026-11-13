@@ -190,6 +190,7 @@ export class LlmChatHelper {
           model: response.model,
           finishReason: response.message.finishReason,
           status: MessageStatus.COMPLETED,
+          ...(response.message.providerContent ? { metadata: { providerContent: response.message.providerContent } } : {}),
         }));
 
         session.addMessage(response.usage.inputTokens, response.usage.outputTokens, response.cost * 100);
@@ -200,6 +201,8 @@ export class LlmChatHelper {
           role: MessageRole.ASSISTANT,
           content: response.message.content || '',
           toolCalls: response.message.toolCalls,
+          // The turn as the vendor returned it (thinking included), sent back with its calls.
+          ...(response.message.providerContent ? { providerContent: response.message.providerContent } : {}),
         });
 
         for (const tc of response.message.toolCalls) {
@@ -459,6 +462,8 @@ export class LlmChatHelper {
       assertModelAllowed(provider, request.model);
       // The files a message refers to, as this model can read them.
       request = await this.runner.resolveAttachments(organizationId, provider, request);
+      // As much room to write as the model has, unless the call says less (output-limit.ts).
+      request = await this.runner.resolveOutputLimit(organizationId, provider, request);
       let response: ChatResponse;
 
 

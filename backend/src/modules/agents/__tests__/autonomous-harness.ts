@@ -23,6 +23,7 @@ import { NotFoundException } from '@nestjs/common';
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { Message, MessageContent } from '../../../entities/message.entity';
 import { MessageAttachmentResolver } from '../../llm-providers/message-attachments.resolver';
+import { OutputLimitResolver } from '../../llm-providers/output-limit';
 import { Conversation } from '../../../entities/conversation.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -170,6 +171,8 @@ export async function runAgent(opts: {
   sleeps?: Array<Record<string, any>>;
   /** The context compactor (AgentContextCompactor), for a case whose agent compacts its context. */
   compactor?: any;
+  /** Model cards' most output tokens, by model id (output-limit.ts); a model left out has no card. */
+  cards?: Record<string, number>;
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -274,6 +277,12 @@ export async function runAgent(opts: {
       // to), else the request as it is.
       resolveAttachments: async (org: string | undefined, p: any, request: any) =>
         opts.attachmentResolver ? opts.attachmentResolver.resolve(org, p, request) : request,
+      // The real output limit, from the cards a case hands in (model -> maxOutputTokens).
+      resolveOutputLimit: (org: string | undefined, p: any, request: any) =>
+        new OutputLimitResolver({
+          findOne: async ({ where }: any) =>
+            opts.cards?.[where.vendorModelId] ? { maxOutputTokens: opts.cards[where.vendorModelId] } : null,
+        } as any).resolve(org, p, request),
       planRouteHead: async (_org: string, request: any) => {
         const route = opts.routes?.[request.routing?.objective];
         if (!route) throw new UnmodelledQueryError('no route is modelled for this policy');
