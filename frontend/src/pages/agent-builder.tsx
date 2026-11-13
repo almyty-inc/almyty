@@ -41,6 +41,15 @@ const DEFAULT_PIPELINE_EDGES: PipelineEdge[] = [
   { id: 'e2', source: 'llm_1', target: 'output_1' },
 ]
 
+/** The mode a new agent starts in: autonomous. The backend's default is the same (agents.service.ts defaultAgentMode). */
+export const NEW_AGENT_MODE = 'autonomous' as const
+
+/** A template's mode: what it says, else a workflow when it lays out steps. */
+export function templateMode(template: { mode?: 'workflow' | 'autonomous'; pipeline?: { nodes?: unknown[] } | null }): 'workflow' | 'autonomous' {
+  if (template.mode) return template.mode
+  return (template.pipeline?.nodes?.length ?? 0) > 0 ? 'workflow' : NEW_AGENT_MODE
+}
+
 export function AgentBuilderPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -56,7 +65,9 @@ export function AgentBuilderPage() {
   const [agentName, setAgentName] = useState('New agent')
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
-  const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>('workflow')
+  // A new agent starts autonomous: a goal, tools and a model, and it works
+  // out the steps. Workflow is one click away on the mode switch.
+  const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>(NEW_AGENT_MODE)
   const [agentPersonality, setAgentSoul] = useState('')
   const [agentInstructions, setAgentInstructions] = useState('')
   const [agentToolIds, setAgentToolIds] = useState<string[]>([])
@@ -192,6 +203,8 @@ export function AgentBuilderPage() {
       if (template) {
         setAgentName(template.name)
         setAgentDescription(template.description || '')
+        // A template is the steps it lays out: a workflow, unless it says otherwise.
+        setAgentMode(templateMode(template))
         const pipelineNodes = (template.pipeline?.nodes || []).map((n: any) => ({
           id: n.id,
           type: n.type,
@@ -472,7 +485,10 @@ export function AgentBuilderPage() {
     }
   }
 
-  if (isEditing && isLoadingAgent) {
+  // Until the loaded agent is in the form: one render with a new agent's
+  // defaults would mount the autonomous form empty, and sections that open
+  // for what an agent has (its teammates) would start closed.
+  if (isEditing && (isLoadingAgent || (agentData && !pipeline.initialized))) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-64px)]">
         <LoadingSpinner size="lg" />

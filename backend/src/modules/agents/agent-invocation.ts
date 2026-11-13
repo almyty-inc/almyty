@@ -42,6 +42,22 @@ export function agentIsInvokable(agent: Pick<Agent, 'status'> | null | undefined
 }
 
 /**
+ * Whether a member of the agent's organization may run it from the agent's
+ * own page (Try it, and the same endpoint from the CLI): an active agent,
+ * or a draft.
+ *
+ * A draft is an agent nobody outside the organization can reach yet: it has
+ * no live channel, gateway, schedule or always-on loop, because each of
+ * those still asks agentIsInvokable. Trying it before turning it on is the
+ * point of a draft; refusing that sent every new agent's first Try it back
+ * with "Activate it first". An agent someone turned off (inactive) or one
+ * in error stays refused here too: that was a decision, not a first draft.
+ */
+export function agentIsTryable(agent: Pick<Agent, 'status'> | null | undefined): boolean {
+  return Boolean(agent && (agent.status === AgentStatus.ACTIVE || agent.status === AgentStatus.DRAFT));
+}
+
+/**
  * Which engine runs this agent.
  *
  * An autonomous agent has no pipeline graph, so the ReAct runtime owns
