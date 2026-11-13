@@ -62,7 +62,7 @@ function playwrightRows(report) {
           ms: last.duration || 0,
           screenshot: shot,
           error: firstLine(last.error?.message || (last.errors || [])[0]?.message || ''),
-          cleanup: annotations.filter((a) => a.type === 'cleanup').map((a) => a.description).join('; '),
+          cleanup: [...new Set(annotations.filter((a) => a.type === 'cleanup').map((a) => a.description))].join('; '),
         });
       }
     }
@@ -96,8 +96,16 @@ function firstLine(s) {
   return (clean.split('\n').find((l) => l.trim()) || '').trim().slice(0, 240);
 }
 
+/** A session token or API key must never reach the report. */
+function redact(s) {
+  return String(s)
+    .replace(/(access_token=|Bearer\s+|cookie:\s*)[^\s;,"]+/gi, '$1<redacted>')
+    .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '<redacted>')
+    .replace(/almyty_[0-9a-f]{16,}/g, '<redacted>');
+}
+
 function cell(s) {
-  return String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  return redact(String(s ?? '')).replace(/\|/g, '\\|').replace(/\n/g, ' ').slice(0, 600);
 }
 
 /**
@@ -139,7 +147,7 @@ function buildReport({ runId, startedAt, finishedAt, target, health, browser, cl
   return lines.join('\n');
 }
 
-module.exports = { playwrightRows, vitestRows, buildReport, firstLine };
+module.exports = { playwrightRows, vitestRows, buildReport, firstLine, redact };
 
 // ── the run ─────────────────────────────────────────────────────────
 
@@ -195,9 +203,19 @@ function runPlaywright(env) {
   const args = [path.join(FRONTEND, 'node_modules', '@playwright', 'test', 'cli.js'), 'test', '--config=playwright.staging.config.ts'];
   if (process.env.GATE_GREP) args.push(`--grep=${process.env.GATE_GREP}`);
   log('staging Playwright suite');
-  sh(process.execPath, args, { cwd: FRONTEND, env });
   const file = path.join(GATE_DIR, 'playwright-results.json');
-  return fs.existsSync(file) ? playwrightRows(JSON.parse(fs.readFileSync(file, 'utf8'))) : [];
+  fs.rmSync(file, { force: true });
+  const code = sh(process.execPath, args, { cwd: FRONTEND, env });
+  const rows = fs.existsSync(file) ? playwrightRows(JSON.parse(fs.readFileSync(file, 'utf8'))) : [];
+  // A suite that could not load (a syntax error, a failed global setup)
+  // runs no test; that is a failure, never an empty pass.
+  if (code !== 0 && !rows.some((r) => r.status === 'failed')) {
+    rows.push({ suite: 'setup', title: 'staging Playwright suite ran', status: 'failed', ms: 0, screenshot: '', error: `playwright exited ${code} with no failed test: see its output` });
+  }
+  if (rows.length === 0) {
+    rows.push({ suite: 'setup', title: 'staging Playwright suite ran', status: 'failed', ms: 0, screenshot: '', error: 'no test ran' });
+  }
+  return rows;
 }
 
 /** Sign the CLI in as the QA user through `almyty login`'s real browser flow; returns the HOME holding its credentials. */

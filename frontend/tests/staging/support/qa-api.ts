@@ -51,11 +51,24 @@ export function deletePath(kind: Kind, id: string, orgId: string): string {
 }
 
 export async function deleteThing(api: APIRequestContext, kind: Kind, id: string, orgId: string): Promise<void> {
-  const res = await api.delete(deletePath(kind, id, orgId))
+  let res
+  try {
+    // Deleting an API deletes its tools too, which can take a while.
+    res = await api.delete(deletePath(kind, id, orgId), { timeout: 180_000 })
+  } catch (err) {
+    // Playwright's message carries the request headers, session cookie
+    // included: keep only its first line.
+    throw new Error(`delete ${kind} ${id}: ${redact(String((err as Error).message).split('\n')[0])}`)
+  }
   // Gone already (an API's tools go with it) is fine.
   if (!res.ok() && res.status() !== 404) {
-    throw new Error(`delete ${kind} ${id}: ${res.status()} ${(await res.text()).slice(0, 200)}`)
+    throw new Error(`delete ${kind} ${id}: ${res.status()} ${redact((await res.text()).slice(0, 200))}`)
   }
+}
+
+/** Never let a session token reach a report. */
+export function redact(s: string): string {
+  return s.replace(/(access_token=|Bearer\s+|cookie:\s*)[^\s;,"]+/gi, '$1<redacted>').replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '<redacted>')
 }
 
 interface Named { id: string; name: string; createdAt?: string }

@@ -121,8 +121,10 @@ test.describe('J3 tools made by hand', () => {
     await page.getByRole('button', { name: 'Add server' }).click()
     const res = await created
     expect(res.ok(), `adding the MCP server answered ${res.status()}`).toBeTruthy()
-    const source = (await res.json()).data
-    gate.track('mcp-source', source.id)
+    const body = (await res.json()).data
+    const sourceId = body?.source?.id ?? body?.id
+    expect(sourceId, 'adding the server should return the new source').toBeTruthy()
+    gate.track('mcp-source', sourceId)
 
     // Its tools are discovered and listed under the server's name.
     await page.goto(`/tools?search=${name}`)

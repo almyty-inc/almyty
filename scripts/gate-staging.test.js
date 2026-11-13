@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { playwrightRows, vitestRows, buildReport, firstLine } = require('./gate-staging');
+const { playwrightRows, vitestRows, buildReport, firstLine, redact } = require('./gate-staging');
 
 const playwrightReport = {
   suites: [
@@ -114,4 +114,16 @@ test('every recorded finding names a file and line', () => {
 
 test('firstLine strips colour codes and blank lines', () => {
   assert.strictEqual(firstLine('\n\u001b[2mexpect(x)\u001b[22m\nmore'), 'expect(x)');
+});
+
+test('the report never carries a session cookie, JWT or almyty API key', () => {
+  const leak = 'DELETE /apis/1 cookie: access_token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc_DEF-1 and almyty_55eb577564d935cad714bad4ffcb8ba0';
+  const md = buildReport({
+    runId: 'r', startedAt: 's', finishedAt: 'f', target: { app: 'a', api: 'b' }, health: null,
+    browser: [{ suite: 's', title: 't', status: 'failed', ms: 1, screenshot: '', error: leak, cleanup: leak }],
+    cli: [],
+  });
+  assert.doesNotMatch(md, /eyJ|almyty_55eb/);
+  assert.match(md, /<redacted>/);
+  assert.strictEqual(redact('Bearer abc.def'), 'Bearer <redacted>');
 });
