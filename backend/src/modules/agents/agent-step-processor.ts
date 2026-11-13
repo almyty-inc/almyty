@@ -72,6 +72,8 @@ import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from
 import { AlwaysOnService } from './always-on/always-on.service';
 import { MACHINE_FAILED, type MachineProblem, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
 import { earlierReportedItems, forbidsRepeats, speaksOfEarlierReports } from './answer-checks';
+import { NO_ANSWER_CODES, NO_ANSWER_REASONS, NO_ANSWER_RETRIES, type NoAnswerKind, noAnswerError, noAnswerNudge, noAnswerOf } from './no-answer';
+import { stoppedAtOutputLimit } from '../llm-providers/output-limit';
 
 /** How many of an agent's earlier answers a "skipped as already reported" claim is checked against, and from how many days back. */
 export const EARLIER_ANSWERS_MAX = 50;
@@ -171,7 +173,7 @@ type FinalCall = {
   toolCount: number;
   startedAt: number;
   /** Set when the answer call did not produce the answer and the draft stood in. */
-  fallback?: 'error' | 'empty';
+  fallback?: 'error' | 'empty' | 'output_limit';
   error?: string;
 };
 
@@ -891,6 +893,10 @@ export class AgentStepProcessor {
           const assistantMsg = Message.createToolCallMessage(run.conversationId, responseMessage.toolCalls);
           assistantMsg.content = responseMessage.content || '';
           assistantMsg.runId = run.id;
+          // The turn as the vendor returned it, sent back with these calls
+          // on the next step (anthropic-messages.ts): a model that thinks
+          // needs the thinking that made them.
+          if (responseMessage.providerContent) assistantMsg.metadata = { providerContent: responseMessage.providerContent };
           await this.s.messageRepository.save(assistantMsg);
         }
 
@@ -1541,6 +1547,20 @@ export class AgentStepProcessor {
 
       } else {
         // No tool calls — the agent has a final response
+        // Unless it holds no answer: empty, or cut off at its output limit.
+        // That is never the run's answer, nor checked as one: the model is
+        // asked again within limits, and the run fails with the reason when
+        // it still has none (no-answer.ts).
+        const noAnswer = noAnswerOf(responseMessage);
+        if (noAnswer) {
+          return this.retryOrFailNoAnswer(run, agent, runId, expectedStep, stepStart, noAnswer, {
+            acting,
+            llmResponse,
+            messageCount,
+            toolCount: allToolDefs.length,
+            resolvedLimits,
+          });
+        }
         let finalContent = responseMessage.content || '';
         // The failures of a check that did not pass, for the note on the answer (unverified-answer.ts).
         let failedCheck: Array<{ rule?: unknown; evidence?: unknown }> | null = null;
@@ -2151,6 +2171,81 @@ export class AgentStepProcessor {
   }
 
   /**
+   * A final reply with no answer (no-answer.ts): empty, or cut off at its
+   * output limit. Within NO_ANSWER_RETRIES and the run's limits the model is
+   * asked again: the step is recorded with the reason, and a note in the
+   * conversation tells the model its reply reached nobody. Past that the
+   * run fails with the reason, which the run view shows; it never completes
+   * with an empty answer, and nothing it did not say is checked or kept.
+   */
+  private async retryOrFailNoAnswer(
+    run: AgentRun,
+    agent: Agent,
+    runId: string,
+    expectedStep: number,
+    stepStart: number,
+    kind: NoAnswerKind,
+    call: {
+      acting: ModelRoleCall;
+      llmResponse: ChatResponse;
+      messageCount: number;
+      toolCount: number;
+      resolvedLimits: ResolvedRunLimits;
+    },
+  ): Promise<'continue' | 'done'> {
+    const { acting, llmResponse } = call;
+    const retries = Number(run.workingMemory?.noAnswerRetries ?? 0);
+    const reason = NO_ANSWER_REASONS[kind];
+    const outOfRoom = !!checkRunLimits(
+      { currentStep: run.currentStep + 1, totalCost: run.totalCost, totalTokens: run.totalTokens, createdAt: run.createdAt },
+      call.resolvedLimits,
+    );
+    const retry = retries < NO_ANSWER_RETRIES && !outOfRoom;
+    const stepDuration = Date.now() - stepStart;
+    run.steps.push({
+      type: 'llm_call',
+      role: stampOf(acting),
+      input: { messageCount: call.messageCount, toolCount: call.toolCount },
+      output: {
+        status: 'no_answer',
+        reason,
+        code: NO_ANSWER_CODES[kind],
+        finishReason: llmResponse.message?.finishReason ?? null,
+        retried: retry,
+        ...(llmResponse.message?.content ? { content: llmResponse.message.content.substring(0, 200) } : {}),
+        ...answeredBy(llmResponse, acting),
+      },
+      cost: llmResponse.cost || 0,
+      tokens: { input: llmResponse.usage?.inputTokens || 0, output: llmResponse.usage?.outputTokens || 0 },
+      duration: stepDuration,
+      timestamp: new Date().toISOString(),
+    });
+    run.currentStep++;
+    run.executionTime += stepDuration;
+
+    if (retry) {
+      run.workingMemory = { ...(run.workingMemory || {}), noAnswerRetries: retries + 1 };
+      if (run.conversationId) {
+        const nudge = Message.createUserMessage(run.conversationId, noAnswerNudge(kind));
+        nudge.runId = run.id;
+        nudge.metadata = { internal: true, internalPurpose: 'no_answer_retry' };
+        await this.s.messageRepository.save(nudge);
+      }
+      if (!(await this.commitStep(run, expectedStep))) return 'done';
+      this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'no_answer', reason });
+      return 'continue';
+    }
+
+    run.status = AgentRunStatus.FAILED;
+    run.error = noAnswerError(kind);
+    run.metadata = { ...(run.metadata || {}), noAnswer: { code: NO_ANSWER_CODES[kind], reason, retries } };
+    if (!(await this.commitStep(run, expectedStep))) return 'done';
+    await this.s.misc.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
+    this.s.emitEvent(runId, 'run.failed', { error: run.error, reasonCode: NO_ANSWER_CODES[kind], reason });
+    return 'done';
+  }
+
+  /**
    * The answer call of a composing run (final-answer.ts).
    *
    * The draft is recorded as a step of its own, with its cost, and the
@@ -2201,7 +2296,7 @@ export class AgentStepProcessor {
       toolCount: 0,
       startedAt,
     };
-    const standIn = (fallback: 'error' | 'empty', error?: string, spent?: Partial<FinalCall>) => {
+    const standIn = (fallback: 'error' | 'empty' | 'output_limit', error?: string, spent?: Partial<FinalCall>) => {
       this.s.emitEvent(runId, 'llm.response', { step, content: draft, answer: true, fallback });
       return {
         cost: 0,
@@ -2246,6 +2341,8 @@ export class AgentStepProcessor {
 
     const content = response.message?.content || '';
     if (!content.trim() && draft.trim()) return standIn('empty', undefined, spent);
+    // Cut off at its output limit: not an answer; the whole draft stands in.
+    if (stoppedAtOutputLimit(response.message?.finishReason) && draft.trim()) return standIn('output_limit', undefined, spent);
 
     this.s.emitEvent(runId, 'llm.response', {
       step,

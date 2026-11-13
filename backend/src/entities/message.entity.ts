@@ -173,11 +173,17 @@ export class Message {
     streamed?: boolean;
     /** Runtime scaffolding that must not appear in a customer transcript. */
     internal?: boolean;
-    internalPurpose?: 'verification_candidate' | 'verification_revision' | 'verification_advisory';
+    internalPurpose?: 'verification_candidate' | 'verification_revision' | 'verification_advisory' | 'no_answer_retry';
     retryCount?: number;
     processingTime?: number;
     queueTime?: number;
     providerMetadata?: Record<string, any>;
+    /**
+     * A tool-call turn as the vendor returned it (on Anthropic its thinking,
+     * text and tool_use blocks), sent back with the calls on the next call
+     * (anthropic-messages.ts). Opaque to everything but that adapter.
+     */
+    providerContent?: { format: 'anthropic'; blocks: Array<Record<string, unknown>> };
   };
 
   @CreateDateColumn()
