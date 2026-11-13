@@ -1,21 +1,22 @@
 /*
- * Staging smoke suite — fresh-signup edition.
+ * Staging smoke suite.
  *
  * Runs against a real deployed almyty stack (app.staging.almyty.com by
  * default). Registers a brand-new throwaway user per run via the real
- * UI and uses that user for every subsequent test. This is the
- * harshest possible first-contact experience — "can a random visitor
- * get from the sign-up screen to a working dashboard in one try?".
+ * UI: "can a random visitor get through the sign-up screen in one
+ * try?". Registration is rate-limited at 10/hour per IP, so this spec
+ * only registers ONCE per run (test.describe.configure serial + shared
+ * page) and reuses the context for every test that follows.
  *
- * Do NOT rely on a pre-existing demo account. The staging DB gets
- * reset / accounts get rotated / passwords get changed, and any
- * hard-coded credential is a ticking time bomb. Registration is
- * rate-limited at 10/hour per IP, so this spec only registers ONCE
- * per run (test.describe.configure serial + shared page) and reuses
- * the context for every test that follows.
+ * Sign-up opens no session: the new account has to confirm its email
+ * before it can sign in, and this spec has no inbox. So it checks that
+ * sign-up lands on "Check your email", then signs in with a confirmed
+ * account when SMOKE_EMAIL and SMOKE_PASSWORD are set, and skips the
+ * signed-in checks when they are not.
  *
  * Environment:
  *   PLAYWRIGHT_BASE_URL — override baseURL
+ *   SMOKE_EMAIL, SMOKE_PASSWORD — a confirmed account for the signed-in checks
  *
  * Run:
  *   npx playwright test --config=playwright.staging.config.ts \
@@ -29,6 +30,7 @@ let context: BrowserContext
 let page: Page
 let testEmail: string
 let testOrg: string
+let signedIn = false
 
 const PASSWORD = 'SmokeTest123!'
 
@@ -58,11 +60,25 @@ test.beforeAll(async ({ browser }) => {
 
   await page.getByRole('button', { name: /create account/i }).click()
 
-  // The backend will either redirect us to /dashboard on success, OR
-  // leave us on /auth/register with a toast on validation failure.
+  // The account exists and waits for its email to be confirmed.
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible({ timeout: 45_000 })
+
+  const email = process.env.SMOKE_EMAIL
+  const password = process.env.SMOKE_PASSWORD
+  if (!email || !password) return
+
+  await page.goto('/auth/login')
+  await page.locator('#email').fill(email)
+  await page.locator('#password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 45_000 })
   // Sanity: main landmark present after first render.
   await expect(page.locator('main#main-content')).toBeVisible({ timeout: 15_000 })
+  signedIn = true
+})
+
+test.beforeEach(() => {
+  test.skip(!signedIn, 'needs a confirmed account: set SMOKE_EMAIL and SMOKE_PASSWORD')
 })
 
 test.afterAll(async () => {

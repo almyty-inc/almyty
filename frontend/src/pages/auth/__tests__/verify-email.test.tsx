@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { VerifyEmailPage } from '../verify-email'
 import { authApi } from '@/lib/api'
@@ -16,7 +17,7 @@ vi.mock('react-router-dom', async () => {
     useSearchParams: () => [new URLSearchParams(ctl.token ? `token=${ctl.token}` : ''), vi.fn()],
   }
 })
-vi.mock('@/lib/api', () => ({ authApi: { verifyEmail: vi.fn() } }))
+vi.mock('@/lib/api', () => ({ authApi: { verifyEmail: vi.fn(), resendVerificationByEmail: vi.fn() } }))
 
 // Mirrors App.tsx's /auth/* subtree so the regression exercises real routing.
 function AuthSubtree() {
@@ -48,28 +49,43 @@ describe('VerifyEmailPage', () => {
     await waitFor(() => expect(authApi.verifyEmail).toHaveBeenCalledWith('abc'))
   })
 
-  it('shows success + a dashboard link when the token verifies', async () => {
+  // Signing in needs a confirmed address, so "Go to dashboard" only bounced
+  // a signed-out person to the sign-in page. Success leads there directly.
+  it('shows success and leads to sign-in when the token verifies', async () => {
     ;(authApi.verifyEmail as any).mockResolvedValue({ success: true })
     ctl.token = 'good'
     render(<MemoryRouter><VerifyEmailPage /></MemoryRouter>)
-    await waitFor(() => expect(screen.getByText(/Email verified/i)).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText(/Email confirmed/i)).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/auth/login')
   })
 
-  it('shows the upstream error message when the token is invalid/expired', async () => {
+  // The failure page was a dead end ("Invalid verification token", "Back to
+  // app") for someone who cannot sign in to ask for a new link.
+  it('explains a bad link plainly and sends a new one from the page', async () => {
     ;(authApi.verifyEmail as any).mockRejectedValue({
-      response: { data: { message: 'This verification link has expired.' } },
+      response: { status: 400, data: { message: 'Invalid verification token' } },
     })
+    ;(authApi.resendVerificationByEmail as any).mockResolvedValue({ success: true })
     ctl.token = 'stale'
+    const user = userEvent.setup()
     render(<MemoryRouter><VerifyEmailPage /></MemoryRouter>)
-    await waitFor(() => expect(screen.getByText(/Verification failed/i)).toBeInTheDocument())
-    expect(screen.getByText(/has expired/i)).toBeInTheDocument()
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: /this link didn.t work/i })).toBeInTheDocument())
+    expect(screen.queryByText(/invalid verification token/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /back to app/i })).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/email address/i), 'dana@example.com')
+    await user.click(screen.getByRole('button', { name: /send a new link/i }))
+    await waitFor(() => expect(authApi.resendVerificationByEmail).toHaveBeenCalledWith('dana@example.com'))
+    expect(screen.getByText(/a new link is on its way/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /back to sign in/i })).toHaveAttribute('href', '/auth/login')
   })
 
-  it('errors without calling the API when the token is missing', async () => {
+  it('offers a new link without calling the API when the token is missing', async () => {
     ctl.token = ''
     render(<MemoryRouter><VerifyEmailPage /></MemoryRouter>)
-    await waitFor(() => expect(screen.getByText(/Verification failed/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: /this link didn.t work/i })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /send a new link/i })).toBeInTheDocument()
     expect(authApi.verifyEmail).not.toHaveBeenCalled()
   })
 })
