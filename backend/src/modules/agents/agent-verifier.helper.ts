@@ -100,6 +100,8 @@ export interface VerifyPanelResult {
   failures: VerifyFailure[];
   /** The checkers' notes: shown on the run, never on the answer, never deciding the verdict. */
   notes?: CheckerNote[];
+  /** Notes the tool results show false: never shown as notes; kept, with why, for the run view's audit list. */
+  hiddenNotes?: CheckerNote[];
   passedRules: string[];
   checkers: Array<{
     checker: string;
@@ -320,8 +322,12 @@ export function codeFindings(input: { request: string; answer: string; evidence:
  * them: the answer's note and every visitor channel read the verdict
  * findings alone.
  */
-export function checkerNotesOf(panel: Pick<VerifyPanelResult, 'notes'>): { notes?: CheckerNote[] } {
-  return panel.notes?.length ? { notes: panel.notes } : {};
+export function checkerNotesOf(panel: Pick<VerifyPanelResult, 'notes' | 'hiddenNotes'>): { notes?: CheckerNote[]; hiddenNotes?: CheckerNote[] } {
+  return {
+    ...(panel.notes?.length ? { notes: panel.notes } : {}),
+    // What the tool results show false: not shown as notes, kept on the step for an audit.
+    ...(panel.hiddenNotes?.length ? { hiddenNotes: panel.hiddenNotes } : {}),
+  };
 }
 
 /** What the reply looks like and what goes where, said once for both prompts. */
@@ -486,7 +492,7 @@ export class AgentVerifierHelper {
     // false is not shown, one it shows true is marked checked (checker-notes.ts).
     const screened = evidence
       ? screenNotes(merged.notes, { answer: targetText, evidence, instructions: extra.rules, findings: found, now: extra.now })
-      : { notes: merged.notes, dropped: new Map<string, number>() };
+      : { notes: merged.notes, hidden: [] as CheckerNote[], dropped: new Map<string, number>() };
 
     return {
       verdict: merged.verdict,
@@ -495,6 +501,7 @@ export class AgentVerifierHelper {
       policy,
       failures: merged.failures,
       notes: screened.notes,
+      ...(screened.hidden.length ? { hiddenNotes: screened.hidden } : {}),
       passedRules: merged.passedRules,
       checkers: checkerResults.map((r) => {
         const dropped = screened.dropped.get(r.checker);
