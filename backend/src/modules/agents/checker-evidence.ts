@@ -17,7 +17,8 @@
  * itself, on the line that names the tool ("[result shortened: 4 of 10
  * items shown in results; fields left out: results[].abstract (text) ...]"),
  * and the checker is told that absence from shortened evidence proves
- * nothing (checker-guards.ts drops a failure about a field left out).
+ * nothing (a failure counts only when the tool data it cites is there:
+ * checker-findings.ts).
  */
 
 /** Evidence budget when the checker's context window is not known, in characters. */
@@ -587,14 +588,45 @@ function compact(v: unknown, level: Level, notes: Notes, path: string, depth: nu
       }
     }
     if (level <= 3 && kindOf(value) === 'object') {
-      // Too large whole: the nested object's identifying leaves, when they are short.
+      // Too large whole: the nested object's identifying leaves. Only those:
+      // its other leaves, nulls and empty lists among them, counted
+      // against the limit too, so a repository's `primary_location`
+      // (license null, issn null, lineage [] ...) went over it and was
+      // dropped whole, venue name and all, while a journal's was kept
+      // (runs db52dcca, e3acd95d: the PhilPapers and Zenodo entries).
       const inner = newNotes();
-      const small = compact(value, 3, inner, childPath, depth + 1, maxItems);
+      const small = identityLeaves(value, inner, childPath, depth + 1);
       if (holdsLeaf(small) && (JSON.stringify(small) ?? '').length <= NESTED_IDENTITY_LIMIT) {
         out[key] = small;
         mergeNotes(notes, inner);
         continue;
       }
+    }
+    notes.dropped.set(childPath, kindOf(value));
+  }
+  return out;
+}
+
+/**
+ * A nested object's identifying leaves (id, name, display_name, title,
+ * type, version, dates, DOI ...), at every depth, and nothing else. A
+ * null identifying leaf is kept: `doi: null` says the item has none.
+ * Every other leaf is recorded as left out.
+ */
+function identityLeaves(v: unknown, notes: Notes, path: string, depth: number): unknown {
+  if (depth > MAX_DEPTH || v === null || typeof v !== 'object' || Array.isArray(v)) return v;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(v as Record<string, unknown>)) {
+    const childPath = `${path}.${key}`;
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      const inner = identityLeaves(value, notes, childPath, depth + 1);
+      if (inner !== null && typeof inner === 'object' && Object.keys(inner).length) {
+        out[key] = inner;
+        continue;
+      }
+    } else if (isIdentityKey(key) && !Array.isArray(value)) {
+      out[key] = typeof value === 'string' ? cutText(value, IDENTITY_STRING_LIMIT, notes) : value;
+      continue;
     }
     notes.dropped.set(childPath, kindOf(value));
   }
