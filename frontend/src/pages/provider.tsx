@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -372,7 +373,7 @@ function EditableName({ name, saving, onSave }: { name: string; saving: boolean;
     )
   }
   return (
-    <form
+    <Form
       className="flex flex-wrap items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault()
@@ -387,7 +388,7 @@ function EditableName({ name, saving, onSave }: { name: string; saving: boolean;
       <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
         Cancel
       </Button>
-    </form>
+    </Form>
   )
 }
 
@@ -421,7 +422,7 @@ function ReplaceKey({ provider, onSaved, idPrefix = 'replace-key' }: { provider:
       </div>
       {open && (
         <div className="space-y-3 rounded-lg border p-3">
-          <form
+          <Form
             className="flex flex-wrap items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault()
@@ -439,7 +440,7 @@ function ReplaceKey({ provider, onSaved, idPrefix = 'replace-key' }: { provider:
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-          </form>
+          </Form>
           <div className="flex flex-wrap items-center gap-3">
             {keyUrl && (
               <a href={keyUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
@@ -633,7 +634,7 @@ function Advanced({ provider, models, onSaved }: { provider: any; models: ModelC
 
   return (
     <Disclosure title="Advanced">
-      <form className="space-y-4" onSubmit={form.handleSubmit((data) => saveSettings.mutate(data))} aria-label="Provider settings">
+      <Form className="space-y-4" onSubmit={form.handleSubmit((data) => saveSettings.mutate(data))} aria-label="Provider settings">
         <h3 className="text-sm font-semibold">Call settings</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -675,7 +676,7 @@ function Advanced({ provider, models, onSaved }: { provider: any; models: ModelC
         <Button type="submit" size="sm" disabled={saveSettings.isPending}>
           {saveSettings.isPending ? 'Saving...' : 'Save settings'}
         </Button>
-      </form>
+      </Form>
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold">Per-model settings</h3>

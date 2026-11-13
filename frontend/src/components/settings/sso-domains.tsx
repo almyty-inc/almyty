@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Globe } from 'lucide-react'
 
@@ -148,7 +149,7 @@ export function SsoDomains() {
           </ul>
         )}
 
-        <form
+        <Form
           className="space-y-1.5"
           onSubmit={(e) => {
             e.preventDefault()
@@ -167,7 +168,7 @@ export function SsoDomains() {
               {add.isPending ? 'Adding...' : 'Add domain'}
             </Button>
           </div>
-        </form>
+        </Form>
 
         {error && (
           <p role="alert" className="text-sm text-destructive">

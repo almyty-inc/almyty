@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { Form } from '@/components/ui/form'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -479,7 +480,7 @@ export function ChatPage() {
               })}
             </div>
           )}
-          <form
+          <Form
             onSubmit={(e) => {
               e.preventDefault()
               handleSend()
@@ -506,7 +507,7 @@ export function ChatPage() {
             >
               <Send className="h-4 w-4" />
             </Button>
-          </form>
+          </Form>
           <div className="text-xs text-muted-foreground mt-1">
             Enter to send · Shift+Enter for newline
             {selectedProvider && ` · ${selectedProvider.type} · ${selectedModel || 'provider default model'}`}

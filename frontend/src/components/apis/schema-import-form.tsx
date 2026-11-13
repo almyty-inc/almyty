@@ -12,6 +12,7 @@
  * for it instead of losing track of it.
  */
 import React from 'react'
+import { Form } from '@/components/ui/form'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
@@ -151,7 +152,7 @@ export function SchemaImportForm({ api }: { api: Api }) {
 
       <Card>
         <CardContent className="pt-6">
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate aria-label="Update the description">
+          <Form onSubmit={handleSubmit} className="space-y-5" noValidate aria-label="Update the description">
             {running && (
               <p role="status" className="flex items-center gap-2 text-sm" data-testid="schema-import-running">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -190,7 +191,7 @@ export function SchemaImportForm({ api }: { api: Api }) {
                 Cancel
               </Button>
             </div>
-          </form>
+          </Form>
         </CardContent>
       </Card>
       {guard.element}

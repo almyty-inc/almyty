@@ -1,4 +1,5 @@
 import React from 'react'
+import { Form } from '@/components/ui/form'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -77,7 +78,7 @@ export function ForgotPasswordPage() {
       <p className="text-sm text-muted-foreground mb-6">
         Enter your email and we'll send you a link to reset it.
       </p>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <Label htmlFor="email">Email address</Label>
           <div className="mt-1">
@@ -121,7 +122,7 @@ export function ForgotPasswordPage() {
             )}
           </Button>
         </div>
-      </form>
+      </Form>
 
       <div className="mt-6 text-center">
         <p className="text-sm text-muted-foreground">

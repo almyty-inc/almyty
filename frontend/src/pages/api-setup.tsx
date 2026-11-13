@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react'
@@ -189,7 +190,7 @@ export function ApiSetupPage() {
                   {api.baseUrl}
                 </p>
               ) : (
-                <form onSubmit={submitAddress} className="flex flex-wrap items-end gap-2" noValidate>
+                <Form onSubmit={submitAddress} className="flex flex-wrap items-end gap-2" noValidate>
                   <div className="min-w-[16rem] flex-1">
                     <Label htmlFor="setup-address-input">Address</Label>
                     <Input
@@ -209,7 +210,7 @@ export function ApiSetupPage() {
                       {addressError}
                     </p>
                   )}
-                </form>
+                </Form>
               )}
             </section>
           )}

@@ -11,6 +11,7 @@
  * Used on a connection's page and as the last step of adding a connection.
  */
 import { useMemo, useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 
@@ -100,7 +101,7 @@ export function AllowedModelsEditor({ provider, cards, onSaved, onCancel, submit
   const allShownTicked = shown.length > 0 && shown.every((c) => ticked.has(c.vendorModelId))
 
   return (
-    <form onSubmit={submit} className="space-y-4" aria-label={`Models of ${provider.name}`} data-testid="allowed-models-editor">
+    <Form onSubmit={submit} className="space-y-4" aria-label={`Models of ${provider.name}`} data-testid="allowed-models-editor">
       <div className="flex items-start gap-3 rounded-lg border p-3">
         <Switch
           id={`allow-new-${provider.id}`}
@@ -205,6 +206,6 @@ export function AllowedModelsEditor({ provider, cards, onSaved, onCancel, submit
           </Button>
         </div>
       )}
-    </form>
+    </Form>
   )
 }
