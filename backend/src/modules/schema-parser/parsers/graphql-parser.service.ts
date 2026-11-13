@@ -117,7 +117,10 @@ export class GraphQLParserService implements SchemaParser {
       operation.operationId = parsedOp.operationId;
       operation.description = parsedOp.description;
       operation.method = HttpMethod.POST; // GraphQL typically uses POST
-      operation.endpoint = '/graphql';
+      // No path: GraphQL has one endpoint, and it is the API's address --
+      // the URL the schema was introspected from, or the one the person
+      // gave (graphqlTargetUrl, tools/executors/graphql-operation-request.ts).
+      operation.endpoint = '';
       operation.type = parsedOp.method === 'query' ? OperationType.QUERY : OperationType.MUTATION;
       operation.parameters = parsedOp.parameters;
       operation.responses = parsedOp.responses;
@@ -204,7 +207,7 @@ export class GraphQLParserService implements SchemaParser {
       name: fieldName,
       description: field.description,
       method: operationType,
-      endpoint: `/graphql`,
+      endpoint: '',
       metadata: { query: document.query, operationName: document.operationName },
       parameters: {
         body: {

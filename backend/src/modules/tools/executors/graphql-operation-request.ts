@@ -55,3 +55,35 @@ export function graphqlOperationRequest(
     operationName: params.operationName,
   };
 }
+
+/** The endpoint path imports stored before they kept the API's own address. */
+const LEGACY_GRAPHQL_PATH = '/graphql';
+
+/**
+ * Where a tool generated from a GraphQL import sends its request: the
+ * API's address, which is the endpoint it was imported from (the URL
+ * that answered introspection, or the address the person gave).
+ * GraphQL has one endpoint; the import stores no path of its own.
+ *
+ * Operations imported earlier carry the path `/graphql`, which used to
+ * be appended to every address. When the address already has a path of
+ * its own (`https://graphqlzero.almansi.me/api`) that path is the
+ * endpoint and is used as it is; a bare host keeps getting `/graphql`,
+ * as it did when it was imported.
+ */
+export function graphqlTargetUrl(baseUrl: string, endpoint?: string | null): string {
+  const base = baseUrl || '';
+  if (!endpoint) return base;
+  if (endpoint === LEGACY_GRAPHQL_PATH) {
+    try {
+      const path = new URL(base).pathname;
+      if (path !== '' && path !== '/') return base;
+    } catch {
+      /* not a URL: join as before */
+    }
+  }
+  const trimmed = base.replace(/(?<!\/)\/+$/, '');
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  if (trimmed.endsWith(path)) return trimmed;
+  return `${trimmed}${path}`;
+}
