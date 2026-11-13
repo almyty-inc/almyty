@@ -86,7 +86,8 @@ describe('autonomous strategies drive the loop, role by role', () => {
       const [, toolStep, escalated, check, done] = seen.run.steps as any[];
       expect(toolStep.output).toMatchObject({ model: 'gpt-4o-mini', providerId: 'p-cheap' });
       expect(escalated.output).toMatchObject({ model: 'gpt-4o-mini', providerId: 'p-cheap' });
-      expect(check.output.failures[0]).toMatchObject({ rule: 'cites no order data', checker: 'Checker' });
+      // The confirmed finding, in the code's words (confirmCheckerFindings).
+      expect(check.output.failures[0]).toMatchObject({ rule: 'order 4411: the answer gives ship date soon, but the tool results say Monday', checker: 'Checker' });
       expect(done.output).toMatchObject({ model: 'claude-sonnet-5', providerId: 'p-strong' });
       expect(done.role).toEqual({ key: 'main', name: 'Main', purpose: 'main', kind: 'model' });
 
