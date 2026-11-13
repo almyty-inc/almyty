@@ -66,5 +66,13 @@
   "list --json never returns a secret value": {
     "finding": "credentials list --json prints each credential's config with its secret fields (\"apiKey\":\"********\"); a plaintext value longer than 8 characters comes back as its first and last 4 characters.",
     "rootCause": "backend/src/modules/credentials/credentials.service.ts:554-576 (maskCredential keeps config, masking to 4+****+4) passed through by packages/credentials-cli/src/index.ts:492-494"
+  },
+  "J9 A2A channel answers the official A2A client from the live tool": {
+    "finding": "On an A2A channel's page, New key > Make key reloads the page instead of making a key: no POST to /gateways/:id/auth/api-keys is sent, so no A2A caller can ever sign in. The channel page is the only place these keys are made.",
+    "rootCause": "frontend/src/components/gateways/detail/gateway-auth-section.tsx:108 renders the key form as its own <form aria-label=\"New key\">, nested on the channel page inside the FormPage <form> (frontend/src/components/layout/form-page.tsx:145, via frontend/src/components/channels/channel-settings.tsx:559-564,692 and hosted-channels.tsx:307); the nested submit becomes a native GET reload and never reaches the create mutation (gateway-auth-section.tsx:99-101)"
+  },
+  "J7 agent key works with the model the Integration snippet names": {
+    "finding": "The agent page's Integration snippet tells callers to send model \"agent:<agent-name-slug>\" with their key, but a key made in the agent's own API access is refused for that model (401 \"This is a gateway API key. Use it against the gateway endpoint.\"). Only \"agent:<uuid>\" works.",
+    "rootCause": "frontend/src/components/agents/detail/integration-snippets.tsx:31,43,55,72 (snippet uses slugify(agent.name)) vs backend/src/modules/agents/agent-api-access.service.ts:21 (authenticateTarget accepts only a uuid ref and returns null for a name), so the request falls to backend/src/modules/agents/compat-auth.helper.ts:43 (authenticateCompatKey refuses any key carrying a gatewayId)"
   }
 }

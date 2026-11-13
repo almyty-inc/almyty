@@ -37,7 +37,7 @@ export async function data<T = any>(res: Awaited<ReturnType<APIRequestContext['g
 }
 
 /** Kinds of things a gate test makes, and how each is deleted. */
-export type Kind = 'api' | 'tool' | 'agent' | 'mcp-source' | 'credential' | 'gateway'
+export type Kind = 'api' | 'tool' | 'agent' | 'mcp-source' | 'credential' | 'gateway' | 'approval-rule'
 
 export function deletePath(kind: Kind, id: string, orgId: string): string {
   switch (kind) {
@@ -47,6 +47,8 @@ export function deletePath(kind: Kind, id: string, orgId: string): string {
     case 'mcp-source': return `/organizations/${orgId}/mcp-sources/${id}`
     case 'credential': return `/credentials/${id}`
     case 'gateway': return `/gateways/${id}`
+    // A stranded rule would hold every later call to its tool for approval.
+    case 'approval-rule': return `/approval-rules/${id}`
   }
 }
 
@@ -99,6 +101,7 @@ export async function list(api: APIRequestContext, kind: Kind, orgId: string): P
     case 'mcp-source': return pick(await data(await api.get(`/organizations/${orgId}/mcp-sources`)))
     case 'credential': return pick(await data(await api.get('/credentials')))
     case 'gateway': return pick(await paged(api, '/gateways', (d) => d?.gateways))
+    case 'approval-rule': return pick(arr(await data(await api.get('/approval-rules'))))
   }
 }
 
