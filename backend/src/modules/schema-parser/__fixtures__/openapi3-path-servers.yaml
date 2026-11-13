@@ -1,0 +1,46 @@
+# Shaped like Open-Meteo's forecast.yml: no document-level servers, the
+# servers are declared on the path. A second path declares its own server
+# on the operation instead.
+openapi: '3.1.0'
+info:
+  title: Open-Meteo Weather Forecast API
+  version: '1.0'
+paths:
+  /v1/forecast:
+    servers:
+      - url: https://api.open-meteo.com
+      - url: https://customer-api.open-meteo.com
+    get:
+      operationId: getForecast
+      summary: Weather forecast
+      parameters:
+        - name: latitude
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: longitude
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: OK
+  /v1/archive:
+    servers:
+      - url: https://api.open-meteo.com
+    get:
+      operationId: getArchive
+      summary: Historical weather
+      servers:
+        - url: https://archive-api.open-meteo.com
+      parameters:
+        - name: latitude
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: OK

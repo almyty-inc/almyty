@@ -18,8 +18,8 @@ import * as protobuf from 'protobufjs';
 
 import { ApiType } from '../../entities/api.entity';
 import { stripTags } from '../../common/security/strip-tags';
-import { hasDelimited, replaceDelimited } from '../../common/security/linear-text';
 import { discoveryToOpenApi, GOOGLE_TOKEN_URL, isGoogleDiscoveryDocument } from './google-discovery';
+import { absoluteUrl as absolute, declaresServers, openApi3BaseUrl, trimSlash } from './openapi-servers';
 
 export type DetectedFormat = 'openapi3' | 'swagger2' | 'graphql-sdl' | 'graphql-introspection' | 'wsdl' | 'proto';
 
@@ -163,7 +163,10 @@ function detectJson(doc: any, text: string, opts: DetectOptions): DetectedApi {
 
 function describeOpenApi3(doc: any, text: string, opts: DetectOptions): DetectedApi {
   const info = doc.info ?? {};
-  const server = Array.isArray(doc.servers) ? doc.servers.find((s: any) => str(s?.url)) : null;
+  // The document's servers, else the ones a path or operation declares
+  // (openapi-servers.ts). Only a description that declares none is taken
+  // to live where it was downloaded from.
+  const baseUrl = openApi3BaseUrl(doc, opts.sourceUrl) ?? (declaresServers(doc) ? null : originOf(opts.sourceUrl));
   return {
     type: ApiType.OPENAPI,
     format: 'openapi3',
@@ -171,7 +174,7 @@ function describeOpenApi3(doc: any, text: string, opts: DetectOptions): Detected
     name: str(info.title) ?? fallbackName(opts),
     version: str(info.version) ?? (info.version != null ? String(info.version) : null),
     description: str(info.description),
-    baseUrl: server ? resolveServerUrl(server, opts.sourceUrl) : originOf(opts.sourceUrl),
+    baseUrl,
     auth: pickAuth(doc.components?.securitySchemes, doc.security, doc.paths, mapOpenApi3Scheme),
   };
 }
@@ -190,20 +193,6 @@ function describeSwagger2(doc: any, text: string, opts: DetectOptions): Detected
   };
 }
 
-/** `https://{region}.example.com` with the variables' defaults filled in; relative URLs against where the spec came from. */
-function resolveServerUrl(server: any, sourceUrl?: string): string | null {
-  let url = String(server.url).trim();
-  const vars = server.variables && typeof server.variables === 'object' ? server.variables : {};
-  // Not /\{([^}]+)\}/g: from every `{` of a URL with no `}` after it, that
-  // rescanned to the end (linear-text.ts).
-  url = replaceDelimited(url, '{', '}', (whole, name) => {
-    const v = vars[name];
-    return v && v.default != null ? String(v.default) : whole;
-  });
-  if (hasDelimited(url, '{', '}')) return null;
-  return absolute(url, sourceUrl);
-}
-
 function swagger2BaseUrl(doc: any, sourceUrl?: string): string | null {
   const basePath = str(doc.basePath) ?? '';
   const host = str(doc.host);
@@ -216,16 +205,6 @@ function swagger2BaseUrl(doc: any, sourceUrl?: string): string | null {
   return origin ? trimSlash(`${origin}${basePath}`) : null;
 }
 
-function absolute(url: string, sourceUrl?: string): string | null {
-  if (/^https?:\/\//i.test(url)) return trimSlash(url);
-  if (!sourceUrl) return null;
-  try {
-    return trimSlash(new URL(url, sourceUrl).toString());
-  } catch {
-    return null;
-  }
-}
-
 function originOf(sourceUrl?: string): string | null {
   if (!sourceUrl) return null;
   try {
@@ -233,10 +212,6 @@ function originOf(sourceUrl?: string): string | null {
   } catch {
     return null;
   }
-}
-
-function trimSlash(url: string): string {
-  return url.length > 1 && url.endsWith('/') && !/^https?:\/\/$/.test(url) ? url.replace(/(?<!\/)\/+$/, '') : url;
 }
 
 /**
