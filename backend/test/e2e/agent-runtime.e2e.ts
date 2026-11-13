@@ -4,27 +4,54 @@
  *
  * Runs against a live staging server. NOT a Jest test — standalone Node.js script.
  *
- * Environment variables:
- *   STAGING_URL   — base URL of the API (default: https://api.staging.almyty.com)
- *   TEST_EMAIL    — login email
- *   TEST_PASSWORD — login password
+ * It signs in as the staging QA user, whose organization already has its
+ * models connected in the product; it never handles a vendor key. The
+ * address and password come from `.env.staging-qa.local` at the checkout
+ * root (ALMYTY_QA_API_URL, ALMYTY_QA_EMAIL, ALMYTY_QA_PASSWORD, and
+ * optionally ALMYTY_QA_ORG, default "Northwind AI"), the same file the
+ * staging gate uses.
  *
  * Usage:
- *   STAGING_URL=https://api.staging.almyty.com TEST_EMAIL=test@apif.ai TEST_PASSWORD=TestPass123! npx tsx test/e2e/agent-runtime.e2e.ts
+ *   npx tsx test/e2e/agent-runtime.e2e.ts      (or: npm run test:e2e:staging)
  */
 
 import axios, { AxiosInstance } from 'axios';
+import { existsSync, readFileSync } from 'fs';
+import { dirname, join, resolve } from 'path';
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-const STAGING_URL = process.env.STAGING_URL || 'https://api.staging.almyty.com';
-const TEST_EMAIL = process.env.TEST_EMAIL;
-const TEST_PASSWORD = process.env.TEST_PASSWORD;
+/** The QA env file: the first `.env.staging-qa.local` walking up from here. */
+function qaEnv(): Record<string, string> {
+  let dir = resolve(__dirname);
+  for (let i = 0; i < 12; i++) {
+    const file = join(dir, '.env.staging-qa.local');
+    if (existsSync(file)) {
+      const out: Record<string, string> = {};
+      for (const raw of readFileSync(file, 'utf-8').split('\n')) {
+        const line = raw.trim();
+        if (!line || line.startsWith('#') || !line.includes('=')) continue;
+        const at = line.indexOf('=');
+        out[line.slice(0, at).trim()] = line.slice(at + 1).trim().replace(/^["']|["']$/g, '');
+      }
+      return out;
+    }
+    if (dirname(dir) === dir) break;
+    dir = dirname(dir);
+  }
+  return {};
+}
+
+const QA = qaEnv();
+const STAGING_URL = (QA.ALMYTY_QA_API_URL || 'https://api.staging.almyty.com').replace(/\/$/, '');
+const TEST_EMAIL = QA.ALMYTY_QA_EMAIL;
+const TEST_PASSWORD = QA.ALMYTY_QA_PASSWORD;
+const QA_ORG_NAME = QA.ALMYTY_QA_ORG || 'Northwind AI';
 
 if (!TEST_EMAIL || !TEST_PASSWORD) {
-  console.error('ERROR: TEST_EMAIL and TEST_PASSWORD environment variables are required.');
+  console.error('ERROR: .env.staging-qa.local with ALMYTY_QA_EMAIL and ALMYTY_QA_PASSWORD is required.');
   process.exit(1);
 }
 
@@ -63,39 +90,41 @@ function extractData<T = any>(response: any): T {
   return body as T;
 }
 
+/** Sign in; the session is the httpOnly cookie the API sets (the body carries no token). */
 async function login(): Promise<string> {
   const res = await axios.post(`${STAGING_URL}/auth/login`, {
     email: TEST_EMAIL,
     password: TEST_PASSWORD,
   });
-  const data = res.data?.data ?? res.data;
-  const tok = data?.token || data?.access_token || data?.accessToken;
-  if (!tok) {
-    throw new Error(`Login failed: no token in response. Body: ${JSON.stringify(res.data).substring(0, 300)}`);
+  const cookies = (res.headers['set-cookie'] || []).map((c: string) => c.split(';')[0]);
+  const session = cookies.find((c: string) => c.startsWith('access_token='));
+  if (!session) {
+    throw new Error(`Login failed: no session cookie. Body: ${JSON.stringify(res.data).substring(0, 300)}`);
   }
-  return tok;
+  return cookies.join('; ');
 }
 
-function createApi(tok: string): AxiosInstance {
+function createApi(cookie: string): AxiosInstance {
   const instance = axios.create({
     baseURL: STAGING_URL,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${tok}`,
+      Cookie: cookie,
     },
     timeout: 60_000,
   });
   return instance;
 }
 
-/** Get the organization ID from the authenticated user profile */
+/** The QA organization's id; every later request is made in it. */
 let orgId: string = '';
 async function findOrgId(): Promise<string> {
   if (orgId) return orgId;
   const profile = extractData<any>(await api.get('/auth/profile'));
-  const memberships = profile?.organizationMemberships || profile?.organizations || [];
-  orgId = memberships[0]?.organization?.id || memberships[0]?.organizationId || memberships[0]?.id || '';
-  if (!orgId) throw new Error('Could not determine organization ID from profile');
+  const orgs: any[] = profile?.organizations || [];
+  orgId = orgs.find((o: any) => o.name === QA_ORG_NAME)?.id || '';
+  if (!orgId) throw new Error(`The QA user is not in an organization named "${QA_ORG_NAME}"`);
+  api.defaults.headers.common['X-Organization-Id'] = orgId;
   return orgId;
 }
 
@@ -230,11 +259,13 @@ async function ensureBmiTool(): Promise<string> {
     console.log(`  Tool search failed: ${e.message}${respData ? ' — ' + JSON.stringify(respData).substring(0, 200) : ''}, trying to create...`);
   }
 
-  // Create a simple JS tool for BMI
+  // Create a simple JS tool for BMI, the way Create tool does (a custom
+  // JavaScript tool reads its inputs from `parameters`).
   const tool = extractData(await api.post(`/organizations/${oid}/tools`, {
     name: 'calculate_bmi',
     description: 'Calculate Body Mass Index (BMI) from weight in kg and height in meters. Returns the BMI value and category.',
-    type: 'javascript',
+    type: 'function',
+    executionMethod: 'custom',
     parameters: {
       type: 'object',
       properties: {
@@ -244,7 +275,7 @@ async function ensureBmiTool(): Promise<string> {
       required: ['weight_kg', 'height_m'],
     },
     code: `
-      const bmi = params.weight_kg / (params.height_m * params.height_m);
+      const bmi = Number(parameters.weight_kg) / (Number(parameters.height_m) * Number(parameters.height_m));
       const rounded = Math.round(bmi * 10) / 10;
       let category = 'Normal';
       if (rounded < 18.5) category = 'Underweight';
@@ -253,9 +284,10 @@ async function ensureBmiTool(): Promise<string> {
       else category = 'Obese';
       return { bmi: rounded, category };
     `,
-    status: 'active',
   }));
   bmiToolId = tool.id;
+  // A tool made by hand can start as a draft.
+  if (tool.status !== 'active') await api.post(`/organizations/${oid}/tools/${tool.id}/activate`);
   return bmiToolId!;
 }
 
@@ -685,45 +717,46 @@ async function test08_DebateCollaboration(): Promise<TestResult> {
 async function test09_MemoryCreateRecallSearch(): Promise<TestResult> {
   const name = 'Memory — create, recall, search';
   let memoryId: string | null = null;
+  // The organization's shared memory (canonical memory, scope "workspace").
+  // (The server substitutes the caller's own organization for scope_id.)
+  const scope = { scope_type: 'workspace', scope_id: await findOrgId() };
   try {
-    const uniqueContent = `E2E test memory ${Date.now()}: The capital of France is Paris.`;
+    const marker = `e2e-${Date.now()}`;
+    const uniqueContent = `E2E test memory ${marker}: The capital of France is Paris.`;
 
-    // Create a memory
-    const memory = extractData(await api.post('/memories', {
+    // Write a memory
+    const memory = extractData(await api.post('/memory/canonical', {
+      mode: 'memory',
+      scope,
       content: uniqueContent,
-      type: 'fact',
-      scope: 'organization',
       tags: ['e2e-test'],
     }));
     memoryId = memory.id;
     assert(!!memoryId, `Memory creation returned no id`);
 
-    // Short delay for indexing
-    await sleep(2000);
+    // Read it back by id
+    const read = extractData(await api.get(`/memory/canonical/${memoryId}`));
+    assert(read.content === uniqueContent, `Recall returned other content: ${String(read.content).substring(0, 80)}`);
 
-    // Search for it
-    const results = extractData<any[]>(await api.post('/memories/search', {
-      query: 'capital of France',
-      limit: 5,
+    // Search for it. Full-text search finds it at once; the embedding is
+    // written in the background.
+    const results = extractData<any[]>(await api.post('/memory/canonical/search', {
+      scope,
+      query: marker,
+      mode: 'memory',
+      fts_only: true,
     }));
-
-    assert(Array.isArray(results), `Search should return an array. Got: ${typeof results}`);
-
-    // Find our memory in results
-    const found = results.find((r: any) => r.id === memoryId || r.content?.includes('E2E test memory'));
-    assert(!!found, `Search results should contain our memory. Got ${results.length} results: ${results.map((r: any) => r.content?.substring(0, 50)).join('; ')}`);
-
-    if (found.similarity !== undefined) {
-      assert(found.similarity > 0, `Expected similarity > 0, got ${found.similarity}`);
-    }
+    const hits = Array.isArray(results) ? results : (results as any)?.items || [];
+    const found = hits.find((r: any) => (r.item ?? r).id === memoryId || (r.item ?? r).content?.includes(marker));
+    assert(!!found, `Search results should contain our memory. Got ${hits.length} results`);
 
     return { name, passed: true, durationMs: 0 };
   } catch (error: any) {
-    return { name, passed: false, error: error.message, durationMs: 0 };
+    return { name, passed: false, error: error.response?.data?.message || error.message, durationMs: 0 };
   } finally {
     // Cleanup
     if (memoryId) {
-      try { await api.delete(`/memories/${memoryId}`); } catch (_) {}
+      try { await api.delete(`/memory/canonical/${memoryId}?mode=hard`); } catch (_) {}
     }
   }
 }
