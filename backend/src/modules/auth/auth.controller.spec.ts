@@ -102,7 +102,7 @@ describe('AuthController', () => {
   });
 
   describe('register', () => {
-    it('should register user successfully', async () => {
+    it('registers without opening a session: login needs a confirmed address', async () => {
       const createUserDto = {
         email: 'test@example.com',
         password: 'password123',
@@ -111,27 +111,19 @@ describe('AuthController', () => {
         organizationName: 'Test Organization',
       };
 
-      const mockTokens = {
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-        expiresIn: 86400,
-      };
-
-      authService.register.mockResolvedValue(mockTokens);
+      authService.register.mockResolvedValue({ email: 'test@example.com', verificationRequired: true });
 
       const mockRequest: any = { cookies: {}, ip: '203.0.113.10' };
       const result = await controller.register(createUserDto, mockResponse, mockRequest);
 
       expect(result).toEqual({
         success: true,
-        data: { expiresIn: 86400 },
+        data: { email: 'test@example.com', verificationRequired: true },
         message: 'Registration successful',
       });
-      expect(mockResponse.cookie).toHaveBeenCalledWith(
-        'access_token',
-        'access-token',
-        expect.objectContaining({ httpOnly: true, path: '/' }),
-      );
+      // A cookie here worked until it expired, then the same person was
+      // refused at sign-in with EMAIL_NOT_VERIFIED: a lockout.
+      expect(mockResponse.cookie).not.toHaveBeenCalled();
     });
 
     it('forwards the CAPTCHA token and client IP to the service', async () => {
@@ -143,9 +135,7 @@ describe('AuthController', () => {
         organizationName: 'Test Organization',
         captchaToken: 'tok-123',
       };
-      authService.register.mockResolvedValue({
-        accessToken: 'a', refreshToken: 'r', expiresIn: 86400,
-      });
+      authService.register.mockResolvedValue({ email: 'test@example.com', verificationRequired: true });
       const mockRequest: any = {
         cookies: {},
         ip: '203.0.113.10',

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { Tool } from '../../entities/tool.entity';
 import { buildGraphQLQueryTemplate } from './skill-graphql.helper';
+import { operationServerUrl } from '../schema-parser/openapi-servers';
 import { codeNames, toolSignature } from '../tool-discovery/tool-signature';
 import { toolOutputSchema } from '../tool-discovery/tool-discovery.service';
 import {
@@ -497,7 +498,8 @@ export class SkillRendererHelper {
 
   private fullUrl(tool: Tool): string {
     const endpoint = tool.operation?.endpoint || '';
-    const baseUrl = tool.operation?.api?.baseUrl?.replace(/\/$/, '') || '';
+    // The operation's own server first, as the executor calls it.
+    const baseUrl = (operationServerUrl(tool.operation) ?? tool.operation?.api?.baseUrl)?.replace(/\/$/, '') || '';
     return baseUrl
       ? `${baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`
       : endpoint;

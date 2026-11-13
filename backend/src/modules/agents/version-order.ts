@@ -31,8 +31,10 @@ const VERSION = /v?\d{1,9}(?:\.\d{1,9}){1,4}/gi;
 const COMPARISON =
   /(?<![-=<>])(<=|>=|≤|≥|<(?![-=<])|>(?![=>]))|\b(older|earlier|lower|smaller|less(?: recent)?|newer|later|higher|greater|bigger|larger|more recent)\s+than\b/gi;
 const LOWER = new Set(['<', '<=', '≤', 'older', 'earlier', 'lower', 'smaller', 'less', 'less recent']);
-/** Words that turn a stated order around or deny it: "is not older than", "4.18.1 < 4.17.21 is false". */
+/** Words that leave no plain order statement: "4.18.1 is wrongly older than 4.17.21". */
 const NEGATION = /\bnot\b|n't\b|\bnever\b|\bfalse\b|\bwrong\b|\bincorrect\b/i;
+/** A denial of the stated order, which turns it around: "is not older than" says "is at least as new as". */
+const DENIAL = /\bnot\b|n't\b|\bnever\b/i;
 
 /**
  * Sentences of `text`. A dot inside a version ("4.17.21") is followed by a
@@ -62,10 +64,17 @@ export function falseVersionOrder(text: string): string | null {
       const a = [...versions].reverse().find((v) => v.end <= at);
       const b = versions.find((v) => v.start >= at + c[0].length);
       if (!a || !b) continue;
-      // "A is not older than B", "A < B is false": not a statement that A is older.
+      // "A < B is false": not a statement that A is older.
       const gap = sentence.slice(a.end, b.start);
       const after = sentence.slice(b.end, b.end + 20);
-      if (NEGATION.test(gap) || /^\s*(?:(?:is|was)\s+)?(?:false|wrong|incorrect|not true)\b/i.test(after)) continue;
+      if (/^\s*(?:(?:is|was)\s+)?(?:false|wrong|incorrect|not true)\b/i.test(after)) continue;
+      // "A is not newer than B" states that A is at most B: the denial
+      // turns the order around rather than taking the statement back
+      // (run 20f31553 failed a correct answer on "4.18.1 is not newer
+      // than 4.17.21"). Other words between ("A is wrongly older than
+      // B") leave no plain statement to check.
+      const denied = DENIAL.test(gap);
+      if (!denied && NEGATION.test(gap)) continue;
       const cmp = compareVersions(a.v, b.v);
       // The same version on both sides is never a false order claim: it is a
       // range read as ">=1.6.0" next to "^1.6.0", or a version set beside
@@ -73,6 +82,11 @@ export function falseVersionOrder(text: string): string | null {
       // the failures that followed from it stayed (run 6933d7e2).
       if (cmp === 0) continue;
       const saysLower = LOWER.has(word);
+      if (denied) {
+        if (saysLower && cmp < 0) return `${a.v} is older than ${b.v}: ${b.v} is the newer one`;
+        if (!saysLower && cmp > 0) return `${a.v} is newer than ${b.v}: ${a.v} is the newer one`;
+        continue;
+      }
       if (saysLower && cmp > 0) return `${a.v} is not older than ${b.v}: ${a.v} is the newer one`;
       if (!saysLower && cmp < 0) return `${a.v} is not newer than ${b.v}: ${b.v} is the newer one`;
     }

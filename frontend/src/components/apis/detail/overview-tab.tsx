@@ -21,8 +21,13 @@ import { useNotifications } from '@/store/app'
 import { Api, ApiOperation, Tool } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { pluralized } from '@/lib/utils'
+import { connectionTestMessage } from '@/lib/connection-test'
 import { addToolPath } from './operations-tab'
 
+/** The tool list filtered to one API's tools. */
+export function apiToolsPath(api: Pick<Api, 'id' | 'name'>): string {
+  return `/tools?${new URLSearchParams({ apiId: api.id, apiName: api.name }).toString()}`
+}
 /** How the API's key is sent, as the overview's Key row says it. */
 const AUTH_WORDS: Record<string, string> = {
   none: 'None',
@@ -69,12 +74,14 @@ export function OverviewTab({
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Tools generated</span>
-              <button
-                onClick={() => navigate('/tools')}
+              {/* This API's tools only: /tools filters on apiId. */}
+              <Link
+                to={apiToolsPath(api)}
+                aria-label={`Show the ${pluralized(apiTools.length, 'tool')} of ${api.name}`}
                 className="font-bold text-blue-600 hover:underline"
               >
                 {apiTools.length}
-              </button>
+              </Link>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Schema</span>
@@ -205,9 +212,9 @@ export function OverviewTab({
               const testResult = await apisApi.testConnection(api.id)
               setTestResults(testResult)
               if (testResult?.success === false) {
-                error('Test failed', testResult?.error || testResult?.message || 'The API did not respond.')
+                error('Test failed', connectionTestMessage(testResult))
               } else {
-                success('Test completed', 'API connection test successful')
+                success('API is reachable', connectionTestMessage(testResult))
               }
             } catch (err: any) {
               setTestResults({ success: false, error: getApiErrorMessage(err, 'Connection failed') })
@@ -230,7 +237,7 @@ export function OverviewTab({
         </Button>
       </div>
 
-      {/* Test Results */}
+      {/* Test Results: the sentence the server wrote, never the raw answer. */}
       {testResults && (
         <Card className={testResults.success ? 'border-green-200 bg-green-50/50 dark:border-green-500/30 dark:bg-green-500/10' : 'border-red-200 bg-red-50/50 dark:border-destructive/30 dark:bg-destructive/10'}>
           <CardContent className="pt-6">
@@ -238,19 +245,10 @@ export function OverviewTab({
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">Test results</h3>
                 <Badge variant={testResults.success ? 'default' : 'destructive'}>
-                  {testResults.success ? 'Success' : 'Failed'}
+                  {testResults.success ? 'Reachable' : 'Failed'}
                 </Badge>
               </div>
-              <pre className="p-4 text-sm font-mono bg-muted rounded-md overflow-auto max-h-96">
-                {(() => {
-                  try {
-                    const data = typeof testResults === 'string' ? JSON.parse(testResults) : testResults
-                    return JSON.stringify(data, null, 2)
-                  } catch {
-                    return String(testResults)
-                  }
-                })()}
-              </pre>
+              <p className="text-sm" data-testid="connection-test-message">{connectionTestMessage(testResults)}</p>
             </div>
           </CardContent>
         </Card>

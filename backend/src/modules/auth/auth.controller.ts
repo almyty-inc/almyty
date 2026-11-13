@@ -127,11 +127,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({
     status: 201,
-    description: 'User registered; the session is the httpOnly cookie, the body carries no token',
+    description:
+      'User registered and a confirmation link emailed. No session is set: signing in needs the confirmed address.',
     schema: {
       type: 'object',
       properties: {
-        expiresIn: { type: 'number' },
+        email: { type: 'string' },
+        verificationRequired: { type: 'boolean' },
       },
     },
   })
@@ -145,7 +147,7 @@ export class AuthController {
     // via /r/<code> share links) drops a short-lived cookie on this origin;
     // read it here so the signup is attributed server-side.
     const referralCode = req.cookies?.[REFERRAL_COOKIE];
-    const tokens = await this.authService.register(createUserDto, {
+    const registration = await this.authService.register(createUserDto, {
       referralCode,
       ipAddress: clientIpOf(req),
     });
@@ -155,12 +157,11 @@ export class AuthController {
       res.clearCookie(REFERRAL_COOKIE, { path: '/' });
     }
 
-    // The session is the httpOnly cookie, and only the cookie.
-    res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
-
+    // No session cookie: login refuses an unconfirmed address, so a cookie
+    // set here would work until it expired and then lock the person out.
     return {
       success: true,
-      data: browserSession(tokens),
+      data: registration,
       message: 'Registration successful',
     };
   }
@@ -662,10 +663,10 @@ export class AuthController {
   }
 
   /**
-   * Re-send the verification email for the logged-in user.
-   * Verification is non-blocking, so this is reachable while
-   * unverified (normal JWT auth). Throttled tighter than the global
-   * limit — it sends outbound email.
+   * Re-send the verification email for a signed-in user whose address is
+   * not confirmed. Someone who cannot sign in yet (password login refuses
+   * an unconfirmed address) uses resend-verification-email below.
+   * Throttled tighter than the global limit — it sends outbound email.
    */
   @UseGuards(JwtAuthGuard)
   // Two paths for the same action: the frozen frontend contract calls

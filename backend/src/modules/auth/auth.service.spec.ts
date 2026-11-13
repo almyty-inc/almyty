@@ -273,11 +273,11 @@ describe('AuthService', () => {
 
       const result = await service.register(createUserDto);
 
-      expect(result).toEqual({
-        accessToken: 'mock-token',
-        refreshToken: 'mock-token',
-        expiresIn: 86400,
-      });
+      // No session for an unconfirmed address: login refuses one with
+      // EMAIL_NOT_VERIFIED, so tokens minted here would open the app only
+      // until they expired and then lock the new user out.
+      expect(result).toEqual({ email: createUserDto.email, verificationRequired: true });
+      expect(jwtService.sign).not.toHaveBeenCalled();
 
       // Verify password was actually hashed with bcrypt
       expect(savedUser.passwordHash).toBeDefined();
@@ -357,7 +357,7 @@ describe('AuthService', () => {
 
       const result = await service.register(createUserDto, { referralCode: 'ABCD2345' });
 
-      expect(result.accessToken).toBe('mock-token');
+      expect(result.verificationRequired).toBe(true);
     });
 
     it('auto-provisions the default "Everyone" team and joins the owner as LEAD on register', async () => {
@@ -519,7 +519,7 @@ describe('AuthService', () => {
       it('accepts a normal domain', async () => {
         mockSuccessfulRegistration();
         const result = await service.register(createUserDto);
-        expect(result.accessToken).toBe('mock-token');
+        expect(result.verificationRequired).toBe(true);
       });
     });
 
@@ -530,7 +530,7 @@ describe('AuthService', () => {
 
         const result = await service.register(createUserDto);
 
-        expect(result.accessToken).toBe('mock-token');
+        expect(result.verificationRequired).toBe(true);
         expect(captchaService.verify).not.toHaveBeenCalled();
       });
 
@@ -553,8 +553,86 @@ describe('AuthService', () => {
 
         const result = await service.register({ ...createUserDto, captchaToken: 'good' });
 
-        expect(result.accessToken).toBe('mock-token');
+        expect(result.verificationRequired).toBe(true);
         expect(captchaService.verify).toHaveBeenCalledWith('good', undefined);
+      });
+    });
+
+    // Test stacks only: an address on exactly AUTO_VERIFY_EMAIL_DOMAIN is
+    // confirmed at once so an automated journey can sign up and sign in.
+    describe('AUTO_VERIFY_EMAIL_DOMAIN', () => {
+      const saved = process.env.AUTO_VERIFY_EMAIL_DOMAIN;
+      afterEach(() => {
+        if (saved === undefined) delete process.env.AUTO_VERIFY_EMAIL_DOMAIN;
+        else process.env.AUTO_VERIFY_EMAIL_DOMAIN = saved;
+      });
+
+      function capturedUser(): any {
+        const calls = userRepository.create.mock.calls as any[];
+        const [created] = calls[calls.length - 1];
+        return created;
+      }
+
+      it('confirms an address on exactly that domain, mails nothing, and lets it sign in straight away', async () => {
+        process.env.AUTO_VERIFY_EMAIL_DOMAIN = 'test.almyty.com';
+        mockSuccessfulRegistration();
+        const verifySpy = jest.spyOn(service, 'requestEmailVerification');
+
+        const result = await service.register({ ...createUserDto, email: 'journey-1@test.almyty.com' });
+
+        expect(result).toEqual({ email: 'journey-1@test.almyty.com', verificationRequired: false });
+        const created = capturedUser();
+        expect(created.isVerified).toBe(true);
+        expect(created.verifiedAt).toBeInstanceOf(Date);
+        expect(verifySpy).not.toHaveBeenCalled();
+
+        // The sign-in that follows: validateUser no longer refuses it.
+        const passwordHash = await bcrypt.hash(createUserDto.password, 4);
+        userRepository.findOne.mockReset();
+        userRepository.findOne.mockResolvedValueOnce({
+          ...created, id: 'user-123', passwordHash, isActive: true, organizationMemberships: [],
+        });
+        await expect(service.validateUser('journey-1@test.almyty.com', createUserDto.password))
+          .resolves.toEqual(expect.objectContaining({ id: 'user-123' }));
+      });
+
+      it.each([
+        'someone@evil-test.almyty.com',
+        'someone@test.almyty.com.evil.com',
+        'someone@sub.test.almyty.com',
+        'someone@almyty.com',
+      ])('leaves %s unconfirmed and mails the link', async (email) => {
+        process.env.AUTO_VERIFY_EMAIL_DOMAIN = 'test.almyty.com';
+        mockSuccessfulRegistration();
+        const verifySpy = jest.spyOn(service, 'requestEmailVerification');
+
+        const result = await service.register({ ...createUserDto, email });
+
+        expect(result.verificationRequired).toBe(true);
+        expect(capturedUser().isVerified).toBe(false);
+        expect(capturedUser().verifiedAt).toBeUndefined();
+        expect(verifySpy).toHaveBeenCalledWith('user-123');
+      });
+
+      it('changes nothing when unset', async () => {
+        delete process.env.AUTO_VERIFY_EMAIL_DOMAIN;
+        mockSuccessfulRegistration();
+        const verifySpy = jest.spyOn(service, 'requestEmailVerification');
+
+        const result = await service.register({ ...createUserDto, email: 'journey-1@test.almyty.com' });
+
+        expect(result.verificationRequired).toBe(true);
+        expect(capturedUser().isVerified).toBe(false);
+        expect(verifySpy).toHaveBeenCalledWith('user-123');
+
+        // And that account is still refused a session until it confirms.
+        const passwordHash = await bcrypt.hash(createUserDto.password, 4);
+        userRepository.findOne.mockReset();
+        userRepository.findOne.mockResolvedValueOnce({
+          ...capturedUser(), id: 'user-123', passwordHash, isActive: true, organizationMemberships: [],
+        });
+        await expect(service.validateUser('journey-1@test.almyty.com', createUserDto.password))
+          .rejects.toThrow(ForbiddenException);
       });
     });
   });

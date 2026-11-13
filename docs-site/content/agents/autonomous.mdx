@@ -36,9 +36,22 @@ Whatever the mode, the person asking gets one answer. Each step of a run records
 
 ## Verification
 
-Verification is a second opinion on the agent's answer. Reviewer models each try to find a reason the answer is wrong, and say what they found.
+Verification is a second opinion on the agent's answer. almyty checks the answer against what the agent's tools returned, and reviewer models look for anything wrong with it.
 
-By default that is all they do. The answer goes out as the agent wrote it, and when the check didn't pass, it starts with a line such as "Note: this answer's check didn't pass: the total does not match the invoices." If no reviewer could give a verdict, the line says the answer could not be checked. The run shows the verdict and the reasons either way.
+By default that is all they do. The answer goes out as the agent wrote it, and when the check didn't pass, it starts with a line that says what is wrong, such as "Note: this answer's check didn't pass: dotenv: the answer says outdated-minor, but 16 to 18 is a major update." If no reviewer could give a verdict, the line says the answer could not be checked. The run shows the verdict and the reasons either way.
+
+### What decides the verdict
+
+A check fails only on something that can be shown wrong from the tool results:
+
+- **What almyty checks itself.** It compares and counts: a date, DOI, version, label, title, venue or author the answer gives an item that the tools gave differently; an update marked minor that is a major one; an item listed as new that is older than the time span you asked about; a count that doesn't add up, such as "I skipped 10" above a list of all 10; and an item the tool returned that the answer leaves out while it says nothing else matched.
+- **What a reviewer shows from the tool results.** A reviewer must quote the wrong words from the answer and the tool data that contradicts them. almyty checks that both quotes are real, that they are about the same item, and that the values really differ. Only then does it count.
+
+Each reason names the item and what is wrong with it.
+
+### Checker notes
+
+Anything else a reviewer says is a checker note: whether an item fits your instructions, which items it would have picked or left out, wording and style, and any complaint it could not back with tool data. You see the notes on the run, under **Checker notes** on the verify step. They never change the verdict, never count against **Checks passed**, and never appear on the answer or in a chat with your visitors.
 
 To set it up, open the agent's **Overview** tab and, on the **Models & verification** card, click **Configure verification**:
 

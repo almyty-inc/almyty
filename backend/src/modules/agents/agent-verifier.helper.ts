@@ -4,42 +4,51 @@ import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 import type { ChatResponse } from '../llm-providers/llm-providers.service';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
-import { SHORTENED_MARK, leftOutFieldsOf } from './checker-evidence';
+import { SHORTENED_MARK } from './checker-evidence';
 import { falseVersionOrder } from './version-order';
 import { falseDateArithmetic, windowNote } from './date-arithmetic';
-import {
-  aboutLeftOutField,
-  confirmsClaim,
-  judgesRelevance,
-  listedAsConfirmed,
-  presentInEvidence,
-  restsOnRules,
-  strongestFirst,
-  unquotedRule,
-  wrongReturnedCount,
-  type FailureKind,
-} from './checker-guards';
-import { itemsOutsideWindow, WINDOW_CHECKER } from './window-check';
+import { strongestFirst, type FailureKind } from './checker-guards';
+import { itemsOutsideWindow } from './window-check';
+import { answerCodeFindings, CODE_CHECKER } from './answer-checks';
+import { verifiedRule, verifyCheckerFinding } from './checker-findings';
 
 /** Verdict-merge policy for a verify node's checker panel. */
 export type VerifyPolicy = 'all_pass' | 'majority' | 'any_fail_blocks';
 
+/**
+ * A verdict finding: something wrong with the answer that the platform
+ * found itself (`deterministic`), or that a checker cited from the tool
+ * data and the code confirmed (`evidence`). Only these decide the verdict
+ * of a final-answer check.
+ */
 export interface VerifyFailure {
   rule: string;
   evidence: string;
   checker: string;
   /** The claim in the answer the failure is about, when the checker named it. */
   claim?: string;
-  /** A machine code for a failure the platform raised itself (verification_unavailable, outside_window). `rule` is the words a person reads. */
+  /** A machine code for a failure the platform raised itself (verification_unavailable, outside_window, item_field, ...). `rule` is the words a person reads. */
   code?: string;
-  /**
-   * What the failure rests on: a check the platform made itself
-   * (`deterministic`), a contradiction with the evidence, or one of the
-   * agent's rules. The answer's note leads with the strongest.
-   */
+  /** What the failure rests on: a check the platform made itself, or tool data a checker cited and the code confirmed. */
   kind?: FailureKind;
-  /** For a rule failure, the words of the agent's instructions it relies on, as the checker quoted them. */
-  instruction?: string;
+  /** The item the failure is about ("dotenv", "#67427", a title) and its field ("status", "publication date"). */
+  item?: string;
+  field?: string;
+}
+
+/**
+ * Anything else a checker said: a rule or selection judgement, style,
+ * relevance, a contradiction it could not cite from the tool data. Shown
+ * on the run's verify step under "Checker notes"; never on the answer,
+ * never in a visitor channel, never deciding the verdict.
+ */
+export interface CheckerNote {
+  checker: string;
+  text: string;
+  /** The claim in the answer it is about, when the checker named one. */
+  claim?: string;
+  /** For a failure the code could not verify, why it is a note. */
+  why?: string;
 }
 
 /**
@@ -59,7 +68,10 @@ export interface CheckerConfig {
 export interface CheckerResult {
   checker: string;
   verdict: 'pass' | 'fail' | 'error';
+  /** Its verdict findings: with evidence, only those the code verified. */
   failures: VerifyFailure[];
+  /** Everything else it said: never deciding the verdict. */
+  notes?: CheckerNote[];
   passedRules: string[];
   /** Why the checker gave no verdict, in words a person can act on. */
   error?: string;
@@ -81,7 +93,10 @@ export interface VerifyPanelResult {
   /** No checker gave a verdict: the answer was not checked, nothing was found wrong with it. */
   unavailable?: boolean;
   policy: VerifyPolicy;
+  /** The verdict findings, strongest first. */
   failures: VerifyFailure[];
+  /** The checkers' notes: shown on the run, never on the answer, never deciding the verdict. */
+  notes?: CheckerNote[];
   passedRules: string[];
   checkers: Array<{
     checker: string;
@@ -143,15 +158,15 @@ const FAILED_STATUSES = new Set(['fail', 'failed', 'failure', 'wrong', 'incorrec
 
 /**
  * The checker's reply, as a JSON schema for providers that take one
- * (structured output, structured-output.ts): real failures in "failures",
- * what the evidence confirms in "confirmed". Checkers asked for one list
- * put confirmations in it ("which is correct", "no failure here"), and
- * each failed a correct answer.
+ * (structured output, structured-output.ts): contradictions it can cite
+ * from the tool data in "failures", everything else it would question in
+ * "notes", what it found right in "confirmed". Checkers asked for one list
+ * put confirmations and opinions in it, and each failed a correct answer.
  */
 export const VERDICT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['verdict', 'failures', 'confirmed'],
+  required: ['verdict', 'failures', 'notes', 'confirmed'],
   properties: {
     verdict: { type: 'string', enum: ['pass', 'fail'] },
     failures: {
@@ -159,16 +174,17 @@ export const VERDICT_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['claim', 'rule', 'evidence', 'instruction'],
+        required: ['claim', 'evidence', 'rule'],
         properties: {
+          // The wrong claim, copied exactly from the answer.
           claim: { type: 'string' },
-          rule: { type: 'string' },
+          // The tool data that shows it is wrong, copied exactly.
           evidence: { type: 'string' },
-          // The agent instruction a rule failure relies on, word for word; "" for a failure the evidence contradicts.
-          instruction: { type: 'string' },
+          rule: { type: 'string' },
         },
       },
     },
+    notes: { type: 'array', items: { type: 'string' } },
     confirmed: { type: 'array', items: { type: 'string' } },
   },
 } as const;
@@ -182,7 +198,7 @@ function refusedFormat(err: any): boolean {
   return status === 400 || /response_format|json_schema|responseSchema|structured output/i.test(text);
 }
 
-type ParsedVerdict = { verdict?: string; failures?: any[]; passed_rules?: any[]; confirmed?: any[] };
+type ParsedVerdict = { verdict?: string; failures?: any[]; notes?: any[]; passed_rules?: any[]; confirmed?: any[] };
 
 function tryJson(text: string): unknown {
   try {
@@ -284,6 +300,87 @@ function requestOf(evidence: string): string {
 }
 
 /**
+ * The checks the platform makes itself on an answer, before any checker
+ * model is asked: the request's window (window-check.ts) and the item,
+ * count and completeness checks (answer-checks.ts). Each finding names
+ * the item and the field, and decides the verdict on its own.
+ */
+export function codeFindings(input: { request: string; answer: string; evidence: string; now: Date }): VerifyFailure[] {
+  const found: VerifyFailure[] = [...itemsOutsideWindow(input), ...answerCodeFindings(input)];
+  const seen = new Set<string>();
+  return found.filter((f) => (seen.has(f.rule) ? false : (seen.add(f.rule), true)));
+}
+
+/**
+ * The checker notes of a panel, for the verify step it is recorded on
+ * (`{ notes }`, or nothing when there are none). Only the run view reads
+ * them: the answer's note and every visitor channel read the verdict
+ * findings alone.
+ */
+export function checkerNotesOf(panel: Pick<VerifyPanelResult, 'notes'>): { notes?: CheckerNote[] } {
+  return panel.notes?.length ? { notes: panel.notes } : {};
+}
+
+/** What the reply looks like and what goes where, said once for both prompts. */
+const REPLY_FORMAT =
+  `\n\nReply with ONLY a JSON object, no prose, no code fences:\n` +
+  `{"verdict":"pass"|"fail","failures":[{"claim":"<the wrong claim, copied from the OUTPUT>","evidence":"<the text that shows it is wrong>","rule":"<what is wrong, naming the item and the field>"}],"notes":["<anything else you would question, one sentence>"],"confirmed":["<the id, number, name or version of an item you found right>"]}\n` +
+  `"failures" holds only claims that are wrong. A claim you checked and found right goes in "confirmed", never in "failures". ` +
+  `Each "confirmed" entry is only the item's id, number, name or version ("#67421", "lodash"), never a sentence. ` +
+  `Keep each failure and note short. "verdict" is "fail" when "failures" lists anything, else "pass".`;
+
+/**
+ * The checker's instructions for a final answer checked against the
+ * run's tool results. Only a contradiction it can cite from the tool data
+ * is a failure, and the platform verifies each (checker-findings.ts);
+ * every other judgement is a note that never changes the verdict.
+ */
+function evidencePrompt(rules: string, focus?: string): string {
+  return (
+    `You are a verifier. Your ONLY job is to find what is WRONG with the OUTPUT, judged against the EVIDENCE: what the agent was asked and what its tools returned in this run. ` +
+    `Do not praise, summarize, or restate.` +
+    `\n\nYour reply has two lists, and only the first decides the verdict.` +
+    `\n\n"failures": a claim in the OUTPUT that the tool results contradict: a value the OUTPUT gives for an item (a date, version, number, id, DOI, title, name, venue, author or label) ` +
+    `where the tool results give that same item a different value. For each failure:\n` +
+    `- "claim": the words of the OUTPUT that give the wrong value, copied exactly, character for character (one line, at most 200 characters);\n` +
+    `- "evidence": the text of the tool results that gives the right value, copied exactly, character for character, with its field name (for example "publication_date":"2026-11-09");\n` +
+    `- "rule": what is wrong, in plain words that name the item and the field.\n` +
+    `The platform checks every failure: one whose claim is not in the OUTPUT, whose evidence is not in the tool results, or whose two values do not differ, is not counted.` +
+    `\n\n"notes": everything else you would question, one short sentence each: whether an item meets the agent's rules, which items were picked or left out, ` +
+    `relevance, wording, style. Notes are shown to the agent's owner and never change the verdict.` +
+    (rules
+      ? `\n\nThe AGENT INSTRUCTIONS are the rules the agent was given. Read them as written, never stricter: where they allow alternatives ("labels or titles"), ` +
+        `an item that meets any one of them meets the rule. What you find about them goes in "notes".`
+      : '') +
+    `\n\nNever use your own knowledge of versions, dates, prices or other facts to overrule the EVIDENCE; it is newer than you. ` +
+    `Compare version numbers part by part as integers: 4.18.1 is newer than 4.17.21, because 18 > 17. ` +
+    `Work out every difference between dates by counting the days from the dates themselves; never estimate it. ` +
+    `Count the items a tool returned from the list of items in its result, never from a total the result reports about the whole collection. ` +
+    `A tool result marked "${SHORTENED_MARK} ...]" or "[result left out ...]" is incomplete: a value missing from what you see is not a contradiction.` +
+    (focus ? `\n\nFocus: ${focus}` : '') +
+    REPLY_FORMAT
+  );
+}
+
+/** The checker's instructions where there are no tool results to check against: a workflow's verify step, a mid-run review. */
+function specPrompt(rules: string, focus?: string): string {
+  const standard = rules ? 'the AGENT INSTRUCTIONS or the SPEC' : 'the SPEC';
+  return (
+    `You are a verifier. Your ONLY job is to find what is WRONG with the OUTPUT ` +
+    `relative to the SPEC. Do not praise, summarize, or restate. Hunt for ` +
+    `violations, missing requirements, unsupported claims, and contradictions.` +
+    (rules
+      ? `\n\nThe AGENT INSTRUCTIONS are the rules the agent was given, and the standard you judge the OUTPUT by. ` +
+        `Judge against them as written, never stricter rules of your own: where they allow alternatives ` +
+        `("labels or titles"), an item that meets any one of them meets the rule.`
+      : '') +
+    `\n\nFail a claim that is wrong, or an item that breaks a rule ${standard} states. Anything else you would question goes in "notes".` +
+    (focus ? `\n\nFocus: ${focus}` : '') +
+    REPLY_FORMAT
+  );
+}
+
+/**
  * Each checker's verdict, for the verify step it is recorded on: why one
  * gave none ("the checker's reply was cut off at its output limit ...")
  * and what else happened reading it. The run view shows these.
@@ -356,15 +453,15 @@ export class AgentVerifierHelper {
         this.runChecker(checker, i, targetText, spec, organizationId, userId, signal, evidence, extra),
       ),
     );
-    // What is counted, not judged: an item listed as new whose date in
-    // the tool results is before the window the request names. It stands
-    // beside the checkers as a check of its own, so a checker that passed
-    // over it (run dda8789a) does not pass the answer.
-    const outside = checkers.length && evidence
-      ? itemsOutsideWindow({ request: requestOf(evidence), answer: targetText, evidence, now: extra.now })
-      : [];
-    const checkerResults: CheckerResult[] = outside.length
-      ? [...fromModels, { checker: WINDOW_CHECKER, verdict: 'fail', failures: outside, passedRules: [] }]
+    // What is counted and compared, not judged: an item listed as new whose
+    // date is before the request's window, an item field that contradicts
+    // the tool's value for that item, counts that do not add up, items left
+    // out of a list said to be complete. These stand beside the checkers
+    // as a check of their own, so a checker that passed over them (run
+    // dda8789a) does not pass the answer.
+    const found = checkers.length && evidence ? codeFindings({ request: requestOf(evidence), answer: targetText, evidence, now: extra.now }) : [];
+    const checkerResults: CheckerResult[] = found.length
+      ? [...fromModels, { checker: CODE_CHECKER, verdict: 'fail', failures: found, passedRules: [] }]
       : fromModels;
 
     const merged = this.mergeVerdicts(checkerResults, policy);
@@ -375,6 +472,7 @@ export class AgentVerifierHelper {
       ...(merged.unavailable ? { unavailable: true } : {}),
       policy,
       failures: merged.failures,
+      notes: merged.notes,
       passedRules: merged.passedRules,
       checkers: checkerResults.map((r) => ({
         checker: r.checker,
@@ -456,44 +554,7 @@ export class AgentVerifierHelper {
     // counts ("34 days ago ... within 30 days") and failed correct answers.
     const dates = windowNote([requestOf(evidence), spec, rules], now);
     const maxTokens = checker.maxTokens && checker.maxTokens > 0 ? checker.maxTokens : CHECKER_MAX_TOKENS;
-    // What the answer is held to, by the names the prompt gives it.
-    const standardNames = rules ? 'the AGENT INSTRUCTIONS or the SPEC' : 'the SPEC';
-    const systemPrompt =
-      `You are a verifier. Your ONLY job is to find what is WRONG with the OUTPUT ` +
-      `relative to the SPEC. Do not praise, summarize, or restate. Hunt for ` +
-      `violations, missing requirements, unsupported claims, and contradictions.` +
-      (rules
-        ? `\n\nThe AGENT INSTRUCTIONS are the rules the agent was given, and the standard you judge the OUTPUT by. ` +
-          `Judge against the agent's stated rules, never stricter rules of your own: where they allow alternatives ` +
-          `("labels or titles"), an item that meets any one of them meets the rule. Do not add requirements they do not state. ` +
-          `An item that meets a rule as written meets it: never fail it because you would have judged it differently. ` +
-          `A failure that rests on a rule must quote, in "instruction", the words of the AGENT INSTRUCTIONS it relies on, ` +
-          `copied exactly (a phrase of at least four words); a rule failure that quotes nothing, or quotes words that are not in them, is not counted.`
-        : '') +
-      `\n\nYou fail two kinds of thing only: ${evidence ? 'a claim the EVIDENCE contradicts' : 'a claim that is wrong'}, and an item that breaks a rule ${standardNames} states. ` +
-      `Your own sense of what is relevant, on topic or worth including is not a rule: never fail an item as "off-topic", "not relevant", ` +
-      `"unrelated" or "should be excluded" unless ${standardNames} makes relevance a rule.` +
-      (evidence
-        ? `\n\nThe EVIDENCE is what the agent was asked and what its tools returned in this run. ` +
-          `Judge every factual claim against it. You refute; you do not need to confirm. Fail a claim only when:\n` +
-          `- the EVIDENCE contradicts it, or\n` +
-          `- the EVIDENCE that would hold it is complete and does not hold it.\n` +
-          `A tool result marked "${SHORTENED_MARK} ...]" or "[result left out ...]" is incomplete: items, fields and text were left out of what you see. ` +
-          `Never fail a claim only because it is absent from shortened evidence; absence counts only where the evidence is complete. ` +
-          `A field the note names under "fields left out" is not in what you see: never fail a claim about that field, ` +
-          `neither as wrong nor as missing from the OUTPUT. ` +
-          `Never use your own knowledge of versions, dates, prices or other facts to overrule the EVIDENCE; it is newer than you. ` +
-          `Compare version numbers part by part as integers: 4.18.1 is newer than 4.17.21, because 18 > 17. ` +
-          `Work out every difference between dates by counting the days from the dates themselves; never estimate it. ` +
-          `Count the items a tool returned from the list of items in its result, never from a total the result reports about the whole collection.`
-        : '') +
-      (checker.instructions ? `\n\nFocus: ${checker.instructions}` : '') +
-      `\n\nReply with ONLY a JSON object, no prose, no code fences:\n` +
-      `{"verdict":"pass"|"fail","failures":[{"claim":"<the wrong claim, quoted from the OUTPUT>","rule":"<what is wrong, briefly>","evidence":"<${evidence ? 'the EVIDENCE that contradicts it' : 'quote or location'}>","instruction":"<for a rule failure, the AGENT INSTRUCTIONS words it relies on, copied exactly; else \\"\\">"}],"confirmed":["<the id, number, name or version of an item you found right>"]}\n` +
-      `"failures" holds only claims that are wrong. A claim you checked and found right or acceptable goes in "confirmed", never in "failures": ` +
-      `an entry in "failures" that says the claim is correct is a mistake. ` +
-      `Each "confirmed" entry is only the item's id, number, name or version ("#67421", "lodash"), never a sentence. ` +
-      `Keep each failure short. "verdict" is "fail" when "failures" lists anything, else "pass".`;
+    const systemPrompt = evidence ? evidencePrompt(rules, checker.instructions) : specPrompt(rules, checker.instructions);
 
     const userPrompt =
       (rules ? `AGENT INSTRUCTIONS (the standard to judge by):\n${rules}\n\n` : '') +
@@ -570,13 +631,15 @@ export class AgentVerifierHelper {
         };
       }
 
-      const read = this.readFailures(parsed, name, evidence, now, { rules, spec, focus: checker.instructions });
-      // A 'fail' that names no failure still blocks: synthesize one so the
-      // failure list is never silently empty on a fail. A fail whose every
-      // listed item turned out not to be a failure (marked correct, or
-      // resting on a false version order) is a pass: nothing was refuted.
+      const read = this.readFailures(parsed, name, evidence, now, targetText);
+      // With evidence the verdict is the verified findings alone: a fail
+      // that names none the code could verify is a pass with checker notes.
+      // Without evidence a 'fail' that names no failure still blocks:
+      // synthesize one so the failure list is never silently empty on a
+      // fail. A fail whose every listed item turned out not to be a failure
+      // is a pass: nothing was refuted.
       const failures = read.failures;
-      let verdict: 'pass' | 'fail' = failures.length ? 'fail' : parsed.verdict === 'pass' ? 'pass' : 'fail';
+      let verdict: 'pass' | 'fail' = failures.length ? 'fail' : evidence ? 'pass' : parsed.verdict === 'pass' ? 'pass' : 'fail';
       if (verdict === 'fail' && failures.length === 0) {
         if (read.listed > 0) {
           verdict = 'pass';
@@ -592,7 +655,7 @@ export class AgentVerifierHelper {
         ...(Array.isArray(parsed.passed_rules) ? parsed.passed_rules.map((r: any) => String(r)) : []),
         ...(Array.isArray(parsed.confirmed) ? parsed.confirmed.map((r: any) => String(r)) : []),
       ];
-      const notes = [
+      const readNotes = [
         ...(parsed.truncated ? [`the checker's reply was cut off at its output limit (${maxTokens} tokens); it was read up to its last complete item`] : []),
         ...read.discarded.map((d) => `not counted: "${oneLine(d.rule, 120)}" (${d.reason})`),
       ];
@@ -601,11 +664,12 @@ export class AgentVerifierHelper {
         checker: name,
         verdict,
         failures,
+        notes: read.notes,
         passedRules,
         cost,
         tokens,
         ...usage,
-        ...(notes.length ? { note: notes.join('; ') } : {}),
+        ...(readNotes.length ? { note: readNotes.join('; ') } : {}),
         ...answered,
       };
     } catch (err: any) {
@@ -622,108 +686,75 @@ export class AgentVerifierHelper {
   }
 
   /**
-   * The items of a checker reply that count as failures. The reply puts
-   * real failures in "failures" and what the evidence confirms in
-   * "confirmed" (VERDICT_SCHEMA); checkers still listed confirmations as
-   * failures, and each such item failed a correct answer. So an item does
-   * not count when:
-   *  - the checker marks it as not failed ("status": "pass", "ok", ...), or
-   *    gives it no status on a "pass" verdict;
-   *  - its claim is also in "confirmed";
-   *  - its own reason or evidence says the claim is correct ("which is
-   *    correct", "is acceptable", "no failure here": confirmsClaim);
-   *  - its reason states a false version order ("4.18.1 < 4.17.21");
-   *  - its reason states false day arithmetic ("2026-10-09 is within 30
-   *    days of 2026-11-12"; date-arithmetic.ts);
-   *  - it says the item is absent, invented or not found, and the item's
-   *    DOI, id, number, version or title is in the evidence
-   *    (presentInEvidence);
-   *  - it is about a field the evidence left out (a shortening note names
-   *    it; aboutLeftOutField): the checker never saw that field;
-   *  - it states how many items the tool returned, and the tool results
-   *    hold another number (wrongReturnedCount);
-   *  - it judges relevance ("off-topic", "unrelated", "should be
-   *    excluded") and neither the agent's instructions, the spec nor the
-   *    checker's focus make relevance a rule (judgesRelevance);
-   *  - it rests on the agent's instructions and quotes nothing from them,
-   *    or quotes words that are not in them (unquotedRule).
-   * Each item left out is said, with why, on the verify step. Each item
-   * kept says what it rests on (`kind`): the evidence, or a rule.
+   * A checker reply as verdict findings and checker notes.
+   *
+   * With evidence (the final-answer check), an item of "failures" is a
+   * verdict finding only when the code verifies it (checker-findings.ts):
+   * its claim is in the answer, the tool data it cites is in the tool
+   * results and belongs to the claim's item, and the two values differ
+   * where the field can be compared. It is then said in the code's words,
+   * naming the item and the field. Every other item, and everything in the
+   * reply's "notes", is a checker note: shown on the run, never deciding
+   * the verdict. An item the checker itself marks as not failed
+   * ("status": "pass") is neither.
+   *
+   * Without evidence (a workflow's verify step, a mid-run review) there is
+   * nothing to verify against, and a failure counts as the checker gave it,
+   * unless its reason states a false version order or false day arithmetic.
    */
   readFailures(
     parsed: ParsedVerdict,
     checker: string,
     evidence = '',
     now: Date = new Date(),
-    standard: { rules?: string; spec?: string; focus?: string } = {},
-  ): { failures: VerifyFailure[]; listed: number; discarded: Array<{ rule: string; reason: string }> } {
+    answer = '',
+  ): { failures: VerifyFailure[]; notes: CheckerNote[]; listed: number; discarded: Array<{ rule: string; reason: string }> } {
     const items = Array.isArray(parsed.failures) ? parsed.failures : [];
-    const confirmed = Array.isArray(parsed.confirmed) ? parsed.confirmed.map((c: any) => String(c ?? '')).filter(Boolean) : [];
-    const leftOut = evidence.includes(SHORTENED_MARK) ? leftOutFieldsOf(evidence) : [];
-    // Every rule the answer is held to: the agent's own, the spec, the checker's focus.
-    const rulesText = [standard.rules, standard.spec, standard.focus].filter((s) => typeof s === 'string' && s.trim()).join('\n');
     const failures: VerifyFailure[] = [];
+    const notes: CheckerNote[] = [];
     const discarded: Array<{ rule: string; reason: string }> = [];
     for (const f of items) {
       const rule = String((f && typeof f === 'object' ? f.rule : f) ?? 'unspecified');
       const evidenceText = String((f && typeof f === 'object' ? f.evidence : '') ?? '');
       const claim = f && typeof f === 'object' && f.claim !== undefined && f.claim !== null ? String(f.claim) : undefined;
-      const instruction = f && typeof f === 'object' && typeof f.instruction === 'string' && f.instruction.trim() ? f.instruction.trim() : undefined;
       const status = f && typeof f === 'object' && typeof f.status === 'string' ? f.status.trim().toLowerCase() : '';
       if (status ? !FAILED_STATUSES.has(status) : parsed.verdict === 'pass') {
         discarded.push({ rule, reason: 'the checker did not mark it as failed' });
         continue;
       }
-      if (listedAsConfirmed(claim, confirmed)) {
-        discarded.push({ rule, reason: 'the checker also listed this claim as confirmed' });
+      if (evidence) {
+        const check = verifyCheckerFinding({ claim, evidence: evidenceText, rule }, answer, evidence, now);
+        if (check.verified) {
+          const found = check.finding;
+          failures.push({
+            rule: verifiedRule(found),
+            evidence: evidenceText,
+            checker,
+            ...(claim ? { claim } : {}),
+            kind: 'evidence',
+            ...(found.item ? { item: found.item } : {}),
+            field: found.field,
+          });
+        } else {
+          notes.push({ checker, text: rule, ...(claim ? { claim } : {}), why: check.why });
+        }
         continue;
       }
-      // The failure's own words: its reason, then its evidence.
-      const words = [rule.trim(), evidenceText.trim()].filter(Boolean).join('\n');
-      const confirms = confirmsClaim(words, claim);
-      if (confirms) {
-        discarded.push({ rule, reason: `its own words say the claim is right: "${oneLine(confirms, 40)}"` });
+      const wrongOrder = falseVersionOrder(`${rule}\n${evidenceText}`);
+      const wrongDays = wrongOrder ? null : falseDateArithmetic(`${rule}\n${evidenceText}`, now);
+      if (wrongOrder || wrongDays) {
+        discarded.push({ rule, reason: wrongOrder ?? `its day arithmetic is wrong: ${wrongDays}` });
         continue;
       }
-      const wrongOrder = falseVersionOrder(words);
-      if (wrongOrder) {
-        discarded.push({ rule, reason: wrongOrder });
-        continue;
-      }
-      const wrongDays = falseDateArithmetic(words, now);
-      if (wrongDays) {
-        discarded.push({ rule, reason: `its day arithmetic is wrong: ${wrongDays}` });
-        continue;
-      }
-      const present = presentInEvidence({ claim, rule, evidence: evidenceText }, evidence);
-      if (present) {
-        discarded.push({ rule, reason: `it says the item is absent, but ${present} is in the tool results` });
-        continue;
-      }
-      const leftOutField = aboutLeftOutField({ rule, evidence: evidenceText }, leftOut);
-      if (leftOutField) {
-        discarded.push({ rule, reason: `it is about ${leftOutField}, which the evidence left out` });
-        continue;
-      }
-      const wrongCount = wrongReturnedCount({ rule, evidence: evidenceText }, evidence);
-      if (wrongCount) {
-        discarded.push({ rule, reason: wrongCount });
-        continue;
-      }
-      const relevance = judgesRelevance({ rule, evidence: evidenceText }, rulesText);
-      if (relevance) {
-        discarded.push({ rule, reason: `it judges relevance ("${oneLine(relevance, 40)}"), which no rule of the agent makes a requirement` });
-        continue;
-      }
-      const unquoted = standard.rules?.trim() ? unquotedRule({ rule, evidence: evidenceText, instruction }, rulesText) : null;
-      if (unquoted) {
-        discarded.push({ rule, reason: unquoted });
-        continue;
-      }
-      const kind = restsOnRules({ rule, evidence: evidenceText, instruction }) ? 'rule' : 'evidence';
-      failures.push({ rule, evidence: evidenceText, checker, ...(claim ? { claim } : {}), kind, ...(instruction ? { instruction } : {}) });
+      failures.push({ rule, evidence: evidenceText, checker, ...(claim ? { claim } : {}), kind: 'evidence' });
     }
-    return { failures, listed: items.length, discarded };
+    if (Array.isArray(parsed.notes)) {
+      for (const n of parsed.notes) {
+        const text = typeof n === 'string' ? n : n && typeof n === 'object' ? String((n as any).note ?? (n as any).text ?? (n as any).rule ?? '') : '';
+        if (text.trim()) notes.push({ checker, text: text.trim() });
+      }
+    }
+    return { failures, notes, listed: items.length, discarded };
   }
 
   /**
@@ -752,6 +783,10 @@ export class AgentVerifierHelper {
    *  - all_pass:        pass only if every checker explicitly passed (fail OR error blocks)
    *  - majority:        pass if decisive passes outnumber decisive fails (errors ignored; tie blocks)
    *  - any_fail_blocks: pass unless a checker explicitly failed (errors do not veto) — default
+   * A checker's verdict is already its verdict findings (readFailures):
+   * with evidence, a checker fails only on a finding the code verified.
+   * The code checks stand as a checker of their own. Checker notes are
+   * gathered here and never change the verdict.
    * If no checker returned a usable verdict, the result is 'fail' and
    * `unavailable`: correctness could not be asserted, so the gate must not
    * silently pass, but nothing was found wrong either, and the failure says
@@ -760,12 +795,13 @@ export class AgentVerifierHelper {
   mergeVerdicts(
     results: CheckerResult[],
     policy: VerifyPolicy,
-  ): { verdict: 'pass' | 'fail'; failures: VerifyFailure[]; passedRules: string[]; unavailable?: boolean } {
-    // The strongest first: what the platform counted, then what the
-    // evidence contradicts, then rule failures. The answer's note quotes
-    // the first, and a rule misread was the first one (run 887a8bfe).
+  ): { verdict: 'pass' | 'fail'; failures: VerifyFailure[]; passedRules: string[]; notes: CheckerNote[]; unavailable?: boolean } {
+    // The strongest first: what the code found, then what a checker cited
+    // from the tool data and the code confirmed. The answer's note leads
+    // with the first.
     const failures = strongestFirst(results.flatMap((r) => r.failures));
     const passedRules = Array.from(new Set(results.flatMap((r) => r.passedRules)));
+    const notes = results.flatMap((r) => r.notes ?? []);
     const passes = results.filter((r) => r.verdict === 'pass').length;
     const fails = results.filter((r) => r.verdict === 'fail').length;
 
@@ -788,6 +824,7 @@ export class AgentVerifierHelper {
               },
             ],
         passedRules,
+        notes,
       };
     }
 
@@ -804,6 +841,6 @@ export class AgentVerifierHelper {
         verdict = fails > 0 ? 'fail' : 'pass';
         break;
     }
-    return { verdict, failures, passedRules };
+    return { verdict, failures, passedRules, notes };
   }
 }

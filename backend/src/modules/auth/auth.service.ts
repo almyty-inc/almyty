@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
@@ -33,6 +33,7 @@ import { AuthSession } from '../../entities/auth-session.entity';
 import { AuthSessionService } from './auth-session.service';
 import { ssoSessionOrganization } from './sso-session';
 import { EMAIL_VERIFY_TOKEN_AUDIENCE, REFRESH_TOKEN_AUDIENCE, isAccessTokenPayload } from './token-kinds';
+import { AUTO_VERIFY_EMAIL_DOMAIN_ENV, autoVerifyEmailDomain, isOnAutoVerifyDomain } from './auto-verify-domain';
 
 /**
  * A personal API key: one a user mints for themselves (Settings > API
@@ -81,8 +82,17 @@ export interface AuthTokens {
   expiresIn: number;
 }
 
+/**
+ * What sign-up answers: never a session, and whether the address still
+ * needs confirming (false only for an AUTO_VERIFY_EMAIL_DOMAIN address).
+ */
+export interface Registration {
+  email: string;
+  verificationRequired: boolean;
+}
+
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -115,10 +125,21 @@ export class AuthService {
     private readonly lifecycleQueue?: Queue,
   ) {}
 
+  private readonly logger = new Logger(AuthService.name);
+
+  onModuleInit(): void {
+    const domain = autoVerifyEmailDomain();
+    if (domain) {
+      this.logger.warn(
+        `${AUTO_VERIFY_EMAIL_DOMAIN_ENV}=${domain}: new accounts on exactly this domain skip email verification. ` +
+          'For test environments only; never set it in production.',
+      );
+    }
+  }
   async register(
     createUserDto: CreateUserDto,
     context?: { referralCode?: string; ipAddress?: string },
-  ): Promise<AuthTokens> {
+  ): Promise<Registration> {
     // ── Signup abuse protection (runs before any DB write) ───────────────
 
     // 1. CAPTCHA gate. No-op when unconfigured (ships dark); when a secret is
@@ -189,6 +210,7 @@ export class AuthService {
     // commit, or the DB rolls them all back.
     let savedUser: User;
     let savedOrganizationId: string;
+    const autoVerified = isOnAutoVerifyDomain(createUserDto.email, autoVerifyEmailDomain());
     try {
       ({ savedUser, savedOrganizationId } = await this.userRepository.manager.transaction(async (tx) => {
       // Create user inside the transaction
@@ -198,7 +220,8 @@ export class AuthService {
         passwordHash,
         firstName: createUserDto.firstName,
         lastName: createUserDto.lastName,
-        isVerified: false,
+        isVerified: autoVerified,
+        ...(autoVerified ? { verifiedAt: new Date() } : {}),
       });
       const saved = await tx.save(User, user);
 
@@ -277,17 +300,20 @@ export class AuthService {
     // transaction): the verification link email and the welcome
     // notification must never fail a successful registration.
     //
-    // VERIFICATION GATE (current behavior, deliberately left non-blocking):
-    // a fresh account is unverified (verifiedAt = null) and login + the app
-    // work fully while unverified — validateUser() only checks isActive. The
-    // only feature gated on verification today is referral-reward payout
-    // (referrals.service checks verifiedAt/isVerified). Making login itself
-    // hard-require verification would lock out the entire existing unverified
-    // user base and contradicts the documented non-blocking design, so the
-    // gate here stays at "send the verification email + show the in-app
-    // banner". The robust abuse defenses are the per-IP rate limit, disposable
-    // rejection, gmail-alias dedupe, and (when enabled) CAPTCHA above.
-    this.requestEmailVerification(savedUser.id).catch(() => {});
+    // VERIFICATION GATE: a fresh account is unverified (verifiedAt = null)
+    // and validateUser() refuses it a session with EMAIL_NOT_VERIFIED until
+    // the link in this email is opened. So register() hands out no session
+    // either: the sign-up page shows "check your email" with a resend, and
+    // the person signs in after confirming. The abuse defenses that run
+    // before that are the per-IP rate limit, disposable rejection,
+    // gmail-alias dedupe, and (when enabled) CAPTCHA above.
+    //
+    // AUTO_VERIFY_EMAIL_DOMAIN (test environments only) confirms an address
+    // on exactly that domain when the account is created, so nothing is
+    // mailed for it.
+    if (!autoVerified) {
+      this.requestEmailVerification(savedUser.id).catch(() => {});
+    }
     if (this.notifications) {
       const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
       // Exactly one welcome EMAIL in both modes. When lifecycle emails are on,
@@ -323,8 +349,12 @@ export class AuthService {
         .catch(() => {});
     }
 
-    // Generate tokens (outside the transaction — purely read-side)
-    return this.generateTokens(savedUser);
+    // No session: signing in needs a confirmed address (validateUser), so
+    // a token minted here would open the app until it expired and then
+    // lock the new user out. The caller tells them to check their email,
+    // or, for an address confirmed at once (AUTO_VERIFY_EMAIL_DOMAIN), to
+    // sign in.
+    return { email: savedUser.email, verificationRequired: !autoVerified };
   }
 
   async login(loginDto: LoginDto): Promise<AuthTokens> {
