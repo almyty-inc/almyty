@@ -17,8 +17,10 @@
  * write into a temp project directory and clean up after themselves.
  *
  * Run:
- *   cd packages/cli-tests
- *   RUN_CLI_SMOKE=1 npx vitest run
+ *   npm run gate:staging     (repo root: signs the CLI in as the staging QA
+ *                             user in a throwaway HOME, runs these, revokes
+ *                             the login's key afterwards)
+ *   or, against your own login: cd packages/cli-tests && RUN_CLI_SMOKE=1 npx vitest run
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';

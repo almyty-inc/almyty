@@ -91,3 +91,7 @@ skills-lock.json
 # longer has that history, so this directory is the only copy. Never
 # committed, never pushed.
 .backup/
+
+# staging gate output (npm run gate:staging)
+gate-results/
+gate-report.md
