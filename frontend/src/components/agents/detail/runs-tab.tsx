@@ -15,6 +15,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Table,
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/table'
 
 import { formatDateTime, pluralized } from '@/lib/utils'
+import { agentsApi } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
 import { execStatusVariant, runStatusVariant, formatDuration } from './constants'
 import type { AgentExecution, AgentRun } from '@/types'
@@ -57,6 +59,9 @@ interface RunsTabProps {
    * The lists hold one page, so their length is the page size.
    */
   total?: number
+  /** How many autonomous runs and workflow runs there are in all: while a list holds fewer, "Show more" reads its next page. */
+  runsTotal?: number
+  executionsTotal?: number
 }
 
 /**
@@ -90,24 +95,98 @@ export function stepMachineError(step: { output?: unknown }): MachineProblemInfo
   return { sentence: m.sentence, detail: typeof m.detail === 'string' ? m.detail : null }
 }
 
-export function RunsTab({ runs, executions = [], agentId, openRunId, total }: RunsTabProps) {
+/** How many runs one page of either list holds: the size the lists are first read with. */
+export const RUNS_PAGE_SIZE = 20
+
+type Row =
+  | { kind: 'run'; id: string; createdAt: string; run: AgentRun }
+  | { kind: 'execution'; id: string; createdAt: string; exec: AgentExecution }
+
+/** Each item once, the first seen kept: a page read after new runs arrived repeats some. */
+function once<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>()
+  return items.filter((x) => (seen.has(x.id) ? false : (seen.add(x.id), true)))
+}
+
+function oldest(items: Array<{ createdAt: string }>): number {
+  return items.reduce((min, x) => Math.min(min, Date.parse(x.createdAt)), Infinity)
+}
+
+/**
+ * The rows to show, newest first. Workflow runs and autonomous runs come
+ * in pages of their own; while a list has more pages to read, nothing
+ * older than its oldest row read is shown, so a run from the other list
+ * never jumps ahead of one not read yet.
+ */
+export function visibleRows(
+  runs: AgentRun[],
+  executions: AgentExecution[],
+  more: { runs: boolean; executions: boolean },
+): Row[] {
+  const rows: Row[] = [
+    ...runs.map((run) => ({ kind: 'run' as const, id: run.id, createdAt: run.createdAt, run })),
+    ...executions.map((exec) => ({ kind: 'execution' as const, id: exec.id, createdAt: exec.createdAt, exec })),
+  ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+  const cutoff = Math.max(
+    more.runs && runs.length ? oldest(runs) : -Infinity,
+    more.executions && executions.length ? oldest(executions) : -Infinity,
+  )
+  return rows.filter((r) => Date.parse(r.createdAt) >= cutoff)
+}
+
+export function RunsTab({ runs, executions = [], agentId, openRunId, total, runsTotal, executionsTotal }: RunsTabProps) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(openRunId ?? null)
   // A link to another run while this tab is showing opens that one.
   useEffect(() => {
     if (openRunId) setExpandedRunId(openRunId)
   }, [openRunId])
+  // Pages read past the first, by "Show more".
+  const [later, setLater] = useState<{ runs: AgentRun[]; executions: AgentExecution[]; runPages: number; executionPages: number }>({
+    runs: [],
+    executions: [],
+    runPages: 1,
+    executionPages: 1,
+  })
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [moreError, setMoreError] = useState(false)
+  useEffect(() => {
+    setLater({ runs: [], executions: [], runPages: 1, executionPages: 1 })
+  }, [agentId])
+  const allRuns = useMemo(() => once([...runs, ...later.runs]), [runs, later.runs])
+  const allExecutions = useMemo(() => once([...executions, ...later.executions]), [executions, later.executions])
+  const moreRuns = typeof runsTotal === 'number' && allRuns.length < runsTotal
+  const moreExecutions = typeof executionsTotal === 'number' && allExecutions.length < executionsTotal
   // Workflow runs and autonomous runs, newest first: both are this agent's runs.
   const rows = useMemo(
-    () =>
-      [
-        ...runs.map((run) => ({ kind: 'run' as const, id: run.id, createdAt: run.createdAt, run })),
-        ...executions.map((exec) => ({ kind: 'execution' as const, id: exec.id, createdAt: exec.createdAt, exec })),
-      ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
-    [runs, executions],
+    () => visibleRows(allRuns, allExecutions, { runs: moreRuns, executions: moreExecutions }),
+    [allRuns, allExecutions, moreRuns, moreExecutions],
   )
   const toggle = (id: string) => setExpandedRunId(expandedRunId === id ? null : id)
   // Every run of the agent, not the page listed below it.
   const count = typeof total === 'number' && total >= rows.length ? total : rows.length
+
+  // The next page of each list that has more, read on "Show more".
+  const showMore = async () => {
+    if (!agentId || loadingMore) return
+    setLoadingMore(true)
+    setMoreError(false)
+    try {
+      const [r, e] = await Promise.all([
+        moreRuns ? agentsApi.listRunsPage(agentId, { page: later.runPages + 1, limit: RUNS_PAGE_SIZE }) : null,
+        moreExecutions ? agentsApi.getExecutionsPage(agentId, { page: later.executionPages + 1, limit: RUNS_PAGE_SIZE }) : null,
+      ])
+      setLater((prev) => ({
+        runs: r ? [...prev.runs, ...r.items] : prev.runs,
+        executions: e ? [...prev.executions, ...e.items] : prev.executions,
+        runPages: r ? prev.runPages + 1 : prev.runPages,
+        executionPages: e ? prev.executionPages + 1 : prev.executionPages,
+      }))
+    } catch {
+      setMoreError(true)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   return (
     <Card>
@@ -164,6 +243,18 @@ export function RunsTab({ runs, executions = [], agentId, openRunId, total }: Ru
                 )}
               </TableBody>
             </Table>
+          </div>
+        )}
+        {(moreRuns || moreExecutions) && rows.length > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground" data-testid="runs-show-more">
+            <span>
+              Showing {rows.length} of {pluralized(count, 'run')}
+              {moreError ? '. The next runs could not be loaded.' : ''}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => void showMore()} disabled={loadingMore || !agentId}>
+              {loadingMore && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              {moreError ? 'Try again' : 'Show more'}
+            </Button>
           </div>
         )}
       </CardContent>

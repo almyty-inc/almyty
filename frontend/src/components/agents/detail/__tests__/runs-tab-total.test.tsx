@@ -51,6 +51,8 @@ describe('the Runs tab counts every run, not the page', () => {
     expect(src).toMatch(/agentsApi\.listRunsPage\(id!\)/)
     expect(src).toMatch(/agentsApi\.getExecutionsPage\(id!/)
     expect(src).toMatch(/const runsTotal = \(runsData\?\.total \?\? runs\.length\) \+ \(executionsData\?\.total \?\? executions\.length\)/)
-    expect(src).toMatch(/<RunsTab [^>]*total=\{runsTotal\}/)
+    expect(src).toMatch(/<RunsTab\s[^>]*total=\{runsTotal\}/)
+    // Each list's own total, so "Show more" knows which has more pages.
+    expect(src).toMatch(/<RunsTab\s[^>]*runsTotal=\{runsData\?\.total\}[^>]*executionsTotal=\{executionsData\?\.total\}/)
   })
 })
