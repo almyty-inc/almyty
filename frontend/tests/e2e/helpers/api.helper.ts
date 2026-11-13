@@ -82,7 +82,7 @@ export class APIHelper {
     lastName: string
     organizationName: string
   }) {
-    // Registration answers with the session cookie and no token.
+    // Registration sets no session: signing in needs the confirmed address.
     //
     // A stack with a captcha secret refuses a sign-up without a token. The
     // providers' always-pass test secrets (TURNSTILE_SECRET=1x...AA) accept
