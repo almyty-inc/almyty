@@ -46,6 +46,7 @@ import { ToolCatalog, searchResultText, uniquePromptNames, upstreamErrorText } f
 import { EXIT, EXIT_CODE_HELP, exitCodeFor } from './exit-codes.js';
 import { executeResult, gatewayToolConfig, passThroughResult } from './registration.js';
 import { VERSION } from './version.js';
+import { DrainingStdioTransport } from './stdio-transport.js';
 
 
 // Accept gateway as positional arg or env var:
@@ -447,6 +448,9 @@ async function main() {
     }
     return buildServer(ctx.era, { proxy, catalog, discovered, url: ALMYTY_URL }, settled);
   }, {
+    // A client may write its requests and close stdin at once; every
+    // request already received is answered before the server goes.
+    transport: new DrainingStdioTransport(),
     onerror: (error) => log(`protocol error: ${error.message}`),
   });
   log(`ready on stdio (mode: ${ALMYTY_MODE}, ${managementTools(proxy).length} management tools)`);

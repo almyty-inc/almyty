@@ -12,7 +12,7 @@ vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
 }));
 
-import { loadCredentials, resolveCredentials, credentialsExpired, CREDENTIALS_FILE } from '../credentials.js';
+import { loadCredentials, resolveCredentials, credentialsExpired, defaultOrganization, getOrgSlugFromToken, CREDENTIALS_FILE } from '../credentials.js';
 import { readFileSync, existsSync } from 'node:fs';
 
 describe('credentials', () => {
@@ -167,6 +167,28 @@ describe('credentials', () => {
 
     it('treats the moment of expiry as expired', () => {
       expect(credentialsExpired({ expiresAt: new Date(Date.now() - 1).toISOString() })).toBe(true);
+    });
+  });
+
+  describe('defaultOrganization', () => {
+    const jwt = (payload: object) =>
+      ['e30', Buffer.from(JSON.stringify(payload)).toString('base64url'), 'sig'].join('.');
+
+    it('uses the organization `almyty login` stored next to its API key', () => {
+      // What the browser login writes: an almyty_ key (no JWT) + organizationId.
+      const creds = { url: 'https://api', token: 'almyty_sk_0123456789abcdef', organizationId: '7d3c2b1a-0000-4000-8000-000000000001' };
+      expect(getOrgSlugFromToken(creds.token)).toBeNull();
+      expect(defaultOrganization(creds)).toBe('7d3c2b1a-0000-4000-8000-000000000001');
+    });
+
+    it('prefers the stored organization over the first one a JWT lists', () => {
+      const token = jwt({ organizations: [{ slug: 'first-org' }] });
+      expect(defaultOrganization({ token, organizationId: 'chosen-org-id' })).toBe('chosen-org-id');
+    });
+
+    it('falls back to a JWT login\'s first organization, and to null', () => {
+      expect(defaultOrganization({ token: jwt({ organizations: [{ slug: 'acme' }] }) })).toBe('acme');
+      expect(defaultOrganization({ token: 'almyty_sk_no_org' })).toBeNull();
     });
   });
 });

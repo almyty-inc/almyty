@@ -72,6 +72,7 @@ describeIfDb('durable runs step 4: a keyless write whose outcome was lost (real 
       extra: { options: `-c search_path=${SCHEMA},public`, max: 20 },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       logging: false,

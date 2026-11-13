@@ -63,7 +63,7 @@ function dataSource(schema: string, migrations: any[] | string[]): DataSource {
     extra: { options: `-c search_path=${schema},public` },
     entities: [join(__dirname, '..', '..', 'entities', '*.entity{.ts,.js}')],
     migrations,
-    migrationsTransactionMode: 'all',
+    migrationsTransactionMode: 'each',
     logging: false,
   });
 }
