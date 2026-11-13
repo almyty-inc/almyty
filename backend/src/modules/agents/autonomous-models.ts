@@ -273,12 +273,31 @@ export function modelsFromModelConfig(modelConfig: ModelConfigLike): AgentModels
   return { strategy: 'single', roles: [main as AgentModelRole] };
 }
 
+const isSet = (v: unknown): boolean => v !== undefined && v !== null;
+
+/**
+ * The call settings a write sends twice, in `models`' main role and in
+ * `modelConfig`, with different values. Neither can win quietly: one of
+ * the two the caller sent would be dropped, so the write is refused.
+ */
+export function mainRoleConflicts(models: AgentModels | null | undefined, modelConfig: ModelConfigLike): string[] {
+  const main = models?.roles?.find((r) => r && r.purpose === 'main');
+  if (!main || main.kind !== 'model' || !modelConfig) return [];
+  return MAIN_ROLE_FIELDS.filter(
+    (f) => isSet(main[f]) && isSet(modelConfig[f]) && JSON.stringify(main[f]) !== JSON.stringify(modelConfig[f]),
+  );
+}
+
 /**
  * Keep `models` and `modelConfig` saying the same thing about the main
  * role, whichever one a write changed.
  *
  * - `models` written: the main role's call settings are copied onto
- *   `modelConfig`; its other keys (compaction, history) are kept.
+ *   `modelConfig`; its other keys (compaction, history) are kept. When the
+ *   same write also sent `modelConfig` (`modelConfigWritten`), a call
+ *   setting it sends that the main role leaves out goes onto the role too:
+ *   a value the caller sent is never dropped. (Conflicting values are
+ *   refused before this, mainRoleConflicts.)
  * - only `modelConfig` written (an API or MCP client that predates
  *   `models`): the main role is updated from it, or a Single strategy is
  *   made when the agent had no models yet.
@@ -287,11 +306,22 @@ export function syncMainRole(input: {
   models: AgentModels | null | undefined;
   modelConfig: ModelConfigLike;
   modelsWritten: boolean;
+  modelConfigWritten?: boolean;
 }): { models: AgentModels | null; modelConfig: ModelConfigLike } {
-  const { models, modelConfig, modelsWritten } = input;
+  const { modelConfig, modelsWritten, modelConfigWritten } = input;
+  let { models } = input;
   if (modelsWritten && models) {
-    const main = models.roles.find((r) => r.purpose === 'main');
+    let main = models.roles.find((r) => r.purpose === 'main');
     if (!main || main.kind !== 'model') return { models, modelConfig };
+    if (modelConfigWritten && modelConfig) {
+      const filled: Record<string, any> = { ...main };
+      for (const f of MAIN_ROLE_FIELDS) {
+        if (!isSet(filled[f]) && isSet(modelConfig[f])) filled[f] = modelConfig[f];
+      }
+      const role = filled as AgentModelRole;
+      models = { ...models, roles: models.roles.map((r) => (r === main ? role : r)) };
+      main = role;
+    }
     const next: Record<string, any> = { ...(modelConfig ?? {}) };
     for (const f of MAIN_ROLE_FIELDS) {
       if (main[f] === undefined || main[f] === null) delete next[f];

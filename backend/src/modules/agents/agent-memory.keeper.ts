@@ -1,7 +1,7 @@
 import type { Agent } from '../../entities/agent.entity';
 import type { AgentRun } from '../../entities/agent-run.entity';
 import type { ChatRequest } from '../llm-providers/llm-providers.service';
-import { MemoryError, type MemoryItem, type Provenance, type RankedItem, type ScopeRef, type Tier } from '../memory/canonical/canonical.types';
+import type { MemoryItem, Provenance, RankedItem, ScopeRef, Tier } from '../memory/canonical/canonical.types';
 import type { PutInput } from '../memory/canonical/dto/canonical-memory.dto';
 import { legacyTypeToTier, type AgentRuntimeService } from './agent-runtime.service';
 import type { AutonomousStrategyRunner } from './autonomous-strategy.runner';
@@ -138,6 +138,36 @@ export function parseFacts(content: string): string[] {
   } catch {
     return [];
   }
+}
+
+/** A store_memory save held on the run until it completes (AgentMemoryKeeper.store). */
+export interface PendingMemory {
+  content: string;
+  tags: string[];
+  kind?: MemoryKind;
+}
+
+/** The saves a run holds, as a fresh array. */
+export function pendingMemoriesOf(run: Pick<AgentRun, 'workingMemory'>): PendingMemory[] {
+  const held = run.workingMemory?.pendingMemories;
+  return Array.isArray(held) ? held.filter((p: any) => p && typeof p.content === 'string') : [];
+}
+
+const normalised = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+const sameText = (a: string, b: string) => normalised(a) === normalised(b);
+
+/**
+ * Whether a saved memory says what the agent's answer reported, listed or
+ * told someone ("Reported in the answer to ...", "Listed W123 in today's
+ * digest", "Already sent the user ..."). Such a memory is true only of an
+ * answer that was delivered and stood: commitPending drops it otherwise.
+ * Wide on purpose: a preference caught by it is only held until the
+ * answer is out, while an answer fact it misses would outlive a failed run.
+ */
+export function describesAnswer(content: string): boolean {
+  return /\b(report(?:ed|s|ing)?|answer(?:ed|s)?|repl(?:y|ied|ies)|respon(?:se|ded|ses)|listed|included|presented|told|sent|shared|mentioned|summari[sz]ed|delivered|digest|surfaced|notified|posted|already (?:covered|seen|given))\b/i.test(
+    content,
+  );
 }
 
 /** The most already-reported items a run's prompt lists. */
@@ -295,7 +325,16 @@ export class AgentMemoryKeeper {
     }
   }
 
-  /** The store_memory tool: screened against the never-save rules, then saved. */
+  /**
+   * The store_memory tool: screened against the never-save rules now, and
+   * held on the run (`workingMemory.pendingMemories`) until it ends. A run
+   * is not over when the model calls the tool: in a staging research digest
+   * run (2026-11-13), the model saved "Reported in the answer ..." for nine
+   * works and then hit its cost cap with no answer, and the next run
+   * skipped all nine as already reported. So nothing the model saves is
+   * written before the run completes (commitPending); a run that fails
+   * leaves none of it behind.
+   */
   async store(agent: Agent, run: AgentRun, team: Team, params: Record<string, any>): Promise<{ result?: any; error?: string }> {
     const scope = memoryScopeFor(agent, run);
     if (!scope) return { result: null, error: 'There is no memory to save to on this run' };
@@ -307,22 +346,69 @@ export class AgentMemoryKeeper {
     const s = this.settings(agent);
     const kept = await this.screen(run, team.main, content, s.neverSave);
     if (kept === null) return { result: 'Not saved: the agent is told never to save that.' };
-    try {
+    const pending = pendingMemoriesOf(run);
+    // The same thing saved twice in one run is one memory.
+    if (!pending.some((p) => sameText(p.content, kept))) {
       const kind = memoryKindOf(params.type);
-      const item = await this.put(agent, run, scope, s, kept, legacyTypeToTier(kind), Array.isArray(params.tags) ? params.tags : [], 'store_memory', kind);
-      return { result: `Memory stored (id: ${item.id})` };
-    } catch (err: any) {
-      if (err instanceof MemoryError) return { result: null, error: `memory rejected: ${err.tag.kind}` };
-      return { result: null, error: `Failed to store memory: ${err?.message ?? err}` };
+      pending.push({ content: kept, tags: Array.isArray(params.tags) ? params.tags.map(String) : [], ...(kind ? { kind } : {}) });
+      run.workingMemory = { ...(run.workingMemory ?? {}), pendingMemories: pending };
     }
+    return { result: 'Saved. It is kept once this run finishes with its answer; there is no need to save it again.' };
   }
 
   /**
-   * What a finished run leaves in memory: its facts, or the exchange as
-   * said, per the agent's "what gets saved". Recorded as a `memory_save`
-   * step. Never throws; a save that fails is logged.
+   * Write what the model saved during the run (store), now that it has
+   * completed. A save that describes the answer ("reported", "listed in
+   * the answer", describesAnswer) is kept only when the answer was
+   * delivered (not empty) and its check did not fail: otherwise it would
+   * tell later runs something was reported that nobody was given, or that
+   * the checks refuted. Other saves (a preference the person stated) are
+   * kept. Recorded as a `memory_save` step. Never throws.
+   */
+  async commitPending(agent: Agent, run: AgentRun, team: Team): Promise<void> {
+    const pending = pendingMemoriesOf(run);
+    if (!pending.length) return;
+    run.workingMemory = { ...(run.workingMemory ?? {}), pendingMemories: [] };
+    const scope = memoryScopeFor(agent, run);
+    if (!scope || !runMayWriteSharedMemory(run)) return;
+    const s = this.settings(agent);
+    const answerStands = asText(run.output).trim().length > 0 && !verificationFailed(run);
+    let saved = 0;
+    let dropped = 0;
+    for (const p of pending) {
+      if (!answerStands && describesAnswer(p.content)) {
+        dropped++;
+        continue;
+      }
+      try {
+        await this.put(agent, run, scope, s, p.content, legacyTypeToTier(p.kind), p.tags ?? [], 'store_memory', p.kind);
+        saved++;
+      } catch (err: any) {
+        this.s.logger.warn(`Failed to save memory for run ${run.id}: ${err?.message ?? err}`);
+      }
+    }
+    run.steps.push({
+      type: 'memory_save',
+      role: stampOf(team.main),
+      input: { save: 'store_memory', scope: scope.scope_type, account: s.account },
+      output: {
+        saved,
+        ...(dropped ? { dropped: `${dropped} about the answer: ${asText(run.output).trim() ? 'its check failed' : 'no answer was given'}` } : {}),
+      },
+      cost: 0,
+      duration: 0,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * What a finished run leaves in memory: what the model saved during it
+   * (commitPending), then its facts, or the exchange as said, per the
+   * agent's "what gets saved". Recorded as `memory_save` steps. Never
+   * throws; a save that fails is logged.
    */
   async afterRun(agent: Agent, run: AgentRun, team: Team): Promise<void> {
+    await this.commitPending(agent, run, team);
     const s = this.settings(agent);
     if (!s.enabled || s.save === 'asked') return;
     // An explorer's own run works for its parent; the parent saves.

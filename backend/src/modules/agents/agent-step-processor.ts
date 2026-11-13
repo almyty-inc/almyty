@@ -1932,7 +1932,14 @@ export class AgentStepProcessor {
           const saved = await this.persistWithEvents(
             run,
             { id: run.id, ...heldBy(run) },
-            { steps: await this.stepsForPersist(run), totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata },
+            {
+              steps: await this.stepsForPersist(run),
+              totalCost: run.totalCost,
+              totalTokens: run.totalTokens,
+              metadata: run.metadata,
+              // The saves held during the run are written now (commitPending).
+              workingMemory: run.workingMemory,
+            },
           );
           if (!saved) this.s.logger.warn(`Run ${run.id}: the memory step after completion was not recorded (the run is gone)`);
         }

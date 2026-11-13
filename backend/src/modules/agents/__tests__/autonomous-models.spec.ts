@@ -7,7 +7,7 @@ import { fakeRepository } from '../../../test/fake-repository';
 import { orgMembersPolicy } from '../../../test/execution-access.fixture';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
 import { AgentsService } from '../agents.service';
-import { AgentModels, agentModelsProblems, missingSlots, syncMainRole, unusedPurposes } from '../autonomous-models';
+import { AgentModels, agentModelsProblems, mainRoleConflicts, missingSlots, syncMainRole, unusedPurposes } from '../autonomous-models';
 import { teamOf } from '../autonomous-team';
 import { withholdsCandidateAnswers, composesFinalAnswer } from '../final-answer';
 
@@ -144,6 +144,24 @@ describe('syncMainRole: the main role and modelConfig say the same thing', () =>
       roles: [{ key: 'main', name: 'Main', purpose: 'main', kind: 'model', routing: { objective: 'fastest' } }],
     });
     expect(syncMainRole({ models: null, modelConfig: { temperature: 1 }, modelsWritten: false }).models).toBeNull();
+  });
+
+  it('a write that sends both keeps every call setting either carries; the role wins nothing it does not say', () => {
+    const { models, modelConfig } = syncMainRole({
+      models: { strategy: 'single', roles: [{ key: 'main', name: 'Main', purpose: 'main', kind: 'model', providerId: 'p1', model: 'claude-opus-5-5' }] },
+      modelConfig: { providerId: 'p1', model: 'claude-opus-5-5', maxTokens: 16000, temperature: 0.3, compaction: { enabled: true } },
+      modelsWritten: true,
+      modelConfigWritten: true,
+    });
+    expect(modelConfig).toEqual({ providerId: 'p1', model: 'claude-opus-5-5', maxTokens: 16000, temperature: 0.3, compaction: { enabled: true } });
+    expect(models!.roles[0]).toMatchObject({ maxTokens: 16000, temperature: 0.3 });
+  });
+
+  it('mainRoleConflicts names a setting sent twice with two values, and nothing else', () => {
+    const models: AgentModels = { strategy: 'single', roles: [{ ...MAIN, maxTokens: 4000, routing: { objective: 'fastest' } } as any] };
+    expect(mainRoleConflicts(models, { providerId: 'p1', maxTokens: 16000, routing: { objective: 'fastest' } })).toEqual(['maxTokens']);
+    expect(mainRoleConflicts(models, { providerId: 'p1', temperature: 0.2 })).toEqual([]);
+    expect(mainRoleConflicts(null, { maxTokens: 1 })).toEqual([]);
   });
 });
 
