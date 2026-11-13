@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional, forwardRef } from '@nestjs/common';
-import { FindOptionsWhere, In, Not } from 'typeorm';
+import { Between, FindOptionsWhere, In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { RunEventDraft } from './run-events';
@@ -71,7 +71,11 @@ import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
 import { MACHINE_FAILED, type MachineProblem, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
+import { claimsSkippedAsReported } from './answer-checks';
 
+/** How many of an agent's earlier answers a "skipped as already reported" claim is checked against, and from how many days back. */
+export const EARLIER_ANSWERS_MAX = 50;
+export const EARLIER_ANSWERS_DAYS = 90;
 /** One line per namespace a script can use: `petstore (19 functions)`. */
 function namespaceSummary(tools: Tool[]): string[] {
   const counts = new Map<string, number>();
@@ -1044,7 +1048,10 @@ export class AgentStepProcessor {
               run.currentStep++;
               run.executionTime += stepDuration;
               if (!(await this.commitStep(run, expectedStep))) return 'done';
-              this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'waiting_input' });
+              // request_approval answers waiting_input too, but the run waits
+              // on a person's approval: say which, so a visitor's page shows it.
+              const waitingOn = run.status === AgentRunStatus.WAITING_APPROVAL ? 'waiting_approval' : 'waiting_input';
+              this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: waitingOn });
               return 'waiting';
             }
 
@@ -3235,7 +3242,12 @@ export class AgentStepProcessor {
     // its tools returned and the agent's own rules.
     const check = await this.prepareCheck(run, agent, cfg.checkers!, finalContent, cfg.spec);
     const panel = await this.verifier.runPanel(
-      { target: finalContent, spec: cfg.spec, checkers: check.checkers, policy: cfg.policy, evidence: check.evidence, rules: check.rules },
+      {
+        target: finalContent, spec: cfg.spec, checkers: check.checkers, policy: cfg.policy, evidence: check.evidence, rules: check.rules,
+        // What the code checks read besides: the tool results whole, and for a skip claim the agent's earlier answers.
+        ...(check.earlier ? { earlier: check.earlier } : {}),
+        ...(check.toolResults ? { toolResults: check.toolResults } : {}),
+      },
       run.organizationId,
       principalOfRun(run),
     );
@@ -3256,7 +3268,9 @@ export class AgentStepProcessor {
    *   policy demands; unknown windows get the default budget);
    * - the agent's own instructions, the standard the answer is held to;
    * - each checker with the output budget its model card allows
-   *   (checkerOutputLimit), unless the checker sets its own.
+   *   (checkerOutputLimit), unless the checker sets its own;
+   * - when the answer says it skipped items as already reported, what this
+   *   agent's earlier runs answered (earlierAnswersOf), to check that claim.
    */
   async prepareCheck(
     run: AgentRun,
@@ -3264,7 +3278,7 @@ export class AgentStepProcessor {
     checkers: CheckerConfig[],
     target: string,
     spec?: string,
-  ): Promise<{ evidence: string; rules: string; checkers: CheckerConfig[] }> {
+  ): Promise<{ evidence: string; rules: string; checkers: CheckerConfig[]; earlier?: string[]; toolResults?: RunToolResult[] }> {
     const rules = (agent?.instructions ?? '').trim();
     const cards = await this.checkerCards(run, checkers ?? []);
     const windows: number[] = [];
@@ -3285,7 +3299,35 @@ export class AgentStepProcessor {
     const sized = (checkers ?? []).map((checker, i) =>
       checker && !(checker.maxTokens && checker.maxTokens > 0) ? { ...checker, maxTokens: checkerOutputLimit(cards[i]?.maxOutputTokens) } : checker,
     );
-    return { evidence, rules, checkers: sized };
+    const earlier = claimsSkippedAsReported(target ?? '') ? await this.earlierAnswersOf(run) : undefined;
+    return { evidence, rules, checkers: sized, ...(earlier ? { earlier } : {}), ...(toolResults ? { toolResults } : {}) };
+  }
+
+  /**
+   * What this agent's earlier completed runs answered, newest first: the
+   * last EARLIER_ANSWERS_MAX of them, from the last EARLIER_ANSWERS_DAYS
+   * days, outputs only. Read only for an answer that says it skipped
+   * items as already reported. Undefined when they cannot be read, so the
+   * claim is then not checked rather than checked against nothing.
+   */
+  private async earlierAnswersOf(run: AgentRun): Promise<string[] | undefined> {
+    if (!run.agentId || !this.s.runRepository) return undefined;
+    try {
+      const before = run.createdAt instanceof Date ? run.createdAt : new Date();
+      const since = new Date(before.getTime() - EARLIER_ANSWERS_DAYS * 86_400_000);
+      const rows = await this.s.runRepository.find({
+        where: { agentId: run.agentId, organizationId: run.organizationId, status: AgentRunStatus.COMPLETED, createdAt: Between(since, before), id: Not(run.id) } as FindOptionsWhere<AgentRun>,
+        select: { id: true, output: true, createdAt: true } as any,
+        order: { createdAt: 'DESC' } as any,
+        take: EARLIER_ANSWERS_MAX,
+      });
+      return rows
+        .map((r: AgentRun) => (typeof r.output === 'string' ? r.output : r.output == null ? '' : JSON.stringify(r.output)))
+        .filter((text: string) => text.trim().length > 0);
+    } catch (err) {
+      this.s.logger.warn(`Could not read the earlier answers of agent ${run.agentId} for the check of run ${run.id}: ${(err as Error)?.message}`);
+      return undefined;
+    }
   }
 
   /** Each checker's model card (its context window and most output), or null when it has none. */

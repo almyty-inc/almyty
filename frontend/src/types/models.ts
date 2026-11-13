@@ -27,8 +27,13 @@ export interface ModelCapabilities {
   reasoning?: boolean
   embedding?: boolean
   structuredOutput?: boolean
-  /** Takes PDF documents as input (price feed or set on the card). */
   pdfInput?: boolean
+  /**
+   * Answers a conversation in text. False for a speech, transcription,
+   * image, video or embedding model (from the price feed's model kind);
+   * unset when no feed knows the model. A model picker leaves out false.
+   */
+  chat?: boolean
 }
 
 export type ModelCapabilityKey = keyof ModelCapabilities
@@ -41,6 +46,7 @@ export const MODEL_CAPABILITY_LABELS: Record<ModelCapabilityKey, string> = {
   reasoning: 'Reasoning',
   embedding: 'Embedding',
   structuredOutput: 'Structured output',
+  chat: 'Chat',
 }
 
 /** Dollars per million tokens. */
