@@ -14,6 +14,14 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * src/test/integration/api-delete-cascade.integration.spec.ts holds the
  * cascade to no sequential scan at all, and every foreign key it reaches
  * to an index.
+ *
+ * Built CONCURRENTLY, so request_logs, usage_metrics, tools and the rest
+ * keep taking writes while each index builds. That cannot run inside a
+ * transaction, hence `transaction = false` (the data sources run
+ * migrations in 'each' mode, which allows it). A concurrent build that was
+ * interrupted (the deploy's migration step timing out, say) leaves an
+ * INVALID index behind under the same name, which IF NOT EXISTS would then
+ * skip; such a leftover is dropped and built again.
  */
 const INDEXES: Array<[name: string, table: string, column: string]> = [
   ['IDX_tools_apiId', 'tools', 'apiId'],
@@ -29,20 +37,28 @@ const INDEXES: Array<[name: string, table: string, column: string]> = [
   ['IDX_push_subscriptions_apiId', 'push_subscriptions', 'apiId'],
   ['IDX_push_subscriptions_verifyCredentialId', 'push_subscriptions', 'verifyCredentialId'],
   ['IDX_external_agents_credentialId', 'external_agents', 'credentialId'],
+  ['IDX_llm_providers_usageCredentialId', 'llm_providers', 'usageCredentialId'],
 ];
 
 export class IndexApiDeleteCascadeForeignKeys1791001600000 implements MigrationInterface {
   name = 'IndexApiDeleteCascadeForeignKeys1791001600000';
+  transaction = false as const;
 
   public async up(q: QueryRunner): Promise<void> {
     for (const [name, table, column] of INDEXES) {
-      await q.query(`CREATE INDEX IF NOT EXISTS "${name}" ON "${table}" ("${column}")`);
+      // to_regclass resolves on the search_path, like the statements below.
+      const invalid = await q.query(
+        `SELECT 1 FROM pg_index i WHERE i.indexrelid = to_regclass($1) AND NOT i.indisvalid`,
+        [`"${name}"`],
+      );
+      if (invalid.length > 0) await q.query(`DROP INDEX CONCURRENTLY IF EXISTS "${name}"`);
+      await q.query(`CREATE INDEX CONCURRENTLY IF NOT EXISTS "${name}" ON "${table}" ("${column}")`);
     }
   }
 
   public async down(q: QueryRunner): Promise<void> {
     for (const [name] of [...INDEXES].reverse()) {
-      await q.query(`DROP INDEX IF EXISTS "${name}"`);
+      await q.query(`DROP INDEX CONCURRENTLY IF EXISTS "${name}"`);
     }
   }
 }

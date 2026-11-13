@@ -2,6 +2,7 @@ import { DataSource, Logger as TypeOrmLogger } from 'typeorm';
 
 import { Api } from '../../entities/api.entity';
 import { ApisService } from '../../modules/apis/apis.service';
+import { IndexApiDeleteCascadeForeignKeys1791001600000 } from '../../migrations/1791001600000-IndexApiDeleteCascadeForeignKeys';
 
 /**
  * Deleting an API is one statement from the app and a bounded amount of
@@ -68,6 +69,7 @@ describeIfDb('deleting an API (real Postgres)', () => {
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       logging: ['query'],
       logger,
@@ -191,5 +193,75 @@ describeIfDb('deleting an API (real Postgres)', () => {
       [`${SCHEMA}.apis`],
     );
     expect(unindexed.map((r: any) => r.fk)).toEqual([]);
+  });
+
+  // The migration builds CONCURRENTLY: writes go on while an index builds,
+  // and an interrupted build's INVALID leftover is rebuilt, not skipped.
+  // API_DELETE_BENCH_ROWS sizes request_logs (usage_metrics gets half);
+  // 2,000,000 is the local proof, CI runs a smaller copy.
+  it('the index migration builds concurrently: writes are not blocked and an invalid leftover is rebuilt', async () => {
+    const rows = Number(process.env.API_DELETE_BENCH_ROWS || 200_000);
+    const migration = new IndexApiDeleteCascadeForeignKeys1791001600000();
+    expect(migration.transaction).toBe(false);
+
+    const runner = ds.createQueryRunner();
+    await runner.connect();
+    const writer = ds.createQueryRunner();
+    await writer.connect();
+    const reader = ds.createQueryRunner();
+    await reader.connect();
+    try {
+      await migration.down(runner);
+      await runner.query(`INSERT INTO request_logs (method, path, "statusCode", "responseTime", timestamp) SELECT 'GET', '/', 200, 1, now() FROM generate_series(1, $1::int)`, [rows]);
+      await runner.query(`INSERT INTO usage_metrics (type, value, timestamp) SELECT 'x', 1, now() FROM generate_series(1, $1::int)`, [Math.floor(rows / 2)]);
+      await runner.query('ANALYZE request_logs; ANALYZE usage_metrics');
+
+      // 1. Writes go on while an index builds. A reader holding an old
+      // snapshot keeps the first build (tools) from finishing, so it is
+      // certainly under way; a plain CREATE INDEX would hold the insert
+      // until it was done.
+      await reader.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      await reader.query('SELECT count(*) FROM tools');
+      const firstBuild = migration.up(runner);
+      let inProgress = false;
+      for (let i = 0; i < 1000 && !inProgress; i++) {
+        inProgress = (await writer.query(`SELECT 1 FROM pg_stat_progress_create_index p JOIN pg_class c ON c.oid = p.relid WHERE c.relname = 'tools'`)).length > 0;
+        if (!inProgress) await new Promise((r) => setTimeout(r, 10));
+      }
+      expect(inProgress).toBe(true);
+      const t = Date.now();
+      await writer.query(`INSERT INTO tools (name, "organizationId") VALUES ('written-during-build', $1)`, [organizationId]);
+      const writeMs = Date.now() - t;
+      await reader.query('COMMIT');
+      await firstBuild;
+      expect(writeMs).toBeLessThan(2_000);
+
+      // 2. An interrupted build's INVALID leftover under the migration's
+      // name (here from a unique build that failed) is rebuilt, and the
+      // whole migration is timed.
+      await migration.down(runner);
+      await runner.query(`CREATE UNIQUE INDEX CONCURRENTLY "IDX_request_logs_toolId" ON request_logs (method)`).catch(() => undefined);
+      const leftover = await runner.query(`SELECT i.indisvalid FROM pg_index i WHERE i.indexrelid = to_regclass('"IDX_request_logs_toolId"')`);
+      expect(leftover).toEqual([{ indisvalid: false }]);
+      const started = Date.now();
+      await migration.up(runner);
+      const buildMs = Date.now() - started;
+      process.stdout.write(`index migration over ${rows} request_logs / ${Math.floor(rows / 2)} usage_metrics: ${buildMs} ms; an insert during a build took ${writeMs} ms\n`);
+
+      const indexes = await runner.query(
+        `SELECT c.relname, i.indisvalid, pg_get_indexdef(i.indexrelid) AS def FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+          WHERE c.relname = ANY($1) AND c.relnamespace = to_regnamespace($2)`,
+        [['IDX_request_logs_toolId', 'IDX_usage_metrics_toolId', 'IDX_tools_apiId'], SCHEMA],
+      );
+      expect(indexes).toHaveLength(3);
+      for (const index of indexes) expect(index.indisvalid).toBe(true);
+      // The leftover was replaced, not kept: it is on toolId and not unique.
+      expect(indexes.find((x: any) => x.relname === 'IDX_request_logs_toolId').def).toMatch(/^CREATE INDEX .*\("toolId"\)$/);
+    } finally {
+      await reader.query('ROLLBACK').catch(() => undefined);
+      await reader.release();
+      await writer.release();
+      await runner.release();
+    }
   });
 });
