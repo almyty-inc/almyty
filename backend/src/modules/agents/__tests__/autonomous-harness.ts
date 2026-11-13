@@ -40,6 +40,7 @@ import { withRunEvents } from '../../../test/fake-run-events';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 import { gatewayPrincipal, userPrincipal } from '../../../common/authorization/execution-access.service';
 import { callLlmProviderHttpStream } from '../../llm-providers/providers/safe-request';
+import * as checkerFindings from '../checker-findings';
 
 // ── Provider byte streams, one per call, keyed by the model asked for ──
 export const openaiText = (model: string, prompt: number, parts: string[], completion: number) => [
@@ -107,6 +108,21 @@ export const mainModelConfig = { providerId: 'p-strong', model: 'claude-sonnet-5
 
 export const FAIL = JSON.stringify({ verdict: 'fail', failures: [{ rule: 'cites no order data', evidence: 'ships soon' }], passed_rules: [] });
 export const PASS = JSON.stringify({ verdict: 'pass', failures: [], passed_rules: ['grounded'] });
+
+/**
+ * These runs read no tool data a checker could cite, so a checker's
+ * failure could never be verified (checker-findings.ts). Tests about what
+ * a failed check does (escalate, revise, deliver) stand in for the code's
+ * verification with this: every checker failure counts, in the code's
+ * words. Call it in beforeEach and the returned restore in afterEach.
+ */
+export function confirmCheckerFindings(): () => void {
+  const spy = jest.spyOn(checkerFindings, 'verifyCheckerFinding').mockReturnValue({
+    verified: true,
+    finding: { item: 'order 4411', field: 'ship date', answerValue: 'soon', toolValue: 'Monday' },
+  });
+  return () => spy.mockRestore();
+}
 
 export type Streams = Record<string, Array<string[] | Error>>;
 

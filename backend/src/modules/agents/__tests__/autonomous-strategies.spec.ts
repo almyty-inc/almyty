@@ -6,6 +6,7 @@ import {
   anthropicTool,
   CHECKER,
   cheap,
+  confirmCheckerFindings,
   dear,
   DRAFTER,
   FAIL,
@@ -38,6 +39,9 @@ jest.mock('../../llm-providers/providers/safe-request', () => ({
 describe('autonomous strategies drive the loop, role by role', () => {
   describe('Cascade', () => {
     const cascade: AgentModels = { strategy: 'cascade', roles: [MAIN as any, DRAFTER as any, CHECKER as any] };
+    let restore: () => void = () => undefined;
+    beforeEach(() => (restore = confirmCheckerFindings()));
+    afterEach(() => restore());
 
     it('the drafter works the task, the checker fails its answer, and only then the main role redoes the step', async () => {
       const seen = await runAgent({

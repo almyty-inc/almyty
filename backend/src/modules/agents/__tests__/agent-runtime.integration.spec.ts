@@ -27,6 +27,7 @@ import { CanonicalMemoryService } from '../../memory/canonical/canonical-memory.
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AgentVerifierHelper } from '../agent-verifier.helper';
+import * as checkerFindings from '../checker-findings';
 import { AgentContextCompactor } from '../agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../agent-constraints/agent-constraints.service';
 import { BudgetsService } from '../../budgets/budgets.service';
@@ -885,6 +886,21 @@ describe('AgentRuntimeService (integration)', () => {
       cost: 0.001,
     });
 
+    // These runs call no tool, so no checker finding could cite tool data.
+    // The delivery and revision mechanics below are about a check that did
+    // not pass, so the code's verification is stood in for: each checker
+    // failure counts, said in the code's words. What an unverified finding
+    // does is the last test of this block.
+    const REASON = 'the invoice total: the answer gives total 90, but the tool results say 100';
+    let confirm: jest.SpyInstance | undefined;
+    beforeEach(() => {
+      confirm = jest.spyOn(checkerFindings, 'verifyCheckerFinding').mockReturnValue({
+        verified: true,
+        finding: { item: 'the invoice total', field: 'total', answerValue: '90', toolValue: '100' },
+      });
+    });
+    afterEach(() => confirm?.mockRestore());
+
     it('completes the run when the checker panel passes', async () => {
       agentStore.push(verifyAgent());
       llmService.chat.mockResolvedValue(checkerReply('{"verdict":"pass"}'));
@@ -911,7 +927,7 @@ describe('AgentRuntimeService (integration)', () => {
     it('by default reports a failed check and delivers the answer unchanged, marked, without a revision round', async () => {
       agentStore.push(verifyAgent());
       llmService.chat.mockResolvedValue(
-        checkerReply('{"verdict":"fail","failures":[{"rule":"the total does not match the invoices","evidence":"secret row 7"}]}'),
+        checkerReply('{"verdict":"fail","failures":[{"claim":"total 90","rule":"the total does not match the invoices","evidence":"secret row 7"}]}'),
       );
       const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
 
@@ -928,16 +944,16 @@ describe('AgentRuntimeService (integration)', () => {
         revisions: 0,
         exhausted: false,
         reportOnly: true,
-        reason: 'the total does not match the invoices',
+        reason: REASON,
       });
-      const line = "Note: this answer's check didn't pass: the total does not match the invoices.";
+      const line = `Note: this answer's check didn't pass: ${REASON}.`;
       expect(String(stored.output).startsWith(line)).toBe(true);
       const reply = messageStore.find(m => m.role === 'assistant' && m.runId === run.id && !m.metadata?.internal);
       expect(String(reply?.content).startsWith(line)).toBe(true);
       const verify = stored.steps.filter(s => s.type === 'verify');
       expect(verify).toHaveLength(1);
       expect(verify[0].output).toMatchObject({ verdict: 'fail', reportOnly: true, exhausted: false });
-      expect(verify[0].output.failures[0].rule).toBe('the total does not match the invoices');
+      expect(verify[0].output.failures[0]).toMatchObject({ rule: REASON, item: 'the invoice total', field: 'total' });
     });
 
     it('counts the check toward "Checks passed", apart from "Completed"', async () => {
@@ -994,7 +1010,7 @@ describe('AgentRuntimeService (integration)', () => {
         m => m.role === 'user' && String(m.content).includes('reviewed your answer'),
       );
       expect(critique).toBeDefined();
-      expect(String(critique!.content)).toContain('missing total');
+      expect(String(critique!.content)).toContain(REASON);
       expect(critique!.metadata).toMatchObject({
         internal: true,
         internalPurpose: 'verification_revision',
@@ -1041,13 +1057,35 @@ describe('AgentRuntimeService (integration)', () => {
       await service.processStep(run.id);
 
       const stored = runStore.find(r => r.id === run.id)!;
-      const line = "Note: this answer's check didn't pass: the total does not match the invoices.";
+      const line = `Note: this answer's check didn't pass: ${REASON}.`;
       expect(String(stored.output).startsWith(line)).toBe(true);
       // The evidence quotes what the checker read; it stays off the answer.
       expect(String(stored.output)).not.toContain('secret row 7');
-      expect(stored.metadata?.verify?.reason).toBe('the total does not match the invoices');
+      expect(stored.metadata?.verify?.reason).toBe(REASON);
       const reply = messageStore.find(m => m.role === 'assistant' && m.runId === run.id && !m.metadata?.internal);
       expect(String(reply?.content).startsWith(line)).toBe(true);
+    });
+
+    it('passes an answer the checker failed on what it could not verify, and keeps that as checker notes on the step only', async () => {
+      confirm?.mockRestore();
+      agentStore.push(verifyAgent({ revise: true }));
+      llmService.chat.mockResolvedValue(
+        checkerReply('{"verdict":"fail","failures":[{"claim":"x","rule":"the summary is too long","evidence":"style"}],"notes":["wording could be tighter"]}'),
+      );
+      const run = await service.startRun('verify-agent', 'org-1', 'user-1', 'do it');
+
+      const result = await service.processStep(run.id);
+
+      expect(result).toBe('done');
+      const stored = runStore.find(r => r.id === run.id)!;
+      expect(stored.metadata?.verify?.verdict).toBe('pass');
+      expect(stored.workingMemory?.verifyRevisions ?? 0).toBe(0);
+      expect(String(stored.output)).not.toMatch(/check didn't pass|too long|wording/);
+      const verify = stored.steps.filter(s => s.type === 'verify');
+      expect(verify[0].output.failures).toEqual([]);
+      expect(verify[0].output.notes.map((n: any) => n.text)).toEqual(['the summary is too long', 'wording could be tighter']);
+      const reply = messageStore.find(m => m.role === 'assistant' && m.runId === run.id && !m.metadata?.internal);
+      expect(String(reply?.content)).not.toMatch(/too long|wording/);
     });
 
     it('delivers a passed answer unmarked', async () => {

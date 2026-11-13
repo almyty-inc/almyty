@@ -14,7 +14,7 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentVerifierHelper, CheckerConfig, VerifyPanelResult, checkerOutputLimit, checkerVerdicts, evidenceBudget, runEvidence } from './agent-verifier.helper';
+import { AgentVerifierHelper, CheckerConfig, VerifyPanelResult, checkerNotesOf, checkerOutputLimit, checkerVerdicts, evidenceBudget, runEvidence } from './agent-verifier.helper';
 import { RunToolResult, toolResultsFromMessages } from './checker-evidence';
 import { ALWAYS_ON_COMPACTION, AgentContextCompactor, carriedContextSummary } from './agent-context-compactor.helper';
 import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
@@ -1673,7 +1673,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: stampOf(team.checker!),
               input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, checkers: checkerVerdicts(check), ...checkedBy(check) },
+              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, checkers: checkerVerdicts(check), ...checkerNotesOf(check), ...checkedBy(check) },
               cost: check.cost,
               tokens: checkTokens(check),
               duration: checkDuration,
@@ -1697,6 +1697,7 @@ export class AgentStepProcessor {
               ...(unavailable ? { unavailable: true } : {}),
               failures: check.failures,
               checkers: checkerVerdicts(check),
+              ...checkerNotesOf(check),
               ...checkedBy(check),
             },
             cost: check.cost,
@@ -1790,7 +1791,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: ANSWER_CHECK_ROLE,
               input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures, checkers: checkerVerdicts(verifyPanel) },
+              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures, checkers: checkerVerdicts(verifyPanel), ...checkerNotesOf(verifyPanel) },
               cost: verifyPanel.cost,
               tokens: checkTokens(verifyPanel),
               duration: verifyStepDuration,
@@ -1827,6 +1828,7 @@ export class AgentStepProcessor {
               ...(unavailable ? { unavailable: true } : {}),
               failures: verifyPanel.failures,
               checkers: checkerVerdicts(verifyPanel),
+              ...checkerNotesOf(verifyPanel),
             },
             cost: verifyPanel.cost,
             tokens: checkTokens(verifyPanel),
@@ -3383,7 +3385,7 @@ export class AgentStepProcessor {
       type: 'verify',
       role: ANSWER_CHECK_ROLE,
       input: { mode: 'mid_loop', policy: panel.policy, checkers: panel.checkers.length },
-      output: { verdict: panel.verdict, advisory: true, failures: panel.failures, checkers: checkerVerdicts(panel) },
+      output: { verdict: panel.verdict, advisory: true, failures: panel.failures, checkers: checkerVerdicts(panel), ...checkerNotesOf(panel) },
       cost: panel.cost,
       tokens: checkTokens(panel),
       timestamp: new Date().toISOString(),

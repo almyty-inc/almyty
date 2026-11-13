@@ -30,7 +30,9 @@ export const UNVERIFIED_ANSWER_LEAD = "Note: this answer's check didn't pass";
  */
 export const UNCHECKED_ANSWER_LEAD = 'Note: this answer could not be checked';
 
+/** How long one reason may be on the note, and how many the note names before "and N more". */
 const MAX_REASON = 160;
+const MAX_REASONS = 3;
 
 type Failure = { rule?: unknown; evidence?: unknown; code?: unknown; kind?: unknown; instruction?: unknown } | null | undefined;
 
@@ -40,23 +42,32 @@ export function checkUnavailable(failures: Failure[] | null | undefined): boolea
   return list.length > 0 && list.every((f) => f?.code === 'verification_unavailable');
 }
 
+function oneReason(f: Failure): string {
+  const r = trimTrailingDots(String(typeof f?.rule === 'string' ? f.rule : '').replace(/\s+/g, ' ').trim());
+  return r.length > MAX_REASON ? `${r.slice(0, MAX_REASON - 1).trimEnd()}…` : r;
+}
+
 /**
- * The short reason: the strongest failed rule, one line. Strongest is a
- * finding the platform counted itself (an item outside the window), then
- * a claim the evidence contradicts, then a rule failure: a misread rule
- * led the note while a real error sat behind it (runs 887a8bfe,
- * dda8789a). The evidence is left out on purpose: it quotes what the
- * checker read (tool results, documents), which a visitor may not be
- * meant to see.
+ * What the note on the answer says is wrong: the verdict findings,
+ * strongest first (a finding the platform made itself, then tool data a
+ * checker cited and the code confirmed), each naming the item and what is
+ * wrong with it, up to three and then how many more. A failure that is
+ * only a rule a checker applied (`kind: 'rule'`), or whose reason is the
+ * instruction it quotes, is never shown: a bare instruction says nothing
+ * about what is wrong (run db52dcca). The evidence is left out on
+ * purpose: it quotes what the checker read (tool results, documents),
+ * which a visitor may not be meant to see. Checker notes are never here.
  */
 export function unverifiedReason(failures: Failure[] | null | undefined): string {
   if (checkUnavailable(failures)) return 'the checker could not give a verdict';
-  const rule = strongestFirst((failures ?? []).filter(Boolean))
-    .map((f) => (typeof f?.rule === 'string' ? f.rule : ''))
-    .map((r) => trimTrailingDots(r.replace(/\s+/g, ' ').trim()))
-    .find((r) => r.length > 0);
-  if (!rule) return 'the checkers found problems that were not fixed';
-  return rule.length > MAX_REASON ? `${rule.slice(0, MAX_REASON - 1).trimEnd()}…` : rule;
+  const shown = strongestFirst((failures ?? []).filter(Boolean))
+    .filter((f) => f?.kind !== 'rule' && !(typeof f?.instruction === 'string' && f.instruction.trim() && f.instruction.trim() === String(f?.rule ?? '').trim()))
+    .map(oneReason)
+    .filter((r, i, all) => r.length > 0 && all.indexOf(r) === i);
+  if (!shown.length) return 'the checkers found problems that were not fixed';
+  const named = shown.slice(0, MAX_REASONS).join('; ');
+  const more = shown.length - MAX_REASONS;
+  return more > 0 ? `${named}; and ${more} more` : named;
 }
 
 /** Drop trailing dots and spaces without a backtracking regex. */
