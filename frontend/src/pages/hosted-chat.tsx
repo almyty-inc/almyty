@@ -56,7 +56,16 @@ interface HostedChatPageProps {
 
 interface PendingMessage extends HostedChatMessage {
   streaming?: boolean
+  /** The reply waits for a person on the team to approve one of its steps. */
+  waiting?: 'approval'
 }
+
+/** What a visitor reads while a step waits for someone on the team to approve it. */
+export const WAITING_FOR_APPROVAL = 'Waiting for a person on the team to approve this step.'
+/** The approval a reply waited on was turned down; the reply stops there. */
+export const APPROVAL_REJECTED = 'A person on the team turned down this step, so the assistant stopped here.'
+/** Nobody decided in time; the reply stops there. */
+export const APPROVAL_EXPIRED = 'Nobody on the team approved this step in time, so the assistant stopped here.'
 
 type VisitorAction = 'export' | 'conversation' | 'visitor'
 
@@ -527,7 +536,11 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         // page just goes quiet, which reads as "ignored".
         const last = thread.messages[thread.messages.length - 1]
         const unanswered = !last || last.role === 'user'
-        if (reason === 'run.cancelled') {
+        if (reason === 'approval.rejected') {
+          setError(APPROVAL_REJECTED)
+        } else if (reason === 'approval.expired') {
+          setError(APPROVAL_EXPIRED)
+        } else if (reason === 'run.cancelled') {
           setError('That reply was cancelled. Please try again.')
         } else if (reason === 'run.failed' || unanswered) {
           setError("The assistant couldn't reply just now. Please try again in a moment.")
@@ -560,7 +573,7 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
           const chunk = payload.token ?? payload.text ?? payload.content ?? ''
           if (!chunk) return
           setMessages((current) =>
-            current.map((m) => (m.id === `run-${runId}` ? { ...m, content: m.content + chunk } : m)),
+            current.map((m) => (m.id === `run-${runId}` ? { ...m, content: m.content + chunk, waiting: undefined } : m)),
           )
         })
 
@@ -574,6 +587,16 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
             current.map((m) => (m.id === `run-${runId}` ? { ...m, content: '' } : m)),
           )
         })
+
+        // The run stopped for a person on the team to approve a step, which
+        // can take hours; `resumed` says it is working on the reply again.
+        // A token means the same. Neither carries reply text, so no `seen`.
+        const waitingFor = (waiting: PendingMessage['waiting']) => {
+          if (activeThreadRef.current !== threadId) return
+          setMessages((current) => current.map((m) => (m.id === `run-${runId}` ? { ...m, waiting } : m)))
+        }
+        es.addEventListener('waiting', () => waitingFor('approval'))
+        es.addEventListener('resumed', () => waitingFor(undefined))
 
         es.addEventListener('done', (event) => {
           let reason: string | undefined
@@ -1086,9 +1109,16 @@ function MessageBubble({ message }: { message: PendingMessage }) {
           ) : (
             <AssistantMarkdown>{message.content}</AssistantMarkdown>
           )
-        ) : message.streaming ? (
+        ) : message.streaming && !message.waiting ? (
           <StreamingDots />
         ) : null}
+        {message.streaming && message.waiting === 'approval' && (
+          // A step needs a person on the team, which can take hours: say
+          // so, rather than leave the visitor watching dots.
+          <p role="status" className={cn('text-muted-foreground', message.content && 'mt-2')}>
+            {WAITING_FOR_APPROVAL}
+          </p>
+        )}
       </div>
     </div>
   )

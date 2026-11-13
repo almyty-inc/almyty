@@ -5,6 +5,7 @@ import { AgentStatus } from '../../../entities/agent.entity';
 import {
   AgentNotActive,
   agentIsInvokable,
+  agentIsTryable,
   assertAgentInvokable,
   runsOnAutonomousRuntime,
 } from '../agent-invocation';
@@ -52,6 +53,26 @@ describe('the invoke gate lives in one place', () => {
       expect(agentIsInvokable(undefined)).toBe(false);
     });
 
+    it("lets the agent's own page try a draft, and nothing turned off", () => {
+      // A new agent is saved as a draft; its first Try it was refused with
+      // "Activate it first", and the builder never said so.
+      expect(agentIsTryable(agent({ status: AgentStatus.DRAFT }))).toBe(true);
+      expect(agentIsTryable(agent())).toBe(true);
+      expect(agentIsTryable(agent({ status: AgentStatus.INACTIVE }))).toBe(false);
+      expect(agentIsTryable(agent({ status: AgentStatus.ERROR }))).toBe(false);
+      expect(agentIsTryable(null)).toBe(false);
+    });
+
+    it('only the dashboard invoke and stream try a draft; channels, gateways and MCP still need it active', () => {
+      const read = (rel: string) => readFileSync(join(__dirname, '..', '..', '..', rel), 'utf8');
+      const dashboard = read('modules/agents/agent-execution.controller.ts');
+      expect(dashboard.match(/!agentIsTryable\(agent\)/g)).toHaveLength(2);
+      expect(dashboard).not.toContain('agentIsInvokable');
+      for (const file of ['modules/gateways/unified-agent.helper.ts', 'modules/mcp/almyty-mcp.service.ts', 'modules/gateways/gateway-servable.ts']) {
+        expect(read(file)).not.toContain('agentIsTryable');
+      }
+    });
+
     it('sends only autonomous agents to the autonomous runtime', () => {
       expect(runsOnAutonomousRuntime(agent({ mode: 'autonomous' }))).toBe(true);
       expect(runsOnAutonomousRuntime(agent({ mode: 'workflow' }))).toBe(false);
@@ -72,7 +93,7 @@ describe('the invoke gate lives in one place', () => {
       it(`${file} uses the shared gate`, () => {
         const source = read(file);
                 expect(source).toMatch(/from '\.[./]*(agents\/)?agent-invocation'/);
-        expect(source).toMatch(/agentIsInvokable|assertAgentInvokable/);
+        expect(source).toMatch(/agentIsInvokable|assertAgentInvokable|agentIsTryable/);
         // The open-coded comparison is what drifts. Its absence is the
         // property worth pinning.
         expect(source).not.toMatch(/status\s*!==\s*AgentStatus\.ACTIVE/);

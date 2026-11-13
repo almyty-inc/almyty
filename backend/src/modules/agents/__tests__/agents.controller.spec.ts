@@ -384,18 +384,32 @@ describe('AgentsController', () => {
       expect(executionEngine.execute).not.toHaveBeenCalled();
     });
 
-    it('should throw when agent is not active', async () => {
+    it('should throw when agent was turned off', async () => {
       const invokeDto = { input: { message: 'Hello' } };
       const mockAgent = {
         id: 'agent-1',
-        status: AgentStatus.DRAFT,
+        status: AgentStatus.INACTIVE,
       } as any;
 
       agentsService.getAgent.mockResolvedValue(mockAgent);
 
       await expect(
         executionController.invokeAgent('agent-1', invokeDto as any, mockRequest),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ response: expect.objectContaining({ message: expect.stringMatching(/inactive/) }) });
+      expect(runtimeService.startRun).not.toHaveBeenCalled();
+      expect(executionEngine.execute).not.toHaveBeenCalled();
+    });
+
+    it("runs a draft: the agent's own Try it works before it is turned on", async () => {
+      const mockAgent = { id: 'agent-1', status: AgentStatus.DRAFT, mode: 'autonomous' } as any;
+      const mockRun = { id: 'run-1', status: 'running' } as any;
+      agentsService.getAgent.mockResolvedValue(mockAgent);
+      runtimeService.startRun.mockResolvedValue(mockRun);
+
+      const result = await executionController.invokeAgent('agent-1', { input: { message: 'Hi' } } as any, mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBe(mockRun);
     });
 
     it('should throw when no organization found', async () => {

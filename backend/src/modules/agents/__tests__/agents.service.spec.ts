@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
-import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS, nextAgentVersion } from '../agents.service';
+import { getMetadataArgsStorage } from 'typeorm';
+import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS, defaultAgentMode, nextAgentVersion } from '../agents.service';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
 import { AgentReadinessService } from '../agent-readiness.service';
@@ -208,6 +209,29 @@ describe('AgentsService', () => {
       );
       expect(agentRepo.save).toHaveBeenCalledWith(agent);
       expect(result).toBe(agent);
+    });
+
+    it('starts a new agent autonomous when the request names no mode', async () => {
+      organizationRepo.findOne.mockResolvedValue(makeOrganization());
+      agentRepo.create.mockImplementation((row: any) => row);
+      agentRepo.save.mockImplementation(async (row: any) => row);
+
+      await service.createAgent({ name: 'Helper' }, 'org-1', 'user-1');
+
+      expect(agentRepo.create).toHaveBeenCalledWith(expect.objectContaining({ mode: 'autonomous' }));
+    });
+
+    it('keeps a request that brings a pipeline and no mode a workflow, and a named mode as named', async () => {
+      expect(defaultAgentMode({ pipeline: makeValidPipeline() as any })).toBe('workflow');
+      expect(defaultAgentMode({ pipeline: { nodes: [] } })).toBe('autonomous');
+      expect(defaultAgentMode({})).toBe('autonomous');
+      expect(defaultAgentMode({ mode: 'workflow' })).toBe('workflow');
+      expect(defaultAgentMode({ mode: 'autonomous', pipeline: makeValidPipeline() as any })).toBe('autonomous');
+    });
+
+    it('the agents table defaults to autonomous too', () => {
+      const column = getMetadataArgsStorage().columns.find((c) => c.target === Agent && c.propertyName === 'mode');
+      expect(column?.options.default).toBe('autonomous');
     });
 
     it('should throw NotFoundException when organization is not found', async () => {
