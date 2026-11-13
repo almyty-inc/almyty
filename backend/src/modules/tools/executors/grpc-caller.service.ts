@@ -25,7 +25,7 @@
  *     extra metadata passed in
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { credentials, Metadata, loadPackageDefinition, ClientReadableStream, ClientWritableStream, ClientDuplexStream } from '@grpc/grpc-js';
+import { credentials, Metadata, loadPackageDefinition, ClientReadableStream, ClientWritableStream, ClientDuplexStream, connectivityState, status } from '@grpc/grpc-js';
 import { loadSync as loadProtoSync } from '@grpc/proto-loader';
 import { createHash } from 'crypto';
 import { mkdirSync, writeFileSync, existsSync } from 'fs';
@@ -76,6 +76,35 @@ const PROTO_INCLUDE_DIRS = resolveProtoIncludeDirs();
 /** Hard cap on collected stream messages — protects worker heap. */
 const MAX_STREAM_MESSAGES = 100;
 
+/**
+ * The deadline a call gets when the caller names none: the same 30 s an
+ * HTTP tool waits by default. A channel that never finishes connecting (a
+ * server that accepts the connection and never speaks HTTP/2) holds a call
+ * without a deadline for ever.
+ */
+export const DEFAULT_GRPC_TIMEOUT_MS = 30_000;
+
+export function effectiveTimeoutMs(timeoutMs: number | undefined): number {
+  return typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : DEFAULT_GRPC_TIMEOUT_MS;
+}
+
+function formatSeconds(ms: number): string {
+  return String(Math.round(ms / 100) / 10);
+}
+
+class GrpcDeadlineError extends Error {}
+
+/** `work`, or `onTimeout()` thrown once `deadlineAt` (epoch ms) has passed. */
+function withDeadline<T>(work: Promise<T>, deadlineAt: number, onTimeout: () => Error): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(onTimeout()), Math.max(0, deadlineAt - Date.now()));
+  });
+  return Promise.race([work, expired]).finally(() => clearTimeout(timer));
+}
+
 export interface GrpcCallInput {
   /** Full proto schema source — typically ApiSchema.rawSchema. */
   protoSource: string;
@@ -99,7 +128,11 @@ export interface GrpcCallInput {
   request: Record<string, any> | Record<string, any>[];
   /** Per-call metadata headers (auth, etc). */
   metadata?: Record<string, string>;
-  /** Per-call deadline in ms (added to Date.now()). */
+  /**
+   * Per-call deadline in ms, counted from the start of call() (so the DNS
+   * lookup is inside it). Missing, zero or not a number means
+   * {@link DEFAULT_GRPC_TIMEOUT_MS}: there is no call without a deadline.
+   */
   timeoutMs?: number;
   /** Set by the parser; treat `request` as an array of messages. */
   requestStream?: boolean;
@@ -153,6 +186,8 @@ export class GrpcCallerService {
   private readonly logger = new Logger(GrpcCallerService.name);
 
   async call(input: GrpcCallInput): Promise<GrpcCallResult> {
+    const timeoutMs = effectiveTimeoutMs(input.timeoutMs);
+    const deadlineAt = Date.now() + timeoutMs;
     let target: string;
     let useTls: boolean;
     try {
@@ -160,18 +195,27 @@ export class GrpcCallerService {
     } catch (err: any) {
       return { success: false, error: `Invalid baseUrl: ${err.message}` };
     }
+    // The name the user wrote, for messages; `target` may become an address.
+    const displayTarget = target;
 
     // grpc-js resolves the name itself and takes no lookup hook, so the
     // string check the executor ran on baseUrl said nothing about the
     // address actually dialled. With pinDns the name is resolved here,
     // through the same banned-address check the HTTP agents use, and the
     // channel dials that address -- there is no second resolution for the
-    // answer to change in between.
+    // answer to change in between. The lookup counts against the deadline.
     let channelOptions: Record<string, string> = {};
     if (input.pinDns) {
       try {
-        ({ target, channelOptions } = await this.pinTarget(target, input.pinDnsExemptHost));
+        ({ target, channelOptions } = await withDeadline(
+          this.pinTarget(target, input.pinDnsExemptHost),
+          deadlineAt,
+          () => new GrpcDeadlineError(`Couldn't resolve ${displayTarget} within ${formatSeconds(timeoutMs)} s.`),
+        ));
       } catch (err: any) {
+        if (err instanceof GrpcDeadlineError) {
+          return { success: false, error: err.message, code: status.DEADLINE_EXCEEDED };
+        }
         return { success: false, error: `Refused to connect: ${err.message}` };
       }
     }
@@ -219,6 +263,7 @@ export class GrpcCallerService {
     const client = new ServiceCtor(target, channelCreds, channelOptions);
 
     if (typeof client[input.methodName] !== 'function') {
+      try { client.close(); } catch { /* best effort */ }
       return {
         success: false,
         error: `Method "${input.methodName}" not found on service "${input.serviceName}".`,
@@ -230,11 +275,9 @@ export class GrpcCallerService {
       meta.set(k, v);
     }
 
-    const deadline = input.timeoutMs
-      ? new Date(Date.now() + input.timeoutMs)
-      : undefined;
-    const callOptions: any = {};
-    if (deadline) callOptions.deadline = deadline;
+    // Every call carries a deadline. The clock started before the name was
+    // resolved, so the lookup and the proto load count against it too.
+    const callOptions: any = { deadline: new Date(deadlineAt) };
 
     const cap = input.maxStreamMessages ?? MAX_STREAM_MESSAGES;
     // A caller that knows (the parser persisted it) says whether the
@@ -243,23 +286,58 @@ export class GrpcCallerService {
     const reqStream = input.requestStream ?? !!methodDef?.requestStream;
     const resStream = input.responseStream ?? !!methodDef?.responseStream;
 
+    let result: GrpcCallResult;
     try {
       if (!reqStream && !resStream) {
-        return await this.callUnary(client, input.methodName, input.request ?? {}, meta, callOptions);
+        result = await this.callUnary(client, input.methodName, input.request ?? {}, meta, callOptions);
+      } else if (!reqStream && resStream) {
+        result = await this.callServerStreaming(client, input.methodName, input.request ?? {}, meta, callOptions, cap);
+      } else if (reqStream && !resStream) {
+        result = await this.callClientStreaming(client, input.methodName, this.toMessageArray(input.request), meta, callOptions);
+      } else {
+        result = await this.callBidi(client, input.methodName, this.toMessageArray(input.request), meta, callOptions, cap);
       }
-      if (!reqStream && resStream) {
-        return await this.callServerStreaming(client, input.methodName, input.request ?? {}, meta, callOptions, cap);
-      }
-      if (reqStream && !resStream) {
-        return await this.callClientStreaming(client, input.methodName, this.toMessageArray(input.request), meta, callOptions);
-      }
-      return await this.callBidi(client, input.methodName, this.toMessageArray(input.request), meta, callOptions, cap);
     } catch (err: any) {
       // Synchronous throw paths — usually means the request payload
       // doesn't match the proto's message shape, or the channel
       // refused to dial.
-      return { success: false, error: err.message || String(err) };
+      result = { success: false, error: err.message || String(err) };
     }
+    if (!result.success) {
+      result = { ...result, error: this.explainFailure(result, displayTarget, timeoutMs, this.wasConnected(client)) };
+    }
+    // Each call builds its own client; release its channel so it stops
+    // trying to connect once nobody is waiting on it.
+    try { client.close(); } catch { /* best effort */ }
+    return result;
+  }
+
+  /** Whether the channel ever got as far as a working connection. */
+  private wasConnected(client: any): boolean {
+    try {
+      return client.getChannel().getConnectivityState(false) === connectivityState.READY;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * A deadline or an unreachable server, said in words a person can act
+   * on: which address, how long we waited, and whether a connection was
+   * ever made. Other failures keep the server's own message.
+   */
+  private explainFailure(res: GrpcCallResult, target: string, timeoutMs: number, connected: boolean): string {
+    const secs = formatSeconds(timeoutMs);
+    if (res.code === status.DEADLINE_EXCEEDED) {
+      return connected
+        ? `${target} accepted the connection but did not answer within ${secs} s.`
+        : `Couldn't reach ${target} within ${secs} s: no connection could be made. ` +
+            'Check the address and port, and that outbound connections to that port are allowed from this server.';
+    }
+    if (res.code === status.UNAVAILABLE && !connected) {
+      return `Couldn't reach ${target}: ${res.error}`;
+    }
+    return res.error || 'gRPC call failed';
   }
 
   // ── Call shape implementations ────────────────────────────────
