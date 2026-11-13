@@ -220,6 +220,7 @@ The `:?` form makes Compose refuse to start rather than silently fall back. Rota
 | `BULL_REDIS_HOST` | Separate Redis for BullMQ (if desired) | Falls back to `REDIS_HOST` |
 | `RESEND_API_KEY` | [Resend](https://resend.com) API key. The only outbound-email transport. Without it no mail is sent at all (see [Outbound email](#outbound-email)) | -- |
 | `MAIL_FROM` | Sender address for outbound mail. `EMAIL_FROM` is accepted as a fallback | `almyty <notifications@almyty.com>` |
+| `AUTO_VERIFY_EMAIL_DOMAIN` | **Test environments only. Never set it in production.** New accounts on exactly this email domain (e.g. `test.example.com`) are confirmed at sign-up and get no verification email, so automated tests can sign up and sign in without an inbox. A subdomain or look-alike domain does not match. The API logs a warning at boot while it is set | -- (off) |
 | `PLATFORM_METRICS_TOKEN` | Bearer token for `/monitoring/health/details` and `/monitoring/metrics*`. Unset means those endpoints refuse every request | -- (endpoints disabled) |
 | `OLLAMA_ALLOW_PRIVATE_URLS` | Allow Ollama providers to target localhost/private-network URLs (see [Local models with Ollama](#local-models-with-ollama)) | `false` |
 

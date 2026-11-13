@@ -331,8 +331,9 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
+  /** Creates the account and emails a confirmation link. Sets no session cookie. */
   register: (data: { email: string; password: string; firstName: string; lastName: string; organizationName: string; captchaToken?: string }) =>
-    apiPost('/auth/register', data),
+    apiPost<{ email: string; verificationRequired: boolean }>('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>
     apiPost('/auth/login', data),

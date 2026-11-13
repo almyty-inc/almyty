@@ -39,7 +39,11 @@ describe('links to one run', () => {
     const page = src('pages/agent-detail.tsx')
     expect(page).toMatch(/const \{ id, runId \} = useParams/)
     expect(page).toMatch(/searchParams\.get\('tab'\) \|\| \(runId \? 'runs' : 'overview'\)/)
-    expect(page).toMatch(/<RunsTab runs=\{runs\} executions=\{executions\} agentId=\{agent\.id\} openRunId=\{runId\} total=\{runsTotal\} \/>/)
+    const runsTab = page.match(/<RunsTab\b[^>]*\/>/)?.[0] ?? ''
+    expect(runsTab).toMatch(/\bruns=\{runs\}/)
+    expect(runsTab).toMatch(/\bexecutions=\{executions\}/)
+    expect(runsTab).toMatch(/\bagentId=\{agent\.id\}/)
+    expect(runsTab).toMatch(/\bopenRunId=\{runId\}/)
   })
 
   it('shows the linked run open, and none without a link', () => {

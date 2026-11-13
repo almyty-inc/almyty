@@ -5,7 +5,6 @@ import { AgentStepProcessor } from '../agent-step-processor';
 import { AgentVerifierHelper, CHECKER_MAX_TOKENS, CHECKER_ROOMY_MAX_TOKENS, checkerOutputLimit } from '../agent-verifier.helper';
 import { AutonomousStrategyRunner } from '../autonomous-strategy.runner';
 import { FIELDS_LEFT_OUT, fitResult, leftOutFieldsOf, runEvidence, toolResultsFromMessages } from '../checker-evidence';
-import { aboutLeftOutField } from '../checker-guards';
 import { falseDateArithmetic, windowNote } from '../date-arithmetic';
 import { capPersistedPayload } from '../persist-cap';
 import { PriceFeedService } from '../../model-catalog/pricing/price-feed.service';
@@ -193,25 +192,14 @@ describe('2. the shortening note names every field left out, by path', () => {
   });
 });
 
-describe('3. a failure about a field the evidence left out does not count', () => {
+describe('3. a failure about a field the evidence left out is a checker note', () => {
   const evidence =
     'REQUEST:\nrag\n\nopenalex_search_works: [result shortened: every item is shown; ' +
     `${FIELDS_LEFT_OUT}results[].{abstract (text), primary_location (object)}, results[].authorships[].author (object); 9,000 chars omitted]\n` +
-    '{"results":[{"id":"https://openalex.org/W1","title":"A study"}]}';
+    '{"results":[{"id":"https://openalex.org/W1","title":"A study","doi":"https://doi.org/10.1234/y"}]}';
+  const answer = '1. Title: A study\n   First Author: Li Yongxin\n   Venue: eLife\n   DOI: none';
 
-  it('finds the path a failure is about', () => {
-    const leftOut = leftOutFieldsOf(evidence);
-    // Run 5f990f9e, verbatim.
-    expect(aboutLeftOutField({ rule: 'First author name does not match the evidence; evidence does not provide first author name for this work', evidence: '' }, leftOut)).toBe(
-      'results[].authorships[].author',
-    );
-    expect(aboutLeftOutField({ rule: 'evidence includes primary_location for this work; output omits venue', evidence: '' }, leftOut)).toBe('results[].primary_location');
-    // A contradiction is not an absence, and a field that was not left out is not covered.
-    expect(aboutLeftOutField({ rule: 'author is Jane Doe in evidence, output says John', evidence: '' }, leftOut)).toBeNull();
-    expect(aboutLeftOutField({ rule: 'output omits the DOI', evidence: '' }, leftOut)).toBeNull();
-  });
-
-  it('readFailures drops it and says why on the step; a real failure stays', () => {
+  it('readFailures keeps it off the verdict and on the step as a note: it cites nothing the tool results hold (run 5f990f9e)', () => {
     const helper = new AgentVerifierHelper({} as any);
     const read = helper.readFailures(
       {
@@ -219,24 +207,34 @@ describe('3. a failure about a field the evidence left out does not count', () =
         failures: [
           { claim: 'First Author: Li Yongxin', rule: 'First author name does not match the evidence; evidence does not provide first author name for this work', evidence: 'The evidence does not list any author names.' },
           { claim: 'Venue: eLife', rule: 'Venue is not provided in the evidence; evidence includes primary_location without a name', evidence: '' },
-          { claim: 'DOI: none', rule: 'The DOI is wrong', evidence: 'evidence has DOI 10.1/x' },
         ],
       },
       'Source check',
       evidence,
+      new Date(),
+      answer,
     );
-    expect(read.failures.map((f) => f.claim)).toEqual(['DOI: none']);
-    expect(read.discarded.map((d) => d.reason)).toEqual([
-      'it is about results[].authorships[].author, which the evidence left out',
-      'it is about results[].primary_location, which the evidence left out',
-    ]);
+    expect(read.failures).toEqual([]);
+    expect(read.notes.map((n) => n.claim)).toEqual(['First Author: Li Yongxin', 'Venue: eLife']);
   });
 
-  it('tells the checker in its instructions', async () => {
+  it('a DOI the tool results really give, cited exactly, is a verdict finding', () => {
+    const read = new AgentVerifierHelper({} as any).readFailures(
+      { verdict: 'fail', failures: [{ claim: 'DOI: none', rule: 'The DOI is wrong', evidence: '"doi":"https://doi.org/10.1234/y"' }] },
+      'Source check',
+      evidence,
+      new Date(),
+      answer,
+    );
+    expect(read.notes).toEqual([]);
+    expect(read.failures).toEqual([expect.objectContaining({ kind: 'evidence', field: 'DOI', claim: 'DOI: none' })]);
+  });
+
+  it('tells the checker that a value missing from shortened evidence is no contradiction', async () => {
     const chat = jest.fn().mockResolvedValue({ message: { content: '{"verdict":"pass","failures":[],"confirmed":[]}' } });
     await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'x', checkers: [{ providerId: 'p' }], evidence }, 'org-1');
     const system = chat.mock.calls[0][1].messages[0].content as string;
-    expect(system).toMatch(/A field the note names under "fields left out" is not in what you see: never fail a claim about that field/);
+    expect(system).toMatch(/is incomplete: a value missing from what you see is not a contradiction/);
   });
 });
 
@@ -327,7 +325,7 @@ describe("5. the checker judges by the agent's own rules (run b60bacad)", () => 
     await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'x', checkers: [{ providerId: 'p' }], evidence: 'REQUEST:\nnodejs/node', rules: instructions }, 'org-1');
     const [system, user] = chat.mock.calls[0][1].messages;
     expect(user.content).toContain(`AGENT INSTRUCTIONS (the standard to judge by):\n${instructions}`);
-    expect(system.content).toMatch(/Judge against the agent's stated rules, never stricter rules of your own/);
+    expect(system.content).toMatch(/Read them as written, never stricter/);
     expect(system.content).toMatch(/an item that meets any one of them meets the rule/);
   });
 

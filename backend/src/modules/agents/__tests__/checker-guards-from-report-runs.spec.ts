@@ -1,5 +1,4 @@
 import { AgentVerifierHelper } from '../agent-verifier.helper';
-import { confirmsClaim } from '../checker-guards';
 import { falseDateArithmetic } from '../date-arithmetic';
 import { falseVersionOrder } from '../version-order';
 
@@ -82,33 +81,23 @@ describe('a version set beside itself is not a false order claim', () => {
 
 describe('a failure whose own words say every item is in the answer', () => {
   // Run 6933d7e2, revision 2: claim "The table contains all packages ...".
+  // No wording guard reads it any more: it cites no tool data that
+  // contradicts the answer, so it is a checker note, never a verdict.
   const rule =
     'The package.json lists 8 packages total (6 dependencies + 2 devDependencies), and the table shows 8 packages, but the table is missing verification that all were checked. However, all 8 packages are present in the table.';
   const evidence =
     'All packages from package.json are in the table: axios, chalk, uuid, node-fetch, dotenv, querystring (dependencies) and jest, eslint (devDependencies).';
 
-  it('is a confirmation (run 6933d7e2)', () => {
-    expect(confirmsClaim(evidence)).toMatch(/in the table/);
-    expect(confirmsClaim(`${rule}\n${evidence}`)).toMatch(/in the table/);
+  it('is a checker note, not a verdict finding (run 6933d7e2)', () => {
+    const answer = "The table contains all packages from the user's package.json";
     const read = new AgentVerifierHelper({} as any).readFailures(
-      { verdict: 'fail', failures: [{ claim: "The table contains all packages from the user's package.json", rule, evidence }] },
+      { verdict: 'fail', failures: [{ claim: answer, rule, evidence }] },
       'dep-checker',
-      '',
+      'REQUEST:\n{}\n\nnpm_get_package_latest {"package":"axios"}:\n{"name":"axios","version":"1.21.1"}',
       now,
+      answer,
     );
     expect(read.failures).toEqual([]);
-    expect(read.discarded[0].reason).toMatch(/its own words say the claim is right/);
-  });
-
-  it('keeps one that names a real error after it', () => {
-    expect(confirmsClaim('All packages from package.json are in the table, but the version of chalk is wrong')).toBeNull();
-    expect(confirmsClaim('All packages are in the table except lodash')).toBeNull();
-    expect(confirmsClaim('All packages are in the table; lodash is missing its version')).toBeNull();
-  });
-
-  it('keeps a denial and a statement about the tool results, not the answer', () => {
-    expect(confirmsClaim('Not all packages are in the table')).toBeNull();
-    expect(confirmsClaim('All packages are not in the table')).toBeNull();
-    expect(confirmsClaim('All releases are listed in the tool results; v5.3.0 is absent from the output')).toBeNull();
+    expect(read.notes).toEqual([expect.objectContaining({ checker: 'dep-checker', text: rule })]);
   });
 });

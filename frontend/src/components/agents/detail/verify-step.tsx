@@ -21,10 +21,18 @@ export const CHECK_PASSED = 'Check passed'
 export const CHECK_FAILED = "Check didn't pass"
 export const NOT_CHECKED = 'Not checked'
 
+/** A verdict finding: what the platform found itself, or tool data a checker cited and the platform confirmed. */
 interface VerifyFailure {
   rule?: string
   evidence?: string
   checker?: string
+  claim?: string
+}
+
+/** What else a checker said: shown on the run only, never deciding the verdict. */
+interface CheckerNote {
+  checker?: string
+  text?: string
   claim?: string
 }
 
@@ -42,7 +50,10 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
   // No checker gave a verdict: the answer was not checked, nothing was found wrong.
   const unavailable = !passed && out.unavailable === true
   const advisory = out.advisory === true || step.input?.mode === 'mid_loop'
+  // A check that only reports blocks nothing: the answer goes out either way.
+  const blocking = !advisory && out.reportOnly !== true
   const failures: VerifyFailure[] = Array.isArray(out.failures) ? out.failures : []
+  const notes: CheckerNote[] = Array.isArray(out.notes) ? out.notes.filter((n: CheckerNote) => typeof n?.text === 'string' && n.text.trim()) : []
   const checkers: CheckerVerdict[] = Array.isArray(out.checkers) ? out.checkers : []
   const checkerLines = checkers.filter((c) => c?.error || c?.note)
   const inputTokens = Number(step.tokens?.input) || 0
@@ -65,7 +76,8 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
           <ShieldAlert className={`h-4 w-4 ${unavailable ? 'text-amber-500' : 'text-destructive'}`} />
         )}
         <Badge variant="outline" className="text-[10px]">verify</Badge>
-        <Badge variant="outline" className="text-[10px]">{advisory ? 'mid-run' : 'blocking'}</Badge>
+        {advisory && <Badge variant="outline" className="text-[10px]">mid-run</Badge>}
+        {blocking && <Badge variant="outline" className="text-[10px]">blocking</Badge>}
         {typeof out.revision === 'number' && (
           <Badge variant="outline" className="text-[10px]">revision {out.revision}</Badge>
         )}
@@ -83,7 +95,7 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
           {out.exhausted ? ' — revision budget exhausted' : ''}
         </div>
         {failures.length > 0 && !unavailable && (
-          <ul className="mt-1 space-y-0.5">
+          <ul className="mt-1 space-y-0.5" data-testid="verify-findings">
             {failures.map((f, i) => (
               <li key={i} className="text-xs text-muted-foreground">
                 {f.claim ? <span className="text-foreground">“{f.claim}”: </span> : null}
@@ -93,6 +105,23 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
               </li>
             ))}
           </ul>
+        )}
+        {notes.length > 0 && (
+          <div className="mt-2" data-testid="checker-notes">
+            <div className="text-xs font-medium">Checker notes</div>
+            <p className="text-[11px] text-muted-foreground">
+              What the checker would question but could not show from the tool results. Notes never change the verdict.
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {notes.map((n, i) => (
+                <li key={i} className="text-xs text-muted-foreground">
+                  {n.claim ? <span>“{n.claim}”: </span> : null}
+                  <span className="text-foreground">{n.text}</span>
+                  {n.checker ? ` (${n.checker})` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {checkerLines.length > 0 && (
           <ul className="mt-1 space-y-0.5" data-testid="verify-checker-notes">
