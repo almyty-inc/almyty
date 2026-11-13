@@ -11,7 +11,7 @@ import { dirname } from 'path'
 import { chromium, request, expect, type FullConfig } from '@playwright/test'
 import { APP_URL, API_URL, QA_ORG_FILE, QA_ORG_NAME, QA_STATE_FILE, qaCredentials } from './env'
 import { sweep } from './sweep'
-
+import { installCli } from './cli'
 async function savedSessionWorks(): Promise<boolean> {
   if (!existsSync(QA_STATE_FILE)) return false
   const ctx = await request.newContext({ baseURL: API_URL, storageState: QA_STATE_FILE })
@@ -60,7 +60,9 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   } finally {
     await browser.close()
   }
-
   const hours = Number(process.env.GATE_SWEEP_MAX_AGE_HOURS ?? 24)
   await sweep(hours * 3600_000)
+
+  // The published CLI, installed the documented way, for the tests that run it.
+  installCli()
 }

@@ -19,7 +19,7 @@ import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { test as base, expect, type APIRequestContext, type Page, type TestInfo } from '@playwright/test'
 import { API_URL, APP_URL, RUN_ID, SHOTS_DIR } from './env'
-import { deleteThing, qaApi, qaOrg, type Kind, type QaOrg } from './qa-api'
+import { deleteThing, qaApi, qaOrg, redact, type Kind, type QaOrg } from './qa-api'
 
 export interface Gate {
   runId: string
@@ -29,6 +29,12 @@ export interface Gate {
   ident(what: string): string
   /** Delete this when the test ends. Deleted in reverse order. */
   track(kind: Kind, id: string): void
+  /**
+   * Undo something that is not a plain DELETE of a record (stop a
+   * process, revoke a key, remove a temp dir) when the test ends. Runs in
+   * reverse order together with `track`.
+   */
+  defer(what: string, undo: () => Promise<void> | void): void
 }
 
 export interface FreshUser {
@@ -48,6 +54,8 @@ export function shotPath(title: string): string {
 
 let seq = 0
 
+type Undo = { what: string; run: () => Promise<void> | void }
+
 export const test = base.extend<{ gate: Gate; qa: APIRequestContext; org: QaOrg; freshUser: FreshUser; _shot: void }>({
   org: async ({}, use) => {
     await use(qaOrg())
@@ -60,22 +68,25 @@ export const test = base.extend<{ gate: Gate; qa: APIRequestContext; org: QaOrg;
   },
 
   gate: async ({ qa, org }, use, testInfo) => {
-    const made: { kind: Kind; id: string }[] = []
+    const made: Undo[] = []
     const stamp = `${RUN_ID}${testInfo.retry ? `r${testInfo.retry}` : ''}`
     await use({
       runId: RUN_ID,
       name: (what) => `gate-${stamp}-${slug(what)}`,
       ident: (what) => `gate_${stamp}_${slug(what).replace(/-/g, '_')}`,
       track: (kind, id) => {
-        made.push({ kind, id })
+        made.push({ what: `${kind} ${id}`, run: () => deleteThing(qa, kind, id, org.id) })
+      },
+      defer: (what, undo) => {
+        made.push({ what, run: undo })
       },
     })
     const problems: string[] = []
-    for (const { kind, id } of made.reverse()) {
+    for (const { what, run } of made.reverse()) {
       try {
-        await deleteThing(qa, kind, id, org.id)
+        await run()
       } catch (err) {
-        problems.push((err as Error).message)
+        problems.push(redact(`${what}: ${String((err as Error).message).split('\n')[0]}`))
       }
     }
     // A failed cleanup leaves the thing for the daily sweep; say so, do not fail the test.

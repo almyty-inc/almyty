@@ -66,9 +66,12 @@ export async function deleteThing(api: APIRequestContext, kind: Kind, id: string
   }
 }
 
-/** Never let a session token reach a report. */
+/** Never let a session token or an API key reach a report. */
 export function redact(s: string): string {
-  return s.replace(/(access_token=|Bearer\s+|cookie:\s*)[^\s;,"]+/gi, '$1<redacted>').replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '<redacted>')
+  return s
+    .replace(/(access_token=|refresh_token=|Bearer\s+|cookie:\s*|x-api-key:\s*)[^\s;,"]+/gi, '$1<redacted>')
+    .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '<redacted>')
+    .replace(/\b(almyty|gw|ak|sk)_[A-Za-z0-9_-]{16,}/g, '<redacted>')
 }
 
 interface Named { id: string; name: string; createdAt?: string }
