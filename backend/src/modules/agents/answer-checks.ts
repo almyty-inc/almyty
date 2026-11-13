@@ -1,34 +1,39 @@
 /**
  * Checks the platform makes itself on a final answer: counting and
- * comparing, never judging. Each reads the answer, the tool results and,
- * for one check, what the agent answered before; none knows an API.
+ * comparing, never judging. Each reads the answer, the tool results, the
+ * agent's instructions and, where it matters, what the agent answered
+ * before; none knows an API. Every value the answer gives is read one way
+ * (normalValue, valueList): "[linux, s390x]", "`linux`, `s390x`" and
+ * "s390x, linux" are one set, "(none)" and "[N/A]" say none.
  *
  *  - An item's field against the tool's value for that same item: a date,
  *    a DOI, a version, labels, a title, a venue, a first author. The item
  *    is found by what identifies it (an OpenAlex id, an issue number, a
- *    package name, a title, a DOI). "(none)" and "[N/A]" say none. A DOI
- *    field that gives the DOI and says there is none contradicts itself
- *    (run 0f136ed8).
+ *    package name, a title, a DOI).
+ *  - Every claim that an item has no value for a field, in a field, a cell
+ *    or a sentence ("in PhilPapers, no DOI.", run d99aa38d), against the
+ *    tool's value for that item.
  *  - A package's update kind against its versions: "outdated-minor" for
  *    ^16.4.5 against 18.0.10 is wrong, 16 to 18 is a major update (run
  *    bf05f68a).
- *  - The technical terms a release's summary names against that release's
- *    notes: "dns" and "crypto" for v22.23.5, whose notes name neither (run
- *    947d8e43). An issue listed as a bug whose issue type, labels and title
- *    all say otherwise.
+ *  - The technical terms and severity words a release's summary names
+ *    against that release's notes: "dns" and "crypto" for v22.23.5 (run
+ *    947d8e43), "critical" for v26.13.1 (run d3757bc9).
+ *  - An issue listed as a bug that the agent's own rule cannot let in: a
+ *    question or feature request whose labels and title name no problem.
  *  - The answer's own counts against its own list and the tool's list:
  *    "the tool returned 10 works, I skipped 10" over a list of 10 (run
  *    6432deb3); "returned 10, skipped 0" over a list of 9 (run db52dcca).
  *  - Items the tool returned that the answer leaves out while it says its
  *    list is complete ("No other works matched", run db52dcca).
- *  - Items it says it skipped as already reported that no earlier answer
- *    of the agent reported (run af3c05c0).
+ *  - Against the agent's earlier answers: items it says it skipped as
+ *    already reported that none reported (run af3c05c0), and items it lists
+ *    as new that one did (run d13c5d50).
  *  - A summary's counts against the table above it.
  *
  * Every finding names the item and the field, and says what is wrong in
- * plain words. In seven rounds of runs these checks were right every time,
- * and a checker model's judgement was not; so a finding here decides the
- * verdict on its own (agent-verifier.helper.ts).
+ * plain words. A finding here decides the verdict on its own
+ * (agent-verifier.helper.ts); a checker model's judgement is a note.
  */
 
 import { asJson, cutTextOf } from './checker-evidence';
@@ -363,20 +368,38 @@ function entryTitle(entry: AnswerEntry): string {
 
 interface EntryKeys {
   dois: string[];
-  doiNone: boolean;
   ids: string[];
   numbers: string[];
   names: string[];
   title: string;
 }
 
-const NONE_VALUE = /^(?:none|null|n\/?a|not available|not given|not provided|unknown|no doi|no labels?|-|—|–)\.?$/i;
+const NONE_VALUE = /^(?:none|null|nil|n\/?a|not available|not given|not provided|not listed|unknown|missing|no doi|no labels?|-|—|–)\.?$/i;
 
-/** A value without the brackets around it: "(none)" is "none", "[n/a]" is "n/a". */
+/**
+ * The one way a value the answer gives is read, wherever it is compared:
+ * markdown and quotes off (bare), and the brackets around it, at any depth:
+ * "(none)" is "none", "[n/a]" is "n/a", "**`[linux]`**" is "linux".
+ */
 function unwrap(text: string): string {
   let s = bare(text);
   while (s.length >= 2 && '([{<'.includes(s[0]) && ')]}>'['([{<'.indexOf(s[0])] === s[s.length - 1]) s = bare(s.slice(1, -1));
   return s;
+}
+
+/** A value as it is compared: unwrapped, spaces collapsed, lower case. */
+export function normalValue(text: string): string {
+  return unwrap(text).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/**
+ * A list value as its members, each normalised: "[linux, s390x]",
+ * "`linux`, `s390x`", "\"linux\"; \"s390x\"" and "linux | s390x" are all
+ * {linux, s390x}. A none-like value is the empty list.
+ */
+export function valueList(text: string): string[] {
+  if (noneLike(text)) return [];
+  return Array.from(new Set(unwrap(text).split(/[,;|]/).map((part) => normalValue(part)).filter(Boolean)));
 }
 
 /** Whether a value the answer gives says there is none: "none", "(none)", "[N/A]", "", "-". */
@@ -385,11 +408,14 @@ function noneLike(text: string): boolean {
   return !s || NONE_VALUE.test(s);
 }
 
+/** Whether a value says there is none, or starts by saying so: "Unknown (preprint, Université Bordeaux Montaigne)". */
+function startsNone(text: string): boolean {
+  return noneLike(text) || /^(?:unknown|none|n\/a|not given|not available|not listed|missing)\b/i.test(unwrap(text));
+}
+
 function keysOfEntry(entry: AnswerEntry): EntryKeys {
   const text = entry.text;
   const dois = Array.from(new Set(Array.from(text.matchAll(DOI_IN_TEXT), (m) => doiKey(m[0]))));
-  const doiLine = labelled(entry, /^doi$/);
-  const doiNone = doiLine !== null && !!unwrap(doiLine) && noneLike(doiLine);
   const ids = Array.from(new Set(Array.from(text.matchAll(OPENALEX_ID), (m) => m[0].toLowerCase())));
   const numbers = new Set<string>();
   const head = entry.kind === 'row' ? entry.head : entry.head.slice(0, 120);
@@ -404,7 +430,7 @@ function keysOfEntry(entry: AnswerEntry): EntryKeys {
     const v = /^[*_`"[(]*(v?\d{1,6}\.\d{1,6}(?:\.\d{1,6})?(?:-[0-9A-Za-z.]+)?)\b/i.exec(entry.head.trim());
     if (v) names.push(v[1].toLowerCase(), v[1].toLowerCase().replace(/^v(?=\d)/, ''));
   }
-  return { dois, doiNone, ids, numbers: Array.from(numbers), names, title: entryTitle(entry) };
+  return { dois, ids, numbers: Array.from(numbers), names, title: entryTitle(entry) };
 }
 
 /** Whether two titles name the same work: one holds the other, compared as letters and digits. */
@@ -503,56 +529,24 @@ function dateFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   return out;
 }
 
-/**
- * Words in a DOI field, beside a DOI, that say the item has none: "DOI:
- * https://doi.org/10.17613/zf92n-68j61 (N/A - no direct DOI, but link
- * available)" (run 0f136ed8).
- */
-const SAYS_NO_DOI = /\bn\/a\b|\bno\s+(?:direct\s+|real\s+|official\s+|valid\s+)?doi\b|\bdoi\s+(?:is\s+)?(?:not available|unavailable|missing)\b|\bnone\b|\bnot available\b/i;
-
-/** What a DOI field says besides its DOIs: the field with every DOI and DOI address taken out. */
-function besideDoi(line: string): string {
-  return line.replace(/\bhttps?:\/\/(?:dx\.)?doi\.org\/\S{1,300}/gi, ' ').replace(DOI_IN_TEXT, ' ');
-}
-
-function doiFindings(entry: AnswerEntry, items: ToolItem[], keys: EntryKeys): CodeFinding[] {
+/** A DOI the answer gives that is not the one the tool gives the item. That the item has none is noneClaimFindings'. */
+function doiFindings(items: ToolItem[], keys: EntryKeys): CodeFinding[] {
   const withDoi = items.filter((it) => 'doi' in it.value);
-  if (!withDoi.length) return [];
+  if (!withDoi.length || !keys.dois.length) return [];
   const it = withDoi[0];
   const tool = typeof it.value.doi === 'string' && it.value.doi ? doiKey(it.value.doi) : null;
-  if (keys.dois.length) {
-    if (tool && keys.dois.includes(tool)) {
-      // The right DOI, and in the same field words that say there is none: the field contradicts itself.
-      const field = labelled(entry, /^doi$/);
-      const aside = field === null ? null : SAYS_NO_DOI.exec(besideDoi(field));
-      if (!field || !aside) return [];
-      return [
-        finding(
-          it.label,
-          'DOI',
-          `${it.label}: the answer gives DOI ${tool} and in the same field says "${short(besideDoi(field).trim(), 60)}", as if it had none`,
-          `doi: ${it.value.doi}`,
-          `DOI: ${field}`,
-          'item_field',
-        ),
-      ];
-    }
-    const said = keys.dois[0];
-    return [
-      finding(
-        it.label,
-        'DOI',
-        tool ? `${it.label}: the answer gives DOI ${said}, but the tool results give ${tool}` : `${it.label}: the answer gives DOI ${said}, but the tool results give it no DOI`,
-        `doi: ${tool ?? 'null'}`,
-        said,
-        'item_field',
-      ),
-    ];
-  }
-  if (keys.doiNone && tool) {
-    return [finding(it.label, 'DOI', `${it.label}: the answer says it has no DOI, but the tool results give ${tool}`, `doi: ${it.value.doi}`, labelled(entry, /^doi$/) ?? 'DOI: none', 'item_field')];
-  }
-  return [];
+  if (tool && keys.dois.includes(tool)) return [];
+  const said = keys.dois[0];
+  return [
+    finding(
+      it.label,
+      'DOI',
+      tool ? `${it.label}: the answer gives DOI ${said}, but the tool results give ${tool}` : `${it.label}: the answer gives DOI ${said}, but the tool results give it no DOI`,
+      `doi: ${tool ?? 'null'}`,
+      said,
+      'item_field',
+    ),
+  ];
 }
 
 function labelNames(v: unknown): string[] | null {
@@ -562,21 +556,133 @@ function labelNames(v: unknown): string[] | null {
     .filter(Boolean);
 }
 
+/** Labels the answer gives an item that the tool does not, compared as sets (valueList). That it has none is noneClaimFindings'. */
 function labelFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   const said = labelled(entry, /^labels?$/);
-  if (said === null) return [];
+  if (said === null || noneLike(said)) return [];
   const it = items.find((x) => labelNames(x.value.labels) !== null);
   if (!it) return [];
   const tool = labelNames(it.value.labels)!;
-  const toolSet = new Set(tool.map((l) => l.toLowerCase()));
-  const listed = noneLike(said) ? [] : said.split(',').map((l) => bare(l).toLowerCase()).filter(Boolean);
-  const toolWords = tool.length ? tool.join(', ') : 'none';
-  if (!listed.length) {
-    return tool.length ? [finding(it.label, 'labels', `${it.label}: the answer says it has no labels, but the tool results give ${toolWords}`, `labels: ${toolWords}`, `Labels: ${said}`, 'item_field')] : [];
-  }
-  const extra = listed.filter((l) => !toolSet.has(l));
+  const toolSet = new Set(tool.map((l) => normalValue(l)));
+  const extra = valueList(said).filter((l) => !toolSet.has(l));
   if (!extra.length) return [];
+  const toolWords = tool.length ? tool.join(', ') : 'none';
   return [finding(it.label, 'labels', `${it.label}: the answer gives the label${extra.length === 1 ? '' : 's'} ${extra.join(', ')}, but the tool results give ${toolWords}`, `labels: ${toolWords}`, `Labels: ${said}`, 'item_field')];
+}
+
+/**
+ * A field of an item that an answer can say the item has none of, and
+ * the tool's value of it. `tool` is undefined where the tool results do
+ * not carry the field at all (nothing to compare), null where they say
+ * there is none.
+ */
+interface NoneField {
+  field: string;
+  /** The label or table header the field is given under. */
+  label: RegExp;
+  /** Words in a sentence that say the item has none: "in PhilPapers, no DOI." */
+  inline?: RegExp;
+  tool: (it: ToolItem) => string | null | undefined;
+}
+
+const NONE_FIELDS: NoneField[] = [
+  {
+    field: 'DOI',
+    label: /^doi$/,
+    inline:
+      /\b(?:no|without(?: an?)?|lacks?(?: an?)?|missing(?: an?)?)\s+(?:direct\s+|official\s+|valid\s+|known\s+|registered\s+|listed\s+)?doi\b|\bdoi\s+(?:is\s+)?(?:not available|unavailable|missing|not given|not provided|not listed|unknown)\b|\bdoi:?[ \t]{0,3}[([]?(?:none|n\/a)\b/i,
+    tool: (it) => ('doi' in it.value ? (typeof it.value.doi === 'string' && it.value.doi ? doiKey(it.value.doi) : null) : undefined),
+  },
+  {
+    field: 'labels',
+    label: /^labels?$/,
+    inline: /\b(?:no|without)\s+labels?\b|\bunlabell?ed\b|\blabels?:?[ \t]{0,3}[([]?(?:none|n\/a)\b/i,
+    tool: (it) => {
+      const names = labelNames(it.value.labels);
+      return names === null ? undefined : names.length ? names.join(', ') : null;
+    },
+  },
+  {
+    field: 'venue',
+    label: /^(?:venue|journal|source|published in)$/,
+    inline: /\b(?:no|without(?: a)?)\s+(?:known\s+|listed\s+)?venue\b|\bvenue\s+(?:is\s+)?(?:unknown|not available|missing|not given|not listed)\b/i,
+    tool: (it) => {
+      if (!('primary_location' in it.value)) return undefined;
+      const source = pathOf(it.value, ['primary_location', 'source']);
+      if (!source.present) return undefined;
+      const name = source.value && typeof source.value === 'object' ? (source.value as Obj).display_name : null;
+      return typeof name === 'string' && name.trim() ? name : null;
+    },
+  },
+  {
+    field: 'first author',
+    label: /^(?:first author|author|lead author)$/,
+    inline: /\b(?:no|without(?: an?)?)\s+(?:known\s+|listed\s+)?authors?\b|\bauthors?\s+(?:is\s+|are\s+)?(?:unknown|not available|missing|not given|not listed)\b/i,
+    tool: (it) => {
+      if (!Array.isArray(it.value.authorships)) return undefined;
+      const name = pathOf(it.value, ['authorships', '0', 'author', 'display_name']).value;
+      return typeof name === 'string' && name.trim() ? name : null;
+    },
+  },
+  {
+    field: 'latest version',
+    label: /\blatest\b|^version$/,
+    tool: (it) => ('version' in it.value ? (typeof it.value.version === 'string' && it.value.version ? it.value.version : null) : undefined),
+  },
+];
+
+/** What a field says besides its DOIs: the field with every DOI and DOI address taken out. */
+function besideDoi(line: string): string {
+  return line.replace(/\bhttps?:\/\/(?:dx\.)?doi\.org\/\S{1,300}/gi, ' ').replace(DOI_IN_TEXT, ' ');
+}
+
+/** An entry's text without its links and addresses, where a "no DOI" could only be part of a URL. */
+function proseOf(text: string): string {
+  return text.replace(/\]\([^)\s]{0,500}\)/g, ']').replace(/\bhttps?:\/\/\S{0,500}/g, ' ');
+}
+
+/**
+ * Every claim in an entry that its item has no value for a field, against
+ * the tool's value for that item: a field given as "none", "(N/A)",
+ * "unknown" or "-" ("DOI: None", run c62aa29a; a "Labels" cell "(none)"),
+ * a field that gives a value and says there is none ("DOI: <doi> (N/A - no
+ * direct DOI)", run 0f136ed8), and the same said in a sentence ("in
+ * PhilPapers, no DOI.", run d99aa38d). The item is the one the entry
+ * names; where the tool results give it a value, the claim is wrong.
+ */
+function noneClaimFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
+  const out: CodeFinding[] = [];
+  const prose = proseOf(entry.text);
+  for (const f of NONE_FIELDS) {
+    const withField = items.filter((it) => f.tool(it) !== undefined);
+    if (!withField.length) continue;
+    const it = withField[0];
+    const value = f.tool(it);
+    if (!value) continue;
+    let said: string | null = null;
+    const given = labelled(entry, f.label);
+    if (given !== null) {
+      if (startsNone(given) && (unwrap(given) || f.field === 'labels')) said = `${f.field === 'labels' ? 'Labels' : f.field === 'DOI' ? 'DOI' : f.field}: ${given || '(empty)'}`;
+      else if (f.field === 'DOI' && f.inline && f.inline.test(besideDoi(given))) said = `DOI: ${given}`;
+      else if (f.field === 'DOI' && /^\W*(?:n\/a|none)\b/i.test(besideDoi(given).trim())) said = `DOI: ${given}`;
+    }
+    if (!said && f.inline) {
+      const m = f.inline.exec(f.field === 'DOI' ? besideDoi(prose) : prose);
+      if (m) said = m[0];
+    }
+    if (!said) continue;
+    out.push(
+      finding(
+        it.label,
+        f.field,
+        `${it.label}: the answer says it has no ${f.field} ("${short(said.trim(), 70)}"), but the tool results give ${short(value, 80)}`,
+        `${f.field}: ${value}`,
+        said.trim(),
+        'item_field',
+      ),
+    );
+  }
+  return out;
 }
 
 /** Whether two names are the same, the one holding the other, compared as letters and digits. */
@@ -606,9 +712,10 @@ function nameFindings(entry: AnswerEntry, items: ToolItem[], by: string | null):
     const source = pl && typeof pl === 'object' ? pathOf(pl, ['source']) : { present: true, value: null };
     if (source.present) {
       const name = source.value && typeof source.value === 'object' ? (source.value as Obj).display_name : null;
+      // A venue the answer says there is none of ("unknown", "(n/a)") is the none-claim check's (noneClaimFindings).
       if (typeof name === 'string' && name.trim()) {
-        if (!sameName(venue, name)) out.push(finding(it.label, 'venue', `${it.label}: the answer gives the venue as ${short(venue, 80)}, but the tool results give ${name}`, `primary_location.source.display_name: ${name}`, `Venue: ${venue}`, 'item_field'));
-      } else if ((source.value === null || name === null) && unwrap(venue) && !/^(?:unknown|none|n\/?a|not given|not available)\b/i.test(unwrap(venue))) {
+        if (!startsNone(venue) && !sameName(venue, name)) out.push(finding(it.label, 'venue', `${it.label}: the answer gives the venue as ${short(venue, 80)}, but the tool results give ${name}`, `primary_location.source.display_name: ${name}`, `Venue: ${venue}`, 'item_field'));
+      } else if ((source.value === null || name === null) && !startsNone(venue)) {
         out.push(finding(it.label, 'venue', `${it.label}: the answer gives the venue as ${short(venue, 80)}, but the tool results give it no venue`, 'primary_location.source: null', `Venue: ${venue}`, 'item_field'));
       }
     }
@@ -617,7 +724,7 @@ function nameFindings(entry: AnswerEntry, items: ToolItem[], by: string | null):
   if (author !== null && Array.isArray(it.value.authorships)) {
     const first = pathOf(it.value, ['authorships', '0', 'author', 'display_name']);
     const name = first.value;
-    if (typeof name === 'string' && name.trim() && !sameName(author, name) && !/^(?:unknown|none|n\/?a)\b/i.test(unwrap(author))) {
+    if (typeof name === 'string' && name.trim() && !sameName(author, name) && !startsNone(author)) {
       out.push(finding(it.label, 'first author', `${it.label}: the answer gives the first author as ${short(author, 60)}, but the tool results give ${name}`, `authorships[0].author.display_name: ${name}`, `First author: ${author}`, 'item_field'));
     }
   }
@@ -826,11 +933,12 @@ function releaseNoteFindings(entry: AnswerEntry, items: ToolItem[], by: string |
     while (word.endsWith('.')) word = word.slice(0, -1);
     if (!word) continue;
     const key = word.toLowerCase();
-    const term = /^cve-\d{4}-\d{4,7}$/.test(key) || isIdentifier(word) || notes.vocabulary.has(key);
+    const term = /^cve-\d{4}-\d{4,7}$/.test(key) || isIdentifier(word) || notes.vocabulary.has(key) || severityOf(key) !== null;
     if (term && !terms.includes(key)) terms.push(key);
   }
   // A term counts as mentioned where a word of the notes starts with it: "buffer" is in "retain buffers".
-  const missing = terms.filter((t) => !hasWordStart(text, t));
+  // A severity word counts where the notes say it in any of its words ("security": a CVE id).
+  const missing = terms.filter((t) => !(severityOf(t) ?? [t]).some((w) => hasWordStart(text, w)));
   if (!missing.length) return [];
   const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
   const line = said.split('\n').find((l) => missing.some((t) => hasWord(l.toLowerCase(), t))) ?? said;
@@ -846,50 +954,150 @@ function releaseNoteFindings(entry: AnswerEntry, items: ToolItem[], by: string |
   ];
 }
 
-/** Issue types that are not a bug, a regression or a security problem. */
-const NOT_A_PROBLEM_TYPE = /^(?:feature|feature request|enhancement|task|question|documentation|docs|epic|chore|discussion)$/i;
-/** Words that say an item is a bug, a regression or a security problem: in a heading, a label or a title. */
-const PROBLEM_WORDS = /\b(?:bugs?|regressions?|security|crash(?:es|ing)?|vulnerab|cve|segfault|segmentation|fails?|failing|failure|errors?|broken|leaks?|hangs?|panic)/i;
+/**
+ * Severity words a summary can attribute to a release, with the words of
+ * release notes that say the same: "critical" for v26.13.1, whose notes
+ * rate its fixes High, Medium and Low only (run d3757bc9).
+ */
+const SEVERITY: Record<string, string[]> = {
+  critical: ['critical'],
+  security: ['security', 'cve-', 'vulnerab'],
+  vulnerability: ['vulnerab', 'cve-', 'security'],
+  vulnerabilities: ['vulnerab', 'cve-', 'security'],
+  breaking: ['breaking', 'semver-major'],
+  exploit: ['exploit'],
+  exploited: ['exploit'],
+};
+
+function severityOf(word: string): string[] | null {
+  return SEVERITY[word] ?? null;
+}
+
+/** Labels that say an issue is not a problem but something else: a question, a feature request. */
+const NOT_A_PROBLEM_KIND = new Set(['question', 'feature', 'feature request', 'feature-request', 'enhancement', 'discussion', 'documentation', 'doc', 'docs', 'proposal', 'idea', 'task', 'epic', 'chore']);
+/** Labels the agent's rules commonly name as a problem, beside those its instructions list ("labels like confirmed-bug, ..."). */
+const PROBLEM_LABELS = ['bug', 'confirmed-bug', 'regression', 'security', 'crash', 'priority/critical', 'critical', 'p0', 'p1', 'high-priority', 'vulnerability'];
+/**
+ * Words that say an issue is a bug, a regression or a security problem, in
+ * a heading, a label or a title. Broad on purpose: a title with any of them
+ * meets "titles indicate bugs", so the check never fails an issue a title
+ * could let in.
+ */
+const PROBLEM_WORDS =
+  /\b(?:bugs?|regress|security|crash|vulnerab|cve|rce|exploit|segfault|segmentation|fail|error|broken|break|leak|hang|freez|panic|terminat|abort|incorrect|wrong|truncat|corrupt|overflow|deadlock|race|unexpected|invalid|unhandled|unable|cannot|can't|doesn't|does not|not work|mismatch|missing|undefined|throws?|exception|warning|flak|timeout|slow|stuck)/i;
 
 /**
- * An issue the answer lists under a heading of bugs, regressions or
- * security, whose issue type in the tool results says it is something else
- * (GitHub's `type`: Feature, Task), and whose labels and title say nothing
- * of a problem either. The agent's rules let an issue in by its labels or
- * its title, so either one that names a problem keeps it in ("Express 4:
- * update body-parser minimum for security fix", type Task). Labels alone
- * ("feature request") decide nothing: whether a title indicates a bug is a
- * judgement, and stays a checker note.
+ * The rule an agent's instructions give for which issues to list as
+ * problems ("pick the ones whose labels or titles indicate bugs,
+ * regressions or security (labels like confirmed-bug, bug, ...)"): its
+ * problem labels, or null when the instructions give no such rule.
  */
-function issueTypeFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
-  if (!entry.under || !PROBLEM_WORDS.test(entry.under)) return [];
-  const it = items.find((x) => x.numbers.length && x.value.type);
-  if (!it) return [];
-  const t = it.value.type;
-  const name = typeof t === 'string' ? t : t && typeof t === 'object' && typeof (t as Obj).name === 'string' ? ((t as Obj).name as string) : '';
-  if (!name || !NOT_A_PROBLEM_TYPE.test(name.trim())) return [];
+export function issueRuleOf(instructions: string): { labels: Set<string> } | null {
+  const text = String(instructions ?? '');
+  if (!/\b(?:labels?|titles?)\b[^.\n]{0,60}\bindicat[^.\n]{0,60}\b(?:bugs?|regressions?|security)\b/i.test(text)) return null;
+  const labels = new Set(PROBLEM_LABELS);
+  const like = /\blabels? like\s+([^)\n]{1,300})/i.exec(text);
+  if (like) for (const l of valueList(like[1].replace(/\bor\b|\band\b/gi, ','))) labels.add(l);
+  return { labels };
+}
+
+/**
+ * An issue the answer lists as a bug, a regression or a security problem
+ * that the agent's own rule cannot let in: its labels mark it as something
+ * else (a question, a feature request; or GitHub's issue type does), none
+ * of its labels is a problem label, and its title has no word that says
+ * there is a problem. #67354 "Fall back to a user-configured directory
+ * when resolving imports" (feature request), #67427 (question) in run
+ * d3757bc9. An issue without such a label is never failed: whether its
+ * title indicates a bug is a judgement, a checker note.
+ */
+/**
+ * Whether an issue meets the agent's rule for a problem: true where a
+ * label is a problem label or its title has a problem word, false where it
+ * meets neither and a label (or its issue type) marks it as something else,
+ * null where the tool results cannot say (no labels to read, or nothing
+ * but its title to judge by).
+ */
+export function issueQualifies(
+  it: ToolItem,
+  rule: { labels: Set<string> } | null,
+): { qualifies: boolean | null; problemLabel: boolean; kinds: string[]; labels: string[]; type: string } {
   const labels = labelNames(it.value.labels) ?? [];
-  if (PROBLEM_WORDS.test(it.title) || labels.some((l) => PROBLEM_WORDS.test(l))) return [];
+  const t = it.value.type;
+  const type = typeof t === 'string' ? t : t && typeof t === 'object' && typeof (t as Obj).name === 'string' ? ((t as Obj).name as string) : '';
+  const problemLabels = rule?.labels ?? new Set(PROBLEM_LABELS);
+  const isProblemLabel = (l: string) => problemLabels.has(normalValue(l)) || /\b(?:bug|regression|security|crash|vulnerab|cve|critical)/i.test(l);
+  const problemLabel = labels.some(isProblemLabel);
+  if (labelNames(it.value.labels) === null) return { qualifies: null, problemLabel, kinds: [], labels, type };
+  if (problemLabel || PROBLEM_WORDS.test(it.title) || /^bug$/i.test(type.trim())) return { qualifies: true, problemLabel, kinds: [], labels, type };
+  const kinds = [...labels.filter((l) => NOT_A_PROBLEM_KIND.has(normalValue(l))), ...(type && NOT_A_PROBLEM_KIND.has(normalValue(type)) ? [`issue type ${type}`] : [])];
+  return { qualifies: kinds.length ? false : null, problemLabel, kinds, labels, type };
+}
+
+function issueCategoryFindings(entry: AnswerEntry, items: ToolItem[], rule: { labels: Set<string> } | null): CodeFinding[] {
+  const listedAsProblem = rule !== null || (!!entry.under && PROBLEM_WORDS.test(entry.under));
+  if (!listedAsProblem) return [];
+  const it = items.find((x) => x.numbers.length && labelNames(x.value.labels) !== null);
+  if (!it) return [];
+  const { qualifies, kinds, labels, type } = issueQualifies(it, rule);
+  if (qualifies !== false) return [];
   return [
-    finding(it.label, 'issue type', `${it.label}: the answer lists it under "${short(entry.under, 80)}", but the tool results give it the issue type ${name}, and neither its labels nor its title name a problem`, `type: ${name}; labels: ${labels.join(', ') || 'none'}`, entry.head, 'item_field'),
+    finding(
+      it.label,
+      'category',
+      `${it.label}: the answer lists it as a bug, regression or security issue, but the tool results mark it as ${kinds.join(', ')}, and neither its labels nor its title name a problem`,
+      `labels: ${labels.join(', ') || 'none'}${type ? `; type: ${type}` : ''}; title: ${it.title}`,
+      entry.head,
+      'item_field',
+    ),
   ];
 }
 
+/**
+ * Whether the answer's table is in the order the agent's instructions
+ * sort it by ("sorted with deprecated first, then outdated-major, then
+ * outdated-minor, then up to date"), read from its status column. Null
+ * where the instructions give no such order or a row's status is not in it.
+ */
+export function followsSortRule(answer: string, instructions: string): boolean | null {
+  const text = String(instructions ?? '').toLowerCase().replace(/-/g, ' ');
+  const at = text.indexOf('sort');
+  if (at === -1) return null;
+  let rule = text.slice(at, at + 300);
+  const end = rule.indexOf('. ');
+  if (end !== -1) rule = rule.slice(0, end);
+  const parsed = parseAnswer(answer);
+  const statusHeader = parsed.headers.find((h) => /\bstatus\b/.test(h));
+  if (!statusHeader) return null;
+  const ranks: number[] = [];
+  for (const row of parsed.entries) {
+    if (row.kind !== 'row' || !row.cells) continue;
+    const status = normalValue(row.cells[statusHeader] ?? '').replace(/-/g, ' ');
+    const rank = status ? rule.indexOf(status) : -1;
+    if (rank === -1) return null;
+    ranks.push(rank);
+  }
+  if (ranks.length < 2) return null;
+  return ranks.every((r, i) => i === 0 || r >= ranks[i - 1]);
+}
+
 /** What each field check says about the entries the answer lists, item by item. */
-export function itemFieldFindings(parsed: ParsedAnswer, index: ToolItems, notes: ReleaseNotes = releaseNotesOf(index)): CodeFinding[] {
+export function itemFieldFindings(parsed: ParsedAnswer, index: ToolItems, notes: ReleaseNotes = releaseNotesOf(index), instructions = ''): CodeFinding[] {
   const out: CodeFinding[] = [];
+  const rule = issueRuleOf(instructions);
   for (const entry of parsed.entries) {
     const { items, by } = itemsOfEntry(entry, index);
     if (!items.length) continue;
     const keys = keysOfEntry(entry);
     out.push(
       ...dateFindings(entry, items),
-      ...doiFindings(entry, items, keys),
+      ...doiFindings(items, keys),
       ...labelFindings(entry, items),
+      ...noneClaimFindings(entry, items),
       ...nameFindings(entry, items, by),
       ...packageFindings(entry, items),
       ...releaseNoteFindings(entry, items, by, notes),
-      ...issueTypeFindings(entry, items),
+      ...issueCategoryFindings(entry, items, rule),
     );
   }
   return out;
@@ -1028,6 +1236,22 @@ export function countFindings(parsed: ParsedAnswer, index: ToolItems, evidence: 
   return out;
 }
 
+/**
+ * Whether the answer's own counts add up: the tool returned what it says,
+ * and returned less skipped is what it lists ("returned 10, skipped 1",
+ * 9 listed). Null where it states no returned or no skipped count.
+ */
+export function countsAddUp(answer: string, evidence: string): boolean | null {
+  const parsed = parseAnswer(answer);
+  const returned = statedReturned(parsed.outside);
+  const skipped = statedSkipped(parsed.outside);
+  if (!returned || !skipped) return null;
+  const listed = parsed.numberedLists.length === 1 ? parsed.numberedLists[0] : parsed.entries.length === 0 ? 0 : null;
+  if (listed === null) return null;
+  const wrong = countFindings(parsed, toolItems(evidence), evidence).some((f) => f.code === 'count');
+  return !wrong && returned.n - skipped.n === listed;
+}
+
 const SUMMARY_COUNT = /\b(\d{1,4})\s+(?:(?:packages?|dependencies|deps)\s+)?(?:(?:have|has|are|is|with|show|need)\s+)?(?:(?:newer|an?|available)\s+)?(deprecated|outdated[- ]major|outdated[- ]minor|up[- ]to[- ]date|major|minor)\b/gi;
 
 /** A summary's counts ("5 packages have newer major versions") against the rows of the table it sums up. */
@@ -1096,22 +1320,53 @@ function findWord(hay: string, needle: string, wholeWord: boolean): boolean {
   return false;
 }
 
-/** The most items one skip finding names. */
+/** The most items one finding about earlier answers names. */
 const SKIPPED_NAMED_MAX = 10;
 
 /**
- * Items the answer says it skipped as already reported, against what this
- * agent's earlier answers actually reported. `earlier` is the output of
- * the agent's earlier completed runs, newest first and bounded by the
- * caller (EARLIER_ANSWERS_MAX). An item is found in them by its OpenAlex
- * id, DOI, issue number, package name or whole title. A skipped item none
- * of them holds was never reported: the answer dropped a new item and
- * said it was old (run af3c05c0, 3 of its 10 "already reported" works).
- * Only items the answer leaves out are checked, and only when the count it
- * says it skipped (if it says one) is the count it leaves out.
+ * Words that speak of items reported before, or of new ones: "already
+ * reported", "reported before", "none were reported previously", "the
+ * remaining 9 new papers", "earlier digests". In an answer or in the
+ * agent's instructions ("leave out any paper you already reported"), they
+ * make what the agent reported before something its answer can be held to.
  */
-export function skippedAsReportedFindings(answer: string, parsed: ParsedAnswer, index: ToolItems, evidence: string, earlier?: string[]): CodeFinding[] {
-  if (!earlier || !index.items.length || PARTIAL.test(evidence) || !claimsSkippedAsReported(answer)) return [];
+const EARLIER_REPORTS =
+  /\b(?:already|previously|before|earlier)\b[^.\n]{0,40}\breported\b|\breported\b[^.\n]{0,40}\b(?:before|previously|earlier|already)\b|\bnew\s+(?:unique\s+)?(?:papers?|works?|items?|articles?|issues?|releases?|results?|entries|publications?)\b|\b(?:earlier|previous|prior)\s+digests?\b/i;
+
+/** Whether an answer or the agent's instructions speak of items reported before: then the check reads the agent's earlier answers. */
+export function speaksOfEarlierReports(answer: string, instructions = ''): boolean {
+  return claimsSkippedAsReported(answer) || EARLIER_REPORTS.test(parseAnswer(answer).outside) || EARLIER_REPORTS.test(instructions ?? '');
+}
+
+/**
+ * What this agent's earlier answers reported, as a lookup: an item is
+ * found in them by its OpenAlex id, DOI, issue number, package name or
+ * whole title. Null for an item with nothing to find it by.
+ */
+function earlierReports(earlier: string[]): (it: ToolItem) => boolean | null {
+  const lower = earlier.join('\n').toLowerCase();
+  const tightAll = tight(lower);
+  return (it) => {
+    const keys: string[] = [...it.ids, ...it.dois];
+    for (const n of it.numbers) keys.push(n, `/issues/${n.slice(1)}`, `/pull/${n.slice(1)}`);
+    if (typeof it.value.version === 'string' && it.names[0]) keys.push(it.names[0]);
+    const titleKey = tight(it.title);
+    if (!keys.length && titleKey.length < 20) return null;
+    return keys.some((k) => hasWord(lower, k)) || (titleKey.length >= 20 && tightAll.includes(titleKey));
+  };
+}
+
+function namedItem(it: ToolItem): string {
+  const id = it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? it.dois[0];
+  return id && !it.label.includes(id) ? `${id} ${it.label}` : it.label;
+}
+
+function itemId(it: ToolItem): string {
+  return it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? it.dois[0] ?? it.label;
+}
+
+/** The items the answer's entries show, and the tool list it speaks of: the one most entries come from, else the longest list of identifiable items. */
+function shownAndList(parsed: ParsedAnswer, index: ToolItems): { shown: Set<ToolItem>; list: number } {
   const shown = new Set<ToolItem>();
   const byList = new Map<number, number>();
   for (const e of parsed.entries) {
@@ -1120,7 +1375,6 @@ export function skippedAsReportedFindings(answer: string, parsed: ParsedAnswer, 
       byList.set(it.list, (byList.get(it.list) ?? 0) + 1);
     }
   }
-  // The tool list the answer speaks of: the one most of its entries come from, else the longest list of identifiable items.
   let list = -1;
   let best = 0;
   for (const [l, n] of byList) if (n > best) (best = n), (list = l);
@@ -1130,31 +1384,33 @@ export function skippedAsReportedFindings(answer: string, parsed: ParsedAnswer, 
       if (n > best) (best = n), (list = l);
     }
   }
+  return { shown, list };
+}
+
+/**
+ * Items the answer says it skipped as already reported, against what this
+ * agent's earlier answers actually reported. `earlier` is the output of
+ * the agent's earlier completed runs, newest first and bounded by the
+ * caller (EARLIER_ANSWERS_MAX). A skipped item none of them holds was
+ * never reported: the answer dropped a new item and said it was old (run
+ * af3c05c0, 3 of its 10 "already reported" works). Only items the answer
+ * leaves out are checked, and only when the count it says it skipped (if
+ * it says one) is the count it leaves out.
+ */
+export function skippedAsReportedFindings(answer: string, parsed: ParsedAnswer, index: ToolItems, evidence: string, earlier?: string[]): CodeFinding[] {
+  if (!earlier || !index.items.length || PARTIAL.test(evidence) || !claimsSkippedAsReported(answer)) return [];
+  const { shown, list } = shownAndList(parsed, index);
   if (list === -1) return [];
   const skippedItems = index.items.filter((it) => it.list === list && !shown.has(it));
   const stated = statedSkipped(parsed.outside);
   if (!skippedItems.length || (stated && stated.n !== skippedItems.length)) return [];
-
-  const lower = earlier.join('\n').toLowerCase();
-  const tightAll = tight(lower);
-  const reported = (it: ToolItem): boolean | null => {
-    const keys: string[] = [...it.ids, ...it.dois];
-    for (const n of it.numbers) keys.push(n, `/issues/${n.slice(1)}`, `/pull/${n.slice(1)}`);
-    if (typeof it.value.version === 'string' && it.names[0]) keys.push(it.names[0]);
-    const titleKey = tight(it.title);
-    if (!keys.length && titleKey.length < 20) return null;
-    return keys.some((k) => hasWord(lower, k)) || (titleKey.length >= 20 && tightAll.includes(titleKey));
-  };
+  const reported = earlierReports(earlier);
   const never = skippedItems.filter((it) => reported(it) === false);
   if (!never.length) return [];
-  const name = (it: ToolItem) => {
-    const id = it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? it.dois[0];
-    return id && !it.label.includes(id) ? `${id} ${it.label}` : it.label;
-  };
-  const named = never.slice(0, SKIPPED_NAMED_MAX).map(name);
+  const named = never.slice(0, SKIPPED_NAMED_MAX).map(namedItem);
   const more = never.length > named.length ? ` and ${never.length - named.length} more` : '';
   const where = earlier.length ? `none of this agent's last ${earlier.length} answers report ${never.length === 1 ? 'it' : 'them'}` : 'this agent has no earlier answer';
-  const ids = never.map((it) => it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? it.dois[0] ?? it.label);
+  const ids = never.map(itemId);
   return [
     finding(
       ids.slice(0, SKIPPED_NAMED_MAX).join(', '),
@@ -1163,6 +1419,37 @@ export function skippedAsReportedFindings(answer: string, parsed: ParsedAnswer, 
       `${never.length} skipped ${never.length === 1 ? 'item is' : 'items are'} in no earlier answer: ${ids.join(', ')}`,
       statedSkipped(parsed.outside)?.words ?? short(parsed.outside, 120),
       'skipped_not_reported',
+    ),
+  ];
+}
+
+/**
+ * Items the answer lists as new that this agent's earlier answers already
+ * reported. It runs where the answer or the agent's instructions speak of
+ * items reported before: an answer that says "the remaining 9 new papers"
+ * (run d13c5d50, all 9 reported by earlier runs) or "skipped 0 as none
+ * were reported previously" claims each item it lists is new, and so does
+ * any list from an agent told to leave out what it already reported.
+ */
+export function listedAsNewFindings(answer: string, parsed: ParsedAnswer, index: ToolItems, evidence: string, earlier?: string[], instructions = ''): CodeFinding[] {
+  if (!earlier?.length || !index.items.length || PARTIAL.test(evidence) || !speaksOfEarlierReports(answer, instructions)) return [];
+  const { shown, list } = shownAndList(parsed, index);
+  const reported = earlierReports(earlier);
+  const again = [...shown].filter((it) => it.list === list && reported(it) === true);
+  if (!again.length) return [];
+  const named = again.slice(0, SKIPPED_NAMED_MAX).map(namedItem);
+  const more = again.length > named.length ? ` and ${again.length - named.length} more` : '';
+  const ids = again.map(itemId);
+  const saysNew = EARLIER_REPORTS.test(parsed.outside) || claimsSkippedAsReported(answer);
+  const claim = saysNew ? 'as new' : 'though its instructions say to leave out what it already reported';
+  return [
+    finding(
+      ids.slice(0, SKIPPED_NAMED_MAX).join(', '),
+      'previously reported',
+      `The answer lists ${again.length} ${again.length === 1 ? 'item' : 'items'} ${claim}, but this agent's earlier answers already reported ${again.length === 1 ? 'it' : 'them'}: ${named.join('; ')}${more}`,
+      `${again.length} listed ${again.length === 1 ? 'item is' : 'items are'} in an earlier answer of the last ${earlier.length}: ${ids.join(', ')}`,
+      short(parsed.outside, 160),
+      'previously_reported',
     ),
   ];
 }
@@ -1192,20 +1479,24 @@ export function reportedItemsOf(answer: string, evidence: string): Array<{ id: s
 /**
  * Every finding of these checks on an answer. The window check
  * (window-check.ts) is run beside them by the verifier. `earlier` is what
- * this agent's earlier runs answered, when the caller has it: a claim that
- * items were skipped as already reported is checked against it. `whole`
- * is the run's tool results read whole, when the caller has them: release
- * notes are compared from them, since the evidence cuts long texts.
+ * this agent's earlier runs answered, when the caller has it: what the
+ * answer says it skipped, and what it lists as new, are checked against
+ * it. `whole` is the run's tool results read whole, when the caller has
+ * them: release notes are compared from them, since the evidence cuts long
+ * texts. `instructions` are the agent's own: the rule for which issues are
+ * bugs, and whether it is told to leave out what it reported before.
  */
-export function answerCodeFindings(input: { answer: string; evidence: string; earlier?: string[]; whole?: WholeToolResult[] }): CodeFinding[] {
+export function answerCodeFindings(input: { answer: string; evidence: string; earlier?: string[]; whole?: WholeToolResult[]; instructions?: string }): CodeFinding[] {
   if (!input.answer?.trim() || !input.evidence?.trim()) return [];
   const parsed = parseAnswer(input.answer);
   const index = toolItems(input.evidence);
+  const instructions = input.instructions ?? '';
   const out = [
-    ...itemFieldFindings(parsed, index, releaseNotesOf(index, input.whole)),
+    ...itemFieldFindings(parsed, index, releaseNotesOf(index, input.whole), instructions),
     ...countFindings(parsed, index, input.evidence),
     ...summaryFindings(parsed),
     ...skippedAsReportedFindings(input.answer, parsed, index, input.evidence, input.earlier),
+    ...listedAsNewFindings(input.answer, parsed, index, input.evidence, input.earlier, instructions),
   ];
   const seen = new Set<string>();
   return out.filter((f) => (seen.has(f.rule) ? false : (seen.add(f.rule), true)));

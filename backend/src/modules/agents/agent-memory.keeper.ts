@@ -1,5 +1,6 @@
 import type { Agent } from '../../entities/agent.entity';
-import type { AgentRun } from '../../entities/agent-run.entity';
+import { Not } from 'typeorm';
+import { AgentRunStatus, type AgentRun } from '../../entities/agent-run.entity';
 import type { ChatRequest } from '../llm-providers/llm-providers.service';
 import { MemoryError, type MemoryItem, type Provenance, type RankedItem, type ScopeRef, type Tier } from '../memory/canonical/canonical.types';
 import type { PutInput } from '../memory/canonical/dto/canonical-memory.dto';
@@ -141,27 +142,45 @@ export function parseFacts(content: string): string[] {
   }
 }
 
-/** The most item ids one run's "reported items" memory keeps: it must fit RECALL_ITEM_MAX_CHARS when recalled. */
-export const REPORTED_ITEMS_MAX = 30;
+/** The most item ids one run records as reported. */
+export const REPORTED_ITEMS_MAX = 50;
+/** How many of the agent's earlier runs a run is told the reported items of, newest first, and the most ids that makes. */
+export const REPORTED_RUNS_MAX = 20;
+export const REPORTED_IDS_MAX = 200;
 
 /**
- * The items a finished run's answer reported, by the ids its tool results
- * give them (an OpenAlex id and DOI, an issue number), as one memory:
- * `Reported in the answer to "<request>" on 2026-11-13: W7167504345 (DOI
- * 10.17613/zf92n-68j61); ...`. A later run recalls it with the same
- * request, and can leave out exactly these items. Null when the answer
- * lists no item its tool results identify.
+ * The items a finished run's answer reported, by the one id each is best
+ * known by (an OpenAlex id, else an issue number, else a DOI), from the
+ * items its tool results identify. [] when the answer lists none.
  */
-export function reportedItemsMemory(run: Pick<AgentRun, 'input' | 'metadata' | 'output' | 'steps' | 'createdAt'>): string | null {
+export function reportedItemIds(run: Pick<AgentRun, 'input' | 'output' | 'steps'>): string[] {
   const answer = asText(run.output).trim();
-  if (!answer) return null;
-  const items = reportedItemsOf(answer, runEvidence(run as any)).slice(0, REPORTED_ITEMS_MAX);
-  if (!items.length) return null;
-  const asked = recallQueryOf(run).replace(/\s+/g, ' ').slice(0, 200);
-  const day = (run.createdAt instanceof Date ? run.createdAt : new Date()).toISOString().slice(0, 10);
+  if (!answer) return [];
+  return reportedItemsOf(answer, runEvidence(run as any))
+    .map((it) => it.id)
+    .slice(0, REPORTED_ITEMS_MAX);
+}
+
+/**
+ * Keeps on the finished run (`metadata.reportedItems`) the ids of the
+ * items its answer reported. They are state, not a memory: every later run
+ * of the agent is given them (AgentMemoryKeeper.reportedBefore), where a
+ * memory of them lost the similarity ranking to prose facts and no run
+ * ever saw it (rc8, runs bc75f6f1 to d13c5d50).
+ */
+export function recordReportedItems(run: AgentRun): void {
+  const ids = reportedItemIds(run);
+  if (!ids.length) return;
+  run.metadata = { ...(run.metadata ?? {}), reportedItems: ids };
+}
+
+/** The "Items you already reported" block a run's prompt carries, or '' when there are none. */
+export function reportedBlock(ids: string[]): string {
+  if (!ids.length) return '';
   return (
-    `Reported in the answer to "${asked}" on ${day} (${items.length} item${items.length === 1 ? '' : 's'}): ` +
-    items.map((it) => (it.doi ? `${it.id} (DOI ${it.doi})` : it.id)).join('; ')
+    '\n\n## Items you already reported\n' +
+    'Your earlier answers reported these items, newest first. Leave out any of them your tools return again, and say how many you left out:\n' +
+    ids.join(', ')
   );
 }
 /** The most of one recalled memory put in front of the model. */
@@ -262,17 +281,58 @@ export class AgentMemoryKeeper {
       error = `Failed to recall memories: ${err?.message ?? err}`;
       this.s.logger.warn(`${error} (run ${run.id})`);
     }
-    const context = recallBlock(ranked);
-    run.workingMemory = { ...(run.workingMemory ?? {}), memoryRecall: { context, found: ranked.length } };
+    // What the agent reported before, by id, always: not ranked against the
+    // request like a memory, which prose facts outranked every time.
+    const reported = await this.reportedBefore(agent, run);
+    const context = recallBlock(ranked) + reportedBlock(reported);
+    run.workingMemory = { ...(run.workingMemory ?? {}), memoryRecall: { context, found: ranked.length, reportedItems: reported.length } };
     run.steps.push({
       type: 'memory_recall',
       input: { scope: scope.scope_type, account: s.account },
-      output: { found: ranked.length, ...(query ? {} : { skipped: 'nothing to search with' }) },
+      output: { found: ranked.length, reportedItems: reported.length, ...(query ? {} : { skipped: 'nothing to search with' }) },
       duration: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
       ...(error ? { error } : {}),
     });
     return context;
+  }
+
+  /**
+   * The ids of the items this agent's earlier completed runs reported
+   * (their `metadata.reportedItems`), newest first, without repeats: the
+   * last REPORTED_RUNS_MAX runs, at most REPORTED_IDS_MAX ids. For a memory
+   * that is each person's own, only the runs of the same person or
+   * visitor. [] when they cannot be read.
+   */
+  async reportedBefore(agent: Pick<Agent, 'id' | 'memoryConfig'>, run: AgentRun): Promise<string[]> {
+    if (!this.s.runRepository) return [];
+    const s = this.settings(agent);
+    const own = s.whose === 'person' && run.principal?.kind !== 'agent';
+    if (own && !run.userId && !run.endUserId) return [];
+    try {
+      const rows = await this.s.runRepository.find({
+        where: {
+          agentId: agent.id,
+          organizationId: run.organizationId,
+          status: AgentRunStatus.COMPLETED,
+          id: Not(run.id),
+          ...(own ? (run.userId ? { userId: run.userId } : { endUserId: run.endUserId }) : {}),
+        } as any,
+        select: { id: true, metadata: true, createdAt: true } as any,
+        order: { createdAt: 'DESC' } as any,
+        take: REPORTED_RUNS_MAX,
+      });
+      const ids: string[] = [];
+      for (const row of rows as AgentRun[]) {
+        const listed = row.metadata?.reportedItems;
+        if (!Array.isArray(listed)) continue;
+        for (const id of listed) if (typeof id === 'string' && !ids.includes(id) && ids.length < REPORTED_IDS_MAX) ids.push(id);
+      }
+      return ids;
+    } catch (err: any) {
+      this.s.logger.warn(`Failed to read what agent ${agent.id} reported before, for run ${run.id}: ${err?.message ?? err}`);
+      return [];
+    }
   }
 
   /** The recall_memory tool. */
@@ -362,16 +422,12 @@ export class AgentMemoryKeeper {
 
     let entries: string[] = [];
     let dropped = false;
-    // The ids of the items the answer reported, as the tool results give
-    // them: facts are a few sentences and kept none of them, so a later
-    // digest "skipped as already reported" papers it had never reported
-    // (run af3c05c0).
-    let reported: string | null = null;
+    // The ids of the items the answer reported are not a fact to rank by
+    // similarity: they are the run's reportedItems (recordReportedItems),
+    // and every later run of the agent is given them (reportedBlock).
     if (s.save === 'facts') {
       const answer = await this.runner.callModel(run, team.main, request(factsPrompt(s.neverSave), exchange));
       entries = answer.error ? [] : parseFacts(answer.content);
-      const items = reportedItemsMemory(run);
-      if (items) reported = await this.screen(run, team.main, items, s.neverSave);
     } else {
       const kept = await this.screen(run, team.main, exchange, s.neverSave);
       if (kept === null) dropped = true;
@@ -379,8 +435,7 @@ export class AgentMemoryKeeper {
     }
 
     let saved = 0;
-    const saves = [...entries.map((content) => ({ content, items: false })), ...(reported ? [{ content: reported, items: true }] : [])];
-    for (const { content, items } of saves) {
+    for (const content of entries) {
       try {
         await this.put(
           agent,
@@ -389,7 +444,7 @@ export class AgentMemoryKeeper {
           s,
           content,
           s.save === 'facts' ? 'long' : 'project',
-          ['auto-saved', items ? 'reported-items' : s.save === 'facts' ? 'fact' : 'conversation'],
+          ['auto-saved', s.save === 'facts' ? 'fact' : 'conversation'],
           s.save === 'facts' ? 'auto_save_facts' : 'auto_save_conversation',
           s.save === 'facts' ? 'fact' : 'episode',
         );
@@ -402,7 +457,7 @@ export class AgentMemoryKeeper {
       type: 'memory_save',
       role: stampOf(team.main),
       input: { save: s.save, scope: scope.scope_type, account: s.account },
-      output: { saved, ...(reported ? { reportedItems: true } : {}), ...(dropped ? { dropped: 'never-save rules' } : {}) },
+      output: { saved, ...(dropped ? { dropped: 'never-save rules' } : {}) },
       cost: (run.totalCost || 0) - costBefore,
       duration: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
