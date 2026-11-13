@@ -28,6 +28,9 @@ export function appTypeOrmOptions(configService: ConfigService) {
     // gated migration Job runs before the rollout, so the N replicas
     // don't race each other running the same migrations on startup.
     migrationsRun: configService.get('DB_MIGRATIONS_RUN', 'true') !== 'false',
+    // One transaction per migration, as database.config.ts (the migration
+    // Job): a CONCURRENTLY index migration sets `transaction = false`.
+    migrationsTransactionMode: 'each' as const,
     synchronize: false,
     // Failing and slow queries are logged with their SQL and error,
     // never their parameters (row contents).
