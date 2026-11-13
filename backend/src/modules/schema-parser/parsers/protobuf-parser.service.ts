@@ -46,7 +46,10 @@ export class ProtobufParserService implements SchemaParser {
       if (typeof rawSchema === 'string' && rawSchema.length > MAX_PROTO_BYTES) {
         throw new Error(`Protobuf schema exceeds max size of ${MAX_PROTO_BYTES} bytes`);
       }
-      const root = protobuf.parse(rawSchema).root;
+      // Field names as the .proto writes them (f_string, not fString):
+      // the gRPC caller loads the proto with keepCase too, so these are
+      // the keys a request message is encoded from.
+      const root = protobuf.parse(rawSchema, { keepCase: true }).root;
       
       // One budget for the whole parse: operations and resources draw
       // from the same allowance, so the total emitted is bounded even

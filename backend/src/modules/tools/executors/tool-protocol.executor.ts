@@ -24,6 +24,7 @@ import { Organization } from '../../../entities/organization.entity';
 import { sanitizeHeaders } from '../../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { decideToolEgress } from './tool-egress';
+import { graphqlOperationRequest } from './graphql-operation-request';
 import {
   decideToolRequest,
   effectiveMaxResponseBytes,
@@ -33,7 +34,6 @@ import { ToolGrpcExecutor } from './tool-grpc.executor';
 import {
   ToolExecutionOptions,
   ToolExecutionResult,
-  GraphQLRequest,
   SOAPRequest,
 } from '../tool-execution.types';
 import {
@@ -207,24 +207,13 @@ export class ToolProtocolExecutor {
       return this.blocked(gqlOpPolicy.reason!, startTime);
     }
 
-    // If the caller passed an explicit `variables` object, use it.
-    // Otherwise, treat the remaining parameters as variables — but
-    // strip the three meta keys so they don't leak into the GraphQL
-    // variables payload alongside the operation that describes them.
-    let graphqlVariables: Record<string, any> | undefined;
-    if (parameters.variables !== undefined) {
-      graphqlVariables = parameters.variables;
-    } else {
-      const { query: _q, variables: _v, operationName: _o, ...rest } = parameters;
-      graphqlVariables = rest;
+    const graphqlRequest = graphqlOperationRequest(operation, parameters);
+    if (!graphqlRequest.query) {
+      return this.failure(
+        `GraphQL tool ${tool.name} has no query to send. Import the API again, or pass a query.`,
+        startTime,
+      );
     }
-
-    const graphqlRequest: GraphQLRequest = {
-      query: parameters.query || operation.metadata?.query,
-      variables: graphqlVariables,
-      operationName: parameters.operationName,
-    };
-
     const config: AxiosRequestConfig = {
       method: 'POST',
       url: targetUrl,
