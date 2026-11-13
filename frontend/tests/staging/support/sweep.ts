@@ -8,8 +8,7 @@
  */
 import { qaApi, qaOrg, list, deleteThing, GATE_NAME, type Kind } from './qa-api'
 
-const ORDER: Kind[] = ['agent', 'gateway', 'mcp-source', 'tool', 'api', 'credential']
-
+const ORDER: Kind[] = ['approval-rule', 'agent', 'gateway', 'mcp-source', 'tool', 'api', 'credential']
 export async function sweep(maxAgeMs = 24 * 3600_000, log: (s: string) => void = console.log): Promise<number> {
   const org = qaOrg()
   const api = await qaApi(org.id)
