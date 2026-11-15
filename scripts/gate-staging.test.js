@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder } = require('./gate-staging');
+const { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder, installNeeded, writeInstallStamp } = require('./gate-staging');
 
 const playwrightReport = {
   suites: [
@@ -151,4 +151,217 @@ test('the CLI packages build after the local packages they import, @almyty/clien
 test('buildOrder refuses a dependency cycle', () => {
   const pkgs = { a: { localDeps: ['b'] }, b: { localDeps: ['a'] } };
   assert.throws(() => buildOrder(pkgs, ['a']), /dependency cycle: a -> b -> a/);
+});
+
+// ── secrets out of the terminal, the report and the files left behind ──
+//
+// Playwright's error for a failed request lists its headers, and the gate
+// printed it straight to the terminal: the QA user's access_token cookie
+// with it. Fake values only, assembled at run time.
+const os = require('os');
+const { redactingWriter, scrubDir, shRedacted } = require('./gate-redact');
+
+const fakeOpaque = (label) => `${label}${'x9'.repeat(12)}`;
+const fakeJwtValue = () => ['eyJ', 'head'.repeat(3), '.', 'body'.repeat(3), '.', 'sign'.repeat(3)].join('');
+const secrets = () => {
+  const access = fakeJwtValue();
+  const refresh = fakeOpaque('rt');
+  const gatewayKey = ['gw', 'fake'.repeat(6)].join('_');
+  const callLog = [
+    'apiRequestContext.delete: connect ETIMEDOUT',
+    'Call log:',
+    '  - → DELETE https://api.example/apis/1',
+    '  -   user-agent: Playwright/1.56',
+    `  -   cookie: access_token=${access}; refresh_token=${refresh}`,
+    `  -   x-api-key: ${gatewayKey}`,
+    `  - ← 401 set-cookie: access_token=${access}; Path=/; HttpOnly`,
+  ].join('\n');
+  return { access, refresh, gatewayKey, callLog, all: [access, refresh, gatewayKey] };
+};
+const assertClean = (text, values, where) => {
+  for (const v of values) assert.ok(!text.includes(v), `${where} still carries a secret`);
+  assert.match(text, /<redacted>/, `${where} should say what it hid`);
+};
+
+test('redact hides every cookie of a Playwright call log, not just the first', () => {
+  const s = secrets();
+  const out = redact(s.callLog);
+  assertClean(out, s.all, 'the call log');
+  // What is not a secret stays readable.
+  assert.match(out, /DELETE https:\/\/api\.example\/apis\/1/);
+  assert.match(out, /user-agent: Playwright/);
+});
+
+test('redact hides tokens in storage state, JSON bodies and query strings', () => {
+  const s = secrets();
+  const state = JSON.stringify({ cookies: [{ name: 'access_token', value: s.access }, { name: 'refresh_token', value: s.refresh }] });
+  const body = JSON.stringify({ data: { key: s.gatewayKey, refresh_token: s.refresh } });
+  const query = `GET /mcp?api_key=${s.refresh}&x=1`;
+  assertClean(redact(state), s.all, 'storage state');
+  assertClean(redact(body), s.all, 'a JSON body');
+  assertClean(redact(query), s.all, 'a query string');
+});
+
+test('a child process cannot print a secret through the gate, even split across writes', async () => {
+  const s = secrets();
+  // The child writes the call log in small pieces, cutting through the cookie.
+  const script = `const t = process.argv[1]; for (let i = 0; i < t.length; i += 7) process.stdout.write(t.slice(i, i + 7)); process.stderr.write(t);`;
+  let out = '';
+  let err = '';
+  const code = await shRedacted(process.execPath, ['-e', script, s.callLog], {}, { write: (x) => { out += x; } }, { write: (x) => { err += x; } });
+  assert.strictEqual(code, 0);
+  assertClean(out, s.all, 'stdout');
+  assertClean(err, s.all, 'stderr');
+  assert.match(out, /Call log:/);
+});
+
+test('redactingWriter holds a partial line until it is complete', () => {
+  const s = secrets();
+  let out = '';
+  const w = redactingWriter((x) => { out += x; });
+  w.write(`cookie: access_token=${s.access.slice(0, 10)}`);
+  assert.strictEqual(out, '', 'nothing is written before the line ends');
+  w.write(`${s.access.slice(10)}\n`);
+  w.end();
+  assertClean(out, [s.access], 'the joined line');
+});
+
+test('scrubDir rewrites the result files the gate leaves on disk', () => {
+  const s = secrets();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-scrub-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'playwright', 'j9'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'playwright-results.json'), JSON.stringify({ errors: [{ message: s.callLog }] }));
+    fs.writeFileSync(path.join(dir, 'playwright', 'j9', 'error-context.md'), s.callLog);
+    fs.writeFileSync(path.join(dir, 'shot.png'), s.callLog); // not text: left as it is
+    const changed = scrubDir(dir);
+    assert.strictEqual(changed.length, 2);
+    assertClean(fs.readFileSync(path.join(dir, 'playwright-results.json'), 'utf8'), s.all, 'the JSON report');
+    assertClean(fs.readFileSync(path.join(dir, 'playwright', 'j9', 'error-context.md'), 'utf8'), s.all, 'the error context');
+    // Still valid JSON after redaction.
+    assert.doesNotThrow(() => JSON.parse(fs.readFileSync(path.join(dir, 'playwright-results.json'), 'utf8')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the report redacts its notes and every failure cell', () => {
+  const s = secrets();
+  const md = buildReport({
+    runId: 'r', startedAt: 's', finishedAt: 'f', target: { app: 'a', api: 'b' }, health: null,
+    browser: [{ suite: 's', title: 't', status: 'failed', ms: 1, screenshot: '', error: s.callLog, cleanup: '' }],
+    cli: [],
+    notes: [`CLI login failed: ${s.callLog}`],
+  });
+  assertClean(md, s.all, 'the report');
+});
+
+test('the gate runs its children piped through redaction, and the fixtures use the same redaction', () => {
+  const gate = fs.readFileSync(path.join(__dirname, 'gate-staging.js'), 'utf8');
+  assert.match(gate, /await shRedacted\(process\.execPath, args/, 'Playwright output is redacted');
+  assert.match(gate, /await shRedacted\(process\.execPath, \[path\.join\(tests/, 'CLI smoke output is redacted');
+  assert.match(gate, /scrubDir\(GATE_DIR\)/, 'result files are scrubbed');
+  const fixtures = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'tests', 'staging', 'support', 'qa-api.ts'), 'utf8');
+  assert.match(fixtures, /from '\.\.\/\.\.\/\.\.\/\.\.\/scripts\/gate-redact\.js'/);
+});
+
+// The gate installed only when node_modules was missing, so a lockfile that
+// gained devDependencies (@modelcontextprotocol/client, openai, @a2a-js/sdk)
+// left whole phases failing on a missing module.
+function scratchPackage() {
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-install-'));
+  fs.writeFileSync(path.join(dir, 'package-lock.json'), '{"lockfileVersion":3,"packages":{}}\n');
+  return dir;
+}
+function npmInstalled(dir, at) {
+  fs.mkdirSync(path.join(dir, 'node_modules'), { recursive: true });
+  const record = path.join(dir, 'node_modules', '.package-lock.json');
+  fs.writeFileSync(record, '{}');
+  fs.utimesSync(record, at, at);
+}
+
+test('installNeeded: no node_modules means install', () => {
+  const dir = scratchPackage();
+  try {
+    assert.match(installNeeded(dir), /missing/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('installNeeded: a lockfile newer than an install the gate did not make means install', () => {
+  const dir = scratchPackage();
+  try {
+    const now = Date.now() / 1000;
+    npmInstalled(dir, now - 3600);
+    fs.utimesSync(path.join(dir, 'package-lock.json'), now, now);
+    assert.match(installNeeded(dir), /newer/);
+    npmInstalled(dir, now + 60);
+    assert.strictEqual(installNeeded(dir), '');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('installNeeded: after a gate install the lockfile hash decides, not its mtime', () => {
+  const dir = scratchPackage();
+  try {
+    const now = Date.now() / 1000;
+    npmInstalled(dir, now - 3600);
+    writeInstallStamp(dir);
+    // Touched (a branch switch) but unchanged: no reinstall.
+    fs.utimesSync(path.join(dir, 'package-lock.json'), now, now);
+    assert.strictEqual(installNeeded(dir), '');
+    // A new dependency in the lockfile: reinstall, even if older on disk.
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), '{"lockfileVersion":3,"packages":{"node_modules/openai":{}}}\n');
+    fs.utimesSync(path.join(dir, 'package-lock.json'), now - 7200, now - 7200);
+    assert.match(installNeeded(dir), /changed/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('installNeeded: an install with no record of itself is redone', () => {
+  const dir = scratchPackage();
+  try {
+    fs.mkdirSync(path.join(dir, 'node_modules'));
+    assert.match(installNeeded(dir), /no record/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the gate checks the install of the frontend, cli-tests and every package it builds', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'gate-staging.js'), 'utf8');
+  assert.match(src, /function ensureInstalled\(dir\) \{\n  const why = installNeeded\(dir\);/);
+  assert.match(src, /function runPlaywright\(env\) \{\n  ensureInstalled\(FRONTEND\);/);
+  assert.match(src, /const pkg = pkgs\[name\];\n    ensureInstalled\(pkg\.dir\);/);
+  assert.match(src, /ensureInstalled\(tests\);/);
+  // Every install, and only a successful one, records its lockfile.
+  assert.match(src, /npm ci failed in \$\{dir\}`\);\n  writeInstallStamp\(dir\);/);
+});
+
+// A storage-state entry whose value is itself JSON (\" inside) was cut at
+// the first escaped quote, leaving a file that no longer parsed.
+test('redact keeps JSON valid when a secret value holds escaped quotes', () => {
+  const { redact } = require('./gate-redact');
+  const inner = JSON.stringify({ id: 'u1', email: 'qa@example.test', nested: { a: 'b' } });
+  const state = JSON.stringify({ cookies: [{ name: 'access_token', value: 'v' + 'x'.repeat(20) }], origins: [{ localStorage: [{ name: 'auth', value: inner }] }] }, null, 2);
+  const out = redact(state);
+  assert.doesNotThrow(() => JSON.parse(out));
+  assert.ok(!out.includes('qa@example.test'));
+  const body = JSON.stringify({ password: 'p"q' + 'w'.repeat(10), ok: true });
+  const cleaned = redact(body);
+  assert.deepEqual(JSON.parse(cleaned), { password: '<redacted>', ok: true });
+});
+
+// The next run signs in with the saved session in .auth; rewriting it broke
+// the gate's own setup.
+test('scrubDir leaves the saved session in .auth alone', () => {
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-auth-'));
+  try {
+    fs.mkdirSync(path.join(dir, '.auth'));
+    const state = JSON.stringify({ cookies: [{ name: 'access_token', value: 'v' + 'y'.repeat(20) }] });
+    fs.writeFileSync(path.join(dir, '.auth', 'qa.json'), state);
+    fs.writeFileSync(path.join(dir, 'out.log'), 'cookie: access_token=' + 'z'.repeat(20) + '\n');
+    const changed = scrubDir(dir);
+    assert.equal(fs.readFileSync(path.join(dir, '.auth', 'qa.json'), 'utf8'), state);
+    assert.deepEqual(changed, [path.join(dir, 'out.log')]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

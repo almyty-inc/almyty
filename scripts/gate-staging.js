@@ -30,6 +30,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const { redact, scrubDir, shRedacted } = require('./gate-redact');
 
 const ROOT = path.resolve(__dirname, '..');
 const FRONTEND = path.join(ROOT, 'frontend');
@@ -96,13 +97,8 @@ function firstLine(s) {
   return (clean.split('\n').find((l) => l.trim()) || '').trim().slice(0, 240);
 }
 
-/** A session token or API key must never reach the report. */
-function redact(s) {
-  return String(s)
-    .replace(/(access_token=|Bearer\s+|cookie:\s*)[^\s;,"]+/gi, '$1<redacted>')
-    .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '<redacted>')
-    .replace(/almyty_[0-9a-f]{16,}/g, '<redacted>');
-}
+// A session token or API key must never reach the report, the terminal or
+// a file the gate leaves behind: see gate-redact.js.
 
 function cell(s) {
   return redact(String(s ?? '')).replace(/\|/g, '\\|').replace(/\n/g, ' ').slice(0, 600);
@@ -122,7 +118,7 @@ function buildReport({ runId, startedAt, finishedAt, target, health, browser, cl
   lines.push(`- Target: ${target.app} / ${target.api}`);
   lines.push(`- Started: ${startedAt}  Finished: ${finishedAt}`);
   lines.push(`- Result: **${count('failed') === 0 ? 'PASS' : 'FAIL'}** — ${count('passed')} passed, ${count('failed')} failed, ${count('skipped')} skipped`, '');
-  for (const n of notes) lines.push(`> ${n}`, '');
+  for (const n of notes) lines.push(`> ${redact(n).replace(/\n/g, ' ')}`, '');
   lines.push('| # | Area | Feature (test) | Result | Time | Screenshot | Failure / product finding |');
   lines.push('|---|---|---|---|---|---|---|');
   let i = 0;
@@ -189,7 +185,45 @@ function buildOrder(pkgs, roots) {
   return order;
 }
 
-module.exports = { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder };
+/** Where the gate records which package-lock.json it last installed from. */
+const INSTALL_STAMP = '.gate-install-stamp';
+
+function lockHash(dir) {
+  return require('crypto').createHash('sha256').update(fs.readFileSync(path.join(dir, 'package-lock.json'))).digest('hex');
+}
+
+/**
+ * Why `dir` needs `npm ci`, or '' when its node_modules matches its
+ * package-lock.json. A node_modules that merely exists is not enough: a
+ * lockfile that gained a dependency since the last install (a new
+ * devDependency the staging suite imports) leaves whole phases failing on
+ * a missing module.
+ *
+ * After a gate install the lockfile's hash is in node_modules/<INSTALL_STAMP>
+ * and decides. An install the gate did not make has no stamp; then the
+ * lockfile must not be newer than npm's own record of the install
+ * (node_modules/.package-lock.json).
+ */
+function installNeeded(dir) {
+  const modules = path.join(dir, 'node_modules');
+  if (!fs.existsSync(modules)) return 'node_modules is missing';
+  const lock = path.join(dir, 'package-lock.json');
+  if (!fs.existsSync(lock)) return '';
+  const stamp = path.join(modules, INSTALL_STAMP);
+  if (fs.existsSync(stamp)) {
+    return fs.readFileSync(stamp, 'utf8').trim() === lockHash(dir) ? '' : 'package-lock.json changed since the last install';
+  }
+  const npmRecord = path.join(modules, '.package-lock.json');
+  if (!fs.existsSync(npmRecord)) return 'node_modules has no record of its install';
+  return fs.statSync(lock).mtimeMs > fs.statSync(npmRecord).mtimeMs ? 'package-lock.json is newer than node_modules' : '';
+}
+
+function writeInstallStamp(dir) {
+  if (!fs.existsSync(path.join(dir, 'package-lock.json'))) return;
+  fs.writeFileSync(path.join(dir, 'node_modules', INSTALL_STAMP), `${lockHash(dir)}\n`);
+}
+
+module.exports = { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder, installNeeded, writeInstallStamp };
 
 // ── the run ─────────────────────────────────────────────────────────
 
@@ -219,7 +253,7 @@ function sh(cmd, args, opts = {}) {
 }
 
 function log(s) {
-  process.stdout.write(`\n[gate] ${s}\n`);
+  process.stdout.write(`\n[gate] ${redact(s)}\n`);
 }
 
 async function health(api) {
@@ -234,20 +268,23 @@ async function health(api) {
 }
 
 function ensureInstalled(dir) {
-  if (!fs.existsSync(path.join(dir, 'node_modules'))) {
-    log(`installing ${path.relative(ROOT, dir)}`);
-    if (sh('npm', ['ci', '--no-audit', '--no-fund'], { cwd: dir }) !== 0) throw new Error(`npm ci failed in ${dir}`);
-  }
+  const why = installNeeded(dir);
+  if (!why) return;
+  log(`installing ${path.relative(ROOT, dir) || '.'}: ${why}`);
+  if (sh('npm', ['ci', '--no-audit', '--no-fund'], { cwd: dir }) !== 0) throw new Error(`npm ci failed in ${dir}`);
+  writeInstallStamp(dir);
 }
 
-function runPlaywright(env) {
+async function runPlaywright(env) {
   ensureInstalled(FRONTEND);
   const args = [path.join(FRONTEND, 'node_modules', '@playwright', 'test', 'cli.js'), 'test', '--config=playwright.staging.config.ts'];
   if (process.env.GATE_GREP) args.push(`--grep=${process.env.GATE_GREP}`);
   log('staging Playwright suite');
   const file = path.join(GATE_DIR, 'playwright-results.json');
   fs.rmSync(file, { force: true });
-  const code = sh(process.execPath, args, { cwd: FRONTEND, env });
+  // Piped, not inherited: a failed request's error lists its headers, the
+  // QA session cookie among them.
+  const code = await shRedacted(process.execPath, args, { cwd: FRONTEND, env });
   const rows = fs.existsSync(file) ? playwrightRows(JSON.parse(fs.readFileSync(file, 'utf8'))) : [];
   // A suite that could not load (a syntax error, a failed global setup)
   // runs no test; that is a failure, never an empty pass.
@@ -397,7 +434,7 @@ async function runCli(qa, startedAt, notes) {
   const out = path.join(GATE_DIR, 'cli-results.json');
   try {
     log('CLI smoke tests');
-    sh(process.execPath, [path.join(tests, 'node_modules', 'vitest', 'vitest.mjs'), 'run', '--reporter=default', '--reporter=json', `--outputFile=${out}`], {
+    await shRedacted(process.execPath, [path.join(tests, 'node_modules', 'vitest', 'vitest.mjs'), 'run', '--reporter=default', '--reporter=json', `--outputFile=${out}`], {
       cwd: tests,
       env: { ...process.env, RUN_CLI_SMOKE: '1', HOME: home, USERPROFILE: home, ALMYTY_TOKEN: '' },
     });
@@ -425,7 +462,7 @@ async function main() {
 
   const h = only.includes('health') ? await health(qa.api) : null;
   // Playwright's global setup signs the QA user in and saves the session the CLI login reuses.
-  const browser = only.includes('playwright') ? runPlaywright(childEnv) : [];
+  const browser = only.includes('playwright') ? await runPlaywright(childEnv) : [];
   let cli = [];
   if (only.includes('cli')) {
     try {
@@ -440,6 +477,9 @@ async function main() {
   const md = buildReport({
     runId, startedAt, finishedAt: new Date().toISOString(), target: qa, health: h, browser, cli, findings, notes,
   });
+  // Whatever Playwright and vitest left on disk (their JSON reports, error
+  // context files) can carry the request headers of a failed call.
+  scrubDir(GATE_DIR);
   fs.writeFileSync(REPORT, md);
   fs.mkdirSync(path.join(GATE_DIR, 'history'), { recursive: true });
   fs.writeFileSync(path.join(GATE_DIR, 'history', `${runId}.md`), md);
@@ -450,7 +490,7 @@ async function main() {
 
 if (require.main === module) {
   main().catch((err) => {
-    console.error(err);
+    process.stderr.write(`${redact(err && err.stack ? err.stack : err)}\n`);
     process.exitCode = 1;
   });
 }

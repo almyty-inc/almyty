@@ -124,6 +124,10 @@ export const test = base.extend<{ gate: Gate; qa: APIRequestContext; org: QaOrg;
     await page.locator('#email').fill(email)
     await page.locator('#password').fill(password)
     await page.getByRole('button', { name: 'Sign in' }).click()
+    // Hand the page over only once the sign-in has landed: until then the
+    // context holds no session cookie, and a test that copies its storage
+    // state into an API context (J12's freshApi) gets 401s.
+    await page.waitForURL((url) => !url.pathname.startsWith('/auth/'), { timeout: 60_000 })
 
     await use({ page, email, password, organizationName })
     await finalShot(page, testInfo)
@@ -136,7 +140,7 @@ export const test = base.extend<{ gate: Gate; qa: APIRequestContext; org: QaOrg;
         await page.request.delete(`${API_URL}/organizations/${o.id}`, { headers: { 'X-Organization-Id': o.id } })
       }
     } catch (err) {
-      testInfo.annotations.push({ type: 'cleanup', description: `fresh user org: ${(err as Error).message}` })
+      testInfo.annotations.push({ type: 'cleanup', description: redact(`fresh user org: ${String((err as Error).message).split('\n')[0]}`) })
     }
     await context.close()
   },
