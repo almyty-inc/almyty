@@ -333,3 +333,35 @@ test('the gate checks the install of the frontend, cli-tests and every package i
   // Every install, and only a successful one, records its lockfile.
   assert.match(src, /npm ci failed in \$\{dir\}`\);\n  writeInstallStamp\(dir\);/);
 });
+
+// A storage-state entry whose value is itself JSON (\" inside) was cut at
+// the first escaped quote, leaving a file that no longer parsed.
+test('redact keeps JSON valid when a secret value holds escaped quotes', () => {
+  const { redact } = require('./gate-redact');
+  const inner = JSON.stringify({ id: 'u1', email: 'qa@example.test', nested: { a: 'b' } });
+  const state = JSON.stringify({ cookies: [{ name: 'access_token', value: 'v' + 'x'.repeat(20) }], origins: [{ localStorage: [{ name: 'auth', value: inner }] }] }, null, 2);
+  const out = redact(state);
+  assert.doesNotThrow(() => JSON.parse(out));
+  assert.ok(!out.includes('qa@example.test'));
+  const body = JSON.stringify({ password: 'p"q' + 'w'.repeat(10), ok: true });
+  const cleaned = redact(body);
+  assert.deepEqual(JSON.parse(cleaned), { password: '<redacted>', ok: true });
+});
+
+// The next run signs in with the saved session in .auth; rewriting it broke
+// the gate's own setup.
+test('scrubDir leaves the saved session in .auth alone', () => {
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-auth-'));
+  try {
+    fs.mkdirSync(path.join(dir, '.auth'));
+    const state = JSON.stringify({ cookies: [{ name: 'access_token', value: 'v' + 'y'.repeat(20) }] });
+    fs.writeFileSync(path.join(dir, '.auth', 'qa.json'), state);
+    fs.writeFileSync(path.join(dir, 'out.log'), 'cookie: access_token=' + 'z'.repeat(20) + '\n');
+    const changed = scrubDir(dir);
+    assert.equal(fs.readFileSync(path.join(dir, '.auth', 'qa.json'), 'utf8'), state);
+    assert.deepEqual(changed, [path.join(dir, 'out.log')]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
