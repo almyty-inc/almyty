@@ -84,12 +84,24 @@ export interface UpdateLlmProviderDto extends ModelAccessInput {
   status?: LlmProviderStatus;
 }
 
+/**
+ * An assistant turn as the vendor's API returned it, to be sent back as it
+ * came: on Anthropic, the turn's thinking, text and tool_use blocks, which
+ * a model that thinks needs back with its calls (anthropic-messages.ts).
+ * Opaque to everything but the adapter that wrote it.
+ */
+export interface ProviderContent {
+  format: 'anthropic';
+  blocks: Array<Record<string, unknown>>;
+}
+
 export interface ChatRequest {
   messages: Array<{
     role: MessageRole;
     content: string | MessageContent[];
     toolCalls?: ToolCall[];
     toolCallId?: string;
+    providerContent?: ProviderContent;
   }>;
   model?: string;
   maxTokens?: number;
@@ -152,6 +164,8 @@ export interface ChatResponse {
     content?: string;
     toolCalls?: ToolCall[];
     finishReason?: string;
+    /** The turn as the vendor returned it, when it made tool calls; sent back with them. */
+    providerContent?: ProviderContent;
   };
   usage: {
     inputTokens: number;
