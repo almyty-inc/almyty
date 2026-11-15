@@ -327,15 +327,27 @@ test.describe('J9 channels', () => {
     expect(cardUrl).toMatch(/^https:\/\/.+\/\.well-known\/agent-card\.json$/)
 
     // A caller key, made on the channel page. Read once, never printed.
+    // The Keys box appears only once the saved sign-in methods are loaded,
+    // so the state read here is the gateway's, not a loading placeholder.
     const signIn = page.getByTestId('gateway-sign-in-methods')
     const apiKeyBox = signIn.getByRole('checkbox', { name: 'Keys', exact: true })
+    await expect(apiKeyBox).toBeEnabled()
     if (!(await apiKeyBox.isChecked())) await apiKeyBox.check()
+    await expect(apiKeyBox, 'key sign-in should be on before a key is made').toBeChecked()
     await signIn.getByRole('button', { name: 'New key' }).click()
     const keyForm = page.getByRole('form', { name: 'New key' })
     await keyForm.getByRole('textbox', { name: 'Name' }).fill(gate.name('a2a-caller'))
+    // Making a key refetches the sign-in methods; the key must survive it.
+    const methodsRefetched = page.waitForResponse(
+      (r) => /\/gateways\/[^/]+\/auth$/.test(new URL(r.url()).pathname) && r.request().method() === 'GET',
+      { timeout: 30_000 },
+    )
     await keyForm.getByRole('button', { name: 'Make key' }).click()
     const shown = page.getByTestId('generated-api-key')
     await expect(shown, 'Make key should make the caller key and show it once').toBeVisible()
+    await methodsRefetched
+    await expect(shown, 'the new key should stay on the page after the page refetches').toBeVisible()
+    await expect(apiKeyBox, 'making a key leaves key sign-in on').toBeChecked()
     const key = (await shown.locator('code, input').first().evaluate((el) => (el as HTMLInputElement).value || el.textContent || '')).trim()
     expect(key.length, 'the page should show the new key once').toBeGreaterThan(16)
 

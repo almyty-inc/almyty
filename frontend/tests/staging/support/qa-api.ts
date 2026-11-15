@@ -10,6 +10,8 @@
 import { readFileSync } from 'fs'
 import { request, type APIRequestContext } from '@playwright/test'
 import { API_URL, QA_ORG_FILE, QA_STATE_FILE } from './env'
+// @ts-ignore -- a CommonJS script of the repo root, shared with the gate runner.
+import { redact as gateRedact } from '../../../../scripts/gate-redact.js'
 
 export interface QaOrg {
   id: string
@@ -31,7 +33,7 @@ export async function qaApi(orgId = qaOrg().id): Promise<APIRequestContext> {
 /** The `data` of the API's `{ success, data }` envelope, or throws with the status. */
 export async function data<T = any>(res: Awaited<ReturnType<APIRequestContext['get']>>): Promise<T> {
   const text = await res.text()
-  if (!res.ok()) throw new Error(`${res.url()} answered ${res.status()}: ${text.slice(0, 300)}`)
+  if (!res.ok()) throw new Error(redact(`${res.url()} answered ${res.status()}: ${text.slice(0, 300)}`))
   const body = text ? JSON.parse(text) : {}
   return (body && typeof body === 'object' && 'data' in body ? body.data : body) as T
 }
@@ -68,12 +70,14 @@ export async function deleteThing(api: APIRequestContext, kind: Kind, id: string
   }
 }
 
-/** Never let a session token or an API key reach a report. */
+/**
+ * Never let a session token or an API key reach a report. The gate's own
+ * redaction (scripts/gate-redact.js), so the fixtures and the runner hide
+ * the same things: every cookie in a Cookie header, tokens in JSON and
+ * query strings, JWTs, almyty's key formats.
+ */
 export function redact(s: string): string {
-  return s
-    .replace(/(access_token=|refresh_token=|Bearer\s+|cookie:\s*|x-api-key:\s*)[^\s;,"]+/gi, '$1<redacted>')
-    .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '<redacted>')
-    .replace(/\b(almyty|gw|ak|sk)_[A-Za-z0-9_-]{16,}/g, '<redacted>')
+  return gateRedact(s)
 }
 
 interface Named { id: string; name: string; createdAt?: string }

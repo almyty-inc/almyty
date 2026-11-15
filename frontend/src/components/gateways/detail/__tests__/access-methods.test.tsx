@@ -71,3 +71,50 @@ describe('outside protected methods', () => {
     expect(screen.queryByDisplayValue('fake-test-secret')).not.toBeInTheDocument()
   })
 })
+
+describe('a key just made', () => {
+  // Built at run time: a fake key in the gateway key format.
+  const fakeSecret = () => ['gw', 'unit'.repeat(6)].join('_')
+  const keyMethod = (isActive: boolean) => [{ id: 'auth-1', type: 'api_key', isActive, configuration: {} }]
+
+  it('shows no sign-in method checkbox until the saved methods are loaded', async () => {
+    let answer: (value: unknown) => void = () => {}
+    vi.mocked(gatewaysApi.getAuthConfigs).mockReturnValue(new Promise(resolve => { answer = resolve }) as any)
+    render(<GatewayAuthSection gatewayId="gw-1" />)
+    expect(await screen.findByTestId('sign-in-methods-loading')).toBeInTheDocument()
+    // An unchecked box over a method that is on would invite a click that turns it off.
+    expect(screen.queryByRole('checkbox', { name: 'Keys' })).not.toBeInTheDocument()
+    answer(keyMethod(true))
+    expect(await screen.findByRole('checkbox', { name: 'Keys' })).toBeChecked()
+  })
+
+  it('stays on the page when the Keys method is saved again right after', async () => {
+    const user = userEvent.setup()
+    const secret = fakeSecret()
+    vi.mocked(gatewaysApi.getAuthConfigs).mockResolvedValueOnce(keyMethod(true)).mockResolvedValue(keyMethod(false))
+    vi.mocked(gatewaysApi.updateAuthConfig).mockResolvedValue({})
+    vi.mocked(gatewaysApi.generateApiKey).mockResolvedValue({ key: secret })
+    render(<GatewayAuthSection gatewayId="gw-1" />)
+    await user.click(await screen.findByRole('button', { name: 'New key' }))
+    await user.type(within(screen.getByRole('form', { name: 'New key' })).getByLabelText('Name'), 'Caller')
+    await user.click(screen.getByRole('button', { name: 'Make key' }))
+    expect(await screen.findByTestId('generated-api-key')).toHaveTextContent(secret)
+    // The Keys method saved and refetched while the key is on screen: the key list goes, the key stays.
+    await user.click(screen.getByRole('checkbox', { name: 'Keys' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'New key' })).not.toBeInTheDocument())
+    expect(screen.getByTestId('generated-api-key')).toHaveTextContent(secret)
+  })
+
+  it('refetches the sign-in methods, which making a key turns on', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.getAuthConfigs).mockResolvedValue(keyMethod(true))
+    vi.mocked(gatewaysApi.generateApiKey).mockResolvedValue({ key: fakeSecret() })
+    render(<GatewayAuthSection gatewayId="gw-1" />)
+    await user.click(await screen.findByRole('button', { name: 'New key' }))
+    await user.type(within(screen.getByRole('form', { name: 'New key' })).getByLabelText('Name'), 'Caller')
+    const before = vi.mocked(gatewaysApi.getAuthConfigs).mock.calls.length
+    await user.click(screen.getByRole('button', { name: 'Make key' }))
+    await screen.findByTestId('generated-api-key')
+    await waitFor(() => expect(vi.mocked(gatewaysApi.getAuthConfigs).mock.calls.length).toBeGreaterThan(before))
+  })
+})
