@@ -59,10 +59,11 @@ async function approveLogin(user: FreshUser, bin: string, args: string[], env: N
     const page = await user.page.context().newPage()
     try {
       await page.goto(url)
+      // A fresh account has one organization: the page names it instead of
+      // offering a picker. The picker shows only for an account in several.
+      await expect(page.getByText(user.organizationName, { exact: true }).first()).toBeVisible({ timeout: 30_000 })
       const picker = page.locator('#cli-organization')
-      await expect(picker).toBeVisible({ timeout: 30_000 })
-      await page.waitForFunction(() => document.querySelectorAll('#cli-organization option').length > 1)
-      await picker.selectOption({ label: user.organizationName })
+      if (await picker.isVisible()) await picker.selectOption({ label: user.organizationName })
       await page.getByRole('button', { name: 'Connect CLI' }).click()
       const code = await Promise.race([exited, new Promise((r) => setTimeout(() => r('timeout'), 60_000))])
       expect(code, `almyty login should finish: ${redact(out.trim().split('\n').pop() || '')}`).toBe(0)

@@ -93,7 +93,12 @@ test.describe('J4 duplicate an agent', () => {
     for (const field of ['mode', 'instructions', 'personality', 'toolIds', 'modelConfig', 'models', 'memoryConfig', 'agentConfig', 'variables']) {
       expect(copy[field], `the copy's ${field}`).toEqual(original[field])
     }
-    expect(copy.agentConfig?.verify?.checkers?.[0]?.model).toBe(CHECK_MODEL)
+    // The picker offers the provider's own ids, so a search for
+    // claude-haiku-4-5 picks the dated card (claude-haiku-4-5-20251001) when
+    // that is the one the provider lists. The copy keeps whatever was picked.
+    const checkModel = original.agentConfig?.verify?.checkers?.[0]?.model
+    expect(checkModel, 'the original should keep the picked check model').toMatch(new RegExp(`^${CHECK_MODEL.replace(/[.]/g, '\\.')}`))
+    expect(copy.agentConfig?.verify?.checkers?.[0]?.model).toBe(checkModel)
     expect(copy.modelConfig?.maxTokens).toBe(1500)
     expect(copy.status).toBe('draft')
   })

@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder } = require('./gate-staging');
+const { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder, installNeeded, writeInstallStamp } = require('./gate-staging');
 
 const playwrightReport = {
   suites: [
@@ -151,4 +151,73 @@ test('the CLI packages build after the local packages they import, @almyty/clien
 test('buildOrder refuses a dependency cycle', () => {
   const pkgs = { a: { localDeps: ['b'] }, b: { localDeps: ['a'] } };
   assert.throws(() => buildOrder(pkgs, ['a']), /dependency cycle: a -> b -> a/);
+});
+
+// The gate installed only when node_modules was missing, so a lockfile that
+// gained devDependencies (@modelcontextprotocol/client, openai, @a2a-js/sdk)
+// left whole phases failing on a missing module.
+function scratchPackage() {
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-install-'));
+  fs.writeFileSync(path.join(dir, 'package-lock.json'), '{"lockfileVersion":3,"packages":{}}\n');
+  return dir;
+}
+function npmInstalled(dir, at) {
+  fs.mkdirSync(path.join(dir, 'node_modules'), { recursive: true });
+  const record = path.join(dir, 'node_modules', '.package-lock.json');
+  fs.writeFileSync(record, '{}');
+  fs.utimesSync(record, at, at);
+}
+
+test('installNeeded: no node_modules means install', () => {
+  const dir = scratchPackage();
+  try {
+    assert.match(installNeeded(dir), /missing/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('installNeeded: a lockfile newer than an install the gate did not make means install', () => {
+  const dir = scratchPackage();
+  try {
+    const now = Date.now() / 1000;
+    npmInstalled(dir, now - 3600);
+    fs.utimesSync(path.join(dir, 'package-lock.json'), now, now);
+    assert.match(installNeeded(dir), /newer/);
+    npmInstalled(dir, now + 60);
+    assert.strictEqual(installNeeded(dir), '');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('installNeeded: after a gate install the lockfile hash decides, not its mtime', () => {
+  const dir = scratchPackage();
+  try {
+    const now = Date.now() / 1000;
+    npmInstalled(dir, now - 3600);
+    writeInstallStamp(dir);
+    // Touched (a branch switch) but unchanged: no reinstall.
+    fs.utimesSync(path.join(dir, 'package-lock.json'), now, now);
+    assert.strictEqual(installNeeded(dir), '');
+    // A new dependency in the lockfile: reinstall, even if older on disk.
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), '{"lockfileVersion":3,"packages":{"node_modules/openai":{}}}\n');
+    fs.utimesSync(path.join(dir, 'package-lock.json'), now - 7200, now - 7200);
+    assert.match(installNeeded(dir), /changed/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('installNeeded: an install with no record of itself is redone', () => {
+  const dir = scratchPackage();
+  try {
+    fs.mkdirSync(path.join(dir, 'node_modules'));
+    assert.match(installNeeded(dir), /no record/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the gate checks the install of the frontend, cli-tests and every package it builds', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'gate-staging.js'), 'utf8');
+  assert.match(src, /function ensureInstalled\(dir\) \{\n  const why = installNeeded\(dir\);/);
+  assert.match(src, /function runPlaywright\(env\) \{\n  ensureInstalled\(FRONTEND\);/);
+  assert.match(src, /const pkg = pkgs\[name\];\n    ensureInstalled\(pkg\.dir\);/);
+  assert.match(src, /ensureInstalled\(tests\);/);
+  // Every install, and only a successful one, records its lockfile.
+  assert.match(src, /npm ci failed in \$\{dir\}`\);\n  writeInstallStamp\(dir\);/);
 });
