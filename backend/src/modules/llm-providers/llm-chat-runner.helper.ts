@@ -41,6 +41,7 @@ import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 import { assertModelAllowed } from './allowed-models';
 import { preferredBinding, providerProfile } from './provider-profile';
 import { MessageAttachmentResolver } from './message-attachments.resolver';
+import { OutputLimitResolver } from './output-limit';
 import { type ActingAs, type ExecutionPrincipal, asPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
@@ -65,6 +66,9 @@ export class LlmChatRunnerHelper {
     @Optional() private readonly secrets?: LlmProviderSecretsHelper,
     // Optional for specs that build the runner by hand; the module wires it.
     @Optional() private readonly attachments?: MessageAttachmentResolver,
+    // The model card's output limit for a call that names none. Optional
+    // for hand-built specs; the module wires it.
+    @Optional() private readonly outputLimits?: OutputLimitResolver,
   ) {}
 
   /**
@@ -200,6 +204,16 @@ export class LlmChatRunnerHelper {
   async resolveAttachments(organizationId: string | undefined, provider: LlmProvider, request: ChatRequest): Promise<ChatRequest> {
     return this.attachments ? this.attachments.resolve(organizationId, provider, request) : request;
   }
+
+  /**
+   * The request with the most it may write: the caller's limit, else the
+   * provider's, else the model card's (output-limit.ts). Shared with the
+   * streaming path, which dispatches without callWithRetries.
+   */
+  async resolveOutputLimit(organizationId: string | undefined, provider: LlmProvider, request: ChatRequest): Promise<ChatRequest> {
+    return this.outputLimits ? this.outputLimits.resolve(organizationId, provider, request) : request;
+  }
+
   async callWithRetries(
     provider: LlmProvider,
     request: ChatRequest,
@@ -225,6 +239,8 @@ export class LlmChatRunnerHelper {
     // The files a message refers to, as this model can read them: its own
     // content parts when its card says it takes them, else their text.
     request = await this.resolveAttachments(session?.organizationId ?? provider.organizationId, provider, request);
+    // As much room to write as the model has, unless the call says less.
+    request = await this.resolveOutputLimit(session?.organizationId ?? provider.organizationId, provider, request);
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;

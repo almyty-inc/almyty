@@ -76,6 +76,7 @@ describeIfDb('private-row SQL fails closed on a null owner or viewer (real Postg
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
     }) as any);
     await ds.initialize();

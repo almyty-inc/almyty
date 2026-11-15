@@ -72,6 +72,7 @@ describeIfDb('Runner + Workspace (real Postgres)', () => {
       extra: { options: '-c search_path=runner_workspace_test,public' },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
     });
     await ds.initialize();

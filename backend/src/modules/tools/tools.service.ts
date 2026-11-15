@@ -536,7 +536,10 @@ export class ToolsService {
     }
 
     if (filters.apiId) {
-      queryBuilder.andWhere('api.id = :apiId', { apiId: filters.apiId });
+      // A generated tool reaches its API through its operation; a tool made
+      // by hand under an API carries the API's id itself. The API page counts
+      // both, so its "Tools generated" link lists both.
+      queryBuilder.andWhere('(api.id = :apiId OR tool.apiId = :apiId)', { apiId: filters.apiId });
     }
 
     if (filters.tags?.length > 0) {

@@ -43,6 +43,7 @@ describeOrSkip('OrgDomainService (real Postgres, migrated schema)', () => {
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../../../src/migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       entities: [__dirname + '/../../../../src/entities/*.entity{.ts,.js}'],
       logging: false,

@@ -192,24 +192,9 @@ test.describe('Analytics Dashboard', () => {
     await assertHelper.waitForLoadingComplete()
   })
 
-  test('should handle empty analytics data gracefully', async ({ authenticatedPage: page, assertHelper }) => {
-    // Mock empty responses for all analytics endpoints to return falsy data
-    await page.route('**/analytics/**', (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(null),
-      })
-    })
-
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-
-    // Should show empty state or render gracefully without errors
-    const hasEmptyState = await page.getByText(/No analytics data yet/i).isVisible().catch(() => false)
-    const hasOverviewTab = await page.getByText(/Overview/i).first().isVisible().catch(() => false)
-    expect(hasEmptyState || hasOverviewTab).toBe(true)
-  })
+  // "Empty analytics data" was a page.route stub; a brand-new account's
+  // real empty Analytics page is checked by the staging gate instead
+  // (tests/staging/j1-account.spec.ts).
 
   test('should display real-time subtitle', async ({ authenticatedPage: page }) => {
     // The subtitle "Real-time usage data across all protocols" is always present

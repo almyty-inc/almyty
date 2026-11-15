@@ -17,8 +17,10 @@ describe('RunnerNewPage', () => {
   it('shows the complete unified CLI path immediately without creating a pending runner', async () => {
     render(<RunnerNewPage />)
     expect(screen.getByText('npm i -g @almyty/cli')).toBeInTheDocument()
-    expect(screen.getByText('almyty login')).toBeInTheDocument()
-    expect(screen.getByText('almyty runner start')).toBeInTheDocument()
+    // Served from the test origin, not production: the commands name it.
+    const origin = window.location.origin
+    expect(screen.getByText(`almyty login --api ${origin} --frontend ${origin}`)).toBeInTheDocument()
+    expect(screen.getByText(`almyty runner start --url ${origin}`)).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.getByText(/hostname automatically/)).toBeInTheDocument()
     expect(screen.getByText(/more than one organization/)).toBeInTheDocument()

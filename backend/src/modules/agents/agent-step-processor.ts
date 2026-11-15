@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional, forwardRef } from '@nestjs/common';
-import { FindOptionsWhere, In, Not } from 'typeorm';
+import { Between, FindOptionsWhere, In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { RunEventDraft } from './run-events';
@@ -14,7 +14,7 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentVerifierHelper, CheckerConfig, VerifyPanelResult, checkerOutputLimit, checkerVerdicts, evidenceBudget, runEvidence } from './agent-verifier.helper';
+import { AgentVerifierHelper, CheckerConfig, VerifyPanelResult, checkerNotesOf, checkerOutputLimit, checkerVerdicts, evidenceBudget, runEvidence } from './agent-verifier.helper';
 import { RunToolResult, toolResultsFromMessages } from './checker-evidence';
 import { ALWAYS_ON_COMPACTION, AgentContextCompactor, carriedContextSummary } from './agent-context-compactor.helper';
 import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
@@ -22,7 +22,7 @@ import { AgentConstraintsService } from '../agent-constraints/agent-constraints.
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
-import { AgentMemoryKeeper } from './agent-memory.keeper';
+import { AgentMemoryKeeper, alreadyReportedBlock } from './agent-memory.keeper';
 import { agentApiIds, agentEnvironmentId, agentRunnerId, callsAgents, mayCallAgent } from './agent-capabilities';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
@@ -71,7 +71,13 @@ import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
 import { MACHINE_FAILED, type MachineProblem, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
+import { earlierReportedItems, forbidsRepeats, speaksOfEarlierReports } from './answer-checks';
+import { NO_ANSWER_CODES, NO_ANSWER_REASONS, NO_ANSWER_RETRIES, type NoAnswerKind, noAnswerError, noAnswerNudge, noAnswerOf } from './no-answer';
+import { stoppedAtOutputLimit } from '../llm-providers/output-limit';
 
+/** How many of an agent's earlier answers a "skipped as already reported" claim is checked against, and from how many days back. */
+export const EARLIER_ANSWERS_MAX = 50;
+export const EARLIER_ANSWERS_DAYS = 90;
 /** One line per namespace a script can use: `petstore (19 functions)`. */
 function namespaceSummary(tools: Tool[]): string[] {
   const counts = new Map<string, number>();
@@ -167,7 +173,7 @@ type FinalCall = {
   toolCount: number;
   startedAt: number;
   /** Set when the answer call did not produce the answer and the draft stood in. */
-  fallback?: 'error' | 'empty';
+  fallback?: 'error' | 'empty' | 'output_limit';
   error?: string;
 };
 
@@ -538,6 +544,14 @@ export class AgentStepProcessor {
         }
       }
 
+      // An agent told to leave out what it already reported is told what
+      // that is: the items its earlier answers listed, from the same answers
+      // and by the same rule the answer check holds it to. Read once, at the
+      // start of the run; buildMessages puts it beside the instructions.
+      if (forbidsRepeats(agent.instructions ?? '') && run.workingMemory?.alreadyReported === undefined) {
+        await this.alreadyReportedFor(run);
+      }
+
       // Explore, extract, patch: the main role works from the brief the
       // explorers and the summariser prepared (explorePhase).
       if (run.workingMemory?.brief) {
@@ -879,6 +893,10 @@ export class AgentStepProcessor {
           const assistantMsg = Message.createToolCallMessage(run.conversationId, responseMessage.toolCalls);
           assistantMsg.content = responseMessage.content || '';
           assistantMsg.runId = run.id;
+          // The turn as the vendor returned it, sent back with these calls
+          // on the next step (anthropic-messages.ts): a model that thinks
+          // needs the thinking that made them.
+          if (responseMessage.providerContent) assistantMsg.metadata = { providerContent: responseMessage.providerContent };
           await this.s.messageRepository.save(assistantMsg);
         }
 
@@ -1044,7 +1062,10 @@ export class AgentStepProcessor {
               run.currentStep++;
               run.executionTime += stepDuration;
               if (!(await this.commitStep(run, expectedStep))) return 'done';
-              this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'waiting_input' });
+              // request_approval answers waiting_input too, but the run waits
+              // on a person's approval: say which, so a visitor's page shows it.
+              const waitingOn = run.status === AgentRunStatus.WAITING_APPROVAL ? 'waiting_approval' : 'waiting_input';
+              this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: waitingOn });
               return 'waiting';
             }
 
@@ -1526,6 +1547,20 @@ export class AgentStepProcessor {
 
       } else {
         // No tool calls — the agent has a final response
+        // Unless it holds no answer: empty, or cut off at its output limit.
+        // That is never the run's answer, nor checked as one: the model is
+        // asked again within limits, and the run fails with the reason when
+        // it still has none (no-answer.ts).
+        const noAnswer = noAnswerOf(responseMessage);
+        if (noAnswer) {
+          return this.retryOrFailNoAnswer(run, agent, runId, expectedStep, stepStart, noAnswer, {
+            acting,
+            llmResponse,
+            messageCount,
+            toolCount: allToolDefs.length,
+            resolvedLimits,
+          });
+        }
         let finalContent = responseMessage.content || '';
         // The failures of a check that did not pass, for the note on the answer (unverified-answer.ts).
         let failedCheck: Array<{ rule?: unknown; evidence?: unknown }> | null = null;
@@ -1673,7 +1708,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: stampOf(team.checker!),
               input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, checkers: checkerVerdicts(check), ...checkedBy(check) },
+              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, checkers: checkerVerdicts(check), ...checkerNotesOf(check), ...checkedBy(check) },
               cost: check.cost,
               tokens: checkTokens(check),
               duration: checkDuration,
@@ -1697,6 +1732,7 @@ export class AgentStepProcessor {
               ...(unavailable ? { unavailable: true } : {}),
               failures: check.failures,
               checkers: checkerVerdicts(check),
+              ...checkerNotesOf(check),
               ...checkedBy(check),
             },
             cost: check.cost,
@@ -1790,7 +1826,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: ANSWER_CHECK_ROLE,
               input: { policy: verifyPanel.policy, checkers: verifyPanel.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures, checkers: checkerVerdicts(verifyPanel) },
+              output: { verdict: 'fail', revision: revisions + 1, failures: verifyPanel.failures, checkers: checkerVerdicts(verifyPanel), ...checkerNotesOf(verifyPanel) },
               cost: verifyPanel.cost,
               tokens: checkTokens(verifyPanel),
               duration: verifyStepDuration,
@@ -1827,6 +1863,7 @@ export class AgentStepProcessor {
               ...(unavailable ? { unavailable: true } : {}),
               failures: verifyPanel.failures,
               checkers: checkerVerdicts(verifyPanel),
+              ...checkerNotesOf(verifyPanel),
             },
             cost: verifyPanel.cost,
             tokens: checkTokens(verifyPanel),
@@ -1915,7 +1952,14 @@ export class AgentStepProcessor {
           const saved = await this.persistWithEvents(
             run,
             { id: run.id, ...heldBy(run) },
-            { steps: await this.stepsForPersist(run), totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata },
+            {
+              steps: await this.stepsForPersist(run),
+              totalCost: run.totalCost,
+              totalTokens: run.totalTokens,
+              metadata: run.metadata,
+              // The saves held during the run are written now (commitPending).
+              workingMemory: run.workingMemory,
+            },
           );
           if (!saved) this.s.logger.warn(`Run ${run.id}: the memory step after completion was not recorded (the run is gone)`);
         }
@@ -2127,6 +2171,81 @@ export class AgentStepProcessor {
   }
 
   /**
+   * A final reply with no answer (no-answer.ts): empty, or cut off at its
+   * output limit. Within NO_ANSWER_RETRIES and the run's limits the model is
+   * asked again: the step is recorded with the reason, and a note in the
+   * conversation tells the model its reply reached nobody. Past that the
+   * run fails with the reason, which the run view shows; it never completes
+   * with an empty answer, and nothing it did not say is checked or kept.
+   */
+  private async retryOrFailNoAnswer(
+    run: AgentRun,
+    agent: Agent,
+    runId: string,
+    expectedStep: number,
+    stepStart: number,
+    kind: NoAnswerKind,
+    call: {
+      acting: ModelRoleCall;
+      llmResponse: ChatResponse;
+      messageCount: number;
+      toolCount: number;
+      resolvedLimits: ResolvedRunLimits;
+    },
+  ): Promise<'continue' | 'done'> {
+    const { acting, llmResponse } = call;
+    const retries = Number(run.workingMemory?.noAnswerRetries ?? 0);
+    const reason = NO_ANSWER_REASONS[kind];
+    const outOfRoom = !!checkRunLimits(
+      { currentStep: run.currentStep + 1, totalCost: run.totalCost, totalTokens: run.totalTokens, createdAt: run.createdAt },
+      call.resolvedLimits,
+    );
+    const retry = retries < NO_ANSWER_RETRIES && !outOfRoom;
+    const stepDuration = Date.now() - stepStart;
+    run.steps.push({
+      type: 'llm_call',
+      role: stampOf(acting),
+      input: { messageCount: call.messageCount, toolCount: call.toolCount },
+      output: {
+        status: 'no_answer',
+        reason,
+        code: NO_ANSWER_CODES[kind],
+        finishReason: llmResponse.message?.finishReason ?? null,
+        retried: retry,
+        ...(llmResponse.message?.content ? { content: llmResponse.message.content.substring(0, 200) } : {}),
+        ...answeredBy(llmResponse, acting),
+      },
+      cost: llmResponse.cost || 0,
+      tokens: { input: llmResponse.usage?.inputTokens || 0, output: llmResponse.usage?.outputTokens || 0 },
+      duration: stepDuration,
+      timestamp: new Date().toISOString(),
+    });
+    run.currentStep++;
+    run.executionTime += stepDuration;
+
+    if (retry) {
+      run.workingMemory = { ...(run.workingMemory || {}), noAnswerRetries: retries + 1 };
+      if (run.conversationId) {
+        const nudge = Message.createUserMessage(run.conversationId, noAnswerNudge(kind));
+        nudge.runId = run.id;
+        nudge.metadata = { internal: true, internalPurpose: 'no_answer_retry' };
+        await this.s.messageRepository.save(nudge);
+      }
+      if (!(await this.commitStep(run, expectedStep))) return 'done';
+      this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'no_answer', reason });
+      return 'continue';
+    }
+
+    run.status = AgentRunStatus.FAILED;
+    run.error = noAnswerError(kind);
+    run.metadata = { ...(run.metadata || {}), noAnswer: { code: NO_ANSWER_CODES[kind], reason, retries } };
+    if (!(await this.commitStep(run, expectedStep))) return 'done';
+    await this.s.misc.bumpAgentStats(agent.id, false, run.executionTime, run.totalCost);
+    this.s.emitEvent(runId, 'run.failed', { error: run.error, reasonCode: NO_ANSWER_CODES[kind], reason });
+    return 'done';
+  }
+
+  /**
    * The answer call of a composing run (final-answer.ts).
    *
    * The draft is recorded as a step of its own, with its cost, and the
@@ -2177,7 +2296,7 @@ export class AgentStepProcessor {
       toolCount: 0,
       startedAt,
     };
-    const standIn = (fallback: 'error' | 'empty', error?: string, spent?: Partial<FinalCall>) => {
+    const standIn = (fallback: 'error' | 'empty' | 'output_limit', error?: string, spent?: Partial<FinalCall>) => {
       this.s.emitEvent(runId, 'llm.response', { step, content: draft, answer: true, fallback });
       return {
         cost: 0,
@@ -2222,6 +2341,8 @@ export class AgentStepProcessor {
 
     const content = response.message?.content || '';
     if (!content.trim() && draft.trim()) return standIn('empty', undefined, spent);
+    // Cut off at its output limit: not an answer; the whole draft stands in.
+    if (stoppedAtOutputLimit(response.message?.finishReason) && draft.trim()) return standIn('output_limit', undefined, spent);
 
     this.s.emitEvent(runId, 'llm.response', {
       step,
@@ -3233,7 +3354,12 @@ export class AgentStepProcessor {
     // its tools returned and the agent's own rules.
     const check = await this.prepareCheck(run, agent, cfg.checkers!, finalContent, cfg.spec);
     const panel = await this.verifier.runPanel(
-      { target: finalContent, spec: cfg.spec, checkers: check.checkers, policy: cfg.policy, evidence: check.evidence, rules: check.rules },
+      {
+        target: finalContent, spec: cfg.spec, checkers: check.checkers, policy: cfg.policy, evidence: check.evidence, rules: check.rules,
+        // What the code checks read besides: the tool results whole, and for a skip claim the agent's earlier answers.
+        ...(check.earlier ? { earlier: check.earlier } : {}),
+        ...(check.toolResults ? { toolResults: check.toolResults } : {}),
+      },
       run.organizationId,
       principalOfRun(run),
     );
@@ -3254,7 +3380,9 @@ export class AgentStepProcessor {
    *   policy demands; unknown windows get the default budget);
    * - the agent's own instructions, the standard the answer is held to;
    * - each checker with the output budget its model card allows
-   *   (checkerOutputLimit), unless the checker sets its own.
+   *   (checkerOutputLimit), unless the checker sets its own;
+   * - when the answer says it skipped items as already reported, what this
+   *   agent's earlier runs answered (earlierAnswersOf), to check that claim.
    */
   async prepareCheck(
     run: AgentRun,
@@ -3262,7 +3390,7 @@ export class AgentStepProcessor {
     checkers: CheckerConfig[],
     target: string,
     spec?: string,
-  ): Promise<{ evidence: string; rules: string; checkers: CheckerConfig[] }> {
+  ): Promise<{ evidence: string; rules: string; checkers: CheckerConfig[]; earlier?: string[]; toolResults?: RunToolResult[] }> {
     const rules = (agent?.instructions ?? '').trim();
     const cards = await this.checkerCards(run, checkers ?? []);
     const windows: number[] = [];
@@ -3283,7 +3411,59 @@ export class AgentStepProcessor {
     const sized = (checkers ?? []).map((checker, i) =>
       checker && !(checker.maxTokens && checker.maxTokens > 0) ? { ...checker, maxTokens: checkerOutputLimit(cards[i]?.maxOutputTokens) } : checker,
     );
-    return { evidence, rules, checkers: sized };
+    // Read only where the agent's instructions forbid repeating earlier reports, or the answer says it skipped some.
+    const earlier = speaksOfEarlierReports(target ?? '', rules) ? await this.earlierAnswersOf(run) : undefined;
+    return { evidence, rules, checkers: sized, ...(earlier ? { earlier } : {}), ...(toolResults ? { toolResults } : {}) };
+  }
+
+  /**
+   * What this agent's earlier completed runs answered, newest first: the
+   * last EARLIER_ANSWERS_MAX of them, from the last EARLIER_ANSWERS_DAYS
+   * days, outputs only; for a visitor's run, only that visitor's. The one
+   * source of both the answer check's "reported before" and the list a run
+   * is told to leave out (alreadyReportedFor). Undefined when they cannot
+   * be read, so nothing is then checked against nothing.
+   */
+  async earlierAnswersOf(run: AgentRun): Promise<string[] | undefined> {
+    if (!run.agentId || !this.s.runRepository) return undefined;
+    try {
+      const before = run.createdAt instanceof Date ? run.createdAt : new Date();
+      const since = new Date(before.getTime() - EARLIER_ANSWERS_DAYS * 86_400_000);
+      const rows = await this.s.runRepository.find({
+        where: {
+          agentId: run.agentId,
+          organizationId: run.organizationId,
+          status: AgentRunStatus.COMPLETED,
+          createdAt: Between(since, before),
+          id: Not(run.id),
+          ...(run.endUserId ? { endUserId: run.endUserId } : {}),
+        } as FindOptionsWhere<AgentRun>,
+        select: { id: true, output: true, createdAt: true } as any,
+        order: { createdAt: 'DESC' } as any,
+        take: EARLIER_ANSWERS_MAX,
+      });
+      return rows
+        .map((r: AgentRun) => (typeof r.output === 'string' ? r.output : r.output == null ? '' : JSON.stringify(r.output)))
+        .filter((text: string) => text.trim().length > 0);
+    } catch (err) {
+      this.s.logger.warn(`Could not read the earlier answers of agent ${run.agentId} for the check of run ${run.id}: ${(err as Error)?.message}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * The "[ALREADY REPORTED — DO NOT LIST AGAIN]" section of this run's
+   * prompt, kept on the run (`workingMemory.alreadyReported`) so every step
+   * reads the same: the items the agent's earlier answers listed
+   * (earlierReportedItems over earlierAnswersOf), exactly what the answer
+   * check will hold this answer to. '' when there are none.
+   */
+  async alreadyReportedFor(run: AgentRun): Promise<string> {
+    const earlier = await this.earlierAnswersOf(run);
+    const items = earlier ? earlierReportedItems(earlier) : [];
+    const block = alreadyReportedBlock(items);
+    run.workingMemory = { ...(run.workingMemory ?? {}), alreadyReported: block, alreadyReportedItems: items.length };
+    return block;
   }
 
   /** Each checker's model card (its context window and most output), or null when it has none. */
@@ -3383,7 +3563,7 @@ export class AgentStepProcessor {
       type: 'verify',
       role: ANSWER_CHECK_ROLE,
       input: { mode: 'mid_loop', policy: panel.policy, checkers: panel.checkers.length },
-      output: { verdict: panel.verdict, advisory: true, failures: panel.failures, checkers: checkerVerdicts(panel) },
+      output: { verdict: panel.verdict, advisory: true, failures: panel.failures, checkers: checkerVerdicts(panel), ...checkerNotesOf(panel) },
       cost: panel.cost,
       tokens: checkTokens(panel),
       timestamp: new Date().toISOString(),

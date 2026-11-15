@@ -38,9 +38,10 @@ export class AuthHelper {
   }
 
   /**
-   * Register a new user via API (faster). Registration answers with a
-   * cookie and no token, so the helper signs in through the non-browser
-   * login (/auth/token) to learn the user's id and organization.
+   * Register a new user via API (faster). Registration sets no session,
+   * so the helper signs in through the non-browser login (/auth/token) to
+   * learn the user's id and organization; that sign-in needs the address
+   * confirmed, as it does for anyone.
    */
   async registerViaAPI(user: Omit<TestUser, 'token' | 'id' | 'organizationId'>): Promise<TestUser> {
     await this.apiHelper.register(user)

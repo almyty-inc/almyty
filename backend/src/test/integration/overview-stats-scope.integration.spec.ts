@@ -65,6 +65,7 @@ describeIfDb('overview stats are scoped to what the caller may see (real Postgre
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
     }) as any);
     await ds.initialize();

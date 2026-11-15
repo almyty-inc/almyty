@@ -45,6 +45,7 @@ describeIfDb('OAuth discovery org slug resolution (real DB)', () => {
       extra: { options: '-c search_path=oauth_discovery_test,public' },
       migrations: [path.join(__dirname, '../../migrations/*{.ts,.js}')],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
     });
     await ds.initialize();

@@ -6,19 +6,24 @@ import type { Agent } from '@/types'
  *
  * - "Completed": the share of runs that finished. It says nothing about
  *   whether an answer was right.
- * - "Checks passed": for an agent whose answers a checker reviews, the
- *   share of checked runs whose check passed. A run no checker could give
- *   a verdict on was not checked and is not counted.
+ * - "No errors found": for an agent whose answers a checker reviews, the
+ *   share of checked runs whose check found no mismatch with the tool
+ *   results. That is not the share of correct answers: a detail the tool
+ *   results hold nothing to compare with passes. A run no checker could
+ *   give a verdict on was not checked and is not counted.
  *
  * They used to be one "Success rate" that counted finished runs and
  * ignored the checks, so an agent whose every answer failed its check
- * still read 100%.
+ * still read 100%. The API fields keep their names
+ * (`passedCheckExecutions`); only the label changed.
  */
 
 type RunCounts = Pick<Agent, 'totalExecutions' | 'successfulExecutions' | 'checkedExecutions' | 'passedCheckExecutions' | 'agentConfig'>
 
 export const COMPLETED_LABEL = 'Completed'
-export const CHECKS_PASSED_LABEL = 'Checks passed'
+export const CHECKS_PASSED_LABEL = 'No errors found'
+/** The hint beside the number: what a run counted there means. */
+export const CHECKS_PASSED_HINT = "Checked runs whose check found no mismatch with the tool results. It can't confirm everything an answer says."
 
 /** Whole percent of `part` in `whole`, or null when there is nothing to divide. */
 function percent(part: number | undefined | null, whole: number | undefined | null): number | null {
@@ -39,7 +44,7 @@ export function hasAnswerCheck(agent: Pick<Agent, 'agentConfig'>): boolean {
 }
 
 /**
- * "Checks passed" for an agent with a check: passed of checked, and the
+ * "No errors found" for an agent with a check: passed of checked, and the
  * percent (null until a run was checked). Null for an agent without a
  * check, which shows no such number at all.
  */

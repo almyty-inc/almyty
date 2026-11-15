@@ -66,6 +66,12 @@ export function stepSummary(step: AgentRunStep): string | null {
           return typeof out.candidate === 'number' ? `Candidate ${out.candidate}` : 'Candidate answer'
         case 'panel_answer':
           return 'Panel answer'
+        case 'no_answer': {
+          // A reply with no answer in it: empty, or cut off at the output limit.
+          const reason = typeof out.reason === 'string' && out.reason ? out.reason : 'the model gave no answer'
+          const said = reason.charAt(0).toUpperCase() + reason.slice(1)
+          return out.retried ? `No answer: ${said}. Asked again.` : `No answer: ${said}.`
+        }
         default:
           return null
       }

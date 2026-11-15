@@ -14,6 +14,7 @@ import { Api } from '../../entities/api.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { egressAxiosConfig } from '../../common/security/pinned-redirects';
 import { outboundFailureDetail } from '../../common/security/safe-fetch';
+import { redactSecrets } from '../credentials/secret-redaction';
 
 export interface CreateCredentialDto {
   name: string;
@@ -354,26 +355,10 @@ export class CredentialService {
     await this.credentialRepository.update(credentialId, { lastUsedAt: new Date() });
   }
 
-  /**
-   * Mask sensitive fields for API responses.
-   */
+  /** A credential as a response shows it: each stored secret only as present (secret-redaction.ts). */
   private maskCredential(credential: Credential): Credential {
-    if (credential.config) {
-      const maskedConfig = { ...credential.config };
-      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret'];
-      for (const field of sensitiveFields) {
-        if (maskedConfig[field] && typeof maskedConfig[field] === 'string') {
-          const val = maskedConfig[field];
-          if (val.startsWith('encrypted:')) {
-            maskedConfig[field] = '••••••••';
-          } else if (val.length > 8) {
-            maskedConfig[field] = val.substring(0, 4) + '••••••••';
-          } else {
-            maskedConfig[field] = '••••••••';
-          }
-        }
-      }
-      credential.config = maskedConfig;
+    if (credential.config && typeof credential.config === 'object') {
+      credential.config = redactSecrets(credential.config);
     }
     return credential;
   }

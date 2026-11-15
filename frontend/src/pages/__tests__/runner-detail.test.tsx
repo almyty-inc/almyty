@@ -76,7 +76,8 @@ describe('RunnerDetailPage', () => {
     render(<RunnerDetailPage />)
     await waitFor(() => expect(screen.getByText('never connected')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
-    expect(screen.getByText('almyty runner start')).toBeInTheDocument()
+    // Served from the test origin, not production, so the command names it.
+    expect(screen.getByText(`almyty runner start --url ${window.location.origin}`)).toBeInTheDocument()
   })
 
   it('Delete asks a one-line confirmation and calls the API on confirm', async () => {

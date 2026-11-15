@@ -631,4 +631,17 @@ describe('HostedChatService', () => {
       await expect(bare.recordDisclosureRemoval(gateway(), null)).resolves.toBeUndefined();
     });
   });
+
+  describe('openRunOf', () => {
+    it('follows a reply waiting on an approval, so a reopened page says it is waiting', async () => {
+      for (const status of ['pending', 'running', 'waiting_approval']) {
+        runRepository.findOne.mockResolvedValueOnce({ id: 'run-1', status });
+        await expect(service.openRunOf({ id: 'conv-1' } as any)).resolves.toBe('run-1');
+      }
+      for (const status of ['completed', 'failed', 'cancelled', 'waiting_input']) {
+        runRepository.findOne.mockResolvedValueOnce({ id: 'run-1', status });
+        await expect(service.openRunOf({ id: 'conv-1' } as any)).resolves.toBeNull();
+      }
+    });
+  });
 });

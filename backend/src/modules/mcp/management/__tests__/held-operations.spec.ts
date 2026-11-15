@@ -279,7 +279,8 @@ describe('management MCP: the operations that were held', () => {
       const res = await write('member', 'profile.create_api_key', { body: { name: 'ci' } });
       expect(res.isError).toBe(false);
       expect(res.json.data.apiKey).toBe('almyty_live_abc');
-      expect(svc(AuthService).createApiKey).toHaveBeenCalledWith('member', expect.objectContaining({ name: 'ci' }));
+      // Scoped to the org the call is made in, as a key minted in the web app is.
+      expect(svc(AuthService).createApiKey).toHaveBeenCalledWith('member', expect.objectContaining({ name: 'ci' }), ORG);
       expect((await write('outsider', 'profile.create_api_key', { body: { name: 'ci' } })).isError).toBe(true);
     });
 

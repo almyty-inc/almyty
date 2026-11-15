@@ -129,13 +129,13 @@ test('core journey: sign up, credentials, API, gateway, agent, channel', async (
       // A build with a captcha key refuses to submit until the widget has a token.
       await AuthHelper.waitForCaptcha(page)
       await page.getByRole('button', { name: 'Create account' }).click()
-      await page.waitForURL(/\/dashboard/)
+      // No session yet: signing in needs the confirmed address.
+      await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
 
-      await page.getByRole('button', { name: 'User menu' }).click()
-      await page.getByRole('menuitem', { name: 'Log out' }).click()
-      await page.waitForURL(/\/auth\/login/)
       // The verification link, clicked.
       sql(`UPDATE users SET "isVerified" = true, "verifiedAt" = now() WHERE email = '${user.email}';`)
+      await page.getByRole('link', { name: 'Sign in' }).click()
+      await page.waitForURL(/\/auth\/login/)
       await page.locator('#email').fill(user.email)
       await page.locator('#password').fill(user.password)
       await page.getByRole('button', { name: 'Sign in' }).click()

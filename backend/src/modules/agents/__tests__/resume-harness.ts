@@ -247,7 +247,8 @@ export async function resumeWorkers(opts: {
       const row = approvals.rows.find((r) => r.id === approvalId);
       if (!row) throw new Error(`no approval ${approvalId}`);
       Object.assign(row, { status, decisionReason: reason ?? null, decidedBy: status === 'expired' ? null : 'u-1' });
-      const runtime = { runRepository: opts.runs, messageRepository: messages, runtimeQueue: { add: async (...job: any[]) => queued.push(job) }, logger: s.logger };
+      // The decision lands on the run's live stream too (a web chat visitor follows it there).
+      const runtime = { runRepository: opts.runs, messageRepository: messages, runtimeQueue: { add: async (...job: any[]) => queued.push(job) }, logger: s.logger, emitEvent: s.emitEvent };
       await (AgentRuntimeService.prototype as any).handleApprovalDecided.call(runtime, row);
     },
   };

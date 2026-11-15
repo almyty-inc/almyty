@@ -42,6 +42,7 @@ describeIfDb('the checker reads the run conversation (real Postgres)', () => {
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       logging: false,

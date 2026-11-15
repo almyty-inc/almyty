@@ -46,13 +46,16 @@ test.describe('Authentication - Registration', () => {
     await expect(page.getByRole('button', { name: /create account|register|sign up/i })).toBeVisible()
   })
 
-  test('should successfully register a new user', async ({ page, authHelper, assertHelper }) => {
+  // Sign-up opens no session: signing in needs the confirmed address, so
+  // the page says to check the email instead of opening the dashboard.
+  test('should successfully register a new user', async ({ page, authHelper }) => {
     await AuthHelper.skipUnlessCaptchaAutoPasses(page)
     await submitSignUp(page, AuthHelper.generateTestUser())
 
-    await page.waitForURL(/\/dashboard/)
-    await assertHelper.assertOnDashboard()
-    expect(await authHelper.isAuthenticated()).toBe(true)
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Send a new link' })).toBeVisible()
+    await expect(page).toHaveURL(/\/auth\/register/)
+    expect(await authHelper.isAuthenticated()).toBe(false)
   })
 
   test('should validate required fields', async ({ page }) => {
@@ -60,7 +63,7 @@ test.describe('Authentication - Registration', () => {
     await page.getByRole('button', { name: /create account|register|sign up/i }).click()
 
     // Should show validation errors (multiple errors appear - check for at least one)
-    await expect(page.getByText(/required|cannot be empty/i).first()).toBeVisible()
+    await expect(page.getByText(/^enter your/i).first()).toBeVisible()
   })
 
   test('should validate email format', async ({ page }) => {
@@ -79,7 +82,7 @@ test.describe('Authentication - Registration', () => {
     await page.getByLabel('Confirm password').click() // Blur password field
 
     // Should show password strength error
-    await expect(page.getByText(/password.*at least|password.*minimum|password.*strong/i)).toBeVisible()
+    await expect(page.getByText(/use at least 8 characters/i)).toBeVisible()
   })
 
   test('should validate password confirmation match', async ({ page }) => {
@@ -107,19 +110,18 @@ test.describe('Authentication - Registration', () => {
       organizationName: `New Org ${Date.now()}`,
     })
 
-    // The inline alert and the toast both carry the message.
+    // The inline alert carries the message.
     await expect(page.getByRole('alert').filter({ hasText: /email.*already.*exist|email.*taken/i })).toBeVisible()
     await expect(page).toHaveURL(/\/auth\/register/)
   })
 
-  test('should handle special characters in password [BUG FIX TEST]', async ({ page, assertHelper }) => {
+  test('should handle special characters in password [BUG FIX TEST]', async ({ page }) => {
     await AuthHelper.skipUnlessCaptchaAutoPasses(page)
     // A password full of characters that need escaping in JSON, a form body
     // or a shell must arrive intact.
     await submitSignUp(page, { ...AuthHelper.generateTestUser(), password: 'T3st!@#$%^&*()_+-=[]{}|;:,.<>?' })
 
-    await page.waitForURL(/\/dashboard/)
-    await assertHelper.assertOnDashboard()
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
   })
 
   test('should allow user-controlled organization name', async ({ page }) => {

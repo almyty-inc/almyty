@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { Form } from '@/components/ui/form'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
@@ -68,7 +69,12 @@ export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditMode
       privacyTier: data.privacyTier as UpdateModelBody['privacyTier'],
       region: data.region ? data.region : null,
       contextLength: data.contextLength ?? null,
-      capabilities: compactCapabilities(data.capabilities) ?? {},
+      // What kind of model it is (`chat`, from the price feed) is not on the
+      // form; a save keeps it rather than dropping it.
+      capabilities: {
+        ...(card.capabilities?.chat !== undefined ? { chat: card.capabilities.chat } : {}),
+        ...(compactCapabilities(data.capabilities) ?? {}),
+      },
       pricingOverride: pricingFromForm(data),
     }
     await onSubmit(card.id, body)
@@ -78,7 +84,7 @@ export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditMode
   const feedSource = card ? PRICING_SOURCE_LABELS[card.pricingSource] || card.pricingSource : ''
 
   return (
-          <form onSubmit={submit} className="space-y-4" noValidate aria-label="Model settings">
+          <Form onSubmit={submit} className="space-y-4" noValidate aria-label="Model settings">
             <div>
               <Label htmlFor="edit-name">Name</Label>
               <Input id="edit-name" className="mt-1" {...form.register('name')} />
@@ -151,6 +157,6 @@ export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditMode
               </Button>
             </div>
             {guard.element}
-          </form>
+          </Form>
   )
 }

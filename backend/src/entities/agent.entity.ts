@@ -146,7 +146,8 @@ export class Agent {
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 
-  @Column({ type: 'varchar', default: 'workflow' })
+  // A new agent starts autonomous (migration AgentModeDefaultAutonomous).
+  @Column({ type: 'varchar', default: 'autonomous' })
   mode: 'workflow' | 'autonomous';
 
   @Column({ type: 'text', nullable: true })
@@ -398,7 +399,7 @@ export class Agent {
   @Column({ default: 0 })
   checkedExecutions: number;
 
-  /** Of `checkedExecutions`, the runs whose check passed. "Checks passed" in the UI. */
+  /** Of `checkedExecutions`, the runs whose check found no mismatch with the tool results. "No errors found" in the UI. */
   @Column({ default: 0 })
   passedCheckExecutions: number;
 

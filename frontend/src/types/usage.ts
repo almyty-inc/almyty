@@ -338,7 +338,7 @@ export interface Agent {
   successfulExecutions: number
   /** Finished runs whose final answer a checker gave a verdict on. */
   checkedExecutions?: number
-  /** Of those, the runs whose check passed ("Checks passed"). */
+  /** Of those, the runs whose check passed ("No errors found": no mismatch with the tool results, not proof the answer is right). */
   passedCheckExecutions?: number
   totalCost: number
   averageExecutionTime: number

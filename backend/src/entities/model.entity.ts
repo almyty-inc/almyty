@@ -45,6 +45,13 @@ export interface ModelCapabilities {
   embedding?: boolean;
   structuredOutput?: boolean;
   /**
+   * Answers a conversation in text. From the price feed's model kind
+   * (LiteLLM `mode`: chat, completion, responses); false for a speech,
+   * transcription, image, video, embedding or rerank model, which a model
+   * picker then leaves out. Unset when no feed knows the model.
+   */
+  chat?: boolean;
+  /**
    * This card can score a teacher-forced continuation and return per-token
    * logprobs, which is what the `decide` mode's logits path needs.
    *

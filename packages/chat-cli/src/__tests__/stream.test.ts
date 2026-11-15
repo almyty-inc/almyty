@@ -97,15 +97,33 @@ describe('visible progress', () => {
     expect(s.output).toBe('done');
   });
 
+  it('counts a workflow answer once, not its nodes and then its totals again', () => {
+    // What staging sends: each node's own figures, then the pipeline's
+    // totals, which are the sum of those same figures.
+    const s = fold([
+      ev('node.completed', { nodeId: 'in', cost: 0, tokens: 0 }),
+      ev('node.completed', { nodeId: 'llm_1', cost: 0.0001204, tokens: 298 }),
+      ev('execution.completed', { output: 'ready', totalCost: 0.0001204, totalTokens: 298 }),
+    ]);
+    expect(s.usage.tokens).toBe(298);
+    expect(s.usage.cost).toBeCloseTo(0.0001204, 9);
+  });
+
+  it('takes the pipeline totals when the node events were missed', () => {
+    const s = fold([ev('execution.completed', { output: 'done', totalCost: 0.004, totalTokens: 300 })]);
+    expect(s.usage.tokens).toBe(300);
+    expect(s.usage.cost).toBeCloseTo(0.004, 6);
+  });
+
   it('labels a run that is waiting on the user', () => {
     const s = reduceStreamEvent(initialStreamState(), ev('step.completed', { status: 'waiting_input' }));
     expect(s.label).toBe('Waiting for your input');
     expect(s.usage.steps).toBe(1);
   });
 
-  it('says when a verifier sent the draft back', () => {
+  it('says when the check sent the draft back, in plain words', () => {
     const s = reduceStreamEvent(initialStreamState(), ev('verify.failed', {}));
-    expect(s.emit[0].text).toContain('revising');
+    expect(s.emit[0].text).toBe('the check found errors in the draft — revising');
   });
 });
 

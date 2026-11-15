@@ -1316,7 +1316,7 @@ describe('AgentNodeExecutor', () => {
       expect(res.output.verdict).toBe('fail');
       expect(res.output.passed).toBe(false);
       expect(res.output.failures).toEqual([
-        { rule: 'no source', evidence: 'para 2', checker: 'vendor-b' },
+        { rule: 'no source', evidence: 'para 2', checker: 'vendor-b', kind: 'evidence' },
       ]);
     });
 

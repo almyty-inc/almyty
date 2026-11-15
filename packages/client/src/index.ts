@@ -27,6 +27,7 @@ export {
   resolveCredentials,
   resolveCredentialsOrExit,
   getOrgSlugFromToken,
+  defaultOrganization,
   credentialsExpired,
   CREDENTIALS_FILE,
 } from './credentials.js';

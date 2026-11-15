@@ -10,6 +10,8 @@ import {
   PriceFeedService,
   snapshotAlias,
   withFeedInputs,
+  modeAnswersChat,
+  withFeedChat,
 } from '../price-feed.service';
 import { Model } from '../../../../entities/model.entity';
 import { LlmProvider, LlmProviderType } from '../../../../entities/llm-provider.entity';
@@ -651,9 +653,10 @@ describe('PriceFeedService', () => {
 
       await service.applyToCatalog();
 
-      expect(rows[0].capabilities).toEqual({ vision: true, pdfInput: true });
-      expect(rows[1].capabilities).toEqual({ vision: false, tools: true, pdfInput: true });
-      expect(rows[2].capabilities).toEqual({});
+      // `chat` comes from the same feed (its model kind), tested below.
+      expect(rows[0].capabilities).toEqual({ vision: true, pdfInput: true, chat: true });
+      expect(rows[1].capabilities).toEqual({ vision: false, tools: true, pdfInput: true, chat: true });
+      expect(rows[2].capabilities).toEqual({ chat: true });
 
       // Settled: a second pass saves nothing for capabilities' sake.
       modelRepository.save.mockClear();
@@ -666,6 +669,83 @@ describe('PriceFeedService', () => {
       expect(withFeedInputs({ vision: true }, { image: true, pdf: false })).toBeNull();
       expect(withFeedInputs({ tools: true }, undefined)).toBeNull();
       expect(withFeedInputs({ pdfInput: false }, { image: false, pdf: true })).toBeNull();
+    });
+  });
+
+  describe('whether a model holds a conversation (the feed\'s model kind)', () => {
+    // A connected OpenAI or Gemini key lists speech, transcription and image
+    // models next to the chat ones; the model picker offered them all as an
+    // agent's main model. LiteLLM's `mode` says which is which, priced per
+    // token or not.
+    const LITELLM_KINDS = {
+      'gpt-4o': LITELLM_FIXTURE['gpt-4o'],
+      'gpt-4o-mini-transcribe': { litellm_provider: 'openai', mode: 'audio_transcription', input_cost_per_token: 0.00000125, output_cost_per_token: 0.000005 },
+      'tts-1': { litellm_provider: 'openai', mode: 'audio_speech', input_cost_per_character: 0.000015 },
+      'gpt-image-1': { litellm_provider: 'openai', mode: 'image_generation', input_cost_per_token: 0.000005 },
+      'gemini/gemini-2.5-flash-preview-tts': { litellm_provider: 'gemini', mode: 'audio_speech', input_cost_per_token: 0.0000005, output_cost_per_token: 0.00001 },
+      'gemini/nano-banana-pro-preview': { litellm_provider: 'gemini', mode: 'image_generation', input_cost_per_token: 0.000002, output_cost_per_token: 0.000012 },
+      'o1-2024-12-17': { ...LITELLM_FIXTURE['o1-2024-12-17'], mode: 'responses' },
+      'text-embedding-3-small': { litellm_provider: 'openai', mode: 'embedding', input_cost_per_token: 0.00000002, output_cost_per_token: 0 },
+    };
+
+    it('reads each model\'s kind, priced or not, by the same ids as its price', async () => {
+      routeAxios({ litellm: LITELLM_KINDS, openrouter: { data: [] } });
+      await service.refresh();
+      expect(service.answersChat('openai', 'gpt-4o')).toBe(true);
+      expect(service.answersChat('openai', 'gpt-4o-2024-08-06')).toBe(true);
+      expect(service.answersChat('openai', 'o1')).toBe(true);
+      expect(service.answersChat('openai', 'gpt-4o-mini-transcribe')).toBe(false);
+      // Priced per character or per image: no price, still known not to chat.
+      expect(service.answersChat('openai', 'tts-1')).toBe(false);
+      expect(service.answersChat('openai', 'gpt-image-1')).toBe(false);
+      expect(service.answersChat('openai', 'text-embedding-3-small')).toBe(false);
+      expect(service.answersChat('google', 'gemini-2.5-flash-preview-tts')).toBe(false);
+      expect(service.answersChat('google', 'nano-banana-pro-preview')).toBe(false);
+      expect(service.answersChat('openai', 'never-heard-of-it')).toBeUndefined();
+    });
+
+    it('marks the cards, priced and unpriced, and never over an operator\'s word', async () => {
+      routeAxios({ litellm: LITELLM_KINDS, openrouter: { data: [] } });
+      await service.refresh();
+      const rows = [
+        makeRow({ id: 'chat', vendorModelId: 'gpt-4o', capabilities: {} }),
+        makeRow({ id: 'transcribe', vendorModelId: 'gpt-4o-mini-transcribe', capabilities: {} }),
+        makeRow({ id: 'speech', vendorModelId: 'tts-1', capabilities: {} }),
+        makeRow({ id: 'operator', vendorModelId: 'gpt-image-1', capabilities: { chat: true } }),
+        makeRow({ id: 'unknown', vendorModelId: 'my-own-model', capabilities: {} }),
+      ];
+      modelRepository.find.mockResolvedValue(rows);
+
+      await service.applyToCatalog();
+
+      expect(rows[0].capabilities).toEqual({ chat: true });
+      expect(rows[1].capabilities).toEqual({ chat: false });
+      expect(rows[2].capabilities).toEqual({ chat: false });
+      expect(rows[3].capabilities).toEqual({ chat: true });
+      expect(rows[4].capabilities).toEqual({});
+    });
+
+    it('keeps the kinds across a restart (the Redis cache)', async () => {
+      routeAxios({ litellm: LITELLM_KINDS, openrouter: { data: [] } });
+      await service.refresh();
+      const [, , payload] = redis.setex.mock.calls[redis.setex.mock.calls.length - 1];
+      redis.get.mockResolvedValue(payload);
+      const restarted = await build();
+      await restarted.onModuleInit();
+      expect(restarted.answersChat('openai', 'tts-1')).toBe(false);
+      expect(restarted.answersChat('openai', 'gpt-4o')).toBe(true);
+    });
+
+    it('modeAnswersChat and withFeedChat', () => {
+      expect(modeAnswersChat('chat')).toBe(true);
+      expect(modeAnswersChat('completion')).toBe(true);
+      expect(modeAnswersChat('audio_transcription')).toBe(false);
+      expect(modeAnswersChat('realtime')).toBe(false);
+      expect(modeAnswersChat(undefined)).toBeUndefined();
+      expect(modeAnswersChat('one of: chat, embedding')).toBeUndefined();
+      expect(withFeedChat({ tools: true }, false)).toEqual({ tools: true, chat: false });
+      expect(withFeedChat({ chat: true }, false)).toBeNull();
+      expect(withFeedChat({}, undefined)).toBeNull();
     });
   });
 });

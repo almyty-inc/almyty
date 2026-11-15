@@ -15,6 +15,7 @@ import {
 import { Operation, OperationType, HttpMethod } from '../../../entities/operation.entity';
 import { Resource, ResourceType } from '../../../entities/resource.entity';
 import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../interfaces/parser.interface';
+import { buildOperationDocument, requiredArgumentNames } from './graphql-operation-document';
 
 /** Hard cap on GraphQL SDL input size — memory DoS protection. */
 const MAX_SDL_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -116,11 +117,16 @@ export class GraphQLParserService implements SchemaParser {
       operation.operationId = parsedOp.operationId;
       operation.description = parsedOp.description;
       operation.method = HttpMethod.POST; // GraphQL typically uses POST
-      operation.endpoint = '/graphql';
+      // No path: GraphQL has one endpoint, and it is the API's address --
+      // the URL the schema was introspected from, or the one the person
+      // gave (graphqlTargetUrl, tools/executors/graphql-operation-request.ts).
+      operation.endpoint = '';
       operation.type = parsedOp.method === 'query' ? OperationType.QUERY : OperationType.MUTATION;
       operation.parameters = parsedOp.parameters;
       operation.responses = parsedOp.responses;
       operation.tags = parsedOp.tags;
+      // Carries the query document the executor sends.
+      operation.metadata = parsedOp.metadata ?? null;
       operation.isActive = true;
 
       operations.push(operation);
@@ -189,12 +195,20 @@ export class GraphQLParserService implements SchemaParser {
     operationType: string,
     budget: ExpansionBudget = newExpansionBudget(),
   ): ParsedOperation {
+    // The document the generated tool sends (tool-protocol.executor.ts
+    // reads metadata.query): without it the call goes out with no query.
+    const document = buildOperationDocument(
+      operationType as 'query' | 'mutation' | 'subscription',
+      fieldName,
+      field,
+    );
     return {
       operationId: `${operationType}_${fieldName}`,
       name: fieldName,
       description: field.description,
       method: operationType,
-      endpoint: `/graphql`,
+      endpoint: '',
+      metadata: { query: document.query, operationName: document.operationName },
       parameters: {
         body: {
           query: {
@@ -206,6 +220,7 @@ export class GraphQLParserService implements SchemaParser {
             type: 'object',
             description: 'GraphQL variables',
             properties: this.extractArgumentsAsProperties(field.args, budget),
+            required: requiredArgumentNames(field),
           },
         },
       },

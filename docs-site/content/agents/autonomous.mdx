@@ -8,13 +8,13 @@ On this page: how to set one up, how it can check its own answers, the rules it 
 
 ## Create an autonomous agent
 
-1. Open **Agents**, click **Create agent** and pick **Autonomous** at the top.
+1. Open **Agents** and click **Create agent**. A new agent is autonomous already (**Autonomous** is picked at the top).
 2. Fill in the page from top to bottom: **Personality & style** (the tone, such as "warm, brief, specific"), **Instructions** (the job), **Work mode** and its models, **Memory**, **Capabilities** (what it may use), **Run limits**, and **Always on**, which keeps it working in the background (set up on its own page; see [Always on](/agents/always-on)).
 3. Save it. Rules and answer checks are added on the agent's own page afterwards.
 
 ![Autonomous agent form in the builder](/screenshots/agent-builder-autonomous.png)
 
-To try it, use **Try it** on the agent's **Overview** tab.
+To try it, use **Try it** on the agent's **Overview** tab. It works while the agent is still a draft; turn the agent on when its channels and schedules should answer.
 
 ## Work mode: how it works, and which models do it
 
@@ -36,9 +36,41 @@ Whatever the mode, the person asking gets one answer. Each step of a run records
 
 ## Verification
 
-Verification is a second opinion on the agent's answer. Reviewer models each try to find a reason the answer is wrong, and say what they found.
+Verification is a second opinion on the agent's answer. almyty checks the answer against what the agent's tools returned, and reviewer models look for anything wrong with it.
 
-By default that is all they do. The answer goes out as the agent wrote it, and when the check didn't pass, it starts with a line such as "Note: this answer's check didn't pass: the total does not match the invoices." If no reviewer could give a verdict, the line says the answer could not be checked. The run shows the verdict and the reasons either way.
+By default that is all they do. The answer goes out as the agent wrote it, and when the check didn't pass, it starts with a line that says what is wrong, such as "Note: this answer's check didn't pass: dotenv: the answer says outdated-minor, but 16 to 18 is a major update." If no reviewer could give a verdict, the line says the answer could not be checked. The run shows the verdict and the reasons either way.
+
+### What decides the verdict
+
+A check fails only on something that can be shown wrong from the tool results:
+
+- **What almyty checks itself.** It compares and counts: a date, DOI, version, label, title, venue or author the answer gives an item that the tools gave differently; an update marked minor that is a major one; an item listed as new that is older than the time span you asked about; a count that doesn't add up, such as "I skipped 10" above a list of all 10; and an item the tool returned that the answer leaves out while it says nothing else matched.
+- **What a reviewer shows from the tool results.** A reviewer must quote the wrong words from the answer and the tool data that contradicts them. almyty checks that both quotes are real, that they are about the same item, and that the values really differ. Only then does it count.
+
+Each reason names the item and what is wrong with it.
+
+### Checker notes
+
+Anything else a reviewer says is a checker note: whether an item fits your instructions, which items it would have picked or left out, wording and style, and any complaint it could not back with tool data. You see the notes on the run, under **Checker notes** on the verify step. They never change the verdict, never count against **No errors found**, and never appear on the answer or in a chat with your visitors.
+
+### What the check can and can't catch
+
+When the check passes, the run shows **No errors found** and, under it: "The check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch. It can't confirm everything the answer says." When it fails, the run shows **Errors found** and what was found.
+
+The check can catch:
+
+- a name, date, version, id, count or label the answer gives an item that the tools gave differently;
+- counts in the answer that don't add up against its own lists and tables;
+- items the answer says it skipped as already reported that no earlier report listed;
+- items listed as new that are older than the time span you asked about;
+- an update marked minor that is a major one.
+
+The check can't catch:
+
+- a claim with nothing to compare it with in the tool results. A dependency name made up for a release summary, or a quote reworded into words the source never used, passes;
+- whether the wording is right, whether an item is relevant, and which items should have been picked. A reviewer may say so, and you see it as a checker note, but it never decides the verdict.
+
+So **No errors found** means no mismatch was found, not that the answer is correct. Read the answer before you rely on it.
 
 To set it up, open the agent's **Overview** tab and, on the **Models & verification** card, click **Configure verification**:
 
@@ -67,7 +99,7 @@ Reviewers are sometimes wrong, and a reworked answer can lose things that were r
 
 ### The numbers on the agent
 
-The agent's header and the **Agents** tab of Analytics show **Completed**, the share of runs that finished. For an agent with verification they also show **Checks passed**, the share of checked runs whose check passed. A run no reviewer could give a verdict on isn't counted.
+The agent's header and the **Agents** tab of Analytics show **Completed**, the share of runs that finished. For an agent with verification they also show **No errors found**, the share of checked runs whose check found no mismatch with the tool results. That is not the share of correct answers (see [What the check can and can't catch](#what-the-check-can-and-cant-catch)). A run no reviewer could give a verdict on isn't counted.
 
 Workflow agents can do the same with a Verify step.
 

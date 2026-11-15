@@ -69,7 +69,9 @@ describe('a new agent draft nobody has touched yet', () => {
     // The work that is left is on screen -- nothing is being hidden.
     const steps = await screen.findByTestId('builder-next-steps')
     expect(steps).toHaveTextContent(/to finish:/i)
-    expect(steps).toHaveTextContent(/model call: pick a model/i)
+    // A new agent opens on Autonomous, so what is left is its instructions and model.
+    expect(steps).toHaveTextContent(/write the instructions/i)
+    expect(steps).toHaveTextContent(/pick a model/i)
 
     // But it is not an error: no destructive banner, no alert role, and
     // nothing inside it reaching for the destructive palette.
@@ -98,13 +100,13 @@ describe('a new agent draft nobody has touched yet', () => {
 
     // And now it is an error, still phrased as the step that closes it.
     const banner = await screen.findByTestId('builder-validation-errors')
-    expect(banner).toHaveTextContent(/model call: pick a model/i)
+    expect(banner).toHaveTextContent(/write the instructions/i)
     expect(screen.queryByTestId('builder-next-steps')).not.toBeInTheDocument()
     expect(saveButton()).toBeDisabled()
 
     expect(errorNotif).toHaveBeenCalledWith(
       'Not ready to save yet',
-      expect.stringMatching(/model call: pick a model/i),
+      expect.stringMatching(/write the instructions/i),
     )
   })
 
@@ -123,23 +125,21 @@ describe('a new agent draft nobody has touched yet', () => {
   })
 })
 
-describe('a new autonomous draft nobody has touched yet', () => {
+describe('a new workflow draft nobody has touched yet', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('asks for instructions and a provider without calling either a failure', async () => {
+  it("asks for the Model Call's model without calling it a failure", async () => {
     const user = userEvent.setup()
     renderWithProviders(<AgentBuilderPage />)
 
+    // A new agent opens on Autonomous; Workflow is the other side of the switch.
     await screen.findByTestId('builder-next-steps')
-    await user.click(screen.getByRole('button', { name: 'Autonomous' }))
+    await user.click(screen.getByRole('button', { name: 'Workflow' }))
 
     await waitFor(() =>
       expect(screen.getByTestId('builder-next-steps')).toHaveTextContent(
-        /write the instructions/i,
+        /model call: pick a model/i,
       ),
-    )
-    expect(screen.getByTestId('builder-next-steps')).toHaveTextContent(
-      /pick a model/i,
     )
 
     // Flipping the mode toggle is not filling in a form.

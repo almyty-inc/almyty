@@ -138,7 +138,9 @@ describe('CredentialsService', () => {
       const result = await service.findAll({ id: 'user-1' }, 'org-1');
 
       expect(result).toHaveLength(2);
-      expect(result[0].config.apiKey).toBe('sk-1****cdef');
+      // Presence only: not the first or last characters, not the length.
+      expect(result[0].config.apiKey).toBe('********');
+      expect(JSON.stringify(result)).not.toMatch(/sk-1|cdef/);
       expect(result[0].config.baseUrl).toBe('https://api.example.com');
       expect(result[1].config.token).toBe('********');
 
@@ -168,7 +170,8 @@ describe('CredentialsService', () => {
       const result = await service.findById('cred-1', 'org-1');
 
       expect(result.id).toBe('cred-1');
-      expect(result.config.apiKey).toBe('sk-a****mnop');
+      expect(result.config.apiKey).toBe('********');
+      expect(JSON.stringify(result)).not.toMatch(/sk-a|mnop/);
       expect(credentialRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'cred-1', organizationId: 'org-1' },
       });
@@ -217,8 +220,9 @@ describe('CredentialsService', () => {
       );
       expect(mockCreated.encryptSensitiveDataForOrg).toHaveBeenCalled();
       expect(credentialRepository.save).toHaveBeenCalledWith(mockCreated);
-      // Returned value should have masked config
-      expect(result.config.apiKey).toBe('sk-r****7890');
+      // The response says a key is stored and shows none of it.
+      expect(result.config.apiKey).toBe('********');
+      expect(JSON.stringify(result)).not.toMatch(/sk-r|7890/);
     });
 
     it('persists visibility="team" + teamId from the dashboard VisibilityField payload', async () => {

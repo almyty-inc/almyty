@@ -3,6 +3,7 @@ import type { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.s
 import { principalOfRun } from '../../common/authorization/execution-access.service';
 import type { AgentRuntimeService } from './agent-runtime.service';
 import type { AgentVerifierHelper, CheckerConfig, VerifyPanelResult } from './agent-verifier.helper';
+import type { WholeToolResult } from './answer-checks';
 import { answerCallMessages } from './final-answer';
 import { checkRunLimits, type ResolvedRunLimits } from './run-limits';
 import { EXTRACT_CONTEXT_INSTRUCTION, ExtractedContext, parseExtractedContext } from './strategies/extract-context';
@@ -254,7 +255,7 @@ export class AutonomousStrategyRunner {
     checker: ModelRoleCall,
     target: string,
     spec?: string,
-    prepared?: { evidence?: string; rules?: string; checkers?: CheckerConfig[] },
+    prepared?: { evidence?: string; rules?: string; checkers?: CheckerConfig[]; earlier?: string[]; toolResults?: WholeToolResult[] },
   ): Promise<VerifyPanelResult> {
     const sized = prepared?.checkers?.[0];
     const panel = await this.verifier.runPanel(
@@ -265,6 +266,8 @@ export class AutonomousStrategyRunner {
         policy: 'any_fail_blocks',
         ...(prepared?.evidence ? { evidence: prepared.evidence } : {}),
         ...(prepared?.rules ? { rules: prepared.rules } : {}),
+        ...(prepared?.earlier ? { earlier: prepared.earlier } : {}),
+        ...(prepared?.toolResults ? { toolResults: prepared.toolResults } : {}),
       },
       run.organizationId,
       principalOfRun(run),

@@ -23,6 +23,7 @@ import { NotFoundException } from '@nestjs/common';
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { Message, MessageContent } from '../../../entities/message.entity';
 import { MessageAttachmentResolver } from '../../llm-providers/message-attachments.resolver';
+import { OutputLimitResolver } from '../../llm-providers/output-limit';
 import { Conversation } from '../../../entities/conversation.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -40,6 +41,7 @@ import { withRunEvents } from '../../../test/fake-run-events';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 import { gatewayPrincipal, userPrincipal } from '../../../common/authorization/execution-access.service';
 import { callLlmProviderHttpStream } from '../../llm-providers/providers/safe-request';
+import * as checkerFindings from '../checker-findings';
 
 // ── Provider byte streams, one per call, keyed by the model asked for ──
 export const openaiText = (model: string, prompt: number, parts: string[], completion: number) => [
@@ -108,6 +110,21 @@ export const mainModelConfig = { providerId: 'p-strong', model: 'claude-sonnet-5
 export const FAIL = JSON.stringify({ verdict: 'fail', failures: [{ rule: 'cites no order data', evidence: 'ships soon' }], passed_rules: [] });
 export const PASS = JSON.stringify({ verdict: 'pass', failures: [], passed_rules: ['grounded'] });
 
+/**
+ * These runs read no tool data a checker could cite, so a checker's
+ * failure could never be verified (checker-findings.ts). Tests about what
+ * a failed check does (escalate, revise, deliver) stand in for the code's
+ * verification with this: every checker failure counts, in the code's
+ * words. Call it in beforeEach and the returned restore in afterEach.
+ */
+export function confirmCheckerFindings(): () => void {
+  const spy = jest.spyOn(checkerFindings, 'verifyCheckerFinding').mockReturnValue({
+    verified: true,
+    finding: { item: 'order 4411', field: 'ship date', answerValue: 'soon', toolValue: 'Monday' },
+  });
+  return () => spy.mockRestore();
+}
+
 export type Streams = Record<string, Array<string[] | Error>>;
 
 /**
@@ -154,6 +171,8 @@ export async function runAgent(opts: {
   sleeps?: Array<Record<string, any>>;
   /** The context compactor (AgentContextCompactor), for a case whose agent compacts its context. */
   compactor?: any;
+  /** Model cards' most output tokens, by model id (output-limit.ts); a model left out has no card. */
+  cards?: Record<string, number>;
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -258,6 +277,12 @@ export async function runAgent(opts: {
       // to), else the request as it is.
       resolveAttachments: async (org: string | undefined, p: any, request: any) =>
         opts.attachmentResolver ? opts.attachmentResolver.resolve(org, p, request) : request,
+      // The real output limit, from the cards a case hands in (model -> maxOutputTokens).
+      resolveOutputLimit: (org: string | undefined, p: any, request: any) =>
+        new OutputLimitResolver({
+          findOne: async ({ where }: any) =>
+            opts.cards?.[where.vendorModelId] ? { maxOutputTokens: opts.cards[where.vendorModelId] } : null,
+        } as any).resolve(org, p, request),
       planRouteHead: async (_org: string, request: any) => {
         const route = opts.routes?.[request.routing?.objective];
         if (!route) throw new UnmodelledQueryError('no route is modelled for this policy');

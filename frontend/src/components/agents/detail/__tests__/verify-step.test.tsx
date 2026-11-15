@@ -10,9 +10,10 @@ const step = (over: Partial<AgentRunStep>): AgentRunStep =>
 const run = (metadata: any): AgentRun => ({ metadata } as AgentRun)
 
 describe('VerifyStepCard', () => {
-  it('renders a passing gate verdict', () => {
+  it('renders a passing gate verdict as "No errors found", with what that means', () => {
     render(<VerifyStepCard step={step({ output: { verdict: 'pass', failures: [] } })} index={0} />)
-    expect(screen.getByText('Check passed')).toBeInTheDocument()
+    expect(screen.getByText('No errors found')).toBeInTheDocument()
+    expect(screen.getByTestId('verify-pass-explanation')).toHaveTextContent(/found no mismatch\. It can't confirm everything the answer says\./)
     expect(screen.getByText('blocking')).toBeInTheDocument()
   })
 
@@ -29,7 +30,8 @@ describe('VerifyStepCard', () => {
         index={1}
       />,
     )
-    expect(screen.getByText("Check didn't pass")).toBeInTheDocument()
+    expect(screen.getByText('Errors found')).toBeInTheDocument()
+    expect(screen.queryByTestId('verify-pass-explanation')).not.toBeInTheDocument()
     expect(screen.getByText('revision 2')).toBeInTheDocument()
     expect(screen.getByText(/missing total/)).toBeInTheDocument()
     expect(screen.getByText(/no sum line/)).toBeInTheDocument()
@@ -53,14 +55,20 @@ describe('VerifySummary', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders a passing verdict', () => {
+  // A pass is no mismatch with the tool results, not a correct answer.
+  it('renders a passing verdict as "No errors found", with what that means', () => {
     render(<VerifySummary run={run({ verify: { verdict: 'pass', revisions: 0 } })} />)
-    expect(screen.getByText('Check passed')).toBeInTheDocument()
+    expect(screen.getByText('No errors found')).toBeInTheDocument()
+    expect(screen.getByTestId('verify-summary-explanation')).toHaveTextContent(
+      "The check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch. It can't confirm everything the answer says.",
+    )
+    expect(document.body).not.toHaveTextContent(/passed|verified|correct/i)
   })
 
   it('renders a failed verdict with revisions and exhausted budget', () => {
     render(<VerifySummary run={run({ verify: { verdict: 'fail', revisions: 2, exhausted: true } })} />)
-    expect(screen.getByText("Check didn't pass")).toBeInTheDocument()
+    expect(screen.getByText('Errors found')).toBeInTheDocument()
+    expect(screen.queryByTestId('verify-summary-explanation')).not.toBeInTheDocument()
     expect(screen.getByText(/2 revisions/)).toBeInTheDocument()
     expect(screen.getByText(/budget exhausted/)).toBeInTheDocument()
   })
@@ -75,23 +83,23 @@ describe('a check no checker could give a verdict on', () => {
     metadata: { verify: { verdict: 'fail', revisions: 0, exhausted: false, unavailable: true, reason: 'the checker could not give a verdict' } },
   } as unknown as AgentRun
 
-  it('says the check could not be done, not that problems were found', () => {
+  it('says the check could not be done, not that errors were found', () => {
     render(<VerifySummary run={unchecked} />)
     expect(screen.getByText('Not checked')).toBeInTheDocument()
-    expect(screen.queryByText("Check didn't pass")).not.toBeInTheDocument()
+    expect(screen.queryByText('Errors found')).not.toBeInTheDocument()
   })
 
   it('marks the answer as not checked', () => {
     render(<UnverifiedNote run={unchecked} />)
     const note = screen.getByTestId('unverified-note')
     expect(note).toHaveTextContent('Not checked: the check could not be done')
-    expect(note).not.toHaveTextContent(/found problems/)
+    expect(note).not.toHaveTextContent(/found problems|Errors found/)
     expect(note).not.toHaveTextContent(/verification_unavailable/)
   })
 
-  it('keeps the "found problems" line for an answer the checkers did fail', () => {
+  it('keeps the "errors found" line for an answer the checkers did fail', () => {
     render(<UnverifiedNote run={{ status: 'completed', metadata: { verify: { verdict: 'fail', exhausted: true } } }} />)
-    expect(screen.getByTestId('unverified-note')).toHaveTextContent(/found problems with this answer/)
+    expect(screen.getByTestId('unverified-note')).toHaveTextContent(/^Errors found: .*don't match what the tools returned/)
   })
 
   // By default the check only reports: no revision ran, so the line must
@@ -104,7 +112,7 @@ describe('a check no checker could give a verdict on', () => {
         <VerifySummary run={reported as unknown as AgentRun} />
       </>,
     )
-    expect(screen.getByTestId('unverified-note')).toHaveTextContent("Check didn't pass: the checkers found problems with this answer.")
+    expect(screen.getByTestId('unverified-note')).toHaveTextContent("Errors found: the check found things in this answer that don't match what the tools returned.")
     expect(document.body).not.toHaveTextContent(/revisions ran out|budget exhausted/)
   })
 
@@ -114,7 +122,7 @@ describe('a check no checker could give a verdict on', () => {
       steps: [{ type: 'verify', output: { verdict: 'fail', reportOnly: true, exhausted: false, failures: [{ rule: 'wrong total' }] } }],
     }
     render(<UnverifiedNote run={run} compact />)
-    expect(screen.getByTestId('unverified-badge')).toHaveTextContent("Check didn't pass")
+    expect(screen.getByTestId('unverified-badge')).toHaveTextContent('Errors found')
   })
 
   it('shows on the step why each checker gave no verdict', () => {
@@ -133,7 +141,7 @@ describe('a check no checker could give a verdict on', () => {
     )
     expect(screen.getByText('Not checked: no checker gave a verdict')).toBeInTheDocument()
     expect(screen.getByTestId('verify-checker-notes')).toHaveTextContent(/checker_1: the checker's reply was cut off at its output limit/)
-    expect(screen.queryByText("Check didn't pass")).not.toBeInTheDocument()
+    expect(screen.queryByText('Errors found')).not.toBeInTheDocument()
   })
 })
 
@@ -145,7 +153,7 @@ describe('one wording for a check', () => {
     metadata: { verify: { verdict: 'fail', revisions: 2, exhausted: true, reason: 'Paper not found in the tool results for the query' } },
   } as unknown as AgentRun
 
-  it('the runs list badge, the answer note and the run banner all say "Check didn\'t pass"', () => {
+  it('the runs list badge, the answer note and the run banner all say "Errors found"', () => {
     render(
       <>
         <UnverifiedNote run={failed} compact />
@@ -153,9 +161,9 @@ describe('one wording for a check', () => {
         <VerifySummary run={failed} />
       </>,
     )
-    expect(screen.getByTestId('unverified-badge')).toHaveTextContent("Check didn't pass")
-    expect(screen.getByTestId('unverified-note')).toHaveTextContent(/^Check didn't pass: /)
-    expect(screen.getByTestId('verify-summary')).toHaveTextContent("Check didn't pass")
+    expect(screen.getByTestId('unverified-badge')).toHaveTextContent('Errors found')
+    expect(screen.getByTestId('unverified-note')).toHaveTextContent(/^Errors found: /)
+    expect(screen.getByTestId('verify-summary')).toHaveTextContent('Errors found')
     expect(document.body).not.toHaveTextContent(/Not verified|Verification failed|Failed verification/)
   })
 

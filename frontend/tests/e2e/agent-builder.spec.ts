@@ -5,10 +5,9 @@ import { AuthHelper } from './helpers/auth.helper'
  * Agent Builder E2E Tests
  *
  * These tests verify the full agent creation and management flow
- * through the browser UI. They require a running staging environment
- * (backend + frontend) and use the test account from CLAUDE.md.
- *
- * Run with: E2E_API_URL=https://api.staging.almyty.com npx playwright test agent-builder.spec.ts --config=playwright.staging.config.ts
+ * through the browser UI, against a local stack (playwright.config.ts).
+ * The staging version of this journey is tests/staging/j45-agent.spec.ts
+ * in the staging gate (npm run gate:staging at the repo root).
  */
 test.describe('Agent Builder', () => {
   let testUser: any

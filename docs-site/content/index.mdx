@@ -6,13 +6,19 @@ For example: a support assistant that looks up an order in your order system and
 
 Start on the [hosted platform](https://app.almyty.com) (no card required), or [run it on your own servers](/self-hosting).
 
+## Before you start
+
+1. **Sign up.** Give your name, your email address, a name for your workspace (your company, your team or just your own name; you can rename it later) and a password. On the hosted platform there is also a short "Verify you are human" check.
+2. **Confirm your email.** We send you a link. Open it, then sign in. You can't sign in until the address is confirmed. If the email doesn't arrive, or the link has expired, click **Send a new link**.
+3. **Bring your own AI model key.** almyty doesn't come with an AI model of its own: your assistants run on a model maker you already use, such as OpenAI, Anthropic or Google, with your own API key. Under **Models**, click **Connect a provider**, pick it and paste the key. Its models appear by themselves. See [Connect a provider](/llm-providers).
+
 ## How it works, in three steps
 
 **1. Connect the systems you already use.** Under **APIs**, give almyty the description of a system: your order system, CRM, help center or intranet. (An API is the way one piece of software talks to another; most business software has one.) almyty works out what the system can do, such as "look up an order" or "issue a refund", and turns each into a tool an assistant can use.
 
 ![A connected system, with what it can do](/screenshots/quickstart-api-imported.png)
 
-**2. Build an assistant.** Under **Agents**, describe the job in plain words, pick the AI model it runs on and tick the tools it may use. You can run it on almost any AI model and switch whenever you like, without starting over. If you prefer to lay out every step yourself, draw it on the canvas instead.
+**2. Build an assistant.** Under **Agents**, describe the job in plain words, pick the AI model it runs on (one from the provider you connected) and tick the tools it may use. You can run it on almost any AI model and switch whenever you like, without starting over. If you prefer to lay out every step yourself, draw it on the canvas instead.
 
 ![An assistant, with its models and checks](/screenshots/agent-detail-overview.png)
 

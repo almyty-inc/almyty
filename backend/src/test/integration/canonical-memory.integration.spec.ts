@@ -111,6 +111,7 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
       // re-runs clean (only the isolated schema is dropped).
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       logging: false,
       // Pin search_path on every connection (pool) so the migrations'

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RunnerDaemon } from '../src/daemon.js';
+import { RunnerDaemon, registerFailureMessage } from '../src/daemon.js';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,6 +32,20 @@ describe('runner registration from shared login', () => {
     const [, options] = fetchMock.mock.calls[0];
     expect(JSON.parse(options.body).name).toBe('custom');
     expect(options.headers['X-Organization-Id']).toBe('override-org');
+  });
+  it('says how to recover when the login key belongs to another organization', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false, status: 401,
+      text: async () => '{"message":"API key is not scoped to the requested organization","statusCode":401}',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const err: Error = await new RunnerDaemon().start({}).then(() => { throw new Error('expected a refusal'); }, e => e);
+    expect(err.message).toContain('register failed: 401');
+    expect(err.message).toContain('chosen-org');
+    expect(err.message).toContain('almyty login');
+  });
+  it('leaves other refusals as the server worded them', () => {
+    expect(registerFailureMessage(403, 'nope', 'org-a')).toBe('register failed: 403 nope');
   });
 });
 

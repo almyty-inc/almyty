@@ -46,7 +46,7 @@ async function migratedUpTo(schema: string): Promise<DataSource> {
     schema,
     extra: { options: `-c search_path=${schema},public` },
     migrations: migrationsBefore(TARGET),
-    migrationsTransactionMode: 'all',
+    migrationsTransactionMode: 'each',
     logging: false,
   });
   await ds.initialize();

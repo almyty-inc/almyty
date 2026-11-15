@@ -16,6 +16,7 @@ import { KubeApiClient, KubeApiError, KubeClientOptions, KubeConnection, kubeCon
 import { DeniedAccess, deniedHostedRunnerAccess } from '../hosted-runners/adapters/kubernetes/access';
 import { namespaceFor } from '../hosted-runners/adapters/kubernetes/manifests';
 import { DEFAULT_HOSTED_RUNNER_SETTINGS, loadHostedRunnerSettings } from '../hosted-runners/hosted-runner-settings';
+import { secretFingerprint } from '../credentials/secret-redaction';
 
 /** The outbound HTTP call used by every probe; specs bind a fixture here. */
 export type ConnectionsHttp = (url: string, init: RequestInit) => Promise<Response>;
@@ -523,12 +524,15 @@ export class ConnectionValidationService {
     }
   }
 
-  /** `<displayName> key ...abcd` when the provider names nothing. */
+  /**
+   * `<displayName> key sha256:1a2b3c4d` when the provider names nothing: a
+   * fingerprint tells two keys apart without showing any of either.
+   */
   private fallbackLabel(connector: ConnectorDefinition, config: Record<string, any>): string {
     const plain = ['workspace', 'bucket', 'baseUrl', 'serverUrl', 'specUrl', 'url', 'clientId', 'roleArn'].map((k) => config[k]).find((v) => typeof v === 'string' && v);
     if (plain) return String(plain);
     const secret = ['apiKey', 'accessToken', 'tokenId', 'accessKeyId', 'secret'].map((k) => config[k]).find((v) => typeof v === 'string' && v);
-    if (secret) return `${connector.displayName} key ...${String(secret).slice(-4)}`;
+    if (secret) return `${connector.displayName} key ${secretFingerprint(String(secret))}`;
     return connector.displayName;
   }
 }

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { render, Box, Text } from 'ink';
-import { AlmytyClient, resolveCredentials, getOrgSlugFromToken } from '@almyty/client';
+import { AlmytyClient, resolveCredentials, defaultOrganization } from '@almyty/client';
 import type { AgentInfo, RunLimits } from '@almyty/client';
 
 import { AgentSelector } from './components.js';
@@ -57,7 +57,9 @@ async function main(): Promise<void> {
   });
 
   const ref = resolveRef(args);
-  const defaultOrg = getOrgSlugFromToken(creds.token);
+  // `almyty login` stores an API key plus the organization it chose; an
+  // API key is no JWT, so the organization comes from the stored id.
+  const defaultOrg = defaultOrganization(creds);
 
   let orgSlug: string;
   let agentSlug: string;

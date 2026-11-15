@@ -102,7 +102,7 @@ describe('AuthController', () => {
   });
 
   describe('register', () => {
-    it('should register user successfully', async () => {
+    it('registers without opening a session: login needs a confirmed address', async () => {
       const createUserDto = {
         email: 'test@example.com',
         password: 'password123',
@@ -111,27 +111,19 @@ describe('AuthController', () => {
         organizationName: 'Test Organization',
       };
 
-      const mockTokens = {
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-        expiresIn: 86400,
-      };
-
-      authService.register.mockResolvedValue(mockTokens);
+      authService.register.mockResolvedValue({ email: 'test@example.com', verificationRequired: true });
 
       const mockRequest: any = { cookies: {}, ip: '203.0.113.10' };
       const result = await controller.register(createUserDto, mockResponse, mockRequest);
 
       expect(result).toEqual({
         success: true,
-        data: { expiresIn: 86400 },
+        data: { email: 'test@example.com', verificationRequired: true },
         message: 'Registration successful',
       });
-      expect(mockResponse.cookie).toHaveBeenCalledWith(
-        'access_token',
-        'access-token',
-        expect.objectContaining({ httpOnly: true, path: '/' }),
-      );
+      // A cookie here worked until it expired, then the same person was
+      // refused at sign-in with EMAIL_NOT_VERIFIED: a lockout.
+      expect(mockResponse.cookie).not.toHaveBeenCalled();
     });
 
     it('forwards the CAPTCHA token and client IP to the service', async () => {
@@ -143,9 +135,7 @@ describe('AuthController', () => {
         organizationName: 'Test Organization',
         captchaToken: 'tok-123',
       };
-      authService.register.mockResolvedValue({
-        accessToken: 'a', refreshToken: 'r', expiresIn: 86400,
-      });
+      authService.register.mockResolvedValue({ email: 'test@example.com', verificationRequired: true });
       const mockRequest: any = {
         cookies: {},
         ip: '203.0.113.10',
@@ -467,6 +457,19 @@ describe('AuthController', () => {
       expect(result.success).toBe(true);
       expect(result.message).toBe('API key created successfully');
       expect(result.data.apiKey).toBe('api-key-value');
+    });
+
+    it("passes the caller's current org and returns the org the key is scoped to", async () => {
+      const mockUser = { id: 'user-1', currentOrganizationId: 'org-session' } as any;
+      authService.createApiKey.mockResolvedValue({
+        apiKey: 'api-key-value',
+        keyData: { id: 'key-1', name: 'CLI login', keyPrefix: 'almyty_12', organizationId: 'org-session' } as any,
+      });
+
+      const result = await controller.createApiKey(mockUser, { name: 'CLI login' });
+
+      expect(authService.createApiKey).toHaveBeenCalledWith('user-1', { name: 'CLI login' }, 'org-session');
+      expect(result.data.keyData.organizationId).toBe('org-session');
     });
   });
 

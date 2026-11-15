@@ -4,6 +4,7 @@
  * The tab lives in `?tab=` so a link can open Members or Settings directly.
  */
 import { useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef } from '@tanstack/react-table'
 import { useForm } from 'react-hook-form'
@@ -354,7 +355,7 @@ function InviteMemberForm({ org, onDone, onInvited }: { org: Organization; onDon
   // Cancel and a sent invitation both close the form, so neither asks.
   const guard = useLeaveGuard(form.formState.isDirty && !invite.isPending)
   return (
-    <form
+    <Form
       onSubmit={form.handleSubmit((d) => invite.mutate(d))}
       className="space-y-4 rounded-lg border bg-muted/30 p-4"
       aria-label="Invite team member"
@@ -385,7 +386,7 @@ function InviteMemberForm({ org, onDone, onInvited }: { org: Organization; onDon
         submitting={invite.isPending}
       />
       {guard.element}
-    </form>
+    </Form>
   )
 }
 
@@ -443,7 +444,7 @@ function SettingsTab({ org }: { org: Organization }) {
   return (
     <>
       <FormSection title="Organization settings">
-        <form
+        <Form
           onSubmit={(e) => {
             e.preventDefault()
             if (!name.trim()) return
@@ -470,7 +471,7 @@ function SettingsTab({ org }: { org: Organization }) {
               submitDisabled={!name.trim()}
             />
           )}
-        </form>
+        </Form>
       </FormSection>
       <FormSection>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

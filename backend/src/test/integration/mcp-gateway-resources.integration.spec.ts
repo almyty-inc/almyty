@@ -79,6 +79,7 @@ describeIfDb('MCP gateway resources, discover and search scope (real Postgres)',
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
     }) as any);
     await ds.initialize();

@@ -15,6 +15,35 @@ export const FINISHED_RUN: Record<string, string | undefined> = {
 };
 
 /**
+ * A run a person stopped by turning down (or never deciding) an approval
+ * it waited on, in the stream's words: `approval.rejected` or
+ * `approval.expired`, so the page can say what happened rather than
+ * "cancelled". Read from the live `run.cancelled` event's reasonCode, or
+ * from the error a finished run was stored with (AgentRuntimeService
+ * .handleApprovalDecided writes both).
+ */
+export function approvalEnding(source: { reasonCode?: string; error?: string | null } | null | undefined): string | undefined {
+  if (source?.reasonCode === 'APPROVAL_EXPIRED') return 'approval.expired';
+  if (source?.reasonCode === 'APPROVAL_REJECTED') return 'approval.rejected';
+  const error = typeof source?.error === 'string' ? source.error : '';
+  if (error.startsWith('approval expired')) return 'approval.expired';
+  if (error.startsWith('approval rejected')) return 'approval.rejected';
+  return undefined;
+}
+
+/** The `done` reason for a run that has already ended, or undefined while it is going. */
+export function finishedReason(run: { status?: string; error?: string | null }): string | undefined {
+  const ended = FINISHED_RUN[run.status as string];
+  if (ended === 'run.cancelled') return approvalEnding(run) ?? ended;
+  return ended;
+}
+
+/** What the page shows while a run waits for a person to approve one of its steps. */
+const WAITING_FOR_APPROVAL = `event: waiting\ndata: ${JSON.stringify({ for: 'approval' })}\n\n`;
+/** The approval came through and the run is working on the reply again. */
+const RESUMED = `event: resumed\ndata: ${JSON.stringify({ after: 'approval' })}\n\n`;
+
+/**
  * Refuse a reply stream to a visitor opening them too often.
  *
  * Anything but a browser's EventSource gets a plain 429 with Retry-After.
@@ -72,12 +101,16 @@ export function refuseVisitorStream(
  * reply from the transcript (or, for the widget, from its stored replies).
  * At its time limit the stream ends without `done`, so the browser
  * reconnects from its last frame.
+ *
+ * A run that stops to ask a person on the team sends `waiting`, then
+ * `resumed` once approved; turned down or expired, it ends with `done`
+ * and the reason `approval.rejected` or `approval.expired`.
  */
 export async function streamVisitorReply(opts: {
   req: Request;
   res: Response;
   runtime: Pick<AgentRuntimeService, 'subscribeRunEvents'>;
-  run: { id: string; status?: string; agent?: any };
+  run: { id: string; status?: string; error?: string | null; agent?: any };
   resumeFrom: VisitorStreamPos | null;
 }): Promise<void> {
   const { req, res, runtime, run, resumeFrom } = opts;
@@ -89,12 +122,15 @@ export async function streamVisitorReply(opts: {
   res.setHeader('X-Accel-Buffering', 'no'); // nginx would otherwise buffer the stream
   res.flushHeaders?.();
 
-  const ended = FINISHED_RUN[run.status as string];
+  const ended = finishedReason(run);
   if (ended) {
     res.write(`event: done\ndata: ${JSON.stringify({ reason: ended })}\n\n`);
     res.end();
     return;
   }
+  // Already waiting on a person (the page was reopened, or the stream came
+  // back after its time limit): say so before anything else.
+  if (run.status === 'waiting_approval') res.write(WAITING_FOR_APPROVAL);
 
   let closed = false;
   let timedOut = false;
@@ -143,6 +179,25 @@ export async function streamVisitorReply(opts: {
     if (closed) return;
     if (event?.type === 'stream.timeout') {
       timedOut = true;
+      return;
+    }
+    // The run stopped to ask a person on the team, which can take hours:
+    // say so, rather than leave the visitor watching "thinking" dots. These
+    // frames carry no id; they say what the run is doing, not reply text.
+    if (event?.type === 'step.completed' && event?.data?.status === 'waiting_approval') {
+      res.write(WAITING_FOR_APPROVAL);
+      return;
+    }
+    if (event?.type === 'approval.decided' && event?.data?.resumed) {
+      res.write(RESUMED);
+      return;
+    }
+    // Turned down, or nobody decided in time: the run ends there, and the
+    // page says which.
+    const declined = event?.type === 'run.cancelled' ? approvalEnding(event?.data) : undefined;
+    if (declined) {
+      res.write(`event: done\ndata: ${JSON.stringify({ reason: declined })}\n\n`);
+      close();
       return;
     }
     source = id;

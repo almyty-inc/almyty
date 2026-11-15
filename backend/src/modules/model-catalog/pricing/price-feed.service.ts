@@ -94,6 +94,36 @@ export function withFeedInputs(
   return next.vision === current.vision && next.pdfInput === current.pdfInput ? null : next;
 }
 
+/** LiteLLM `mode` values of a model that answers a conversation in text. */
+const CHAT_MODES = new Set(['chat', 'completion', 'responses']);
+
+/**
+ * Whether a LiteLLM `mode` is a model that answers a conversation: true for
+ * chat, completion and responses; false for every other kind the feed names
+ * (audio_transcription, audio_speech, image_generation, image_edit,
+ * video_generation, embedding, rerank, realtime, moderation, ocr, ...);
+ * undefined when the entry names none, or something that is not one word.
+ */
+export function modeAnswersChat(mode: unknown): boolean | undefined {
+  if (typeof mode !== 'string' || !/^[a-z_]+$/.test(mode)) return undefined;
+  return CHAT_MODES.has(mode);
+}
+
+/**
+ * A card's capabilities with `chat` set from the feed, when the card does
+ * not say yet. An operator's explicit value stays, and a feed that does not
+ * know the model leaves the card alone. Null when nothing would change.
+ */
+export function withFeedChat(
+  capabilities: ModelCapabilities | null | undefined,
+  chat: boolean | undefined,
+): ModelCapabilities | null {
+  if (chat === undefined) return null;
+  const current = capabilities ?? {};
+  if (current.chat !== undefined) return null;
+  return { ...current, chat };
+}
+
 export interface PriceFeedRefreshResult {
   litellm: number;
   openrouter: number;
@@ -213,6 +243,8 @@ export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping 
 interface NormalisedFeed {
   map: Map<string, FeedPrice>;
   count: number;
+  /** Whether each model answers a conversation, priced or not (LiteLLM only). */
+  chat?: Map<string, boolean>;
 }
 
 interface CachedFeed {
@@ -220,6 +252,7 @@ interface CachedFeed {
   counts?: { litellm: number; openrouter: number };
   litellm: Array<[string, FeedPrice]>;
   openrouter: Array<[string, FeedPrice]>;
+  litellmChat?: Array<[string, boolean]>;
 }
 
 /**
@@ -261,6 +294,8 @@ export class PriceFeedService implements OnModuleInit {
 
   private litellm = new Map<string, FeedPrice>();
   private openrouter = new Map<string, FeedPrice>();
+  /** Whether each LiteLLM model answers a conversation (its `mode`), keyed like the prices. */
+  private litellmChat = new Map<string, boolean>();
   private fetchedAt: Date | null = null;
   /** The refresh ensureFresh started, shared by concurrent callers. */
   private refreshing: Promise<void> | null = null;
@@ -310,6 +345,7 @@ export class PriceFeedService implements OnModuleInit {
     const errors: string[] = [];
     if (litellmResult.status === 'fulfilled') {
       this.litellm = litellmResult.value.map;
+      this.litellmChat = litellmResult.value.chat ?? new Map();
       this.sourceCounts.litellm = litellmResult.value.count;
     } else {
       errors.push(`litellm: ${litellmResult.reason?.message ?? litellmResult.reason}`);
@@ -460,6 +496,12 @@ export class PriceFeedService implements OnModuleInit {
         totals.unpriced += 1;
       }
 
+      // Whether the model answers a conversation at all, priced or not: a
+      // model picker leaves out speech, transcription and image models.
+      // Onto a card that does not say yet, like the inputs above.
+      const kind = withFeedChat(next.capabilities ?? row.capabilities, this.answersChat(row.providerType, row.vendorModelId));
+      if (kind) next.capabilities = kind;
+
       const metadata = { ...(row.metadata ?? {}) };
       if (quote?.disagreement) {
         metadata.pricingDisagreement = quote.disagreement;
@@ -537,6 +579,19 @@ export class PriceFeedService implements OnModuleInit {
     return null;
   }
 
+  /**
+   * Whether the feed says this model answers a conversation (true), is a
+   * model of another kind: speech, transcription, image, video, embedding
+   * (false), or does not know it (undefined). Exact id, then its alias.
+   */
+  answersChat(providerType: string, vendorModelId: string): boolean | undefined {
+    if (!providerType || !vendorModelId) return undefined;
+    const exact = this.litellmChat.get(feedKey(providerType, vendorModelId));
+    if (exact !== undefined) return exact;
+    const alias = snapshotAlias(vendorModelId);
+    return alias ? this.litellmChat.get(feedKey(providerType, alias)) : undefined;
+  }
+
   private litellmProviderIndex(): Map<string, LlmProviderType> {
     const index = new Map<string, LlmProviderType>();
     for (const [type, mapping] of Object.entries(PROVIDER_FEED_MAPPING)) {
@@ -566,11 +621,18 @@ export class PriceFeedService implements OnModuleInit {
     const providerIndex = this.litellmProviderIndex();
     const map = new Map<string, FeedPrice>();
     const entries: Array<{ type: LlmProviderType; id: string; price: FeedPrice }> = [];
+    // Whether each model answers a conversation, priced or not: a speech or
+    // image model is often priced per second or per image, and is still not
+    // a model to run an agent on.
+    const chat = new Map<string, boolean>();
+    const kinds: Array<{ type: LlmProviderType; id: string; chat: boolean }> = [];
 
     for (const [key, raw] of Object.entries(data)) {
       if (!raw || typeof raw !== 'object' || key === 'sample_spec') continue;
       const type = providerIndex.get(String(raw.litellm_provider ?? ''));
       if (!type) continue;
+      const answers = modeAnswersChat(raw.mode);
+      if (answers !== undefined) kinds.push({ type, id: key, chat: answers });
       const inPerMTok = perTokenToPerMTok(raw.input_cost_per_token);
       const outPerMTok = perTokenToPerMTok(raw.output_cost_per_token);
       if (inPerMTok === null || outPerMTok === null) continue;
@@ -593,7 +655,14 @@ export class PriceFeedService implements OnModuleInit {
       if (slash > 0) this.setIfAbsent(map, feedKey(type, id.slice(slash + 1)), price);
     }
     this.indexAliases(map);
-    return { map, count };
+    // Indexed the same way as the prices, so a card finds its kind by the same id.
+    for (const { type, id, chat: answers } of kinds) chat.set(feedKey(type, id), answers);
+    for (const { type, id, chat: answers } of kinds) {
+      const slash = id.indexOf('/');
+      if (slash > 0) this.setIfAbsent(chat, feedKey(type, id.slice(slash + 1)), answers);
+    }
+    this.indexAliases(chat);
+    return { map, count, chat };
   }
 
   private async fetchOpenRouter(): Promise<NormalisedFeed> {
@@ -649,8 +718,8 @@ export class PriceFeedService implements OnModuleInit {
    * a dated feed entry. When several snapshots share an alias the greatest
    * key wins, which for date stamps is the newest.
    */
-  private indexAliases(map: Map<string, FeedPrice>): void {
-    const aliases = new Map<string, { key: string; price: FeedPrice }>();
+  private indexAliases<T>(map: Map<string, T>): void {
+    const aliases = new Map<string, { key: string; price: T }>();
     for (const [key, price] of map) {
       const sep = key.indexOf('::');
       const alias = snapshotAlias(key.slice(sep + 2));
@@ -663,7 +732,7 @@ export class PriceFeedService implements OnModuleInit {
     for (const [aliasKey, { price }] of aliases) map.set(aliasKey, price);
   }
 
-  private setIfAbsent(map: Map<string, FeedPrice>, key: string, price: FeedPrice): void {
+  private setIfAbsent<T>(map: Map<string, T>, key: string, price: T): void {
     if (!map.has(key)) map.set(key, price);
   }
 
@@ -675,6 +744,7 @@ export class PriceFeedService implements OnModuleInit {
       const cached = JSON.parse(raw) as CachedFeed;
       this.litellm = new Map(cached.litellm ?? []);
       this.openrouter = new Map(cached.openrouter ?? []);
+      this.litellmChat = new Map(cached.litellmChat ?? []);
       this.sourceCounts = cached.counts ?? { litellm: this.litellm.size, openrouter: this.openrouter.size };
       this.fetchedAt = cached.fetchedAt ? new Date(cached.fetchedAt) : null;
       this.logger.log(
@@ -693,6 +763,7 @@ export class PriceFeedService implements OnModuleInit {
       counts: { ...this.sourceCounts },
       litellm: Array.from(this.litellm.entries()),
       openrouter: Array.from(this.openrouter.entries()),
+      litellmChat: Array.from(this.litellmChat.entries()),
     };
     try {
       await this.redis.setex(PRICE_FEED_CACHE_KEY, PRICE_FEED_CACHE_TTL_SECONDS, JSON.stringify(payload));

@@ -139,13 +139,12 @@ describe('the checker sees every item of a long tool result', () => {
     expect(largeEvidence).toContain(JSON.stringify(works));
   });
 
-  it('tells the checker absence from shortened evidence proves nothing, and to refute only', async () => {
+  it('tells the checker absence from shortened evidence proves nothing, and to fail only what the tool results contradict', async () => {
     const chat = jest.fn().mockResolvedValue({ message: { content: '{"verdict":"pass","failures":[]}' } });
     await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'x', checkers: [{ providerId: 'p' }], evidence: 'REQUEST:\nx' }, 'org-1');
     const system = chat.mock.calls[0][1].messages[0].content as string;
-    expect(system).toMatch(/Never fail a claim only because it is absent from shortened evidence; absence counts only where the evidence is complete/);
-    expect(system).toMatch(/the EVIDENCE contradicts it/);
-    expect(system).toMatch(/the EVIDENCE that would hold it is complete and does not hold it/);
+    expect(system).toMatch(/is incomplete: a value missing from what you see is not a contradiction/);
+    expect(system).toMatch(/"failures": a claim in the OUTPUT that the tool results contradict/);
     expect(system).toContain('[result shortened');
   });
 
@@ -177,7 +176,7 @@ describe('a checker reply is never cut off by the provider default', () => {
     const panel = await new AgentVerifierHelper({ chat } as any).runPanel({ target: 'x', checkers: [{ name: 'c', providerId: 'p' }] }, 'org-1');
     expect(panel.verdict).toBe('fail');
     expect(panel.unavailable).toBeUndefined();
-    expect(panel.failures).toEqual([{ claim: 'x is 3', rule: 'x is 2 in the evidence', evidence: 'x: 2', checker: 'c' }]);
+    expect(panel.failures).toEqual([{ claim: 'x is 3', rule: 'x is 2 in the evidence', evidence: 'x: 2', checker: 'c', kind: 'evidence' }]);
     expect(panel.checkers[0].note).toMatch(/cut off at its output limit \(4096 tokens\); it was read up to its last complete item/);
   });
 

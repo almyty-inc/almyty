@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { Routes, Route, Navigate, Outlet, createRoutesFromElements } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, createRoutesFromElements, useLocation } from 'react-router-dom'
 
 import { RouteErrorView } from '@/components/layout/route-error'
 
@@ -120,9 +120,20 @@ function DashboardLayoutOutlet() {
 import { HostedChatPage } from '@/pages/hosted-chat'
 import { currentTenantSlug } from '@/lib/tenant-host'
 
+/**
+ * The sign-in, sign-up, verify-email and password pages: nobody on them
+ * has a session to restore, so asking /auth/profile there only logs a 401
+ * in the console of every visitor.
+ */
+export function isPublicAuthPath(pathname: string): boolean {
+  return pathname === '/auth' || pathname.startsWith('/auth/')
+}
+
 // The root route's element: app-wide bootstrap, then whichever route matched.
 export function AppRoot() {
-  const { checkAuth } = useAuthStore()
+  const { checkAuth, authChecked } = useAuthStore()
+  const { pathname } = useLocation()
+  const onPublicAuthPage = isPublicAuthPath(pathname)
 
   // Resolved once: the host cannot change without a page load.
   const tenantSlug = useMemo(() => currentTenantSlug(), [])
@@ -135,10 +146,14 @@ export function AppRoot() {
   // Tenant hosts are public chat, not the dashboard. checkAuth hits
   // /auth/profile; a 401 there redirects to /auth/login and is exactly
   // the dashboard sign-in the hosted URL must never show.
+  //
+  // The public auth pages skip it too. It runs once the visitor reaches
+  // any other route (the app, an invite, the CLI sign-in), including
+  // straight after signing in on /auth/login.
   useEffect(() => {
-    if (tenantSlug) return
+    if (tenantSlug || onPublicAuthPage || authChecked) return
     checkAuth()
-  }, [checkAuth, tenantSlug])
+  }, [checkAuth, tenantSlug, onPublicAuthPage, authChecked])
 
   // A tenant subdomain serves the hosted chat app and nothing else: no
   // dashboard routes, no auth bootstrap, no chance of a stray link

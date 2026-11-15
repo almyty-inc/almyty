@@ -7,6 +7,7 @@
     "bench": "cd benchmarks && npm ci --no-audit --no-fund && node run.mjs",
     "bench:test": "cd benchmarks && npm ci --no-audit --no-fund && npm test",
     "check": "node scripts/check.js",
+    "gate:staging": "node scripts/gate-staging.js",
     "changeset": "changeset",
     "version-packages": "node scripts/release-packages.js version",
     "publish-packages": "node scripts/release-packages.js publish",
