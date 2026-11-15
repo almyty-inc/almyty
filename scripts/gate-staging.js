@@ -189,7 +189,45 @@ function buildOrder(pkgs, roots) {
   return order;
 }
 
-module.exports = { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder };
+/** Where the gate records which package-lock.json it last installed from. */
+const INSTALL_STAMP = '.gate-install-stamp';
+
+function lockHash(dir) {
+  return require('crypto').createHash('sha256').update(fs.readFileSync(path.join(dir, 'package-lock.json'))).digest('hex');
+}
+
+/**
+ * Why `dir` needs `npm ci`, or '' when its node_modules matches its
+ * package-lock.json. A node_modules that merely exists is not enough: a
+ * lockfile that gained a dependency since the last install (a new
+ * devDependency the staging suite imports) leaves whole phases failing on
+ * a missing module.
+ *
+ * After a gate install the lockfile's hash is in node_modules/<INSTALL_STAMP>
+ * and decides. An install the gate did not make has no stamp; then the
+ * lockfile must not be newer than npm's own record of the install
+ * (node_modules/.package-lock.json).
+ */
+function installNeeded(dir) {
+  const modules = path.join(dir, 'node_modules');
+  if (!fs.existsSync(modules)) return 'node_modules is missing';
+  const lock = path.join(dir, 'package-lock.json');
+  if (!fs.existsSync(lock)) return '';
+  const stamp = path.join(modules, INSTALL_STAMP);
+  if (fs.existsSync(stamp)) {
+    return fs.readFileSync(stamp, 'utf8').trim() === lockHash(dir) ? '' : 'package-lock.json changed since the last install';
+  }
+  const npmRecord = path.join(modules, '.package-lock.json');
+  if (!fs.existsSync(npmRecord)) return 'node_modules has no record of its install';
+  return fs.statSync(lock).mtimeMs > fs.statSync(npmRecord).mtimeMs ? 'package-lock.json is newer than node_modules' : '';
+}
+
+function writeInstallStamp(dir) {
+  if (!fs.existsSync(path.join(dir, 'package-lock.json'))) return;
+  fs.writeFileSync(path.join(dir, 'node_modules', INSTALL_STAMP), `${lockHash(dir)}\n`);
+}
+
+module.exports = { playwrightRows, vitestRows, buildReport, firstLine, redact, readLocalPackages, buildOrder, installNeeded, writeInstallStamp };
 
 // ── the run ─────────────────────────────────────────────────────────
 
@@ -234,10 +272,11 @@ async function health(api) {
 }
 
 function ensureInstalled(dir) {
-  if (!fs.existsSync(path.join(dir, 'node_modules'))) {
-    log(`installing ${path.relative(ROOT, dir)}`);
-    if (sh('npm', ['ci', '--no-audit', '--no-fund'], { cwd: dir }) !== 0) throw new Error(`npm ci failed in ${dir}`);
-  }
+  const why = installNeeded(dir);
+  if (!why) return;
+  log(`installing ${path.relative(ROOT, dir) || '.'}: ${why}`);
+  if (sh('npm', ['ci', '--no-audit', '--no-fund'], { cwd: dir }) !== 0) throw new Error(`npm ci failed in ${dir}`);
+  writeInstallStamp(dir);
 }
 
 function runPlaywright(env) {

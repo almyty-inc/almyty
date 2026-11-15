@@ -8,8 +8,24 @@ import type { Page } from '@playwright/test'
 
 const COUNTRIES_GRAPHQL = 'https://countries.trevorblades.com/'
 const COUNTRY_INFO_WSDL = 'http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso?WSDL'
-const GRPCBIN_PROTO = 'https://raw.githubusercontent.com/moul/pb/master/grpcbin/grpcbin.proto'
-const GRPCBIN_TLS = 'https://grpcb.in:9001'
+// Postman's public gRPC echo service. It speaks plaintext HTTP/2 on port
+// 443 and has no published .proto, so the service it reflects is written out
+// here. (grpcb.in, used before, stopped answering on every port.)
+const ECHO_ADDRESS = 'http://grpc.postman-echo.com:443'
+const ECHO_PROTO = `syntax = "proto3";
+
+service HelloService {
+  rpc SayHello (HelloRequest) returns (HelloResponse);
+}
+
+message HelloRequest {
+  string greeting = 1;
+}
+
+message HelloResponse {
+  string reply = 1;
+}
+`
 
 /** From the API page, open the generated tool whose identifier ends in `suffix`. */
 async function openToolOf(page: Page, apiName: string, suffix: string): Promise<string> {
@@ -71,31 +87,29 @@ test.describe('J3 import an API of every kind and run a tool', () => {
     expect(await resultText(page)).toContain('Berlin')
   })
 
-  test('J3 gRPC import (grpcbin proto) and run a unary call', async ({ page, gate }) => {
-    const proto = await (await fetch(GRPCBIN_PROTO)).text()
-    expect(proto).toContain('service GRPCBin')
-    const name = gate.name('grpcbin')
+  test('J3 gRPC import (echo service proto) and run a unary call', async ({ page, gate }) => {
+    const name = gate.name('grpc-echo')
     await connectApi(page, gate, {
       kind: /^gRPC/,
       name,
       fill: async (p) => {
         await p.getByRole('tab', { name: 'Paste' }).click()
-        await p.getByRole('main').getByRole('textbox').first().fill(proto)
+        await p.getByRole('main').getByRole('textbox').first().fill(ECHO_PROTO)
         await p.getByRole('button', { name: 'Advanced' }).click()
-        await p.getByRole('textbox', { name: 'Address' }).fill(GRPCBIN_TLS)
+        await p.getByRole('textbox', { name: 'Address' }).fill(ECHO_ADDRESS)
       },
     })
-    const toolId = await openToolOf(page, name, 'dummy_unary')
+    const toolId = await openToolOf(page, name, 'say_hello')
     const panel = await openTestTool(page, toolId)
     const marker = `${gate.runId}-echo`
-    // DummyMessage's fields are what a caller fills in.
+    // HelloRequest's fields are what a caller fills in.
     await expect(
-      panel.getByRole('textbox', { name: 'Enter f_string', exact: true }),
-      'the request message fields (DummyMessage.f_string) should be tool inputs',
+      panel.getByRole('textbox', { name: 'Enter greeting', exact: true }),
+      'the request message fields (HelloRequest.greeting) should be tool inputs',
     ).toBeVisible()
-    expect(await executeTool(panel, { f_string: marker }), 'DummyUnary should succeed').toBe('Success')
-    // grpcbin echoes the message back.
-    expect(await resultText(page)).toContain(marker)
+    expect(await executeTool(panel, { greeting: marker }), 'SayHello should succeed').toBe('Success')
+    // The echo service answers "hello <greeting>".
+    expect(await resultText(page)).toContain(`hello ${marker}`)
   })
 
   test('J3 SDK import (npm slugify) and run its function', async ({ page, gate }) => {
