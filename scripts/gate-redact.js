@@ -31,9 +31,11 @@ const RULES = [
   // line or the closing quote. A Cookie header carries every cookie at once.
   [/\b((?:set-)?cookie|(?:proxy-)?authorization|x-api-key)(["']?\s*:\s*["']?)([^\n"']*)/gi, `$1$2${R}`],
   // {"name": "access_token", "value": "..."}: storage state, trace headers.
-  [/("name"\s*:\s*"[^"]*"\s*,\s*"value"\s*:\s*")[^"]*"/g, `$1${R}"`],
+  // A JSON string ends at the first quote that is not escaped: a
+  // localStorage entry holds JSON of its own, full of \".
+  [/("name"\s*:\s*"[^"]*"\s*,\s*"value"\s*:\s*")(?:[^"\\]|\\.)*"/g, `$1${R}"`],
   // "access_token": "..." in JSON bodies.
-  [new RegExp(`("(?:${NAMES})"\\s*:\\s*")[^"]*"`, 'gi'), `$1${R}"`],
+  [new RegExp(`("(?:${NAMES})"\\s*:\\s*")(?:[^"\\\\]|\\\\.)*"`, 'gi'), `$1${R}"`],
   // access_token=... in cookies, query strings and form bodies.
   [new RegExp(`\\b(${NAMES})=[^\\s;,&"'<>]+`, 'gi'), `$1=${R}`],
   [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/g, `$1 ${R}`],
@@ -81,7 +83,10 @@ function scrubDir(dir) {
     const d = stack.pop();
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       const p = path.join(d, e.name);
-      if (e.isDirectory()) stack.push(p);
+      // .auth holds the saved QA session the next run signs in with: it is
+      // credentials kept on purpose (git-ignored), not output, and a
+      // rewritten copy no longer parses.
+      if (e.isDirectory()) { if (e.name !== '.auth') stack.push(p); }
       else if (e.isFile() && TEXT_FILES.test(e.name)) {
         const text = fs.readFileSync(p, 'utf8');
         const clean = redact(text);
