@@ -121,9 +121,9 @@ describe('visible progress', () => {
     expect(s.usage.steps).toBe(1);
   });
 
-  it('says when a verifier sent the draft back', () => {
+  it('says when the check sent the draft back, in plain words', () => {
     const s = reduceStreamEvent(initialStreamState(), ev('verify.failed', {}));
-    expect(s.emit[0].text).toContain('revising');
+    expect(s.emit[0].text).toBe('the check found errors in the draft — revising');
   });
 });
 

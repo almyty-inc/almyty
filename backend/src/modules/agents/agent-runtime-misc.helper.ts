@@ -131,7 +131,7 @@ export class AgentRuntimeMiscHelper {
    * Atomically bump an agent's running stats. Mirrors the helper in
    * AgentExecutionEngine; both paths used to do a load-modify-save pair
    * which lost increments under concurrency. `check` is the final-answer
-   * check's verdict when a checker gave one: it feeds "Checks passed",
+   * check's verdict when a checker gave one: it feeds "No errors found",
    * kept apart from "Completed" (`success`), which ignores checks.
    */
   async bumpAgentStats(

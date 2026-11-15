@@ -17,7 +17,9 @@ import { agentsApi } from '@/lib/api'
  * "Success rate" counted finished runs and ignored the checks: an agent
  * whose every answer failed its check read 100%. Two numbers now:
  * "Completed" (runs that finished) and, for an agent with a check,
- * "Checks passed" (checked runs whose check passed).
+ * "No errors found" (checked runs whose check found no mismatch with the
+ * tool results). It used to read "Checks passed", which sounded like the
+ * answers were right; a pass can't confirm everything an answer says.
  */
 
 const checked = (over: Partial<Agent> = {}): Agent =>
@@ -40,20 +42,26 @@ const unchecked = (): Agent =>
   ({ ...checked(), id: 'a2', name: 'Plain', agentConfig: {}, checkedExecutions: 0, passedCheckExecutions: 0 }) as Agent
 
 describe('the agent header', () => {
-  it('shows Completed and Checks passed, not a success rate', () => {
+  it('shows Completed and No errors found, not a success rate', () => {
     render(<AgentStats agent={checked()} />)
     expect(screen.queryByText(/Success rate/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Checks passed/i)).not.toBeInTheDocument()
     expect(screen.getByText('Completed')).toBeInTheDocument()
     expect(screen.getByTestId('agent-stat-completed')).toHaveTextContent('100%')
-    expect(screen.getByText('Checks passed')).toBeInTheDocument()
+    expect(screen.getByText('No errors found')).toHaveAttribute('title', expect.stringMatching(/can't confirm everything an answer says/))
     expect(screen.getByTestId('agent-stat-checks-passed')).toHaveTextContent('25%')
     expect(screen.getByText('2 of 8 checked runs')).toBeInTheDocument()
   })
 
-  it('shows no Checks passed for an agent without a check', () => {
+  it('says one checked run, not one checked runs', () => {
+    render(<AgentStats agent={checked({ checkedExecutions: 1, passedCheckExecutions: 1 })} />)
+    expect(screen.getByText('1 of 1 checked run')).toBeInTheDocument()
+  })
+
+  it('shows no No errors found for an agent without a check', () => {
     render(<AgentStats agent={unchecked()} />)
     expect(screen.getByTestId('agent-stat-completed')).toHaveTextContent('100%')
-    expect(screen.queryByText('Checks passed')).not.toBeInTheDocument()
+    expect(screen.queryByText('No errors found')).not.toBeInTheDocument()
   })
 
   it('shows a dash, not 0%, before any run was checked', () => {
@@ -65,7 +73,7 @@ describe('the agent header', () => {
 describe('analytics', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('shows Completed and, for checked agents, Checks passed', async () => {
+  it('shows Completed and, for checked agents, No errors found', async () => {
     ;(agentsApi.getAll as any).mockResolvedValue([checked(), unchecked()])
     ;(agentsApi.getExecutions as any).mockResolvedValue([])
     render(<AgentsTab />)
@@ -73,8 +81,8 @@ describe('analytics', () => {
     expect(await screen.findByTestId('agent-checks-passed-a1')).toHaveTextContent('25%')
     expect(screen.getByTestId('agent-checks-passed-a2')).toHaveTextContent('--')
     expect(screen.getAllByText('Completed').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Checks passed').length).toBe(2)
-    expect(screen.queryByText(/Success rate/i)).not.toBeInTheDocument()
+    expect(screen.getAllByText('No errors found').length).toBe(2)
+    expect(screen.queryByText(/Checks passed|Success rate/i)).not.toBeInTheDocument()
   })
 
   it('leaves the summary card out when no agent has a check', async () => {
@@ -83,6 +91,6 @@ describe('analytics', () => {
     render(<AgentsTab />)
     await waitFor(() => expect(screen.getByTestId('agent-checks-passed-a2')).toBeInTheDocument())
     // Only the table column, no summary card.
-    expect(screen.getAllByText('Checks passed').length).toBe(1)
+    expect(screen.getAllByText('No errors found').length).toBe(1)
   })
 })

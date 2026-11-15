@@ -14,11 +14,16 @@ import { pluralized } from '@/lib/utils'
 
 /**
  * One wording for a check everywhere a run is shown (the runs list, the run
- * view, its banner and its steps), matching the line on the answer itself
- * ("Note: this answer's check didn't pass", unverified-answer.ts).
+ * view, its banner and its steps). A pass says what it means and no more:
+ * the check found no mismatch with the tool results, which is not the same
+ * as the answer being right. A made-up detail with nothing to compare
+ * against passes. `honest-check-label.test.ts` keeps wording that makes a
+ * pass sound like a correct answer from coming back.
  */
-export const CHECK_PASSED = 'Check passed'
-export const CHECK_FAILED = "Check didn't pass"
+export const CHECK_PASSED = 'No errors found'
+export const CHECK_PASSED_EXPLANATION =
+  "The check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch. It can't confirm everything the answer says."
+export const CHECK_FAILED = 'Errors found'
 export const NOT_CHECKED = 'Not checked'
 
 /** A verdict finding: what the platform found itself, or tool data a checker cited and the platform confirmed. */
@@ -97,6 +102,11 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
                 : CHECK_FAILED}
           {out.exhausted ? ' — revision budget exhausted' : ''}
         </div>
+        {passed && !advisory && (
+          <p className="text-[11px] text-muted-foreground" data-testid="verify-pass-explanation">
+            {CHECK_PASSED_EXPLANATION}
+          </p>
+        )}
         {failures.length > 0 && !unavailable && (
           <ul className="mt-1 space-y-0.5" data-testid="verify-findings">
             {failures.map((f, i) => (
@@ -196,6 +206,7 @@ export function VerifySummary({ run }: { run: AgentRun }) {
           {revisions > 0 && <span>· {pluralized(revisions, 'revision')}</span>}
           {v.exhausted && <span>· budget exhausted</span>}
         </div>
+        {passed && <div data-testid="verify-summary-explanation">{CHECK_PASSED_EXPLANATION}</div>}
         {reason && <div data-testid="verify-summary-reason">{reason}</div>}
       </div>
     </div>
@@ -248,7 +259,7 @@ export function uncheckedAnswer(run: VerdictCarrier): boolean {
 }
 
 /** True in both modes: the check reports, or the revisions ran out. */
-const UNVERIFIED_LINE = `${CHECK_FAILED}: the checkers found problems with this answer.`
+const UNVERIFIED_LINE = `${CHECK_FAILED}: the check found things in this answer that don't match what the tools returned.`
 const UNCHECKED_LINE = `${NOT_CHECKED}: the check could not be done, so no checker gave a verdict on this answer.`
 
 /**
