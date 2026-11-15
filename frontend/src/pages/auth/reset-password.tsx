@@ -1,4 +1,5 @@
 import React from 'react'
+import { Form } from '@/components/ui/form'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -108,7 +109,7 @@ export function ResetPasswordPage() {
       <p className="text-sm text-muted-foreground mb-6">
         Choose a new password for your account.
       </p>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <Label htmlFor="password">New password</Label>
           <div className="mt-1 relative">
@@ -189,7 +190,7 @@ export function ResetPasswordPage() {
             )}
           </Button>
         </div>
-      </form>
+      </Form>
 
       <div className="mt-6 text-center">
         <p className="text-sm text-muted-foreground">

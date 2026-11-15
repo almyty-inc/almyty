@@ -6,8 +6,8 @@ import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
 import { stepKindSignal } from '../dto/llm-providers.dto';
 import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
-import { toAnthropicContent } from '../content-parts';
 import { requireModel } from '../model-errors';
+import { anthropicSystemPrompt, anthropicTurn, toAnthropicMessages, toolCallOf } from './anthropic-messages';
 
 
 /**
@@ -20,21 +20,91 @@ import { requireModel } from '../model-errors';
  */
 const DEPRECATED_PARAM_RE = /`(\w+)` is deprecated/;
 
+/**
+ * The output limit sent when neither the call nor the model's card names
+ * one (a model with no card yet). Anthropic needs a number; a model that
+ * writes less refuses this one with its own most in the message, and the
+ * call is made again with that (OUTPUT_LIMIT_RE). Never a low number: a
+ * reply that runs into the limit has no answer (output-limit.ts).
+ */
+export const ANTHROPIC_UNCARDED_MAX_TOKENS = 64_000;
+
+/** "max_tokens: 64000 > 8192, which is the maximum allowed number of output tokens for ..." */
+const OUTPUT_LIMIT_RE = /max_tokens:\s*\d+\s*>\s*(\d+)/;
+
+/**
+ * A thinking block sent back after the conversation before it changed
+ * (the system prompt carries the time of each step, and compaction folds
+ * old turns) is refused on accounts the history check is enforced on. The
+ * documented recovery: send the turns without their thinking blocks.
+ */
+const THINKING_REFUSED_RE = /thinking/i;
+const THINKING_REFUSAL_DETAIL_RE = /signature|different conversation|thinking block/i;
+
+function stripThinking(body: Record<string, unknown>): boolean {
+  let stripped = false;
+  const messages = body.messages as Array<{ role: string; content: unknown }> | undefined;
+  for (const message of messages ?? []) {
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
+    const kept = message.content.filter((b: any) => b?.type !== 'thinking' && b?.type !== 'redacted_thinking');
+    if (kept.length !== message.content.length) {
+      message.content = kept;
+      stripped = true;
+    }
+  }
+  return stripped;
+}
+
+/**
+ * Make the call, and make it again (once per kind) when the API says
+ * exactly what to change: a sampling param this model no longer takes, an
+ * output limit above the model's own, or thinking blocks it no longer
+ * accepts back.
+ */
 export async function callWithDeprecatedParamRetry<T>(
   call: () => Promise<T>,
   body: Record<string, unknown>,
 ): Promise<T> {
-  try {
-    return await call();
-  } catch (error: any) {
-    const message = error?.response?.data?.error?.message;
-    const match = typeof message === 'string' ? message.match(DEPRECATED_PARAM_RE) : null;
-    if (match && match[1] in body) {
-      delete body[match[1]];
-      return call();
+  const fixed = new Set<string>();
+  for (;;) {
+    try {
+      return await call();
+    } catch (error: any) {
+      const message = error?.response?.data?.error?.message;
+      if (typeof message !== 'string') throw error;
+      const deprecated = message.match(DEPRECATED_PARAM_RE);
+      if (deprecated && deprecated[1] in body && !fixed.has(`param:${deprecated[1]}`)) {
+        fixed.add(`param:${deprecated[1]}`);
+        delete body[deprecated[1]];
+        continue;
+      }
+      const limit = message.match(OUTPUT_LIMIT_RE);
+      if (limit && !fixed.has('max_tokens') && Number(limit[1]) > 0) {
+        fixed.add('max_tokens');
+        body.max_tokens = Number(limit[1]);
+        continue;
+      }
+      if (THINKING_REFUSED_RE.test(message) && THINKING_REFUSAL_DETAIL_RE.test(message) && !fixed.has('thinking') && stripThinking(body)) {
+        fixed.add('thinking');
+        continue;
+      }
+      throw error;
     }
-    throw error;
   }
+}
+
+/** What a reply's content blocks say: its text, every tool call (a turn may make several) and the turn to send back with them. */
+export function readAnthropicContent(blocks: Array<Record<string, any>> | undefined): {
+  text: string;
+  toolCalls: ToolCall[];
+  providerContent: ReturnType<typeof anthropicTurn>;
+} {
+  const list = Array.isArray(blocks) ? blocks : [];
+  return {
+    text: list.filter((b) => b?.type === 'text').map((b) => b.text).join(' '),
+    toolCalls: list.filter((b) => b?.type === 'tool_use').map(toolCallOf),
+    providerContent: anthropicTurn(list),
+  };
 }
 
 
@@ -52,36 +122,8 @@ export async function callAnthropic(
   const apiUrl = provider.getApiUrl();
   const headers = provider.getAuthHeaders();
 
-  // Extract system messages for Anthropic's system parameter
-  const systemMessages = request.messages.filter(msg => msg.role === MessageRole.SYSTEM || msg.role === 'system' as MessageRole);
-  const nonSystemMessages = request.messages.filter(msg => msg.role !== MessageRole.SYSTEM && msg.role !== 'system' as MessageRole);
-
-  // Prepare Anthropic request
-  const anthropicRequest: Record<string, unknown> = {
-    model: requireModel(request, provider),
-    max_tokens: request.maxTokens || conversation.context?.maxTokens || 1024,
-    temperature: request.temperature ?? conversation.context?.temperature,
-    top_p: request.topP ?? conversation.context?.topP,
-    stop_sequences: request.stopSequences || conversation.context?.stopSequences,
-    messages: nonSystemMessages.map(msg => ({
-      role: msg.role === MessageRole.ASSISTANT ? 'assistant' : 'user',
-      content: toAnthropicContent(msg.content),
-    })),
-  };
-
-  // Add system prompt if present
-  if (systemMessages.length > 0) {
-    anthropicRequest.system = systemMessages.map(m => typeof m.content === 'string' ? m.content : '').join('\n');
-  }
-
-  // Add tools if available
-  if (tools.length > 0) {
-    anthropicRequest.tools = tools.map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      input_schema: tool.parameters,
-    }));
-  }
+  // The same body as the streaming path, so both send the same conversation.
+  const anthropicRequest = buildAnthropicRequestBody(provider, request, conversation, tools, false);
 
   const config: AxiosRequestConfig = {
     method: 'POST',
@@ -102,30 +144,15 @@ export async function callAnthropic(
 
   const cost = calculateProviderCost(provider, usage.input_tokens, usage.output_tokens);
 
-  // Process tool use
-  let toolCalls: ToolCall[] = [];
-  if (response.data.content) {
-    const toolUseContent = response.data.content.find((c: { type: string }) => c.type === 'tool_use');
-    if (toolUseContent) {
-      toolCalls = [{
-        id: toolUseContent.id,
-        name: toolUseContent.name,
-        parameters: toolUseContent.input,
-      }];
-    }
-  }
-
-  const textContent = response.data.content
-    ?.filter((c: { type: string }) => c.type === 'text')
-    ?.map((c: { text: string }) => c.text)
-    ?.join(' ') || '';
+  const { text, toolCalls, providerContent } = readAnthropicContent(response.data.content);
 
   return {
     message: {
       role: MessageRole.ASSISTANT,
-      content: textContent,
+      content: text,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       finishReason: response.data.stop_reason,
+      ...(providerContent ? { providerContent } : {}),
     },
     usage: {
       inputTokens: usage.input_tokens,
@@ -144,32 +171,27 @@ export async function callAnthropic(
  * Build the common Anthropic request body shared by both the
  * non-streaming and streaming paths.
  */
-function buildAnthropicRequestBody(
+export function buildAnthropicRequestBody(
   provider: LlmProvider,
   request: ChatRequest,
   conversation: Conversation,
   tools: Tool[],
   stream: boolean,
 ): Record<string, unknown> {
-  const systemMessages = request.messages.filter(msg => msg.role === MessageRole.SYSTEM || msg.role === 'system' as MessageRole);
-  const nonSystemMessages = request.messages.filter(msg => msg.role !== MessageRole.SYSTEM && msg.role !== 'system' as MessageRole);
-
   const body: Record<string, unknown> = {
     model: requireModel(request, provider),
-    max_tokens: request.maxTokens || conversation.context?.maxTokens || 1024,
-    temperature: request.temperature ?? conversation.context?.temperature,
-    top_p: request.topP ?? conversation.context?.topP,
-    stop_sequences: request.stopSequences || conversation.context?.stopSequences,
+    // The call's limit, which the runner sets from the model's card when
+    // the caller names none (output-limit.ts).
+    max_tokens: request.maxTokens || conversation?.context?.maxTokens || ANTHROPIC_UNCARDED_MAX_TOKENS,
+    temperature: request.temperature ?? conversation?.context?.temperature,
+    top_p: request.topP ?? conversation?.context?.topP,
+    stop_sequences: request.stopSequences || conversation?.context?.stopSequences,
     stream,
-    messages: nonSystemMessages.map(msg => ({
-      role: msg.role === MessageRole.ASSISTANT ? 'assistant' : 'user',
-      content: toAnthropicContent(msg.content),
-    })),
+    messages: toAnthropicMessages(request.messages, tools.length > 0),
   };
 
-  if (systemMessages.length > 0) {
-    body.system = systemMessages.map(m => typeof m.content === 'string' ? m.content : '').join('\n');
-  }
+  const system = anthropicSystemPrompt(request.messages);
+  if (system) body.system = system;
 
   if (tools.length > 0) {
     body.tools = tools.map(tool => ({
@@ -219,7 +241,7 @@ export async function callAnthropicStream(
   };
 
   const response: AxiosResponse = await callWithDeprecatedParamRetry(
-    () => callLlmProviderHttpStream(config, llmCallOptionsFor(provider)),
+    () => callLlmProviderHttpStream(config, llmCallOptionsFor(provider)).catch(readStreamedErrorBody),
     anthropicRequest,
   );
 
@@ -228,7 +250,10 @@ export async function callAnthropicStream(
   let inputTokens = 0;
   let outputTokens = 0;
   let stopReason = '';
-  // Track tool use content blocks (Anthropic streams tool calls differently)
+  // Every block of the reply by its index, as the API would have returned
+  // it whole: the turn that is sent back with its tool calls.
+  const blocks = new Map<number, Record<string, any>>();
+  // Tool use blocks' input, streamed as JSON text.
   const toolBlocks: Map<number, { id: string; name: string; inputJson: string }> = new Map();
   let currentBlockIndex = -1;
   let currentBlockType = '';
@@ -246,6 +271,9 @@ export async function callAnthropicStream(
   return new Promise<ChatResponse>((resolve, reject) => {
     let buffer = '';
     let currentEventType = '';
+    // An `error` event mid-stream (overloaded, for one): the call failed,
+    // and must not settle as an empty reply.
+    let streamError: Error | null = null;
 
     const stream = response.data as NodeJS.ReadableStream;
 
@@ -277,9 +305,16 @@ export async function callAnthropicStream(
               if (parsed.message?.usage?.input_tokens) inputTokens = parsed.message.usage.input_tokens;
               break;
 
-            case 'content_block_start':
+            case 'content_block_start': {
               currentBlockIndex = parsed.index ?? (currentBlockIndex + 1);
               currentBlockType = parsed.content_block?.type || '';
+              const block = { ...(parsed.content_block ?? {}) };
+              if (currentBlockType === 'text') block.text = block.text ?? '';
+              if (currentBlockType === 'thinking') {
+                block.thinking = block.thinking ?? '';
+                block.signature = block.signature ?? '';
+              }
+              blocks.set(currentBlockIndex, block);
               if (currentBlockType === 'tool_use') {
                 stepKind.decide('tool');
                 toolBlocks.set(currentBlockIndex, {
@@ -289,20 +324,30 @@ export async function callAnthropicStream(
                 });
               }
               break;
+            }
 
-            case 'content_block_delta':
+            case 'content_block_delta': {
+              const index = parsed.index ?? currentBlockIndex;
+              const block = blocks.get(index);
               if (parsed.delta?.type === 'text_delta' && parsed.delta.text) {
                 contentAccumulator += parsed.delta.text;
+                if (block) block.text = (block.text ?? '') + parsed.delta.text;
                 onChunk({ content: parsed.delta.text });
               }
+              if (parsed.delta?.type === 'thinking_delta' && block) {
+                block.thinking = (block.thinking ?? '') + (parsed.delta.thinking ?? '');
+              }
+              if (parsed.delta?.type === 'signature_delta' && block) {
+                block.signature = (block.signature ?? '') + (parsed.delta.signature ?? '');
+              }
               if (parsed.delta?.type === 'input_json_delta' && parsed.delta.partial_json) {
-                const index = parsed.index ?? currentBlockIndex;
-                const block = toolBlocks.get(index);
-                if (block) {
-                  block.inputJson += parsed.delta.partial_json;
+                const toolBlock = toolBlocks.get(index);
+                if (toolBlock) {
+                  toolBlock.inputJson += parsed.delta.partial_json;
                 }
               }
               break;
+            }
 
             case 'message_delta':
               if (parsed.delta?.stop_reason) {
@@ -314,6 +359,13 @@ export async function callAnthropicStream(
               }
               if (parsed.usage?.output_tokens) outputTokens = parsed.usage.output_tokens;
               break;
+
+            case 'error':
+              streamError = Object.assign(new Error(parsed.error?.message || 'The model stream reported an error'), {
+                code: parsed.error?.type,
+                status: parsed.error?.type === 'overloaded_error' ? 529 : undefined,
+              });
+              break;
           }
         } catch {
           // Malformed JSON — skip
@@ -322,6 +374,10 @@ export async function callAnthropicStream(
     });
 
     stream.on('end', () => {
+      if (streamError) {
+        reject(streamError);
+        return;
+      }
       // A stream that ended without a message_delta: settle it on what
       // was accumulated, which is what the runtime will act on.
       stepKind.decide(toolBlocks.size > 0 ? 'tool' : 'text');
@@ -330,16 +386,21 @@ export async function callAnthropicStream(
       // Build tool calls from accumulated blocks
       let toolCalls: ToolCall[] = [];
       if (toolBlocks.size > 0) {
-        toolCalls = Array.from(toolBlocks.values()).map(block => {
+        toolCalls = Array.from(toolBlocks.entries()).map(([index, block]) => {
           let parameters: Record<string, any> = {};
+          let input: Record<string, any> = {};
           try {
             parameters = block.inputJson ? JSON.parse(block.inputJson) : {};
+            input = parameters;
           } catch {
             parameters = { __rawArguments: block.inputJson, __parseError: true };
           }
+          const whole = blocks.get(index);
+          if (whole) whole.input = input;
           return { id: block.id, name: block.name, parameters };
         });
       }
+      const providerContent = anthropicTurn(Array.from(blocks.entries()).sort(([a], [b]) => a - b).map(([, b]) => b));
 
       const cost = calculateProviderCost(provider, inputTokens, outputTokens);
 
@@ -349,6 +410,7 @@ export async function callAnthropicStream(
           content: contentAccumulator || undefined,
           toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
           finishReason: stopReason,
+          ...(providerContent ? { providerContent } : {}),
         },
         usage: {
           inputTokens,
@@ -367,4 +429,33 @@ export async function callAnthropicStream(
       reject(err);
     });
   });
+}
+
+/**
+ * A streamed call the API refused carries its error body as a stream;
+ * read it, so the refusal says what it says (callWithDeprecatedParamRetry
+ * and the error log read `error.response.data`).
+ */
+export async function readStreamedErrorBody(error: any): Promise<never> {
+  const data = error?.response?.data;
+  if (data && typeof data.on === 'function' && typeof data.pipe === 'function') {
+    try {
+      const text = await new Promise<string>((resolve, reject) => {
+        let out = '';
+        data.on('data', (c: Buffer) => {
+          if (out.length < 65_536) out += c.toString();
+        });
+        data.on('end', () => resolve(out));
+        data.on('error', reject);
+      });
+      try {
+        error.response.data = JSON.parse(text);
+      } catch {
+        error.response.data = text;
+      }
+    } catch {
+      // Leave the error as it was.
+    }
+  }
+  throw error;
 }

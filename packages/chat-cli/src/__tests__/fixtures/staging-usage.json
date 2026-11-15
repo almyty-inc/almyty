@@ -1,0 +1,22 @@
+{
+  "about": "What api.staging.almyty.com sent for one answer to 'Reply with the single word: ready', captured 2026-11-13 with the real CLI login: the usage-bearing live events, and the totals the backend persisted for the same run. Contents and ids trimmed.",
+  "autonomous": {
+    "events": [
+      { "type": "llm.response", "data": { "step": 0, "content": "ready", "usage": { "inputTokens": 1908, "outputTokens": 4 }, "cost": 0.007712 } },
+      { "type": "run.completed", "data": { "output": "ready" } }
+    ],
+    "run": { "status": "completed", "totalTokens": 3140, "totalCost": 0.009232 }
+  },
+  "workflow": {
+    "events": [
+      { "type": "node.completed", "data": { "cost": 0, "tokens": 0, "executionTime": 0 } },
+      { "type": "node.completed", "data": { "cost": 0, "tokens": 0, "executionTime": 146 } },
+      { "type": "node.completed", "data": { "cost": 0, "tokens": 0, "executionTime": 149 } },
+      { "type": "node.completed", "data": { "cost": 0, "tokens": 0, "executionTime": 151 } },
+      { "type": "node.completed", "data": { "cost": 0.0001204, "tokens": 298, "executionTime": 868 } },
+      { "type": "node.completed", "data": { "cost": 0, "tokens": 0, "executionTime": 0 } },
+      { "type": "execution.completed", "data": { "output": "ready", "executionTime": 1340, "totalCost": 0.0001204, "totalTokens": 298 } }
+    ],
+    "execution": { "status": "completed", "totalTokens": 298, "totalCost": 0.0001204 }
+  }
+}

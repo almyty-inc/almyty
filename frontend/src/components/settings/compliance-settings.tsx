@@ -17,6 +17,7 @@
  * controls. They do not share state or endpoints.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -221,7 +222,7 @@ function CompliancePolicyForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit((v) => saveMutation.mutate(v))} className="space-y-6">
+        <Form onSubmit={handleSubmit((v) => saveMutation.mutate(v))} className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <Label className="flex items-center gap-2">
@@ -324,7 +325,7 @@ function CompliancePolicyForm() {
           <Button type="submit" disabled={isSubmitting || saveMutation.isPending}>
             {saveMutation.isPending ? 'Saving...' : 'Save compliance policy'}
           </Button>
-        </form>
+        </Form>
       </CardContent>
       {guard.element}
     </Card>

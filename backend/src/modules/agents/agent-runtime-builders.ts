@@ -204,6 +204,10 @@ export class AgentRuntimeBuilders {
         if (msg.toolCallId) {
           msgObj.toolCallId = msg.toolCallId;
         }
+        // A tool-call turn as the vendor returned it, sent back as it came.
+        if (msg.toolCalls && msg.metadata?.providerContent) {
+          msgObj.providerContent = msg.metadata.providerContent;
+        }
         // Which stored message this is, for the compactor (not sent anywhere).
         tagStoredMessage(msgObj, msg);
         messages.push(msgObj);

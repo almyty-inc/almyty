@@ -463,18 +463,12 @@ export class AgentsController {
         );
       }
 
-      const duplicate = await this.agentsService.createAgent({
-        name: await this.agentsService.freeAgentName(organizationId, `${original.name} (Copy)`),
-        description: original.description,
-        pipeline: original.pipeline,
-        variables: original.variables,
-        settings: original.settings,
-        status: 'draft',
-        // The copy keeps the original's scope, so a private agent's copy
-        // (and the private tools it references) stays private to its owner.
-        visibility: original.visibility,
-        teamId: original.teamId,
-      } as any, organizationId, req.user.id);
+      // Everything that makes the agent behave as it does comes across;
+      // its name, keys, channels, run history and memories do not
+      // (agent-duplicate.ts). The copy keeps the original's scope, so a
+      // private agent's copy (and the private tools it references) stays
+      // private to its owner.
+      const duplicate = await this.agentsService.duplicateAgent(original, organizationId, req.user.id);
 
       // Roles live in their own table, so copying the agent row left them
       // behind -- while `settings.execution.strategyKey` came across. The

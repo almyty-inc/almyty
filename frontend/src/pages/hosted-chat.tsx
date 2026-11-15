@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, Download, MessageSquarePlus, Menu, MoreHorizontal, Trash2, X } from 'lucide-react'
 import { AssistantMarkdown, assistantMarkdownComponents } from '@/components/hosted-chat/assistant-markdown'
@@ -230,7 +231,7 @@ function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () =>
   const buttonStyle = { backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }
 
   return step === 'email' ? (
-    <form onSubmit={send} className="mt-4 space-y-3 text-left">
+    <Form onSubmit={send} className="mt-4 space-y-3 text-left">
       <p className="text-sm text-muted-foreground">We will email you a one-time code.</p>
       <label htmlFor="hosted-chat-email" className="sr-only">
         Email address
@@ -258,9 +259,9 @@ function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () =>
       >
         {busy ? 'Sending...' : 'Email me a code'}
       </button>
-    </form>
+    </Form>
   ) : (
-    <form onSubmit={verify} className="mt-4 space-y-3 text-left">
+    <Form onSubmit={verify} className="mt-4 space-y-3 text-left">
       <p className="text-sm text-muted-foreground">
         Enter the 6-digit code we sent to <span className="font-medium text-foreground">{email.trim()}</span>.
       </p>
@@ -300,7 +301,7 @@ function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () =>
           Send a new code
         </button>
       </div>
-    </form>
+    </Form>
   )
 }
 

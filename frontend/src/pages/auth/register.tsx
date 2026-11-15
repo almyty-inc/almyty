@@ -1,4 +1,5 @@
 import React from 'react'
+import { Form } from '@/components/ui/form'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -125,7 +126,7 @@ export function RegisterPage() {
   return (
     <div>
       <h1 className="text-2xl font-heading font-bold mb-6">Sign up</h1>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <Label htmlFor="firstName">First name</Label>
           <div className="mt-1">
@@ -328,7 +329,7 @@ export function RegisterPage() {
             )}
           </Button>
         </div>
-      </form>
+      </Form>
 
       <div className="mt-6">
         {/* No OAuth providers are wired up yet — a bare divider here

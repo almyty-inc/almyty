@@ -10,7 +10,7 @@ import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { STALE_THRESHOLD_MS, OFFLINE_GRACE_MS } from './runner-state';
-import { FakeRepository, fakeRepository } from '../../test/fake-repository';
+import { FakeRepository, fakeManager, fakeRepository } from '../../test/fake-repository';
 
 /**
  * Service-level tests with mocked repositories. The pure FSM is tested
@@ -61,6 +61,13 @@ describe('RunnerService', () => {
       make: () => Object.assign(new RunnerSession(), { connectedAt: new Date(), disconnectedAt: null, remoteAddress: null }),
     });
     workspaces = fakeRepository<Workspace>({ idPrefix: 'w' });
+    // Deleting a runner runs in a transaction with a lock timeout.
+    Object.assign(fakeManager([[Runner, runners], [RunnerSession, sessions], [Workspace, workspaces]]), {
+      query: jest.fn(async (sql: string) => {
+        if (!/^SET LOCAL lock_timeout = '\d+ms'$/.test(sql)) throw new Error(`unmodelled query: ${sql}`);
+        return [];
+      }),
+    });
     /**
      * SELECT DISTINCT ws."runnerId" FROM workspaces ws JOIN runners r ...
      * -- the self-heal lookup. Evaluates the exact clauses it models over
