@@ -34,7 +34,7 @@ describe('the verify step card', () => {
         index={2}
       />,
     )
-    expect(screen.getByText('Check passed')).toBeInTheDocument()
+    expect(screen.getByText('No errors found')).toBeInTheDocument()
     const notes = screen.getByTestId('checker-notes')
     expect(notes).toHaveTextContent('Checker notes')
     expect(notes).toHaveTextContent(/Issue #67427 does not have labels/)

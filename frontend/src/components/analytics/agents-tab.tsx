@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { agentsApi } from '@/lib/api'
-import { CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent } from '@/lib/agent-run-numbers'
+import { CHECKS_PASSED_HINT, CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent } from '@/lib/agent-run-numbers'
 import { cn, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { Agent, AgentExecution } from '@/types'
@@ -90,7 +90,7 @@ export function AgentsTab() {
       executions7d: number
       /** "Completed": the share of runs that finished, whatever their check said. */
       completed: number
-      /** "Checks passed", for an agent with a check (agent-run-numbers.ts). */
+      /** "No errors found", for an agent with a check (agent-run-numbers.ts). */
       checks: ReturnType<typeof checksPassed>
       avgTime: number
       recentFailures: AgentExecution[]
@@ -237,7 +237,7 @@ export function AgentsTab() {
                   <th className={`${TH} text-right`}>24h</th>
                   <th className={`${TH} text-right`}>7d</th>
                   <th className={`${TH} text-right`}>{COMPLETED_LABEL}</th>
-                  <th className={`${TH} text-right`}>{CHECKS_PASSED_LABEL}</th>
+                  <th className={`${TH} text-right`} title={CHECKS_PASSED_HINT}>{CHECKS_PASSED_LABEL}</th>
                   <th className={`${TH} text-right`}>Avg time</th>
                   <th className={`${TH} text-right`}>Cost</th>
                 </tr>

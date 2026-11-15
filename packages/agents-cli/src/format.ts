@@ -161,9 +161,36 @@ export function formatStep(step: RunStep | undefined, index?: number): string | 
       return `  ${n}sub_agent_call → ${step.input?.agentId ?? '?'}${suffix}`;
     case 'error':
       return `  ${n}error: ${step.error ?? 'unknown'}${suffix}`;
+    case 'verify': {
+      const midRun = step.output?.advisory === true || step.input?.mode === 'mid_loop';
+      return `  ${n}${midRun ? 'mid-run check' : 'check'}: ${formatCheck(step.output)}${suffix}`;
+    }
     default:
       return step.type ? `  ${n}${step.type}${suffix}` : null;
   }
+}
+
+/** What a pass means, said once wherever the CLI shows one. */
+export const CHECK_PASS_EXPLANATION =
+  "the check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch; it can't confirm everything the answer says";
+
+/**
+ * A check's outcome in plain words. A pass is "no errors found", never
+ * "passed" or "verified": it means no mismatch with the tool results, not
+ * that the answer is right.
+ */
+export function formatCheck(verdict: { verdict?: string; unavailable?: boolean; reason?: string; failures?: Array<{ rule?: unknown }> } | undefined | null): string {
+  if (!verdict) return 'not checked';
+  if (verdict.verdict === 'pass') return 'no errors found';
+  if (verdict.unavailable === true) return 'not checked: no checker gave a verdict';
+  const reasons = typeof verdict.reason === 'string' && verdict.reason.trim()
+    ? [verdict.reason.trim()]
+    : (Array.isArray(verdict.failures) ? verdict.failures : [])
+        .map((f) => (typeof f?.rule === 'string' ? f.rule.trim() : ''))
+        .filter((r) => r.length > 0);
+  if (!reasons.length) return 'errors found';
+  const more = reasons.length - 3;
+  return `errors found: ${reasons.slice(0, 3).join('; ')}${more > 0 ? `; and ${more} more` : ''}`;
 }
 
 /**
@@ -280,6 +307,7 @@ export function formatRunDetail(run: {
   output?: unknown;
   steps?: RunStep[];
   limits?: Record<string, unknown>;
+  metadata?: { verify?: { verdict?: string; unavailable?: boolean; reason?: string; failures?: Array<{ rule?: unknown }> } } | null;
 }): string {
   const lines: string[] = [];
   lines.push(`Run ${run.id ?? '(no id)'}`);
@@ -299,6 +327,13 @@ export function formatRunDetail(run: {
     if (model) models.add(model);
   }
   if (models.size > 0) lines.push(`  models:    ${[...models].join(', ')}`);
+
+  // The final answer's check, as the run recorded it (`metadata.verify`).
+  const verdict = run.metadata?.verify;
+  if (verdict && typeof verdict.verdict === 'string') {
+    lines.push(`  check:     ${formatCheck(verdict)}`);
+    if (verdict.verdict === 'pass') lines.push(`             (${CHECK_PASS_EXPLANATION})`);
+  }
 
   if (run.error) {
     lines.push('');

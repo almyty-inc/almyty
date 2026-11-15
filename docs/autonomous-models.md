@@ -171,11 +171,47 @@ This is the final-answer check only. The checks inside a strategy
 as each strategy describes above.
 
 The agent's header and analytics show two numbers: **Completed**, the
-share of runs that finished, and, for an agent with a check, **Checks
-passed**, the share of checked runs whose check passed
+share of runs that finished, and, for an agent with a check, **No errors
+found**, the share of checked runs whose check passed
 (`agents.checkedExecutions`, `agents.passedCheckExecutions`; a run no
 checker gave a verdict on is not counted). A check passes when it has
 no verdict finding, whatever its checker notes say.
+
+### What the check can and can't catch
+
+A pass is shown as "No errors found", with one line under it: "The check
+compared the answer's names, dates, versions, ids, counts and labels with
+what the tools returned and found no mismatch. It can't confirm everything
+the answer says." A failed check is shown as "Errors found" with what was
+found. The run view, the verify step, the agent header, analytics, the
+agent's technical document and `almyty agents inspect` all use these
+words. The API fields keep their names (`verdict: 'pass'`,
+`passedCheckExecutions`, `checksPassed`); none of them says the answer is
+right.
+
+It can catch:
+
+- a name, date, version, id, count or label in the answer that differs
+  from the same item's value in the tool results (see the next section
+  for the fields and how an item is matched);
+- the answer's own counts against its own lists and tables;
+- items said to be skipped as already reported that earlier reports
+  never listed;
+- items listed as new whose date is outside the window the request names;
+- a package's update kind (major, minor) against its versions.
+
+It can't catch:
+
+- a claim with no matching value in the tool results. A made-up
+  dependency name in a release summary, or a quote paraphrased into
+  words the source never used, has nothing to be compared with, so it
+  passes;
+- judgements of wording, relevance, and which items were picked or left
+  out. A checker may say these, and they appear as checker notes on the
+  verify step; they never decide the verdict.
+
+So "No errors found" means the check found no mismatch, not that the
+answer is correct.
 
 ### What a checker sees
 
@@ -271,8 +307,8 @@ whether an item meets the agent's rules, which items it picked or left
 out, relevance, wording, style, and every failure the code could not
 confirm. Notes are shown on the run's `verify` step under "Checker
 notes" and nowhere else: never on the answer, never in a visitor
-channel. They never change the verdict and never count against "Checks
-passed". In six rounds of runs on staging the platform's own checks were
+channel. They never change the verdict and never count against "No errors
+found". In six rounds of runs on staging the platform's own checks were
 right every time, and a checker's rule and selection judgements were
 not; this is why only the first two kinds decide.
 

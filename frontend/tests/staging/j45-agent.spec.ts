@@ -120,6 +120,6 @@ test.describe('J4/J5 autonomous agent with a real tool', () => {
     // What the tool returned is the number the answer gave.
     expect(steps).toMatch(new RegExp(`"temperature_2m_max":\\[[^\\]]*${String(expected).replace('.', '\\.')}[,\\]]`))
     expect(steps, 'the run should list the answer check').toMatch(/#\d+ verify Answer check/)
-    await expect(runs.getByText('Check passed').first(), 'a correct answer should pass its check').toBeVisible()
+    await expect(runs.getByText('No errors found').first(), 'a correct answer should pass its check').toBeVisible()
   })
 })
