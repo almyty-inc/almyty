@@ -166,7 +166,7 @@ export function reduceStreamEvent(prev: StreamState, event: StreamEvent): Stream
     }
 
     case 'verify.failed':
-      s.emit.push({ role: 'info', text: 'verification rejected the draft — revising' });
+      s.emit.push({ role: 'info', text: 'the check found errors in the draft — revising' });
       s.label = 'Revising';
       return s;
 

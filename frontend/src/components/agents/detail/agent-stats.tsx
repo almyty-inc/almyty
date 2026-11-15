@@ -1,6 +1,6 @@
 /**
  * Summary stat cards displayed at the top of the agent detail page:
- * total runs, completed, checks passed (an agent with a check only),
+ * total runs, completed, no errors found (an agent with a check only),
  * avg run time, total cost.
  *
  * "Run" is the one word for what a user starts and for the record it
@@ -19,7 +19,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import type { Agent } from '@/types'
 import { pluralized } from '@/lib/utils'
-import { CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent } from '@/lib/agent-run-numbers'
+import { CHECKS_PASSED_HINT, CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent } from '@/lib/agent-run-numbers'
 
 interface AgentStatsProps {
   agent: Agent
@@ -58,7 +58,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground" title="Of the runs whose answer was checked, the share whose check passed">
+              <span className="text-sm text-muted-foreground" title={CHECKS_PASSED_HINT}>
                 {CHECKS_PASSED_LABEL}
               </span>
             </div>

@@ -429,7 +429,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     // "Success rate" counted finished runs and ignored the checks.
-    it('says Completed and, for checked runs, Checks passed, not a success rate', async () => {
+    it('says Completed and, for checked runs, No errors found, not a success rate', async () => {
       agentsService.getAgent.mockResolvedValue({ ...autonomousAgent(), checkedExecutions: 8, passedCheckExecutions: 2 });
       const doc = await helper.build('agent-1', ORG, VIEWER);
       expect(doc.loggingAndTraceability.executions).toMatchObject({
@@ -441,15 +441,23 @@ describe('AgentTechDocHelper', () => {
       });
       const md = helper.renderMarkdown(doc);
       expect(md).toContain('9 completed (90%)');
-      expect(md).toContain('- Checks passed: 2 of 8 checked runs (25%)');
-      expect(md).not.toMatch(/success rate/i);
+      expect(md).toContain('- No errors found: 2 of 8 checked runs (25%).');
+      // A pass is no mismatch with the tool results, and the line says so.
+      expect(md).toContain("it can't confirm everything an answer says");
+      expect(md).not.toMatch(/success rate|checks passed/i);
     });
 
-    it('leaves Checks passed out when no run was checked', async () => {
+    it('says one checked run, not one checked runs', async () => {
+      agentsService.getAgent.mockResolvedValue({ ...autonomousAgent(), checkedExecutions: 1, passedCheckExecutions: 1 });
+      const doc = await helper.build('agent-1', ORG, VIEWER);
+      expect(helper.renderMarkdown(doc)).toContain('- No errors found: 1 of 1 checked run (100%).');
+    });
+
+    it('leaves No errors found out when no run was checked', async () => {
       agentsService.getAgent.mockResolvedValue(autonomousAgent());
       const doc = await helper.build('agent-1', ORG, VIEWER);
       expect(doc.loggingAndTraceability.executions.checksPassedPercent).toBeNull();
-      expect(helper.renderMarkdown(doc)).not.toContain('Checks passed');
+      expect(helper.renderMarkdown(doc)).not.toContain('No errors found');
     });
 
     // An imported API's tool descriptions carry HTML and line breaks; either
