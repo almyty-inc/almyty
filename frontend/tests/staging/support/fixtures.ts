@@ -136,7 +136,7 @@ export const test = base.extend<{ gate: Gate; qa: APIRequestContext; org: QaOrg;
         await page.request.delete(`${API_URL}/organizations/${o.id}`, { headers: { 'X-Organization-Id': o.id } })
       }
     } catch (err) {
-      testInfo.annotations.push({ type: 'cleanup', description: `fresh user org: ${(err as Error).message}` })
+      testInfo.annotations.push({ type: 'cleanup', description: redact(`fresh user org: ${String((err as Error).message).split('\n')[0]}`) })
     }
     await context.close()
   },
