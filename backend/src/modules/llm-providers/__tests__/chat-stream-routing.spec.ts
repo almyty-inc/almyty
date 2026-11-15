@@ -24,6 +24,7 @@ describe('LlmChatHelper.chatStream with a routing policy', () => {
     const runner = {
       resolveProviderSecrets: jest.fn().mockResolvedValue(undefined),
       resolveAttachments: jest.fn(async (_org: unknown, _provider: unknown, request: unknown) => request),
+      resolveOutputLimit: jest.fn(async (_org: unknown, _provider: unknown, request: unknown) => request),
       planRouteHead: jest.fn().mockResolvedValue({ provider, candidate, rejected: [{ modelId: 'card-2', reason: 'lacks tools' }] }),
       recordRoute: jest.fn(),
       prepareTools: jest.fn().mockResolvedValue([]),
@@ -78,6 +79,18 @@ describe('LlmChatHelper.chatStream with a routing policy', () => {
     expect(resolvedFor.id).toBe('p-head');
     expect(request.model).toBe('gpt-cheap');
     expect(callOpenAIStream.mock.calls.at(-1)[1]).toMatchObject(resolved);
+  });
+
+  it("sends the head candidate's output limit, from its card, on the stream", async () => {
+    const { helper, runner } = build();
+    runner.resolveOutputLimit.mockImplementation(async (_org: unknown, _provider: unknown, request: any) => ({ ...request, maxTokens: 128_000 }));
+    callOpenAIStream.mockResolvedValue({ message: { role: 'assistant', content: 'hi' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, cost: 0, model: 'gpt-cheap', responseTime: 5 });
+    await helper.chatStream(undefined, { messages: [], routing: { objective: 'cheapest' } } as any, 'org', 'u', () => undefined);
+    const [org, resolvedFor, request] = runner.resolveOutputLimit.mock.calls[0] as [string, any, any];
+    expect(org).toBe('org');
+    expect(resolvedFor.id).toBe('p-head');
+    expect(request.model).toBe('gpt-cheap');
+    expect(callOpenAIStream.mock.calls.at(-1)[1].maxTokens).toBe(128_000);
   });
 
   it('surfaces NO_ROUTE before opening any stream', async () => {
