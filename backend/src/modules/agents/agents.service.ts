@@ -17,7 +17,8 @@ import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
-import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-models';
+import { AgentModels, agentModelsProblems, mainRoleConflicts, syncMainRole } from './autonomous-models';
+import { duplicateAgentFields } from './agent-duplicate';
 import { parseLabelRequirements } from '../runner/runner-labels';
 import { AgentMemoryConfig, memoryConfigProblems, memorySettings, retentionSeconds, NATIVE_MEMORY_ACCOUNT } from './agent-memory-settings';
 import { capabilityProblems, normaliseCapabilities } from './agent-capabilities';
@@ -390,17 +391,29 @@ export class AgentsService {
    * The models and modelConfig an agent is saved with. On an autonomous
    * agent the main role and modelConfig are kept equal (syncMainRole), so
    * a client that still writes modelConfig alone moves the main role, and
-   * the page, which writes models, moves modelConfig. A workflow agent has
-   * no models: its multi-model shape is its graph.
+   * the page, which writes models, moves modelConfig. A write that sends
+   * both keeps every call setting either one carries; one that sends the
+   * same setting twice with different values is refused rather than one
+   * of them dropped. Create and update go through here alike. A workflow
+   * agent has no models: its multi-model shape is its graph.
    */
   private modelsFor(
     mode: 'workflow' | 'autonomous',
     models: AgentModels | null | undefined,
     modelConfig: Agent['modelConfig'] | null | undefined,
     modelsWritten: boolean,
+    modelConfigWritten = false,
   ): { models: AgentModels | null; modelConfig: Agent['modelConfig'] | null } {
     if (mode !== 'autonomous') return { models: null, modelConfig: modelConfig ?? null };
-    const synced = syncMainRole({ models, modelConfig, modelsWritten });
+    if (modelsWritten && modelConfigWritten) {
+      const conflicts = mainRoleConflicts(models, modelConfig);
+      if (conflicts.length) {
+        throw new BadRequestException(
+          `models and modelConfig disagree on ${conflicts.join(', ')}: send one value, or send it in models only`,
+        );
+      }
+    }
+    const synced = syncMainRole({ models, modelConfig, modelsWritten, modelConfigWritten });
     return { models: synced.models, modelConfig: (synced.modelConfig as Agent['modelConfig']) ?? null };
   }
 
@@ -593,6 +606,7 @@ export class AgentsService {
         createDto.models,
         createDto.modelConfig as Agent['modelConfig'],
         createDto.models !== undefined,
+        createDto.modelConfig !== undefined && createDto.modelConfig !== null,
       );
 
       await this.assertPrivateReferencesAllowed(
@@ -663,6 +677,25 @@ export class AgentsService {
       this.logger.error(`[CREATE_AGENT] Failed: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  /**
+   * A new draft agent that behaves like `original` (agent-duplicate.ts
+   * says what is copied and what is not). It goes through createAgent, so
+   * the copy is checked like any new agent: its tools, memory account,
+   * models and private references must be ones the caller may use. The
+   * channel policy and always-on settings, which createAgent does not
+   * take, are written onto the new row after it.
+   */
+  async duplicateAgent(original: Agent, organizationId: string, userId: string): Promise<Agent> {
+    const name = await this.freeAgentName(organizationId, `Copy of ${original.name}`);
+    const { alwaysOn, branding, visitorRules, ...fields } = duplicateAgentFields(original, name);
+    const saved = await this.createAgent(fields as unknown as CreateAgentInput, organizationId, userId);
+    const rest = { alwaysOn: alwaysOn ?? null, branding: branding ?? null, visitorRules: visitorRules ?? null };
+    if (rest.alwaysOn || rest.branding || rest.visitorRules) {
+      await this.agentRepository.update(saved.id, rest as any);
+    }
+    return Object.assign(saved, rest);
   }
 
   /**
@@ -911,6 +944,7 @@ export class AgentsService {
       updateDto.models !== undefined ? updateDto.models : agent.models,
       updateDto.modelConfig !== undefined ? (updateDto.modelConfig as Agent['modelConfig']) : agent.modelConfig,
       updateDto.models !== undefined,
+      updateDto.modelConfig !== undefined && updateDto.modelConfig !== null,
     );
 
     // Only the agent's owner may make it (or keep it) private; an agent

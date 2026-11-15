@@ -4,6 +4,7 @@
  * pipeline info, version history, change history, and audit log.
  */
 import React, { useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Play,
@@ -255,7 +256,7 @@ export function OverviewTab({
           <CardContent>
             <div className="space-y-3">
               {/* The chat composer's keys: Enter sends, Shift+Enter is a new line. */}
-              <form
+              <Form
                 className="flex gap-2"
                 onSubmit={(e) => {
                   e.preventDefault()
@@ -286,7 +287,7 @@ export function OverviewTab({
                 >
                   {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 </Button>
-              </form>
+              </Form>
               <p className="text-xs text-muted-foreground">Enter to send · Shift+Enter for newline</p>
               {/* The question stays above its answer once the box is cleared. */}
               {testQuestion && (

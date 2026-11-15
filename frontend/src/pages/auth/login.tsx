@@ -1,4 +1,5 @@
 import React from 'react'
+import { Form } from '@/components/ui/form'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -131,7 +132,7 @@ export function LoginPage() {
   return (
     <div>
       <h1 className="text-2xl font-heading font-bold mb-6">Sign in</h1>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <Label htmlFor="email">Email address</Label>
           <div className="mt-1">
@@ -242,7 +243,7 @@ export function LoginPage() {
             )}
           </Button>
         </div>
-      </form>
+      </Form>
 
       <div className="mt-6 text-center">
         <p className="text-sm text-muted-foreground">

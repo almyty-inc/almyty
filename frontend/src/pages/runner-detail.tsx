@@ -1,4 +1,5 @@
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
+import { Form } from '@/components/ui/form'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -251,13 +252,13 @@ export function RunnerDetailPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Name</CardTitle></CardHeader>
           <CardContent>
-            <form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); if (nameDraft?.trim()) renameMutation.mutate(nameDraft.trim()) }}>
+            <Form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); if (nameDraft?.trim()) renameMutation.mutate(nameDraft.trim()) }}>
               <div className="min-w-0 flex-1 space-y-1.5">
                 <Label htmlFor="runner-name">Runner name</Label>
                 <Input id="runner-name" value={nameDraft ?? runner.name} onChange={e => setNameDraft(e.target.value)} pattern="[a-zA-Z0-9_-]{1,64}" maxLength={64} required />
               </div>
               <Button type="submit" disabled={!nameDraft?.trim() || nameDraft.trim() === runner.name || renameMutation.isPending}>Save name</Button>
-            </form>
+            </Form>
             <p className="mt-2 text-xs text-muted-foreground">Starts with your machine's hostname. A new name stays when you restart the runner.</p>
           </CardContent>
         </Card>

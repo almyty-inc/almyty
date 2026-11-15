@@ -7,6 +7,7 @@
  * steps and output stay in view while naming the skill.
  */
 import { useId, useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Sparkles } from 'lucide-react'
 
@@ -79,7 +80,7 @@ export function PromoteRunSection({ runId }: PromoteRunSectionProps) {
 
   return (
     <>
-      <form
+      <Form
         id={formId}
         aria-label="Promote run to skill"
         className="space-y-3 rounded-md border bg-background dark:bg-muted/40 p-4"
@@ -119,7 +120,7 @@ export function PromoteRunSection({ runId }: PromoteRunSectionProps) {
           submitLabel="Promote"
           submitting={mutation.isPending}
         />
-      </form>
+      </Form>
       {guard.element}
     </>
   )

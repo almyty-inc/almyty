@@ -94,7 +94,14 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
   // take a while, so these pass their own timeout.
 
   describe('chat-cli', () => {
-    /** An agent to talk to, resolved once from the account's own list. */
+    /**
+     * An agent to talk to, resolved once from the account's own list: an
+     * active autonomous one, which always answers through a model. Not
+     * simply the newest: on the shared QA organization that is whatever
+     * another gate run made a moment ago (`gate-<run id>-...`), such as
+     * the model-free workflow J7/J8 builds, which truthfully answers with
+     * 0 tokens and is deleted under the tests' feet.
+     */
     let agentRef: string | null = null;
 
     /** A question short enough that any model answers it cheaply. */
@@ -106,10 +113,11 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     beforeAll(() => {
       try {
         const agents = JSON.parse(run('agents-cli', ['list', '--json']));
-        const first = Array.isArray(agents)
-          ? (agents.find((a: any) => a.status === 'active') ?? agents[0])
-          : null;
-        agentRef = first ? (first.slug ?? first.name) : null;
+        const usable = Array.isArray(agents)
+          ? agents.filter((a: any) => a.status === 'active' && !/^gate-/.test(a.slug ?? a.name ?? ''))
+          : [];
+        const pick = usable.find((a: any) => a.mode === 'autonomous') ?? null;
+        agentRef = pick ? (pick.slug ?? pick.name) : null;
       } catch {
         agentRef = null;
       }
@@ -203,11 +211,15 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
       expect(Object.keys(parsed)).toContain('conversationId');
     });
 
-    it('reports a token count for an answer that completed', () => {
+    it('reports the tokens the backend recorded for an answer that completed', () => {
       if (!agentRef) { console.warn('no agent available, skipping'); return; }
       const parsed = JSON.parse(run('chat-cli', [agentRef, '-m', PROMPT, '--json'], { ...SLOW, stdio: ['pipe', 'pipe', 'ignore'] }));
       if (parsed.status !== 'completed') { console.warn(`run ${parsed.status}, skipping usage assertion`); return; }
+      // An autonomous answer always calls a model, so it always costs tokens.
       expect(parsed.usage.tokens).toBeGreaterThan(0);
+      // And the figure is the run's own, as the backend persisted it.
+      const recorded = JSON.parse(run('agents-cli', ['inspect', agentRef, parsed.runId, '--json']));
+      expect(parsed.usage.tokens).toBe(recorded.totalTokens);
     });
 
     it('--resume continues the conversation it is given', () => {

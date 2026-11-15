@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { AgentMemoryKeeper, recallQueryOf, verificationFailed } from '../agent-memory.keeper';
+import { AgentMemoryKeeper, describesAnswer, recallQueryOf, verificationFailed } from '../agent-memory.keeper';
 import { memoryScopeFor, memorySettings } from '../agent-memory-settings';
 
 /**
@@ -131,5 +131,62 @@ describe('no memories from an answer that failed verification', () => {
     expect(verificationFailed({ steps: [{ type: 'verify', output: { verdict: 'fail', escalateTo: 'main' } }], metadata: {} } as any)).toBe(false);
     expect(verificationFailed({ steps: [{ type: 'verify', output: { verdict: 'error', exhausted: true } }], metadata: {} } as any)).toBe(true);
     expect(verificationFailed({ steps: [], metadata: {} } as any)).toBe(false);
+  });
+});
+
+describe("the agent's own saves (store_memory) wait for the run's answer", () => {
+  const REPORTED = 'Reported in the answer: W4402 "Quantum dots" (DOI 10.1000/qd).';
+  const PREFERENCE = 'The owner wants works from 2026 only.';
+  const team = { main: MAIN } as any;
+
+  async function savedDuring(r: any, config: any = { enabled: true, save: 'asked' }) {
+    const { k, memoryAccounts } = keeper();
+    const a = agent(config);
+    await k.store(a, r, team, { content: REPORTED, type: 'fact' });
+    await k.store(a, r, team, { content: PREFERENCE, type: 'preference' });
+    expect(memoryAccounts.put).not.toHaveBeenCalled();
+    await k.commitPending(a, r, team);
+    return memoryAccounts.put.mock.calls.map((c: any[]) => c[2].content);
+  }
+
+  it('writes nothing while the run is going', async () => {
+    const { k, memoryAccounts } = keeper();
+    const r = run();
+    await k.store(agent({ enabled: true }), r, team, { content: REPORTED });
+    expect(memoryAccounts.put).not.toHaveBeenCalled();
+    expect(r.workingMemory.pendingMemories).toEqual([{ content: REPORTED, tags: [] }]);
+  });
+
+  it('keeps both once the answer was delivered and its check passed', async () => {
+    const r = run({ steps: [{ type: 'verify', output: { verdict: 'pass' } }] });
+    expect(await savedDuring(r)).toEqual([REPORTED, PREFERENCE]);
+    expect(r.steps[r.steps.length - 1]).toMatchObject({ type: 'memory_save', output: { saved: 2 } });
+  });
+
+  it('drops what describes the answer when its check failed, and keeps the rest', async () => {
+    const r = run({ steps: [{ type: 'verify', output: { verdict: 'fail', exhausted: true } }] });
+    expect(await savedDuring(r)).toEqual([PREFERENCE]);
+    expect(r.steps[r.steps.length - 1]).toMatchObject({ type: 'memory_save', output: { saved: 1, dropped: '1 about the answer: its check failed' } });
+  });
+
+  it('drops what describes the answer when the run ended with an empty answer', async () => {
+    const r = run({ output: '' });
+    expect(await savedDuring(r)).toEqual([PREFERENCE]);
+  });
+
+  it('is committed by afterRun, also when nothing is saved on its own (save: asked)', async () => {
+    const { k, memoryAccounts } = keeper();
+    const r = run();
+    await k.store(agent({ enabled: true, save: 'asked' }), r, team, { content: PREFERENCE });
+    await k.afterRun(agent({ enabled: true, save: 'asked' }), r, team);
+    expect(memoryAccounts.put).toHaveBeenCalledTimes(1);
+    expect(r.workingMemory.pendingMemories).toEqual([]);
+  });
+
+  it('describesAnswer reads what an answer reported, listed or sent, not a plain preference', () => {
+    for (const t of [REPORTED, 'Listed W1 in the 2026-11-13 digest', 'Already sent the user the v26 release notes', 'Told the owner about #7560']) {
+      expect(describesAnswer(t)).toBe(true);
+    }
+    for (const t of [PREFERENCE, 'billing-service uses express 5.1.0', 'Dana prefers email']) expect(describesAnswer(t)).toBe(false);
   });
 });

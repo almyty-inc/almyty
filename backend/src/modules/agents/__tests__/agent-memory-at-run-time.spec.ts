@@ -166,6 +166,59 @@ describe("an agent's memory settings at run time", () => {
     ]);
   });
 
+  describe("what the agent saves during a run is kept only once the run completes", () => {
+    const REPORTED = 'Reported in the answer to the 2026-11-13 digest: W4402 "Quantum dots", W4403 "Spin chains".';
+    const config = { enabled: true, whose: 'agent', save: 'asked' };
+
+    it('a run that fails after a store_memory call leaves no "reported" memory behind', async () => {
+      const memoryAccounts = memoryDouble();
+      const seen = await runAgent({
+        models: single,
+        modelConfig: mainModelConfig,
+        // The save, then the provider fails on the next call: the run ends
+        // with no answer, as the staging research digest's did at its cost cap.
+        streams: { 'claude-sonnet-5': [anthropicTool('claude-sonnet-5', 'store_memory', { content: REPORTED, type: 'fact' }, 100, 12)] },
+        agent: { memoryConfig: config },
+        memoryAccounts,
+      });
+      expect(seen.run.status).toBe(AgentRunStatus.FAILED);
+      expect(seen.run.output ?? null).toBeNull();
+      // The model was told it was saved...
+      const call = seen.run.steps.find((st: any) => st.type === 'tool_call') as any;
+      expect(call.error ?? null).toBeNull();
+      expect(call.output).toContain('Saved');
+      // ...and nothing was written.
+      expect(memoryAccounts.put).not.toHaveBeenCalled();
+      expect(seen.run.steps.some((st: any) => st.type === 'memory_save')).toBe(false);
+    });
+
+    it('a run that completes with its answer writes the save, once however often it was made, after the answer', async () => {
+      const memoryAccounts = memoryDouble();
+      const seen = await runAgent({
+        models: single,
+        modelConfig: mainModelConfig,
+        streams: {
+          'claude-sonnet-5': [
+            anthropicTool('claude-sonnet-5', 'store_memory', { content: REPORTED, type: 'fact' }, 100, 12),
+            anthropicTool('claude-sonnet-5', 'store_memory', { content: `  ${REPORTED} ` }, 110, 12),
+            anthropicText('claude-sonnet-5', 130, ['W4402 Quantum dots; W4403 Spin chains.'], 9),
+          ],
+        },
+        agent: { memoryConfig: config },
+        memoryAccounts,
+      });
+      expect(seen.run.status).toBe(AgentRunStatus.COMPLETED);
+      expect(saves(memoryAccounts)).toEqual([
+        expect.objectContaining({ content: REPORTED, tier: 'long', scope: { scope_type: 'agent', scope_id: 'org-1:agent:agent-1' } }),
+      ]);
+      const stored = seen.runRepository.row('run-1')!;
+      const types = stored.steps.map((st: any) => st.type);
+      expect(types.indexOf('memory_save')).toBeGreaterThan(types.lastIndexOf('llm_call'));
+      expect(stored.steps.find((st: any) => st.type === 'memory_save')).toMatchObject({ input: { save: 'store_memory' }, output: { saved: 1 } });
+      expect(stored.workingMemory.pendingMemories).toEqual([]);
+    });
+  });
+
   describe('a visitor, per person', () => {
     it("is read their own memory, and nothing is saved while the visitor rules do not allow keeping it", async () => {
       const seen = await run({ enabled: true, whose: 'person', save: 'facts' }, [anthropicText('claude-sonnet-5', 100, [ANSWER], 8)], {

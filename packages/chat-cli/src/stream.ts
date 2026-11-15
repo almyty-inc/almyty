@@ -202,8 +202,12 @@ export function reduceStreamEvent(prev: StreamState, event: StreamEvent): Stream
       return s;
 
     case 'execution.completed': {
-      s.usage.cost += num(d.totalCost);
-      s.usage.tokens += num(d.totalTokens);
+      // The pipeline's totals are the sum of the node.completed figures
+      // already counted above, not more on top of them: adding them
+      // reported every workflow answer at twice its tokens and cost. They
+      // stand in only where node events were missed.
+      s.usage.cost = Math.max(s.usage.cost, num(d.totalCost));
+      s.usage.tokens = Math.max(s.usage.tokens, num(d.totalTokens));
       const output = formatOutput(d.output);
       if (output) s.output = output;
       s.done = true;

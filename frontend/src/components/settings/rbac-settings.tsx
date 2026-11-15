@@ -7,6 +7,7 @@
  * Business-tier upgrade prompt instead of a 402. Mirrors sso-settings.tsx.
  */
 import { Fragment, useMemo, useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -379,7 +380,7 @@ function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDon
   const guard = useLeaveGuard(form.formState.isDirty && !saveMutation.isPending)
 
   return (
-    <form
+    <Form
       onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))}
       className="space-y-4 rounded-lg border bg-muted/30 p-4"
       aria-label={editing ? `Edit role ${editing.name}` : 'New custom role'}
@@ -430,7 +431,7 @@ function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDon
         submitting={saveMutation.isPending}
       />
       {guard.element}
-    </form>
+    </Form>
   )
 }
 
@@ -746,7 +747,7 @@ function PolicyInlineForm({ onDone }: { onDone: () => void }) {
   const guard = useLeaveGuard(form.formState.isDirty && !saveMutation.isPending)
 
   return (
-    <form
+    <Form
       onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))}
       className="space-y-4 rounded-lg border bg-muted/30 p-4"
       aria-label="New access rule"
@@ -792,6 +793,6 @@ function PolicyInlineForm({ onDone }: { onDone: () => void }) {
       </Field>
       <InlineFormActions onCancel={onDone} submitLabel="Create rule" submitting={saveMutation.isPending} />
       {guard.element}
-    </form>
+    </Form>
   )
 }

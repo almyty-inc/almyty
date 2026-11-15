@@ -3,6 +3,7 @@
  * memories; "Add memory" opens an inline form at the top of the card.
  */
 import React, { useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
@@ -173,7 +174,7 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
         </CardHeader>
         <CardContent className="space-y-4">
           {addMemoryOpen && (
-            <form
+            <Form
               onSubmit={submit}
               noValidate
               aria-label="Add memory"
@@ -223,7 +224,7 @@ export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTa
                 submitLabel="Add memory"
                 submitting={addMemoryMutation.isPending}
               />
-            </form>
+            </Form>
           )}
           {error ? (
             <QueryError error={error} onRetry={onRetry} title="Couldn't load memories" />

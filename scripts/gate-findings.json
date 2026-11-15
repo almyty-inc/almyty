@@ -27,9 +27,9 @@
     "finding": "chat-cli: bare agent name refused after `almyty login`.",
     "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
   },
-  "reports a token count for an answer that completed": {
-    "finding": "chat-cli: bare agent name refused after `almyty login`.",
-    "rootCause": "packages/client/src/credentials.ts:96-111 + packages/chat-cli/src/index.tsx:60,71-73"
+  "reports the tokens the backend recorded for an answer that completed": {
+    "finding": "The smoke test asked the newest active agent, which on the shared QA org was another gate run's model-free workflow (J7/J8): 0 tokens was the true answer. chat-cli also printed a workflow answer's tokens and cost twice.",
+    "rootCause": "packages/cli-tests/cli-smoke.test.ts:116-120 (agent pick) + packages/chat-cli/src/stream.ts:209-210 (totals added on top of node figures)"
   },
   "--resume continues the conversation it is given": {
     "finding": "chat-cli: bare agent name refused after `almyty login`.",
