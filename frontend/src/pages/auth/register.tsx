@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/auth'
 import { referralsApi } from '@/lib/api'
 import { CaptchaWidget, isCaptchaEnabled } from '@/components/auth/captcha-widget'
 import { CheckEmail } from '@/components/auth/check-email'
+import { AuthAlert, AuthField, AuthHeading, PasswordInput } from '@/components/auth/auth-form'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 /** The documents the consent checkbox names, on the website. */
@@ -60,8 +61,6 @@ export function RegisterPage() {
     }
   }, [referralCode])
   const { register: registerUser, isLoading } = useAuthStore()
-  const [showPassword, setShowPassword] = React.useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
   const [captchaToken, setCaptchaToken] = React.useState('')
   const [captchaError, setCaptchaError] = React.useState(false)
   const [registerError, setRegisterError] = React.useState<string | null>(null)
@@ -125,171 +124,81 @@ export function RegisterPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-heading font-bold mb-6">Sign up</h1>
-      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div>
-          <Label htmlFor="firstName">First name</Label>
-          <div className="mt-1">
-            <Input
-              id="firstName"
-              type="text"
-              autoComplete="given-name"
-              placeholder="Enter your first name"
-              {...register('firstName')}
-              className={errors.firstName ? 'border-red-300' : ''}
-            />
-            {errors.firstName && (
-              <p className="mt-2 text-sm text-destructive">{errors.firstName.message}</p>
-            )}
-          </div>
+      <AuthHeading title="Sign up" lead="Create your account and your organization's workspace." />
+      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <div className="grid gap-5 sm:grid-cols-2 sm:gap-4">
+          <AuthField id="firstName" label="First name" error={errors.firstName?.message}>
+            <Input id="firstName" type="text" autoComplete="given-name" {...register('firstName')} />
+          </AuthField>
+          <AuthField id="lastName" label="Last name" error={errors.lastName?.message}>
+            <Input id="lastName" type="text" autoComplete="family-name" {...register('lastName')} />
+          </AuthField>
         </div>
 
-        <div>
-          <Label htmlFor="lastName">Last name</Label>
-          <div className="mt-1">
-            <Input
-              id="lastName"
-              type="text"
-              autoComplete="family-name"
-              placeholder="Enter your last name"
-              {...register('lastName')}
-              className={errors.lastName ? 'border-red-300' : ''}
-            />
-            {errors.lastName && (
-              <p className="mt-2 text-sm text-destructive">{errors.lastName.message}</p>
-            )}
-          </div>
-        </div>
+        <AuthField id="email" label="Email address" error={errors.email?.message}>
+          <Input id="email" type="email" autoComplete="email" placeholder="name@example.com" {...register('email')} />
+        </AuthField>
 
-        <div>
-          <Label htmlFor="email">Email address</Label>
-          <div className="mt-1">
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="Enter your email"
-              {...register('email')}
-              className={errors.email ? 'border-red-300' : ''}
-            />
-            {errors.email && (
-              <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
-            )}
-          </div>
-        </div>
+        <AuthField
+          id="organizationName"
+          label="Organization name"
+          hint={<>Your team&apos;s workspace in almyty. You can rename it later.</>}
+          error={errors.organizationName?.message}
+        >
+          <Input
+            id="organizationName"
+            type="text"
+            autoComplete="organization"
+            placeholder="Your company, team or your own name"
+            {...register('organizationName')}
+          />
+        </AuthField>
 
-        <div>
-          <Label htmlFor="organizationName">Organization name</Label>
-          <div className="mt-1">
-            <Input
-              id="organizationName"
-              type="text"
-              autoComplete="organization"
-              placeholder="Your company, team or your own name"
-              aria-describedby="organization-help"
-              {...register('organizationName')}
-              className={errors.organizationName ? 'border-red-300' : ''}
-            />
-            <p id="organization-help" className="mt-2 text-xs text-muted-foreground">
-              Your team&apos;s workspace in almyty. You can rename it later.
-            </p>
-            {errors.organizationName && (
-              <p className="mt-1 text-sm text-destructive">{errors.organizationName.message}</p>
-            )}
-          </div>
-        </div>
+        {/* The rules up front, not only after a password breaks them. */}
+        <AuthField id="password" label="Password" hint={PASSWORD_RULES} error={errors.password?.message}>
+          <PasswordInput id="password" autoComplete="new-password" {...register('password')} />
+        </AuthField>
 
-        <div>
-          <Label htmlFor="password">Password</Label>
-          <div className="mt-1 relative">
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete="new-password"
-              placeholder="Create a password"
-              aria-describedby="password-rules"
-              {...register('password')}
-              className={errors.password ? 'border-red-300' : ''}
+        <AuthField id="confirmPassword" label="Confirm password" error={errors.confirmPassword?.message}>
+          <PasswordInput id="confirmPassword" autoComplete="new-password" {...register('confirmPassword')} />
+        </AuthField>
+
+        <div className="space-y-1.5">
+          <div className="flex items-start gap-2">
+            <input
+              id="terms"
+              type="checkbox"
+              aria-invalid={errors.terms ? true : undefined}
+              aria-describedby={errors.terms ? 'terms-error' : undefined}
+              {...register('terms')}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-input accent-primary"
             />
-            <button
-              type="button"
-              className="absolute inset-y-0 right-0 pr-3 flex items-center"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <Eye className="h-4 w-4 text-muted-foreground" />
-              )}
-            </button>
+            <Label htmlFor="terms" className="text-sm font-normal leading-5 text-foreground">
+              {/* New tab, so following a link never loses what was typed here. */}
+              I agree to the{' '}
+              <a
+                href={TERMS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-primary underline-offset-2 hover:text-primary-hover hover:underline"
+              >
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a
+                href={PRIVACY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-primary underline-offset-2 hover:text-primary-hover hover:underline"
+              >
+                Privacy Policy
+              </a>
+            </Label>
           </div>
-          {/* The rules up front, not only after a password breaks them. */}
-          <p id="password-rules" className="mt-2 text-xs text-muted-foreground">{PASSWORD_RULES}</p>
-          {errors.password && (
-            <p className="mt-1 text-sm text-destructive">{errors.password.message}</p>
+          {errors.terms && (
+            <p id="terms-error" className="text-sm text-destructive">{errors.terms.message}</p>
           )}
         </div>
-
-        <div>
-          <Label htmlFor="confirmPassword">Confirm password</Label>
-          <div className="mt-1 relative">
-            <Input
-              id="confirmPassword"
-              type={showConfirmPassword ? 'text' : 'password'}
-              autoComplete="new-password"
-              placeholder="Confirm your password"
-              {...register('confirmPassword')}
-              className={errors.confirmPassword ? 'border-red-300' : ''}
-            />
-            <button
-              type="button"
-              className="absolute inset-y-0 right-0 pr-3 flex items-center"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-            >
-              {showConfirmPassword ? (
-                <EyeOff className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <Eye className="h-4 w-4 text-muted-foreground" />
-              )}
-            </button>
-            {errors.confirmPassword && (
-              <p className="mt-2 text-sm text-destructive">{errors.confirmPassword.message}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center">
-          <input
-            id="terms"
-            type="checkbox"
-            {...register('terms')}
-            className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
-          />
-          <Label htmlFor="terms" className="ml-2 block text-sm text-foreground">
-            {/* New tab, so following a link never loses what was typed here. */}
-            I agree to the{' '}
-            <a
-              href={TERMS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-primary hover:text-primary/80 underline-offset-2 hover:underline"
-            >
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a
-              href={PRIVACY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-primary hover:text-primary/80 underline-offset-2 hover:underline"
-            >
-              Privacy Policy
-            </a>
-          </Label>
-        </div>
-        {errors.terms && (
-          <p className="text-sm text-destructive">{errors.terms.message}</p>
-        )}
 
         {captchaEnabled && (
           <div>
@@ -302,52 +211,35 @@ export function RegisterPage() {
           </div>
         )}
 
-        <div>
-          {registerError && (
-            <div
-              role="alert"
-              aria-live="polite"
-              className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md"
-            >
-              <p className="text-sm text-destructive">{registerError}</p>
-            </div>
+        {registerError && <AuthAlert>{registerError}</AuthAlert>}
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isLoading}
+          aria-disabled={isLoading}
+          title={isLoading ? 'Creating your account…' : undefined}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              Creating account...
+            </>
+          ) : (
+            'Create account'
           )}
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isLoading}
-            aria-disabled={isLoading}
-            title={isLoading ? 'Creating your account…' : undefined}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                Creating account...
-              </>
-            ) : (
-              'Create account'
-            )}
-          </Button>
-        </div>
+        </Button>
       </Form>
 
-      <div className="mt-6">
-        {/* No OAuth providers are wired up yet — a bare divider here
-            used to read "Or continue with" followed by nothing. */}
-        <div className="border-t border-border" />
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Already have an account?{' '}
-            <Link
-              to="/auth/login"
-              className="font-medium text-primary hover:text-primary/80"
-            >
-              Sign in
-            </Link>
-          </p>
-        </div>
-      </div>
+      {/* No OAuth providers are wired up yet, so no "Or continue with". */}
+      <p className="mt-8 border-t pt-6 text-sm text-muted-foreground">
+        Already have an account?{' '}
+        <Link
+          to="/auth/login"
+          className="font-semibold text-primary hover:text-primary-hover"
+        >
+          Sign in
+        </Link>
+      </p>
     </div>
   )
 }

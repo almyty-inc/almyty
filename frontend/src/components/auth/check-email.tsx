@@ -53,12 +53,12 @@ export function CheckEmail({
 
   return (
     <div>
-      <div className="flex justify-center mb-4">
-        <MailCheck className="h-10 w-10 text-violet-500" aria-hidden />
+      <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-info-subtle">
+        <MailCheck className="h-6 w-6 text-primary" aria-hidden />
       </div>
-      <h1 className="text-2xl font-heading font-bold mb-2 text-center">{heading}</h1>
-      {lead && <p className="text-sm text-muted-foreground mb-2 text-center">{lead}</p>}
-      <p className="text-sm text-muted-foreground mb-6 text-center">
+      <h1 className="mb-2 font-heading text-[28px] font-bold leading-9 tracking-[-0.03em]">{heading}</h1>
+      {lead && <p className="text-sm text-muted-foreground mb-2">{lead}</p>}
+      <p className="text-sm text-muted-foreground mb-6">
         We sent a link to <span className="font-medium text-foreground">{email}</span>. Open it to
         confirm your address, then sign in.
       </p>
