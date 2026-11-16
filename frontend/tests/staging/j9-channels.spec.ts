@@ -179,6 +179,28 @@ async function askHostedChat(chat: Page, question: string): Promise<void> {
   await chat.getByRole('button', { name: 'Send' }).click()
 }
 
+/** How many of the agent's steps wait in Approvals right now. */
+async function pendingFor(qa: APIRequestContext, agentId: string): Promise<number> {
+  const pending = await data<any[]>(await qa.get('/approvals'))
+  return (pending ?? []).filter((a) => a.agentId === agentId).length
+}
+
+/** Approve the agent's held step in Approvals, as the QA user. */
+async function approveHeldStep(page: Page, agentName: string): Promise<void> {
+  await page.goto('/approvals')
+  const card = page
+    .locator('div')
+    .filter({ has: page.getByRole('link', { name: agentName, exact: true }) })
+    .filter({ has: page.getByRole('button', { name: 'Approve' }) })
+    .last()
+  await expect(card, 'the held step should be listed in Approvals').toBeVisible({ timeout: 60_000 })
+  await card.getByRole('button', { name: 'Approve' }).click()
+  const form = page.getByRole('form', { name: 'Approve this action' })
+  const decided = page.waitForResponse((r) => /\/approve$/.test(r.url()) && r.request().method() === 'POST')
+  await form.getByRole('button', { name: 'Approve' }).click()
+  expect((await decided).ok(), 'approving should be accepted').toBeTruthy()
+}
+
 test.describe('J9 channels', () => {
   test('J9 web chat on *.staging.almyty.app answers a visitor from the live tool', async ({ page, gate, qa, browser }) => {
     const agent = await weatherAgent(page, gate, 'webchat')
@@ -204,8 +226,14 @@ test.describe('J9 channels', () => {
 
   test('J9 web chat: an approval rule holds the tool call until the QA user approves it', async ({ page, gate, qa, browser }) => {
     // The agent always asks Open-Meteo for three days, so every forecast
-    // call carries forecast_days = 3.
-    const agent = await weatherAgent(page, gate, 'approval', 'forecast_days=3, and read the day asked from the list')
+    // call carries forecast_days = 3. Open-Meteo refuses forecast_days with
+    // start_date or end_date (400), so the agent is told to leave them out.
+    const agent = await weatherAgent(
+      page,
+      gate,
+      'approval',
+      'forecast_days=3 and no start_date or end_date, then read the day asked from the list',
+    )
     const toolIdent = `${agent.apiName.replace(/-/g, '_')}_get_v1_forecast`
 
     // Ask before the agent's own forecast tool runs with forecast_days over
@@ -244,25 +272,34 @@ test.describe('J9 channels', () => {
       'the visitor should be told the step waits for approval',
     ).toBeVisible({ timeout: 180_000 })
 
-    // The QA user approves it in Approvals.
-    await page.goto('/approvals')
-    const card = page
-      .locator('div')
-      .filter({ has: page.getByRole('link', { name: agent.agentName, exact: true }) })
-      .filter({ has: page.getByRole('button', { name: 'Approve' }) })
-      .last()
-    await expect(card, 'the held step should be listed in Approvals').toBeVisible({ timeout: 60_000 })
-    await card.getByRole('button', { name: 'Approve' }).click()
-    const form = page.getByRole('form', { name: 'Approve this action' })
-    const decided = page.waitForResponse((r) => /\/approve$/.test(r.url()) && r.request().method() === 'POST')
-    await form.getByRole('button', { name: 'Approve' }).click()
-    expect((await decided).ok(), 'approving should be accepted').toBeTruthy()
-
-    // The visitor then gets the answer.
-    const expected = await liveMax(day)
+    // The QA user approves it in Approvals, and every step the run holds
+    // after it. One approval is not always the end: a call that fails once
+    // approved is tried again with other arguments, and that call waits for
+    // its own approval (run 24cf5b70 in gate 261116145643: the model sent
+    // forecast_days with start_date, Open-Meteo answered 400, the retry was
+    // held, and the visitor rightly read "Waiting" until the test gave up).
     const reply = lastReply(chat)
+    const waiting = chat.getByRole('status').filter({ hasText: 'Waiting for a person on the team to approve this step.' })
+    const answered = reply.filter({ hasText: /\d\s*°/ })
+    for (let approved = 0; ; approved++) {
+      expect(approved, 'the run should not keep asking for approval').toBeLessThan(3)
+      await approveHeldStep(page, agent.agentName)
+      // Then either the answer comes, or the run holds another step: read
+      // from Approvals, not from the notice, which can come back faster than
+      // a check of the page would see it go.
+      await expect
+        .poll(
+          async () => ((await answered.isVisible()) ? 'answered' : (await pendingFor(qa, agent.agentId)) ? 'held' : 'working'),
+          { message: 'the visitor should get the answer once the step is approved', timeout: 180_000, intervals: [1_000] },
+        )
+        .not.toBe('working')
+      if (await answered.isVisible()) break
+    }
+
+    // The visitor then has the answer.
+    const expected = await liveMax(day)
     await expect(reply, 'the visitor should get the answer once the step is approved').toContainText(/\d\s*°/, { timeout: 180_000 })
-    await expect(chat.getByRole('status').filter({ hasText: 'Waiting for a person' })).toHaveCount(0)
+    await expect(waiting).toHaveCount(0)
     await expect(chat.getByRole('button', { name: 'Send' }).locator('svg.animate-spin')).toHaveCount(0, { timeout: 120_000 })
     expectTemperature(await reply.innerText(), expected, day, 'approved web chat')
   })
