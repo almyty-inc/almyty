@@ -46,22 +46,30 @@ describe('ToolDetailPage test run', () => {
     })
     render(<ToolDetailPage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Execute Tool/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Execute tool' }))
 
-    expect(await screen.findByText('Execution failed')).toBeInTheDocument()
+    expect(await screen.findByText('The run failed')).toBeInTheDocument()
     expect(screen.queryByText('Success')).not.toBeInTheDocument()
     expect(document.body).toHaveTextContent('Request failed with status code 400')
     expect(document.body).toHaveTextContent('Latitude must be in range')
+    // The failure is drawn with the danger status pair, not raw reds.
+    const result = screen.getByTestId('tool-run-result')
+    expect(result.className).toContain('bg-danger-subtle')
+    expect(result.className).not.toMatch(/red-\d/)
   })
 
   it('shows a successful run with its data', async () => {
     vi.mocked(toolsApi.execute).mockResolvedValue({ success: true, data: { daily: { temperature_2m_max: [12.3] } }, metadata: { executionTime: 42 } })
     render(<ToolDetailPage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Execute Tool/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Execute tool' }))
 
     expect(await screen.findByText('Success')).toBeInTheDocument()
     expect(document.body).toHaveTextContent('temperature_2m_max')
-    expect(document.body).toHaveTextContent('Executed in 42ms')
+    expect(document.body).toHaveTextContent('Ran in 42ms')
+    expect(screen.getByText('Response data:')).toBeInTheDocument()
+    const result = screen.getByTestId('tool-run-result')
+    expect(result.className).toContain('bg-success-subtle')
+    expect(result.className).not.toMatch(/green-\d/)
   })
 })

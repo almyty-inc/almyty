@@ -47,7 +47,7 @@ test.describe('J3 tools made by hand', () => {
 
     // A package that does not exist is a 404 upstream, and the page says Error.
     expect(await executeTool(panel, { pkg: `gate-${gate.runId}-no-such-package` })).toBe('Error')
-    await expect(panel.getByText(/HTTP Status:\s*404/)).toBeVisible()
+    await expect(panel.getByText(/HTTP status:\s*404/)).toBeVisible()
   })
 
   /** Make a JavaScript tool with one parameter `n`, run it with n = 7, and return what it showed. */
