@@ -130,6 +130,15 @@ function lookupKeys(id: string): string[] {
   return [k, k.replace(/^v(?=\d)/, ''), `v${k.replace(/^v(?=\d)/, '')}`];
 }
 
+/**
+ * A heading inside a "new" section that starts a part which is not new:
+ * "## Latest release", "## High-priority open issues" under a title
+ * "# nodejs/node - New releases and high-priority issues in last 1 day"
+ * (run 4ee3fad1, failed for the latest release and an issue it listed
+ * there). A sub-heading that names an item ("### v5.3.0") or says new does not.
+ */
+const NOT_NEW_PART = /\b(?:latest|issues?|pull requests?|prs?|open|high[- ]priority|older|previous|earlier)\b/i;
+
 /** The lines of each section of the answer whose heading says "new" ("## New releases", "**New issues**"). */
 function newSections(answer: string): Array<{ heading: string; lines: string[] }> {
   const lines = answer.split('\n');
@@ -144,6 +153,8 @@ function newSections(answer: string): Array<{ heading: string; lines: string[] }
       if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) break;
       const inner = headingLevel(line);
       if (inner !== null && (inner <= level || level === 7)) break;
+      // A direct part of the section, not deeper notes inside one item ("#### Issues fixed" under "### v5.3.0").
+      if (inner !== null && inner === level + 1 && !/\bnew\b/i.test(line) && !leadingIdentifier(line) && NOT_NEW_PART.test(line)) break;
       body.push(line);
     }
     out.push({ heading: lines[i].trim(), lines: body });

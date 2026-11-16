@@ -71,7 +71,8 @@ import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
 import { MACHINE_FAILED, type MachineProblem, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
-import { earlierReportedItems, forbidsRepeats, issueRuleOf, markAlreadyReported, markOutsideIssueRule, speaksOfEarlierReports } from './answer-checks';
+import { earlierReportedItems, forbidsRepeats, issueRuleOf, markAlreadyReported, markOutsideIssueRule, markRequestWindow, speaksOfEarlierReports } from './answer-checks';
+import { requestWindow } from './date-arithmetic';
 import { NO_ANSWER_CODES, NO_ANSWER_REASONS, NO_ANSWER_RETRIES, type NoAnswerKind, noAnswerError, noAnswerNudge, noAnswerOf } from './no-answer';
 import { stoppedAtOutputLimit } from '../llm-providers/output-limit';
 
@@ -3477,16 +3478,21 @@ export class AgentStepProcessor {
    * can say what the answer check will hold the answer to: for an agent
    * told to leave out what it already reported, the items its earlier
    * answers listed (markAlreadyReported); for an agent with a rule for
-   * which issues are problems, the issues it cannot let in
-   * (markOutsideIssueRule). Every other result is given as it is. The step
+   * which issues are problems, each issue's labels as a closed list and
+   * whether the rule lets it in (markOutsideIssueRule); for a request that
+   * names a window, whether each dated item is inside it
+   * (markRequestWindow). Every other result is given as it is. The step
    * keeps the result as the tool returned it.
    */
-  toolResultForModel(run: AgentRun, content: string): string {
+  toolResultForModel(run: AgentRun, content: string, now: Date = new Date()): string {
     let out = content;
     const items = run.workingMemory?.alreadyReportedList;
     if (Array.isArray(items) && items.length) out = markAlreadyReported(out, items).content;
     const labels = run.workingMemory?.issueRuleLabels;
     if (Array.isArray(labels)) out = markOutsideIssueRule(out, { labels: new Set<string>(labels) }).content;
+    const input = run.input as unknown;
+    const request = input && typeof input === 'object' && 'message' in (input as Record<string, unknown>) ? (input as Record<string, unknown>).message : input;
+    if (typeof request === 'string' && request.trim()) out = markRequestWindow(out, requestWindow([request], now)).content;
     return out;
   }
 
