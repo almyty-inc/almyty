@@ -9,18 +9,17 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Edit, ExternalLink, Plus, TestTube, Upload, Zap } from 'lucide-react'
+import { Edit, ExternalLink, FileCode, KeyRound, ListTree, Plus, TestTube, Upload, Wrench, Zap } from 'lucide-react'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ApiTypeBadge } from '@/components/ui/api-type-badge'
+import { StatTile } from '@/components/ui/stat-tile'
 
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { Api, ApiOperation, Tool } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { pluralized } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 import { connectionTestMessage } from '@/lib/connection-test'
 import { addToolPath } from './operations-tab'
 
@@ -59,95 +58,70 @@ export function OverviewTab({
   const [testResults, setTestResults] = useState<Record<string, unknown> | null>(null)
   const [testing, setTesting] = useState(false)
 
+  const hasSchema = !!api.schemas && api.schemas.length > 0
+  const downloadSchema = () => {
+    if (!api.schemas || api.schemas.length === 0) return
+    // Always download the original raw schema (the exact bytes the user
+    // uploaded). The parsed form is no longer persisted; users who want it
+    // can hit the on-demand parse endpoint via the schema viewer.
+    const rawText = api.schemas[0].rawSchema || (api.schemas[0] as any).content || ''
+    const blob = new Blob([rawText], { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = api.schemas[0].fileName || `${api.name}-schema.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  const inlineAction = 'h-auto p-0 text-xs font-semibold text-primary hover:bg-transparent hover:text-primary-hover'
+
   return (
     <>
-      {/* Info Cards - Redesigned */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">API content</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Operations</span>
-              <span className="font-bold">{operations.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tools generated</span>
-              {/* This API's tools only: /tools filters on apiId. */}
-              <Link
-                to={apiToolsPath(api)}
-                aria-label={`Show the ${pluralized(apiTools.length, 'tool')} of ${api.name}`}
-                className="font-bold text-blue-600 hover:underline"
-              >
-                {apiTools.length}
-              </Link>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Schema</span>
-              {api.schemas && api.schemas.length > 0 ? (
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" className="h-auto p-1 text-xs" onClick={onOpenSchemaViewer}>
-                    View
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto p-1 text-xs"
-                    onClick={() => {
-                      if (!api.schemas || api.schemas.length === 0) return
-                      // Always download the original raw schema (the
-                      // exact bytes the user uploaded). The parsed
-                      // form is no longer persisted; users who want
-                      // it can hit the on-demand parse endpoint via
-                      // the schema viewer.
-                      const rawText = api.schemas[0].rawSchema || (api.schemas[0] as any).content || ''
-                      const blob = new Blob([rawText], { type: 'application/octet-stream' })
-                      const url = URL.createObjectURL(blob)
-                      const a = document.createElement('a')
-                      a.href = url
-                      a.download = api.schemas[0].fileName || `${api.name}-schema.txt`
-                      a.click()
-                      URL.revokeObjectURL(url)
-                    }}
-                  >
-                    Download
-                  </Button>
-                </div>
-              ) : (
-                <span className="text-sm">Not uploaded</span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Configuration</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Type</span>
-              <ApiTypeBadge type={api.type} />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Version</span>
-              <span className="text-sm">{api.version || '1.0.0'}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Key</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-auto p-0 text-xs"
-                onClick={onOpenAuthConfig}
-              >
-                {AUTH_WORDS[api.authentication?.type ?? 'none'] ?? api.authentication?.type}
-                <Edit className="h-3 w-3 ml-1" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {/* What the API holds, at a glance: the same stat row as an agent's. */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="api-stats">
+        <StatTile icon={ListTree} label="Operations" value={operations.length} />
+        <StatTile
+          icon={Wrench}
+          label="Tools"
+          value={
+            // This API's tools only: /tools filters on apiId.
+            <Link
+              to={apiToolsPath(api)}
+              aria-label={`Show the ${pluralized(apiTools.length, 'tool')} of ${api.name}`}
+              className="text-primary hover:text-primary-hover hover:underline"
+            >
+              {apiTools.length}
+            </Link>
+          }
+        />
+        <StatTile
+          icon={FileCode}
+          label="Description"
+          value={<span className="text-base font-semibold">{hasSchema ? 'Imported' : 'Not uploaded'}</span>}
+          footer={
+            hasSchema ? (
+              <span className="flex gap-3">
+                <Button variant="ghost" size="sm" className={inlineAction} onClick={onOpenSchemaViewer}>
+                  View
+                </Button>
+                <Button variant="ghost" size="sm" className={inlineAction} onClick={downloadSchema}>
+                  Download
+                </Button>
+              </span>
+            ) : undefined
+          }
+        />
+        <StatTile
+          icon={KeyRound}
+          label="Key"
+          value={<span className="text-base font-semibold">{AUTH_WORDS[api.authentication?.type ?? 'none'] ?? api.authentication?.type}</span>}
+          footer={
+            <Button variant="ghost" size="sm" className={inlineAction} onClick={onOpenAuthConfig} aria-label="Change the key">
+              <Edit className="mr-1 h-3 w-3" aria-hidden />
+              Change
+            </Button>
+          }
+        />
       </div>
 
       {/* Quick Actions */}
@@ -239,19 +213,21 @@ export function OverviewTab({
 
       {/* Test Results: the sentence the server wrote, never the raw answer. */}
       {testResults && (
-        <Card className={testResults.success ? 'border-green-200 bg-green-50/50 dark:border-green-500/30 dark:bg-green-500/10' : 'border-red-200 bg-red-50/50 dark:border-destructive/30 dark:bg-destructive/10'}>
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">Test results</h3>
-                <Badge variant={testResults.success ? 'default' : 'destructive'}>
-                  {testResults.success ? 'Reachable' : 'Failed'}
-                </Badge>
-              </div>
-              <p className="text-sm" data-testid="connection-test-message">{connectionTestMessage(testResults)}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div
+          data-testid="connection-test-result"
+          className={cn(
+            'rounded-xl border p-4',
+            testResults.success ? 'border-success-border bg-success-subtle' : 'border-danger-border bg-danger-subtle',
+          )}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Test results</h3>
+            <Badge variant={testResults.success ? 'success' : 'destructive'}>
+              {testResults.success ? 'Reachable' : 'Failed'}
+            </Badge>
+          </div>
+          <p className="mt-2 text-sm" data-testid="connection-test-message">{connectionTestMessage(testResults)}</p>
+        </div>
       )}
     </>
   )

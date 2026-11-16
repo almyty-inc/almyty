@@ -60,6 +60,19 @@ describe('OperationsTab (inline operation details)', () => {
     { id: 'op-2', name: 'Create order', method: 'POST', path: '/orders', parameters: [] },
   ] as unknown as ApiOperation[]
 
+  it('filters by method with a segmented control, one method at a time', async () => {
+    const user = userEvent.setup()
+    render(<OperationsTab api={API} operations={ops} apiTools={[]} onOpenSchemaImport={vi.fn()} />)
+    const filter = screen.getByRole('tablist', { name: 'Filter by method' })
+    expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true')
+
+    await user.click(screen.getByRole('tab', { name: 'POST' }))
+    expect(screen.getByRole('tab', { name: 'POST' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('button', { name: /GET \/orders List orders/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /POST \/orders Create order/ })).toBeInTheDocument()
+    expect(filter).toBeInTheDocument()
+  })
+
   it('expands an operation in place with its full endpoint', async () => {
     const user = userEvent.setup()
     render(<OperationsTab api={API} operations={ops} apiTools={[]} onOpenSchemaImport={vi.fn()} />)
