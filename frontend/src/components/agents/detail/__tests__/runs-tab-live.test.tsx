@@ -173,7 +173,8 @@ describe('the runs tab, live', () => {
     expect(screen.getAllByTestId(/^run-step-\d+$/).map((el) => el.getAttribute('data-testid'))).toEqual(['run-step-0', 'run-step-1', 'run-step-2'])
     expect(screen.getAllByText(/answer 1/)).toHaveLength(1)
     expect(await screen.findByText('Refund issued.')).toBeInTheDocument()
-  })
+    // It waits out a real reconnect delay: room for a loaded machine.
+  }, 15000)
 
   it('says it is live as soon as the stream is open, before anything has happened', async () => {
     // An open stream on which nothing arrives yet.

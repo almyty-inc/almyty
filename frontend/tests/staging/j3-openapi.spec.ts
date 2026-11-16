@@ -50,7 +50,7 @@ test.describe('J3 connect an API by OpenAPI link', () => {
     const params = { ...BERLIN, daily: 'temperature_2m_max', timezone: 'Europe/Berlin', forecast_days: '3' }
     const [outcome, direct] = await Promise.all([executeTool(panel, params), forecast(params)])
     expect(outcome, 'a real forecast call should show Success').toBe('Success')
-    await expect(panel.getByText(/^Executed in \d+ms$/)).toBeVisible()
+    await expect(panel.getByText(/^Ran in \d+ms$/)).toBeVisible()
     const shown = await responseData(panel)
     const body = shown?.body ?? shown?.data ?? shown
     expect(body.daily.time).toEqual(direct.daily.time)
@@ -59,7 +59,7 @@ test.describe('J3 connect an API by OpenAPI link', () => {
     // Open-Meteo answers 400 for an impossible latitude: the page must say Error.
     const failed = await executeTool(panel, { latitude: '999' })
     expect(failed, 'an upstream 400 must not show as Success').toBe('Error')
-    await expect(panel.getByText(/HTTP Status:\s*400/)).toBeVisible()
+    await expect(panel.getByText(/HTTP status:\s*400/)).toBeVisible()
   })
 
   test('J3 Tools generated lists only this API\'s tools, and Test connection is Reachable', async ({ page, gate }) => {

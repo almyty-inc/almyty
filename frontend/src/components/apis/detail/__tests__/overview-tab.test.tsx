@@ -84,4 +84,26 @@ describe('OverviewTab', () => {
     expect(screen.getByRole('button', { name: 'Regenerate tools' })).toBeInTheDocument()
     expect(screen.queryByText(/Re-generate Tools/)).not.toBeInTheDocument()
   })
+
+  it('colours the test result with the status tokens, not raw greens and reds', async () => {
+    vi.mocked(apisApi.testConnection).mockResolvedValue({ success: true, message: 'Reachable in 40 ms.' })
+    renderOverview()
+    fireEvent.click(screen.getByRole('button', { name: /Test connection/ }))
+    const result = await screen.findByTestId('connection-test-result')
+    expect(result.className).toContain('bg-success-subtle')
+    expect(result.className).not.toMatch(/green-|red-/)
+  })
+
+  it('sums the API up in one stat row: operations, tools, description and key', () => {
+    renderOverview()
+    const stats = screen.getByTestId('api-stats')
+    expect(stats).toHaveTextContent('Operations1')
+    expect(stats).toHaveTextContent('Tools1')
+    expect(stats).toHaveTextContent('DescriptionNot uploaded')
+    expect(stats).toHaveTextContent('KeyNone')
+    expect(screen.getByRole('button', { name: 'Change the key' })).toBeInTheDocument()
+    // The old label/value cards are gone.
+    expect(screen.queryByText('API content')).not.toBeInTheDocument()
+    expect(screen.queryByText('Configuration')).not.toBeInTheDocument()
+  })
 })

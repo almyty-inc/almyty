@@ -63,6 +63,11 @@ const VISIBILITY_LABEL = {
   org: { label: 'Everyone', Icon: Globe },
 } as const
 
+/** One segment of the Workflow/Autonomous control, as the shared segmented tabs draw it. */
+const MODE_SEGMENT = 'flex-1 sm:flex-none h-8 rounded-md px-3 text-sm font-semibold transition-colors duration-[120ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+const MODE_SEGMENT_ON = 'bg-card text-foreground shadow-sm'
+const MODE_SEGMENT_OFF = 'text-muted-foreground hover:text-foreground'
+
 export function BuilderToolbar({
   agentName,
   onAgentNameChange,
@@ -97,9 +102,11 @@ export function BuilderToolbar({
         </Button>
         <Input
           // Sized to the name (within bounds) so the status and visibility
-          // sit next to it instead of after a fixed 260px gap.
+          // sit next to it instead of after a fixed 260px gap. It reads as
+          // the page title, and still shows a field outline on hover and a
+          // focus ring, so it is visibly editable.
           className={cn(
-            'text-base sm:text-lg font-semibold border-none shadow-none focus-visible:ring-0 min-w-[8ch] max-w-[140px] sm:max-w-[320px] px-1',
+            'h-10 min-w-[8ch] max-w-[160px] border-transparent bg-transparent px-2 font-heading text-lg font-bold tracking-[-0.02em] shadow-none hover:border-input hover:bg-transparent sm:max-w-[360px] sm:text-xl',
             nameError && 'text-destructive',
           )}
           style={{ width: `${Math.max(8, agentName.length + 2)}ch` }}
@@ -144,12 +151,13 @@ export function BuilderToolbar({
         role="group"
         aria-label="Agent mode"
         data-testid="agent-mode-toggle"
-        className="order-last flex min-w-[10rem] flex-1 items-center gap-1 bg-muted rounded-md p-0.5 sm:order-none sm:mr-2 sm:min-w-0 sm:flex-none"
+        className="order-last flex min-w-[10rem] flex-1 items-center gap-1 rounded-lg bg-muted p-1 sm:order-none sm:mr-2 sm:min-w-0 sm:flex-none"
       >
+        {/* The segmented control's look: the picked mode sits on the card surface. */}
         <button
           type="button"
           aria-pressed={agentMode === 'workflow'}
-          className={cn('flex-1 sm:flex-none px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'workflow' ? 'bg-background dark:bg-input shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
+          className={cn(MODE_SEGMENT, agentMode === 'workflow' ? MODE_SEGMENT_ON : MODE_SEGMENT_OFF)}
           onClick={() => onAgentModeChange('workflow')}
         >
           Workflow
@@ -157,7 +165,7 @@ export function BuilderToolbar({
         <button
           type="button"
           aria-pressed={agentMode === 'autonomous'}
-          className={cn('flex-1 sm:flex-none px-2 py-1 text-xs rounded font-medium transition-colors', agentMode === 'autonomous' ? 'bg-background dark:bg-input shadow text-foreground' : 'text-muted-foreground hover:text-foreground')}
+          className={cn(MODE_SEGMENT, agentMode === 'autonomous' ? MODE_SEGMENT_ON : MODE_SEGMENT_OFF)}
           onClick={() => onAgentModeChange('autonomous')}
         >
           Autonomous
@@ -167,7 +175,6 @@ export function BuilderToolbar({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
           onClick={undo}
           disabled={!canUndo}
           aria-label="Undo"
@@ -178,7 +185,6 @@ export function BuilderToolbar({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
           onClick={redo}
           disabled={!canRedo}
           aria-label="Redo"
@@ -216,13 +222,16 @@ export function BuilderToolbar({
             <span className="hidden sm:inline">Settings</span>
           </Button>
         )}
+        {/* On a phone these two show their icon only: the name stays on the
+            button through aria-label, or it would be read as nothing. */}
         {isEditing && (
           <Button
             variant="outline"
             size="sm"
             onClick={onToggleTestPanel}
+            aria-label="Test"
           >
-            <Play className="h-4 w-4 sm:mr-2" />
+            <Play className="h-4 w-4 sm:mr-2" aria-hidden="true" />
             <span className="hidden sm:inline">Test</span>
           </Button>
         )}
@@ -230,12 +239,13 @@ export function BuilderToolbar({
           size="sm"
           onClick={onSave}
           disabled={isSaving || saveDisabled}
+          aria-label="Save"
           title={saveDisabled ? 'Finish the steps listed above to save' : undefined}
         >
           {isSaving ? (
-            <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />
+            <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" aria-hidden="true" />
           ) : (
-            <Save className="h-4 w-4 sm:mr-2" />
+            <Save className="h-4 w-4 sm:mr-2" aria-hidden="true" />
           )}
           <span className="hidden sm:inline">Save</span>
         </Button>
