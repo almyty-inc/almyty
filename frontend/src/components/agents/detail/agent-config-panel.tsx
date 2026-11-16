@@ -43,11 +43,11 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Cpu className="h-4 w-4 text-primary" /> Models &amp; verification
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {!editingVerify && (
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setEditingVerify(true)}>
                 <Settings2 className="h-3.5 w-3.5" />

@@ -74,7 +74,7 @@ export function formFromEffective(effective: EffectiveSettings): PublicSettingsF
   const r = effective.visitorRules
   return {
     appName: b.appName ?? '',
-    primaryColor: b.primaryColor ?? '#8b5cf6',
+    primaryColor: b.primaryColor ?? '#1469EC',
     theme: b.theme ?? 'auto',
     iconFileId: b.iconFileId ?? null,
     logoUrl: b.logoUrl ?? null,

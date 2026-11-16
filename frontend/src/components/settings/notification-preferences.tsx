@@ -183,7 +183,7 @@ export function NotificationPreferences() {
                             <p className="mt-0.5 text-xs text-muted-foreground">Always shown in the app</p>
                           )}
                           {emailLocked && (
-                            <p className="mt-0.5 text-xs text-cyan-600 dark:text-cyan-400">
+                            <p className="mt-0.5 text-xs text-info">
                               Security notices are always emailed
                             </p>
                           )}

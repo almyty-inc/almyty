@@ -37,6 +37,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { pluralized } from '@/lib/utils'
 
+/**
+ * The row menu column ("actions") is pinned to the table's right edge, so on
+ * a phone each row's menu stays on screen while the other columns scroll.
+ */
+export const PINNED_ACTIONS = 'sticky right-0 z-[1] bg-card text-right'
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
@@ -134,7 +139,8 @@ export function DataTable<TData, TValue>({
   return (
     <div className="w-full">
       {(searchKey || headerExtra || !hideColumnsButton) && (
-      <div className="flex items-center py-4">
+      // Wraps on a phone, so filters and Columns never push the page wider than the screen.
+      <div className="flex flex-wrap items-center gap-3 py-4" data-testid="data-table-header">
         {searchKey && (
           <Input
             placeholder={searchPlaceholder}
@@ -183,7 +189,7 @@ export function DataTable<TData, TValue>({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id}>
+                    <TableHead key={header.id} className={header.column.id === 'actions' ? PINNED_ACTIONS : undefined}>
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -228,7 +234,7 @@ export function DataTable<TData, TValue>({
                   className={onRowClick ? "cursor-pointer hover:bg-muted" : ""}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} className={cell.column.id === 'actions' ? PINNED_ACTIONS : undefined}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()

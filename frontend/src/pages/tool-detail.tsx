@@ -276,10 +276,10 @@ export function ToolDetailPage() {
         <SideEffectCard tool={tool} organizationId={currentOrganization!.id} canEdit />
 
         {tool.runnerConfig ? (
-          <Card className="border-cyan-200 dark:border-cyan-900">
+          <Card className="border-teal-200 dark:border-teal-900">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Server className="h-4 w-4 text-cyan-500" />
+                <Server className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                 Runner-backed tool
               </CardTitle>
               <CardDescription className="text-xs">
@@ -292,7 +292,7 @@ export function ToolDetailPage() {
                 <Button
                   variant="link"
                   size="sm"
-                  className="h-auto p-0 font-mono text-cyan-600 dark:text-cyan-400"
+                  className="h-auto p-0 font-mono text-teal-700 dark:text-teal-300"
                   onClick={() => navigate(`/runners/${tool.runnerConfig!.runnerId}`)}
                 >
                   {tool.runnerConfig.runnerName}
@@ -435,9 +435,9 @@ export function ToolDetailPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {requiresWorkspace && (
-                <div className="space-y-2 border rounded-md p-4 bg-cyan-500/5 border-cyan-200 dark:border-cyan-900">
+                <div className="space-y-2 border rounded-md p-4 bg-teal-500/5 border-teal-200 dark:border-teal-900">
                   <Label className="flex items-center gap-2">
-                    <Server className="h-4 w-4 text-cyan-500" />
+                    <Server className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                     Workspace <span className="text-red-500">*</span>
                   </Label>
                   <p className="text-xs text-muted-foreground">
@@ -752,7 +752,7 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-purple-500" />
+              <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               <CardTitle className="text-sm">Agent Skills</CardTitle>
               <Badge variant="outline" className="text-[10px]">{skillsGateway.name}</Badge>
             </div>
@@ -798,7 +798,7 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-violet-500" />
+              <Zap className="h-5 w-5 text-primary" />
               <CardTitle className="text-sm">MCP</CardTitle>
               <Badge variant="outline" className="text-[10px]">{mcpGateway.name}</Badge>
             </div>
@@ -859,7 +859,7 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <Bot className="h-5 w-5 text-cyan-500" />
+              <Bot className="h-5 w-5 text-teal-600 dark:text-teal-400" />
               <CardTitle className="text-sm">A2A</CardTitle>
               <Badge variant="outline" className="text-[10px]">{gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.name}</Badge>
             </div>

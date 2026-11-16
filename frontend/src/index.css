@@ -1,92 +1,77 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+/* The design system's semantic tokens (--am-*) and the bridge to the
+   shadcn HSL names every component reads (--primary, --border, ...).
+   Copied verbatim from the design-system package's generated tokens.css:
+   regenerate there and copy again rather than editing values here. */
+@import "./styles/tokens.css";
 @config "../tailwind.config.js";
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 240 6% 3%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 6% 3%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 6% 3%;
-    --primary: 262 83% 58%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 3%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 6% 3%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 90%;
-    --input: 240 5% 84%;
-    --ring: 262 83% 58%;
-    --radius: 0.5rem;
-    /* Fill of inputs, selects and outline buttons. */
-    --field: 0 0% 100%;
-    --field-hover: 240 5% 96%;
-  }
-
-  .dark {
-    --background: 240 6% 3%;
-    --foreground: 0 0% 98%;
-    --card: 240 6% 10%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 6% 10%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 262 83% 66%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 17%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 5% 17%;
-    --muted-foreground: 240 4% 64%;
-    --accent: 240 5% 17%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 5% 17%;
-    --input: 240 4% 26%;
-    --ring: 262 83% 66%;
-    /* Inputs and outline buttons sit on the page (zinc-950) and on cards
-       (zinc-900). A translucent zinc-700 reads as a raised field on both;
-       an opaque --background made them black holes on a card. */
-    --field: 240 4% 26% / 0.35;
-    --field-hover: 240 4% 26% / 0.7;
-  }
-}
 
 @layer base {
   * {
     @apply border-border;
   }
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--am-font-interface);
     @apply bg-background text-foreground antialiased;
+  }
+  code, kbd, samp, pre {
+    font-family: var(--am-font-mono);
+  }
+  /* Inputs on a touch pointer use 16px text so iOS does not zoom the page
+     on focus. */
+  @media (pointer: coarse) {
+    input, select, textarea {
+      font-size: max(1rem, 1em);
+    }
   }
 }
 
-@layer utilities {
-  .btn-gradient {
-    background: linear-gradient(135deg, #8b5cf6 0%, #22d3ee 100%);
-    color: white;
-    transition: opacity 0.15s, box-shadow 0.15s;
-  }
-  .btn-gradient:hover {
-    opacity: 0.9;
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
-  }
-  .text-gradient {
-    background: linear-gradient(135deg, #8b5cf6 0%, #22d3ee 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .sidebar-active {
-    border-left: 2px solid transparent;
-    border-image: linear-gradient(to bottom, #8b5cf6, #22d3ee) 1;
-  }
+/* Gradients are accents only: the original mark, short strips and the
+   product field around a showcased surface. Text, data and controls stay
+   on opaque surfaces; default actions are solid primary. */
+@utility bg-accent-gradient {
+  background-image: var(--am-gradient-accent);
+}
+@utility bg-product-field {
+  background-image: var(--am-gradient-product);
+}
+@utility shadow-panel {
+  box-shadow: var(--am-shadow-panel);
+}
+@utility shadow-menu {
+  box-shadow: var(--am-shadow-menu);
+}
+/* Paired status surfaces: foreground and background from one semantic
+   tone, so colour never stands alone and dark mode follows. Add
+   `border border-tone` for the tone's own edge. */
+@utility tone-info {
+  color: var(--am-status-info-text);
+  background-color: var(--am-status-info-surface);
+  --tone-border: var(--am-status-info-border);
+}
+@utility tone-success {
+  color: var(--am-status-success-text);
+  background-color: var(--am-status-success-surface);
+  --tone-border: var(--am-status-success-border);
+}
+@utility tone-warning {
+  color: var(--am-status-warning-text);
+  background-color: var(--am-status-warning-surface);
+  --tone-border: var(--am-status-warning-border);
+}
+@utility tone-danger {
+  color: var(--am-status-danger-text);
+  background-color: var(--am-status-danger-surface);
+  --tone-border: var(--am-status-danger-border);
+}
+@utility tone-neutral {
+  color: var(--am-status-neutral-text);
+  background-color: var(--am-status-neutral-surface);
+  --tone-border: var(--am-status-neutral-border);
+}
+@utility border-tone {
+  border-color: var(--tone-border, var(--am-border-subtle));
 }
 
 /* Subtle card shadow improvement for consistency */

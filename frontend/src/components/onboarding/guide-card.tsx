@@ -25,7 +25,7 @@ export function GuideCard({ state, onDismiss }: GuideCardProps) {
   const total = ALL_STEPS.length
 
   return (
-    <Card className="border-t-2 border-t-violet-500/20" data-testid="guide-card">
+    <Card data-testid="guide-card">
       <CardContent className="space-y-4 pt-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -34,7 +34,7 @@ export function GuideCard({ state, onDismiss }: GuideCardProps) {
               {done} of {pluralized(total, 'step')} done across the platform.{' '}
               <Link
                 to="/guide"
-                className="font-medium text-violet-600 hover:underline dark:text-violet-400"
+                className="font-medium text-selection-foreground hover:underline"
                 data-testid="guide-card-open"
               >
                 Open the guide

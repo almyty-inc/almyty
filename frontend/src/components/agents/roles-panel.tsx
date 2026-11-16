@@ -117,7 +117,7 @@ export function RolesPanel({
                 variant="outline"
                 className={cn(
                   'shrink-0 gap-1',
-                  pinned ? 'border-violet-500/40 text-violet-600 dark:text-violet-400' : 'border-cyan-500/40 text-cyan-600 dark:text-cyan-400',
+                  pinned ? 'border-primary/40 text-primary' : 'border-teal-600/40 text-teal-700 dark:border-teal-400/40 dark:text-teal-300',
                 )}
               >
                 {pinned ? <Pin className="h-3 w-3" aria-hidden="true" /> : <Route className="h-3 w-3" aria-hidden="true" />}

@@ -9,8 +9,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Play,
   Loader2,
-  CheckCircle2,
-  XCircle,
   Calculator,
   History,
   Clock,
@@ -53,12 +51,13 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
-import { execStatusVariant, runStatusVariant, diffObjects, formatDiffValue } from './constants'
+import { diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
 import { DeliveryNote, ScheduleCard } from './schedule-card'
-import { WaitingApprovalNote, runStatusLabel } from './waiting-approval'
+import { WaitingApprovalNote } from './waiting-approval'
+import { RunStatusBadge } from './run-status-badge'
 import { AlwaysOnCard } from './always-on-card'
 import { AccessCard } from './access-card'
 import { AssistantMarkdown } from '@/components/hosted-chat/assistant-markdown'
@@ -446,16 +445,13 @@ export function OverviewTab({
                       }}
                     >
                       <TableCell>
-                        <Badge variant={(row.kind === 'run' ? runStatusVariant[row.status] : execStatusVariant[row.status]) || 'secondary'}>
-                          {row.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                          {row.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
-                          {runStatusLabel(row.status)}
-                        </Badge>
+                        <RunStatusBadge status={row.status} />
                         <UnverifiedNote run={row.kind === 'run' ? row.run : row.exec} compact />
                         <DeliveryNote outcome={(row.kind === 'run' ? row.run.metadata : row.exec.metadata)?.channelDelivery} />
                         <WaitingApprovalNote run={(row.kind === 'run' ? row.run : row.exec) as { status: string; error?: string | null }} />
                       </TableCell>
-                      <TableCell className="max-w-[320px]">
+                      {/* A model id never breaks mid-name: on a phone the table scrolls instead. */}
+                      <TableCell className="max-w-[320px] whitespace-nowrap">
                         {row.kind === 'execution' ? (
                           <ExecutionRouting nodeResults={row.exec.nodeResults} cardNames={cardNames} />
                         ) : (

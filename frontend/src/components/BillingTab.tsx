@@ -282,7 +282,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                 )}
               >
                 Annual
-                <span className="ml-1.5 text-xs text-cyan-600 dark:text-cyan-400">Save 17%</span>
+                <span className="ml-1.5 text-xs text-teal-700 dark:text-teal-300">Save 17%</span>
               </button>
             </div>
           </div>
@@ -315,7 +315,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                         </span>
                       </div>
                       {annual ? (
-                        <p className="text-sm text-cyan-600 dark:text-cyan-400">
+                        <p className="text-sm text-teal-700 dark:text-teal-300">
                           {formatUsd(annualPrice)}/yr instead of {formatUsd(fullYear)}, 2 months free
                         </p>
                       ) : (
