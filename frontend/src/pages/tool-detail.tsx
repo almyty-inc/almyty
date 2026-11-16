@@ -564,7 +564,7 @@ export function ToolDetailPage() {
                       <div className="space-y-3">
                         <p className="text-sm text-destructive font-semibold">The run failed</p>
                         <div className="space-y-3 text-xs">
-                          <div className="rounded-lg bg-background p-3 space-y-2">
+                          <div className="rounded-lg bg-card p-3 space-y-2">
                             <p className="text-destructive"><strong>Error:</strong> {executionResult.error || executionResult.message || 'Unknown error'}</p>
                             {executionResult.statusCode && (
                               <p><strong>HTTP status:</strong> {executionResult.statusCode}</p>
