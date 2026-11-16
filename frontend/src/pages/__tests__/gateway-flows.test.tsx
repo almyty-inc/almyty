@@ -147,7 +147,7 @@ describe('/gateways/new: create gateway', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Create gateway' })).toBeInTheDocument()
     await screen.findByTestId('share-api-api-1')
     const tiles = within(screen.getByRole('list', { name: 'Protocol' })).getAllByRole('button').map((b) => b.textContent)
-    expect(tiles).toEqual(['MCPClaude Code, Cursor', 'UTCPAny UTCP client', 'SkillsSKILL.md for agents'])
+    expect(tiles).toEqual(['MCPAny MCP client', 'UTCPAny UTCP client', 'SkillsSKILL.md for agents'])
     // Nothing picked for you: the protocol is an explicit choice.
     for (const p of ['mcp', 'utcp', 'skills']) expect(screen.getByTestId(`gateway-protocol-${p}`)).toHaveAttribute('aria-pressed', 'false')
     expect(screen.queryByRole('radio', { name: /^Agent/ })).toBeNull()

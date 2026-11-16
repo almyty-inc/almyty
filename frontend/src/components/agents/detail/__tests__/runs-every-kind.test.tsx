@@ -62,15 +62,32 @@ describe('every run, on the Runs tab and in Recent runs', () => {
 
   it('lists workflow runs with autonomous ones, newest first, and opens a workflow run step by step', () => {
     renderWithProviders(
-      <RunsTab runs={[run('r-1', '2026-11-10T10:00:00Z')]} executions={[exec('e-1', '2026-11-10T11:00:00Z')]} agentId="a-1" openRunId="e-1" />,
+      <RunsTab runs={[run('r-1', '2026-11-10T10:00:00Z')]} executions={[exec('e-1', '2026-11-10T11:00:00Z')]} agentId="a-1" />,
     )
     const rows = screen.getAllByRole('button').filter((r) => r.tagName === 'TR')
     expect(rows).toHaveLength(2)
     expect(rows[0]).toHaveAttribute('data-testid', 'execution-row-e-1')
-    // Opened from a link to /agents/:id/runs/e-1.
+    fireEvent.click(rows[0])
     const detail = screen.getByTestId('execution-detail-e-1')
     expect(within(detail).getByText('gpt-4o-mini', { selector: 'span' })).toBeInTheDocument()
     expect(within(detail).getByText('Model call')).toBeInTheDocument()
+  })
+
+  // An opened run used to sit inside its table row, squeezed into a
+  // scrolled cell between the other rows. It now takes the tab's width in
+  // place of the list, with the way back above it.
+  it('opens a run in place of the list, full width, with the way back to all runs', () => {
+    renderWithProviders(
+      <RunsTab runs={[run('r-1', '2026-11-10T10:00:00Z')]} executions={[exec('e-1', '2026-11-10T11:00:00Z')]} agentId="a-1" openRunId="e-1" />,
+    )
+    const opened = screen.getByTestId('opened-run-e-1')
+    expect(opened.closest('table')).toBeNull()
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(within(opened).getByTestId('opened-run-facts')).toHaveTextContent('Steps')
+
+    fireEvent.click(screen.getByRole('button', { name: 'All runs' }))
+    expect(screen.queryByTestId('opened-run-e-1')).toBeNull()
+    expect(screen.getAllByRole('button').filter((r) => r.tagName === 'TR')).toHaveLength(2)
   })
 
   it("shows the model of a workflow run whose steps were pinned, and a row opens the run", () => {
@@ -162,6 +179,8 @@ describe('the run view renders an answer like Try it', () => {
     const output = within(screen.getByTestId('execution-detail-e-1')).getByTestId('run-output')
     expect(await within(output).findByRole('table', undefined, { timeout: 15000 })).toBeInTheDocument()
 
+    // Back to the list, then the other run.
+    fireEvent.click(screen.getByRole('button', { name: 'All runs' }))
     fireEvent.click(screen.getByTestId('execution-row-e-2'))
     expect(within(screen.getByTestId('execution-detail-e-2')).getByTestId('run-output')).toHaveTextContent('"total": 40')
   }, 20000)

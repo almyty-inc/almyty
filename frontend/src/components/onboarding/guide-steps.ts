@@ -67,7 +67,7 @@ export const JOURNEYS: Journey[] = [
     id: 'api',
     title: 'Give an AI your API',
     summary:
-      'Turn an API you already have into tools that Claude Code, Cursor or any MCP client can call.',
+      'Turn an API you already have into tools that AI assistants, coding tools and any MCP client can call.',
     icon: Globe,
     steps: [
       {
@@ -96,7 +96,7 @@ export const JOURNEYS: Journey[] = [
       },
       {
         key: 'external_client',
-        title: 'Connect Claude Code, Cursor or another MCP client',
+        title: 'Connect an MCP client',
         description: (s) =>
           s.links.gateway
             ? `Run the command for ${s.links.gateway.name} and its tools show up in the client. Done when a call from outside almyty reaches the gateway.`

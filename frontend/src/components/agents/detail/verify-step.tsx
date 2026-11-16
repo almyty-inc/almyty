@@ -194,12 +194,12 @@ export function VerifySummary({ run }: { run: AgentRun }) {
   return (
     <div
       data-testid="verify-summary"
-      className={`flex items-start gap-2 p-2 rounded text-xs ${
+      className={`flex items-start gap-2 rounded-lg border p-3 text-sm ${
         passed
-          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+          ? 'border-success-border bg-success-subtle text-success'
           : unavailable
-            ? 'bg-amber-500/10 text-amber-800 dark:text-amber-200'
-            : 'bg-destructive/10 text-destructive'
+            ? 'border-warning-border bg-warning-subtle text-warning'
+            : 'border-danger-border bg-danger-subtle text-danger'
       }`}
     >
       {passed ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : unavailable ? <ShieldAlert className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}

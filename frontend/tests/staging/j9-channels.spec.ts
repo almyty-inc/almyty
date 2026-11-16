@@ -118,14 +118,16 @@ async function weatherAgent(
 }
 
 /**
- * Channels tab › Add channel › the kind. Lands on the channel's page and
- * registers the channel for deletion (deleting it takes its gateway down).
+ * Channels tab › Add channel › the kind › Add channel. Picking the kind only
+ * selects it; the button adds it. Lands on the channel's page and registers
+ * the channel for deletion (deleting it takes its gateway down).
  */
 async function addChannel(page: Page, gate: Gate, qa: APIRequestContext, agent: WeatherAgent, kind: 'web' | 'widget' | 'a2a'): Promise<string> {
   await page.goto(`/agents/${agent.agentId}?tab=channels`)
   await page.getByRole('tabpanel', { name: 'Channels' }).getByRole('link', { name: 'Add channel' }).first().click()
   await expect(page).toHaveURL(/\/channels\/new$/)
   await page.getByTestId(`channel-${kind}`).click()
+  await page.getByRole('button', { name: 'Add channel', exact: true }).click()
   await expect(page, 'adding a channel should open its page').toHaveURL(/\/channels\/[0-9a-f-]{36}$/, { timeout: 30_000 })
   const channelId = page.url().match(/\/channels\/([0-9a-f-]{36})$/)![1]
   gate.defer(`delete channel ${channelId}`, async () => {

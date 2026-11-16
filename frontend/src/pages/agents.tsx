@@ -241,17 +241,12 @@ export function AgentsPage() {
       ) : isError ? (
         <QueryError error={agentsError} onRetry={() => refetchAgents()} title="Couldn't load agents" />
       ) : !isLoading && agents.length === 0 ? (
+        // No second solid "Create agent" here: the header's is the one action.
         <EmptyState
           variant="panel"
           icon={Bot}
           title="No agents yet"
-          description="Agents call models and tools to do a job — with cross-vendor verification if you want a second opinion."
-          action={
-            <Button onClick={() => navigate('/agents/new')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create agent
-            </Button>
-          }
+          description="An agent calls models and tools to do a job. Use Create agent to make your first one."
         />
       ) : (
         <>

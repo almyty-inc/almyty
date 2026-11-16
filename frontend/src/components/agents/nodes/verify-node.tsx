@@ -2,6 +2,7 @@ import React from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { ShieldCheck } from 'lucide-react'
 import { pluralized } from '@/lib/utils'
+import { verifyPolicyLabel } from '@/components/agents/verifier-panel'
 
 /**
  * A refute-only checker panel.
@@ -32,7 +33,7 @@ export function VerifyNode({ data, selected }: NodeProps) {
             : `${pluralized(checkers.length, 'checker')}${named ? `: ${named}` : ''}`}
         </div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
-          Policy: {(data.policy as string) || 'any_fail_blocks'}
+          {verifyPolicyLabel(data.policy as string)}
         </div>
       </div>
       <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-emerald-500 !border-emerald-600" />

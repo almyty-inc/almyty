@@ -78,4 +78,10 @@ describe('OverviewTab', () => {
     expect(screen.getByText('Failed')).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/"success"|[{}]/)
   })
+
+  it('labels the generate action in sentence case', () => {
+    renderOverview()
+    expect(screen.getByRole('button', { name: 'Regenerate tools' })).toBeInTheDocument()
+    expect(screen.queryByText(/Re-generate Tools/)).not.toBeInTheDocument()
+  })
 })

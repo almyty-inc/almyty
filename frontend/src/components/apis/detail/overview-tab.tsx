@@ -196,7 +196,7 @@ export function OverviewTab({
             }}
           >
             <Zap className="mr-2 h-4 w-4" />
-            {apiTools.length > 0 ? 'Re-generate Tools' : `Generate ${operations.length} Tools`}
+            {apiTools.length > 0 ? 'Regenerate tools' : `Generate ${pluralized(operations.length, 'tool')}`}
           </Button>
         )}
         <Button

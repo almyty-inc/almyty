@@ -1,7 +1,9 @@
-import { Bot, Code2, Globe, Mail, MessageSquare, Monitor, Phone, Terminal, Webhook } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { Bot, Code2, Globe, Hash, Mail, MessagesSquare, Monitor, Smartphone, Terminal, Users, Webhook } from 'lucide-react'
 
+import { BRAND_ICONS, BrandIcon } from '@/components/brand-icon'
 import { cn } from '@/lib/utils'
-import { isMessagingChannel, type ChannelStatus, type ChannelType } from '@/lib/agent-channels'
+import type { ChannelStatus, ChannelType } from '@/lib/agent-channels'
 
 /** How a channel's status reads, the same on the list and on its page. */
 export const CHANNEL_STATUS: Record<
@@ -15,17 +17,28 @@ export const CHANNEL_STATUS: Record<
   failed: { label: 'Build failed', variant: 'destructive' },
 }
 
+/**
+ * The icon for each kind of channel that has no brand mark to draw: the
+ * platform's own mark is used where the icon set has one (BRAND_ICONS),
+ * and these cover the rest, so no two kinds share one generic chat bubble.
+ */
+const CHANNEL_GLYPHS: Partial<Record<ChannelType, LucideIcon>> = {
+  web: Globe,
+  widget: Code2,
+  tui: Terminal,
+  desktop: Monitor,
+  a2a: Bot,
+  email: Mail,
+  sms: Smartphone,
+  webhook: Webhook,
+  slack: Hash,
+  microsoft_teams: Users,
+  irc: MessagesSquare,
+}
+
 /** The icon a channel shows next to its name. */
 export function ChannelIcon({ type, className }: { type: ChannelType; className?: string }) {
-  const cls = cn('h-4 w-4 text-primary', className)
-  if (type === 'web') return <Globe className={cls} aria-hidden="true" />
-  if (type === 'widget') return <Code2 className={cls} aria-hidden="true" />
-  if (type === 'tui') return <Terminal className={cls} aria-hidden="true" />
-  if (type === 'desktop') return <Monitor className={cls} aria-hidden="true" />
-  if (type === 'a2a') return <Bot className={cls} aria-hidden="true" />
-  if (type === 'email') return <Mail className={cls} aria-hidden="true" />
-  if (type === 'sms') return <Phone className={cls} aria-hidden="true" />
-  if (type === 'webhook') return <Webhook className={cls} aria-hidden="true" />
-  if (isMessagingChannel(type)) return <MessageSquare className={cls} aria-hidden="true" />
-  return <Globe className={cls} aria-hidden="true" />
+  if (BRAND_ICONS[type]) return <BrandIcon brand={type} name={type} className={className} />
+  const Glyph = CHANNEL_GLYPHS[type] ?? Globe
+  return <Glyph className={cn('h-4 w-4 text-primary', className)} aria-hidden="true" data-channel-icon={type} />
 }

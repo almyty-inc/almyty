@@ -198,20 +198,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // on GET queries (no per-mutation onError handler) would be
   // silently swallowed — the user just saw a blank screen with no
   // explanation of why the page didn't load.
+  // `generic`: when the page reports the same failure itself ("Could not
+  // add the channel"), that message replaces this one, so one refusal
+  // shows one toast.
   const notifications = useNotifications()
+  const addNotification = useAppStore((s) => s.addNotification)
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent).detail as
         | { url?: string; method?: string; message?: string }
         | undefined
-      notifications.warning(
-        'Permission denied',
-        detail?.message || "You don't have permission to perform this action.",
-      )
+      addNotification({
+        type: 'warning',
+        title: 'Permission denied',
+        message: detail?.message || "You don't have permission to perform this action.",
+        generic: true,
+      })
     }
     window.addEventListener('almyty:api-forbidden', handler)
     return () => window.removeEventListener('almyty:api-forbidden', handler)
-  }, [notifications])
+  }, [addNotification])
 
   // Show loading only while hydrating or not authenticated
   if (!hasHydrated || !isAuthenticated) {

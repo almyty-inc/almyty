@@ -19,7 +19,7 @@ import userEvent from '@testing-library/user-event'
  */
 
 // Controls the state the mocked primary useQuery reports.
-let queryState: { isLoading: boolean; isError: boolean; data: unknown } = {
+let queryState: { isLoading: boolean; isError: boolean; data: unknown; error?: unknown } = {
   isLoading: false,
   isError: false,
   data: undefined,
@@ -38,7 +38,7 @@ vi.mock('@tanstack/react-query', async () => {
           data: queryState.data,
           isLoading: queryState.isLoading,
           isError: queryState.isError,
-          error: queryState.isError ? new Error('Server exploded') : undefined,
+          error: queryState.isError ? queryState.error ?? new Error('Server exploded') : undefined,
           refetch: refetchMock,
         }
       }
@@ -133,5 +133,27 @@ describe.each(PAGES)('$name error/not-found/loading states', ({ Comp, notFound }
     expect(screen.queryByText(notFound)).not.toBeInTheDocument()
     // The spinner container is present (h-96 centered wrapper).
     expect(container.querySelector('.h-96')).toBeInTheDocument()
+  })
+})
+
+describe('agent-detail: an unknown agent', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const notFound = (status: number, message: string) =>
+    Object.assign(new Error(message), {
+      isAxiosError: true,
+      response: { status, data: { success: false, error: { code: status === 404 ? 'NOT_FOUND' : 'BAD_REQUEST', message, statusCode: status } } },
+    })
+
+  it.each([
+    ['a 404', notFound(404, 'Agent not found: 0000')],
+    ['an id that is not an id', notFound(400, 'Validation failed (uuid is expected)')],
+  ])('says it is not found and offers the way back, not "Try again", for %s', (_label, error) => {
+    queryState = { isLoading: false, isError: true, data: undefined, error }
+    renderPage(AgentDetailPage)
+
+    expect(screen.getByText('Agent not found')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /back to agents/i })).toHaveAttribute('href', '/agents')
   })
 })
