@@ -532,7 +532,7 @@ export function ToolsPage() {
                     ? `${visibleSelectedIds.length} selected.`
                     : `${selectableDraftIds.length} tool${selectableDraftIds.length === 1 ? ' is a draft' : 's are drafts'}. A gateway only serves active tools.`}
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {visibleSelectedIds.length === 0 ? (
                     <Button
                       variant="outline"
@@ -574,7 +574,7 @@ export function ToolsPage() {
               pageSize={PAGE_SIZE}
               headerExtra={
                 // Search takes its own row on a phone; the filters wrap below it.
-                <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0" data-testid="tools-filters">
+                <div className="flex flex-wrap items-center gap-3 w-full min-w-0 sm:w-auto sm:flex-1" data-testid="tools-filters">
                   <div className="basis-full sm:basis-auto sm:flex-1 sm:min-w-[12rem]">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

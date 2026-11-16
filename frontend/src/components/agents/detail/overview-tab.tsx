@@ -450,7 +450,8 @@ export function OverviewTab({
                         <DeliveryNote outcome={(row.kind === 'run' ? row.run.metadata : row.exec.metadata)?.channelDelivery} />
                         <WaitingApprovalNote run={(row.kind === 'run' ? row.run : row.exec) as { status: string; error?: string | null }} />
                       </TableCell>
-                      <TableCell className="max-w-[320px]">
+                      {/* A model id never breaks mid-name: on a phone the table scrolls instead. */}
+                      <TableCell className="max-w-[320px] whitespace-nowrap">
                         {row.kind === 'execution' ? (
                           <ExecutionRouting nodeResults={row.exec.nodeResults} cardNames={cardNames} />
                         ) : (
