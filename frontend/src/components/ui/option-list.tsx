@@ -9,7 +9,7 @@
  * a long list (the kinds of channel) scannable.
  */
 import { useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
-import { Check } from 'lucide-react'
+import { Check, ChevronRight } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -142,5 +142,56 @@ export function OptionList<T extends string>({
         )
       })}
     </div>
+  )
+}
+
+/** The icon square a row starts with, the same in both lists. */
+function RowIcon({ children }: { children: ReactNode }) {
+  return (
+    <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-background [&>svg]:h-5 [&>svg]:w-5">
+      {children}
+    </span>
+  )
+}
+
+interface PickListItem {
+  key: string
+  label: string
+  hint?: string
+  icon?: ReactNode
+  onPick: () => void
+  testId?: string
+}
+
+/**
+ * The same rows as OptionList, for a pick that goes somewhere straight
+ * away (each kind of API opens its own form): a list of buttons with a
+ * chevron, not a choice to confirm. Use OptionList when the pick only
+ * selects and the form's submit does the work.
+ */
+export function PickList({ label, items, className }: { label: string; items: PickListItem[]; className?: string }) {
+  return (
+    <ul aria-label={label} className={cn('divide-y overflow-hidden rounded-xl border bg-card', className)}>
+      {items.map((item) => (
+        <li key={item.key}>
+          <button
+            type="button"
+            data-testid={item.testId}
+            onClick={item.onPick}
+            className={cn(
+              'flex w-full min-h-[56px] items-center gap-3 px-4 py-3 text-left text-sm transition-colors duration-[120ms]',
+              'hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+            )}
+          >
+            {item.icon && <RowIcon>{item.icon}</RowIcon>}
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">{item.label}</span>
+              {item.hint && <span className="block text-xs text-muted-foreground">{item.hint}</span>}
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          </button>
+        </li>
+      ))}
+    </ul>
   )
 }
