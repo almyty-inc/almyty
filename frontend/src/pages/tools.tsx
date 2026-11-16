@@ -573,8 +573,9 @@ export function ToolsPage() {
               onPageChange={(idx) => setPage(idx + 1)}
               pageSize={PAGE_SIZE}
               headerExtra={
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="flex-1">
+                // Search takes its own row on a phone; the filters wrap below it.
+                <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0" data-testid="tools-filters">
+                  <div className="basis-full sm:basis-auto sm:flex-1 sm:min-w-[12rem]">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -589,7 +590,7 @@ export function ToolsPage() {
                     </div>
                   </div>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-32" aria-label="Filter by status">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -599,7 +600,7 @@ export function ToolsPage() {
                     </SelectContent>
                   </Select>
                   <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="w-32" aria-label="Filter by type">
+                    <SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-32" aria-label="Filter by type">
                       <SelectValue placeholder="Type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -611,7 +612,7 @@ export function ToolsPage() {
                   </Select>
                   {apiSources.length > 0 && (
                     <Select value={apiFilter} onValueChange={setApiFilter}>
-                      <SelectTrigger className="w-48" aria-label="Filter by API">
+                      <SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-48" aria-label="Filter by API">
                         <SelectValue placeholder="Filter by API" />
                       </SelectTrigger>
                       <SelectContent>
@@ -628,6 +629,7 @@ export function ToolsPage() {
                     organizationId={currentOrganization?.id}
                     value={teamFilter}
                     onChange={setTeamFilter}
+                    className="flex-1 min-w-[9rem] sm:flex-none sm:w-44"
                   />
                 </div>
               }

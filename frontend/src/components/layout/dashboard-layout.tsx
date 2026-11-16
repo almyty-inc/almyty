@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect } from 'react'
+import React, { Suspense, useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -78,6 +78,21 @@ interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
+/** Whether the viewport is lg or wider, where the sidebar sits beside the page instead of over it. */
+function useIsDesktop() {
+  const query = '(min-width: 1024px)'
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(query).matches)
+  useEffect(() => {
+    const mq = window.matchMedia?.(query)
+    if (!mq) return
+    const onChange = () => setIsDesktop(mq.matches)
+    onChange()
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [])
+  return isDesktop
+}
+
 // Work first, then the resources agents use, then organization controls.
 // A divider starts a labelled group in the expanded sidebar and draws a
 // rule in the collapsed one.
@@ -113,6 +128,35 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       setSidebarOpen(false)
     }
   }, [])
+
+  // Below lg the sidebar is a drawer over the page.
+  const isDesktop = useIsDesktop()
+  const drawerHidden = !isDesktop && !sidebarOpen
+  const drawerModal = !isDesktop && sidebarOpen
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const drawerToggleRef = useRef<HTMLButtonElement>(null)
+  const drawerWasOpen = useRef(false)
+  useEffect(() => {
+    if (drawerModal) {
+      drawerWasOpen.current = true
+      // Focus moves into the drawer, onto its first control (Close).
+      drawerRef.current?.querySelector<HTMLElement>('button, a[href], input, [tabindex]:not([tabindex="-1"])')?.focus()
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setSidebarOpen(false)
+      }
+      document.addEventListener('keydown', onKey)
+      return () => document.removeEventListener('keydown', onKey)
+    }
+    if (drawerWasOpen.current && !isDesktop) {
+      // Closing it hands focus back to the button that opened it.
+      drawerWasOpen.current = false
+      drawerToggleRef.current?.focus()
+    }
+  }, [drawerModal, isDesktop, setSidebarOpen])
+  // Following a link inside the drawer closes it.
+  useEffect(() => {
+    if (!isDesktop) setSidebarOpen(false)
+  }, [location.pathname])
 
   // Apply the stored preference, and keep following the OS for as long as
   // the preference IS the OS. Someone whose machine flips at sunset expects
@@ -231,7 +275,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <KeyboardShortcutsListener />
       {/* Sidebar */}
       {/* Sidebar: on the app surround, beside the white working panel. */}
+      {/* On a phone the sidebar is a drawer: while it is closed it is inert
+          (out of the Tab order and hidden from screen readers); while it is
+          open the page behind it is inert instead, so focus stays inside. */}
       <div
+        id="app-navigation"
+        ref={drawerRef}
+        inert={drawerHidden || undefined}
+        aria-label="Navigation"
+        role={drawerModal ? 'dialog' : undefined}
+        aria-modal={drawerModal || undefined}
         className={cn(
           "fixed inset-y-0 left-0 z-50 bg-surround border-r lg:border-r-0 transform transition-all duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
           sidebarCollapsed ? "w-16" : "w-64",
@@ -468,7 +521,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main Content: the white working panel, inset on the app surround
           from lg up; edge to edge below it. */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden bg-background lg:my-2 lg:mr-2 lg:rounded-xl lg:border lg:shadow-panel">
+      <div
+        className="flex flex-col flex-1 min-w-0 overflow-hidden bg-background lg:my-2 lg:mr-2 lg:rounded-xl lg:border lg:shadow-panel"
+        inert={drawerModal || undefined}
+      >
         {/* Email verification nudge — renders only when the backend
          * explicitly reports emailVerified === false. */}
         <EmailVerificationBanner />
@@ -476,10 +532,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <header className="bg-background border-b lg:hidden">
           <div className="flex items-center justify-between h-16 px-4">
             <Button
+              ref={drawerToggleRef}
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
               aria-label="Toggle navigation menu"
+              aria-controls="app-navigation"
+              aria-expanded={sidebarOpen}
             >
               <Menu className="h-6 w-6" />
             </Button>

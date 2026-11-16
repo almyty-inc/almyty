@@ -333,13 +333,14 @@ function OrganizationTab({ organization }: { organization: any }) {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
+        {/* The actions drop below the title on a phone rather than pushing the page wider than the screen. */}
+        <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <CardTitle>Organization details</CardTitle>
             <CardDescription>Your organization's name and description</CardDescription>
           </div>
           {!isEditing ? (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => setIsEditing(true)}>
                 Edit organization
               </Button>
