@@ -591,7 +591,9 @@ function labelFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   if (!it) return [];
   const tool = labelNames(it.value.labels)!;
   const toolSet = new Set(tool.map((l) => normalValue(l)));
-  const extra = valueList(said).filter((l) => !toolSet.has(l) && !toolSet.has(l.replace(/\s*\([^()]*\)$/, '').trim()));
+  // The label before a trailing "(...)", read without a regex.
+  const beforeNote = (l: string) => (l.endsWith(')') && l.lastIndexOf('(') > 0 ? l.slice(0, l.lastIndexOf('(')).trim() : l);
+  const extra = valueList(said).filter((l) => !toolSet.has(l) && !toolSet.has(beforeNote(l)));
   if (!extra.length) return [];
   const toolWords = tool.length ? tool.join(', ') : 'none';
   return [finding(it.label, 'labels', `${it.label}: the answer gives the label${extra.length === 1 ? '' : 's'} ${extra.join(', ')}, but the tool results give ${toolWords}`, `labels: ${toolWords}`, `Labels: ${said}`, 'item_field')];
