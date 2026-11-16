@@ -4,9 +4,9 @@ import type { ModelDeployment } from '@/types/deployments'
 
 /** One colour per tone, readable in both themes. Moving states pulse. */
 const TONE_CLASS: Record<HostedStatusTone, string> = {
-  starting: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+  starting: 'bg-info-subtle text-info',
   running: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  idle: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
+  idle: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
   stopped: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
   attention: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   failed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',

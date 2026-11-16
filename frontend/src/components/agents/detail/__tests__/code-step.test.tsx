@@ -70,6 +70,21 @@ describe('the script step of a run', () => {
     expect(await screen.findByText('Line 2: boom')).toBeInTheDocument()
   })
 
+  // At 390px the summary sat between the step label and the button and was
+  // squeezed into a one-word column. The header wraps, and below sm the
+  // summary takes its own full-width line after the button.
+  it('gives the summary its own line on a phone', () => {
+    render(<CodeStepCard step={step as any} index={0} agentId="a1" runId="r1" />)
+    const header = screen.getByTestId('code-step-header').className.split(/\s+/)
+    expect(header).toContain('flex-wrap')
+    const summary = screen.getByTestId('code-step-summary')
+    expect(summary).toHaveTextContent(/3 calls: 1 ran, 2 waiting for approval/)
+    const cls = summary.className.split(/\s+/)
+    expect(cls).toEqual(expect.arrayContaining(['order-last', 'basis-full', 'sm:order-none', 'sm:flex-1']))
+    // The button group follows the label on the first line, pushed right.
+    expect(screen.getByRole('button', { name: 'Show script' }).parentElement!.className).toMatch(/\bml-auto\b/)
+  })
+
   it('is what the runs tab renders for a script step (guard)', () => {
     const source = readFileSync(join(__dirname, '..', 'runs-tab.tsx'), 'utf8')
     expect(source).toMatch(/if \(isCodeStep\(step\)\) return <CodeStepCard/)

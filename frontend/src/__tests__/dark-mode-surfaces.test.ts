@@ -3,9 +3,9 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 /**
- * Dark surfaces layer from the page up: page = --background (zinc-950),
- * cards = --card (zinc-900), recessed = --muted (zinc-800), see
- * docs/brand/colors.md.
+ * Dark surfaces layer from the page up: page = --background, cards =
+ * --card, recessed = --muted (frontend/src/styles/tokens.css, see
+ * docs/brand/colors.md).
  *
  * The app shell once painted the page with bg-muted in both themes. That is
  * right in light mode (zinc-100 page, white cards) and inverted in dark: a
@@ -79,14 +79,15 @@ describe('dark page background is the background token', () => {
   })
 
   it('the dashboard shell sets the page colour on its root', () => {
-    // Guard against the root losing its background altogether (a transparent
-    // root shows body, which is right, but the light-mode zinc-100 page goes).
-    expect(read('components/layout/dashboard-layout.tsx')).toMatch(/"h-screen flex overflow-hidden bg-muted dark:bg-background"/)
+    // Guard against the root losing its background altogether: the light
+    // app surround (--am-surface-subtle) behind the white working panel,
+    // and the background token in dark.
+    expect(read('components/layout/dashboard-layout.tsx')).toMatch(/"h-screen flex overflow-hidden bg-surround dark:bg-background"/)
   })
 
   it('the dark tokens keep page < card < muted in lightness', () => {
-    const css = read('index.css')
-    const dark = css.match(/\.dark\s*\{([^}]*)\}/)?.[1] ?? ''
+    const css = read('styles/tokens.css')
+    const dark = css.match(/\.dark[^{]*\{([^}]*)\}/)?.[1] ?? ''
     const l = (name: string) => Number(dark.match(new RegExp(`--${name}:\\s*[\\d.]+\\s+[\\d.]+%\\s+([\\d.]+)%`))?.[1])
     expect(l('background')).toBeLessThan(l('card'))
     expect(l('card')).toBeLessThan(l('muted'))
@@ -116,14 +117,18 @@ describe('fields read on the page and on cards', () => {
   })
 
   it('--field is defined for both themes and wired into tailwind', () => {
-    const css = read('index.css')
+    // The palette lives in the design-system tokens, imported by index.css.
+    const css = read('styles/tokens.css')
+    expect(read('index.css')).toContain('@import "./styles/tokens.css"')
     expect(css.match(/--field:/g)?.length).toBe(2)
     expect(css.match(/--field-hover:/g)?.length).toBe(2)
     expect(readFileSync(resolve(SRC, '../tailwind.config.js'), 'utf8')).toMatch(/field:\s*\{\s*DEFAULT:\s*"hsl\(var\(--field\)\)"/)
   })
 
   it('the active tab and the switch thumb lift off their track in dark mode', () => {
-    expect(read('components/ui/tabs.tsx')).toContain('dark:data-[state=active]:bg-input')
+    // The active segment is the raised card surface on the inset muted
+    // track, lighter than the track in light mode and set apart in dark.
+    expect(read('components/ui/tabs.tsx')).toContain('data-[state=active]:bg-card')
     expect(read('components/ui/switch.tsx')).toMatch(/bg-background dark:bg-foreground/)
   })
 })

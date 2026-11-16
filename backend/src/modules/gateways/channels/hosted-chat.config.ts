@@ -120,7 +120,7 @@ export const hostedChatConfigSchema = z.object({
   appName: z.string().trim().min(1, 'Name is required').max(60, 'Name must be 60 characters or fewer'),
 
   /** Shared with the widget builder. */
-  primaryColor: z.string().trim().regex(HEX_COLOR, 'Must be a hex color like #8b5cf6'),
+  primaryColor: z.string().trim().regex(HEX_COLOR, 'Must be a hex color like #1469ec'),
   greeting: z.string().max(300, 'Greeting must be 300 characters or fewer').default(''),
   theme: z.enum(['dark', 'light', 'auto']).default('auto'),
 
@@ -157,7 +157,7 @@ export type HostedChatConfig = z.infer<typeof hostedChatConfigSchema>;
 export const HOSTED_CHAT_DEFAULTS: HostedChatConfig = Object.freeze({
   slug: '',
   appName: 'Assistant',
-  primaryColor: '#8b5cf6',
+  primaryColor: '#1469ec',
   greeting: '',
   theme: 'auto',
   logoUrl: null,

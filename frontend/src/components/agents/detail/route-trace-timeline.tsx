@@ -42,8 +42,8 @@ interface RunTrace {
 }
 
 const LAYER_TONE: Record<string, string> = {
-  routing: 'border-violet-500/40 text-violet-600 dark:text-violet-400',
-  provider: 'border-cyan-500/40 text-cyan-600 dark:text-cyan-400',
+  routing: 'border-primary/40 text-primary',
+  provider: 'border-teal-600/40 text-teal-700 dark:border-teal-400/40 dark:text-teal-300',
   strategy: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',
   orchestrator: 'border-amber-500/40 text-amber-600 dark:text-amber-400',
 }

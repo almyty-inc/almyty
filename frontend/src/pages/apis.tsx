@@ -193,8 +193,8 @@ export function ApisPage() {
         <>
           <Card>
             <CardContent className="pt-6 space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="basis-full lg:basis-auto lg:flex-1 min-w-0">
                   <ApisFilters
                     searchQuery={searchQuery}
                     onSearchQueryChange={setSearchQuery}
@@ -208,6 +208,7 @@ export function ApisPage() {
                   organizationId={currentOrganization?.id}
                   value={teamFilter}
                   onChange={setTeamFilter}
+                  className="flex-1 min-w-[9rem] sm:flex-none sm:w-44"
                 />
               </div>
 

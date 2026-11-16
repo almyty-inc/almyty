@@ -315,7 +315,7 @@ export function EnvironmentChips({ value, onChange, disabled }: { value: string[
     <div className="space-y-2" data-testid="environment-chips">
       <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-field px-2 py-1.5">
         {value.map((name) => (
-          <span key={name} className="inline-flex items-center gap-1 rounded-full border border-cyan-500/40 bg-cyan-500/5 px-2 py-0.5 text-xs" data-testid={`environment-chip-${name}`}>
+          <span key={name} className="inline-flex items-center gap-1 rounded-full border border-teal-600/40 bg-teal-500/10 px-2 py-0.5 text-xs text-teal-700 dark:border-teal-400/40 dark:text-teal-300" data-testid={`environment-chip-${name}`}>
             {name}
             {!disabled && (
               <button type="button" onClick={() => remove(name)} className="rounded-full text-muted-foreground hover:text-foreground" aria-label={`Remove ${name}`}>

@@ -67,30 +67,33 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
   const inputTokens = Number(step.tokens?.input) || 0
 
   return (
+    // Same frame as the other steps: number and badges, then the findings,
+    // which take the full width below the header on a phone.
     <div
-      className={`flex items-start gap-3 p-2 rounded border text-sm ${
+      data-testid={`verify-step-${index}`}
+      className={`flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border p-3 text-sm sm:flex-nowrap ${
         passed
-          ? 'border-emerald-500/30 bg-emerald-500/5'
+          ? 'border-success-border bg-success-subtle'
           : unavailable
-            ? 'border-amber-500/40 bg-amber-500/5'
-            : 'border-destructive/30 bg-destructive/5'
+            ? 'border-warning-border bg-warning-subtle'
+            : 'border-danger-border bg-danger-subtle'
       }`}
     >
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs font-mono text-muted-foreground">#{index + 1}</span>
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-card text-xs font-semibold tabular-nums text-foreground" aria-label={`Step ${index + 1}`}>{index + 1}</span>
         {passed ? (
-          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+          <ShieldCheck className="h-4 w-4 text-success" aria-hidden />
         ) : (
-          <ShieldAlert className={`h-4 w-4 ${unavailable ? 'text-amber-500' : 'text-destructive'}`} />
+          <ShieldAlert className={`h-4 w-4 ${unavailable ? 'text-warning' : 'text-danger'}`} aria-hidden />
         )}
-        <Badge variant="outline" className="text-[10px]">verify</Badge>
-        {advisory && <Badge variant="outline" className="text-[10px]">mid-run</Badge>}
-        {blocking && <Badge variant="outline" className="text-[10px]">blocking</Badge>}
+        <Badge variant="outline" className="font-mono">verify</Badge>
+        {advisory && <Badge variant="outline">mid-run</Badge>}
+        {blocking && <Badge variant="outline">blocking</Badge>}
         {typeof out.revision === 'number' && (
-          <Badge variant="outline" className="text-[10px]">revision {out.revision}</Badge>
+          <Badge variant="outline">revision {out.revision}</Badge>
         )}
       </div>
-      <div className="min-w-0 flex-1 space-y-0.5">
+      <div className="order-last min-w-0 flex-1 basis-full space-y-0.5 sm:order-none sm:basis-auto">
         <StepRoleLine step={step} />
         <div className="text-xs font-medium">
           {passed
@@ -165,7 +168,7 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
           </ul>
         )}
       </div>
-      <div className="text-[10px] text-muted-foreground shrink-0 text-right">
+      <div className="ml-auto text-xs text-muted-foreground shrink-0 text-right tabular-nums">
         {step.duration ? formatDuration(step.duration) : ''}
         {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
         {/* What the checker read: the evidence is most of it, and it is paid again on every check. */}
@@ -276,7 +279,7 @@ export function UnverifiedNote({ run, compact, className = '' }: { run: unknown;
         variant="outline"
         title={line}
         data-testid="unverified-badge"
-        className={`ml-1 gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 ${className}`}
+        className={`ml-1 gap-1 whitespace-nowrap border-warning-border text-warning ${className}`}
       >
         <ShieldAlert className="h-3 w-3" aria-hidden />
         {unchecked ? NOT_CHECKED : CHECK_FAILED}
@@ -287,7 +290,7 @@ export function UnverifiedNote({ run, compact, className = '' }: { run: unknown;
     <div
       role="note"
       data-testid="unverified-note"
-      className={`flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-200 ${className}`}
+      className={`flex items-start gap-2 rounded-lg border border-warning-border bg-warning-subtle p-2 text-xs text-foreground ${className}`}
     >
       <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden />
       <span>{line}</span>

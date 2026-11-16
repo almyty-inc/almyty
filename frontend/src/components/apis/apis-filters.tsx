@@ -29,8 +29,9 @@ export function ApisFilters({
   onHealthFilterChange,
 }: ApisFiltersProps) {
   return (
-    <div className="flex items-center gap-4">
-      <div className="flex-1">
+    // Search takes its own row on a phone; the two filters share the next one.
+    <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0" data-testid="apis-filters">
+      <div className="basis-full sm:basis-auto sm:flex-1 sm:min-w-[12rem]">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -42,7 +43,7 @@ export function ApisFilters({
         </div>
       </div>
       <Select value={typeFilter} onValueChange={onTypeFilterChange}>
-        <SelectTrigger className="w-40">
+        <SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" aria-label="Filter by type">
           <SelectValue placeholder="Type" />
         </SelectTrigger>
         <SelectContent>
@@ -56,7 +57,7 @@ export function ApisFilters({
         </SelectContent>
       </Select>
       <Select value={healthFilter} onValueChange={onHealthFilterChange}>
-        <SelectTrigger className="w-40">
+        <SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" aria-label="Filter by health">
           <SelectValue placeholder="Health" />
         </SelectTrigger>
         <SelectContent>

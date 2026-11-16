@@ -147,21 +147,21 @@ export function ApiDetailPage() {
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center space-x-4">
-          <Button variant="outline" size="sm" onClick={() => navigate('/apis')}>
+        <div className="flex min-w-0 items-center gap-4">
+          <Button variant="outline" size="sm" aria-label="Back to APIs" onClick={() => navigate('/apis')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-              <TypeIcon className="h-6 w-6 text-primary" />
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="w-12 h-12 shrink-0 bg-selection rounded-lg flex items-center justify-center">
+              <TypeIcon className="h-6 w-6 text-selection-foreground" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className={DETAIL_TITLE_CLASSES}>{api.name}</h1>
-              <p className="text-muted-foreground">{api.baseUrl}</p>
+              <p className="text-muted-foreground [overflow-wrap:anywhere]">{api.baseUrl}</p>
             </div>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ApiTypeBadge type={api.type} />
           {api.version && <Badge variant="secondary">v{api.version}</Badge>}
           <Button variant="outline" size="sm" asChild>

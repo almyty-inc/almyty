@@ -73,7 +73,7 @@ const SUCCESS_PAGE = `<!doctype html>
 <style>
   body { font-family: system-ui, -apple-system, sans-serif; background: #09090b; color: #fafafa; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
   .card { text-align: center; padding: 2rem 3rem; border: 1px solid #27272a; border-radius: 8px; background: #18181b; }
-  h1 { color: #8b5cf6; margin: 0 0 0.5rem; font-weight: 600; }
+  h1 { color: #1469ec; margin: 0 0 0.5rem; font-weight: 600; }
   p { margin: 0.5rem 0; color: #a1a1aa; }
 </style>
 </head>
@@ -251,7 +251,7 @@ export function browserLogin(options: BrowserLoginOptions = {}): Promise<Browser
 <style>
   body { font-family: system-ui, -apple-system, sans-serif; background: #09090b; color: #fafafa; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
   .card { text-align: center; padding: 2rem 3rem; border: 1px solid #27272a; border-radius: 8px; background: #18181b; max-width: 32rem; }
-  h1 { color: #8b5cf6; margin: 0 0 0.5rem; font-weight: 600; font-size: 1.25rem; }
+  h1 { color: #1469ec; margin: 0 0 0.5rem; font-weight: 600; font-size: 1.25rem; }
   p { margin: 0.5rem 0; color: #a1a1aa; font-size: 0.875rem; }
   .err { color: #fb7185; }
 </style>

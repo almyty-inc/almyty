@@ -1,156 +1,126 @@
-# Almyty Color System
+# almyty colour system
 
-## Violet (primary brand color)
+Design system v1 (approved white revision). The source of truth is the
+design-system package, `tokens.json` in
+`/Users/frane/Documents/Codex/2026-10-27/referenced-chatgpt-conversation-this-is-an/outputs/almyty-design-system`;
+its generated `tokens.css` is copied verbatim into
+`frontend/src/styles/tokens.css`. Regenerate in the package and copy
+again rather than editing values in the app.
 
-| Step | Hex | Tailwind | Usage |
-|------|-----|----------|-------|
-| 50 | #f5f3ff | violet-50 | Tinted bg (light) |
-| 100 | #ede9fe | violet-100 | Badge bg (light), hover bg (light) |
-| 200 | #ddd6fe | violet-200 | |
-| 300 | #c4b5fd | violet-300 | Badge text (dark), logo node fill |
-| 400 | #a78bfa | violet-400 | Logo top node fill |
-| 500 | #8b5cf6 | violet-500 | **PRIMARY (dark)** — buttons, links, focus rings |
-| 600 | #7c3aed | violet-600 | **PRIMARY (light)** |
-| 700 | #6d28d9 | violet-700 | Badge text (light), hover state (dark) |
-| 800 | #5b21b6 | violet-800 | |
-| 900 | #4c1d95 | violet-900 | |
+Every value below is a semantic token (`--am-*`). The shadcn names the
+components read (`--primary`, `--border`, `--ring`, ...) are bridged to
+them in the same file, so components follow without per-page colours.
 
-## Cyan (accent)
+## Primary blue
 
-| Step | Hex | Tailwind | Usage |
-|------|-----|----------|-------|
-| 50 | #ecfeff | cyan-50 | Tinted bg (light) |
-| 100 | #cffafe | cyan-100 | Badge bg (light) |
-| 200 | #a5f3fc | cyan-200 | |
-| 300 | #67e8f9 | cyan-300 | Badge text (dark) |
-| 400 | #22d3ee | cyan-400 | **ACCENT (dark)** — highlights, badges, hover |
-| 500 | #06b6d4 | cyan-500 | |
-| 600 | #0891b2 | cyan-600 | **ACCENT (light)** |
-| 700 | #0e7490 | cyan-700 | Badge text (light) |
-| 800 | #155e75 | cyan-800 | |
-| 900 | #164e63 | cyan-900 | |
+| Token | Light | Dark | Tailwind |
+|-------|-------|------|----------|
+| Action primary | #1469EC | #7AB5FF | `bg-primary`, `text-primary` |
+| Primary hover | #105BD0 | #9CC8FF | `hover:bg-primary-hover` |
+| Primary pressed | #0F4FB3 | #5AA0FA | `active:bg-primary-pressed` |
+| On primary | #FFFFFF | #0D2440 | `text-primary-foreground` |
+| Focus ring | #1469EC | #7AB5FF | `ring-ring` (2px, 2px offset) |
 
-## Dark Theme Surfaces (zinc scale)
+Hover and pressed are explicit colours, never an opacity of the base.
 
-Every layer MUST be clearly distinguishable.
+Blue scale (`brand-*` in Tailwind): 50 #EFF6FF, 100 #DBEAFF, 200 #B8D5FF,
+300 #86B9FF, 400 #4C96FF, 500 #2775F7, 600 #1469EC, 700 #105BD0,
+800 #0F4FB3, 900 #103E85.
 
-| Token | Hex | Zinc | Usage |
-|-------|-----|------|-------|
-| Background | #09090b | zinc-950 | Page bg, deepest layer |
-| Card | #18181b | zinc-900 | Cards, panels, popovers |
-| Muted | #27272a | zinc-800 | Recessed areas, code blocks, borders |
-| Elevated | #3f3f46 | zinc-700 | Hover states, input borders, toggle off |
-| Mid | #52525b | zinc-600 | Secondary text (light mode) |
-| Subtle | #71717A | zinc-500 | Muted text, placeholders |
-| Secondary | #A1A1AA | zinc-400 | Description text, labels |
-| Primary text | #FAFAFA | zinc-50 | Body text, headings |
+## Surfaces and text
 
-## Light Theme Surfaces
+| Token | Light | Dark | Tailwind / use |
+|-------|-------|------|----------------|
+| Canvas (page) | #FFFFFF | #101827 | `bg-background` |
+| Surround | #F6F9FD | #131E30 | `bg-surround`: the app shell around the white working panel |
+| Raised (card, popover) | #FFFFFF | #162235 | `bg-card` |
+| Inset (muted) | #EFF3F8 | #1D2B42 | `bg-muted` |
+| Hover surface | #F1F6FD | #203149 | `--am-surface-hover` |
+| Text primary | #141E30 | #EDF3FC | `text-foreground` |
+| Text secondary | #5C6980 | #ACBAD0 | `text-muted-foreground` |
+| Placeholder | #69778E | #A3B2CA | `--am-text-placeholder` |
+| Rule (subtle border) | #E6EBF2 | #354760 | `border` |
+| Control border | #7B8BA3 | #6C83A3 | `border-input`: fields and outline buttons |
+| Selection surface | #EBF3FF | #203A5F | `bg-selection`, shadcn `--accent` |
+| Selection text | #185FCA | #B7D5FF | `text-selection-foreground` |
 
-| Token | Hex | Zinc | Usage |
-|-------|-----|------|-------|
-| Background | #FFFFFF | white | Page bg |
-| Card | #FFFFFF | white | Bordered, not tinted |
-| Muted | #F4F4F5 | zinc-100 | Recessed areas, code blocks |
-| Border | #E4E4E7 | zinc-200 | Card borders, dividers |
-| Input border | #D4D4D8 | zinc-300 | Inputs need more contrast than cards |
-| Secondary text | #52525b | zinc-600 | |
-| Muted text | #71717A | zinc-500 | |
-| Primary text | #09090b | zinc-950 | |
+Dark surfaces still layer upward: page < card < inset in lightness.
 
-## Semantic Colors
+## Status pairs
 
-| Role | Dark | Light |
-|------|------|-------|
-| Primary | #8b5cf6 | #7C3AED |
-| Accent | #22d3ee | #0891B2 |
-| Success | #22c55e | #16a34a |
-| Warning | #eab308 | #ca8a04 |
-| Destructive | #EF4444 | #DC2626 |
+Status is always a foreground and a background together, plus a label or
+icon. Colour never carries a state alone. A category (protocol, provider)
+is not a status.
 
-## Protocol Badge Colors
+| Tone | Light text / surface | Dark text / surface | Meaning |
+|------|----------------------|---------------------|---------|
+| Info | #185FCA / #EBF3FF | #B6D3FF / #1D3657 | running, information, selection |
+| Success | #276C52 / #EAF9F1 | #86DBB4 / #15392E | confirmed completion |
+| Warning | #8E651F / #FFF6E5 | #F0CF85 / #463719 | waiting, review |
+| Danger | #B72E35 / #FFF0F0 | #FFB3BC / #47232A | failure, destructive intent |
+| Neutral | #4E5F77 / #EFF3F8 | #BECCE0 / #26364C | draft, queued, cancelled, sleeping, unknown |
 
-| Protocol | Dark bg | Dark text | Light bg | Light text |
-|----------|---------|-----------|----------|------------|
-| MCP | violet-500/20 | violet-300 | violet-100 | violet-700 |
-| A2A | cyan-500/20 | cyan-300 | cyan-100 | cyan-700 |
-| UTCP | emerald-500/20 | emerald-300 | emerald-100 | emerald-700 |
-| SOAP | amber-500/20 | amber-300 | amber-100 | amber-700 |
-| GraphQL | rose-500/20 | rose-300 | rose-100 | rose-700 |
-| REST | blue-500/20 | blue-300 | blue-100 | blue-700 |
+Tailwind: `text-info bg-info-subtle border-info-border` (and `success`,
+`warning`, `danger`); the `tone-*` utilities set both halves at once.
+Run lifecycle states map through `frontend/src/lib/run-status.ts`.
 
 ## Gradients
 
-```css
-/* Primary CTA — one per page max */
-.btn-gradient {
-  background: linear-gradient(135deg, #8b5cf6 0%, #22d3ee 100%);
-}
+Accents only: the original mark, short strips, progress fills, a hero
+underline and the product field behind a showcased surface. Never on a
+button, a paragraph, a data cell or an editor; text stays on an opaque
+surface.
 
-/* Text gradient — hero headings, logo */
-.text-gradient {
-  background: linear-gradient(135deg, #8b5cf6 0%, #22d3ee 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+| Name | Stops | Utility |
+|------|-------|---------|
+| Accent | #2775F7 -> #26C5CF (65%) -> #85E5BA | `bg-accent-gradient` |
+| Product field (light) | #EAF1FF -> #E5F8FF (45%) -> #E6FCF1 | `bg-product-field` |
+| Product field (dark) | #172D53 -> #173B4B (45%) -> #17382E | `bg-product-field` |
 
-/* Sidebar active border */
-.sidebar-active {
-  border-left: 2px solid transparent;
-  border-image: linear-gradient(to bottom, #8b5cf6, #22d3ee) 1;
-}
-```
+Default actions are solid primary. No page has a gradient call to action.
 
-Gradient rules:
-- DO: Primary CTA (one per page), hero headings, sidebar active, progress bars, logo
-- DON'T: Secondary buttons, form submits, table actions, repeated elements
+## Protocol and schema badges
 
-## Component Contrast Rules
+Identity, not readiness. Each keeps a distinct, readable hue with a light
+and a dark half (`components/ui/protocol-badge.tsx`,
+`components/ui/api-type-badge.tsx`).
 
-**Toggles:** Off = zinc-700 dark, zinc-200 light. On = violet-500. Thumb = white.
+| Kind | Light bg / text | Dark bg / text |
+|------|-----------------|----------------|
+| MCP | brand-50 / brand-700 | brand-500/15 / brand-200 |
+| A2A | teal-50 / teal-700 | teal-500/15 / teal-300 |
+| UTCP, Skills | emerald-50 / emerald-700 | emerald-500/15 / emerald-300 |
+| SOAP | amber-50 / amber-800 | amber-500/15 / amber-300 |
+| GraphQL | rose-50 / rose-700 | rose-500/15 / rose-300 |
+| REST, OpenAPI | slate-100 / slate-700 | slate-500/20 / slate-300 |
+| Protobuf, gRPC | fuchsia-50 / fuchsia-700 | fuchsia-500/15 / fuchsia-300 |
 
-**Cards:** Visible border using --border. Card bg (#18181b) clearly different from page bg (#09090b).
+A second category beside the brand blue (a runner tool, an idle machine,
+a provider hop) uses teal with a light and a dark half.
 
-**Text:** Description = zinc-400 (#A1A1AA) dark minimum. Never darker than zinc-500.
+## Charts
 
-**Inputs:** Border --input (zinc-700 dark, zinc-300 light). Fill --field: white in light, translucent zinc-700 in dark so a field reads on the page and on a card alike; never an opaque --background, which is the deepest colour. Focus = violet ring. Placeholder = zinc-500 minimum.
+Six series tokens, `chart-1` to `chart-6`: light #1469EC, #0D807D, #B56316,
+#B43A55, #5969AA, #64748B; dark #7AB5FF, #68D5CB, #F2BE8D, #F89BB1,
+#B8BFF5, #BCCBDD. Label series or give a legend; a hue never implies success.
 
-**Buttons:** Primary = solid violet-500, white text. Outline = --input border, --field fill, --field-hover on hover. Ghost = no bg, violet on hover.
+## Component rules
 
-**Page:** The app shell is bg-muted in light (zinc-100 page under white cards) and bg-background in dark (zinc-950 page under zinc-900 cards). Active tabs and segmented toggles sit on zinc-700 (--input) in dark, lighter than their zinc-800 track.
+**Buttons:** 40px default (36px compact on desktop, 44px touch target).
+Primary is solid blue with explicit hover and pressed colours. Outline:
+control border, field fill, field-hover on hover. Ghost: no fill, the hover
+surface on hover. Destructive is never the universal primary.
 
-## CSS Variables
+**Fields:** control border (`--input`), field fill (`--field`), 2px focus
+ring with a 2px offset, distinct read-only and disabled fills, a danger
+border when invalid. Inputs on a touch pointer use 16px text.
 
-### Light (`:root`)
+**Navigation:** the selected item is the selection surface with blue text;
+hover uses the hover surface. Page and detail tabs are underlined; a
+segmented control is for local views only.
 
-```css
---background: 0 0% 100%;
---foreground: 240 6% 3%;
---card: 0 0% 100%;
---primary: 262 83% 58%;
---secondary: 240 5% 96%;
---muted: 240 5% 96%;
---muted-foreground: 240 4% 46%;
---accent: 189 82% 37%;
---destructive: 0 72% 51%;
---border: 240 6% 90%;
---input: 240 5% 84%;
---ring: 262 83% 58%;
-```
+**Shell:** the sidebar sits on the surround; the working panel is white
+(canvas) with a subtle rule. In dark mode the page is the canvas token.
 
-### Dark (`.dark`)
-
-```css
---background: 240 6% 3%;
---foreground: 0 0% 98%;
---card: 240 6% 10%;
---primary: 262 83% 66%;
---secondary: 240 5% 17%;
---muted: 240 5% 17%;
---muted-foreground: 240 4% 64%;
---accent: 187 86% 53%;
---destructive: 0 84% 60%;
---border: 240 5% 17%;
---input: 240 4% 26%;
---ring: 262 83% 66%;
-```
+**Cards:** 12px radius, a subtle rule, a nearly flat panel shadow. No
+nested card chrome.
