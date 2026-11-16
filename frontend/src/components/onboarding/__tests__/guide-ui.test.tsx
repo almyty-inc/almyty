@@ -89,7 +89,7 @@ describe('GuidePage', () => {
       `claude mcp add weather-api --transport http ${window.location.origin}/acme/weather-api`,
     )
     // It is the step the guide suggests next (a journey already started).
-    expect(within(screen.getByTestId('next-step')).getByText(/Connect Claude Code/)).toBeInTheDocument()
+    expect(within(screen.getByTestId('next-step')).getByText(/Connect an MCP client/)).toBeInTheDocument()
   })
 
   it('has exactly one solid primary call to action, and no gradient one', async () => {

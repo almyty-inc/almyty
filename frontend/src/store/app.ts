@@ -22,7 +22,16 @@ interface Notification {
   message?: string
   type: 'success' | 'error' | 'warning' | 'info'
   duration?: number
+  /**
+   * An app-wide fallback (the "Permission denied" every refused request
+   * raises). A page's own message about the same failure replaces it.
+   */
+  generic?: boolean
+  createdAt?: number
 }
+
+/** Two problem toasts with the same reason this close together are one failure. */
+const SAME_FAILURE_WINDOW_MS = 3000
 
 /**
  * localStorage is a per-viewer convenience here, never state the app needs.
@@ -82,8 +91,27 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   addNotification: (notification: Omit<Notification, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9)
-    const newNotification = { ...notification, id }
-    
+    const newNotification = { ...notification, id, createdAt: Date.now() }
+
+    // One failure, one message. A refused request raises the app-wide
+    // "Permission denied" toast (generic) and the page's own "Could not
+    // add the channel" (specific), both carrying the server's reason. Keep
+    // the specific one: it says what failed.
+    const isProblem = (n: { type: string }) => n.type === 'error' || n.type === 'warning'
+    const sameFailure = (n: Notification) =>
+      isProblem(n) &&
+      isProblem(notification) &&
+      !!notification.message &&
+      n.message === notification.message &&
+      Date.now() - (n.createdAt ?? 0) < SAME_FAILURE_WINDOW_MS
+    const existing = get().notifications.filter(sameFailure)
+    if (existing.length > 0) {
+      if (notification.generic) return
+      set(state => ({
+        notifications: state.notifications.filter(n => !(n.generic && sameFailure(n))),
+      }))
+    }
+
     set(state => ({
       notifications: [...state.notifications, newNotification]
     }))

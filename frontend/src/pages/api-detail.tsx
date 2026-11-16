@@ -1,20 +1,10 @@
 import React, { useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import {
-  ArrowLeft,
-  ChevronRight,
-  Cloud,
-  Code,
-  Database,
-  Globe,
-  Pencil,
-  Server,
-  Share2,
-} from 'lucide-react'
+import { ArrowLeft, Pencil, Share2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
+import { ResourceHeader } from '@/components/layout/resource-header'
 import { Badge } from '@/components/ui/badge'
 import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -85,16 +75,6 @@ export function ApiDetailPage() {
   const allTools = allToolsPage?.items ?? []
   const apiTools = allTools.filter((tool: Tool) => tool.metadata?.sourceApi?.id === id || (tool as unknown as Record<string, string>).apiId === id)
 
-  const getApiTypeIcon = (type: ApiType) => {
-    switch (type) {
-      case ApiType.OPENAPI: return Globe
-      case ApiType.GRAPHQL: return Database
-      case ApiType.SOAP: return Cloud
-      case ApiType.GRPC: return Server
-      default: return Code
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -133,51 +113,38 @@ export function ApiDetailPage() {
   const api = { ...(apiData as any), schemas } as typeof apiData & { schemas: any[] }
   const operationsExtracted = apiOperations?.operations || apiOperations || []
   const operations: ApiOperation[] = Array.isArray(operationsExtracted) ? operationsExtracted : []
-  const TypeIcon = getApiTypeIcon(api.type)
   const isSdk = api.type === ApiType.SDK
 
   return (
-    <div className="space-y-8">
-      {/* Breadcrumbs */}
-      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/apis" className="hover:text-foreground">APIs</Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{api.name}</span>
-      </div>
-
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <Button variant="outline" size="sm" aria-label="Back to APIs" onClick={() => navigate('/apis')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="w-12 h-12 shrink-0 bg-selection rounded-lg flex items-center justify-center">
-              <TypeIcon className="h-6 w-6 text-selection-foreground" />
-            </div>
-            <div className="min-w-0">
-              <h1 className={DETAIL_TITLE_CLASSES}>{api.name}</h1>
-              <p className="text-muted-foreground [overflow-wrap:anywhere]">{api.baseUrl}</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ApiTypeBadge type={api.type} />
-          {api.version && <Badge variant="secondary">v{api.version}</Badge>}
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/apis/${api.id}/edit`}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/gateways/new?api=${api.id}`}>
-              <Share2 className="mr-2 h-4 w-4" />
-              Create gateway
-            </Link>
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <ResourceHeader
+        back={{ to: '/apis', label: 'APIs' }}
+        title={api.name}
+        badges={
+          <>
+            <ApiTypeBadge type={api.type} />
+            {api.version && <Badge variant="secondary">v{api.version}</Badge>}
+          </>
+        }
+        subtitle={api.baseUrl ? <span className="font-mono text-sm">{api.baseUrl}</span> : undefined}
+        actionsLabel="API actions"
+        actions={
+          <>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/apis/${api.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/gateways/new?api=${api.id}`}>
+                <Share2 className="mr-2 h-4 w-4" />
+                Create gateway
+              </Link>
+            </Button>
+          </>
+        }
+      />
       {/* An SDK API has packages, not a description: no import, no operations. */}
       {isSdk ? (
         <SdkPackagesCard api={api} apiTools={apiTools} />

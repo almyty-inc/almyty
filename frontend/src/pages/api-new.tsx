@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Cloud, Database, Globe, Package, Server, Webhook } from 'lucide-react'
 
 import { FormPage } from '@/components/layout/form-page'
-import { ChoiceTile, ChoiceTiles, ServiceIcon } from '@/components/connect/service-tiles'
+import { PickList } from '@/components/ui/option-list'
 import { API_KIND_TILES } from '@/components/apis/api-types'
 import { PROVIDER_APIS, providerApiPath } from '@/components/apis/provider-apis'
 import { BrandIcon } from '@/components/brand-icon'
@@ -45,29 +45,36 @@ export function ApiNewPage() {
   }, [])
 
   return (
-    <FormPage title="Connect an API" description="Pick what kind of API it is." back={{ to: '/apis', label: 'APIs' }} width="wide">
-      <ChoiceTiles label="Kind of API">
-        {API_KIND_TILES.map((tile) => {
+    <FormPage title="Connect an API" description="Pick what kind of API it is." back={{ to: '/apis', label: 'APIs' }}>
+      <PickList
+        label="Kind of API"
+        items={API_KIND_TILES.map((tile) => {
           const Icon = TILE_ICONS[tile.key]
-          return <ChoiceTile key={tile.key} testId={`api-kind-${tile.key}`} icon={<Icon className="h-4 w-4 text-primary" />} label={tile.label} hint={tile.hint} onClick={() => navigate(tile.to)} />
+          return {
+            key: tile.key,
+            testId: `api-kind-${tile.key}`,
+            icon: <Icon className="text-primary" />,
+            label: tile.label,
+            hint: tile.hint,
+            onPick: () => navigate(tile.to),
+          }
         })}
-      </ChoiceTiles>
+      />
       <section className="space-y-2" aria-labelledby="provider-apis-heading">
-        <h2 id="provider-apis-heading" className="text-sm font-medium">
+        <h2 id="provider-apis-heading" className="text-sm font-semibold">
           Ready-made provider APIs
         </h2>
-        <ChoiceTiles label="Ready-made provider APIs">
-          {PROVIDER_APIS.map((p) => (
-            <ChoiceTile
-              key={p.key}
-              testId={`provider-api-${p.key}`}
-              icon={<ServiceIcon><BrandIcon brand={p.key} name={p.label} /></ServiceIcon>}
-              label={p.label}
-              hint={p.hint}
-              onClick={() => navigate(providerApiPath(p.key))}
-            />
-          ))}
-        </ChoiceTiles>
+        <PickList
+          label="Ready-made provider APIs"
+          items={PROVIDER_APIS.map((p) => ({
+            key: p.key,
+            testId: `provider-api-${p.key}`,
+            icon: <BrandIcon brand={p.key} name={p.label} />,
+            label: p.label,
+            hint: p.hint,
+            onPick: () => navigate(providerApiPath(p.key)),
+          }))}
+        />
       </section>
       <p className="text-sm text-muted-foreground" data-testid="other-ways">
         Want a single call instead?{' '}

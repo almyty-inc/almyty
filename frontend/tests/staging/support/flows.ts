@@ -49,7 +49,7 @@ export async function openTestTool(page: Page, toolId: string): Promise<Locator>
   await page.goto(`/tools/${toolId}`)
   await page.getByRole('tab', { name: 'Test tool' }).click()
   const panel = page.getByRole('tabpanel', { name: 'Test tool' })
-  await expect(panel.getByRole('button', { name: 'Execute Tool' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Execute tool' })).toBeVisible()
   return panel
 }
 
@@ -80,18 +80,18 @@ export async function executeTool(panel: Locator, params: Record<string, string>
     (r) => /\/tools\/[0-9a-f-]{36}\/execute$/.test(r.url()) && r.request().method() === 'POST',
     { timeout: 180_000 },
   )
-  await panel.getByRole('button', { name: 'Execute Tool' }).click()
+  await panel.getByRole('button', { name: 'Execute tool' }).click()
   await answered
-  await expect(panel.getByRole('button', { name: 'Execute Tool' })).toBeEnabled()
+  await expect(panel.getByRole('button', { name: 'Execute tool' })).toBeEnabled()
   const badge = panel.getByText(/^(Success|Error)$/)
   await expect(badge, 'the tool run should finish with a result').toBeVisible()
   return (await badge.innerText()).trim() as 'Success' | 'Error'
 }
 
-/** The "Response Data" a successful tool test shows, read through its Copy button, parsed. */
+/** The "Response data" a successful tool test shows, read through its Copy button, parsed. */
 export async function responseData(panel: Locator): Promise<any> {
   const page = panel.page()
-  await expect(panel.getByText('Response Data:')).toBeVisible()
+  await expect(panel.getByText('Response data:')).toBeVisible()
   await panel.getByRole('button', { name: 'Copy' }).first().click()
   const text = await page.evaluate(() => navigator.clipboard.readText())
   try {

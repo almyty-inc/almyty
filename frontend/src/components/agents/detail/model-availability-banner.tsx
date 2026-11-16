@@ -27,8 +27,8 @@ export function ModelAvailabilityBanner({ agentId }: { agentId: string }) {
   if (issues.length === 0) return null
 
   return (
-    <div role="alert" className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm" data-testid="model-availability-banner">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
+    <div role="alert" className="flex items-start gap-2 rounded-lg border border-warning-border bg-warning-subtle p-3 text-sm" data-testid="model-availability-banner">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
       <div className="min-w-0 flex-1 space-y-2">
         <ul className="space-y-1.5">
           {issues.map((issue) => (

@@ -18,7 +18,7 @@ export const PAGE_INTROS = {
   },
   gateways: {
     page: '/gateways',
-    text: 'A gateway serves the tools you pick over one protocol (MCP, UTCP or Skills), so Claude Code, Cursor or another agent can use them. Create a gateway to start.',
+    text: 'A gateway serves the tools you pick over one protocol (MCP, UTCP or Skills), so AI assistants, coding tools and other agents can use them. Create a gateway to start.',
   },
   agents: {
     page: '/agents',
