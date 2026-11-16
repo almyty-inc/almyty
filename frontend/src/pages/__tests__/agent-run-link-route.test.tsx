@@ -82,11 +82,11 @@ describe('links to one run', () => {
 
   it('opens the run a later link names while the Runs tab is showing', () => {
     const runs = [run('run-1'), run('run-2')]
-    // One row per run (the open run's detail has expandable parts of its own).
-    const expanded = () => Array.from(document.querySelectorAll('tr[aria-expanded]')).map((r) => r.getAttribute('aria-expanded'))
+    // The open run is shown on its own, in place of the list.
     const { rerender } = renderWithProviders(<RunsTab agentId="agent-1" runs={runs} openRunId="run-1" />)
-    expect(expanded()).toEqual(['true', 'false'])
+    expect(screen.getByTestId('opened-run-run-1')).toBeInTheDocument()
     rerender(<RunsTab agentId="agent-1" runs={runs} openRunId="run-2" />)
-    expect(expanded()).toEqual(['false', 'true'])
+    expect(screen.getByTestId('opened-run-run-2')).toBeInTheDocument()
+    expect(screen.queryByTestId('opened-run-run-1')).toBeNull()
   })
 })

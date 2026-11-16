@@ -106,7 +106,7 @@ export function defaultShareName(picked: ShareableTool[]): string {
 
 /** The protocol tiles: a label and one line on who reads it. */
 export const PROTOCOL_CHOICES: Record<GatewayProtocol, { label: string; hint: string; icon: typeof Plug }> = {
-  mcp: { label: 'MCP', hint: 'Claude Code, Cursor', icon: Plug },
+  mcp: { label: 'MCP', hint: 'Any MCP client', icon: Plug },
   utcp: { label: 'UTCP', hint: 'Any UTCP client', icon: FileJson },
   skills: { label: 'Skills', hint: 'SKILL.md for agents', icon: BookOpen },
 }

@@ -10,18 +10,56 @@ import { ShieldCheck } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
+import { pluralized } from '@/lib/utils'
+import { providerTypeLabels } from '@/components/llm-providers/provider-type-config'
 import type { Agent } from '@/types'
 
 type Verify = NonNullable<NonNullable<Agent['agentConfig']>['verify']>
 
-/** Provider id -> its name, from the org's providers (the list answers bare or wrapped). */
+/** How the reviewers' verdicts combine, in words a person reads. */
+export const VERIFY_POLICY_LABELS: Record<string, string> = {
+  any_fail_blocks: 'Any reviewer can block',
+  all_pass: 'All reviewers must pass',
+  majority: 'Most reviewers decide',
+}
+
+/** When the reviewers check, in words a person reads. */
+export const VERIFY_TRIGGER_LABELS: Record<string, string> = {
+  on_final_output: 'the final answer',
+  every_n_steps: 'every few steps',
+  on_tool_result: 'each tool result',
+}
+
+/** A policy value as a label; an unknown value is shown as words, never as a raw id. */
+export function verifyPolicyLabel(policy?: string): string {
+  const p = policy || 'any_fail_blocks'
+  return VERIFY_POLICY_LABELS[p] ?? p.replace(/_/g, ' ')
+}
+
+/** The triggers as one sentence: "Checks the final answer and each tool result". */
+export function verifyTriggersLabel(triggers: string[], everyNSteps?: number): string {
+  const parts = triggers.map((t) =>
+    t === 'every_n_steps' && everyNSteps ? `every ${pluralized(everyNSteps, 'step')}` : VERIFY_TRIGGER_LABELS[t] ?? t.replace(/_/g, ' '),
+  )
+  if (parts.length === 0) return ''
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+  return `Checks ${list}`
+}
+
+/**
+ * Provider id -> the vendor a person recognises ("OpenAI"), from the org's
+ * providers (the list answers bare or wrapped). Not the connection's own
+ * name: that is free text and often names a model ("OpenAI · GPT-4o") that
+ * is not the one a role runs, so the role's model is shown beside it instead.
+ */
 export function useProviderNames(): (id?: string) => string {
   const { data } = useQuery<any>({ ...llmProvidersQuery })
   const list: any[] = Array.isArray(data) ? data : data?.providers || []
   const byId = new Map<string, any>(list.map((p: any) => [p.id, p]))
   return (id?: string) => {
     const p = id ? byId.get(id) : undefined
-    return p ? p.name || p.type : id ? 'provider' : '—'
+    if (!p) return id ? 'provider' : '—'
+    return (providerTypeLabels as Record<string, string>)[p.type] || p.name || p.type
   }
 }
 
@@ -43,7 +81,7 @@ export function VerifierPanelList({ verify }: { verify: Verify }) {
 export function VerifierPanelHeading({ children }: { children?: ReactNode }) {
   return (
     <div className="text-xs font-medium text-muted-foreground mb-1.5 flex flex-wrap items-center gap-1.5">
-      <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+      <ShieldCheck className="h-3.5 w-3.5 text-success" />
       Verifier panel
       {children}
     </div>

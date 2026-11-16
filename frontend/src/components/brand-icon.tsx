@@ -14,11 +14,15 @@ import {
   siClaude,
   siDeepseek,
   siDigitalocean,
+  siDiscord,
+  siGooglechat,
   siGooglecloud,
   siGooglegemini,
   siHuggingface,
+  siImessage,
   siKimi,
   siKubernetes,
+  siMatrix,
   siMinimax,
   siMistralai,
   siModal,
@@ -28,7 +32,10 @@ import {
   siOpenrouter,
   siPerplexity,
   siQwen,
+  siSignal,
+  siTelegram,
   siTencenthy,
+  siWhatsapp,
   type SimpleIcon,
 } from 'simple-icons'
 
@@ -62,6 +69,16 @@ export const BRAND_ICONS: Record<string, SimpleIcon> = {
   'mcp-custom': siModelcontextprotocol,
   'toolsource-openapi': siOpenapiinitiative,
   kubernetes: siKubernetes,
+  // Channels (agent channel types) that have a mark in the set
+  whatsapp: siWhatsapp,
+  whatsapp_cloud: siWhatsapp,
+  telegram: siTelegram,
+  discord: siDiscord,
+  google_chat: siGooglechat,
+  signal: siSignal,
+  matrix: siMatrix,
+  imessage_sendblue: siImessage,
+  imessage_loopmessage: siImessage,
 }
 
 /** A brand colour too dark or too light to read on one of the two themes draws in the text colour instead. */

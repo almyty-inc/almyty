@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { OperationPicker } from '@/components/apis/operation-picker'
@@ -118,9 +119,9 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
     <>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>API operations</CardTitle>
+              <CardTitle className="text-xl">API operations</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
                 {pluralized(operations.length, 'operation')} parsed from schema
               </p>
@@ -179,19 +180,16 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                     onChange={(e) => setOperationSearch(e.target.value)}
                   />
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {['ALL', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => (
-                    <Button
-                      key={method}
-                      variant={methodFilter === method ? 'default' : 'outline'}
-                      size="sm"
-                      className="text-xs px-2"
-                      onClick={() => setMethodFilter(method)}
-                    >
-                      {method === 'ALL' ? 'All' : method}
-                    </Button>
-                  ))}
-                </div>
+                {/* One local view at a time: the segmented control, not a row of buttons. */}
+                <Tabs value={methodFilter} onValueChange={setMethodFilter}>
+                  <TabsList aria-label="Filter by method" className="flex-wrap">
+                    {['ALL', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => (
+                      <TabsTrigger key={method} value={method} className="font-mono text-xs">
+                        {method === 'ALL' ? 'All' : method}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
               </div>
               <div className="space-y-2">
               {filteredOperations.map((operation: ApiOperation) => {

@@ -68,21 +68,25 @@ export function createApisColumns({
         const api = row.original
         const TypeIcon = getApiTypeIcon(api.type)
 
+        // On a phone the name and its visibility badge wrap instead of
+        // running past the cell, where the badge was cut off.
         return (
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="w-10 h-10 shrink-0 bg-primary/10 rounded-lg flex items-center justify-center">
               <TypeIcon className="h-5 w-5 text-primary" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{api.name}</span>
-                <VisibilityBadge
-                  visibility={(api as any).visibility}
-                  teamId={(api as any).teamId}
-                  teamLookup={teamLookup}
-                />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="api-name-line">
+                <span className="font-medium break-words">{api.name}</span>
+                <span className="shrink-0">
+                  <VisibilityBadge
+                    visibility={(api as any).visibility}
+                    teamId={(api as any).teamId}
+                    teamLookup={teamLookup}
+                  />
+                </span>
               </div>
-              <div className="text-sm text-muted-foreground">{api.baseUrl === 'internal://custom' ? 'Custom Tool' : api.baseUrl}</div>
+              <div className="truncate text-sm text-muted-foreground">{api.baseUrl === 'internal://custom' ? 'Custom Tool' : api.baseUrl}</div>
             </div>
           </div>
         )

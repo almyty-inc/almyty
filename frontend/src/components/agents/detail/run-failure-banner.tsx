@@ -35,8 +35,8 @@ export function RunFailureBanner({ agent, executions }: { agent: Agent; executio
   const roleFailure = /role ["'].*["'] (could not be filled|needs a model)|no models are registered/i.test(detail ?? '')
 
   return (
-    <div role="alert" className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+    <div role="alert" className="flex items-start gap-2 rounded-lg border border-danger-border bg-danger-subtle p-3 text-sm">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
       <div className="space-y-1">
         <p className="font-medium">
           The last run {latest.status === 'timeout' ? 'timed out' : 'failed'}

@@ -53,10 +53,33 @@ describe('AgentConfigPanel', () => {
     expect(screen.getAllByText('gpt-4o').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('Claude reviewer')).toBeInTheDocument()
     expect(screen.getByText('GPT-4o reviewer')).toBeInTheDocument()
-    expect(screen.getByText('any_fail_blocks')).toBeInTheDocument()
     // Feature chips
     expect(screen.getByText(/Constraints/)).toBeInTheDocument()
     expect(screen.getByText(/Memory/)).toBeInTheDocument()
+  })
+
+  it('shows the policy and triggers as words, never as raw values', async () => {
+    renderWithProviders(<AgentConfigPanel agent={agent()} />)
+    expect(await screen.findByTestId('verify-policy-badge')).toHaveTextContent('Any reviewer can block')
+    expect(screen.getByTestId('verify-triggers')).toHaveTextContent('Checks the final answer')
+    const text = document.body.textContent || ''
+    expect(text).not.toContain('any_fail_blocks')
+    expect(text).not.toContain('on_final_output')
+  })
+
+  it('names the vendor next to the model a role runs, not the connection name that names another model', async () => {
+    renderWithProviders(
+      <AgentConfigPanel
+        agent={agent({
+          agentConfig: {},
+          models: { strategy: 'single', roles: [{ key: 'main', name: 'Main', purpose: 'main', kind: 'model', providerId: 'p-openai', model: 'gpt-4.1-mini' }] },
+        })}
+      />,
+    )
+    const models = await screen.findByTestId('overview-models')
+    await screen.findByText('OpenAI')
+    expect(models).toHaveTextContent('gpt-4.1-mini')
+    expect(models).not.toHaveTextContent('GPT-4o')
   })
 
   it('renders the primary model even when verify is off', async () => {

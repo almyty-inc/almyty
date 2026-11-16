@@ -46,6 +46,7 @@ import {
 
 import { agentsApi } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Disclosure } from '@/components/ui/disclosure'
 import { QueryError } from '@/components/ui/query-error'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
@@ -92,6 +93,8 @@ interface OverviewTabProps {
   auditLog: AgentAuditEntry[]
   webhookUrl: string
   setWebhookUrl: (url: string) => void
+  /** Opens the Runs tab: "See all runs" under Recent runs. */
+  onShowAllRuns?: () => void
 }
 
 type RecentRunRow =
@@ -99,6 +102,8 @@ type RecentRunRow =
   | { kind: 'run'; id: string; status: string; executionTime: number; totalCost: number; totalTokens: number; createdAt: string; run: AgentRun }
 
 const RECENT_RUNS_MAX = 20
+/** How many of them the overview lists; the rest are a click away on Runs. */
+export const OVERVIEW_RECENT_RUNS = 5
 
 /** An agent's executions and autonomous runs as one list, newest first. */
 export function recentRunRows(executions: AgentExecution[], runs: AgentRun[]): RecentRunRow[] {
@@ -152,6 +157,7 @@ export function OverviewTab({
   auditLog,
   webhookUrl,
   setWebhookUrl,
+  onShowAllRuns,
 }: OverviewTabProps) {
   const queryClient = useQueryClient()
   // Card names for the routing column: attribution carries card ids only.
@@ -428,7 +434,7 @@ export function OverviewTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentRuns.map((row) => (
+                  {recentRuns.slice(0, OVERVIEW_RECENT_RUNS).map((row) => (
                     // A row opens its run on the Runs tab, workflow runs and autonomous runs alike.
                     <TableRow
                       key={`${row.kind}-${row.id}`}
@@ -474,11 +480,30 @@ export function OverviewTab({
                   ))}
                 </TableBody>
               </Table>
+              {recentRuns.length > OVERVIEW_RECENT_RUNS && (
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => (onShowAllRuns ? onShowAllRuns() : navigate(`/agents/${agent.id}?tab=runs`))}
+                  >
+                    See all runs
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Pipeline, versions, change history and audit log: closed until
+          asked for, so the overview stays a screen or two on a phone. */}
+      <Disclosure
+        title="History"
+        summary={<span className="text-xs font-normal text-muted-foreground">Versions, changes and the audit log</span>}
+        testId="overview-history"
+      >
+      <div className="space-y-4">
       {/* Cost Estimate & Version Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Pipeline Info -- hidden for autonomous agents */}
@@ -623,8 +648,8 @@ export function OverviewTab({
                             {changes.map((change, ci) => (
                               <div key={ci} className="text-[11px] font-mono bg-muted rounded px-2 py-1">
                                 <span className="text-muted-foreground">{change.field}:</span>{' '}
-                                <span className="text-red-500 line-through">{formatDiffValue(change.from)}</span>{' '}
-                                <span className="text-green-600">{formatDiffValue(change.to)}</span>
+                                <span className="text-danger line-through">{formatDiffValue(change.from)}</span>{' '}
+                                <span className="text-success">{formatDiffValue(change.to)}</span>
                               </div>
                             ))}
                           </div>
@@ -699,6 +724,8 @@ export function OverviewTab({
           )}
         </CardContent>
       </Card>
+      </div>
+      </Disclosure>
 
       {/* Rollback Confirmation */}
       <AlertDialog open={rollbackIndex !== null} onOpenChange={(open) => { if (!open) setRollbackIndex(null) }}>

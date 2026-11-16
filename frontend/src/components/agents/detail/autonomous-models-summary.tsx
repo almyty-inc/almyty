@@ -10,6 +10,7 @@ import { Bot, Cpu, Pencil } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { asProviderList, useProviderList } from '@/components/model-picker'
+import { providerTypeLabels } from '@/components/llm-providers/provider-type-config'
 import {
   PURPOSE_LABELS,
   STRATEGY_DESCRIPTIONS,
@@ -52,7 +53,9 @@ export function AutonomousModelsSummary({ agentId, models, modelConfig }: Autono
     }
     if (!role.providerId) return 'No model chosen'
     const provider = providers.find((p) => p.id === role.providerId)
-    const providerName = provider?.name ?? 'Provider'
+    // The vendor, not the connection's own name: that is free text and
+    // often names a model ("OpenAI · GPT-4o") other than the one the role runs.
+    const providerName = (provider?.type && (providerTypeLabels as Record<string, string>)[provider.type]) || provider?.name || 'Provider'
     return role.model ? `${providerName} / ${role.model}` : `${providerName}, default model`
   }
 
@@ -87,7 +90,9 @@ export function AutonomousModelsSummary({ agentId, models, modelConfig }: Autono
                 <Cpu className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
               )}
               <span className="font-medium">{role.name}</span>
-              <Badge variant="outline" className="text-[10px]">{PURPOSE_LABELS[role.purpose] ?? role.purpose}</Badge>
+              {role.name !== PURPOSE_LABELS[role.purpose] && (
+                <Badge variant="outline" className="text-[10px]">{PURPOSE_LABELS[role.purpose] ?? role.purpose}</Badge>
+              )}
               {!roleIsUsed(current.strategy, role) && (
                 <span className="text-[11px] text-muted-foreground">not used by {STRATEGY_LABELS[current.strategy]}</span>
               )}

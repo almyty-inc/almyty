@@ -41,11 +41,13 @@ interface RunTrace {
   summary: { knownCostCents: number; opaqueHops: number; divergences: RouteHop[]; capabilitiesDropped: string[] }
 }
 
+// A layer is a category, not a status: one neutral look for all of them
+// (the design system keeps green and amber for success and waiting).
 const LAYER_TONE: Record<string, string> = {
-  routing: 'border-primary/40 text-primary',
-  provider: 'border-teal-600/40 text-teal-700 dark:border-teal-400/40 dark:text-teal-300',
-  strategy: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',
-  orchestrator: 'border-amber-500/40 text-amber-600 dark:text-amber-400',
+  routing: 'text-muted-foreground',
+  provider: 'text-muted-foreground',
+  strategy: 'text-muted-foreground',
+  orchestrator: 'text-muted-foreground',
 }
 
 const cents = (c: number) => `$${(c / 100).toFixed(4)}`
@@ -60,7 +62,7 @@ export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; 
 
   if (isError) {
     return (
-      <p data-testid="trace-error" className="text-xs text-red-600 dark:text-red-400">
+      <p data-testid="trace-error" className="text-xs text-danger">
         {getApiErrorMessage(error, 'Could not read this run\'s trace')}
       </p>
     )
@@ -97,13 +99,13 @@ export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; 
       </div>
 
       {data?.strategyFallbackReason && (
-        <p data-testid="trace-fallback-reason" className="text-xs text-amber-600 dark:text-amber-400">
+        <p data-testid="trace-fallback-reason" className="text-xs text-warning">
           The orchestrator did not choose: {data.strategyFallbackReason}
         </p>
       )}
 
       {(data?.summary.divergences.length ?? 0) > 0 && (
-        <p data-testid="trace-divergence" className="text-xs text-amber-600 dark:text-amber-400">
+        <p data-testid="trace-divergence" className="text-xs text-warning">
           A provider served a different model than was asked for. Check the hops marked substituted.
         </p>
       )}
@@ -119,7 +121,7 @@ export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; 
             </div>
 
             {step.error && (
-              <p data-testid={`trace-step-error-${step.nodeId}`} className="mt-1 text-[11px] text-red-600 dark:text-red-400">
+              <p data-testid={`trace-step-error-${step.nodeId}`} className="mt-1 text-[11px] text-danger">
                 {step.error}
               </p>
             )}
@@ -138,7 +140,7 @@ export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; 
                     <span className="text-muted-foreground/70">{cents(hop.costEstimateCents)}</span>
                   ) : null}
                   {hop.divergent && (
-                    <span data-testid="hop-divergent" className="text-amber-600 dark:text-amber-400">
+                    <span data-testid="hop-divergent" className="text-warning">
                       substituted {hop.requestedModel} → {hop.servedModel}
                     </span>
                   )}

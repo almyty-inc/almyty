@@ -127,15 +127,16 @@ describe('AgentsPage', () => {
       const empty = screen.getByText('No agents yet').closest('[role="status"]')!
       expect(empty).toHaveAttribute('data-variant', 'panel')
 
-      // The header and the empty state offer the same action under the
-      // same label: sentence case in both, never "Create Agent" above
-      // "Create agent".
+      // One "Create agent" on the page: the header's. The empty state does
+      // not repeat it as a second solid button. Sentence case, never
+      // "Create Agent".
       const createButtons = screen.getAllByRole('button', { name: 'Create agent' })
-      expect(createButtons).toHaveLength(2)
+      expect(createButtons).toHaveLength(1)
+      expect(empty).not.toContainElement(createButtons[0])
       expect(screen.queryByRole('button', { name: 'Create Agent' })).not.toBeInTheDocument()
     })
 
-    it('should navigate to /agents/new when empty state CTA is clicked', async () => {
+    it('should navigate to /agents/new from the one Create agent button', async () => {
       const user = userEvent.setup()
       renderAgentsPage()
 
@@ -143,10 +144,7 @@ describe('AgentsPage', () => {
         expect(screen.getByText('No agents yet')).toBeInTheDocument()
       })
 
-      // There are two "Create agent" buttons (header + empty state CTA).
-      // Click the empty state one (last match).
-      const createButtons = screen.getAllByRole('button', { name: /Create agent/i })
-      await user.click(createButtons[createButtons.length - 1])
+      await user.click(screen.getByRole('button', { name: 'Create agent' }))
 
       expect(mockNavigate).toHaveBeenCalledWith('/agents/new')
     })

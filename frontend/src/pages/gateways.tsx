@@ -265,7 +265,7 @@ export function GatewaysPage() {
           variant="panel"
           icon={Zap}
           title="No gateways yet"
-          description="Pick a protocol (MCP, UTCP or Skills) and the tools to serve, and get an address Claude Code, Cursor or another client can use."
+          description="Pick a protocol (MCP, UTCP or Skills) and the tools to serve, and get an address that AI assistants, coding tools and other agents can use."
           action={
             <Button onClick={() => navigate('/gateways/new')}>
               <Plus className="h-4 w-4 mr-2" />

@@ -54,6 +54,20 @@ describe('ConnectProviderPage', () => {
     expect(screen.queryByText('Model providers')).not.toBeInTheDocument()
   })
 
+  it('opens on the provider choice alone, and names the connection once one is picked', async () => {
+    at()
+    const form = await screen.findByTestId('credential-form')
+    await screen.findByTestId('service-select-trigger')
+    expect(within(form).queryByLabelText('Name')).not.toBeInTheDocument()
+
+    await openTile('anthropic')
+    const provider = within(form).getByText('Provider')
+    const name = within(form).getByLabelText('Name')
+    expect(name).toHaveValue('Anthropic')
+    // Provider comes before Name in reading order.
+    expect(provider.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('searches the provider list', async () => {
     at()
     fireEvent.click(await screen.findByTestId('service-select-trigger'))

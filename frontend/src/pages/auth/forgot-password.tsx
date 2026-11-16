@@ -9,7 +9,7 @@ import { Loader2, MailCheck } from 'lucide-react'
 import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { AuthAlert, AuthField, AuthHeading } from '@/components/auth/auth-form'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 const forgotSchema = z.object({
@@ -56,10 +56,10 @@ export function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <div className="text-center space-y-4">
-        <div className="flex flex-col items-center gap-3 py-4">
-          <MailCheck className="h-10 w-10 text-emerald-500" aria-hidden />
-          <h1 className="text-2xl font-heading font-bold">Check your email</h1>
+      <div className="space-y-4">
+        <div className="flex flex-col items-start gap-3">
+          <MailCheck className="h-10 w-10 text-success" aria-hidden />
+          <h1 className="font-heading text-[28px] font-bold leading-9 tracking-[-0.03em]">Check your email</h1>
           <p className="text-sm text-muted-foreground">
             If an account exists for that address, we've sent a link to reset
             your password. The link expires in one hour.
@@ -74,38 +74,14 @@ export function ForgotPasswordPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-heading font-bold mb-2">Forgot your password?</h1>
-      <p className="text-sm text-muted-foreground mb-6">
-        Enter your email and we'll send you a link to reset it.
-      </p>
-      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div>
-          <Label htmlFor="email">Email address</Label>
-          <div className="mt-1">
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="Enter your email"
-              {...register('email')}
-              className={errors.email ? 'border-red-300' : ''}
-            />
-            {errors.email && (
-              <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
-            )}
-          </div>
-        </div>
+      <AuthHeading title="Forgot your password?" lead="Enter your email and we'll send you a link to reset it." />
+      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <AuthField id="email" label="Email address" error={errors.email?.message}>
+          <Input id="email" type="email" autoComplete="email" placeholder="name@example.com" {...register('email')} />
+        </AuthField>
 
-        <div>
-          {submitError && (
-            <div
-              role="alert"
-              aria-live="polite"
-              className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md"
-            >
-              <p className="text-sm text-destructive">{submitError}</p>
-            </div>
-          )}
+        <div className="space-y-4">
+          {submitError && <AuthAlert>{submitError}</AuthAlert>}
           <Button
             type="submit"
             className="w-full"
@@ -124,17 +100,12 @@ export function ForgotPasswordPage() {
         </div>
       </Form>
 
-      <div className="mt-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          Remembered it?{' '}
-          <Link
-            to="/auth/login"
-            className="font-medium text-primary hover:text-primary/80"
-          >
-            Back to sign in
-          </Link>
-        </p>
-      </div>
+      <p className="mt-8 border-t pt-6 text-sm text-muted-foreground">
+        Remembered it?{' '}
+        <Link to="/auth/login" className="font-semibold text-primary hover:text-primary-hover">
+          Back to sign in
+        </Link>
+      </p>
     </div>
   )
 }

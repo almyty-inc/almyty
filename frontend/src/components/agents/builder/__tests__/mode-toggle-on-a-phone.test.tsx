@@ -63,3 +63,28 @@ describe('the builder mode toggle on a phone', () => {
     expect(props.onAgentModeChange).toHaveBeenCalledWith('autonomous')
   })
 })
+describe('the builder toolbar buttons on a phone', () => {
+  // Below sm, Save and Test show their icon only (the word is `hidden`).
+  // Without an aria-label they had no name at all on a phone.
+  it('keeps Save and Test named when their word is hidden', () => {
+    renderToolbar({ isEditing: true })
+    const save = screen.getByRole('button', { name: 'Save' })
+    expect(save).toHaveAttribute('aria-label', 'Save')
+    expect(within(save).getByText('Save').className).toMatch(/\bhidden\b/)
+    expect(screen.getByRole('button', { name: 'Test' })).toHaveAttribute('aria-label', 'Test')
+  })
+
+  it('draws the mode toggle as a segmented control on the card surface', () => {
+    renderToolbar({ agentMode: 'autonomous' })
+    const on = within(screen.getByTestId('agent-mode-toggle')).getByRole('button', { name: 'Autonomous' })
+    expect(on).toHaveAttribute('aria-pressed', 'true')
+    expect(on.className).toContain('bg-card')
+  })
+
+  it('shows the name field as visibly editable with a focus ring', () => {
+    renderToolbar()
+    const name = screen.getByRole('textbox', { name: 'Agent name' })
+    expect(name.className).not.toContain('focus-visible:ring-0')
+    expect(name.className).toContain('hover:border-input')
+  })
+})
