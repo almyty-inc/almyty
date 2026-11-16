@@ -23,15 +23,11 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { OperationPicker } from '@/components/apis/operation-picker'
 
-import { Api, ApiOperation, ApiType, Tool } from '@/types'
+import { Api, ApiOperation, Tool } from '@/types'
 import { apisApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { isManualHttp, MANUAL_OPERATIONS_LABEL } from '@/lib/api-operations'
 import { pluralized } from '@/lib/utils'
-
-/** An API connected as a bare address (Manual HTTP), with no description to import. */
-export function isManualHttp(api: Api): boolean {
-  return api.type === ApiType.HTTP && !(api.schemas && api.schemas.length > 0)
-}
 
 /** The create-tool page, opened as an HTTP tool already linked to this API. */
 export function addToolPath(api: Api): string {
@@ -123,7 +119,9 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
             <div>
               <CardTitle className="text-xl">API operations</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                {pluralized(operations.length, 'operation')} parsed from schema
+                {operations.length === 0 && isManualHttp(api)
+                  ? `${MANUAL_OPERATIONS_LABEL}: no description to read operations from`
+                  : `${pluralized(operations.length, 'operation')} parsed from schema`}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

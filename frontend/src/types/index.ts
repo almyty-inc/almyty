@@ -270,6 +270,12 @@ export interface Api {
   schema?: ApiSchema
   schemas?: any[]
   operations?: ApiOperation[]
+  /** On the LIST response only: how many operations were read from its description. */
+  operationCount?: number
+  /** On the LIST response only: live tools from this API, made from operations or by hand. */
+  toolCount?: number
+  /** On the LIST response only: whether a description was imported. */
+  hasDescription?: boolean
   metadata?: Record<string, any>
   isActive: boolean
   lastTestedAt?: string

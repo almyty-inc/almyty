@@ -113,4 +113,14 @@ describe('AgentConfigPanel', () => {
     for (const text of ['Main', 'Drafter', 'Automatic', 'Checker', 'claude-haiku', 'Critic', 'Another agent']) expect(models).toHaveTextContent(text)
     expect(screen.queryByText('Primary model')).not.toBeInTheDocument()
   })
+
+  // The badge was the raw mode under CSS `capitalize`: "Autonomous Mode".
+  it.each([
+    ['autonomous', 'Autonomous mode'],
+    ['workflow', 'Workflow mode'],
+  ])('labels %s agents in sentence case', (mode, label) => {
+    renderWithProviders(<AgentConfigPanel agent={agent({ mode })} />)
+    const badge = screen.getByText(label)
+    expect(badge.className).not.toMatch(/\bcapitalize\b/)
+  })
 })
