@@ -153,6 +153,10 @@ export class Api {
   // Virtual — live tools generated from or attached to this API (list queries).
   toolCount?: number;
 
+  // Virtual — whether a description (schema) was imported (list queries).
+  // Without one the API has no operations; its tools were made by hand.
+  hasDescription?: boolean;
+
   @OneToMany(() => Resource, resource => resource.api, {
     cascade: true,
   })

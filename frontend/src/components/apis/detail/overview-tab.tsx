@@ -22,6 +22,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { cn, pluralized } from '@/lib/utils'
 import { connectionTestMessage } from '@/lib/connection-test'
 import { addToolPath } from './operations-tab'
+import { isManualHttp, MANUAL_OPERATIONS_HINT, MANUAL_OPERATIONS_LABEL } from '@/lib/api-operations'
 
 /** The tool list filtered to one API's tools. */
 export function apiToolsPath(api: Pick<Api, 'id' | 'name'>): string {
@@ -79,7 +80,18 @@ export function OverviewTab({
     <>
       {/* What the API holds, at a glance: the same stat row as an agent's. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="api-stats">
-        <StatTile icon={ListTree} label="Operations" value={operations.length} />
+        {/* A Custom HTTP API has no description, so no operations: say how
+            its tools came to be instead of a bare 0, as the APIs list does. */}
+        {isManualHttp(api) && operations.length === 0 ? (
+          <StatTile
+            icon={ListTree}
+            label="Operations"
+            value={<span className="text-base font-semibold">{MANUAL_OPERATIONS_LABEL}</span>}
+            footer={<span title={MANUAL_OPERATIONS_HINT}>No description to read them from</span>}
+          />
+        ) : (
+          <StatTile icon={ListTree} label="Operations" value={operations.length} />
+        )}
         <StatTile
           icon={Wrench}
           label="Tools"

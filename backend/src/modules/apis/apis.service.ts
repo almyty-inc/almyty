@@ -328,6 +328,14 @@ export class ApisService {
                  OR t."operationId" IN (SELECT o.id FROM operations o WHERE o."apiId" = api.id)))`,
       'api_toolCount',
     );
+    // Whether the API has a description (an imported schema). Operations are
+    // read from one, so an API without it has none to count: a hand-made
+    // HTTP API's tools each call a path set by hand. The list says so
+    // instead of showing "0 operations" next to tools that work.
+    qb.addSelect(
+      `EXISTS (SELECT 1 FROM api_schemas s WHERE s."apiId" = api.id)`,
+      'api_hasDescription',
+    );
     // `id` is not decoration. `createdAt` is a millisecond timestamp, and
     // two APIs written in the same millisecond order arbitrarily between
     // one request and the next — so with `skip`/`take` a tied row can
@@ -340,6 +348,8 @@ export class ApisService {
     entities.forEach((api, i) => {
       api.operationCount = Number(raw[i]?.api_operationCount ?? 0);
       api.toolCount = Number(raw[i]?.api_toolCount ?? 0);
+      const hasDescription = raw[i]?.api_hasDescription;
+      api.hasDescription = hasDescription === true || hasDescription === 't' || hasDescription === 'true';
     });
     return { apis: entities, total };
   }

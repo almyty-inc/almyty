@@ -14,7 +14,7 @@ import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import { VisibilityBadge, type Team } from '@/components/ui/team-filter'
 import { Api, ApiAuthType, ApiType } from '@/types'
-
+import { apiTools, isManualHttp, MANUAL_OPERATIONS_HINT, MANUAL_OPERATIONS_LABEL, operationCount } from '@/lib/api-operations'
 function getApiTypeIcon(type: ApiType) {
   switch (type) {
     case ApiType.OPENAPI: return Globe
@@ -118,26 +118,29 @@ export function createApisColumns({
     {
       accessorKey: 'tools',
       header: 'Tools',
-      cell: ({ row }) => {
-        const api = row.original
-        const apiToolCount = allTools.filter((tool: any) =>
-          tool.metadata?.sourceApi?.id === api.id || tool.apiId === api.id
-        ).length
-        return (
-          <div className="text-center">
-            <span className="font-medium">{apiToolCount}</span>
-          </div>
-        )
-      },
+      cell: ({ row }) => (
+        <div className="text-center">
+          <span className="font-medium">{apiTools(row.original, allTools).length}</span>
+        </div>
+      ),
     },
     {
       accessorKey: 'operations',
       header: 'Operations',
       cell: ({ row }) => {
-        const opCount = (row.original as any).operationCount ?? row.original.operations?.length ?? 0
+        const api = row.original
+        // A Custom HTTP API has no description, so no operations: its tools
+        // were made by hand. "0" read as an API with nothing in it.
+        if (isManualHttp(api)) {
+          return (
+            <div className="text-center text-sm text-muted-foreground" title={MANUAL_OPERATIONS_HINT}>
+              {MANUAL_OPERATIONS_LABEL}
+            </div>
+          )
+        }
         return (
           <div className="text-center">
-            <span className="font-medium">{opCount}</span>
+            <span className="font-medium">{operationCount(api)}</span>
           </div>
         )
       },
