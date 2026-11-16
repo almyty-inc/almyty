@@ -54,7 +54,7 @@
  * | rc9 RD2 b37987d4 | no: "skipping 10", lists 10; 3 reported before | fail |
  * | rc9 RD3 fc270572 | no: "skipped 4", leaves out 3; 7 reported before | fail |
  * | rc9 RD4 37f14fe1 | no: "skipped 1", lists 10; 7 reported before | fail |
- * | rc9 RW1 8ca1dcf2 | no: v22.23.5 "undici" (not in its notes); #63826 (question) as a bug | fail |
+ * | rc9 RW1 8ca1dcf2 | no: v22.23.5 "undici" (not in its notes). #63826 (question) "should not be bound as doubles": its title names a problem, so the agent's "labels or titles" rule lets it in | fail |
  * | rc9 RW2 96f7b54a | no: "crypto", "npm"; #63096 (feature request) as a bug; labels fs, stream, util/dotenv made up | fail |
  * | rc9 RW3 941cb583 | no: v5.3.0 outside the window | fail |
  * | rc9 DC1 9f8a4886 | yes (8/8 values; the sort rule is not a value) | pass |
@@ -132,7 +132,7 @@ const REASONS: Partial<Record<Run, RegExp[]>> = {
   'rc9-RD2-b37987d4': [/^The answer says it skipped 10 of the 10 works the tool returned, so it should list 0, but it lists 10$/, NEW(3)],
   'rc9-RD3-fc270572': [/^The answer says it skipped 4 of the 10 works the tool returned, so it should list 6, but it lists 7$/, NEW(7)],
   'rc9-RD4-37f14fe1': [/^The answer says it skipped 1 of the 10 items the tool returned, so it should list 9, but it lists 10$/, NEW(7)],
-  'rc9-RW1-8ca1dcf2': [/^v22\.23\.5: the answer's summary names undici, but the release notes in the tool results never mention it$/, CATEGORY('63826', 'question')],
+  'rc9-RW1-8ca1dcf2': [/^v22\.23\.5: the answer's summary names undici, but the release notes in the tool results never mention it$/],
   'rc9-RW2-96f7b54a': [
     /^v26\.13\.1: the answer's summary names npm, but the release notes in the tool results never mention it$/,
     /^v22\.23\.5: the answer's summary names crypto, but the release notes in the tool results never mention it$/,
