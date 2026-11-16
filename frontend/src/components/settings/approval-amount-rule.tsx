@@ -44,6 +44,9 @@ export function quotedToolName(tool: any, fallback?: string): string {
   return tool ? `“${readableToolName(tool)}”` : fallback || 'this tool'
 }
 
+/** Under the amount: what to type, for any number a tool takes. */
+export const AMOUNT_HINT = 'Just the number, in the unit the tool uses for it.'
+
 export function AmountRuleFields({
   value,
   onChange,
@@ -112,7 +115,9 @@ export function AmountRuleFields({
               </SelectContent>
             </Select>
           </Field>
-          <Field id="rule-amount" label="Amount" hint="Just the number; the tool's own currency." error={errors.amount}>
+          {/* True for any number the tool takes (a price, forecast_days, a
+              count): it used to name a currency even when there was none. */}
+          <Field id="rule-amount" label="Amount" hint={AMOUNT_HINT} error={errors.amount}>
             <Input
               id="rule-amount"
               inputMode="decimal"

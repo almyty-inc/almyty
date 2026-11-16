@@ -18,6 +18,14 @@ import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { pluralized } from '@/lib/utils'
 import { SAVE_LABELS, saveOf } from '@/components/agents/builder/memory-section'
 
+/**
+ * The mode badge, in sentence case like every other label. It was the raw
+ * mode with CSS `capitalize`, which read "Autonomous Mode".
+ */
+export const AGENT_MODE_BADGE = {
+  autonomous: 'Autonomous mode',
+  workflow: 'Workflow mode',
+} as const
 export function AgentConfigPanel({ agent }: { agent: Agent }) {
   const [editingVerify, setEditingVerify] = useState(false)
   const { data: providersData } = useQuery<any>({
@@ -54,7 +62,7 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
                 Configure verification
               </Button>
             )}
-            <Badge variant="outline" className="capitalize">{agent.mode} mode</Badge>
+            <Badge variant="outline">{AGENT_MODE_BADGE[agent.mode as keyof typeof AGENT_MODE_BADGE] ?? `${agent.mode} mode`}</Badge>
           </div>
         </div>
         {vendors.size > 1 && (
