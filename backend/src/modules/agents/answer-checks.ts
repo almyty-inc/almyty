@@ -39,6 +39,7 @@
 import { asJson, cutTextOf } from './checker-evidence';
 import { evidenceJson } from './checker-guards';
 import { compareVersions } from './version-order';
+import { dayOfIso } from './date-arithmetic';
 
 /** The name findings of these checks carry on the verify step. */
 export const CODE_CHECKER = 'code check';
@@ -582,7 +583,8 @@ function labelNames(v: unknown): string[] | null {
 
 /**
  * Labels the answer gives an item that the tool does not, compared as sets (valueList). That it has none is noneClaimFindings'.
- * A note in brackets after a label is not part of it: "ppc, flaky-test (flaky-test)" gives ppc and flaky-test (run b60bacad).
+ * A note in brackets after a label is not part of it: "ppc, flaky-test (flaky-test)" gives ppc and flaky-test (run b60bacad);
+ * nor a word that says it is a label: "marked feature request (excluded from bugs)" gives feature request (run 3dc6c613).
  */
 function labelFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   const said = labelled(entry, /^labels?$/);
@@ -591,9 +593,13 @@ function labelFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   if (!it) return [];
   const tool = labelNames(it.value.labels)!;
   const toolSet = new Set(tool.map((l) => normalValue(l)));
-  // The label before a trailing "(...)", read without a regex.
+  // The label before a trailing "(...)", and after a leading "marked"/"labelled"/"tagged" ("as"), read without a regex.
   const beforeNote = (l: string) => (l.endsWith(')') && l.lastIndexOf('(') > 0 ? l.slice(0, l.lastIndexOf('(')).trim() : l);
-  const extra = valueList(said).filter((l) => !toolSet.has(l) && !toolSet.has(beforeNote(l)));
+  const afterMark = (l: string) => {
+    for (const lead of ['marked as ', 'labelled as ', 'labeled as ', 'tagged as ', 'marked ', 'labelled ', 'labeled ', 'tagged ']) if (l.startsWith(lead)) return l.slice(lead.length).trim();
+    return l;
+  };
+  const extra = valueList(said).filter((l) => !toolSet.has(l) && !toolSet.has(beforeNote(l)) && !toolSet.has(afterMark(beforeNote(l))));
   if (!extra.length) return [];
   const toolWords = tool.length ? tool.join(', ') : 'none';
   return [finding(it.label, 'labels', `${it.label}: the answer gives the label${extra.length === 1 ? '' : 's'} ${extra.join(', ')}, but the tool results give ${toolWords}`, `labels: ${toolWords}`, `Labels: ${said}`, 'item_field')];
@@ -1652,33 +1658,101 @@ export function markAlreadyReported(content: string, earlier: EarlierItem[]): { 
   );
 }
 
-/** The field an issue carries, for the model, when the agent's own rule for a problem cannot let it in. */
-export const NOT_A_PROBLEM_FIELD = '_not_a_bug_by_your_rule';
+/** The field each issue carries, for the model, with whether the agent's own rule for a problem lets it in, and why. */
+export const ISSUE_RULE_FIELD = '_meets_your_issue_rule';
+/** The field each issue carries, for the model, with its labels as one closed list: the only labels it has. */
+export const ISSUE_LABELS_FIELD = '_labels';
+
+/** Move `head` keys, in that order, to the front of an object, in place (the model reads an issue's number, title and labels together). */
+function keysFirst(m: Obj, head: string[]): void {
+  const all = { ...m };
+  for (const k of Object.keys(m)) delete m[k];
+  for (const k of head) if (k in all) m[k] = all[k];
+  for (const [k, v] of Object.entries(all)) if (!(k in m)) m[k] = v;
+}
 
 /**
  * A tool result as the model of an agent with a rule for which issues are
  * problems ("pick the ones whose labels or titles indicate bugs,
- * regressions or security") reads it: each issue that rule cannot let in
- * marked, with why (its labels mark it as a question or feature request,
- * and its title names no problem: issueQualifies, the answer check's own
- * test). The release watcher listed such issues as bugs in 10 of its 26
- * failed runs (#63096 and #67482, feature requests, in 1d76944d).
+ * regressions or security") reads it. Every issue leads with its number,
+ * its title, its labels as one closed list (`_labels`, "none" when it has
+ * none) and whether the rule lets it in (`_meets_your_issue_rule`: "yes",
+ * "no" or "unclear", with why; issueQualifies, the answer check's own
+ * test). The release watcher gave issues labels of the issue next to them
+ * ("stale" for #64333 in ac92571f, "4.x" for #2414 in 6aa65f19) and listed
+ * issues marked as feature requests as bugs (10 of 26 failed runs, and
+ * #67504 in 3dc6c613 and 4ee3fad1, which only marked it "not a bug").
  */
 export function markOutsideIssueRule(content: string, rule: { labels: Set<string> } | null): { content: string; marked: number; items: number } {
   if (!rule) return { content, marked: 0, items: 0 };
+  let yes = 0;
+  let no = 0;
   return markItems(
     content,
     (m, it) => {
       if (!it.numbers.length) return false;
+      const labels = labelNames(m.labels);
+      if (labels === null) return false;
       const q = issueQualifies(it, rule);
-      if (q.qualifies !== false) return false;
-      m[NOT_A_PROBLEM_FIELD] = `marked ${q.kinds.join(', ')}, and its title names no problem`;
+      m[ISSUE_LABELS_FIELD] = labels.length ? labels.join(', ') : 'none (this issue has no labels)';
+      if (q.qualifies === true) {
+        yes++;
+        m[ISSUE_RULE_FIELD] = q.problemLabel ? `yes: its labels include ${labels.filter((l) => rule.labels.has(normalValue(l)) || /\b(?:bug|regression|security|crash|vulnerab|cve|critical)/i.test(l)).join(', ')}` : 'yes: its title names a problem';
+      } else if (q.qualifies === false) {
+        no++;
+        m[ISSUE_RULE_FIELD] = `no: its labels mark it as ${q.kinds.join(', ')}, and its title names no problem`;
+      } else {
+        m[ISSUE_RULE_FIELD] = 'unclear: no problem label, and its title has no word for a problem';
+      }
+      keysFirst(m, ['number', 'title', ISSUE_LABELS_FIELD, ISSUE_RULE_FIELD, 'state', 'updated_at', 'html_url']);
       return true;
     },
-    (marked, items) =>
-      `${marked} of the ${items} items in this result ${marked === 1 ? 'is' : 'are'} marked "${NOT_A_PROBLEM_FIELD}": ` +
-      `${marked === 1 ? 'its' : 'their'} labels mark ${marked === 1 ? 'it' : 'them'} as something else (a question, a feature request) and ${marked === 1 ? 'its title names' : 'their titles name'} no problem, ` +
-      `so by your instructions ${marked === 1 ? 'it is not a bug, regression or security issue' : 'they are not bugs, regressions or security issues'}: do not list ${marked === 1 ? 'it' : 'them'} as one.`,
+    (marked) =>
+      `Each of the ${marked} issues below starts with its number, title, "${ISSUE_LABELS_FIELD}" and "${ISSUE_RULE_FIELD}". ` +
+      `"${ISSUE_LABELS_FIELD}" is the whole list of that issue's labels: give an issue only those, never a label of another issue or a word from its title. ` +
+      `"${ISSUE_RULE_FIELD}" says whether your instructions let the issue in as a bug, regression or security issue: ${yes} say yes, ${no} say no. ` +
+      `List an issue as one only when it says yes (an "unclear" one only when you can say from its title what is broken); never list one that says no, not even with a note. ` +
+      `If fewer issues qualify than the most you may list, list fewer.`,
+  );
+}
+
+/** The field each dated item carries, for the model, with where its date falls against the window the request names. */
+export const WINDOW_FIELD = '_request_window';
+
+/** The date that makes an item new, in order of preference; never `updated_at` or `created_at` (an old issue can be open today). */
+const NEW_DATE_FIELDS = ['published_at', 'publication_date', 'release_date', 'released_at', 'publishedAt'];
+
+/**
+ * A tool result as the model reads it when the request names a window
+ * ("look back 30 days"): each item with a publication date marked inside
+ * or outside the window, with the dates (window-check.ts holds the answer
+ * to the same window). Told the window in its prompt, the model still
+ * listed v5.3.0 (2026-10-09) as new for 2026-10-17 to 2026-11-16
+ * (5c26460e, 6aa65f19).
+ */
+export function markRequestWindow(content: string, window: { start: number; startIso: string; todayIso: string } | null): { content: string; marked: number; items: number } {
+  if (!window) return { content, marked: 0, items: 0 };
+  let outside = 0;
+  return markItems(
+    content,
+    (m) => {
+      for (const field of NEW_DATE_FIELDS) {
+        const day = dayOfIso(m[field]);
+        if (day === null) continue;
+        const date = String(m[field]).slice(0, 10);
+        if (day >= window.start) m[WINDOW_FIELD] = `inside: ${field} ${date} is on or after ${window.startIso}`;
+        else {
+          outside++;
+          m[WINDOW_FIELD] = `outside: ${field} ${date} is before ${window.startIso}, so it is not new`;
+        }
+        return true;
+      }
+      return false;
+    },
+    (marked) =>
+      `The request's window runs from ${window.startIso} to ${window.todayIso}. Each of the ${marked} dated items below carries "${WINDOW_FIELD}": ` +
+      `${outside} ${outside === 1 ? 'is' : 'are'} outside it. List as new only items marked "inside"; an item marked "outside" is never new, even when it is the latest.`,
+    true,
   );
 }
 
@@ -1686,11 +1760,16 @@ export function markOutsideIssueRule(content: string, rule: { labels: Set<string
  * Mark the items of a JSON tool result's lists that `mark` picks, and put
  * `note(marked, items)` at the head of the result, inside the JSON (beside
  * any note already there): the result stays JSON for every check that
- * reads it back from the conversation. A result that is not JSON, is one
- * item (a repository, a package: not a list to pick from), or has nothing
- * to mark, is given back as it was.
+ * reads it back from the conversation. A result that is one item (a
+ * repository, a package, the latest release) is marked only when `single`
+ * says so; one that is not JSON, or has nothing to mark, is given back as it was.
  */
-function markItems(content: string, mark: (m: Obj, it: ToolItem) => boolean, note: (marked: number, items: number) => string): { content: string; marked: number; items: number } {
+function markItems(
+  content: string,
+  mark: (m: Obj, it: ToolItem) => boolean,
+  note: (marked: number, items: number) => string,
+  single = false,
+): { content: string; marked: number; items: number } {
   const unchanged = { content, marked: 0, items: 0 };
   if (typeof content !== 'string') return unchanged;
   let value: unknown;
@@ -1699,7 +1778,7 @@ function markItems(content: string, mark: (m: Obj, it: ToolItem) => boolean, not
   } catch {
     return unchanged;
   }
-  if (value === null || typeof value !== 'object' || isItem(value)) return unchanged;
+  if (value === null || typeof value !== 'object' || (isItem(value) && !single)) return unchanged;
   let marked = 0;
   let items = 0;
   const visit = (v: unknown, depth: number) => {
@@ -1718,7 +1797,10 @@ function markItems(content: string, mark: (m: Obj, it: ToolItem) => boolean, not
     }
     for (const x of Object.values(v as Obj)) visit(x, depth + 1);
   };
-  visit(value, 0);
+  if (isItem(value)) {
+    items = 1;
+    if (mark(value, toolItem(value, 0))) marked = 1;
+  } else visit(value, 0);
   if (!marked) return { content, marked: 0, items };
   const text = note(marked, items);
   const before = !Array.isArray(value) && typeof (value as Obj)._note === 'string' ? `${(value as Obj)._note} ` : '';

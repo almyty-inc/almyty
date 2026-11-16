@@ -35,18 +35,24 @@ import { AgentStepProcessor } from '../agent-step-processor';
 import { AgentRuntimeBuilders, requestWindowNote } from '../agent-runtime-builders';
 import {
   ALREADY_REPORTED_FIELD,
-  NOT_A_PROBLEM_FIELD,
+  ISSUE_LABELS_FIELD,
+  ISSUE_RULE_FIELD,
+  WINDOW_FIELD,
   earlierReportedItems,
   issueQualifies,
   issueRuleOf,
   markAlreadyReported,
   markOutsideIssueRule,
+  markRequestWindow,
   samePerson,
   speaksOfEarlierReports,
   toolItems,
 } from '../answer-checks';
+import { requestWindow } from '../date-arithmetic';
 import { earlierAnswers, evidenceOf, loadRun, wholeToolResults } from './fixtures/checker-runs/load';
 
+/** The issues of a search result as the model reads it. */
+const issuesOf = (content: string) => JSON.parse(content).items as Array<Record<string, any>>;
 function findingsOf(name: string, opts: { answer?: string } = {}) {
   const fx = loadRun(name);
   const answer = opts.answer ?? fx.answer;
@@ -268,24 +274,26 @@ describe('7. the items an agent already reported are marked on the tool result i
   });
 });
 
-describe("8. the issues an agent's own rule cannot let in are marked on the result its model reads", () => {
+describe("8. each issue carries its labels as a closed list and whether the agent's own rule lets it in", () => {
   const fx = loadRun('staging-RW-1d76944d');
   const search = wholeToolResults(fx).find((t) => t.tool === 'github_rest_api_search_issues_and_pull_requests')!;
   const rule = issueRuleOf(fx.instructions)!;
-  const markedNumbers = (content: string) =>
-    (JSON.parse(content).items as Array<Record<string, any>>).filter((i) => typeof i[NOT_A_PROBLEM_FIELD] === 'string').map((i) => i.number);
+  const ruled = (content: string, verdict: 'yes' | 'no' | 'unclear') =>
+    issuesOf(content).filter((i) => String(i[ISSUE_RULE_FIELD]).startsWith(`${verdict}:`)).map((i) => i.number);
 
-  it('1d76944d: #63096 and #67482 (feature requests the answer listed as bugs) are marked; #67484 (no labels) and #60267 (security) are not', () => {
+  it('1d76944d: #63096 and #67482 (feature requests the answer listed as bugs) say no; #60267 (security) says yes; #67484 (no labels) is unclear and has no labels', () => {
     const marked = markOutsideIssueRule(search.content, rule);
-    const numbers = markedNumbers(marked.content);
-    expect(numbers).toEqual(expect.arrayContaining([63096, 67482]));
-    expect(numbers).not.toContain(67484);
-    expect(numbers).not.toContain(60267);
-    // Exactly the issues the check would fail if they were listed as bugs.
-    const index = toolItems(search.content);
-    const failing = index.items.filter((it) => it.numbers.length && issueQualifies(it, rule).qualifies === false).map((it) => Number(it.numbers[0].slice(1)));
-    expect(numbers.sort()).toEqual(failing.sort());
-    expect(JSON.parse(marked.content)._note).toMatch(/do not list them as one\.$/);
+    expect(ruled(marked.content, 'no')).toEqual(expect.arrayContaining([63096, 67482]));
+    expect(ruled(marked.content, 'yes')).toContain(60267);
+    const i67484 = issuesOf(marked.content).find((i) => i.number === 67484)!;
+    expect(i67484[ISSUE_LABELS_FIELD]).toBe('none (this issue has no labels)');
+    expect(i67484[ISSUE_RULE_FIELD]).toMatch(/^unclear:/);
+    // "no" is exactly the issues the check fails when they are listed as bugs.
+    const failing = toolItems(search.content).items.filter((it) => it.numbers.length && issueQualifies(it, rule).qualifies === false).map((it) => Number(it.numbers[0].slice(1)));
+    expect(ruled(marked.content, 'no').sort()).toEqual(failing.sort());
+    // The model reads number, title, labels and the rule first.
+    expect(Object.keys(i67484).slice(0, 4)).toEqual(['number', 'title', ISSUE_LABELS_FIELD, ISSUE_RULE_FIELD]);
+    expect(JSON.parse(marked.content)._note).toMatch(/never list one that says no, not even with a note/);
   });
 
   it('no rule, nothing marked; a release list has no issues to mark', () => {
@@ -294,10 +302,10 @@ describe("8. the issues an agent's own rule cannot let in are marked on the resu
     expect(markOutsideIssueRule(releases.content, rule).marked).toBe(0);
   });
 
-  it('the step processor keeps the rule at the start of the run and marks with it, beside the already-reported marks', () => {
+  it('the step processor keeps the rule at the start of the run and marks with it', () => {
     const self = Object.create(AgentStepProcessor.prototype);
     const run: any = { workingMemory: { issueRuleLabels: [...rule.labels] } };
-    expect(markedNumbers(self.toolResultForModel(run, search.content))).toEqual(expect.arrayContaining([63096, 67482]));
+    expect(ruled(self.toolResultForModel(run, search.content), 'no')).toEqual(expect.arrayContaining([63096, 67482]));
     const src = readFileSync(join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
     expect(src).toMatch(/const rule = issueRuleOf\(agent\.instructions \?\? ''\);\s*if \(rule\) run\.workingMemory = \{ \.\.\.\(run\.workingMemory \?\? \{\}\), issueRuleLabels: \[\.\.\.rule\.labels\] \};/);
   });
@@ -307,8 +315,101 @@ describe("8. the issues an agent's own rule cannot let in are marked on the resu
     const both = markOutsideIssueRule(markAlreadyReported(search.content, items).content, rule).content;
     const note: string = JSON.parse(both)._note;
     expect(note).toMatch(/already reported/);
-    expect(note).toMatch(/do not list them as one/);
+    expect(note).toMatch(/never list one that says no/);
     expect(Object.keys(JSON.parse(both))[0]).toBe('_note');
+  });
+});
+
+/**
+ * The release watcher after #1202 on staging (2026-11-16, 15:11 to 15:14
+ * UTC): 1 of 6 passed. Each failed run, against its tool results:
+ *  - 3dc6c613: wrong. #67504 (feature request) is in its list of bugs, with
+ *    "excluded from bugs" beside it. The check also called "marked feature
+ *    request (excluded from bugs)" a made-up label: false, fixed.
+ *  - 4ee3fad1: wrong. #67504 in its list of bugs. The check also failed the
+ *    latest release and #66607 as "listed as new": false, fixed (they stand
+ *    under "Latest release" and "High-priority open issues", inside a title
+ *    that says "New releases and high-priority issues").
+ *  - 5c26460e: wrong. v5.3.0 (2026-10-09) listed as new for 2026-10-17 to 2026-11-16.
+ *  - ac92571f: wrong. #64333 given "stale", the label of #60267 above it.
+ *  - 6aa65f19: wrong. v5.3.0 listed as new; #2414 (enhancement) listed as a
+ *    bug and given "4.x".
+ *  - 78b45364: right.
+ * Each wrong value is now marked on the tool result the model reads.
+ */
+describe('9. the release watcher after #1202: false reasons gone, every wrong value marked at the source', () => {
+  const rules = (name: string) => findingsOf(name).map((f) => f.rule);
+  const tool = (name: string, t: string) => wholeToolResults(loadRun(name)).find((x) => x.tool === t)!;
+  const windowOf = (name: string) => requestWindow([loadRun(name).request], new Date(loadRun(name).now));
+
+  it('3dc6c613 fails on #67504 alone, not on its label', () => {
+    expect(rules('staging-RW-3dc6c613')).toEqual([
+      '#67504: the answer lists it as a bug, regression or security issue, but the tool results mark it as feature request, and neither its labels nor its title name a problem',
+    ]);
+  });
+
+  it('4ee3fad1 fails on #67504 alone: the latest release and an issue under a title that says "new" are not listed as new', () => {
+    expect(rules('staging-RW-4ee3fad1')).toEqual([
+      '#67504: the answer lists it as a bug, regression or security issue, but the tool results mark it as feature request, and neither its labels nor its title name a problem',
+    ]);
+    // A release listed under that title's "New releases" part is still found.
+    const fx = loadRun('staging-RW-4ee3fad1');
+    const listed = fx.answer.replace('No releases published within the last 1 day window.', '- v27.0.0-alpha.0.1.0 (2026-11-12)');
+    expect(findingsOf('staging-RW-4ee3fad1', { answer: listed }).filter((f) => f.code === 'outside_window').map((f) => f.item)).toEqual(['v27.0.0-alpha.0.1.0']);
+  });
+
+  it('5c26460e, 6aa65f19, ac92571f still fail on what is wrong; 78b45364 passes', () => {
+    expect(rules('staging-RW-5c26460e')[0]).toMatch(/^v5\.3\.0 is listed as new, but the tool results date it 2026-10-09, before the 30-day window \(2026-10-17 to 2026-11-16\)$/);
+    expect(rules('staging-RW-6aa65f19')).toEqual(
+      expect.arrayContaining([
+        '#2414: the answer gives the label 4.x, but the tool results give enhancement, help wanted, 5.x, module:router',
+        expect.stringMatching(/^#2414: the answer lists it as a bug, regression or security issue, but the tool results mark it as enhancement/),
+      ]),
+    );
+    expect(rules('staging-RW-ac92571f')).toEqual(['#64333: the answer gives the label stale, but the tool results give feature request']);
+    expect(rules('staging-RW-78b45364')).toEqual([]);
+  });
+
+  it('v5.3.0 and the latest release are marked outside the window on the data (5c26460e, 6aa65f19)', () => {
+    for (const name of ['staging-RW-5c26460e', 'staging-RW-6aa65f19']) {
+      const list = markRequestWindow(tool(name, 'github_rest_api_repos_list_releases').content, windowOf(name));
+      const v530 = (JSON.parse(list.content).result as Array<Record<string, any>>).find((r) => r.tag_name === 'v5.3.0')!;
+      expect(v530[WINDOW_FIELD]).toBe('outside: published_at 2026-10-09 is before 2026-10-17, so it is not new');
+      expect(JSON.parse(list.content)._note).toMatch(/^The request's window runs from 2026-10-17 to 2026-11-16\. .* 10 are outside it\. List as new only items marked "inside"/);
+      const latest = JSON.parse(markRequestWindow(tool(name, 'github_rest_api_repos_get_latest_release').content, windowOf(name)).content);
+      expect(latest.tag_name).toBe('v5.3.0');
+      expect(latest[WINDOW_FIELD]).toMatch(/^outside:/);
+    }
+  });
+
+  it('an item dated inside the window is marked inside; a request with no window marks nothing', () => {
+    const content = JSON.stringify([{ tag_name: 'v9.9.9', published_at: '2026-11-15T10:00:00Z' }, { tag_name: 'v9.9.8', published_at: '2026-10-01T10:00:00Z' }]);
+    const w = requestWindow(['look back 30 days'], new Date('2026-11-16T12:00:00Z'));
+    const marked = JSON.parse(markRequestWindow(content, w).content).result;
+    expect(marked.map((r: any) => r[WINDOW_FIELD].split(':')[0])).toEqual(['inside', 'outside']);
+    expect(markRequestWindow(content, null).content).toBe(content);
+    // Issues are not dated by when they were opened or updated: an old issue can be open today.
+    const issues = JSON.stringify({ items: [{ number: 1, title: 'x', created_at: '2020-01-01T00:00:00Z', updated_at: '2026-11-16T00:00:00Z' }] });
+    expect(markRequestWindow(issues, w).marked).toBe(0);
+  });
+
+  it('#64333 (ac92571f) and #2414 (6aa65f19) carry their own labels as a closed list; #2414 and #67504 say no', () => {
+    const rw = loadRun('staging-RW-ac92571f');
+    const node = markOutsideIssueRule(tool('staging-RW-ac92571f', 'github_rest_api_search_issues_and_pull_requests').content, issueRuleOf(rw.instructions));
+    const i64333 = issuesOf(node.content).find((i) => i.number === 64333)!;
+    expect(i64333[ISSUE_LABELS_FIELD]).toBe('feature request');
+    expect(issuesOf(node.content).find((i) => i.number === 67504)![ISSUE_RULE_FIELD]).toMatch(/^no: its labels mark it as feature request/);
+    const ex = markOutsideIssueRule(tool('staging-RW-6aa65f19', 'github_rest_api_search_issues_and_pull_requests').content, issueRuleOf(rw.instructions));
+    const i2414 = issuesOf(ex.content).find((i) => i.number === 2414)!;
+    expect(i2414[ISSUE_LABELS_FIELD]).toBe('enhancement, help wanted, 5.x, module:router');
+    expect(i2414[ISSUE_RULE_FIELD]).toMatch(/^no: its labels mark it as enhancement/);
+  });
+
+  it('the step processor marks the window from the run\'s request on every tool result the model reads', () => {
+    const fx = loadRun('staging-RW-5c26460e');
+    const self = Object.create(AgentStepProcessor.prototype);
+    const out = self.toolResultForModel({ input: { message: fx.request }, workingMemory: {} } as any, tool('staging-RW-5c26460e', 'github_rest_api_repos_list_releases').content, new Date(fx.now));
+    expect((JSON.parse(out).result as Array<Record<string, any>>).find((r) => r.tag_name === 'v5.3.0')![WINDOW_FIELD]).toMatch(/^outside:/);
   });
 });
 
