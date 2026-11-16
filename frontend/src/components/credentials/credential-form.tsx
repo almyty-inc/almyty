@@ -139,40 +139,58 @@ export function CredentialForm({
   const connector = target?.kind === 'connector' ? connectors.find((c) => c.key === target.connectorKey) ?? null : null
   const id = (field: string) => `${idPrefix}-${field}`
 
+  const nameField = (
+    <Field id={id('name')} label="Name" error={nameError} hint={embedded ? undefined : 'How it is listed wherever it is picked.'}>
+      <Input
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value)
+          setNameTouched(true)
+          setNameError('')
+        }}
+        placeholder="e.g. Production OpenAI key"
+        autoComplete="off"
+      />
+    </Field>
+  )
+
+  const serviceField = (
+    <Field id={id('service')} label={modelsOnly ? 'Provider' : 'Service'}>
+      {connectorsQuery.isLoading && !modelsOnly ? (
+        <p className="flex h-9 items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading services
+        </p>
+      ) : (
+        <SearchableSelect
+          id={id('service')}
+          value={picked}
+          onChange={pick}
+          options={options}
+          disabled={!!connectorKey}
+          placeholder={modelsOnly ? 'Choose a provider' : 'Choose a service'}
+          searchPlaceholder={modelsOnly ? 'Search providers' : 'Search services'}
+          empty={modelsOnly ? 'No provider matches. If it speaks the OpenAI API, pick Your own server.' : 'No service matches. Pick API key or token, or Custom.'}
+          testId="service-select"
+        />
+      )}
+    </Field>
+  )
+
   return (
     <div className={cn('space-y-5', embedded && 'rounded-lg border bg-muted/30 p-4')} data-testid="credential-form">
-      <Field id={id('name')} label="Name" error={nameError} hint={embedded ? undefined : 'How it is listed wherever it is picked.'}>
-        <Input
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value)
-            setNameTouched(true)
-            setNameError('')
-          }}
-          placeholder="e.g. Production OpenAI key"
-          autoComplete="off"
-        />
-      </Field>
-
-      <Field id={id('service')} label={modelsOnly ? 'Provider' : 'Service'}>
-        {connectorsQuery.isLoading && !modelsOnly ? (
-          <p className="flex h-9 items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading services
-          </p>
-        ) : (
-          <SearchableSelect
-            id={id('service')}
-            value={picked}
-            onChange={pick}
-            options={options}
-            disabled={!!connectorKey}
-            placeholder={modelsOnly ? 'Choose a provider' : 'Choose a service'}
-            searchPlaceholder={modelsOnly ? 'Search providers' : 'Search services'}
-            empty={modelsOnly ? 'No provider matches. If it speaks the OpenAI API, pick Your own server.' : 'No service matches. Pick API key or token, or Custom.'}
-            testId="service-select"
-          />
-        )}
-      </Field>
+      {/* A model provider is picked first and names the connection after
+          itself, so the page opens on one choice; the name comes with it. */}
+      {modelsOnly ? (
+        <>
+          {serviceField}
+          {picked && nameField}
+        </>
+      ) : (
+        <>
+          {nameField}
+          {serviceField}
+        </>
+      )}
       {connectorsQuery.isError && !modelsOnly && (
         <p role="alert" className="text-sm text-destructive">
           The list of services could not be loaded. Reload the page to try again.
