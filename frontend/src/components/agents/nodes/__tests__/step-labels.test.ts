@@ -55,7 +55,7 @@ describe('step labels', () => {
 
   it('come from one list in the builder checks, not a copy', () => {
     const src = readFileSync(join(AGENTS_DIR, 'builder', 'validate-graph.ts'), 'utf8')
-    expect(src).toMatch(/import \{ STEP_NAMES \} from '\.\.\/step-values'/)
+    expect(src).toMatch(/import \{ STEP_NAMES\b[^}]*\} from '\.\.\/step-values'/)
     expect(src).not.toMatch(/const STEP_NAMES/)
   })
 

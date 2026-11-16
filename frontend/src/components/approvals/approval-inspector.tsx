@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { Form } from '@/components/ui/form'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { approvalsApi } from '@/lib/api'
 import { cn, formatDateTime, formatRelativeTime, pluralized } from '@/lib/utils'
@@ -229,7 +230,7 @@ export function ApprovalInspector({ row, compact = false, className }: ApprovalI
       </div>
 
       {intent ? (
-        <form
+        <Form
           className="mt-5 space-y-3 rounded-lg border bg-surround p-4 text-sm text-foreground"
           aria-label={intent === 'approve' ? 'Approve this action' : 'Reject this action'}
           onSubmit={(e) => {
@@ -262,7 +263,7 @@ export function ApprovalInspector({ row, compact = false, className }: ApprovalI
             submitVariant={intent === 'approve' ? 'default' : 'destructive'}
             submitting={approveMutation.isPending || rejectMutation.isPending}
           />
-        </form>
+        </Form>
       ) : (
         <div className="mt-5 flex flex-wrap gap-2">
           <Button className="flex-1 sm:flex-none" onClick={() => { setIntent('approve'); setDecisionReason('') }}>

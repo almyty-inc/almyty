@@ -7,7 +7,7 @@ import {
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
-import type { OperationOutline } from '@/types'
+import type { AgentExecution, AgentRun, OperationOutline } from '@/types'
 import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 import type { AgentWakeRow, AlwaysOnInput, AlwaysOnView } from '@/lib/always-on'
 
@@ -96,6 +96,13 @@ export const api = axios.create({
 })
 
 /**
+ * How long the browser waits for a tool run. Longer than the longest
+ * timeout a tool may have (5 minutes, MAX_TOOL_TIMEOUT_MS on the server),
+ * so the server's own timeout answer always arrives first.
+ */
+export const TOOL_RUN_CLIENT_TIMEOUT_MS = 330_000
+
+/**
  * Base URL of the API host as configured on the axios instance.
  *
  * Used to build user-facing URLs that live on the API host (the unified
@@ -152,6 +159,33 @@ export function extractData<T = any>(response: AxiosResponse): T {
     return body.data as T
   }
   return body as T
+}
+
+/** What running a tool answers: the outcome, kept whole so a failed run reads as failed. */
+export interface ToolRunEnvelope {
+  success: boolean
+  data?: unknown
+  error?: string
+  message?: string
+  metadata?: { executionTime?: number; httpStatus?: number; url?: string; method?: string; [key: string]: unknown }
+}
+
+/** One page of a list and how many there are in all. */
+export interface PageOf<T> {
+  items: T[]
+  /** Every item the list holds, across pages; the page's length when the response gives no pagination. */
+  total: number
+}
+
+/**
+ * A paged list response, `{ success, data: [...], pagination: { total } }`,
+ * as its items and total. extractData keeps only `data`, so a count shown
+ * from it was the page size ("20 runs" for an agent with 70).
+ */
+export function pageOf<T>(body: any): PageOf<T> {
+  const items: T[] = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : []
+  const total = Number(body?.pagination?.total)
+  return { items, total: Number.isFinite(total) && total >= items.length ? total : items.length }
 }
 
 /**
@@ -304,8 +338,9 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
+  /** Creates the account and emails a confirmation link. Sets no session cookie. */
   register: (data: { email: string; password: string; firstName: string; lastName: string; organizationName: string; captchaToken?: string }) =>
-    apiPost('/auth/register', data),
+    apiPost<{ email: string; verificationRequired: boolean }>('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>
     apiPost('/auth/login', data),
@@ -334,7 +369,7 @@ export const authApi = {
   revokeOtherSessions: () =>
     apiPost<{ signedOut: number; expiresIn: number }>('/auth/sessions/revoke-others'),
 
-  createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
+  createApiKey: (data: { name: string; organizationId?: string; scopes?: string[]; expiresAt?: string }) =>
     apiPost('/auth/api-keys', data),
 
   /** Your own API keys, newest first; only the first characters of each. */
@@ -609,6 +644,10 @@ export const apisApi = {
   /** Make tools from these operations only; poll the returned job like an import. */
   selectOperations: (id: string, operationIds: string[]): Promise<{ jobId: string; selected: number }> =>
     apiPost(`/apis/${id}/operations/selection`, { operationIds }),
+
+  /** Make the tool of one operation, or remake it in place (it keeps its id). */
+  makeOperationTool: (id: string, operationId: string): Promise<{ toolId: string; toolName: string }> =>
+    apiPost(`/apis/${id}/operations/${operationId}/tool`),
   
   getSchemas: (id: string) => apiGet(`/apis/${id}/schemas`),
 
@@ -659,7 +698,7 @@ export const toolsApi = {
    * most 100 a page, so one request left an organization with Gmail (79
    * tools) and Google Calendar (37) showing 7 of Calendar's.
    */
-  getAll: async (organizationId?: string, params?: { limit?: number; page?: number; search?: string }) => {
+  getAll: async (organizationId?: string, params?: { limit?: number; page?: number; search?: string; apiId?: string }) => {
     const url = organizationId ? `/organizations/${organizationId}/tools` : '/tools'
     if (params) return apiGet(url, { params })
     const first: any = await apiGet(url, { params: { limit: TOOLS_PAGE, page: 1 } })
@@ -694,7 +733,17 @@ export const toolsApi = {
 
   update: (id: string, data: Record<string, any>, organizationId: string) => apiPut(`/organizations/${organizationId}/tools/${id}`, data),
 
-  execute: (id: string, data: any, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/execute`, data),
+  // The whole envelope, not extractData: a run whose upstream answered 4xx
+  // comes back as 200 { success: false, data: <upstream body>, error }, and
+  // extractData would keep only the upstream body, so the caller could not
+  // tell it failed.
+  //
+  // The server bounds a run by the tool's own timeout (30 s by default, up
+  // to 5 minutes). The client-wide 30 s gave up at the same moment the
+  // server's default deadline fired, so a slow or unreachable upstream
+  // showed as a network timeout instead of the server's answer.
+  execute: (id: string, data: any, organizationId: string): Promise<ToolRunEnvelope> =>
+    api.post(`/organizations/${organizationId}/tools/${id}/execute`, data, { timeout: TOOL_RUN_CLIENT_TIMEOUT_MS }).then((r) => r.data),
 
   // Export formats
   getSkill: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/skill`),
@@ -993,6 +1042,12 @@ export const agentsApi = {
   listWakes: (id: string, limit = 20) => apiGet<AgentWakeRow[]>(`/agents/${id}/always-on/wakes`, { params: { limit } }),
   // Runs (autonomous mode)
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
+  /** One page of runs with its pagination: `total` is every run of the agent, not the page size. */
+  listRunsPage: (id: string, params?: any): Promise<PageOf<AgentRun>> =>
+    api.get(`/agents/${id}/runs`, { params }).then((r) => pageOf<AgentRun>(r.data)),
+  /** One page of workflow runs with its pagination. */
+  getExecutionsPage: (id: string, params?: any): Promise<PageOf<AgentExecution>> =>
+    api.get(`/agents/${id}/executions`, { params }).then((r) => pageOf<AgentExecution>(r.data)),
   getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
 }
 

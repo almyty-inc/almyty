@@ -35,6 +35,14 @@ describe('eligible', () => {
     expect(eligible(card({ pricing: { inPerMTok: 50, outPerMTok: 100, currency: 'USD' } }), { budgetHeadroomCents: 500 }).ok).toBe(false);
     expect(eligible(card({ pricing: null }), { budgetHeadroomCents: 500 }).ok).toBe(true);
   });
+
+  it('never routes a call to a speech, transcription or image model, however cheap', () => {
+    const tts = card({ id: 'tts-1', capabilities: { chat: false }, pricing: { inPerMTok: 0.01, outPerMTok: 0.01, currency: 'USD' } });
+    expect(eligible(tts, {})).toEqual({ ok: false, reason: 'not a chat model' });
+    expect(eligible(card({ capabilities: { chat: true } }), {}).ok).toBe(true);
+    // No feed knows it: not ruled out.
+    expect(eligible(card({ capabilities: {} }), {}).ok).toBe(true);
+  });
 });
 
 describe('selectCandidates', () => {

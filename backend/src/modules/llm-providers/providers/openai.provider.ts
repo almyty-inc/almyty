@@ -9,6 +9,7 @@ import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } fro
 import { requireModel } from '../model-errors';
 import { toOpenAIContent } from '../content-parts';
 import { customChatUrl } from './google.provider';
+import { openAiResponseFormat } from '../structured-output';
 
 
 /**
@@ -105,6 +106,10 @@ export async function callOpenAI(
       },
     }));
   }
+
+  // A reply in a JSON schema, where the API takes one (structured-output.ts).
+  const responseFormat = openAiResponseFormat(request, provider.type);
+  if (responseFormat) openaiRequest.response_format = responseFormat;
 
   const config: AxiosRequestConfig = {
     method: 'POST',

@@ -28,6 +28,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Agent, AgentMemoryConfig, AgentModels, PipelineNode, PipelineEdge } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { inputSchemaOf } from '@/components/agents/step-values'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
@@ -39,6 +40,15 @@ const DEFAULT_PIPELINE_EDGES: PipelineEdge[] = [
   { id: 'e1', source: 'input_1', target: 'llm_1' },
   { id: 'e2', source: 'llm_1', target: 'output_1' },
 ]
+
+/** The mode a new agent starts in: autonomous. The backend's default is the same (agents.service.ts defaultAgentMode). */
+export const NEW_AGENT_MODE = 'autonomous' as const
+
+/** A template's mode: what it says, else a workflow when it lays out steps. */
+export function templateMode(template: { mode?: 'workflow' | 'autonomous'; pipeline?: { nodes?: unknown[] } | null }): 'workflow' | 'autonomous' {
+  if (template.mode) return template.mode
+  return (template.pipeline?.nodes?.length ?? 0) > 0 ? 'workflow' : NEW_AGENT_MODE
+}
 
 export function AgentBuilderPage() {
   const { id } = useParams<{ id: string }>()
@@ -55,7 +65,9 @@ export function AgentBuilderPage() {
   const [agentName, setAgentName] = useState('New agent')
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
-  const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>('workflow')
+  // A new agent starts autonomous: a goal, tools and a model, and it works
+  // out the steps. Workflow is one click away on the mode switch.
+  const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>(NEW_AGENT_MODE)
   const [agentPersonality, setAgentSoul] = useState('')
   const [agentInstructions, setAgentInstructions] = useState('')
   const [agentToolIds, setAgentToolIds] = useState<string[]>([])
@@ -74,6 +86,8 @@ export function AgentBuilderPage() {
   const [visibilityChosen, setVisibilityChosen] = useState(false)
   // Why the last save was refused, shown next to Save with the fix.
   const [saveError, setSaveError] = useState<string | null>(null)
+  // A name another agent in the organization already has, refused on save.
+  const [nameError, setNameError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const orgRunLimits = useOrgRunLimits()
 
@@ -189,6 +203,8 @@ export function AgentBuilderPage() {
       if (template) {
         setAgentName(template.name)
         setAgentDescription(template.description || '')
+        // A template is the steps it lays out: a workflow, unless it says otherwise.
+        setAgentMode(templateMode(template))
         const pipelineNodes = (template.pipeline?.nodes || []).map((n: any) => ({
           id: n.id,
           type: n.type,
@@ -257,7 +273,12 @@ export function AgentBuilderPage() {
     return errors
   }, [agentName, agentMode, agentInstructions, agentModels, agentMemoryConfig, agentConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
 
-  const validationErrors = useMemo(() => validationIssues.map((issue) => issue.text), [validationIssues])
+  // Advisory items (a value read from a renamed field or a deleted step) are
+  // on the list but do not hold the save back: the server accepts them.
+  const validationErrors = useMemo(
+    () => validationIssues.filter((issue) => !issue.advisory).map((issue) => issue.text),
+    [validationIssues],
+  )
 
   const canSave = validationErrors.length === 0
 
@@ -407,6 +428,7 @@ export function AgentBuilderPage() {
     },
     onSuccess: async (res) => {
       setSaveError(null)
+      setNameError(null)
       success('Saved', `Agent "${agentName}" saved successfully.`)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       if (!isEditing) {
@@ -421,6 +443,11 @@ export function AgentBuilderPage() {
     },
     onError: (err: any) => {
       const message = getApiErrorMessage(err, 'Failed to save agent')
+      // Another agent here has this name: said beside the name, where it is fixed.
+      if (err?.response?.status === 409) {
+        setNameError(message)
+        return
+      }
       // Private tools in a shared agent: answered next to Save, with the fix.
       if (isPrivateReferenceRefusal(message)) {
         setSaveError(message)
@@ -458,7 +485,10 @@ export function AgentBuilderPage() {
     }
   }
 
-  if (isEditing && isLoadingAgent) {
+  // Until the loaded agent is in the form: one render with a new agent's
+  // defaults would mount the autonomous form empty, and sections that open
+  // for what an agent has (its teammates) would start closed.
+  if (isEditing && (isLoadingAgent || (agentData && !pipeline.initialized))) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-64px)]">
         <LoadingSpinner size="lg" />
@@ -490,7 +520,11 @@ export function AgentBuilderPage() {
       {/* Top Bar */}
       <BuilderToolbar
         agentName={agentName}
-        onAgentNameChange={setAgentName}
+        onAgentNameChange={(name) => {
+          setAgentName(name)
+          setNameError(null)
+        }}
+        nameError={nameError}
         agentStatus={agentStatus}
         agentMode={agentMode}
         onAgentModeChange={setAgentMode}
@@ -522,7 +556,7 @@ export function AgentBuilderPage() {
         says so. Both render the same strings, so nothing is hidden either
         way and Save is gated by canSave in both.
       */}
-      {validationErrors.length > 0 && (
+      {validationIssues.length > 0 && (
         <NextStepsBar issues={validationIssues} asErrors={showValidationErrors} onGoTo={goToIssue} />
       )}
 
@@ -654,6 +688,7 @@ export function AgentBuilderPage() {
       {showTestPanel && isEditing && agentMode === 'workflow' && (
         <TestPanel
           agentId={id!}
+          inputSchema={inputSchemaOf(pipeline.nodes)}
           onClose={() => setShowTestPanel(false)}
         />
       )}

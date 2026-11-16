@@ -80,9 +80,25 @@ export function RoutingAttribution({ routing, nodeId, cardNames }: RoutingAttrib
 }
 
 /** Every routed node of an execution, or a dash when none carried a policy. */
+/**
+ * The models a workflow run's steps answered with, in step order. Every
+ * model step records its model, routed or pinned; only routed ones carry
+ * attribution, so a run of pinned steps showed "--" here.
+ */
+export function executionModels(nodeResults: AgentExecution['nodeResults']): string[] {
+  const models = Object.values(nodeResults || {})
+    .map((r) => (r as any)?.model ?? r?.routing?.vendorModelId)
+    .filter((m): m is string => typeof m === 'string' && m.length > 0)
+  return [...new Set(models)]
+}
+
 export function ExecutionRouting({ nodeResults, cardNames }: { nodeResults: AgentExecution['nodeResults']; cardNames?: Record<string, string> }) {
   const routed = Object.entries(nodeResults || {}).filter(([, r]) => r && r.routing && r.routing.vendorModelId)
-  if (routed.length === 0) return <span className="text-sm text-muted-foreground">--</span>
+  if (routed.length === 0) {
+    const models = executionModels(nodeResults)
+    if (models.length === 0) return <span className="text-sm text-muted-foreground">--</span>
+    return <span className="text-sm">{models.join(', ')}</span>
+  }
   return (
     <div className="space-y-1">
       {routed.map(([nodeId, r]) => (

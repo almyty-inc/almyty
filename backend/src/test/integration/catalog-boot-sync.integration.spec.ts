@@ -94,7 +94,7 @@ describeIfDb('catalog boot sync across instances (real Postgres)', () => {
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       logging: false,
     };
-    first = new DataSource({ ...options, migrations: [__dirname + '/../../migrations/*{.ts,.js}'], migrationsRun: true, dropSchema: true });
+    first = new DataSource({ ...options, migrations: [__dirname + '/../../migrations/*{.ts,.js}'], migrationsRun: true, migrationsTransactionMode: 'each', dropSchema: true });
     await first.initialize();
     // The second instance: its own pool, so its own Postgres sessions.
     second = new DataSource(options);

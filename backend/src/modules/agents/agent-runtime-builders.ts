@@ -37,16 +37,8 @@ export function storeMemoryDescription(agent: Pick<Agent, 'memoryConfig'>): stri
  */
 const DEFAULT_HISTORY_MESSAGES = 100;
 
-/**
- * The date and time a run's model is told, in UTC with the weekday, so
- * "today", "this week" and "three days ago" resolve to real dates.
- */
-export function describeNow(now: Date): string {
-  const weekday = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
-  const date = now.toISOString().slice(0, 10);
-  const time = now.toISOString().slice(11, 16);
-  return `It is ${weekday}, ${date}, ${time} UTC (${now.toISOString()}).`;
-}
+// The date and time a run's model is told (common/utils/current-time.ts).
+export { describeNow } from '../../common/utils/current-time';
 
 @Injectable()
 export class AgentRuntimeBuilders {
@@ -100,15 +92,25 @@ export class AgentRuntimeBuilders {
     // [INSTRUCTIONS] — what to do
     parts.push(`[INSTRUCTIONS]\n${agent.instructions || 'You are a helpful autonomous agent.'}`);
 
+    // [ALREADY REPORTED — DO NOT LIST AGAIN] — right beside the task, for an
+    // agent told not to repeat earlier reports: what its earlier answers
+    // listed, the list its answer is checked against (alreadyReportedFor).
+    // Under "Relevant memories", as bare ids after the prose, the model
+    // re-listed items it was given (run fc270572).
+    const alreadyReported = run.workingMemory?.alreadyReported;
+    if (typeof alreadyReported === 'string' && alreadyReported.trim()) {
+      parts.push(alreadyReported.trim());
+    }
+
     // [ALWAYS ON] — a wake of the standing thread reports only what is worth
     // telling (always-on-report.ts): the rest is answered with the marker.
     if (run.metadata?.triggerType === 'always_on') {
       parts.push(`[ALWAYS ON]\nYou work in the background for your owner, who is not watching. ${REPORT_RULE}`);
     }
 
-    // [CURRENT TIME] -- a model does not know what day it is. "What is on
-    // my calendar today" or "follow up after three days" needs the date.
-    parts.push(`[CURRENT TIME]\n${describeNow(new Date())}`);
+    // [CURRENT TIME] is not written here: every model call of the run is
+    // given it when it is made (`currentTime: true`, common/utils/current-time.ts),
+    // in the organization's time zone.
 
     // [CONSTRAINTS] — hard rules learned from past failures (opt-in)
     if (agent.agentConfig?.constraints?.enabled && run.organizationId) {
@@ -201,6 +203,10 @@ export class AgentRuntimeBuilders {
         }
         if (msg.toolCallId) {
           msgObj.toolCallId = msg.toolCallId;
+        }
+        // A tool-call turn as the vendor returned it, sent back as it came.
+        if (msg.toolCalls && msg.metadata?.providerContent) {
+          msgObj.providerContent = msg.metadata.providerContent;
         }
         // Which stored message this is, for the compactor (not sent anywhere).
         tagStoredMessage(msgObj, msg);

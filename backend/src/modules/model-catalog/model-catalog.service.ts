@@ -732,6 +732,7 @@ export class ModelCatalogService {
     card.pricingSource = quote.source;
     card.pricingFetchedAt = new Date();
     if (!card.contextLength && quote.contextLength) card.contextLength = quote.contextLength;
+    if (quote.maxOutputTokens) card.maxOutputTokens = quote.maxOutputTokens;
     // Image and PDF input where the feed knows them (price-feed.service.ts withFeedInputs).
     const capabilities = withFeedInputs(card.capabilities, quote.inputs);
     if (capabilities) card.capabilities = capabilities;

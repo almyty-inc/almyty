@@ -54,24 +54,15 @@ test.describe('Gateways - CRUD & Scoping', () => {
     await expect(page.getByRole('heading', { name: TEST_GATEWAY_CONFIGS.PUBLIC_MCP.name })).toBeVisible()
   })
 
-  test('should create A2A gateway', async ({ authenticatedPage: page, assertHelper }) => {
+  test('should not offer A2A in Create gateway (A2A is an agent channel)', async ({ authenticatedPage: page }) => {
+    // A2A, web chat, widget and messaging gateways exist only through an
+    // agent's channel: GatewaysService.create refuses one without forChannel.
     await page.getByRole('button', { name: /create gateway/i }).first().click()
     await expect(page).toHaveURL(/\/gateways\/new$/)
 
-    await page.getByRole('radio', { name: /^Agent/ }).click()
-    await page.getByLabel(/^Name/).fill(TEST_GATEWAY_CONFIGS.ADMIN_A2A.name)
-    await page.getByLabel(/^Endpoint path/).fill(TEST_GATEWAY_CONFIGS.ADMIN_A2A.endpointPath)
-
-    // Select A2A type
     await page.getByRole('combobox', { name: /protocol/i }).click()
-    await page.getByRole('option', { name: /A2A/i }).click()
-    await page.getByRole('combobox', { name: /^Agent/ }).click()
-    await page.getByRole('option').first().click()
-
-    await page.getByRole('button', { name: /^create gateway$/i }).click()
-
-    await expect(page).toHaveURL(/\/gateways\/(?!new)[^/]+$/)
-    await expect(page.getByRole('heading', { name: TEST_GATEWAY_CONFIGS.ADMIN_A2A.name })).toBeVisible()
+    await expect(page.getByRole('option', { name: /MCP/i }).first()).toBeVisible()
+    await expect(page.getByRole('option', { name: /A2A/i })).toHaveCount(0)
   })
 
   test('should create UTCP gateway', async ({ authenticatedPage: page, assertHelper }) => {
@@ -383,10 +374,12 @@ test.describe('Gateways - CRUD & Scoping', () => {
       endpointPath: `/mcp-badge-${timestamp}`,
     })
 
+    // A2A is an agent channel now (GatewaysService.create refuses it
+    // without forChannel), so the tool-gateway badges are MCP and UTCP.
     await apiHelper.createGateway({
-      name: `A2A Badge Gateway ${timestamp}`,
-      type: 'a2a',
-      endpointPath: `/a2a-badge-${timestamp}`,
+      name: `UTCP Badge Gateway ${timestamp}`,
+      type: 'utcp',
+      endpointPath: `/utcp-badge-${timestamp}`,
     })
 
     // Navigate to gateways page (forces fresh query, avoids stale cache)
@@ -395,7 +388,7 @@ test.describe('Gateways - CRUD & Scoping', () => {
 
     // Should show type badges with different colors
     await assertHelper.assertBadge(/MCP/i)
-    await assertHelper.assertBadge(/A2A/i)
+    await assertHelper.assertBadge(/UTCP/i)
   })
 
   test('should display scoping status in main list', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {

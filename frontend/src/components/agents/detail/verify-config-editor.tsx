@@ -1,10 +1,11 @@
 /**
  * Configure the autonomous agent's verifier panel, inline on the agent page
  * (it used to be a modal; create and configure flows live on the page).
- * Set enable/policy/triggers/revision-budget and the cross-vendor checker
- * list, each reviewer a provider + model from the shared picker. Saves to
- * agentConfig.verify via PATCH /agents/:id, preserving the rest of
- * agentConfig.
+ * Set enable/policy/triggers, whether a failed check sends the answer back
+ * for fixes (off by default: the checker reports), the revision budget and
+ * the cross-vendor checker list, each reviewer a provider + model from the
+ * shared picker. Saves to agentConfig.verify via PATCH /agents/:id,
+ * preserving the rest of agentConfig.
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -31,7 +32,7 @@ type Trigger = 'on_final_output' | 'every_n_steps' | 'on_tool_result'
 interface Checker { name: string; providerId: string; model: string; instructions: string }
 
 const TRIGGERS: { id: Trigger; label: string }[] = [
-  { id: 'on_final_output', label: 'On final output (block + revise)' },
+  { id: 'on_final_output', label: 'On final output' },
   { id: 'every_n_steps', label: 'Every N steps (advisory)' },
   { id: 'on_tool_result', label: 'On tool result (advisory)' },
 ]
@@ -47,6 +48,8 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
   const v = agent.agentConfig?.verify
   const [enabled, setEnabled] = useState(v?.enabled ?? false)
   const [policy, setPolicy] = useState<Policy>((v?.policy as Policy) ?? 'any_fail_blocks')
+  // Off unless the agent turned it on: by default the checker only reports.
+  const [revise, setRevise] = useState(v?.revise === true)
   const [maxReviseLoops, setMaxReviseLoops] = useState(v?.maxReviseLoops ?? 2)
   const [triggers, setTriggers] = useState<Trigger[]>((v?.triggers as Trigger[]) ?? ['on_final_output'])
   const [everyNSteps, setEveryNSteps] = useState(v?.everyNSteps ?? 5)
@@ -73,6 +76,7 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
           verify: {
             enabled,
             policy,
+            revise,
             maxReviseLoops: Number(maxReviseLoops),
             triggers,
             everyNSteps: Number(everyNSteps),
@@ -97,7 +101,7 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
 
   // Edited settings ask before a navigation throws them away. Cancel and a
   // save that lands both unmount the editor, so neither asks.
-  const current = JSON.stringify({ enabled, policy, maxReviseLoops, triggers, everyNSteps, checkers })
+  const current = JSON.stringify({ enabled, policy, revise, maxReviseLoops, triggers, everyNSteps, checkers })
   const [seeded] = useState(current)
   const guard = useLeaveGuard(current !== seeded && !mutation.isPending)
 
@@ -116,6 +120,18 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
 
           {enabled && (
             <>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="verify-revise">Let the checker send the answer back for fixes</Label>
+                  <Switch id="verify-revise" checked={revise} onCheckedChange={setRevise} />
+                </div>
+                <p className="text-xs text-muted-foreground" data-testid="verify-revise-help">
+                  Off: the checker gives its verdict and reasons, and the answer goes out as written, with a note when
+                  its check didn&apos;t pass. On: a failed check sends the answer back to be fixed, which can change
+                  correct answers and costs a model call per round.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="verify-merge-policy">Merge policy</Label>
@@ -128,6 +144,7 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
                     </SelectContent>
                   </Select>
                 </div>
+                {/* Also the budget of the explore-extract-patch strategy's own check, so it stays visible. */}
                 <div className="space-y-1.5">
                   <Label htmlFor="max-loops">Max revise loops</Label>
                   <Input

@@ -60,6 +60,46 @@ describe('detectApiSchema', () => {
     expect(await parses(found.type, found.content)).toEqual(['getForecast']);
   });
 
+  // Open-Meteo's forecast.yml declares its servers on the path. Reading only
+  // the document's servers gave the API the address it was downloaded from.
+  it('takes the address from path-level servers when the document declares none', async () => {
+    const found = detectApiSchema(fixture('openapi3-path-servers.yaml'), {
+      sourceUrl: 'https://raw.githubusercontent.com/open-meteo/open-meteo/main/openapi/forecast.yml',
+    });
+    expect(found.baseUrl).toBe('https://api.open-meteo.com');
+    expect(await parses(found.type, found.content)).toEqual(['getArchive', 'getForecast']);
+  });
+
+  it('takes the address from operation-level servers over its path, and never the download host', () => {
+    const doc = {
+      openapi: '3.0.3',
+      info: { title: 'Ops', version: '1' },
+      paths: {
+        '/a': {
+          servers: [{ url: 'https://path.example.com' }],
+          get: { servers: [{ url: 'https://op.example.com/v2/' }], responses: { '200': { description: 'ok' } } },
+        },
+      },
+    };
+    const found = detectApiSchema(JSON.stringify(doc), { sourceUrl: 'https://raw.githubusercontent.com/x/y/spec.json' });
+    expect(found.baseUrl).toBe('https://op.example.com/v2');
+  });
+
+  it('keeps the document-level servers first when they are declared', () => {
+    const doc = {
+      openapi: '3.0.3',
+      info: { title: 'Top', version: '1' },
+      servers: [{ url: 'https://top.example.com' }],
+      paths: { '/a': { servers: [{ url: 'https://path.example.com' }], get: { responses: { '200': { description: 'ok' } } } } },
+    };
+    expect(detectApiSchema(JSON.stringify(doc)).baseUrl).toBe('https://top.example.com');
+  });
+
+  it('falls back to the download host only when no level declares a server', () => {
+    const doc = { openapi: '3.0.3', info: { title: 'None', version: '1' }, paths: { '/a': { get: { responses: { '200': { description: 'ok' } } } } } };
+    expect(detectApiSchema(JSON.stringify(doc), { sourceUrl: 'https://specs.example.com/a/openapi.json' }).baseUrl).toBe('https://specs.example.com');
+  });
+
   it('resolves a relative server against the link it came from and keeps the OAuth2 flow the spec declares', () => {
     const found = detectApiSchema(fixture('openapi3-calendar-oauth.yaml'), {
       sourceUrl: 'https://calendar.example.com/specs/openapi.yaml',

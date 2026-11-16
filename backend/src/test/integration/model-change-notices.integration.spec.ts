@@ -129,6 +129,7 @@ describeIfDb('model change notices (real Postgres)', () => {
       entities: [__dirname + '/../../entities/*.entity{.ts,.js}'],
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
       logging: false,
     });

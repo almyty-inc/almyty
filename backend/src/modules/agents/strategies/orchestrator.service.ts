@@ -120,6 +120,7 @@ export class OrchestratorService {
         temperature: 0,
         maxTokens: 400,
         messages: [{ role: MessageRole.USER, content: orchestratorPrompt(request, available, roleKeys) }],
+        currentTime: true,
       } as any,
       agent.organizationId,
       principal,

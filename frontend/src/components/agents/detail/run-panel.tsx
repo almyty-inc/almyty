@@ -9,6 +9,7 @@
  * Agent" over a "Run Agent" button, reporting an "Invocation Failed".
  */
 import React, { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Play, Loader2, X } from 'lucide-react'
 
@@ -23,8 +24,14 @@ import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { WAITING_APPROVAL, WaitingApprovalBanner, waitingLine } from './waiting-approval'
+import { UnverifiedNote } from './verify-step'
+import { inputSchemaOf, sampleInput } from '../step-values'
 
-const DEFAULT_INPUT = '{\n  "message": "Hello"\n}'
+/** The input a run starts with: the fields the agent's input step declares, a message when it declares none. */
+export function defaultRunInput(agent: Pick<Agent, 'mode' | 'pipeline'>): string {
+  const schema = agent.mode === 'autonomous' ? undefined : inputSchemaOf(agent.pipeline?.nodes as any)
+  return JSON.stringify(sampleInput(schema), null, 2)
+}
 
 interface RunPanelProps {
   agent: Agent
@@ -36,11 +43,12 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
   const { success, info, error: errorNotif } = useNotifications()
   const sectionRef = useRef<HTMLElement>(null)
 
-  const [invokeInput, setInvokeInput] = useState(DEFAULT_INPUT)
+  const [initialInput] = useState(() => defaultRunInput(agent))
+  const [invokeInput, setInvokeInput] = useState(initialInput)
   const [invokeResult, setInvokeResult] = useState<Record<string, unknown> | null>(null)
   // Input edited since the last run (or since the panel opened) asks before
   // a navigation throws it away. Running it, or closing the panel, does not.
-  const [lastRunInput, setLastRunInput] = useState(DEFAULT_INPUT)
+  const [lastRunInput, setLastRunInput] = useState(initialInput)
   const guard = useLeaveGuard(invokeInput !== lastRunInput)
 
   // Opened from the header: bring the panel into view on small screens,
@@ -133,7 +141,7 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
         </Button>
       </div>
 
-      <form onSubmit={submit} noValidate className="space-y-4">
+      <Form onSubmit={submit} noValidate className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="invoke-input">Input JSON</Label>
           <CodeEditor
@@ -158,7 +166,7 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
             )}
           </Button>
         </div>
-      </form>
+      </Form>
 
       {invokeResult && (
         <div className="space-y-2">
@@ -176,6 +184,7 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
           ) : (
             <div role="status" aria-live="polite">
               <Label>Output</Label>
+              <UnverifiedNote run={invokeResult} className="mt-1" />
               <div className="mt-1">
                 {output === null || output === undefined ? (
                   <p data-testid="invoke-no-output" className="text-sm text-muted-foreground">

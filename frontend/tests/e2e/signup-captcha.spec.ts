@@ -50,7 +50,7 @@ test('sign-up renders the captcha and completes', async ({ page }) => {
   await page.locator('#confirmPassword').fill(user.password)
   await page.locator('#terms').click()
   await page.getByRole('button', { name: 'Create account' }).click()
-  await page.waitForURL(/\/dashboard/)
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
 
   expect(violations).toEqual([])
 })

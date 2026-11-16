@@ -366,6 +366,8 @@ export class AgentContextCompactor {
         model: config.model,
         temperature: 0,
         signal,
+        // A summary that keeps "yesterday" needs to know which day that was.
+        currentTime: true,
       },
       organizationId,
       userId,

@@ -414,6 +414,34 @@ export class GatewayAuthService {
     });
   }
 
+  /**
+   * Make sure a gateway accepts keys: turn its key method on, or add one,
+   * so a key made for it works from the moment it is shown. Endpoints whose
+   * access scope does not read sign-in methods (members only, open) are left
+   * alone, since their methods are never consulted.
+   */
+  async ensureApiKeyAuth(gatewayId: string, organizationId: string): Promise<void> {
+    const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId, organizationId } });
+    if (!gateway) throw new NotFoundException('Gateway not found');
+    if (hasEndpointAccessScope(gateway) && gateway.accessScope && gateway.accessScope !== 'external_protected') return;
+    const rows = await this.gatewayAuthRepository.find({ where: { gatewayId, type: GatewayAuthType.API_KEY }, order: { createdAt: 'ASC' } });
+    if (rows.some(row => row.isActive)) return;
+    if (rows.length) {
+      rows[0].isActive = true;
+      await this.gatewayAuthRepository.save(rows[0]);
+      this.logger.log(`Gateway ${gatewayId}: key sign-in turned on for a new key`);
+      return;
+    }
+    await this.gatewayAuthRepository.save(this.gatewayAuthRepository.create({
+      gatewayId,
+      type: GatewayAuthType.API_KEY,
+      isRequired: true,
+      isActive: true,
+      configuration: { keyHeader: 'x-api-key', keyQuery: 'api_key' },
+    }));
+    this.logger.log(`Gateway ${gatewayId}: key sign-in added for a new key`);
+  }
+
   async generateApiKey(
     name: string,
     organizationId: string,
@@ -422,10 +450,13 @@ export class GatewayAuthService {
     expiresAt?: Date,
     gatewayId?: string,
   ): Promise<ApiKey> {
+    // A gateway key is useless, and the caller is refused, while the
+    // gateway has no key method on; turn it on before the key exists.
+    if (gatewayId) await this.ensureApiKeyAuth(gatewayId, organizationId);
+
     const key = this.generateSecureKey();
     const keyHash = this.hashKey(key);
     const keyPrefix = key.substring(0, 8);
-
     const apiKey = this.apiKeyRepository.create({
       name,
       keyHash,

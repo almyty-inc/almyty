@@ -68,6 +68,7 @@ describeIfDb('skill discovery across gateways stays inside team scope and what e
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
     }) as any);
     await ds.initialize();

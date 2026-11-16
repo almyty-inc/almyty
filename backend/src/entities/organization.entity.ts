@@ -33,6 +33,12 @@ export interface OrganizationSettings {
     endpoints: string[];
   };
   /** Routing policy an llm_call node that names neither a provider nor a policy falls back to. */
+  /**
+   * The organization's time zone (IANA name), as a run's models are told it
+   * and as schedule message values are filled in. Unset, it is the owner's
+   * profile time zone, then UTC (llm-providers/organization-time-zone.service.ts).
+   */
+  timezone?: string;
   defaultRouting?: RoutingPolicy | null;
   /**
    * Hosts this organization may reach even though they resolve to a

@@ -60,6 +60,7 @@ import { matchDelimited } from '../../../common/security/linear-text';
 import { idempotencyHeader, operationHeaderParams } from '../operation-header-params';
 import { formEncode, isFormBody } from './form-encode';
 import { isGroupedArguments } from './argument-shape';
+import { operationServerUrl } from '../../schema-parser/openapi-servers';
 const MAX_ERR_MESSAGE = 500;
 
 /** Default per-response size cap. 10MB for success, 5MB for the body we send. */
@@ -341,18 +342,21 @@ export class ToolHttpExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     try {
-      const baseUrlCheck = await this.egressFor(api.baseUrl, api.organizationId ?? tool.organizationId);
+      // The operation's own server when the description gives it one
+      // (path- or operation-level `servers`), else the API's address.
+      const baseUrl = operationServerUrl(operation) ?? api.baseUrl;
+      const baseUrlCheck = await this.egressFor(baseUrl, api.organizationId ?? tool.organizationId);
       if (baseUrlCheck.error) {
         this.logger.warn(`SSRF blocked for tool ${tool.name}: ${baseUrlCheck.error}`);
-        return this.blockedResult(api.baseUrl, operation.method, baseUrlCheck.error!, Date.now());
+        return this.blockedResult(baseUrl, operation.method, baseUrlCheck.error!, Date.now());
       }
 
       // One slash between the two, as the httpConfig path above does. Google
       // publishes servers ending in "/" (https://gmail.googleapis.com/) and
       // paths starting with one, which made "//gmail/v1/..." on every call.
       let url = operation.endpoint
-        ? `${api.baseUrl.replace(/(?<!\/)\/+$/, '')}/${operation.endpoint.replace(/^\/+/, '')}`
-        : api.baseUrl;
+        ? `${baseUrl.replace(/(?<!\/)\/+$/, '')}/${operation.endpoint.replace(/^\/+/, '')}`
+        : baseUrl;
       let pathParams: Record<string, any> = {};
       let queryParams: Record<string, any> = {};
       let headerParams: Record<string, any> = {};

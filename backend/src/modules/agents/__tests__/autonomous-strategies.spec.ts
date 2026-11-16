@@ -6,6 +6,7 @@ import {
   anthropicTool,
   CHECKER,
   cheap,
+  confirmCheckerFindings,
   dear,
   DRAFTER,
   FAIL,
@@ -38,6 +39,9 @@ jest.mock('../../llm-providers/providers/safe-request', () => ({
 describe('autonomous strategies drive the loop, role by role', () => {
   describe('Cascade', () => {
     const cascade: AgentModels = { strategy: 'cascade', roles: [MAIN as any, DRAFTER as any, CHECKER as any] };
+    let restore: () => void = () => undefined;
+    beforeEach(() => (restore = confirmCheckerFindings()));
+    afterEach(() => restore());
 
     it('the drafter works the task, the checker fails its answer, and only then the main role redoes the step', async () => {
       const seen = await runAgent({
@@ -82,7 +86,8 @@ describe('autonomous strategies drive the loop, role by role', () => {
       const [, toolStep, escalated, check, done] = seen.run.steps as any[];
       expect(toolStep.output).toMatchObject({ model: 'gpt-4o-mini', providerId: 'p-cheap' });
       expect(escalated.output).toMatchObject({ model: 'gpt-4o-mini', providerId: 'p-cheap' });
-      expect(check.output.failures[0]).toMatchObject({ rule: 'cites no order data', checker: 'Checker' });
+      // The confirmed finding, in the code's words (confirmCheckerFindings).
+      expect(check.output.failures[0]).toMatchObject({ rule: 'order 4411: the answer gives ship date soon, but the tool results say Monday', checker: 'Checker' });
       expect(done.output).toMatchObject({ model: 'claude-sonnet-5', providerId: 'p-strong' });
       expect(done.role).toEqual({ key: 'main', name: 'Main', purpose: 'main', kind: 'model' });
 

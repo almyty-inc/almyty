@@ -142,6 +142,16 @@ export function useModelCards() {
 }
 
 /**
+ * Whether a model can hold a conversation, from its card: the price feed
+ * marks a speech, transcription, image, video or embedding model
+ * `capabilities.chat: false`. Every model this picker chooses answers a
+ * conversation (an agent's model, a step's, a checker's), so those are left
+ * out. A card no feed knows (a model on your own server) stays in.
+ */
+export function answersChat(card: Pick<ModelCard, 'capabilities'>): boolean {
+  return card.capabilities?.chat !== false
+}
+/**
  * The model a new choice starts on: a model that can be used now, from the
  * first connection (in list order) that has one; that connection's own
  * default when it is usable, else its first usable model by name.
@@ -152,7 +162,7 @@ export function firstUsableModel(providers: ProviderOption[], cards: ModelCard[]
   for (const p of providers) {
     if (!isActive(p)) continue
     const usable = cards
-      .filter((c) => c.providerId === p.id && c.selectable && c.status !== 'inactive')
+      .filter((c) => c.providerId === p.id && c.selectable && c.status !== 'inactive' && answersChat(c))
       .sort((a, b) => cardLabel(a).localeCompare(cardLabel(b)))
     if (usable.length === 0) continue
     const configured = (p as ProviderOption & { configuration?: { model?: string } }).configuration?.model
@@ -259,7 +269,7 @@ export function ModelPicker({
     for (const p of providers) {
       const mine = cards
         .filter((c) => c.providerId === p.id)
-        .filter((c) => (c.selectable && c.status !== 'inactive') || (c.providerId === value.providerId && c.vendorModelId === savedModel))
+        .filter((c) => (c.selectable && c.status !== 'inactive' && answersChat(c)) || (c.providerId === value.providerId && c.vendorModelId === savedModel))
         .sort((a, b) => cardLabel(a).localeCompare(cardLabel(b)))
       own.set(p.id, mine)
       for (const c of mine) {
@@ -287,7 +297,7 @@ export function ModelPicker({
       items.push(...hits)
       modelHits += hits.length
       // Listed but none usable is not the same as nothing listed: say which.
-      const listed = cards.filter((c) => c.providerId === p.id && c.status !== 'inactive').length
+      const listed = cards.filter((c) => c.providerId === p.id && c.status !== 'inactive' && answersChat(c)).length
       const note =
         (own.get(p.id) ?? []).length === 0 && !q
           ? listed > 0

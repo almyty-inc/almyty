@@ -5,6 +5,7 @@
  * all again and its message is shown when it refuses.
  */
 import { useState, type FormEvent } from 'react'
+import { Form } from '@/components/ui/form'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,7 +91,7 @@ export function EnvironmentForm({ organizationId, settings, initial, submitLabel
   const error = 'text-xs text-destructive'
 
   return (
-    <form className="space-y-6" onSubmit={submit} noValidate data-testid="environment-form">
+    <Form className="space-y-6" onSubmit={submit} noValidate data-testid="environment-form">
       <fieldset disabled={disabled || submitting} className="space-y-6">
         <div className={field}>
           <Label htmlFor="env-name">Name</Label>
@@ -184,6 +185,6 @@ export function EnvironmentForm({ organizationId, settings, initial, submitLabel
           {onCancel && <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>Cancel</Button>}
         </div>
       )}
-    </form>
+    </Form>
   )
 }

@@ -8,6 +8,7 @@
  * Cancel does. A failed submit marks the field and focuses it.
  */
 import React from 'react'
+import { Form } from '@/components/ui/form'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -81,7 +82,7 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
   }
 
   return (
-    <form
+    <Form
       ref={formRef}
       noValidate
       onSubmit={(e) =>
@@ -150,6 +151,6 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
         submitting={isSaving}
         submitDisabled={privateNotPossible}
       />
-    </form>
+    </Form>
   )
 }

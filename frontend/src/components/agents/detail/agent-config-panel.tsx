@@ -95,10 +95,14 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
           <div>
             <VerifierPanelHeading>
               <Badge variant="outline" className="text-[10px]">{verify.policy || 'any_fail_blocks'}</Badge>
-              {verify.maxReviseLoops != null && (
-                <Badge variant="outline" className="text-[10px] gap-1">
+              {verify.revise === true ? (
+                <Badge variant="outline" className="text-[10px] gap-1" data-testid="verify-mode-badge">
                   <Repeat className="h-3 w-3" />
-                  {pluralized(verify.maxReviseLoops, 'revision')}
+                  Sends back for fixes · {pluralized(verify.maxReviseLoops ?? 2, 'revision')}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px]" data-testid="verify-mode-badge">
+                  Reports only
                 </Badge>
               )}
             </VerifierPanelHeading>

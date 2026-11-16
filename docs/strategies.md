@@ -80,6 +80,12 @@ failure path needs exactly one step to escalate to, and cannot itself be
 replicated by a fan-out. Both are refused at compile time rather than
 compiled into a graph the validator would reject later.
 
+These checks belong to the strategy, and they escalate as designed. They
+are not the agent's own final-answer check (`agentConfig.verify`), which
+by default only reports its verdict on the finished answer and sends it
+back for fixes only when the agent turns `revise` on
+(`docs/autonomous-models.md`).
+
 ### What a check checks with
 
 A `verify` node runs a panel of refute-only checkers, and a checker needs

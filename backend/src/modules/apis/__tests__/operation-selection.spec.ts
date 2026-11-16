@@ -218,6 +218,61 @@ describe('picking the operations to make tools from', () => {
   }));
 });
 
+// On the API page of GitHub's REST description (1,280 operations) an
+// operation that was not picked said "No tools generated for this operation
+// yet" with nothing to do about it. "Make a tool" makes that one tool.
+describe('making the tool of one more operation', () => {
+  function serviceWith(operation: Record<string, any> | null, opts: { active?: number; tool?: Record<string, any> | null } = {}) {
+    const updates: Array<{ where: any; patch: any }> = [];
+    const generateToolsFromApi = jest.fn(async (_apiId: string, _orgId: string, ops: Operation[]) => {
+      if (opts.tool === null) return { tools: [], generated: 0, failed: 1, skippedInactive: 0, skippedExisting: 0, total: 1 };
+      // Generation skips an inactive operation, so the one passed has to be active.
+      expect(ops.every((op) => op.isActive)).toBe(true);
+      return { tools: [opts.tool ?? { id: 'tool-new', name: 'github_get_repo' }], generated: 1, failed: 0, skippedInactive: 0, skippedExisting: 0, total: 1 };
+    });
+    const service = Object.create(ApisService.prototype) as ApisService;
+    Object.assign(service, {
+      apiRepository: { findOne: jest.fn().mockResolvedValue({ id: 'api-1', organizationId: 'org-1' }) },
+      operationRepository: {
+        findOne: jest.fn(async ({ where }: any) => (operation && where.id === operation.id && where.apiId === 'api-1' ? { ...operation } : null)),
+        count: jest.fn(async () => opts.active ?? 240),
+        update: jest.fn(async (where: any, patch: any) => updates.push({ where, patch })),
+      },
+      toolGen: { generateToolsFromApi },
+    });
+    return { service, updates, generateToolsFromApi };
+  }
+
+  it('makes the tool from that operation alone and marks it picked', async () => {
+    const { service, updates, generateToolsFromApi } = serviceWith({ id: 'op-9', name: 'repos/get', isActive: false });
+    await expect(service.makeOperationTool('api-1', 'org-1', 'op-9', 'user-1')).resolves.toEqual({ toolId: 'tool-new', toolName: 'github_get_repo' });
+    // Only this operation: the API's other tools are not rewritten.
+    expect(generateToolsFromApi).toHaveBeenCalledWith('api-1', 'org-1', [expect.objectContaining({ id: 'op-9' })], undefined, 'user-1');
+    expect(updates).toEqual([{ where: { id: 'op-9', apiId: 'api-1' }, patch: { isActive: true } }]);
+  });
+
+  it('remakes an existing tool in place, keeping its id', async () => {
+    const { service, updates } = serviceWith({ id: 'op-1', name: 'repos/list', isActive: true }, { tool: { id: 'tool-kept', name: 'github_list_repos' } });
+    await expect(service.makeOperationTool('api-1', 'org-1', 'op-1')).resolves.toEqual({ toolId: 'tool-kept', toolName: 'github_list_repos' });
+    expect(updates).toEqual([]);
+  });
+
+  it('refuses one over the per-schema limit, and leaves the operation unpicked when no tool was made', withLimit('240', async () => {
+    const over = serviceWith({ id: 'op-9', name: 'repos/get', isActive: false }, { active: 240 });
+    await expect(over.service.makeOperationTool('api-1', 'org-1', 'op-9')).rejects.toThrow(/limit per schema is 240/);
+    expect(over.generateToolsFromApi).not.toHaveBeenCalled();
+
+    const failed = serviceWith({ id: 'op-9', name: 'repos/get', isActive: false }, { active: 10, tool: null });
+    await expect(failed.service.makeOperationTool('api-1', 'org-1', 'op-9')).rejects.toThrow(BadRequestException);
+    expect(failed.updates).toEqual([]);
+  }));
+
+  it('refuses an operation of another API', async () => {
+    const { service } = serviceWith({ id: 'op-9', name: 'repos/get', isActive: false });
+    await expect(service.makeOperationTool('api-1', 'org-1', 'op-elsewhere')).rejects.toThrow(/Operation not found/);
+  });
+});
+
 describe('the import job', () => {
   function processorWith(apisService: Partial<ApisService>) {
     const apiRepository = { update: jest.fn().mockResolvedValue({ affected: 1 }) };

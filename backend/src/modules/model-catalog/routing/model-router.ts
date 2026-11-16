@@ -84,6 +84,9 @@ function matches(card: Model, key: string): boolean {
 
 /** The hard filters: a card either qualifies for this request or it does not. */
 export function eligible(card: Model, policy: RoutingPolicy): { ok: true } | { ok: false; reason: string } {
+  // Every routed call is a conversation: a speech, transcription or image
+  // model (the price feed's model kind) is never a candidate, however cheap.
+  if (card.capabilities?.chat === false) return { ok: false, reason: 'not a chat model' };
   if (!card.isSelectable()) return { ok: false, reason: 'not usable yet' };
   if (policy.privacyTier && TIER_RANK[card.privacyTier] > TIER_RANK[policy.privacyTier]) {
     return { ok: false, reason: `privacy ${card.privacyTier} is not allowed here; this policy allows ${policy.privacyTier} or stricter` };

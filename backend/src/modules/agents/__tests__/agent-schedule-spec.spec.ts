@@ -22,7 +22,22 @@ describe('agent schedule timing', () => {
 
   describe('normalizeTiming', () => {
     it('keeps the original every-N-minutes shape as the default kind', () => {
-      expect(normalizeTiming({ intervalMinutes: 15 })).toEqual({ kind: 'interval', intervalMinutes: 15 });
+      expect(normalizeTiming({ intervalMinutes: 15 })).toEqual({ kind: 'interval', intervalMinutes: 15, timezone: 'UTC' });
+    });
+
+    // The zone does not time an interval's runs, but it dates {{today}} and
+    // {{last_run_at}} in its message: dropping it filled them in UTC.
+    it('keeps the zone of an interval, the profile zone when the request names none', () => {
+      expect(normalizeTiming({ kind: 'interval', intervalMinutes: 15, timezone: 'Europe/Berlin' })).toEqual({
+        kind: 'interval',
+        intervalMinutes: 15,
+        timezone: 'Europe/Berlin',
+      });
+      expect(normalizeTiming({ kind: 'interval', intervalMinutes: 15 }, 'Asia/Tokyo').timezone).toBe('Asia/Tokyo');
+      expect(() => normalizeTiming({ kind: 'interval', intervalMinutes: 15, timezone: 'Mars/Olympus' })).toThrow(BadRequestException);
+      expect(timingOf({ kind: 'interval', intervalMinutes: 15, timezone: 'Europe/Berlin' }).timezone).toBe('Europe/Berlin');
+      // The queue still gets only the interval.
+      expect(repeatFor({ kind: 'interval', intervalMinutes: 15, timezone: 'Europe/Berlin' })).toEqual({ every: 15 * 60 * 1000 });
     });
 
     it('stores a weekday schedule with its zone and sorted, unique days', () => {
@@ -161,8 +176,11 @@ describe('agent schedule timing', () => {
       ]);
     });
 
-    it('an interval has no computed next run (the queue reports it)', () => {
-      expect(nextRuns({ kind: 'interval', intervalMinutes: 5 }, new Date(), 3)).toEqual([]);
+    it('an interval runs at whole multiples of it on the clock, not counted from the save', () => {
+      expect(iso(nextRuns({ kind: 'interval', intervalMinutes: 60 }, new Date('2026-11-11T21:40:11Z'), 2))).toEqual([
+        '2026-11-11T22:00:00.000Z',
+        '2026-11-11T23:00:00.000Z',
+      ]);
     });
   });
 
@@ -203,5 +221,45 @@ describe('the next-run preview and the queue', () => {
     const runs = nextRuns(timing, new Date('2026-04-01T05:17:00Z'), 5).map((d) => d.toISOString());
     expect(runs).toHaveLength(5);
     expect(new Set(runs).size).toBe(5);
+  });
+
+  // The schedule page shows an interval's next runs from nextRuns, so they
+  // have to be the instants Bull really schedules: Bull's `every` lines
+  // them up with the clock, not with the save (22:40:11 + 15 min ran at 22:45).
+  it('puts an interval on the instants Bull schedules, lined up with the clock', async () => {
+    const queueNext = async (every: number, now: Date): Promise<number> => {
+      const FakeQueue: any = function FakeQueue() {};
+      require('bull/lib/repeatable')(FakeQueue);
+      let score = NaN;
+      const queue = Object.create(FakeQueue.prototype);
+      queue.keys = { repeat: 'repeat' };
+      queue.client = {
+        zadd: async (_key: string, millis: number) => {
+          score = millis;
+          throw new Error('stop before the job is written');
+        },
+      };
+      const realNow = Date.now;
+      Date.now = () => now.getTime();
+      try {
+        await queue.nextRepeatableJob('execute-agent', {}, { repeat: { every }, jobId: 'schedule-a' }, true).catch(() => undefined);
+      } finally {
+        Date.now = realNow;
+      }
+      return score;
+    };
+
+    const saved = new Date('2026-11-11T21:40:11Z');
+    expect(await queueNext(15 * 60 * 1000, saved)).toBe(Date.parse('2026-11-11T21:45:00Z'));
+    expect(nextRuns({ kind: 'interval', intervalMinutes: 15 }, saved, 3).map((d) => d.toISOString())).toEqual([
+      '2026-11-11T21:45:00.000Z',
+      '2026-11-11T22:00:00.000Z',
+      '2026-11-11T22:15:00.000Z',
+    ]);
+    for (const minutes of [1, 7, 60, 90, 300, 1440]) {
+      expect(nextRuns({ kind: 'interval', intervalMinutes: minutes }, saved, 1)[0].getTime()).toBe(
+        await queueNext(minutes * 60 * 1000, saved),
+      );
+    }
   });
 });

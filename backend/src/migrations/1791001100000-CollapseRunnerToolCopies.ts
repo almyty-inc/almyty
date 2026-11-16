@@ -44,6 +44,16 @@ export class CollapseRunnerToolCopies1791001100000 implements MigrationInterface
       SELECT id AS loser, keeper, live_status FROM ranked WHERE n > 1 AND id <> keeper
     `);
 
+    // Nothing to merge: stop here. Every statement below would change no
+    // row, but the history updates still scan usage_metrics and
+    // request_logs, which have no toolId index and run to millions of rows
+    // (over three minutes on staging, past the deploy's migration wait).
+    const [{ copies }] = await queryRunner.query(`SELECT count(*)::int AS copies FROM runner_tool_merge`);
+    if (!copies) {
+      await queryRunner.query(`DROP TABLE runner_tool_merge`);
+      return;
+    }
+
     // The agent's tool list: each copy becomes the kept row, once, in place.
     await queryRunner.query(`
       UPDATE agents a

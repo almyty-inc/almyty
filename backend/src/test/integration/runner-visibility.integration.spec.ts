@@ -83,6 +83,7 @@ describeIfDb('Runner visibility (real Postgres)', () => {
       extra: { options: `-c search_path=${SCHEMA},public` },
       migrations: [__dirname + '/../../migrations/*{.ts,.js}'],
       migrationsRun: true,
+      migrationsTransactionMode: 'each',
       dropSchema: true,
     });
     await ds.initialize();

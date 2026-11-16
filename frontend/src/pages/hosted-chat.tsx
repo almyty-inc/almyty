@@ -1,7 +1,8 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, Download, MessageSquarePlus, Menu, MoreHorizontal, Trash2, X } from 'lucide-react'
-import { assistantMarkdownComponents } from '@/components/hosted-chat/assistant-markdown'
+import { AssistantMarkdown, assistantMarkdownComponents } from '@/components/hosted-chat/assistant-markdown'
 
 import {
   AlertDialog,
@@ -36,15 +37,8 @@ import {
   type HostedChatMessage,
 } from '@/lib/hosted-chat'
 
-// GitHub-flavoured markdown: an agent's tables and task lists render as
-// such, not as a paragraph of pipes. Loaded with the renderer, off the
-// first paint.
-const ReactMarkdown = lazy(() =>
-  Promise.all([import('react-markdown'), import('remark-gfm')]).then(([md, gfm]) => ({
-    default: (props: React.ComponentProps<typeof md.default>) => <md.default remarkPlugins={[gfm.default]} {...props} />,
-  })),
-)
-
+// An answer renders through AssistantMarkdown, the same renderer as an agent's
+// Try it: GitHub-flavoured (tables render as tables), line breaks kept.
 export { assistantMarkdownComponents }
 
 /**
@@ -63,7 +57,16 @@ interface HostedChatPageProps {
 
 interface PendingMessage extends HostedChatMessage {
   streaming?: boolean
+  /** The reply waits for a person on the team to approve one of its steps. */
+  waiting?: 'approval'
 }
+
+/** What a visitor reads while a step waits for someone on the team to approve it. */
+export const WAITING_FOR_APPROVAL = 'Waiting for a person on the team to approve this step.'
+/** The approval a reply waited on was turned down; the reply stops there. */
+export const APPROVAL_REJECTED = 'A person on the team turned down this step, so the assistant stopped here.'
+/** Nobody decided in time; the reply stops there. */
+export const APPROVAL_EXPIRED = 'Nobody on the team approved this step in time, so the assistant stopped here.'
 
 type VisitorAction = 'export' | 'conversation' | 'visitor'
 
@@ -228,7 +231,7 @@ function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () =>
   const buttonStyle = { backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }
 
   return step === 'email' ? (
-    <form onSubmit={send} className="mt-4 space-y-3 text-left">
+    <Form onSubmit={send} className="mt-4 space-y-3 text-left">
       <p className="text-sm text-muted-foreground">We will email you a one-time code.</p>
       <label htmlFor="hosted-chat-email" className="sr-only">
         Email address
@@ -256,9 +259,9 @@ function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () =>
       >
         {busy ? 'Sending...' : 'Email me a code'}
       </button>
-    </form>
+    </Form>
   ) : (
-    <form onSubmit={verify} className="mt-4 space-y-3 text-left">
+    <Form onSubmit={verify} className="mt-4 space-y-3 text-left">
       <p className="text-sm text-muted-foreground">
         Enter the 6-digit code we sent to <span className="font-medium text-foreground">{email.trim()}</span>.
       </p>
@@ -298,7 +301,7 @@ function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () =>
           Send a new code
         </button>
       </div>
-    </form>
+    </Form>
   )
 }
 
@@ -534,7 +537,11 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         // page just goes quiet, which reads as "ignored".
         const last = thread.messages[thread.messages.length - 1]
         const unanswered = !last || last.role === 'user'
-        if (reason === 'run.cancelled') {
+        if (reason === 'approval.rejected') {
+          setError(APPROVAL_REJECTED)
+        } else if (reason === 'approval.expired') {
+          setError(APPROVAL_EXPIRED)
+        } else if (reason === 'run.cancelled') {
           setError('That reply was cancelled. Please try again.')
         } else if (reason === 'run.failed' || unanswered) {
           setError("The assistant couldn't reply just now. Please try again in a moment.")
@@ -567,7 +574,7 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
           const chunk = payload.token ?? payload.text ?? payload.content ?? ''
           if (!chunk) return
           setMessages((current) =>
-            current.map((m) => (m.id === `run-${runId}` ? { ...m, content: m.content + chunk } : m)),
+            current.map((m) => (m.id === `run-${runId}` ? { ...m, content: m.content + chunk, waiting: undefined } : m)),
           )
         })
 
@@ -581,6 +588,16 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
             current.map((m) => (m.id === `run-${runId}` ? { ...m, content: '' } : m)),
           )
         })
+
+        // The run stopped for a person on the team to approve a step, which
+        // can take hours; `resumed` says it is working on the reply again.
+        // A token means the same. Neither carries reply text, so no `seen`.
+        const waitingFor = (waiting: PendingMessage['waiting']) => {
+          if (activeThreadRef.current !== threadId) return
+          setMessages((current) => current.map((m) => (m.id === `run-${runId}` ? { ...m, waiting } : m)))
+        }
+        es.addEventListener('waiting', () => waitingFor('approval'))
+        es.addEventListener('resumed', () => waitingFor(undefined))
 
         es.addEventListener('done', (event) => {
           let reason: string | undefined
@@ -1091,15 +1108,18 @@ function MessageBubble({ message }: { message: PendingMessage }) {
           isUser ? (
             message.content
           ) : (
-            <Suspense fallback={<span className="whitespace-pre-wrap">{message.content}</span>}>
-              <ReactMarkdown skipHtml components={assistantMarkdownComponents}>
-                {message.content}
-              </ReactMarkdown>
-            </Suspense>
+            <AssistantMarkdown>{message.content}</AssistantMarkdown>
           )
-        ) : message.streaming ? (
+        ) : message.streaming && !message.waiting ? (
           <StreamingDots />
         ) : null}
+        {message.streaming && message.waiting === 'approval' && (
+          // A step needs a person on the team, which can take hours: say
+          // so, rather than leave the visitor watching dots.
+          <p role="status" className={cn('text-muted-foreground', message.content && 'mt-2')}>
+            {WAITING_FOR_APPROVAL}
+          </p>
+        )}
       </div>
     </div>
   )

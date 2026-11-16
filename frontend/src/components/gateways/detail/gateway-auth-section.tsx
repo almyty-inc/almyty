@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Form } from '@/components/ui/form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { CredentialPicker } from '@/components/credentials/credential-picker'
@@ -28,6 +29,8 @@ export function GatewayAuthSection({ gatewayId, readOnly = false }: { gatewayId:
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<SignInMethod | null>(null)
   const [error, setError] = useState('')
+  // The secret of a key just made, held here so it outlives the key list.
+  const [secret, setSecret] = useState<string | null>(null)
   const auth = useQuery({ queryKey: ['gateway-auth-configs', gatewayId], queryFn: () => gatewaysApi.getAuthConfigs(gatewayId) })
   const companyMetadata = useQuery({ queryKey: ['gateway-company-signin-metadata', gatewayId], queryFn: () => gatewaysApi.getCompanySignInMetadata(gatewayId), enabled: editing === 'company_signin' })
   const raw = auth.data?.authConfigs ?? auth.data
@@ -51,7 +54,10 @@ export function GatewayAuthSection({ gatewayId, readOnly = false }: { gatewayId:
       <p className="text-sm text-muted-foreground">Allow any combination. A caller only needs one of the enabled methods.</p>
       {auth.isError && <p role="alert" className="text-sm text-destructive">Sign-in methods could not be loaded. Reload to try again.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {METHODS.map(method => {
+      {/* No checkboxes until the saved methods are known: an unchecked box
+          over a method that is on would invite a click that turns it off. */}
+      {auth.isLoading && <p className="text-sm text-muted-foreground" aria-busy="true" data-testid="sign-in-methods-loading">Loading sign-in methods…</p>}
+      {!auth.isLoading && METHODS.map(method => {
         const config = configs.find(c => c.type === method.type)
         const enabled = !!config && config.isActive !== false
         const open = editing === method.type
@@ -60,7 +66,7 @@ export function GatewayAuthSection({ gatewayId, readOnly = false }: { gatewayId:
             <div className="flex items-start justify-between gap-3">
               <label className="flex items-start gap-3">
                 <input type="checkbox" className="mt-1 h-4 w-4 accent-primary" aria-label={method.label} checked={enabled || open}
-                  disabled={readOnly || auth.isLoading || auth.isError || save.isPending}
+                  disabled={readOnly || auth.isError || save.isPending}
                   onChange={event => {
                     setError('')
                     if (!event.target.checked) {
@@ -73,7 +79,8 @@ export function GatewayAuthSection({ gatewayId, readOnly = false }: { gatewayId:
               </label>
               {enabled && !readOnly && method.type !== 'api_key' && !open && <Button type="button" size="sm" variant="outline" onClick={() => setEditing(method.type)}>Edit {method.label.toLowerCase()}</Button>}
             </div>
-            {method.type === 'api_key' && enabled && <GatewayKeys gatewayId={gatewayId} readOnly={readOnly} />}
+            {method.type === 'api_key' && secret && <OneTimeKey secret={secret} onDone={() => setSecret(null)} />}
+            {method.type === 'api_key' && enabled && <GatewayKeys gatewayId={gatewayId} readOnly={readOnly} onMade={setSecret} />}
             {method.type === 'basic_auth' && enabled && !open && <p className="text-sm text-muted-foreground">{config?.configuration.users?.filter((u: any) => u.isActive !== false).length ?? 0} usernames allowed</p>}
             {method.type === 'company_signin' && enabled && !open && <p className="text-sm text-muted-foreground">{config?.configuration.preset ?? 'Company'} sign-in is enabled.</p>}
             {open && <MethodForm key={`${method.type}-${config?.id ?? 'new'}`} type={method.type} configuration={{ ...config?.configuration, ...(method.type === 'company_signin' && companyMetadata.data?.redirectUri ? { redirectUri: companyMetadata.data.redirectUri } : {}) }} onCancel={() => setEditing(null)} saving={save.isPending}
@@ -85,12 +92,24 @@ export function GatewayAuthSection({ gatewayId, readOnly = false }: { gatewayId:
   )
 }
 
-function GatewayKeys({ gatewayId, readOnly }: { gatewayId: string; readOnly: boolean }) {
+/**
+ * A key's secret, shown once right after it is made. It lives in the
+ * section, not in the key list, so nothing the list does afterwards (a
+ * refetch, the Keys method being saved again) can drop it before it is copied.
+ */
+function OneTimeKey({ secret, onDone }: { secret: string; onDone: () => void }) {
+  return <div data-sensitive-text data-testid="generated-api-key" className="space-y-3 rounded-lg border bg-muted p-4">
+    <CopyField value={secret} label="API key" />
+    <p className="text-sm">Copy it now. You won't see it again.</p>
+    <Button type="button" variant="outline" size="sm" onClick={onDone}>I've saved it</Button>
+  </div>
+}
+
+function GatewayKeys({ gatewayId, readOnly, onMade }: { gatewayId: string; readOnly: boolean; onMade: (secret: string | null) => void }) {
   const queryClient = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [expiry, setExpiry] = useState('')
-  const [secret, setSecret] = useState<string | null>(null)
   const [error, setError] = useState('')
   const guard = useLeaveGuard(creating && (name !== '' || expiry !== ''))
   const query = useQuery({ queryKey: ['gateway-api-keys', gatewayId], queryFn: () => gatewaysApi.listApiKeys(gatewayId) })
@@ -98,23 +117,22 @@ function GatewayKeys({ gatewayId, readOnly }: { gatewayId: string; readOnly: boo
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
   const create = useMutation({
     mutationFn: () => gatewaysApi.generateApiKey(gatewayId, { name: name.trim(), ...(expiry ? { expiresAt: `${expiry}T23:59:59.999Z` } : {}) }),
-    onSuccess: result => { setSecret(result.key); setCreating(false); setName(''); setExpiry(''); setError(''); invalidate() },
+    onSuccess: result => {
+      onMade(result.key); setCreating(false); setName(''); setExpiry(''); setError(''); invalidate()
+      // Making a key turns the Keys method on if it was off; show that.
+      queryClient.invalidateQueries({ queryKey: ['gateway-auth-configs', gatewayId] })
+    },
     onError: err => setError(getApiErrorMessage(err)),
   })
   const revoke = useMutation({ mutationFn: (id: string) => gatewaysApi.revokeApiKey(gatewayId, id), onSuccess: invalidate, onError: err => setError(getApiErrorMessage(err)) })
   return (
     <div className="space-y-3">
-      {!readOnly && !creating && <Button type="button" size="sm" variant="outline" onClick={() => { setCreating(true); setSecret(null) }}>New key</Button>}
-      {creating && <form aria-label="New key" className="space-y-3" onSubmit={event => { event.preventDefault(); if (name.trim()) create.mutate(); else setError('Give the key a name.') }}>
+      {!readOnly && !creating && <Button type="button" size="sm" variant="outline" onClick={() => { setCreating(true); onMade(null) }}>New key</Button>}
+      {creating && <Form aria-label="New key" className="space-y-3" onSubmit={event => { event.preventDefault(); if (name.trim()) create.mutate(); else setError('Give the key a name.') }}>
         <Field id={`key-name-${gatewayId}`} label="Name"><Input value={name} onChange={event => setName(event.target.value)} autoComplete="off" /></Field>
         <Field id={`key-expiry-${gatewayId}`} label="Expires on" hint="Leave empty to keep it until you revoke it."><Input type="date" value={expiry} onChange={event => setExpiry(event.target.value)} /></Field>
         <InlineFormActions onCancel={() => setCreating(false)} submitLabel="Make key" submitting={create.isPending} />
-      </form>}
-      {secret && <div data-sensitive-text data-testid="generated-api-key" className="space-y-3 rounded-lg border bg-muted p-4">
-        <CopyField value={secret} label="API key" />
-        <p className="text-sm">Copy it now. You won't see it again.</p>
-        <Button type="button" variant="outline" size="sm" onClick={() => setSecret(null)}>I've saved it</Button>
-      </div>}
+      </Form>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {query.isError && <p role="alert" className="text-sm text-destructive">Keys could not be loaded.</p>}
       {!query.isLoading && !query.isError && !keys.length && <p className="text-sm text-muted-foreground">No keys yet.</p>}
@@ -159,7 +177,7 @@ function MethodForm({ type, configuration, onSave, onCancel, saving }: { type: S
     if (type === 'jwt') delete out.preset
     onSave(out)
   }
-  return <form className="space-y-4" aria-label={`Configure ${label}`} onSubmit={event => { event.preventDefault(); submit() }}>
+  return <Form className="space-y-4" aria-label={`Configure ${label}`} onSubmit={event => { event.preventDefault(); submit() }}>
     {type === 'basic_auth' && <>
       {users.map((user, index) => <div key={user.id ?? index} className="space-y-3 rounded border p-3">
         <Field id={`signin-user-${index}`} label={index === 0 ? 'Username' : `Username ${index + 1}`}><Input value={user.username} onChange={event => setUsers(old => old.map((row, i) => i === index ? { ...row, username: event.target.value } : row))} autoComplete="off" /></Field>
@@ -194,5 +212,5 @@ function MethodForm({ type, configuration, onSave, onCancel, saving }: { type: S
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <InlineFormActions onCancel={onCancel} submitLabel={`Save ${label}`} submitting={saving} />
     {guard.element}
-  </form>
+  </Form>
 }

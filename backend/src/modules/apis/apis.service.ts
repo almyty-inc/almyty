@@ -33,6 +33,7 @@ import { assertWithinPerSchemaCap, maxToolsPerSchema } from '../tools/tool-quota
 import { toolDisplayName } from '../tools/tool-display-name';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
+import { answeredResult, ConnectionTestResult, refusedResult, unreachableResult } from './connection-test-result';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
 
 /** Page size for GET /apis when the caller does not ask for one. */
@@ -686,6 +687,36 @@ export class ApisService {
     return { selected: ids.length };
   }
 
+  /**
+   * Make the tool of one more operation, or remake it in place: on the API
+   * page, for an operation of a large API that was not picked at import.
+   * The operation joins the API's picked (active) operations, within the
+   * per-schema limit, and only its tool is written -- an existing one
+   * keeps its id, as the selection endpoint's generation does.
+   */
+  async makeOperationTool(
+    apiId: string,
+    organizationId: string,
+    operationId: string,
+    createdBy: string | null = null,
+  ): Promise<{ toolId: string; toolName: string }> {
+    await this.assertApiInOrganization(apiId, organizationId);
+    const operation = await this.operationRepository.findOne({ where: { id: operationId, apiId } });
+    if (!operation) throw new NotFoundException('Operation not found in this API');
+    const wasActive = operation.isActive;
+    if (!wasActive) {
+      const active = await this.operationRepository.count({ where: { apiId, isActive: true } });
+      assertWithinPerSchemaCap(active + 1, 'This API');
+      // Generation skips an inactive operation; it is stored as picked once its tool is made.
+      operation.isActive = true;
+    }
+    const result = await this.generateToolsFromApi(apiId, organizationId, [operation], undefined, createdBy);
+    const tool = result.tools[0];
+    if (!tool) throw new BadRequestException('The tool could not be made from this operation.');
+    if (!wasActive) await this.operationRepository.update({ id: operation.id, apiId }, { isActive: true });
+    return { toolId: tool.id, toolName: tool.name };
+  }
+
   async getApiResources(
     apiId: string,
     organizationId: string,
@@ -753,7 +784,7 @@ export class ApisService {
     apiId: string,
     organizationId: string,
     userId?: string,
-  ): Promise<{ success: boolean; statusCode?: number; responseTime?: number; error?: string }> {
+  ): Promise<ConnectionTestResult> {
     const api = await this.findOne(apiId, organizationId, userId ? { id: userId } : undefined);
 
     if (!api) {
@@ -769,10 +800,7 @@ export class ApisService {
     // the connectivity-check button would fetch it on their behalf.
     const validation = validateUrl(api.baseUrl);
     if (!validation.valid) {
-      return {
-        success: false,
-        error: `Refused to connect to API base URL: ${validation.error}`,
-      };
+      return refusedResult(validation.error ?? 'the address is not allowed');
     }
 
     try {
@@ -807,17 +835,12 @@ export class ApisService {
       });
       const responseTime = Date.now() - startTime;
 
-      return {
-        success: response.status < 400,
-        statusCode: response.status,
-        responseTime,
-      };
+      // Any answer short of a server error means the host is up: most
+      // APIs answer 400/401/404 on their bare address (connection-test-result.ts).
+      return answeredResult(api.baseUrl, response.status, responseTime);
     } catch (error) {
       // Never the errno: "ECONNREFUSED" vs a timeout says which ports answer.
-      return {
-        success: false,
-        error: outboundFailureDetail(error),
-      };
+      return unreachableResult(api.baseUrl, outboundFailureDetail(error));
     }
   }
 

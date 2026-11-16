@@ -19,7 +19,7 @@ import { Response } from 'express';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
 import { AgentRuntimeService } from './agent-runtime.service';
-import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from './agent-invocation';
+import { AgentNotActive, agentIsTryable, runsOnAutonomousRuntime } from './agent-invocation';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -77,7 +77,10 @@ export class AgentExecutionController {
       // its status, or anything else about it, is answered.
       await this.runtimeService.executionAccess.assertCanExecute(principal, agent, 'Agent');
 
-      if (!agentIsInvokable(agent)) {
+      // The agent's own page tries a draft before it is turned on; its
+      // channels, gateways and schedules still need it active
+      // (agent-invocation.ts, agentIsTryable).
+      if (!agentIsTryable(agent)) {
         const refusal = new AgentNotActive(String(agent.status));
         throw new HttpException(
           { success: false, message: refusal.message, error: refusal.code },
@@ -171,7 +174,8 @@ export class AgentExecutionController {
       // for answers 404 like a missing one rather than an SSE error event.
       await this.runtimeService.executionAccess.assertCanExecute(principal, agent, 'Agent');
 
-      if (!agentIsInvokable(agent)) {
+      // A draft runs here too (agent-invocation.ts, agentIsTryable).
+      if (!agentIsTryable(agent)) {
         res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
           message: new AgentNotActive(String(agent.status)).message,

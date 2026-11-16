@@ -13,8 +13,8 @@ A schedule runs one task at a set time and posts the result. To keep an autonomo
 3. Under **When it runs**, pick how it repeats:
    - **At a time of day**: every day, weekdays (Monday to Friday), or the days you pick, at a time.
    - **Once a month**: a day from the 1st to the 28th, or the **last day of the month**, at a time.
-   - **Every few minutes or hours**: how often.
-4. Check the **Time zone**. It starts as the one on your profile (**Settings → Your account**). The agent runs at that time there in summer and in winter.
+   - **Every few minutes or hours**: how often. The runs line up with the clock, not with when you save: every 15 minutes runs at :00, :15, :30 and :45, so the first run can come sooner than 15 minutes after you save.
+4. Check the **Time zone**. It starts as the one on your profile (**Settings → Your account**). The agent runs at that time there in summer and in winter, and the dates in its message are in that zone.
 5. Under **Send the result to**, choose where the result goes (see below).
 6. Say what the agent should do:
    - For an agent that works on its own, write the **Message** it gets each time, the way you would ask it in a chat: "Summarise yesterday's sales and point out anything unusual."
@@ -24,6 +24,22 @@ A schedule runs one task at a set time and posts the result. To keep an autonomo
 While you choose, the page says the schedule back in plain words, for example *Every weekday at 8:00, Europe/Berlin*, and lists the next few runs. After you save, the card shows the same sentence and when the next run is.
 
 The agent has to be active. A schedule on an agent that is still a draft never runs, so saving one is refused until you activate it.
+
+## Dates in the message
+
+A message can name the day it runs and the last time it ran. Write one of these in the message, and it is filled in at each run:
+
+| Write | What the agent gets | Example |
+|---|---|---|
+| `{{today}}` | The date of the run | 2026-11-11 |
+| `{{now}}` | The date and time of the run | 2026-11-11T08:00:00+01:00 |
+| `{{last_run_at}}` | When the last successful run of this schedule started. On the first run, when the schedule was set up. | 2026-11-10T08:00:04+01:00 |
+
+So *"List the papers published since `{{last_run_at}}`"* asks for exactly what is new since the last report, even after a run failed or was skipped. The page lists these values under the message, so you do not have to remember them.
+
+Dates and times are in the schedule's **Time zone**, the one next to when it runs. A schedule that repeats every few minutes or hours has one too: it does not change when the runs happen, only the dates in the message. For an agent you drew step by step, they are filled in in a `"message"` field of **What the agent is given**; the rest of it is passed on as you wrote it.
+
+Every agent is also told today's date and the organization's time zone on its own, whenever it calls a model, so "yesterday" or "this week" in a message already means the right days.
 
 ## Send the result to
 
@@ -91,7 +107,7 @@ Each scheduled run costs what a normal run of the agent costs. Look at **Avg cos
 | `days` | number[] | `days` | 0 = Sunday to 6 = Saturday |
 | `dayOfMonth` | number or `"last"` | `monthly` | 1 to 28, or the last day of the month |
 | `timezone` | string | `days`, `monthly` | IANA name such as `Europe/Berlin`; defaults to the caller's profile time zone, then UTC |
-| `input` | object | all | Passed to every run. An autonomous agent is sent `input.message` |
+| `input` | object | all | Passed to every run. An autonomous agent is sent `input.message`. `{{today}}`, `{{now}}` and `{{last_run_at}}` in `input.message` are filled in at each run; nothing else in `input` is changed |
 | `deliverTo` | object or null | all | `{ "kind": "webhook" }` or `{ "kind": "channel", "channelId": "...", "to": "..." }` |
 
 ```bash

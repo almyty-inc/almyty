@@ -45,6 +45,13 @@ export interface ModelCapabilities {
   embedding?: boolean;
   structuredOutput?: boolean;
   /**
+   * Answers a conversation in text. From the price feed's model kind
+   * (LiteLLM `mode`: chat, completion, responses); false for a speech,
+   * transcription, image, video, embedding or rerank model, which a model
+   * picker then leaves out. Unset when no feed knows the model.
+   */
+  chat?: boolean;
+  /**
    * This card can score a teacher-forced continuation and return per-token
    * logprobs, which is what the `decide` mode's logits path needs.
    *
@@ -140,6 +147,10 @@ export class Model {
 
   @Column({ type: 'integer', nullable: true })
   contextLength: number | null;
+
+  /** The most tokens the model writes in one reply, from the price feed (LiteLLM max_output_tokens, OpenRouter top_provider.max_completion_tokens). */
+  @Column({ type: 'integer', nullable: true })
+  maxOutputTokens: number | null;
 
   /** Effective price: the override when set, else the feed. */
   @Column({ type: 'json', nullable: true })

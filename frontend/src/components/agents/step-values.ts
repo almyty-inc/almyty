@@ -178,3 +178,167 @@ export function refLabel(path: string, steps: StepEntry[], nodes: Node[] = []): 
   }
   return path
 }
+
+// ─── References that point at nothing ────────────────────────────────────────
+
+/** A step reading a value that is no longer there: an input field that was renamed or removed, or a deleted step. */
+export interface BrokenRef {
+  nodeId: string
+  path: string
+  kind: 'input' | 'step'
+}
+
+const STEP_REF = /^nodes\.([^.[\s]+)\.output(?:[.[]|$)/
+
+/** The input step's schema, or undefined when there is none. */
+export function inputSchemaOf(nodes: Array<{ type?: string; data?: Record<string, any> }> | undefined): unknown {
+  return (nodes ?? []).find((n) => n.type === 'input')?.data?.schema
+}
+
+/**
+ * The fields the input step declares, or null when it declares none (a
+ * run then starts with a message, and an API caller may send anything)
+ * or says it takes more than it lists.
+ */
+export function declaredInputKeys(nodes: Node[]): string[] | null {
+  const schema = inputSchemaOf(nodes) as any
+  const props = schema?.properties
+  if (!props || typeof props !== 'object' || Object.keys(props).length === 0) return null
+  if (schema.additionalProperties === true) return null
+  return Object.keys(props)
+}
+
+function eachString(value: unknown, visit: (s: string) => void): void {
+  if (typeof value === 'string') visit(value)
+  else if (Array.isArray(value)) value.forEach((v) => eachString(v, visit))
+  else if (value && typeof value === 'object') Object.values(value).forEach((v) => eachString(v, visit))
+}
+
+function mapStrings(value: unknown, fn: (s: string) => string): unknown {
+  if (typeof value === 'string') return fn(value)
+  if (Array.isArray(value)) return value.map((v) => mapStrings(v, fn))
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) out[k] = mapStrings(v, fn)
+    return out
+  }
+  return value
+}
+
+/** The input field a reference reads (`input.invoices.0` reads `invoices`), or null for anything else. */
+export function inputFieldOf(path: string): string | null {
+  if (!path.startsWith('input.')) return null
+  return path.slice('input.'.length).split(/[.[]/)[0] || null
+}
+
+/** Every reference, in any step, to an input field the input step does not have or to a step that is gone. */
+export function brokenRefs(nodes: Node[]): BrokenRef[] {
+  const ids = new Set(nodes.map((n) => n.id))
+  const keys = declaredInputKeys(nodes)
+  const out: BrokenRef[] = []
+  for (const node of nodes) {
+    if (node.type === 'input') continue
+    const seen = new Set<string>()
+    eachString(node.data, (text) => {
+      for (const seg of parseTemplate(text)) {
+        if (seg.kind !== 'ref' || seen.has(seg.path)) continue
+        const field = inputFieldOf(seg.path)
+        if (field !== null) {
+          if (keys && !keys.includes(field)) {
+            seen.add(seg.path)
+            out.push({ nodeId: node.id, path: seg.path, kind: 'input' })
+          }
+          continue
+        }
+        const m = STEP_REF.exec(seg.path)
+        if (m && !ids.has(m[1])) {
+          seen.add(seg.path)
+          out.push({ nodeId: node.id, path: seg.path, kind: 'step' })
+        }
+      }
+    })
+  }
+  return out
+}
+
+/** The steps that still read input field `field`. */
+export function stepsReadingInput(nodes: Node[], field: string): Node[] {
+  return nodes.filter((node) => {
+    if (node.type === 'input') return false
+    let reads = false
+    eachString(node.data, (text) => {
+      if (parseTemplate(text).some((s) => s.kind === 'ref' && inputFieldOf(s.path) === field)) reads = true
+    })
+    return reads
+  })
+}
+
+/**
+ * Point every reference to input field `from` at `to` instead, keeping the
+ * rest of each reference (`input.from.0` becomes `input.to.0`). Returns the
+ * steps that changed, with their new data; nothing else is touched.
+ */
+export function renameInputRefs(nodes: Node[], from: string, to: string): Array<{ id: string; data: Record<string, unknown> }> {
+  const rewrite = (text: string) =>
+    joinTemplate(
+      parseTemplate(text).map((s) => {
+        if (s.kind !== 'ref' || inputFieldOf(s.path) !== from) return s
+        const path = `input.${to}${s.path.slice(`input.${from}`.length)}`
+        return { kind: 'ref' as const, path, raw: refTemplate(path) }
+      }),
+    )
+  return stepsReadingInput(nodes, from).map((node) => ({
+    id: node.id,
+    data: mapStrings(node.data, rewrite) as Record<string, unknown>,
+  }))
+}
+
+// ─── What a run is given ─────────────────────────────────────────────────────
+
+function sampleValue(key: string, prop: any): unknown {
+  if (prop && typeof prop === 'object') {
+    if (Array.isArray(prop.examples) && prop.examples.length > 0) return prop.examples[0]
+    if (prop.example !== undefined) return prop.example
+    if (prop.default !== undefined) return prop.default
+  }
+  switch (prop?.type) {
+    case 'number':
+    case 'integer':
+      return 0
+    case 'boolean':
+      return false
+    case 'array':
+      return []
+    case 'object':
+      return {}
+    default:
+      return key === 'message' ? 'Hello' : ''
+  }
+}
+
+/**
+ * A starting input for the Run and Test panels, from the fields the input
+ * step declares: `{"invoices": ""}` for an agent that starts with invoices.
+ * An input step that declares nothing starts with a message.
+ */
+export function sampleInput(schema: unknown): Record<string, unknown> {
+  const props = (schema as any)?.properties
+  if (!props || typeof props !== 'object' || Object.keys(props).length === 0) return { message: 'Hello' }
+  const out: Record<string, unknown> = {}
+  for (const [key, prop] of Object.entries(props)) out[key] = sampleValue(key, prop)
+  return out
+}
+
+/**
+ * What a typed message becomes as a run's input: `{message}` unless the
+ * input step declares fields without one, then the first text field (or
+ * the first field) carries it.
+ */
+export function messageInput(schema: unknown, text: string): Record<string, unknown> {
+  const props = (schema as any)?.properties
+  if (!props || typeof props !== 'object') return { message: text }
+  const keys = Object.keys(props)
+  if (keys.length === 0 || keys.includes('message')) return { message: text }
+  const textKey = keys.find((k) => (props[k]?.type ?? 'string') === 'string') ?? keys[0]
+  return { [textKey]: text }
+}

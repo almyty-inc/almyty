@@ -966,6 +966,17 @@ describe('ToolsService', () => {
       expect(qb.andWhere).toHaveBeenCalledWith('tool.type = :type', { type: ToolType.API });
     });
 
+    // The API page's "Tools generated" link opens /tools?apiId=... and must
+    // list what the page counted: generated tools and ones added by hand.
+    it('filters by API through the operation or the tool\'s own API', async () => {
+      const qb = makeQueryBuilder([], 0);
+      toolRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getTools({ ...baseFilters, apiId: 'api-1' });
+
+      expect(qb.andWhere).toHaveBeenCalledWith('(api.id = :apiId OR tool.apiId = :apiId)', { apiId: 'api-1' });
+    });
+
     it('should apply status filter', async () => {
       const qb = makeQueryBuilder([], 0);
       toolRepo.createQueryBuilder.mockReturnValue(qb);
@@ -1001,15 +1012,6 @@ describe('ToolsService', () => {
         'category.id IN (:...categoryIds)',
         { categoryIds: ['cat-1'] },
       );
-    });
-
-    it('should apply apiId filter', async () => {
-      const qb = makeQueryBuilder([], 0);
-      toolRepo.createQueryBuilder.mockReturnValue(qb);
-
-      await service.getTools({ ...baseFilters, apiId: 'api-1' });
-
-      expect(qb.andWhere).toHaveBeenCalledWith('api.id = :apiId', { apiId: 'api-1' });
     });
 
     it('should apply tags filter', async () => {

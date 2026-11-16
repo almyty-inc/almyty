@@ -151,8 +151,8 @@ describe('CredentialService', () => {
 
       const result = await service.createCredential('api-1', 'org-1', dto);
 
-      // The apiKey should be masked since it starts with 'encrypted:'
-      expect(result.config.apiKey).toBe('••••••••');
+      // Encrypted at rest: the response shows only that a key is there.
+      expect(result.config.apiKey).toBe('********');
     });
 
     it('should handle expiresAt date string', async () => {
@@ -190,8 +190,8 @@ describe('CredentialService', () => {
         order: { createdAt: 'DESC' },
       });
       expect(result).toHaveLength(2);
-      expect(result[0].config.apiKey).toBe('••••••••');
-      expect(result[1].config.token).toBe('••••••••');
+      expect(result[0].config.apiKey).toBe('********');
+      expect(result[1].config.token).toBe('********');
     });
 
     it('should return empty array when no credentials exist', async () => {
@@ -737,7 +737,7 @@ describe('CredentialService', () => {
   });
 
   describe('maskCredential (private, tested via public methods)', () => {
-    it('should mask encrypted values with bullets', async () => {
+    it('shows an encrypted value only as present', async () => {
       const cred = mockCredential();
       cred.config = {
         apiKey: 'encrypted:abc:def',
@@ -747,11 +747,11 @@ describe('CredentialService', () => {
 
       const result = await service.getCredentials('api-1', 'org-1');
 
-      expect(result[0].config.apiKey).toBe('••••••••');
+      expect(result[0].config.apiKey).toBe('********');
       expect(result[0].config.baseUrl).toBe('https://api.example.com');
     });
 
-    it('should partially mask long non-encrypted sensitive values', async () => {
+    it('shows no part of a long plaintext secret', async () => {
       const cred = mockCredential();
       cred.config = {
         token: 'sk-long-plaintext-token-value',
@@ -760,7 +760,8 @@ describe('CredentialService', () => {
 
       const result = await service.getCredentials('api-1', 'org-1');
 
-      expect(result[0].config.token).toBe('sk-l••••••••');
+      expect(result[0].config.token).toBe('********');
+      expect(JSON.stringify(result)).not.toMatch(/sk-l|alue/);
     });
 
     it('should fully mask short sensitive values', async () => {
@@ -772,7 +773,7 @@ describe('CredentialService', () => {
 
       const result = await service.getCredentials('api-1', 'org-1');
 
-      expect(result[0].config.password).toBe('••••••••');
+      expect(result[0].config.password).toBe('********');
     });
 
     it('should not mask non-sensitive fields', async () => {

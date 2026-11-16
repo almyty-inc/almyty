@@ -134,7 +134,7 @@ export interface RuntimeLlmResponse {
      * back empty and this is the draft standing in.
      */
     answer?: boolean;
-    fallback?: 'error' | 'empty';
+    fallback?: 'error' | 'empty' | 'output_limit';
   };
   timestamp: number;
 }

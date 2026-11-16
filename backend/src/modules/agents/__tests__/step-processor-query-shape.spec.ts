@@ -169,7 +169,7 @@ describe('AgentStepProcessor query and serialization shape', () => {
     expect((processor as any).boundStepsForPersist([...steps, appended])[2]).toBe(fourth[2]);
   });
 
-  it('still truncates an oversized payload', () => {
+  it('still bounds an oversized payload', () => {
     const { processor } = makeProcessor();
     const steps = [
       { type: 'tool', input: {}, output: { blob: 'z'.repeat(STEP_PAYLOAD_CAP * 2) }, timestamp: '1' },
@@ -177,10 +177,11 @@ describe('AgentStepProcessor query and serialization shape', () => {
 
     const [capped] = (processor as any).boundStepsForPersist(steps);
 
-    expect(typeof capped.output).toBe('string');
-    expect(capped.output).toContain('truncated from');
+    // A JSON payload is shortened, not cut: still an object, with a note.
+    expect(JSON.stringify(capped.output).length).toBeLessThanOrEqual(STEP_PAYLOAD_CAP);
+    expect(capped.output._shortened).toContain('[result shortened');
     // The in-memory array the tick reasons over is untouched.
-    expect(typeof steps[0].output).toBe('object');
+    expect(steps[0].output.blob).toHaveLength(STEP_PAYLOAD_CAP * 2);
   });
 
   it('reads the step\'s own progress back with one bounded read of the log, newest first, never the whole log', async () => {

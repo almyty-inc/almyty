@@ -2,13 +2,13 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
-import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ConflictException, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { AgentChannelsService } from '../agent-channels/agent-channels.service';
 import { PushWakesService } from './always-on/push-wakes/push-wakes.service';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Raw, Repository } from 'typeorm';
 import { Tool } from '../../entities/tool.entity';
 
 import { Agent, AgentStatus, AgentPipeline } from '../../entities/agent.entity';
@@ -17,7 +17,8 @@ import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
-import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-models';
+import { AgentModels, agentModelsProblems, mainRoleConflicts, syncMainRole } from './autonomous-models';
+import { duplicateAgentFields } from './agent-duplicate';
 import { parseLabelRequirements } from '../runner/runner-labels';
 import { AgentMemoryConfig, memoryConfigProblems, memorySettings, retentionSeconds, NATIVE_MEMORY_ACCOUNT } from './agent-memory-settings';
 import { capabilityProblems, normaliseCapabilities } from './agent-capabilities';
@@ -39,6 +40,17 @@ import { assertNoSharedDependents, narrowsScope } from '../../common/authorizati
 import { collectAgentReferences, collectProviderReferences } from './agent-references';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { usableProviders } from '../llm-providers/private-provider';
+
+/**
+ * The mode a new agent gets when the request names none: autonomous, the
+ * agent works out its own steps toward a goal. A request that brings a
+ * pipeline (nodes to run) without naming a mode is a workflow, since an
+ * autonomous agent would never run those nodes.
+ */
+export function defaultAgentMode(input: { mode?: 'workflow' | 'autonomous'; pipeline?: { nodes?: unknown[] } | null }): 'workflow' | 'autonomous' {
+  if (input.mode) return input.mode;
+  return Array.isArray(input.pipeline?.nodes) && input.pipeline!.nodes!.length > 0 ? 'workflow' : 'autonomous';
+}
 
 export interface AgentSearchFilters {
   search?: string;
@@ -146,6 +158,39 @@ export function trimAgentVersions(
 }
 
 /**
+ * The version an edited agent gets: the patch number goes up by one, the
+ * same rule tools follow (ToolsService.updateTool). Every save is also
+ * recorded in full by the typeorm-versions subscriber (`GET /versions/
+ * Agent/:id`); this label is the short name people see for it. A label
+ * that is not `major.minor.patch` starts over at 1.0.1.
+ */
+export function nextAgentVersion(current: string | null | undefined): string {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(current ?? '').trim());
+  if (!m) return '1.0.1';
+  return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
+}
+
+/** Fields an update can carry that do not change what the agent is or does. */
+const NOT_AN_EDIT = new Set(['version', 'status', 'visibility', 'teamId']);
+
+/**
+ * The agent's fields named in `keys` as one comparable string: object keys
+ * sorted (jsonb hands them back in its own order) and a missing value the
+ * same as null.
+ */
+export function agentDefinition(agent: Partial<Agent>, keys: Iterable<string>): string {
+  const picked: Record<string, unknown> = {};
+  for (const key of keys) if (!NOT_AN_EDIT.has(key)) picked[key] = (agent as any)[key];
+  return JSON.stringify(picked, (_key, v) =>
+    v === undefined
+      ? null
+      : v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+        : v,
+  );
+}
+
+/**
  * Columns the agents list response emits. `metadata` is deliberately absent:
  * it carries the inline version history and no list consumer reads it.
  */
@@ -176,6 +221,8 @@ export const AGENT_LIST_COLUMNS = [
   'webhookUrl',
   'totalExecutions',
   'successfulExecutions',
+  'checkedExecutions',
+  'passedCheckExecutions',
   'totalCost',
   'averageExecutionTime',
   'lastExecutedAt',
@@ -188,6 +235,14 @@ export const AGENT_LIST_COLUMNS = [
 export const DEFAULT_EXECUTIONS_PAGE_SIZE = 20;
 /** Hard ceiling on one page of executions. */
 export const MAX_EXECUTIONS_PAGE_SIZE = 100;
+
+/**
+ * Why a create or rename was refused for its name. Neutral on purpose: the
+ * agent holding the name may be another person's private agent, and naming
+ * it, its owner or even echoing the name back as "an agent called X" would
+ * tell the caller it exists.
+ */
+export const AGENT_NAME_IN_USE = 'That name is already in use in this organization; pick another.';
 
 @Injectable()
 export class AgentsService {
@@ -336,17 +391,29 @@ export class AgentsService {
    * The models and modelConfig an agent is saved with. On an autonomous
    * agent the main role and modelConfig are kept equal (syncMainRole), so
    * a client that still writes modelConfig alone moves the main role, and
-   * the page, which writes models, moves modelConfig. A workflow agent has
-   * no models: its multi-model shape is its graph.
+   * the page, which writes models, moves modelConfig. A write that sends
+   * both keeps every call setting either one carries; one that sends the
+   * same setting twice with different values is refused rather than one
+   * of them dropped. Create and update go through here alike. A workflow
+   * agent has no models: its multi-model shape is its graph.
    */
   private modelsFor(
     mode: 'workflow' | 'autonomous',
     models: AgentModels | null | undefined,
     modelConfig: Agent['modelConfig'] | null | undefined,
     modelsWritten: boolean,
+    modelConfigWritten = false,
   ): { models: AgentModels | null; modelConfig: Agent['modelConfig'] | null } {
     if (mode !== 'autonomous') return { models: null, modelConfig: modelConfig ?? null };
-    const synced = syncMainRole({ models, modelConfig, modelsWritten });
+    if (modelsWritten && modelConfigWritten) {
+      const conflicts = mainRoleConflicts(models, modelConfig);
+      if (conflicts.length) {
+        throw new BadRequestException(
+          `models and modelConfig disagree on ${conflicts.join(', ')}: send one value, or send it in models only`,
+        );
+      }
+    }
+    const synced = syncMainRole({ models, modelConfig, modelsWritten, modelConfigWritten });
     return { models: synced.models, modelConfig: (synced.modelConfig as Agent['modelConfig']) ?? null };
   }
 
@@ -492,6 +559,7 @@ export class AgentsService {
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
       await this.assertMemoryAndCapabilities(createDto.memoryConfig, createDto.agentConfig, organizationId);
       await (this.identity ?? new AgentIdentityService()).assertMaySave(organizationId, createDto.agentConfig);
+      await this.assertNameFree(organizationId, createDto.name ?? '');
 
       // Verify organization
       const organization = await this.organizationRepository.findOne({
@@ -525,8 +593,10 @@ export class AgentsService {
         { organizationId, visibility: scope.visibility, teamId: scope.teamId, ownerUserId: userId },
         userId,
       );
+      // A new agent starts autonomous; a workflow is one click away. A
+      // caller that sends a pipeline and no mode means a workflow.
+      const mode = defaultAgentMode(createDto);
       // Validate pipeline (only for workflow mode)
-      const mode = createDto.mode || 'workflow';
       if (mode === 'workflow' && createDto.pipeline) {
         this.validation.validatePipeline(createDto.pipeline);
       }
@@ -536,6 +606,7 @@ export class AgentsService {
         createDto.models,
         createDto.modelConfig as Agent['modelConfig'],
         createDto.models !== undefined,
+        createDto.modelConfig !== undefined && createDto.modelConfig !== null,
       );
 
       await this.assertPrivateReferencesAllowed(
@@ -564,7 +635,7 @@ export class AgentsService {
       );
 
       const agent = this.agentRepository.create({
-        name: createDto.name,
+        name: createDto.name?.trim(),
         description: createDto.description,
         organizationId,
         status: createDto.status || AgentStatus.DRAFT,
@@ -590,7 +661,7 @@ export class AgentsService {
       });
 
       if (agent.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
-      const saved = await this.agentRepository.save(agent);
+      const saved = await this.saveNamed(agent);
       this.logger.log(`[CREATE_AGENT] Agent created: id=${saved.id}`);
 
       await this.auditService.log({
@@ -606,6 +677,25 @@ export class AgentsService {
       this.logger.error(`[CREATE_AGENT] Failed: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  /**
+   * A new draft agent that behaves like `original` (agent-duplicate.ts
+   * says what is copied and what is not). It goes through createAgent, so
+   * the copy is checked like any new agent: its tools, memory account,
+   * models and private references must be ones the caller may use. The
+   * channel policy and always-on settings, which createAgent does not
+   * take, are written onto the new row after it.
+   */
+  async duplicateAgent(original: Agent, organizationId: string, userId: string): Promise<Agent> {
+    const name = await this.freeAgentName(organizationId, `Copy of ${original.name}`);
+    const { alwaysOn, branding, visitorRules, ...fields } = duplicateAgentFields(original, name);
+    const saved = await this.createAgent(fields as unknown as CreateAgentInput, organizationId, userId);
+    const rest = { alwaysOn: alwaysOn ?? null, branding: branding ?? null, visitorRules: visitorRules ?? null };
+    if (rest.alwaysOn || rest.branding || rest.visitorRules) {
+      await this.agentRepository.update(saved.id, rest as any);
+    }
+    return Object.assign(saved, rest);
   }
 
   /**
@@ -627,6 +717,59 @@ export class AgentsService {
     }
 
     return agent;
+  }
+
+  /**
+   * Two agents in one organization may not share a name: a name is how a
+   * person picks an agent out of a list, and how the OpenAI-compatible API
+   * finds one (`findByName`). Case and surrounding spaces do not make a
+   * name different. `exceptId` is the agent being renamed. The unique index
+   * on ("organizationId", LOWER(name)) backs this up against a race.
+   *
+   * The refusal says nothing about the other agent -- not its name back,
+   * owner or visibility -- since it may be someone's private agent the
+   * caller cannot see (AGENT_NAME_IN_USE).
+   */
+  async assertNameFree(organizationId: string, name: string, exceptId?: string): Promise<void> {
+    const clash = await this.agentRepository.findOne({
+      where: { organizationId, name: Raw((alias) => `LOWER(TRIM(${alias})) = LOWER(TRIM(:agentName))`, { agentName: name }) },
+      select: { id: true },
+    });
+    if (clash && clash.id !== exceptId) {
+      throw new ConflictException(AGENT_NAME_IN_USE);
+    }
+  }
+
+  /**
+   * Save an agent; a name taken between assertNameFree and the save (two
+   * creates at once) hits the unique index and gets the same answer.
+   */
+  private async saveNamed(agent: Agent): Promise<Agent> {
+    try {
+      return await this.agentRepository.save(agent);
+    } catch (err: any) {
+      if (String(err?.code) === '23505' && /agents_org_name/i.test(String(err?.constraint ?? err?.message ?? ''))) {
+        throw new ConflictException(AGENT_NAME_IN_USE);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * `base` if no agent in the organization has that name yet, otherwise the
+   * first free "base (2)", "base (3)", ... For copies and imports, which pick
+   * the name themselves and should not fail on it.
+   */
+  async freeAgentName(organizationId: string, base: string): Promise<string> {
+    for (let n = 1; n < 1000; n++) {
+      const candidate = n === 1 ? base : `${base} (${n})`;
+      const clash = await this.agentRepository.findOne({
+        where: { organizationId, name: Raw((alias) => `LOWER(TRIM(${alias})) = LOWER(TRIM(:agentName))`, { agentName: candidate }) },
+        select: { id: true },
+      });
+      if (!clash) return candidate;
+    }
+    return `${base} (${Date.now()})`;
   }
 
   /**
@@ -749,6 +892,10 @@ export class AgentsService {
     if (userId) {
       await this.checkAgentPermission(agent, userId);
     }
+    // A rename may not take another agent's name.
+    if (typeof updateDto.name === 'string' && updateDto.name.trim().toLowerCase() !== (agent.name ?? '').trim().toLowerCase()) {
+      await this.assertNameFree(organizationId, updateDto.name, agent.id);
+    }
 
     // Re-validate team scoping if it's being changed on this update.
     if (userId && (updateDto.visibility !== undefined || updateDto.teamId !== undefined)) {
@@ -797,6 +944,7 @@ export class AgentsService {
       updateDto.models !== undefined ? updateDto.models : agent.models,
       updateDto.modelConfig !== undefined ? (updateDto.modelConfig as Agent['modelConfig']) : agent.modelConfig,
       updateDto.models !== undefined,
+      updateDto.modelConfig !== undefined && updateDto.modelConfig !== null,
     );
 
     // Only the agent's owner may make it (or keep it) private; an agent
@@ -884,16 +1032,24 @@ export class AgentsService {
     );
 
     const { visibility: _v, teamId: _t, ...rest } = updateDto;
+    // Saving an edit is a new version; a status or sharing change, or a save
+    // that changes nothing, keeps the label. A caller naming a version keeps it.
+    const editedKeys = [...Object.keys(rest), 'modelConfig', 'models'];
+    const definitionBefore = agentDefinition(agent, editedKeys);
     Object.assign(agent, rest);
+    if (typeof rest.name === 'string') agent.name = rest.name.trim();
     agent.modelConfig = next.modelConfig as Agent['modelConfig'];
     agent.models = next.models;
+    if (rest.version === undefined && agentDefinition(agent, editedKeys) !== definitionBefore) {
+      agent.version = nextAgentVersion(agent.version);
+    }
     if (scope) {
       agent.visibility = scope.visibility;
       agent.teamId = scope.teamId;
       if (scope.ownerId) agent.createdBy = scope.ownerId;
     }
     if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
-    const saved = await this.agentRepository.save(agent);
+    const saved = await this.saveNamed(agent);
 
     // A changed retention applies to what the agent already saved, in
     // almyty's own store and in outside accounts alike.
@@ -1148,7 +1304,7 @@ export class AgentsService {
     }
     return this.createAgent(
       {
-        name: (data.name || 'Imported Agent') + ' (Imported)',
+        name: await this.freeAgentName(organizationId, (data.name || 'Imported Agent') + ' (Imported)'),
         description: data.description,
         pipeline: data.pipeline,
         variables: data.variables,

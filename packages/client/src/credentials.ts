@@ -111,3 +111,15 @@ export function getOrgSlugFromToken(token: string): string | null {
     return null;
   }
 }
+
+/**
+ * The organization a bare agent name belongs to: the one `almyty login`
+ * chose (stored as organizationId; the login stores an almyty_ API key,
+ * which is no JWT and names no organization), else the first one an old
+ * JWT login carried. The unified endpoint takes an organization id
+ * wherever it takes a slug. Null when neither says.
+ */
+export function defaultOrganization(creds: Pick<StoredCredentials, 'token' | 'organizationId'>): string | null {
+  if (creds.organizationId) return creds.organizationId;
+  return getOrgSlugFromToken(creds.token);
+}

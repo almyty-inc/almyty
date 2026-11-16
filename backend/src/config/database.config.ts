@@ -34,6 +34,11 @@ export const AppDataSource = redactQueryErrorsAtSource(new DataSource(versionsCo
   database: configService.get('DATABASE_NAME', 'almyty'),
   entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
+  // One transaction per migration (TypeORM's default is one for all of
+  // them). A migration that has to run outside a transaction -- CREATE
+  // INDEX CONCURRENTLY -- sets `transaction = false`, which TypeORM refuses
+  // in 'all' mode. Kept the same in app-typeorm.options.ts.
+  migrationsTransactionMode: 'each',
   synchronize: false,
   logging: MIGRATION_LOG_LEVELS,
   logger: new RedactedParametersQueryLogger(MIGRATION_LOG_LEVELS),

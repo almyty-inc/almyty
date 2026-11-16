@@ -5,6 +5,7 @@ import { join } from 'path';
 import {
   formatAgentDetail,
   formatAgentLine,
+  formatCheck,
   formatCost,
   formatDuration,
   formatExecutionSummary,
@@ -257,6 +258,36 @@ describe('formatRunDetail', () => {
     expect(detail).toContain('12.0s');
     expect(detail).toContain('Steps:');
     expect(detail).toContain('Output:');
+  });
+});
+
+// A pass means the check found no mismatch with the tool results, not
+// that the answer is right; the CLI says that and nothing more.
+describe('the answer check', () => {
+  it('says "no errors found" for a pass, with what that means, never "passed" or "verified"', () => {
+    const detail = formatRunDetail({
+      id: 'run-2',
+      status: 'completed',
+      metadata: { verify: { verdict: 'pass' } },
+      steps: [{ type: 'verify', output: { verdict: 'pass' } }],
+    });
+    expect(detail).toContain('check:     no errors found');
+    expect(detail).toContain("it can't confirm everything the answer says");
+    expect(detail).toContain('1. check: no errors found');
+    expect(detail).not.toMatch(/passed|verified|correct/i);
+  });
+
+  it('names what the check found when it did not pass', () => {
+    expect(formatCheck({ verdict: 'fail', reason: 'W1: the answer gives DOI 10.1/x, but the tool results give 10.1/y' }))
+      .toBe('errors found: W1: the answer gives DOI 10.1/x, but the tool results give 10.1/y');
+    expect(formatCheck({ verdict: 'fail', failures: [{ rule: 'a' }, { rule: 'b' }, { rule: 'c' }, { rule: 'd' }] }))
+      .toBe('errors found: a; b; c; and 1 more');
+    expect(formatCheck({ verdict: 'fail', unavailable: true })).toBe('not checked: no checker gave a verdict');
+  });
+
+  it('marks a mid-run check as one', () => {
+    expect(formatStep({ type: 'verify', input: { mode: 'mid_loop' }, output: { verdict: 'fail', advisory: true, failures: [{ rule: 'x' }] } }, 0))
+      .toBe('  1. mid-run check: errors found: x');
   });
 });
 

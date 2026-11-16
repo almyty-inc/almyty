@@ -47,8 +47,11 @@ const EXPORT_CONVERSATION_LIMIT = 500;
  * a public endpoint's answer bounded in heap.
  */
 const EXPORT_MESSAGE_LIMIT = 25_000;
-/** A run whose reply is still being written: queued, or running now. */
-const OPEN_RUN_STATUSES: string[] = [AgentRunStatus.PENDING, AgentRunStatus.RUNNING];
+/**
+ * A run whose reply is still to come: queued, running now, or waiting for a
+ * person on the team to approve a step (the page follows it and says so).
+ */
+const OPEN_RUN_STATUSES: string[] = [AgentRunStatus.PENDING, AgentRunStatus.RUNNING, AgentRunStatus.WAITING_APPROVAL];
 @Injectable()
 export class HostedChatService {
   /** Cookie holding the per-surface session key. */

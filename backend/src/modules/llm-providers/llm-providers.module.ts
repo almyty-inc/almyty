@@ -12,6 +12,7 @@ import { Model } from '../../entities/model.entity';
 import { AgentFile } from '../../entities/file.entity';
 import { FilesModule } from '../files/files.module';
 import { MessageAttachmentResolver } from './message-attachments.resolver';
+import { OutputLimitResolver } from './output-limit';
 
 import { LlmProvidersService } from './llm-providers.service';
 import { LlmProvidersController } from './llm-providers.controller';
@@ -23,6 +24,7 @@ import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { DefaultModelResolver } from './default-model.resolver';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 import { EndpointProviderHelper } from './endpoint-provider.helper';
+import { OrganizationTimeZoneService } from './organization-time-zone.service';
 
 import { ModelCatalogModule } from '../model-catalog/model-catalog.module';
 
@@ -52,8 +54,8 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     // needs the runner back, hence the forwardRef.
     forwardRef(() => ModelCatalogModule),
   ],
-  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver, LlmProviderSecretsHelper, EndpointProviderHelper, MessageAttachmentResolver],
+  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver, LlmProviderSecretsHelper, EndpointProviderHelper, MessageAttachmentResolver, OutputLimitResolver, OrganizationTimeZoneService],
   controllers: [LlmProvidersController, LlmSessionsController],
-  exports: [LlmProvidersService, LlmModelsHelper, LlmChatRunnerHelper, LlmProviderSecretsHelper, EndpointProviderHelper],
+  exports: [LlmProvidersService, LlmModelsHelper, LlmChatRunnerHelper, LlmProviderSecretsHelper, EndpointProviderHelper, OrganizationTimeZoneService],
 })
 export class LlmProvidersModule {}

@@ -842,6 +842,9 @@ export class AgentRuntimeService implements OnModuleInit {
         removeOnFail: 50,
       });
       this.logger.log(`run ${run.id} resumed after approval`);
+      // Whoever follows the run live (a web chat visitor waiting on the
+      // reply) learns it is working again.
+      this.emitEvent(run.id, 'approval.decided', { status: approval.status, resumed: true });
     } else {
       const error = approval.status === 'expired'
         ? 'approval expired'
@@ -851,6 +854,12 @@ export class AgentRuntimeService implements OnModuleInit {
       run.error = error;
       await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
       this.logger.log(`run ${run.id} cancelled after approval ${approval.status}`);
+      // The run's live stream ends here, with why: a visitor waiting on the
+      // reply was otherwise left on a reply that never came.
+      this.emitEvent(run.id, 'run.cancelled', {
+        error,
+        reasonCode: approval.status === 'expired' ? 'APPROVAL_EXPIRED' : 'APPROVAL_REJECTED',
+      });
     }
   }
 

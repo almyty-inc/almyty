@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, fireEvent, within } from '@testing-library/react'
 
 import { renderWithProviders } from '@/test/setup'
-import { ModelPicker, keyRejected, type ModelSelection } from '../model-picker'
+import { ModelPicker, answersChat, firstUsableModel, keyRejected, type ModelSelection } from '../model-picker'
 import { llmProvidersApi } from '@/lib/api'
 import { modelsApi } from '@/lib/models-api'
 import { SEARCH_CASES, SEARCH_CATALOG, SEARCH_PROVIDER_ANTHROPIC, SEARCH_PROVIDER_OPENAI } from '@/lib/__tests__/model-search.cases'
@@ -354,6 +354,61 @@ describe('ModelPicker search relevance', () => {
     expect(within(list).queryByRole('option', { name: /Provider default/ })).not.toBeInTheDocument()
     fireEvent.change(search, { target: { value: 'openai' } })
     expect(within(list).getAllByRole('option', { name: /Provider default/ })).toHaveLength(1)
+  })
+})
+
+describe('ModelPicker: only models that hold a conversation', () => {
+  // What a connected OpenAI and Gemini key list: the price feed marks the
+  // speech, transcription and image models `capabilities.chat: false`.
+  const GEMINI = { id: 'prov-gemini', name: 'Google', type: 'google', status: 'active' }
+  const KINDS = [
+    card(OPENAI.id, 'gpt-4.1-mini', { capabilities: { chat: true, tools: true } }),
+    card(OPENAI.id, 'gpt-4o-mini-transcribe', { capabilities: { chat: false } }),
+    card(OPENAI.id, 'tts-1', { capabilities: { chat: false } }),
+    card(OPENAI.id, 'gpt-image-1', { capabilities: { chat: false } }),
+    card(GEMINI.id, 'gemini-2.5-flash', { capabilities: { chat: true } }),
+    card(GEMINI.id, 'gemini-2.5-flash-preview-tts', { capabilities: { chat: false } }),
+    card(GEMINI.id, 'nano-banana-pro-preview', { name: 'Nano Banana Pro', capabilities: { chat: false } }),
+    // No feed knows it: kept, it may well be a chat model on someone's server.
+    card(LOCAL.id, 'my-finetune'),
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, GEMINI, LOCAL] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue(KINDS)
+  })
+
+  const listedIds = (list: HTMLElement) =>
+    within(list)
+      .queryAllByRole('option')
+      .map((o) => o.getAttribute('data-model'))
+      .filter((id): id is string => !!id)
+
+  it('leaves out speech, transcription and image models, from what their cards say', async () => {
+    renderPicker({})
+    const list = await open()
+    expect(listedIds(list).sort()).toEqual(['gemini-2.5-flash', 'gpt-4.1-mini', 'my-finetune'])
+  })
+
+  it('a search for one does not bring it back', async () => {
+    renderPicker({})
+    const list = await open()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'transcribe' } })
+    expect(listedIds(list)).not.toContain('gpt-4o-mini-transcribe')
+  })
+
+  it('still shows one already saved, so the field does not read as empty', async () => {
+    renderPicker({ providerId: OPENAI.id, model: 'tts-1' })
+    const list = await open()
+    expect(listedIds(list)).toContain('tts-1')
+  })
+
+  it('never starts a new choice on one', () => {
+    const onlySpeechFirst = [card(OPENAI.id, 'a-tts', { capabilities: { chat: false } }), card(OPENAI.id, 'b-chat', { capabilities: { chat: true } })]
+    expect(firstUsableModel([OPENAI], onlySpeechFirst)).toEqual({ providerId: OPENAI.id, model: 'b-chat' })
+    expect(answersChat({ capabilities: { chat: false } } as any)).toBe(false)
+    expect(answersChat({ capabilities: {} } as any)).toBe(true)
   })
 })
 

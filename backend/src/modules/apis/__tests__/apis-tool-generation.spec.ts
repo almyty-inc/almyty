@@ -28,16 +28,23 @@ describe('ApisService - tool generation', () => {
   let service: ApisService;
   let toolsService: any;
   let createCallTimestamps: number[];
+  let inFlight: number;
+  let maxInFlight: number;
 
   beforeEach(async () => {
     createCallTimestamps = [];
+    inFlight = 0;
+    maxInFlight = 0;
 
     toolsService = {
       findByName: jest.fn().mockResolvedValue(null), // no existing tools
       buildFromOperation: jest.fn().mockImplementation(async (op, opts) => {
         createCallTimestamps.push(Date.now());
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
         // Simulate a small DB delay
         await new Promise(r => setTimeout(r, 10));
+        inFlight -= 1;
         return { id: `tool-${op.name}`, name: opts.name, status: 'active' };
       }),
       prepareUpdateFromOperation: jest.fn(),
@@ -100,24 +107,18 @@ describe('ApisService - tool generation', () => {
     expect(tools).toHaveLength(60);
     expect(toolsService.buildFromOperation).toHaveBeenCalledTimes(60);
   });
-
   it('processes in batches, not all at once', async () => {
     await service.generateToolsFromApi('api-1', 'org-1');
 
-    // BATCH_SIZE = 20, 60 ops → 3 batches. Within each batch ops
-    // run in parallel; the next batch waits for the previous to
-    // settle. The original concern this guards against is the old
-    // bug where a 600-op import did Promise.all on the whole array
-    // and grabbed 600 connections at once. We re-prove it didn't
-    // come back: not all 60 timestamps arrived within ~1ms.
+    // BATCH_SIZE = 20, 60 ops -> 3 batches. Within each batch ops run in
+    // parallel; the next batch waits for the previous to settle. This
+    // guards against the old bug where a 600-op import did Promise.all on
+    // the whole array and grabbed 600 connections at once. Counted by how
+    // many calls are in flight together, not by wall time, which flaked
+    // on a loaded runner.
     expect(createCallTimestamps.length).toBe(60);
-
-    const firstCall = createCallTimestamps[0];
-    const lastCall = createCallTimestamps[createCallTimestamps.length - 1];
-    // Each tool sleeps 10ms in the mock. With 3 batches of 20 each,
-    // wall time should be at least ~30ms; if the batching collapsed
-    // back to one giant Promise.all it would be ~10ms.
-    expect(lastCall - firstCall).toBeGreaterThanOrEqual(20);
+    expect(maxInFlight).toBeLessThanOrEqual(20);
+    expect(maxInFlight).toBeGreaterThan(1);
   });
 
   it('generates UNIQUE tool names for distinct operations whose semantic name overflows 64 chars', async () => {

@@ -653,11 +653,12 @@ export class AgentNodeExecutor {
       const onAnswerChunk = options?.onAnswerChunk;
       const streams =
         node.type === 'llm_call' && !!onAnswerChunk && !routing && !(Array.isArray(config.toolIds) && config.toolIds.length > 0);
+      // Every model call of a run is told today's date (currentTime).
       response = streams
-        ? await this.llmProvidersService.chatStream(roleProviderId ?? providerId, chatRequest, organizationId, caller, (chunk) => {
+        ? await this.llmProvidersService.chatStream(roleProviderId ?? providerId, { ...chatRequest, currentTime: true }, organizationId, caller, (chunk) => {
             if (chunk.content) onAnswerChunk!(chunk.content);
           })
-        : await this.llmProvidersService.chat(roleProviderId ?? providerId, chatRequest, organizationId, caller);
+        : await this.llmProvidersService.chat(roleProviderId ?? providerId, { ...chatRequest, currentTime: true }, organizationId, caller);
     } catch (err: any) {
       // A provider error body can echo the request back, Authorization
       // header included, so it never reaches a log line or a persisted

@@ -33,6 +33,7 @@ describe('request_approval: the decision reaches the model', () => {
       messageRepository: messages,
       runtimeQueue: { add: jest.fn() },
       workspaceRepository: fakeRepository({ seed: [] }),
+      events: { emitEvent: jest.fn() },
     });
     return { svc, runs, users, events };
   }
@@ -62,6 +63,8 @@ describe('request_approval: the decision reaches the model', () => {
     // The decision is on the run's log, with the resume it caused.
     const log = events.rows('run-1');
     expect(log.map((e) => e.type)).toEqual(['run_started', 'approval_decided', 'status_changed', 'step_committed']);
+    // Whoever follows the run live learns it is working again.
+    expect(svc.events.emitEvent).toHaveBeenCalledWith('run-1', 'approval.decided', { status: 'approved', resumed: true });
     expect(log[1].payload).toEqual({
       approvalId: 'a1', kind: 'run', status: 'approved', decidedBy: 'u-ana', decisionReason: 'Customer is on the gold plan', toolCallId: 'tc-1',
     });
@@ -82,6 +85,20 @@ describe('request_approval: the decision reaches the model', () => {
     const log = events.rows('run-1');
     expect(log.find((e) => e.type === 'approval_decided')!.payload).toMatchObject({ approvalId: 'a1', kind: 'run', status: 'rejected', decisionReason: 'Too large' });
     expect(log.find((e) => e.type === 'step_committed')!.payload).toMatchObject({ status: AgentRunStatus.CANCELLED, error: 'approval rejected: Too large' });
+    // The run's live stream ends with why, so a waiting web chat visitor is told.
+    expect(svc.events.emitEvent).toHaveBeenCalledWith('run-1', 'run.cancelled', {
+      error: 'approval rejected: Too large',
+      reasonCode: 'APPROVAL_REJECTED',
+    });
+  });
+
+  it('an expired approval ends the live stream as expired', async () => {
+    const messages = fakeRepository<Message>({ make: () => new Message(), seed: [placeholder()], idPrefix: 'm' });
+    const { svc } = runtimeWith(messages, { id: 'run-1', conversationId: 'conv-1', status: AgentRunStatus.WAITING_APPROVAL });
+
+    await svc.handleApprovalDecided({ id: 'a1', runId: 'run-1', status: 'expired', decisionReason: 'approval expired', toolCallId: 'tc-1', payload: null });
+
+    expect(svc.events.emitEvent).toHaveBeenCalledWith('run-1', 'run.cancelled', { error: 'approval expired', reasonCode: 'APPROVAL_EXPIRED' });
   });
 
   it('a decision that arrives twice is written once', async () => {
@@ -127,5 +144,13 @@ describe('request_approval: the decision reaches the model', () => {
   it('the step processor hands request_approval its call id', () => {
     const source = readFileSync(join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
     expect(source).toMatch(/toolCall\.name === 'request_approval'\s*\?\s*\{ \.\.\.\(toolCall\.parameters \|\| \{\}\), _toolCallId: toolCall\.id \}/);
+  });
+
+  it('the step request_approval stops on says the run waits for an approval, not for input', () => {
+    // The web chat reads this to tell a visitor a person must approve
+    // (visitor-reply-stream.ts); waiting_input said nothing of the kind.
+    const source = readFileSync(join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
+    expect(source).toMatch(/run\.status === AgentRunStatus\.WAITING_APPROVAL \? 'waiting_approval' : 'waiting_input'/);
+    expect(source).toMatch(/emitEvent\(runId, 'step\.completed', \{ step: run\.currentStep, status: waitingOn \}\)/);
   });
 });

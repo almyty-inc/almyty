@@ -1,4 +1,5 @@
 import { buildHarness, fakeEnvelope, principal } from './test-support';
+import { secretFingerprint } from '../../credentials/secret-redaction';
 
 describe('api_key connect', () => {
   const ORG = 'org-1';
@@ -35,7 +36,7 @@ describe('api_key connect', () => {
     validKeys.add('sk-wrong-key');
     const revalidated = await h.service.validate(admin, ORG, kept.id);
     expect(revalidated.health).toMatchObject({ status: 'valid', error: null });
-    expect(revalidated.accountLabel).toBe('OpenAI key ...-key');
+    expect(revalidated.accountLabel).toBe(`OpenAI key ${secretFingerprint('sk-wrong-key')}`);
     expect(h.audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'connection_validate', details: expect.objectContaining({ ok: true }) }));
     validKeys.delete('sk-wrong-key');
   });
@@ -44,7 +45,9 @@ describe('api_key connect', () => {
     const h = buildHarness({ routes: [openai()] });
     const done = await h.service.connect(admin, ORG, 'openai', { input: { apiKey: 'sk-good-key-good' }, name: 'Team OpenAI' });
     if (done.pending !== false) throw new Error('expected a connection');
-    expect(done.connection).toMatchObject({ name: 'Team OpenAI', method: 'api_key', kind: 'inference', health: { status: 'valid' }, accountLabel: 'OpenAI key ...good' });
+    // The label tells keys apart by a fingerprint, never by the key's own characters.
+    expect(done.connection).toMatchObject({ name: 'Team OpenAI', method: 'api_key', kind: 'inference', health: { status: 'valid' }, accountLabel: `OpenAI key ${secretFingerprint('sk-good-key-good')}` });
+    expect(done.connection.accountLabel).not.toMatch(/good/);
     expect(JSON.stringify(done.connection)).not.toContain('sk-good-key-good');
     const row = h.credentials.rows[0];
     expect(row.config.apiKey).toMatch(/^encrypted:/);

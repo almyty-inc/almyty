@@ -53,19 +53,19 @@ describe('LoginPage', () => {
 
     // Verify-required UI replaces the form.
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: /please verify your email/i })).toBeInTheDocument(),
+      expect(screen.getByRole('heading', { name: /confirm your email first/i })).toBeInTheDocument(),
     )
     expect(screen.getByText(/unverified@example.com/)).toBeInTheDocument()
     // No token was granted, so no navigation to the dashboard.
     expect(navigateMock).not.toHaveBeenCalled()
 
     // Resend wires to the unauthenticated resend endpoint.
-    await user.click(screen.getByRole('button', { name: /resend verification email/i }))
+    await user.click(screen.getByRole('button', { name: /send a new link/i }))
     await waitFor(() =>
       expect(authApi.resendVerificationByEmail).toHaveBeenCalledWith('unverified@example.com'),
     )
     // Neutral confirmation after resend.
-    expect(screen.getByText(/re-sent the verification link/i)).toBeInTheDocument()
+    expect(screen.getByText(/a new link is on its way/i)).toBeInTheDocument()
   })
 
   it('logs in normally on success and does not show the verify prompt', async () => {
@@ -80,11 +80,15 @@ describe('LoginPage', () => {
 
     await waitFor(() => expect(loginMock).toHaveBeenCalledWith('ok@example.com', 'Password123!'))
     expect(navigateMock).toHaveBeenCalledWith('/dashboard')
-    expect(screen.queryByRole('heading', { name: /please verify your email/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /confirm your email first/i })).not.toBeInTheDocument()
   })
 
-  it('shows a generic error for invalid credentials (not the verify prompt)', async () => {
-    loginMock.mockRejectedValue({ response: { data: { error: { code: 'UNAUTHORIZED', message: 'Invalid credentials' } } } })
+  // "Invalid credentials" is jargon, and it showed twice: inline and in a
+  // toast. Now one plain sentence, next to the button.
+  it('says a wrong email or password plainly, once, and not in a toast', async () => {
+    loginMock.mockRejectedValue({
+      response: { status: 401, data: { error: { code: 'UNAUTHORIZED', message: 'Invalid credentials' } } },
+    })
     const user = userEvent.setup()
 
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
@@ -93,8 +97,10 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText(/password/i), 'WrongPass1!')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
-    await waitFor(() => expect(screen.getByText(/invalid credentials/i)).toBeInTheDocument())
-    expect(screen.queryByRole('heading', { name: /please verify your email/i })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("That email and password don't match"))
+    expect(screen.queryByText(/invalid credentials/i)).not.toBeInTheDocument()
+    expect(errorMock).not.toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: /confirm your email first/i })).not.toBeInTheDocument()
   })
 
   // The sign-in page had no way into single sign-on: a person had to be

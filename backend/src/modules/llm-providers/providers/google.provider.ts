@@ -7,6 +7,8 @@ import { ChatRequest, ChatResponse } from '../llm-providers.service';
 import { callLlmProviderHttp, llmCallOptionsFor } from './safe-request';
 import { contentAsText, toGeminiParts } from '../content-parts';
 import { requireModel } from '../model-errors';
+import { geminiResponseFormat } from '../structured-output';
+import { ANTHROPIC_UNCARDED_MAX_TOKENS } from './anthropic.provider';
 
 
 /**
@@ -34,6 +36,8 @@ export async function callGoogle(
       temperature: request.temperature ?? conversation.context?.temperature,
       topP: request.topP ?? conversation.context?.topP,
       topK: request.topK ?? conversation.context?.topK,
+      // A reply in a JSON schema, when one is asked for (structured-output.ts).
+      ...(geminiResponseFormat(request, provider.type) ?? {}),
     },
   };
 
@@ -143,7 +147,9 @@ export async function callCustomProvider(
     requestData = {
       model: request.model || provider.configuration.model,
       messages: request.messages.map((m) => ({ ...m, content: contentAsText(m.content) })),
-      max_tokens: request.maxTokens || conversation.context?.maxTokens,
+      // The Anthropic format needs a limit on every call; the runner sets the
+      // card's, and an uncarded model gets the same high one as Anthropic's own.
+      max_tokens: request.maxTokens || conversation.context?.maxTokens || ANTHROPIC_UNCARDED_MAX_TOKENS,
       temperature: request.temperature ?? conversation.context?.temperature,
     };
   } else {

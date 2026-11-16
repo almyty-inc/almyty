@@ -279,22 +279,20 @@ export class ToolsOperationHelper {
       }
     }
 
-    // GraphQL operations have a different body shape: instead of a
-    // single `schema`, the parser emits `body.query` (the GraphQL
-    // query string) and `body.variables` (an object whose
-    // `properties` map describes each variable). Lift those
-    // variables to top-level so the generated SKILL.md surfaces
-    // them as proper parameters.
-    if (
-      operation.parameters?.body?.variables?.properties &&
-      typeof operation.parameters.body.variables.properties === 'object'
-    ) {
-      const vars = operation.parameters.body.variables;
-      Object.entries(vars.properties as Record<string, any>).forEach(([name, prop]) => {
+    // GraphQL and gRPC operations have their own body shapes. GraphQL's
+    // parser emits `body.query` (the query string) and `body.variables`
+    // (whose `properties` describe each argument); the Protobuf parser
+    // emits `body.message` (whose `properties` are the request message's
+    // fields). Lift those to top level: they are what a caller fills in,
+    // and the executors send them as the variables / the request message.
+    for (const key of ['variables', 'message'] as const) {
+      const lifted = operation.parameters?.body?.[key];
+      if (!lifted?.properties || typeof lifted.properties !== 'object') continue;
+      Object.entries(lifted.properties as Record<string, any>).forEach(([name, prop]) => {
         parameters.properties[name] = prop;
       });
-      if (Array.isArray(vars.required)) {
-        parameters.required.push(...vars.required);
+      if (Array.isArray(lifted.required)) {
+        parameters.required.push(...lifted.required);
       }
     }
 

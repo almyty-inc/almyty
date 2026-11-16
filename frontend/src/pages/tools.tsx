@@ -113,9 +113,26 @@ export function ToolsPage() {
   // Old ?new=1 links (bookmarks, docs) land on the create page.
   useNewParamRedirect('/tools/new')
 
+  // An API page's "Tools generated" link opens /tools?apiId=…&apiName=…: the
+  // list is that API's tools, asked of the server so every page is filtered.
+  const apiIdFilter = searchParams.get('apiId') || undefined
+  const apiNameFilter = searchParams.get('apiName') || undefined
+  const showAllTools = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('apiId')
+    next.delete('apiName')
+    setSearchParams(next)
+    setPage(1)
+  }
+
   const { data: toolsData, isLoading, isError, error: toolsError, refetch: refetchTools } = useQuery({
-    queryKey: ['tools', currentOrganization?.id, page, searchTerm],
-    queryFn: () => toolsApi.getAll(currentOrganization?.id, { limit: PAGE_SIZE, page, ...(searchTerm ? { search: searchTerm } : {}) }),
+    queryKey: ['tools', currentOrganization?.id, page, searchTerm, apiIdFilter ?? null],
+    queryFn: () => toolsApi.getAll(currentOrganization?.id, {
+      limit: PAGE_SIZE,
+      page,
+      ...(searchTerm ? { search: searchTerm } : {}),
+      ...(apiIdFilter ? { apiId: apiIdFilter } : {}),
+    }),
     enabled: !!currentOrganization,
     placeholderData: (prev) => prev, // keep previous data while loading next page
   })
@@ -462,6 +479,17 @@ export function ToolsPage() {
       {/* Connected MCP servers (hidden while none registered) */}
       <McpSourcesPanel organizationId={currentOrganization?.id} />
 
+      {apiIdFilter && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 mb-4" data-testid="api-tools-filter">
+          <p className="text-sm">
+            Showing the tools of <span className="font-medium">{apiNameFilter || 'one API'}</span>.
+          </p>
+          <Button variant="ghost" size="sm" onClick={showAllTools}>
+            Show all tools
+          </Button>
+        </div>
+      )}
+
       {/* Tools Table */}
       {isError ? (
         <QueryError error={toolsError} onRetry={() => refetchTools()} title="Couldn't load tools" />
@@ -472,7 +500,7 @@ export function ToolsPage() {
         <EmptyState
           variant="panel"
           icon={Wrench}
-          title="No tools yet"
+          title={apiIdFilter ? 'This API has no tools yet' : 'No tools yet'}
           description="Tools are generated from your APIs. Import an API and its operations appear here."
           action={
             <div className="flex flex-wrap justify-center gap-2">

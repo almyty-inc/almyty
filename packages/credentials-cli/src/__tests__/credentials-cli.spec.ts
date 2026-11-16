@@ -24,6 +24,7 @@ import {
   parseInput,
   parseInputObject,
   pendingRedirectMessage,
+  publicCredential,
   requireTty,
   secretFields,
   unscreenableInputMessage,
@@ -456,5 +457,38 @@ describe('isEntrypoint', () => {
     const source = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
     expect(source).not.toContain('process.env.VITEST');
     expect(source).toContain('if (isEntrypoint(process.argv[1], import.meta.url))');
+  });
+});
+
+describe('list and get print no secret, not even masked', () => {
+  // What GET /credentials answered on staging: config with the secret
+  // fields, masked to first-and-last-four for a long plaintext value.
+  const rows = [
+    { id: 'c1', name: 'Stripe', connectorKey: 'stripe', owner: 'org', health: { status: 'valid' }, config: { apiKey: 'sk_l****wxyz', baseUrl: 'https://api.stripe.com' } },
+    { id: 'c2', name: 'Bot', type: 'api_key', healthStatus: 'failed', configuration: { bot_token: '********' } },
+    { id: 'llm-p1', name: 'OpenAI API Key', type: 'api_key', config: { apiKey: '********' } },
+  ];
+
+  it('drops the stored config and keeps what a person needs', () => {
+    const out = rows.map(publicCredential);
+    for (const row of out) {
+      expect(row).not.toHaveProperty('config');
+      expect(row).not.toHaveProperty('configuration');
+      expect(JSON.stringify(row)).not.toMatch(/"apiKey"|"accessToken"|"bot_token"|\*\*\*\*/);
+      expect(row.health.status).toBeTruthy();
+    }
+    expect(out[0]).toMatchObject({ id: 'c1', connectorKey: 'stripe', health: { status: 'valid' } });
+    expect(out[1].health.status).toBe('failed');
+    expect(out[2].health.status).toBe('unknown');
+  });
+
+  it('is what list and get print, with or without --json', () => {
+    const source = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
+    const list = source.slice(source.indexOf("case 'list'"), source.indexOf("case 'get'"));
+    const get = source.slice(source.indexOf("case 'get'"), source.indexOf("case 'add'"));
+    expect(list).toContain('.map(publicCredential)');
+    expect(list).not.toContain('out(args, res.data');
+    expect(get).toContain('publicCredential(res.data)');
+    expect(get).not.toContain('out(args, res.data');
   });
 });

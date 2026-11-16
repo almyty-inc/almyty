@@ -1,7 +1,7 @@
 import type { Agent } from '../../entities/agent.entity';
 import type { AgentRun } from '../../entities/agent-run.entity';
 import type { ChatRequest } from '../llm-providers/llm-providers.service';
-import { MemoryError, type MemoryItem, type Provenance, type RankedItem, type ScopeRef, type Tier } from '../memory/canonical/canonical.types';
+import type { MemoryItem, Provenance, RankedItem, ScopeRef, Tier } from '../memory/canonical/canonical.types';
 import type { PutInput } from '../memory/canonical/dto/canonical-memory.dto';
 import { legacyTypeToTier, type AgentRuntimeService } from './agent-runtime.service';
 import type { AutonomousStrategyRunner } from './autonomous-strategy.runner';
@@ -18,6 +18,7 @@ import {
 import { runMayWriteSharedMemory } from './memory-autosave.policy';
 import { principalOfRun } from '../../common/authorization/execution-access.service';
 import type { AgentAccountUse } from '../memory/canonical/memory-accounts.service';
+import type { EarlierItem } from './answer-checks';
 
 /** The most facts one run adds. */
 export const FACTS_PER_RUN_MAX = 5;
@@ -73,7 +74,10 @@ export function factsPrompt(rules: string[]): string {
     'preferences and decisions that would help in a later conversation. Each fact is one short sentence that makes ' +
     'sense on its own and keeps the specifics: names, ids, versions, dates and numbers as the exchange gave them. ' +
     'A fact too vague to act on later ("the user is interested in a topic") is not worth keeping, and neither is ' +
-    `a guess or a conclusion the exchange does not back. Answer with JSON only: {"facts": ["..."]}, at most ${FACTS_PER_RUN_MAX} facts, or {"facts": []} ` +
+    'a guess or a conclusion the exchange does not back. ' +
+    'Never keep the state of a tool, a service or a call as a fact: an error, a timeout, an outage, a rate limit, ' +
+    'a search that failed or found nothing, or what the assistant could not do. It was true for a moment, and a later ' +
+    `conversation would read it as lasting. Answer with JSON only: {"facts": ["..."]}, at most ${FACTS_PER_RUN_MAX} facts, or {"facts": []} ` +
     'when nothing is worth keeping.' +
     (rules.length ? `\n\nNever include anything these rules cover:\n${rulesBlock(rules)}` : '')
   );
@@ -95,6 +99,29 @@ export function verificationFailed(run: Pick<AgentRun, 'steps' | 'metadata'>): b
   return typeof meta === 'string' && meta !== 'pass';
 }
 
+/**
+ * The tools of the agent the run called that never returned a result:
+ * every call of each errored. A tool the agent has (a `toolId` on the
+ * step) is what the answer draws on; the built-in memory and agent tools
+ * are not. An answer that says "the search timed out" can pass its check
+ * (it is honest) and still leave nothing worth remembering: the facts
+ * saved from runs 6c7bd4a5 and b8cc6429 were "the assistant experienced a
+ * server timeout error".
+ */
+export function failedTools(run: Pick<AgentRun, 'steps'>): string[] {
+  const calls = new Map<string, { name: string; ok: boolean }>();
+  for (const step of run.steps ?? []) {
+    if (step?.type !== 'tool_call' || !step.input?.toolId) continue;
+    const id = String(step.input.toolId);
+    const seen = calls.get(id) ?? { name: String(step.input.tool ?? step.input.toolName ?? id), ok: false };
+    if (!step.error) seen.ok = true;
+    calls.set(id, seen);
+  }
+  return Array.from(calls.values())
+    .filter((c) => !c.ok)
+    .map((c) => c.name);
+}
+
 /** The facts in a facts call's answer; [] when it is not the asked-for shape. */
 export function parseFacts(content: string): string[] {
   const text = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
@@ -111,6 +138,63 @@ export function parseFacts(content: string): string[] {
   } catch {
     return [];
   }
+}
+
+/** A store_memory save held on the run until it completes (AgentMemoryKeeper.store). */
+export interface PendingMemory {
+  content: string;
+  tags: string[];
+  kind?: MemoryKind;
+}
+
+/** The saves a run holds, as a fresh array. */
+export function pendingMemoriesOf(run: Pick<AgentRun, 'workingMemory'>): PendingMemory[] {
+  const held = run.workingMemory?.pendingMemories;
+  return Array.isArray(held) ? held.filter((p: any) => p && typeof p.content === 'string') : [];
+}
+
+const normalised = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+const sameText = (a: string, b: string) => normalised(a) === normalised(b);
+
+/**
+ * Whether a saved memory says what the agent's answer reported, listed or
+ * told someone ("Reported in the answer to ...", "Listed W123 in today's
+ * digest", "Already sent the user ..."). Such a memory is true only of an
+ * answer that was delivered and stood: commitPending drops it otherwise.
+ * Wide on purpose: a preference caught by it is only held until the
+ * answer is out, while an answer fact it misses would outlive a failed run.
+ */
+export function describesAnswer(content: string): boolean {
+  return /\b(report(?:ed|s|ing)?|answer(?:ed|s)?|repl(?:y|ied|ies)|respon(?:se|ded|ses)|listed|included|presented|told|sent|shared|mentioned|summari[sz]ed|delivered|digest|surfaced|notified|posted|already (?:covered|seen|given))\b/i.test(
+    content,
+  );
+}
+
+/** The most already-reported items a run's prompt lists. */
+export const ALREADY_REPORTED_MAX = 100;
+
+/**
+ * The "already reported" section of a run's prompt: each item the agent's
+ * earlier answers listed (earlierReportedItems, the very list the answer
+ * check holds it to), newest first, by id, title and DOI, as the tool
+ * results show them. In rc9 a bare list of ids under "Relevant memories",
+ * after five prose facts, covered only runs made after #1174, and the
+ * model re-listed 7 of its items (run fc270572). '' when there are none.
+ */
+export function alreadyReportedBlock(items: EarlierItem[]): string {
+  if (!items.length) return '';
+  const lines = items.slice(0, ALREADY_REPORTED_MAX).map((it) => {
+    const id = it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? '';
+    const doi = it.dois[0] ? `DOI ${it.dois[0]}` : '';
+    const title = it.title ? `"${it.title.length > 100 ? `${it.title.slice(0, 99)}…` : it.title}"` : '';
+    return `- ${[id, title, doi].filter(Boolean).join(' — ')}`;
+  });
+  return (
+    `[ALREADY REPORTED — DO NOT LIST AGAIN]\n` +
+    `Your earlier answers already reported these ${items.length > lines.length ? `${lines.length} (of ${items.length})` : lines.length} items. ` +
+    `Your instructions say to leave out what you already reported: when your tools return any of them again, do not list it, ` +
+    `and count it as skipped. Match by id, DOI or title.\n${lines.join('\n')}`
+  );
 }
 
 /** The most of one recalled memory put in front of the model. */
@@ -241,7 +325,16 @@ export class AgentMemoryKeeper {
     }
   }
 
-  /** The store_memory tool: screened against the never-save rules, then saved. */
+  /**
+   * The store_memory tool: screened against the never-save rules now, and
+   * held on the run (`workingMemory.pendingMemories`) until it ends. A run
+   * is not over when the model calls the tool: in a staging research digest
+   * run (2026-11-13), the model saved "Reported in the answer ..." for nine
+   * works and then hit its cost cap with no answer, and the next run
+   * skipped all nine as already reported. So nothing the model saves is
+   * written before the run completes (commitPending); a run that fails
+   * leaves none of it behind.
+   */
   async store(agent: Agent, run: AgentRun, team: Team, params: Record<string, any>): Promise<{ result?: any; error?: string }> {
     const scope = memoryScopeFor(agent, run);
     if (!scope) return { result: null, error: 'There is no memory to save to on this run' };
@@ -253,22 +346,69 @@ export class AgentMemoryKeeper {
     const s = this.settings(agent);
     const kept = await this.screen(run, team.main, content, s.neverSave);
     if (kept === null) return { result: 'Not saved: the agent is told never to save that.' };
-    try {
+    const pending = pendingMemoriesOf(run);
+    // The same thing saved twice in one run is one memory.
+    if (!pending.some((p) => sameText(p.content, kept))) {
       const kind = memoryKindOf(params.type);
-      const item = await this.put(agent, run, scope, s, kept, legacyTypeToTier(kind), Array.isArray(params.tags) ? params.tags : [], 'store_memory', kind);
-      return { result: `Memory stored (id: ${item.id})` };
-    } catch (err: any) {
-      if (err instanceof MemoryError) return { result: null, error: `memory rejected: ${err.tag.kind}` };
-      return { result: null, error: `Failed to store memory: ${err?.message ?? err}` };
+      pending.push({ content: kept, tags: Array.isArray(params.tags) ? params.tags.map(String) : [], ...(kind ? { kind } : {}) });
+      run.workingMemory = { ...(run.workingMemory ?? {}), pendingMemories: pending };
     }
+    return { result: 'Saved. It is kept once this run finishes with its answer; there is no need to save it again.' };
   }
 
   /**
-   * What a finished run leaves in memory: its facts, or the exchange as
-   * said, per the agent's "what gets saved". Recorded as a `memory_save`
-   * step. Never throws; a save that fails is logged.
+   * Write what the model saved during the run (store), now that it has
+   * completed. A save that describes the answer ("reported", "listed in
+   * the answer", describesAnswer) is kept only when the answer was
+   * delivered (not empty) and its check did not fail: otherwise it would
+   * tell later runs something was reported that nobody was given, or that
+   * the checks refuted. Other saves (a preference the person stated) are
+   * kept. Recorded as a `memory_save` step. Never throws.
+   */
+  async commitPending(agent: Agent, run: AgentRun, team: Team): Promise<void> {
+    const pending = pendingMemoriesOf(run);
+    if (!pending.length) return;
+    run.workingMemory = { ...(run.workingMemory ?? {}), pendingMemories: [] };
+    const scope = memoryScopeFor(agent, run);
+    if (!scope || !runMayWriteSharedMemory(run)) return;
+    const s = this.settings(agent);
+    const answerStands = asText(run.output).trim().length > 0 && !verificationFailed(run);
+    let saved = 0;
+    let dropped = 0;
+    for (const p of pending) {
+      if (!answerStands && describesAnswer(p.content)) {
+        dropped++;
+        continue;
+      }
+      try {
+        await this.put(agent, run, scope, s, p.content, legacyTypeToTier(p.kind), p.tags ?? [], 'store_memory', p.kind);
+        saved++;
+      } catch (err: any) {
+        this.s.logger.warn(`Failed to save memory for run ${run.id}: ${err?.message ?? err}`);
+      }
+    }
+    run.steps.push({
+      type: 'memory_save',
+      role: stampOf(team.main),
+      input: { save: 'store_memory', scope: scope.scope_type, account: s.account },
+      output: {
+        saved,
+        ...(dropped ? { dropped: `${dropped} about the answer: ${asText(run.output).trim() ? 'its check failed' : 'no answer was given'}` } : {}),
+      },
+      cost: 0,
+      duration: 0,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * What a finished run leaves in memory: what the model saved during it
+   * (commitPending), then its facts, or the exchange as said, per the
+   * agent's "what gets saved". Recorded as `memory_save` steps. Never
+   * throws; a save that fails is logged.
    */
   async afterRun(agent: Agent, run: AgentRun, team: Team): Promise<void> {
+    await this.commitPending(agent, run, team);
     const s = this.settings(agent);
     if (!s.enabled || s.save === 'asked') return;
     // An explorer's own run works for its parent; the parent saves.
@@ -284,13 +424,20 @@ export class AgentMemoryKeeper {
     // An answer the verification panel rejected (it ran out of revisions
     // with the checks still failing) is not saved: facts drawn from it carry
     // the very conclusion the checks refuted, and a later run would recall
-    // it as true.
-    if (verificationFailed(run)) {
+    // it as true. Nor is a run whose tool never answered: what it leaves is
+    // the outage, not a fact (failedTools).
+    const broken = failedTools(run);
+    const skipped = verificationFailed(run)
+      ? 'the answer did not pass verification'
+      : broken.length
+        ? `a tool call failed: ${broken.join(', ')}`
+        : null;
+    if (skipped) {
       run.steps.push({
         type: 'memory_save',
         role: stampOf(team.main),
         input: { save: s.save, scope: scope.scope_type, account: s.account },
-        output: { saved: 0, skipped: 'the answer did not pass verification' },
+        output: { saved: 0, skipped },
         cost: 0,
         duration: 0,
         timestamp: new Date().toISOString(),
@@ -304,6 +451,9 @@ export class AgentMemoryKeeper {
 
     let entries: string[] = [];
     let dropped = false;
+    // What the answer reported is not a fact to rank by similarity: every
+    // later run is given it from the agent's earlier answers
+    // (alreadyReportedBlock, the list the answer check holds it to).
     if (s.save === 'facts') {
       const answer = await this.runner.callModel(run, team.main, request(factsPrompt(s.neverSave), exchange));
       entries = answer.error ? [] : parseFacts(answer.content);

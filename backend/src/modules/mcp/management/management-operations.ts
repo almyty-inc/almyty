@@ -313,6 +313,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('apis.list_operations', 'ApisController.getOperations'),
   op('apis.get_operation_outline', 'ApisController.getOperationOutline'),
   op('apis.select_operations', 'ApisController.selectOperations'),
+  op('apis.make_operation_tool', 'ApisController.makeOperationTool'),
   op('apis.list_resources', 'ApisController.getResources'),
   op('apis.test_connection', 'ApisController.testConnection', OPEN),
   op('apis.list_schemas', 'ApisController.getSchemas'),

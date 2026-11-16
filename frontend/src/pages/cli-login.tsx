@@ -105,13 +105,23 @@ export function CliLoginPage() {
         typeof navigator !== 'undefined' && navigator.platform
           ? ` (${navigator.platform})`
           : ''
+      // The key is scoped to the org chosen here, and the CLI is handed
+      // the org the server says the key carries. The runner sends that
+      // org as X-Organization-Id, and a key scoped to another org (or to
+      // none) is refused, so the two must be the same org.
       const keyResponse: any = await authApi.createApiKey({
         name: `CLI login${hostLabel} ${new Date().toISOString().slice(0, 10)}`,
+        organizationId,
       })
       const rawKey: string | undefined =
         keyResponse?.apiKey ?? keyResponse?.data?.apiKey ?? keyResponse
       if (!rawKey || typeof rawKey !== 'string') {
         throw new Error('Backend did not return a new API key')
+      }
+      const keyData = keyResponse?.keyData ?? keyResponse?.data?.keyData
+      const keyOrganizationId: string = keyData?.organizationId ?? organizationId
+      if (keyOrganizationId !== organizationId) {
+        throw new Error('The new key is not scoped to the organization you chose. Try again.')
       }
 
       // Deliver the token to the local CLI via a top-level navigation
@@ -134,7 +144,7 @@ export function CliLoginPage() {
       // tiny HTML page at /cb that reads the hash client-side and
       // POSTs it to /cb-complete as a same-origin fetch — which
       // is not subject to PNA because both sides are loopback.
-      const hash = `#token=${encodeURIComponent(rawKey)}&state=${encodeURIComponent(state)}&organizationId=${encodeURIComponent(organizationId)}`
+      const hash = `#token=${encodeURIComponent(rawKey)}&state=${encodeURIComponent(state)}&organizationId=${encodeURIComponent(keyOrganizationId)}`
       window.location.href = callback + hash
       // The above line navigates away from this page, so the
       // promise below is unreachable in practice — but we still
@@ -207,6 +217,14 @@ export function CliLoginPage() {
               })()}
             </dd>
           </div>
+          {organizations.length <= 1 && (
+            <div className="flex justify-between">
+              <dt className="text-zinc-500">Organization</dt>
+              <dd className="text-zinc-200">
+                {organizations.find(o => o.id === organizationId)?.name ?? '—'}
+              </dd>
+            </div>
+          )}
         </dl>
 
         {organizations.length > 1 && (
@@ -215,7 +233,7 @@ export function CliLoginPage() {
             <select id="cli-organization" value={organizationId} onChange={e => setChosenOrganization(e.target.value)} disabled={status === 'sending'} className="w-full rounded border border-zinc-700 bg-zinc-950 p-2 text-sm">
               {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
             </select>
-            <p className="text-xs text-zinc-400">Your runner uses this organization.</p>
+            <p className="text-xs text-zinc-400">The CLI and your runner work in this organization.</p>
           </div>
         )}
         {status === 'idle' && (

@@ -510,6 +510,7 @@ export class AgentCollaborationHelper {
           temperature: p.temperature,
           maxTokens: p.maxTokens,
           signal: controller.signal,
+          currentTime: true,
         },
         run.organizationId,
         principalOfRun(run),

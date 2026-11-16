@@ -26,6 +26,7 @@ import { gatewayServableTo } from '../gateways/private-gateway';
 import { usableProviders } from '../llm-providers/private-provider';
 import { batchAsync } from '../../common/utils/batch-async';
 import { assertManageable, canRead } from '../../common/authorization/read-rule';
+import { SECRET_PRESENT, redactSecrets } from './secret-redaction';
 
 /**
  * Whether `userId` may see this credential at all. A private ("just me")
@@ -102,7 +103,7 @@ export class CredentialsService {
         lastUsedAt: provider.lastRequestAt,
         createdAt: provider.createdAt,
         organizationId,
-        config: { apiKey: '***masked***' },
+        config: { apiKey: SECRET_PRESENT },
         usedBy: [{ type: 'llm_provider', id: provider.id, name: provider.name }],
         _source: 'llm_provider',
         _sourceId: provider.id,
@@ -551,30 +552,11 @@ export class CredentialsService {
   // Helpers
   // ──────────────────────────────────────────────
 
+  /** A credential as a response shows it: each stored secret only as present (secret-redaction.ts). */
   private maskCredential(credential: Credential): Credential {
-    // Anything that looks like a secret by name, plus any value that is
-    // encrypted at rest (managed rows carry snake_case channel keys and
-    // nested header maps the name list never knew about).
-    const secretName = /(password|secret|token|apikey|api_key|accesskey|access_key|privatekey|private_key|credential|headervalue|bearer|serviceaccount)/i;
-    const mask = (val: unknown): string => {
-      const s = String(val);
-      if (s.startsWith('encrypted:') || s.length <= 8) return '********';
-      return s.substring(0, 4) + '****' + s.substring(s.length - 4);
-    };
-    const maskObject = (obj: Record<string, any>): Record<string, any> => {
-      const out: Record<string, any> = {};
-      for (const [field, value] of Object.entries(obj)) {
-        if (value && typeof value === 'object' && !Array.isArray(value)) out[field] = maskObject(value);
-        else if (typeof value === 'string' && (value.startsWith('encrypted:') || (secretName.test(field) && field !== 'keyName' && field !== 'keyLocation'))) out[field] = mask(value);
-        else out[field] = value;
-      }
-      return out;
-    };
-
     if (credential.config && typeof credential.config === 'object') {
-      credential.config = maskObject(credential.config);
+      credential.config = redactSecrets(credential.config);
     }
-
     return credential;
   }
 }
