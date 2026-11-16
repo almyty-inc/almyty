@@ -8,11 +8,48 @@
  * `isError` branch: an icon, a short message, and a retry
  * button wired to React Query's `refetch`.
  */
-import { AlertTriangle, RotateCw } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, RotateCw, SearchX } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
 import { getApiErrorMessage } from '@/lib/api-error'
+
+interface NotFoundStateProps {
+  /** What was asked for, lower case: "agent", "API", "tool". */
+  thing: string
+  /** Where "back" goes, and what it is called: "/agents", "Back to agents". */
+  backTo: string
+  backLabel: string
+  className?: string
+}
+
+/**
+ * A detail page whose object does not exist, or is not in this org. Not an
+ * error with "Try again": asking again gets the same answer. It says so and
+ * offers the way back to the list.
+ */
+export function NotFoundState({ thing, backTo, backLabel, className }: NotFoundStateProps) {
+  const title = `${thing.charAt(0).toUpperCase()}${thing.slice(1)} not found`
+  return (
+    <EmptyState
+      variant="panel"
+      icon={SearchX}
+      title={title}
+      description={`This ${thing} does not exist, was deleted, or belongs to another organization.`}
+      className={className}
+      action={
+        <Button variant="outline" asChild>
+          <Link to={backTo}>
+            <ArrowLeft className="h-4 w-4 mr-2" aria-hidden="true" />
+            {backLabel}
+          </Link>
+        </Button>
+      }
+    />
+  )
+}
 
 interface QueryErrorProps {
   /** Usually `query.error` from React Query. */

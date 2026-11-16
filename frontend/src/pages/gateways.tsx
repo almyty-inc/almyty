@@ -125,7 +125,7 @@ export function GatewaysPage() {
               <Badge variant="outline" className="text-[10px] px-1.5 py-0">Agent</Badge>
             )}
             {gateway.isSystem && (
-              <Badge className="text-[10px] px-1.5 py-0 border-transparent bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">System</Badge>
+              <Badge variant="info" className="text-[10px] px-1.5 py-0">System</Badge>
             )}
           </div>
         )
@@ -265,7 +265,7 @@ export function GatewaysPage() {
           variant="panel"
           icon={Zap}
           title="No gateways yet"
-          description="Pick a protocol (MCP, UTCP or Skills) and the tools to serve, and get an address Claude Code, Cursor or another client can use."
+          description="Pick a protocol (MCP, UTCP or Skills) and the tools to serve, and get an address that AI assistants, coding tools and other agents can use."
           action={
             <Button onClick={() => navigate('/gateways/new')}>
               <Plus className="h-4 w-4 mr-2" />
@@ -277,8 +277,9 @@ export function GatewaysPage() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             {/* Filters */}
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
+            {/* Search takes its own row on a phone; the filters wrap below it. */}
+            <div className="flex flex-wrap items-center gap-3" data-testid="gateways-filters">
+              <div className="basis-full sm:basis-auto sm:flex-1 sm:min-w-[12rem]">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -290,7 +291,7 @@ export function GatewaysPage() {
                 </div>
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-40" aria-label="Filter by kind">
+                <SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" aria-label="Filter by kind">
                   <SelectValue placeholder="Kind" />
                 </SelectTrigger>
                 <SelectContent>
@@ -301,7 +302,7 @@ export function GatewaysPage() {
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-32" aria-label="Filter by status">
+                <SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" aria-label="Filter by status">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -314,6 +315,7 @@ export function GatewaysPage() {
                 organizationId={currentOrganization?.id}
                 value={teamFilter}
                 onChange={setTeamFilter}
+                className="flex-1 min-w-[9rem] sm:flex-none sm:w-44"
               />
             </div>
 

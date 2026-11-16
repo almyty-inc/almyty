@@ -62,25 +62,31 @@ export function AutonomousConfig({
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
       <WorkModeSection models={models} onChange={onModelsChange} agentId={agentId} availableAgents={availableAgents} />
 
+      {/* Prose, so the body font, not the code font: these are read and
+          written as sentences. */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Personality & style</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base">Personality & style</CardTitle>
+          <CardDescription>Personality, tone and boundaries: who the agent is.</CardDescription>
+        </CardHeader>
         <CardContent>
           <Textarea value={personality} onChange={(e) => onPersonalityChange(e.target.value)}
             aria-label="Personality and style"
             placeholder="You are a friendly, professional assistant. You never share personal opinions on politics or religion. You always cite your sources."
-            className="min-h-[120px] font-mono text-sm" />
-          <p className="text-xs text-muted-foreground mt-2">Personality, tone, and boundaries. Defines WHO the agent is.</p>
+            className="min-h-[120px] text-sm leading-6" />
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Instructions</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base">Instructions</CardTitle>
+          <CardDescription>What the agent should do: its goals, tasks and steps.</CardDescription>
+        </CardHeader>
         <CardContent>
           <Textarea value={instructions} onChange={(e) => onInstructionsChange(e.target.value)}
             aria-label="Instructions"
             placeholder="You are a helpful assistant that..."
-            className="min-h-[200px] font-mono text-sm" />
-          <p className="text-xs text-muted-foreground mt-2">What the agent should do. Goals, tasks, and workflows.</p>
+            className="min-h-[200px] text-sm leading-6" />
         </CardContent>
       </Card>
 

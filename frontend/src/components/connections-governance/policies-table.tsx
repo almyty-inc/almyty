@@ -37,9 +37,9 @@ export const POLICIES_PAGE_PATH = '/settings/credential-rules'
 const KIND_BADGE_CLASS: Record<ConnectionPolicyKind, string> = {
   connector_allowlist: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',
   connector_denylist: 'border-rose-500/40 text-rose-600 dark:text-rose-400',
-  scope_rule: 'border-violet-500/40 text-violet-600 dark:text-violet-400',
+  scope_rule: 'border-primary/40 text-primary',
   expiry_rule: 'border-amber-500/40 text-amber-600 dark:text-amber-400',
-  rotation_rule: 'border-cyan-500/40 text-cyan-600 dark:text-cyan-400',
+  rotation_rule: 'border-teal-600/40 text-teal-700 dark:border-teal-400/40 dark:text-teal-300',
 }
 
 export function PolicyKindBadge({ kind, className }: { kind: ConnectionPolicyKind; className?: string }) {

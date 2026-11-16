@@ -2,11 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Node, type Edge } from '@xyflow/react'
-import { ArrowLeft } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { QueryError } from '@/components/ui/query-error'
+import { NotFoundState, QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ExecutionTab } from '@/components/agents/execution-tab'
 
@@ -45,7 +43,7 @@ import { AgentApiAccessSection } from '@/components/agents/detail/agent-api-acce
 import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { ConstraintsTab } from '@/components/agents/detail/constraints-tab'
 import { RunPanel } from '@/components/agents/detail/run-panel'
-import { getApiErrorMessage } from '@/lib/api-error'
+import { getApiErrorMessage, isNotFoundError } from '@/lib/api-error'
 
 export function AgentDetailPage() {
   useEffect(() => {
@@ -78,6 +76,8 @@ export function AgentDetailPage() {
     queryKey: ['agent', id],
     queryFn: () => agentsApi.getById(id!),
     enabled: !!id,
+    // Asking again for an agent that is not there gets the same answer.
+    retry: (count, err) => !isNotFoundError(err) && count < 1,
   })
 
   const agent = agentData as Agent | undefined
@@ -318,7 +318,13 @@ export function AgentDetailPage() {
     )
   }
 
-  if (isError) {
+  // An unknown id is not a failure "Try again" can fix: say it is not
+  // there and offer the way back.
+  if ((isError && isNotFoundError(agentError)) || (!isError && !agent)) {
+    return <NotFoundState thing="agent" backTo="/agents" backLabel="Back to agents" />
+  }
+
+  if (isError || !agent) {
     return (
       <div className="flex items-center justify-center h-96">
         <QueryError
@@ -326,18 +332,6 @@ export function AgentDetailPage() {
           onRetry={() => refetchAgent()}
           title="Couldn't load agent"
         />
-      </div>
-    )
-  }
-
-  if (!agent) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4">
-        <p className="text-muted-foreground">Agent not found.</p>
-        <Button variant="outline" onClick={() => navigate('/agents')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to agents
-        </Button>
       </div>
     )
   }
@@ -377,7 +371,7 @@ export function AgentDetailPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList variant="underline" aria-label="Agent sections">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="runs">Runs</TabsTrigger>
           <TabsTrigger value="execution">Execution</TabsTrigger>
@@ -409,6 +403,7 @@ export function AgentDetailPage() {
             auditLog={auditLog}
             webhookUrl={webhookUrl}
             setWebhookUrl={setWebhookUrl}
+            onShowAllRuns={() => setActiveTab('runs')}
           />
           <AgentApiAccessSection agentId={id!} ownerUserId={agent?.createdBy} />
         </TabsContent>

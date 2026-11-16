@@ -188,7 +188,7 @@ export function OAuthConsentPage() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-lg bg-violet-600/10 text-violet-600">
+          <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-lg bg-selection text-selection-foreground">
             <ShieldCheck className="h-6 w-6" />
           </div>
           <CardTitle>Authorize access</CardTitle>
@@ -244,7 +244,7 @@ export function OAuthConsentPage() {
               <ul className="space-y-2">
                 {info.scopes.map((s) => (
                   <li key={s} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <span>{SCOPE_LABELS[s] || s}</span>
                   </li>
                 ))}

@@ -9,7 +9,7 @@ export function ReadinessBanner({ result, pending, failed, onRetry, onConfigure 
   if (pending) return <p role="status" className="text-sm text-muted-foreground">Checking model setup before activation…</p>
   if (result?.ready && !failed) return null
   return (
-    <div role="alert" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 space-y-2">
+    <div role="alert" className="rounded-lg border border-warning-border bg-warning-subtle p-4 space-y-2">
       <p className="font-medium">{failed ? 'Could not check model setup' : 'Not ready to activate'}</p>
       <p className="text-sm">{failed ? 'The readiness check failed. Retry before activating this agent.' : result?.message}</p>
       <div className="flex flex-wrap items-center gap-3">

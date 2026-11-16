@@ -62,8 +62,10 @@ describe('channels are on the agent, and nowhere else', () => {
     }
   })
 
-  it('uses the shared page, tile, table and disclosure components', () => {
-    expect(read('pages/agent-channel-new.tsx')).toMatch(/<ChoiceTiles[\s\S]*<ChoiceTile\b/)
+  it('uses the shared page, list, table and disclosure components', () => {
+    // The kinds of channel are a pick-one list on a form, not a tile gallery.
+    expect(read('pages/agent-channel-new.tsx')).toMatch(/<OptionList\b/)
+    expect(read('pages/agent-channel-new.tsx')).not.toMatch(/<ChoiceTiles?\b/)
     expect(read('pages/agent-channel-new.tsx')).toMatch(/<FormPage\b/)
     expect(read('components/channels/channel-settings.tsx')).toMatch(/<FormPage\b/)
     expect(read('pages/agent-public-settings.tsx')).toMatch(/<FormPage\b/)

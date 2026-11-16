@@ -144,7 +144,7 @@ export function CostTab() {
                     </span>
                     <div className="flex-1 h-4 rounded bg-muted overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-violet-500 to-cyan-400"
+                        className="h-full bg-accent-gradient"
                         style={{ width: `${(b.spentCents / maxBucket) * 100}%` }}
                       />
                     </div>

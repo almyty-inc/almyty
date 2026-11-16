@@ -67,7 +67,7 @@ describe('widgetLookFromApp', () => {
   it('falls back to the app name, the default colour, and hides the mark for a white-label app', () => {
     expect(widgetLookFromApp({ name: 'Acme', branding: { whiteLabel: true, aiDisclosure: 'A bot answers.' } })).toMatchObject({
       title: 'Acme',
-      primaryColor: '#8b5cf6',
+      primaryColor: '#1469ec',
       poweredBy: false,
       aiDisclosure: 'A bot answers.',
     })

@@ -74,7 +74,9 @@ describe('every node type a strategy compiles to has a component', () => {
     )
     expect(screen.getByText('Verify')).toBeInTheDocument()
     expect(screen.getByText(/1 checker: verifier/)).toBeInTheDocument()
-    expect(screen.getByText(/any_fail_blocks/)).toBeInTheDocument()
+    // The policy reads as words on the canvas, not as its stored value.
+    expect(screen.getByText('Any reviewer can block')).toBeInTheDocument()
+    expect(screen.queryByText(/any_fail_blocks/)).not.toBeInTheDocument()
   })
 
   it('says plainly when a verify node has no checkers, because that fails the run', () => {

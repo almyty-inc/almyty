@@ -4,16 +4,16 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react'
+import { KeyRound, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/store/auth'
 import { useNotifications } from '@/store/app'
 import { authApi } from '@/lib/api'
 import { loginReturnTo } from '@/lib/return-to'
 import { CheckEmail } from '@/components/auth/check-email'
+import { AuthAlert, AuthField, AuthHeading, PasswordInput } from '@/components/auth/auth-form'
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Enter your email address').email('Enter a valid email address, like name@example.com'),
@@ -60,7 +60,6 @@ export function LoginPage() {
   const location = useLocation()
   const { login, isLoading } = useAuthStore()
   const { success } = useNotifications()
-  const [showPassword, setShowPassword] = React.useState(false)
   const [loginError, setLoginError] = React.useState<string | null>(null)
   // When login is refused with EMAIL_NOT_VERIFIED, we swap the form for a
   // "check your email" page with a resend action. Holds the address the
@@ -131,23 +130,18 @@ export function LoginPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-heading font-bold mb-6">Sign in</h1>
-      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <AuthHeading title="Sign in" lead="Welcome back. Sign in to your organization." />
+      <Form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <div>
-          <Label htmlFor="email">Email address</Label>
-          <div className="mt-1">
+          <AuthField id="email" label="Email address" error={errors.email?.message}>
             <Input
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="Enter your email"
+              placeholder="name@example.com"
               {...register('email')}
-              className={errors.email ? 'border-red-300' : ''}
             />
-            {errors.email && (
-              <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
-            )}
-          </div>
+          </AuthField>
           {ssoLoginUrl && (
             <div className="mt-3 space-y-2" data-testid="sso-sign-in">
               <Button
@@ -168,94 +162,61 @@ export function LoginPage() {
           )}
         </div>
 
-        <div>
-          <Label htmlFor="password">Password</Label>
-          <div className="mt-1 relative">
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              {...register('password')}
-              className={errors.password ? 'border-red-300' : ''}
-            />
-            <button
-              type="button"
-              className="absolute inset-y-0 right-0 pr-3 flex items-center"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <Eye className="h-4 w-4 text-muted-foreground" />
-              )}
-            </button>
-            {errors.password && (
-              <p className="mt-2 text-sm text-destructive">{errors.password.message}</p>
-            )}
-          </div>
-        </div>
+        <AuthField id="password" label="Password" error={errors.password?.message}>
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            placeholder="Enter your password"
+            {...register('password')}
+          />
+        </AuthField>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
+        <div className="flex items-center justify-between gap-4">
+          <label htmlFor="remember-me" className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-foreground">
             <input
               id="remember-me"
               name="remember-me"
               type="checkbox"
-              className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
+              className="h-4 w-4 rounded border-input accent-primary"
             />
-            <Label htmlFor="remember-me" className="ml-2 block text-sm text-foreground">
-              Remember me
-            </Label>
-          </div>
+            Remember me
+          </label>
           <Link
             to="/auth/forgot-password"
-            className="text-sm font-medium text-primary hover:text-primary/80"
+            className="text-sm font-semibold text-primary hover:text-primary-hover"
           >
             Forgot password?
           </Link>
         </div>
 
-        <div>
-          {loginError && (
-            <div
-              role="alert"
-              aria-live="polite"
-              className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md"
-            >
-              <p className="text-sm text-destructive">{loginError}</p>
-            </div>
+        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isLoading}
+          aria-disabled={isLoading}
+          title={isLoading ? 'Signing you in…' : undefined}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              Signing in...
+            </>
+          ) : (
+            'Sign in'
           )}
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isLoading}
-            aria-disabled={isLoading}
-            title={isLoading ? 'Signing you in…' : undefined}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                Signing in...
-              </>
-            ) : (
-              'Sign in'
-            )}
-          </Button>
-        </div>
+        </Button>
       </Form>
 
-      <div className="mt-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          Don't have an account?{' '}
-          <Link
-            to="/auth/register"
-            className="font-medium text-primary hover:text-primary/80"
-          >
-            Sign up
-          </Link>
-        </p>
-      </div>
+      <p className="mt-8 border-t pt-6 text-sm text-muted-foreground">
+        New to almyty?{' '}
+        <Link
+          to="/auth/register"
+          className="font-semibold text-primary hover:text-primary-hover"
+        >
+          Sign up
+        </Link>
+      </p>
     </div>
   )
 }

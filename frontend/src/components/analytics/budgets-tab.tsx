@@ -165,7 +165,7 @@ export function BudgetsTab() {
           {canManage && (
             <Button
               size="sm"
-              className="h-7 text-xs bg-gradient-to-r from-violet-500 to-cyan-400 text-white hover:opacity-90"
+              className="h-7 text-xs"
               asChild
             >
               <Link to={`${BUDGETS_PATH}/new`}><Plus className="h-3 w-3 mr-1" /> New budget</Link>
@@ -224,7 +224,7 @@ export function BudgetsTab() {
                     ? 'bg-red-500'
                     : overSoft
                       ? 'bg-amber-500'
-                      : 'bg-gradient-to-r from-violet-500 to-cyan-400'
+                      : 'bg-accent-gradient'
                   return (
                     <tr
                       key={b.id}

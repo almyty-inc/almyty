@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code, Play, Zap, BookOpen, Copy, Check, ChevronRight, Globe, Bot, Server, Store } from 'lucide-react'
+import { Activity, ArrowLeft, CheckCircle2, Clock, Play, Zap, BookOpen, Copy, Check, Globe, Bot, Server, Store } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
+import { ResourceHeader } from '@/components/layout/resource-header'
+import { StatTile } from '@/components/ui/stat-tile'
 import { Badge } from '@/components/ui/badge'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { ApiTypeBadge } from '@/components/ui/api-type-badge'
@@ -163,69 +164,69 @@ export function ToolDetailPage() {
   const tool = toolData
 
   return (
-    <div className="space-y-8">
-      {/* Breadcrumbs */}
-      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/tools" className="hover:text-foreground">Tools</Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{tool.metadata?.displayName || tool.name}</span>
-      </div>
-
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center space-x-4">
-          <Button variant="outline" size="sm" onClick={() => navigate('/tools')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Code className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <h1 className={DETAIL_TITLE_CLASSES}>{tool.metadata?.displayName || tool.name}</h1>
+    <div className="space-y-6">
+      <ResourceHeader
+        back={{ to: '/tools', label: 'Tools' }}
+        title={tool.metadata?.displayName || tool.name}
+        badges={
+          <Badge variant={tool.status === 'active' ? 'success' : 'secondary'} className="gap-1.5" data-testid="tool-status">
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+            {tool.status ? tool.status.charAt(0).toUpperCase() + tool.status.slice(1) : 'Draft'}
+          </Badge>
+        }
+        subtitle={
+          (tool.metadata?.displayName && tool.metadata.displayName !== tool.name) ||
+          (tool.description && !isGeneratedDescription(tool.description)) ? (
+            <>
               {/* A generated tool is called by its machine name; show it under the one people read. */}
               {tool.metadata?.displayName && tool.metadata.displayName !== tool.name && (
                 <code className="block text-xs text-muted-foreground break-all" data-testid="tool-machine-name">{tool.name}</code>
               )}
-              {/* "GET /path operation" is what generation writes when the spec says nothing; the Underlying Operation card shows the method and path. */}
-              {tool.description && !isGeneratedDescription(tool.description) && <p className="text-muted-foreground">{tool.description}</p>}
+              {/* "GET /path operation" is what generation writes when the spec says nothing; the Underlying operation card shows the method and path. */}
+              {tool.description && !isGeneratedDescription(tool.description) && <p>{tool.description}</p>}
+            </>
+          ) : undefined
+        }
+        actionsLabel="Tool actions"
+        actions={
+          <>
+            {/* "Edit Tool" used to navigate to /tools/:id/edit, a route that
+                does not exist, so it landed on the 404 page. There is no
+                tool-editing UI anywhere in the app -- the API supports it,
+                nothing calls it -- and a button that 404s is a worse answer
+                than no button. Removed rather than left promising something
+                the product cannot do. */}
+            {isPublishable(tool) && (
+              <Button variant="outline" size="sm" asChild>
+                <Link to={`/tools/${tool.id}/publish`}>
+                  <Store className="mr-2 h-4 w-4" />
+                  Publish to hub
+                </Link>
+              </Button>
+            )}
+            {/* The switch says what it is set to, in words, beside it. */}
+            <div className="flex h-10 items-center gap-2 rounded-lg border px-3">
+              <Switch
+                checked={tool.status === 'active'}
+                aria-label={tool.status === 'active' ? 'Deactivate tool' : 'Activate tool'}
+                disabled={toggleStatusMutation.isPending}
+                onCheckedChange={(checked) => {
+                  toggleStatusMutation.mutate({
+                    status: checked ? 'active' : 'inactive',
+                  })
+                }}
+              />
+              <span className="text-sm font-semibold" aria-hidden>
+                {tool.status === 'active' ? 'On' : 'Off'}
+              </span>
             </div>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          {/* "Edit Tool" used to navigate to /tools/:id/edit, a route that
-              does not exist, so it landed on the 404 page. There is no
-              tool-editing UI anywhere in the app -- the API supports it,
-              nothing calls it -- and a button that 404s is a worse answer
-              than no button. Removed rather than left promising something
-              the product cannot do. */}
-          {isPublishable(tool) && (
-            <Button variant="outline" size="sm" asChild>
-              <Link to={`/tools/${tool.id}/publish`}>
-                <Store className="mr-2 h-4 w-4" />
-                Publish to hub
-              </Link>
-            </Button>
-          )}
-          <Badge variant={tool.status === 'active' ? 'success' : 'secondary'}>
-            {tool.status === 'active' ? 'Active' : tool.status}
-          </Badge>
-          <Switch
-            checked={tool.status === 'active'}
-            aria-label={tool.status === 'active' ? 'Deactivate tool' : 'Activate tool'}
-            disabled={toggleStatusMutation.isPending}
-            onCheckedChange={(checked) => {
-              toggleStatusMutation.mutate({
-                status: checked ? 'active' : 'inactive',
-              })
-            }}
-          />
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      {/* Tabs */}
+      {/* Tabs: page sections, so the underline look the agent page uses. */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
+        <TabsList variant="underline" aria-label="Tool sections">
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="test">Test tool</TabsTrigger>
           <TabsTrigger value="exports">Exports</TabsTrigger>
@@ -253,7 +254,7 @@ export function ToolDetailPage() {
                         <div className="flex items-center gap-2">
                           <code className="font-mono font-medium">{key}</code>
                           {tool.parameters.required?.includes(key) && (
-                            <span className="text-red-500 text-xs">*</span>
+                            <span className="text-destructive text-xs" aria-label="required">*</span>
                           )}
                         </div>
                         {schema.description && (
@@ -276,10 +277,10 @@ export function ToolDetailPage() {
         <SideEffectCard tool={tool} organizationId={currentOrganization!.id} canEdit />
 
         {tool.runnerConfig ? (
-          <Card className="border-cyan-200 dark:border-cyan-900">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Server className="h-4 w-4 text-cyan-500" />
+                <Server className="h-4 w-4 text-muted-foreground" aria-hidden />
                 Runner-backed tool
               </CardTitle>
               <CardDescription className="text-xs">
@@ -292,7 +293,7 @@ export function ToolDetailPage() {
                 <Button
                   variant="link"
                   size="sm"
-                  className="h-auto p-0 font-mono text-cyan-600 dark:text-cyan-400"
+                  className="h-auto p-0 font-mono"
                   onClick={() => navigate(`/runners/${tool.runnerConfig!.runnerId}`)}
                 >
                   {tool.runnerConfig.runnerName}
@@ -317,9 +318,9 @@ export function ToolDetailPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">
-              {tool.executionMethod === 'custom' ? 'Custom Code' :
-               tool.executionMethod ? `${tool.executionMethod.toUpperCase()} Configuration` :
-               'Underlying Operation'}
+              {tool.executionMethod === 'custom' ? 'Custom code' :
+               tool.executionMethod ? `${tool.executionMethod.toUpperCase()} configuration` :
+               'Underlying operation'}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -435,10 +436,10 @@ export function ToolDetailPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {requiresWorkspace && (
-                <div className="space-y-2 border rounded-md p-4 bg-cyan-500/5 border-cyan-200 dark:border-cyan-900">
+                <div className="space-y-2 rounded-lg border border-info-border bg-info-subtle p-4">
                   <Label className="flex items-center gap-2">
-                    <Server className="h-4 w-4 text-cyan-500" />
-                    Workspace <span className="text-red-500">*</span>
+                    <Server className="h-4 w-4 text-info" aria-hidden />
+                    Workspace <span className="text-destructive" aria-hidden>*</span>
                   </Label>
                   <p className="text-xs text-muted-foreground">
                     This runner method runs inside an active workspace on its runner.
@@ -488,7 +489,7 @@ export function ToolDetailPage() {
                         <span className="font-medium">
                           {paramName}
                           {tool.parameters.required?.includes(paramName) && (
-                            <span className="text-red-500 ml-1">*</span>
+                            <span className="text-destructive ml-1" aria-label="required">*</span>
                           )}
                         </span>
                         <Badge variant="outline" className="text-xs font-normal">
@@ -520,8 +521,7 @@ export function ToolDetailPage() {
                     : executionParameters,
                 })}
                 disabled={executeToolMutation.isPending || (requiresWorkspace && !selectedWorkspaceId)}
-                className="w-full"
-                size="lg"
+                className="w-full sm:w-auto"
               >
                 {executeToolMutation.isPending ? (
                   <>
@@ -531,7 +531,7 @@ export function ToolDetailPage() {
                 ) : (
                   <>
                     <Play className="h-4 w-4 mr-2" />
-                    Execute Tool
+                    Execute tool
                   </>
                 )}
               </Button>
@@ -541,30 +541,33 @@ export function ToolDetailPage() {
                 <div className="space-y-3 border-t pt-4">
                   <div className="flex items-center justify-between">
                     <Label>Result</Label>
-                    <Badge variant={executionResult.success ? 'default' : 'destructive'}>
+                    <Badge variant={executionResult.success ? 'success' : 'destructive'}>
                       {executionResult.success ? 'Success' : 'Error'}
                     </Badge>
                   </div>
 
-                  <div className={executionResult.success ? 'bg-green-500/10 border border-green-500/20 rounded p-4' : 'bg-red-500/10 border border-red-500/20 rounded p-4'}>
+                  <div
+                    data-testid="tool-run-result"
+                    className={executionResult.success ? 'rounded-xl border border-success-border bg-success-subtle p-4' : 'rounded-xl border border-danger-border bg-danger-subtle p-4'}
+                  >
                     {executionResult.success ? (
                       <div>
-                        <p className="text-sm font-medium mb-3">Response Data:</p>
+                        <p className="text-sm font-semibold mb-3">Response data:</p>
                         <CodeBlock value={JSON.stringify(executionResult.data, null, 2)} language="json" maxHeight="300px" />
                         {executionResult.metadata && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Executed in {executionResult.metadata.executionTime}ms
+                            Ran in {executionResult.metadata.executionTime}ms
                           </p>
                         )}
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        <p className="text-sm text-destructive font-medium">Execution failed</p>
+                        <p className="text-sm text-destructive font-semibold">The run failed</p>
                         <div className="space-y-3 text-xs">
-                          <div className="bg-background/50 dark:bg-muted/40 p-3 rounded space-y-2">
+                          <div className="rounded-lg bg-card p-3 space-y-2">
                             <p className="text-destructive"><strong>Error:</strong> {executionResult.error || executionResult.message || 'Unknown error'}</p>
                             {executionResult.statusCode && (
-                              <p><strong>HTTP Status:</strong> {executionResult.statusCode}</p>
+                              <p><strong>HTTP status:</strong> {executionResult.statusCode}</p>
                             )}
                             {executionResult.method && executionResult.url && (
                               <p><strong>Endpoint:</strong> {executionResult.method?.toUpperCase()} {executionResult.url}</p>
@@ -573,7 +576,7 @@ export function ToolDetailPage() {
 
                           {sentParameters && (
                             <div>
-                              <strong>Parameters Sent:</strong>
+                              <strong>Parameters sent:</strong>
                               <div className="mt-1">
                                 <CodeBlock value={JSON.stringify(sentParameters, null, 2)} language="json" maxHeight="200px" />
                               </div>
@@ -582,7 +585,7 @@ export function ToolDetailPage() {
 
                           {executionResult.fullError && (
                             <div>
-                              <strong>Backend Response:</strong>
+                              <strong>What the server answered:</strong>
                               <div className="mt-1">
                                 <CodeBlock value={JSON.stringify(executionResult.fullError, null, 2)} language="json" maxHeight="200px" />
                               </div>
@@ -647,42 +650,24 @@ export function ToolDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* Stats Tab */}
-        <TabsContent value="stats">
-          <Card>
-            <CardHeader>
-              <CardTitle>Usage statistics</CardTitle>
-              <CardDescription>
-                Tool execution metrics and performance data
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <div className="text-2xl font-bold">{tool.usageCount || 0}</div>
-                  <div className="text-sm text-muted-foreground">Total executions</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold">{tool.successRate || 0}%</div>
-                  <div className="text-sm text-muted-foreground">Success rate</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold">{tool.averageResponseTime || 0}ms</div>
-                  <div className="text-sm text-muted-foreground">Avg response time</div>
-                </div>
-              </div>
-              {tool.lastUsedAt && (
-                <p className="text-xs text-muted-foreground mt-4">
-                  Last used: {formatDateTime(tool.lastUsedAt)}
-                </p>
-              )}
-              {(tool.usageCount || 0) === 0 && (
-                <p className="text-center text-muted-foreground py-8">
-                  No executions recorded yet. Test this tool to see usage statistics.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+        {/* Stats Tab: the same stat row as an agent's. With no runs yet a
+            rate or a time would be a made-up zero, so those say "--". */}
+        <TabsContent value="stats" className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3" data-testid="tool-stats">
+            <StatTile icon={Activity} label="Total runs" value={tool.usageCount || 0} />
+            <StatTile icon={CheckCircle2} label="Succeeded" value={tool.usageCount ? `${tool.successRate || 0}%` : '--'} />
+            <StatTile icon={Clock} label="Avg response time" value={tool.usageCount ? `${tool.averageResponseTime || 0}ms` : '--'} />
+          </div>
+          {tool.lastUsedAt && (
+            <p className="text-xs text-muted-foreground">
+              Last used: {formatDateTime(tool.lastUsedAt)}
+            </p>
+          )}
+          {(tool.usageCount || 0) === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No runs recorded yet. Test this tool to see how it does.
+            </p>
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -752,7 +737,7 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-purple-500" />
+              <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               <CardTitle className="text-sm">Agent Skills</CardTitle>
               <Badge variant="outline" className="text-[10px]">{skillsGateway.name}</Badge>
             </div>
@@ -798,12 +783,12 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-violet-500" />
+              <Zap className="h-5 w-5 text-primary" />
               <CardTitle className="text-sm">MCP</CardTitle>
               <Badge variant="outline" className="text-[10px]">{mcpGateway.name}</Badge>
             </div>
             <CardDescription className="text-xs">
-              Connect via MCP in Claude Code, Cursor, Windsurf, or any MCP client
+              Connect over MCP from any MCP client
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -859,7 +844,7 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <Bot className="h-5 w-5 text-cyan-500" />
+              <Bot className="h-5 w-5 text-teal-600 dark:text-teal-400" />
               <CardTitle className="text-sm">A2A</CardTitle>
               <Badge variant="outline" className="text-[10px]">{gateways.find(g => g.gateway?.type === 'a2a')?.gateway?.name}</Badge>
             </div>

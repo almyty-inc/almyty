@@ -30,16 +30,16 @@ export function PageIntro({ topic }: PageIntroProps) {
 
   return (
     <div
-      className="flex items-start gap-3 rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-sm"
+      className="flex items-start gap-3 rounded-lg border border-info-border bg-info-subtle px-4 py-3 text-sm"
       data-testid={`page-intro-${topic}`}
       role="note"
     >
-      <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" aria-hidden="true" />
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
       <p className="min-w-0 flex-1 text-muted-foreground">
         {PAGE_INTROS[topic].text}{' '}
         <Link
           to="/guide"
-          className="whitespace-nowrap font-medium text-violet-600 hover:underline dark:text-violet-400"
+          className="whitespace-nowrap font-medium text-selection-foreground hover:underline"
         >
           Open the guide
         </Link>

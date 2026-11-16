@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { VerifyConfigEditor } from './verify-config-editor'
-import { VerifierPanelHeading, VerifierPanelList, useProviderNames } from '@/components/agents/verifier-panel'
+import { VerifierPanelHeading, VerifierPanelList, useProviderNames, verifyPolicyLabel, verifyTriggersLabel } from '@/components/agents/verifier-panel'
 import { PURPOSE_LABELS, STRATEGY_LABELS, modelsFromAgent } from '@/components/agents/builder/agent-models'
 import type { Agent } from '@/types'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
@@ -43,11 +43,11 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Cpu className="h-4 w-4 text-primary" /> Models &amp; verification
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {!editingVerify && (
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setEditingVerify(true)}>
                 <Settings2 className="h-3.5 w-3.5" />
@@ -94,7 +94,7 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
         {verify?.enabled && (
           <div>
             <VerifierPanelHeading>
-              <Badge variant="outline" className="text-[10px]">{verify.policy || 'any_fail_blocks'}</Badge>
+              <Badge variant="outline" className="text-[10px]" data-testid="verify-policy-badge">{verifyPolicyLabel(verify.policy)}</Badge>
               {verify.revise === true ? (
                 <Badge variant="outline" className="text-[10px] gap-1" data-testid="verify-mode-badge">
                   <Repeat className="h-3 w-3" />
@@ -108,9 +108,8 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
             </VerifierPanelHeading>
             <VerifierPanelList verify={verify} />
             {verify.triggers && verify.triggers.length > 0 && (
-              <div className="text-[10px] text-muted-foreground mt-1.5">
-                Triggers: {verify.triggers.join(', ')}
-                {verify.everyNSteps ? ` (every ${pluralized(verify.everyNSteps, 'step')})` : ''}
+              <div className="text-xs text-muted-foreground mt-1.5" data-testid="verify-triggers">
+                {verifyTriggersLabel(verify.triggers, verify.everyNSteps)}
               </div>
             )}
           </div>

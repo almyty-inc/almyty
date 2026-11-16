@@ -34,13 +34,13 @@ export interface NotificationPresentation {
 const PRESENTATION: Record<string, NotificationPresentation> = {
   'approval.pending': {
     icon: Shield,
-    accentClass: 'text-violet-500',
+    accentClass: 'text-primary',
     label: 'Approval requested',
     description: 'An agent run is waiting for your approval.',
   },
   'approval.decided': {
     icon: ShieldCheck,
-    accentClass: 'text-violet-500',
+    accentClass: 'text-primary',
     label: 'Approval decided',
     description: 'A pending approval you follow was approved or denied.',
   },
@@ -52,7 +52,7 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
   },
   'agent.report': {
     icon: Radio,
-    accentClass: 'text-violet-500',
+    accentClass: 'text-primary',
     label: 'Agent report',
     description: 'An always-on agent finished a wake and reported what it did.',
   },
@@ -70,7 +70,7 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
   },
   'invite.received': {
     icon: UserPlus,
-    accentClass: 'text-cyan-500',
+    accentClass: 'text-teal-600 dark:text-teal-400',
     label: 'Invitation received',
     description: 'You were invited to join an organization or team.',
   },
@@ -124,7 +124,7 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
   },
   'connections.rotation_due': {
     icon: KeyRound,
-    accentClass: 'text-cyan-500',
+    accentClass: 'text-teal-600 dark:text-teal-400',
     label: 'Rotation due',
     description: 'A credential is older than your rotation rule allows.',
   },
@@ -136,7 +136,7 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
   },
   'models.new': {
     icon: Sparkles,
-    accentClass: 'text-cyan-500',
+    accentClass: 'text-teal-600 dark:text-teal-400',
     label: 'New models',
     description: 'A provider connection started offering new models. Emailed in the daily summary.',
   },
@@ -154,7 +154,7 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
   },
   'environments.handed_over': {
     icon: Cloud,
-    accentClass: 'text-cyan-500',
+    accentClass: 'text-teal-600 dark:text-teal-400',
     label: 'Hosted environment handed to you',
     description: 'A member left the organization, so their hosted environments are now yours to look after. Nothing was deleted.',
   },
@@ -166,19 +166,19 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
   },
   'account.welcome': {
     icon: User,
-    accentClass: 'text-cyan-500',
+    accentClass: 'text-teal-600 dark:text-teal-400',
     label: 'Welcome',
     description: 'Getting-started messages for your account.',
   },
   'account.verify_email': {
     icon: User,
-    accentClass: 'text-cyan-500',
+    accentClass: 'text-teal-600 dark:text-teal-400',
     label: 'Verify email',
     description: 'Email address verification requests.',
   },
   'account.password_reset': {
     icon: KeyRound,
-    accentClass: 'text-cyan-500',
+    accentClass: 'text-teal-600 dark:text-teal-400',
     label: 'Password reset',
     description: 'Password reset confirmations for your account.',
   },

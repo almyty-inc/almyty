@@ -147,16 +147,15 @@ test.describe('Authentication - Registration', () => {
     // Password field should be type=password initially
     await expect(passwordInput).toHaveAttribute('type', 'password')
 
-    // Click show password toggle if it exists
-    const toggleButton = page.getByRole('button', { name: /show|hide password/i })
-    if (await toggleButton.isVisible()) {
-      await toggleButton.click()
-      await expect(passwordInput).toHaveAttribute('type', 'text')
+    // The toggle beside the password field (the confirm field has its own).
+    const toggleButton = page.locator('button[aria-controls="password"]')
+    await expect(toggleButton).toHaveAccessibleName('Show what you typed')
+    await toggleButton.click()
+    await expect(passwordInput).toHaveAttribute('type', 'text')
 
-      // Click again to hide
-      await toggleButton.click()
-      await expect(passwordInput).toHaveAttribute('type', 'password')
-    }
+    // Click again to hide
+    await toggleButton.click()
+    await expect(passwordInput).toHaveAttribute('type', 'password')
   })
 
   test('should handle network errors gracefully', async ({ page }) => {

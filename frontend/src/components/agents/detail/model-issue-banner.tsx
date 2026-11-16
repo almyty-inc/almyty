@@ -19,9 +19,9 @@ export function ModelIssueBanner({ agent }: { agent: Agent }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+      className="flex items-start gap-2 rounded-lg border border-warning-border bg-warning-subtle p-3 text-sm"
     >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
       <div className="space-y-1">
         <p className="font-medium">
           The model <span className="font-mono">{issue.model}</span> is no longer available from its provider.

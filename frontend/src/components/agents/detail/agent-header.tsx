@@ -46,28 +46,29 @@ export function AgentHeader({
 
   return (
     <>
-      {/* Breadcrumbs */}
-      <div className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+      {/* Breadcrumbs: where this agent sits, and the way back. */}
+      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+        <Button variant="ghost" size="icon" className="-ml-2 h-8 w-8 shrink-0" aria-label="Back to agents" onClick={() => navigate('/agents')}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
         <Link to="/agents" className="shrink-0 hover:text-foreground">Agents</Link>
-        <ChevronRight className="h-3 w-3 shrink-0" />
+        <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
         <span className="min-w-0 text-foreground [overflow-wrap:anywhere]">{agent.name}</span>
-      </div>
+      </nav>
 
-      {/* Header */}
+      {/* Header: the agent, its state, and what can be done with it. */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-1 basis-80 items-start gap-3">
-          <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to agents" onClick={() => navigate('/agents')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className={DETAIL_TITLE_CLASSES}>{agent.name}</h1>
-              <Badge variant={statusVariant[agent.status] || 'secondary'}>
+              <Badge variant={statusVariant[agent.status] || 'secondary'} className="gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
                 {agent.status === 'active' ? 'Active' : agent.status === 'draft' ? 'Draft' : agent.status === 'inactive' ? 'Inactive' : agent.status}
               </Badge>
             </div>
             {agent.description && (
-              <p className="text-muted-foreground mt-0.5 [overflow-wrap:anywhere]">{agent.description}</p>
+              <p className="mt-1.5 max-w-[65ch] text-base text-muted-foreground [overflow-wrap:anywhere]">{agent.description}</p>
             )}
           </div>
         </div>

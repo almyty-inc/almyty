@@ -120,8 +120,8 @@ const founder = walk('tutorial-founder', "Tutorial: the founder's associate", []
   { click: { title: 'google_calendar_calendar_events_list', exact: true } },
   { click: { role: 'tab', name: 'Test tool' } },
   { fill: { placeholder: 'Enter calendarId' }, value: 'primary' },
-  { click: button('Execute Tool') },
-  { waitFor: { text: 'Response Data:' }, timeout: 20000 },
+  { click: button('Execute tool') },
+  { waitFor: { text: 'Response data:' }, timeout: 20000 },
   near({ text: 'Response Data:' }),
   { shot: 'founder-10' },
 

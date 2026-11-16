@@ -67,7 +67,7 @@ describe('Recent runs on Overview', () => {
     const rows = screen.getAllByRole('row').slice(1)
     expect(rows).toHaveLength(2)
     // Newest first.
-    expect(within(rows[0]).getByText('waiting input')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Waiting for input')).toBeInTheDocument()
     expect(within(rows[1]).getByText('gpt-4o-mini')).toBeInTheDocument()
     expect(within(rows[1]).getByText('$0.0123')).toBeInTheDocument()
   })
@@ -78,5 +78,36 @@ describe('Recent runs on Overview', () => {
       [run('r-mid', '2026-09-30T08:00:00Z')],
     )
     expect(rows.map((r) => r.id)).toEqual(['e-new', 'r-mid', 'e-old'])
+  })
+})
+
+// On a phone the overview ran to about 13,700px: twenty recent runs, then
+// the pipeline, versions, change history and audit log, all open.
+describe('a short overview', () => {
+  const many = Array.from({ length: 12 }, (_, i) => run(`run-${i}`, `2026-09-${String(10 + i).padStart(2, '0')}T10:00:00Z`))
+  const renderOverview = (onShowAllRuns = vi.fn()) =>
+    renderWithProviders(
+      <OverviewTab agent={agent} executions={[]} runs={many} executionsError={null} versions={[]}
+        entityVersions={[{ id: 1, itemType: 'Agent', itemId: 'agent-1', event: 'INSERT', owner: 'a@b.c', object: {}, timestamp: '2026-09-01T10:00:00Z' }]}
+        auditLog={[{ action: 'activated', timestamp: '2026-09-01T10:00:00Z', userId: 'user-1' } as any]}
+        webhookUrl="" setWebhookUrl={vi.fn()} onShowAllRuns={onShowAllRuns} />,
+    )
+
+  it('lists the five newest runs and offers the rest on the Runs tab', async () => {
+    const onShowAllRuns = vi.fn()
+    renderOverview(onShowAllRuns)
+    const table = screen.getByTestId('recent-run-run-11').closest('table')!
+    expect(within(table).getAllByRole('row').slice(1)).toHaveLength(5)
+    expect(screen.queryByTestId('recent-run-run-6')).toBeNull()
+    screen.getByRole('button', { name: 'See all runs' }).click()
+    expect(onShowAllRuns).toHaveBeenCalled()
+  })
+
+  it('keeps the history closed until asked for', () => {
+    renderOverview()
+    const history = screen.getByTestId('overview-history')
+    expect(within(history).getByRole('button', { name: /History/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Audit log')).toBeNull()
+    within(history).getByRole('button', { name: /History/ }).click()
   })
 })
