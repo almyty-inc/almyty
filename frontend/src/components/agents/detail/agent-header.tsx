@@ -9,13 +9,21 @@ import {
   Pencil,
   Play,
   Pause,
+  Power,
   Download,
   Copy,
   ChevronRight,
   FileText,
+  MoreHorizontal,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { statusVariant } from './constants'
@@ -73,33 +81,72 @@ export function AgentHeader({
           </div>
         </div>
         <div role="group" aria-label="Agent actions" className="flex max-w-full flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onExportTechDoc}
-            title="Export EU AI Act style technical documentation (Markdown)"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Tech doc
-          </Button>
-          <Button variant="outline" size="sm" onClick={onDuplicate}>
-            <Copy className="h-4 w-4 mr-2" />
-            Duplicate
-          </Button>
-          {agent.status === 'active' ? (
-            <Button variant="outline" size="sm" onClick={onDeactivate}>
-              <Pause className="h-4 w-4 mr-2" />
-              Deactivate
+          {/* From sm up every action is a button. On a phone only Run and
+              Edit are; the rest sit in the overflow menu, so the header is
+              one row instead of two. */}
+          <div className="hidden flex-wrap items-center gap-2 sm:flex">
+            <Button variant="outline" size="sm" onClick={onExport}>
+              <Download className="h-4 w-4 mr-2" />
+              Export
             </Button>
-          ) : (
-            <Button variant="outline" size="sm" onClick={onActivate} disabled={activationDisabled}>
-              Activate
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExportTechDoc}
+              title="Export EU AI Act style technical documentation (Markdown)"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Tech doc
             </Button>
-          )}
+            <Button variant="outline" size="sm" onClick={onDuplicate}>
+              <Copy className="h-4 w-4 mr-2" />
+              Duplicate
+            </Button>
+            {agent.status === 'active' ? (
+              <Button variant="outline" size="sm" onClick={onDeactivate}>
+                <Pause className="h-4 w-4 mr-2" />
+                Deactivate
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={onActivate} disabled={activationDisabled}>
+                Activate
+              </Button>
+            )}
+          </div>
+          <div className="sm:hidden" data-testid="agent-actions-overflow">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="More agent actions">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onSelect={onExport}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onExportTechDoc}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Tech doc
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onDuplicate}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Duplicate
+                </DropdownMenuItem>
+                {agent.status === 'active' ? (
+                  <DropdownMenuItem onSelect={onDeactivate}>
+                    <Pause className="h-4 w-4 mr-2" />
+                    Deactivate
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onSelect={onActivate} disabled={activationDisabled}>
+                    <Power className="h-4 w-4 mr-2" />
+                    Activate
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <Button variant="outline" onClick={onInvoke}>
             <Play className="h-4 w-4 mr-2" />
             Run

@@ -42,8 +42,8 @@ export function mcpEndpointFor(gateway: ConnectableGateway, orgSlug: string, bac
   return `${backendUrl}/${orgSlug}/${gwSlug}`
 }
 
-/** The one-line Claude Code command for an MCP gateway. */
-export function claudeCodeCommand(gateway: ConnectableGateway, orgSlug: string, backendUrl = gatewayBackendUrl()): string {
+/** The one-line `mcp add` command a command-line assistant takes for an MCP gateway. */
+export function mcpAddCommand(gateway: ConnectableGateway, orgSlug: string, backendUrl = gatewayBackendUrl()): string {
   return `claude mcp add ${gatewayClientName(gateway)} --transport http ${mcpEndpointFor(gateway, orgSlug, backendUrl)}`
 }
 
@@ -59,7 +59,7 @@ export function skillsInstallCommand(gateway: ConnectableGateway, orgSlug: strin
  */
 export function connectCommandFor(gateway: ConnectableGateway, orgSlug: string, backendUrl = gatewayBackendUrl()): string | null {
   const type = (gateway.type || 'mcp').toLowerCase()
-  if (type === 'mcp') return claudeCodeCommand(gateway, orgSlug, backendUrl)
+  if (type === 'mcp') return mcpAddCommand(gateway, orgSlug, backendUrl)
   if (type === 'skills') return skillsInstallCommand(gateway, orgSlug)
   return null
 }
@@ -77,7 +77,7 @@ export const ACCESS_KEY_PLACEHOLDER = '<your-access-key>'
 
 export interface ClientSnippet {
   /** Stable id, for tabs and tests. */
-  id: 'claude-code' | 'cursor' | 'claude-desktop' | 'mcp' | 'utcp' | 'skills'
+  id: 'terminal' | 'editor' | 'desktop' | 'mcp' | 'utcp' | 'skills'
   label: string
   /** One line: where the snippet goes. */
   hint: string
@@ -96,7 +96,7 @@ export type GatewayProtocol = (typeof GATEWAY_PROTOCOLS)[number]
 
 /** Which client snippets each protocol serves. */
 const SNIPPETS_BY_PROTOCOL: Record<GatewayProtocol, ClientSnippet['id'][]> = {
-  mcp: ['claude-code', 'cursor', 'claude-desktop', 'mcp'],
+  mcp: ['terminal', 'editor', 'desktop', 'mcp'],
   utcp: ['utcp'],
   skills: ['skills'],
 }
@@ -141,25 +141,27 @@ export function clientSnippets(
   const headers = usesKey ? { [ACCESS_KEY_HEADER]: secret } : undefined
   const headerArgument = usesKey ? ` --header "${ACCESS_KEY_HEADER}: ${secret}"` : ''
   const json = (value: unknown) => JSON.stringify(value, null, 2)
+  // Labelled by the kind of client, never by product: the app names no
+  // other product (no-product-names-in-copy.test.ts).
   return [
     {
-      id: 'claude-code',
-      label: 'Claude Code',
-      hint: 'Run in your terminal.',
+      id: 'terminal',
+      label: 'Command-line assistant',
+      hint: 'Run in your terminal, for a command-line assistant that adds MCP servers with mcp add.',
       value: `claude mcp add ${name} --transport http ${url}${headerArgument}`,
       language: 'bash',
     },
     {
-      id: 'cursor',
-      label: 'Cursor',
-      hint: 'Add to .cursor/mcp.json in your project, or ~/.cursor/mcp.json for all of them.',
+      id: 'editor',
+      label: 'Code editor (mcp.json)',
+      hint: 'Add to the mcp.json your editor reads: in the project for that project, in your home folder for all of them.',
       value: json({ mcpServers: { [name]: { url, ...(headers ? { headers } : {}) } } }),
       language: 'json',
     },
     {
-      id: 'claude-desktop',
-      label: 'Claude Desktop',
-      hint: 'Add to claude_desktop_config.json (Settings, Developer, Edit config), then restart Claude Desktop.',
+      id: 'desktop',
+      label: 'Desktop assistant',
+      hint: "Add to your desktop assistant's MCP config file, then restart it. mcp-remote connects it to the gateway's address.",
       value: json({
         mcpServers: {
           [name]: {
@@ -173,7 +175,7 @@ export function clientSnippets(
     },
     {
       id: 'mcp',
-      label: 'Other MCP clients',
+      label: 'Any MCP client',
       hint: 'Any client that speaks MCP over HTTP.',
       value: `URL: ${url}${usesKey ? `\nHeader: ${ACCESS_KEY_HEADER}: ${secret}` : ''}`,
       language: 'text',

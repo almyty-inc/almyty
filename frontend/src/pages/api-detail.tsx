@@ -1,14 +1,14 @@
 import React, { useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Pencil, Share2 } from 'lucide-react'
+import { Pencil, Share2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { ResourceHeader } from '@/components/layout/resource-header'
 import { Badge } from '@/components/ui/badge'
 import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { QueryError } from '@/components/ui/query-error'
+import { NotFoundState, QueryError } from '@/components/ui/query-error'
 
 import { ApiKeyCard } from '@/components/apis/detail/key-card'
 import { OperationsTab } from '@/components/apis/detail/operations-tab'
@@ -17,6 +17,7 @@ import { SchemaTab } from '@/components/apis/detail/schema-tab'
 import { SdkPackagesCard } from '@/components/apis/detail/sdk-packages-card'
 
 import { apisApi } from '@/lib/api'
+import { isNotFoundError } from '@/lib/api-error'
 import { toolsQuery } from '@/lib/list-queries'
 import { useOrganizationStore } from '@/store/organization'
 import { ApiType, ApiOperation, Tool } from '@/types'
@@ -36,6 +37,8 @@ export function ApiDetailPage() {
     queryKey: ['api', id],
     queryFn: () => apisApi.getById(id!),
     enabled: !!id,
+    // Asking again for an API that is not there gets the same answer.
+    retry: (count, err) => !isNotFoundError(err) && count < 1,
     // An SDK API's packages are analysed in the background: follow it.
     refetchInterval: (query) =>
       (query.state.data as { metadata?: { sdkAnalysis?: { state?: string } } } | undefined)?.metadata?.sdkAnalysis?.state === 'analysing'
@@ -83,6 +86,12 @@ export function ApiDetailPage() {
     )
   }
 
+  // An unknown id is not a failure "Try again" can fix: say it is not
+  // there and offer the way back.
+  if ((isError && isNotFoundError(apiError)) || (!isError && !apiData)) {
+    return <NotFoundState thing="API" backTo="/apis" backLabel="Back to APIs" />
+  }
+
   if (isError) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -91,20 +100,6 @@ export function ApiDetailPage() {
           onRetry={() => refetchApi()}
           title="Couldn't load API"
         />
-      </div>
-    )
-  }
-
-  if (!apiData) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-muted-foreground">API not found</p>
-          <Button className="mt-4" onClick={() => navigate('/apis')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to APIs
-          </Button>
-        </div>
       </div>
     )
   }

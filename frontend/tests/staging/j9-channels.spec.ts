@@ -22,7 +22,7 @@ import type { AddressInfo } from 'net'
 import { randomUUID } from 'crypto'
 import { ClientFactory, ClientFactoryOptions, DefaultAgentCardResolver, JsonRpcTransportFactory } from '@a2a-js/sdk/client'
 import { test, expect, screenshotThis } from './support/fixtures'
-import { connectApi, idFromUrl } from './support/flows'
+import { activateAgent, connectApi, idFromUrl } from './support/flows'
 import { BERLIN, OPEN_METEO_SPEC, berlinDaily } from './support/open-meteo'
 import { data } from './support/qa-api'
 import type { APIRequestContext, Browser, BrowserContext, Locator, Page } from '@playwright/test'
@@ -112,8 +112,7 @@ async function weatherAgent(
 
   await page.goto(`/agents/${agentId}`)
   await expect(page.getByRole('heading', { name: agentName, level: 1 })).toBeVisible()
-  await page.getByRole('button', { name: 'Activate', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Deactivate', exact: true })).toBeVisible()
+  await activateAgent(page)
   return { agentId, agentName, apiName }
 }
 
