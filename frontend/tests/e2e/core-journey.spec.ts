@@ -208,7 +208,7 @@ test('core journey: sign up, credentials, API, gateway, agent, channel', async (
       accessKey = (await page.getByTestId('initial-api-key').locator('code').innerText()).trim()
       expect(accessKey).toMatch(/^gw_/)
       const snippets = page.getByTestId('connect-snippets')
-      await expect(snippets.getByRole('tab', { name: 'Claude Code' })).toBeVisible()
+      await expect(snippets.getByRole('tab', { name: 'Command-line assistant' })).toBeVisible()
       await expect(snippets.getByRole('tab', { name: 'UTCP' })).toHaveCount(0)
       const address = (await snippets.locator('code').filter({ hasText: /^https?:\/\// }).first().innerText()).trim()
       gatewayUrl = `${API_ORIGIN}${new URL(address).pathname}`

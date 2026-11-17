@@ -8,7 +8,7 @@
  * to stop it.
  */
 import { test, expect, type Gate } from './support/fixtures'
-import { idFromUrl } from './support/flows'
+import { activateAgent, idFromUrl } from './support/flows'
 import { data } from './support/qa-api'
 import {
   connect,
@@ -148,8 +148,7 @@ test.describe('J7/J8 workflow agent without a model', () => {
 
     await page.goto(`/agents/${agentId}`)
     await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
-    await page.getByRole('button', { name: 'Activate', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Deactivate', exact: true })).toBeVisible()
+    await activateAgent(page)
 
     // Set up a schedule: every 1 minute, given the package.
     await page.getByRole('link', { name: 'Set up a schedule' }).click()

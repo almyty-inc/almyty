@@ -1,6 +1,6 @@
 # Give your coding assistant your own API
 
-Let Claude Code, Cursor, Claude Desktop or another AI tool use an API your company already runs. You connect the API to almyty once, and every operation in it becomes a tool the AI can call. Ask "look up pet 2 and show its status", and it calls your API to find out.
+Let your AI assistant, your code editor or another AI tool use an API your company already runs. You connect the API to almyty once, and every operation in it becomes a tool the AI can call. Ask "look up pet 2 and show its status", and it calls your API to find out.
 
 This works through MCP, the Model Context Protocol: a common way for AI tools to discover and call outside tools. In almyty, a **gateway** is the address your AI tool connects to, with a key and a chosen set of tools behind it.
 
@@ -9,7 +9,7 @@ For the full developer walk-through, see [For developers: APIs and machines](/ex
 ## What you need
 
 - An API with a description file (OpenAPI/Swagger, GraphQL, SOAP/WSDL or a gRPC .proto file), and its key if it needs one.
-- An AI tool that supports MCP, such as Claude Code, Cursor or Claude Desktop.
+- An AI assistant or code editor that supports MCP.
 
 ## How to build it
 
@@ -17,7 +17,7 @@ For the full developer walk-through, see [For developers: APIs and machines](/ex
 
    ![An imported API, its operations turned into tools](/screenshots/quickstart-api-imported.png)
 
-2. **Create a gateway.** Open **Gateways** and click **Create gateway**. Pick **MCP**, pick the API (or single tools), and click **Create gateway**. Its access key is shown once, next to ready-made setup for Claude Code, Cursor and Claude Desktop, so copy it then. The **Tool scoping** tab changes exactly which tools it offers.
+2. **Create a gateway.** Open **Gateways** and click **Create gateway**. Pick **MCP**, pick the API (or single tools), and click **Create gateway**. Its access key is shown once, next to a ready-made setup for each kind of MCP client, so copy it then. The **Tool scoping** tab changes exactly which tools it offers.
 
    ![The Petstore gateway, with its keys and tool scoping](/screenshots/gateway-petstore-config.png)
 
@@ -35,7 +35,7 @@ For the full developer walk-through, see [For developers: APIs and machines](/ex
 
 ## For developers
 
-In Claude Code:
+For a client set up from the terminal with `claude mcp add`:
 
 ```bash
 claude mcp add petstore --transport http \

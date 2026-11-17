@@ -1,6 +1,6 @@
 # MCP gateway
 
-MCP (Model Context Protocol) is the common standard AI apps use to call tools. An MCP gateway gives AI apps such as Claude Code, Cursor and Claude Desktop one address where they find your tools and use them. Once it is connected, you can ask Claude "where is order NW-10428?" and it looks the order up in your system.
+MCP (Model Context Protocol) is the common standard AI apps use to call tools. An MCP gateway gives AI apps, such as AI assistants, coding tools and code editors, one address where they find your tools and use them. Once it is connected, you can ask your assistant "where is order NW-10428?" and it looks the order up in your system.
 
 ![MCP endpoints on the gateway Integrations tab](/screenshots/quickstart-mcp-endpoints.png)
 
@@ -18,16 +18,16 @@ On the gateway's page, **Tool scoping** changes which tools it offers, **Who can
 
 ## Connect an AI app
 
-Pick your app in the setup shown after creating the gateway (or under **Quick setup** on the **Integrations** tab) and follow its one line of instructions: paste a command into a terminal for Claude Code, or a few lines into a settings file for Cursor or Claude Desktop. The app then lists the gateway's tools and calls them when they help.
+Pick the kind of app you use in the setup shown after creating the gateway (or under **Quick setup** on the **Integrations** tab) and follow its one line of instructions: **Command-line assistant** is a command to paste into a terminal, **Code editor (mcp.json)** and **Desktop assistant** are a few lines for the app's settings file, and **Any MCP client** is the address and the key header. The app then lists the gateway's tools and calls them when they help.
 
 Need a key for a person or app? Choose **Outside, protected**, switch on **Keys**, then click **New key** under **Who can use it**.
 
-![Claude client configured with an almyty gateway](/screenshots/quickstart-claude-config.png)
+![An AI app configured with an almyty gateway](/screenshots/quickstart-claude-config.png)
 
 
 ## Which apps and versions work
 
-MCP has several versions, and AI apps move to new ones over time. An almyty gateway speaks the newest one, **MCP 2026-07-28**, and the two before it, **MCP 2025-11-25** and **MCP 2025-06-18**, which is what today's Claude Code, Cursor, Codex and Claude Desktop use. Apps still on the older 2025-03-26 and 2024-11-05 versions keep working too. Your app and the gateway agree on a version by themselves when the app connects; there is nothing to set and the address stays the same.
+MCP has several versions, and AI apps move to new ones over time. An almyty gateway speaks the newest one, **MCP 2026-07-28**, and the two before it, **MCP 2025-11-25** and **MCP 2025-06-18**, which is what today's AI assistants and code editors use. Apps still on the older 2025-03-26 and 2024-11-05 versions keep working too. Your app and the gateway agree on a version by themselves when the app connects; there is nothing to set and the address stays the same.
 
 One old way of connecting is being retired: the separate streaming address (SSE) that MCP apps used in 2024. Gateways never offered it, and the newer MCP versions drop it. almyty's own `/mcp/sse` address still answers for the few apps that need it and tells them it is deprecated; it goes away once nobody uses it.
 
@@ -49,16 +49,18 @@ https://api.almyty.com/{org}/{gateway-slug}
 
 Only `POST` carries MCP: the gateway keeps no session and opens no stream of its own, so `GET` and `DELETE` on the endpoint answer `405 Method Not Allowed`. A 2026-07-28 client that wants change notifications asks for them with a `subscriptions/listen` POST (see [MCP 2026-07-28](#mcp-2026-07-28)). The legacy HTTP+SSE transport (2024-11-05) is not served on gateways; it is deprecated in MCP 2026-07-28 (see [Legacy SSE transport](#legacy-sse-transport)).
 
-### Claude Code
+### Command-line assistant
+
+Run in your terminal, for a command-line assistant that adds MCP servers with `mcp add`:
 
 ```bash
 claude mcp add petstore --transport http https://api.almyty.com/acme/petstore \
   --header "x-api-key: your-gateway-key"
 ```
 
-### Claude Desktop
+### Desktop assistant
 
-Add to `claude_desktop_config.json` (Settings, Developer, Edit config), then restart Claude Desktop:
+Add to your desktop assistant's MCP config file, then restart it. `mcp-remote` connects it to the gateway's address:
 
 ```json
 {
@@ -72,9 +74,9 @@ Add to `claude_desktop_config.json` (Settings, Developer, Edit config), then res
 }
 ```
 
-### Cursor
+### Code editor (mcp.json)
 
-Add to `.cursor/mcp.json` in your project, or `~/.cursor/mcp.json` for all of them:
+Add to the `mcp.json` your editor reads: in the project for that project, in your home folder for all of them:
 
 ```json
 {
@@ -188,7 +190,7 @@ Link: <https://docs.almyty.com/gateways/mcp#legacy-sse-transport>; rel="deprecat
 
 ### Origin
 
-A request that carries an `Origin` header must come from the dashboard, the API's own origin, or an origin in `MCP_ALLOWED_ORIGINS` (comma list); anything else gets `403` with an id-less JSON-RPC error, before authentication. Requests without `Origin` (Claude Code, Cursor, curl, the stdio proxy) are not affected. Outside production, MCP Inspector's local origin (`http://localhost:6274`) is allowed.
+A request that carries an `Origin` header must come from the dashboard, the API's own origin, or an origin in `MCP_ALLOWED_ORIGINS` (comma list); anything else gets `403` with an id-less JSON-RPC error, before authentication. Requests without `Origin` (command-line assistants, code editors, curl, the stdio proxy) are not affected. Outside production, MCP Inspector's local origin (`http://localhost:6274`) is allowed.
 
 ### Tools
 

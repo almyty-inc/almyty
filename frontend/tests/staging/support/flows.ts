@@ -15,6 +15,29 @@ export function idFromUrl(page: Page): string {
 }
 
 /**
+ * An agent page's secondary actions (Export, Tech doc, Duplicate,
+ * Activate, Deactivate) are buttons from the sm breakpoint up; on a phone
+ * they sit behind "More agent actions". This opens the menu when it is the
+ * way in and returns the action, as a button or a menu item.
+ */
+export async function agentAction(page: Page, name: string): Promise<Locator> {
+  const more = page.getByRole('button', { name: 'More agent actions' })
+  if (await more.isVisible()) {
+    if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+    return page.getByRole('menuitem', { name, exact: true })
+  }
+  return page.getByRole('button', { name, exact: true })
+}
+
+/** Turn the agent on from its page, and see it offer Deactivate. */
+export async function activateAgent(page: Page): Promise<void> {
+  await (await agentAction(page, 'Activate')).click()
+  await expect(await agentAction(page, 'Deactivate')).toBeVisible()
+  // On a phone the check left the menu open.
+  if (await page.getByRole('menu').isVisible()) await page.keyboard.press('Escape')
+}
+
+/**
  * Connect an API from APIs › Connect an API: pick the kind, fill what the
  * kind asks for, name it under Advanced, and connect. Lands on the API page
  * and registers the API for deletion.

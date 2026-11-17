@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Activity, ArrowLeft, CheckCircle2, Clock, Play, Zap, BookOpen, Copy, Check, Globe, Bot, Server, Store } from 'lucide-react'
+import { Activity, CheckCircle2, Clock, Play, Zap, BookOpen, Copy, Check, Globe, Bot, Server, Store } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,13 +15,13 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { QueryError } from '@/components/ui/query-error'
+import { NotFoundState, QueryError } from '@/components/ui/query-error'
 
 import { CodeBlock } from '@/components/ui/code-block'
 import { toolsApi, workspacesApi, type ToolRunEnvelope } from '@/lib/api'
 import { toolRunOutcome } from '@/lib/tool-run-outcome'
 import { toolQuery } from '@/lib/list-queries'
-import { getApiErrorMessage } from '@/lib/api-error'
+import { getApiErrorMessage, isNotFoundError } from '@/lib/api-error'
 import { formatDateTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
@@ -52,6 +52,8 @@ export function ToolDetailPage() {
   const { data: toolData, isLoading, isError, error: toolError, refetch: refetchTool } = useQuery({
     ...toolQuery(id, currentOrganization?.id),
     enabled: !!id && !!currentOrganization,
+    // Asking again for a tool that is not there gets the same answer.
+    retry: (count, err) => !isNotFoundError(err) && count < 1,
   })
 
   useEffect(() => {
@@ -135,6 +137,12 @@ export function ToolDetailPage() {
     )
   }
 
+  // An unknown id is not a failure "Try again" can fix: say it is not
+  // there and offer the way back.
+  if ((isError && isNotFoundError(toolError)) || (!isError && !toolData)) {
+    return <NotFoundState thing="tool" backTo="/tools" backLabel="Back to tools" />
+  }
+
   if (isError) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -143,20 +151,6 @@ export function ToolDetailPage() {
           onRetry={() => refetchTool()}
           title="Couldn't load tool"
         />
-      </div>
-    )
-  }
-
-  if (!toolData) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-muted-foreground">Tool not found</p>
-          <Button className="mt-4" onClick={() => navigate('/tools')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to tools
-          </Button>
-        </div>
       </div>
     )
   }
@@ -807,7 +801,7 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
               <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Client configs</summary>
               <div className="mt-2 space-y-3">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Claude Code</Label>
+                  <Label className="text-xs text-muted-foreground">Code editor (mcp.json)</Label>
                   <div className="mt-1">
                     <CodeBlock value={`"mcpServers": {\n  "${gatewayClientName(mcpGateway)}": {\n    "url": "${apiBase}/${orgSlug}${mcpGateway.endpoint}",\n    "headers": { "X-API-Key": "YOUR_KEY" }\n  }\n}`} language="json" maxHeight="120px" />
                   </div>

@@ -136,7 +136,14 @@ describe.each(PAGES)('$name error/not-found/loading states', ({ Comp, notFound }
   })
 })
 
-describe('agent-detail: an unknown agent', () => {
+const UNKNOWN: Array<{ name: string; Comp: React.ComponentType; title: string; back: RegExp; href: string }> = [
+  { name: 'api-detail', Comp: ApiDetailPage, title: 'API not found', back: /back to apis/i, href: '/apis' },
+  { name: 'tool-detail', Comp: ToolDetailPage, title: 'Tool not found', back: /back to tools/i, href: '/tools' },
+  { name: 'gateway-detail', Comp: GatewayDetailPage, title: 'Gateway not found', back: /back to gateways/i, href: '/gateways' },
+  { name: 'agent-detail', Comp: AgentDetailPage, title: 'Agent not found', back: /back to agents/i, href: '/agents' },
+]
+
+describe.each(UNKNOWN)('$name: an unknown id', ({ Comp, title, back, href }) => {
   beforeEach(() => vi.clearAllMocks())
 
   const notFound = (status: number, message: string) =>
@@ -146,14 +153,14 @@ describe('agent-detail: an unknown agent', () => {
     })
 
   it.each([
-    ['a 404', notFound(404, 'Agent not found: 0000')],
+    ['a 404', notFound(404, 'Not found: 0000')],
     ['an id that is not an id', notFound(400, 'Validation failed (uuid is expected)')],
   ])('says it is not found and offers the way back, not "Try again", for %s', (_label, error) => {
     queryState = { isLoading: false, isError: true, data: undefined, error }
-    renderPage(AgentDetailPage)
+    renderPage(Comp)
 
-    expect(screen.getByText('Agent not found')).toBeInTheDocument()
+    expect(screen.getByText(title)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /back to agents/i })).toHaveAttribute('href', '/agents')
+    expect(screen.getByRole('link', { name: back })).toHaveAttribute('href', href)
   })
 })

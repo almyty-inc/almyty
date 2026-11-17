@@ -3,7 +3,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 
 import {
-  claudeCodeCommand,
+  mcpAddCommand,
   connectCommandFor,
   gatewayClientName,
   mcpEndpointFor,
@@ -21,8 +21,8 @@ describe('gateway connect commands', () => {
     expect(mcpEndpointFor(gw, 'acme', 'https://api.example')).toBe('https://api.example/acme/weather-api')
   })
 
-  it('gives Claude Code one command, named after the gateway', () => {
-    expect(claudeCodeCommand(gw, 'acme', 'https://api.example')).toBe(
+  it('gives a command-line assistant one command, named after the gateway', () => {
+    expect(mcpAddCommand(gw, 'acme', 'https://api.example')).toBe(
       'claude mcp add weather-api --transport http https://api.example/acme/weather-api',
     )
   })
@@ -66,7 +66,7 @@ describe('gateway connect commands', () => {
 
   it('never puts a raw name into claude mcp add or the client JSON keys', () => {
     const petstore = { name: 'Swagger Petstore - OpenAPI 3.0', type: 'mcp', endpoint: null }
-    expect(claudeCodeCommand(petstore, 'acme', 'https://x')).toMatch(/^claude mcp add swagger-petstore-openapi-3-0 /)
+    expect(mcpAddCommand(petstore, 'acme', 'https://x')).toMatch(/^claude mcp add swagger-petstore-openapi-3-0 /)
     for (const snippet of clientSnippets(petstore, 'acme', 'k', 'https://x')) {
       expect(snippet.value).not.toContain('---')
       if (snippet.language === 'json') expect(Object.keys(JSON.parse(snippet.value).mcpServers)).toEqual(['swagger-petstore-openapi-3-0'])
@@ -90,14 +90,14 @@ describe('gateway connect commands', () => {
     for (const accessScope of ['private', 'team', 'org', 'external_open']) {
       const snippets = gatewaySnippets({ ...gw, accessScope }, 'acme', null, 'https://x')
       for (const snippet of snippets) expect(snippet.value).not.toContain('x-api-key')
-      expect(snippets.find(s => s.id === 'claude-code')?.value).toBe('claude mcp add weather-api --transport http https://x/acme/weather-api')
+      expect(snippets.find(s => s.id === 'terminal')?.value).toBe('claude mcp add weather-api --transport http https://x/acme/weather-api')
     }
   })
   it('includes a key header only when keys are an allowed outside method', () => {
     const snippets = gatewaySnippets({ ...gw, accessScope: 'external_protected', authConfigs: [{ type: 'api_key', isActive: true }] }, 'acme', 'gw_secret', 'https://x')
-    expect(snippets.find(s => s.id === 'claude-code')?.value).toContain('--header "x-api-key: gw_secret"')
+    expect(snippets.find(s => s.id === 'terminal')?.value).toContain('--header "x-api-key: gw_secret"')
     const company = gatewaySnippets({ ...gw, accessScope: 'external_protected', authConfigs: [{ type: 'company_signin', isActive: true }] }, 'acme', null, 'https://x')
-    expect(company.find(s => s.id === 'claude-code')?.value).not.toContain('--header')
+    expect(company.find(s => s.id === 'terminal')?.value).not.toContain('--header')
   })
 })
 
@@ -105,7 +105,7 @@ describe('one protocol per gateway', () => {
   const ids = (type: string) => gatewaySnippets({ ...gw, type }, 'acme', 'k', 'https://x').map((s) => s.id)
 
   it('gives each gateway only the setups its protocol serves', () => {
-    expect(ids('mcp')).toEqual(['claude-code', 'cursor', 'claude-desktop', 'mcp'])
+    expect(ids('mcp')).toEqual(['terminal', 'editor', 'desktop', 'mcp'])
     expect(ids('utcp')).toEqual(['utcp'])
     expect(ids('skills')).toEqual(['skills'])
   })
