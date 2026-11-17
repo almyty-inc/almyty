@@ -150,9 +150,13 @@ export class RunnerDaemon {
 
     // Detect runtime info before anything else; if a probe hangs (e.g.
     // a misbehaving node-pty install) we want to fail fast here rather
-    // than after registration has succeeded.
+    // than after registration has succeeded. Said before it starts, so a
+    // slow probe reads as probing in the log, not as a runner that went
+    // quiet after "starting".
+    process.stdout.write(`probing ${resolved.binaryProbeList.length} binaries on PATH\n`);
+    const probeStarted = Date.now();
     const runtime = await detectRuntimeInfo({ binaries: resolved.binaryProbeList });
-    process.stdout.write(`detected ${Object.values(runtime.binaries).filter(v => v).length}/${resolved.binaryProbeList.length} binaries on PATH\n`);
+    process.stdout.write(`detected ${Object.values(runtime.binaries).filter(v => v).length}/${resolved.binaryProbeList.length} binaries on PATH in ${Date.now() - probeStarted}ms\n`);
 
     // Register over the existing REST endpoint (POST /runners/register).
     // Streamable HTTP isn't used for registration itself — registration
