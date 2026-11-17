@@ -365,3 +365,66 @@ test('scrubDir leaves the saved session in .auth alone', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// Reusing the QA session: answering /auth/profile at setup is not enough.
+// A session that ended while the suite ran sent 40 tests to the sign-in page.
+const { savedSessionLasts, SESSION_MIN_LEFT_MS } = require('./gate-session');
+
+const API = 'https://api.staging.almyty.com';
+const NOW = Date.UTC(2026, 10, 16, 15, 0, 0);
+/** A token shaped like the API's, ending at `expMs`; never signed, the gate only reads `exp`. */
+function token(expMs) {
+  const part = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${part({ alg: 'HS256' })}.${part({ sub: 'u', exp: Math.floor(expMs / 1000) })}.sig`;
+}
+function stateWith(expMs, cookie = {}) {
+  return {
+    cookies: [{ name: 'access_token', value: token(expMs), domain: 'api.staging.almyty.com', expires: expMs / 1000, ...cookie }],
+    origins: [],
+  };
+}
+
+test('a saved session that lasts the run is reused', () => {
+  const at = savedSessionLasts(stateWith(NOW + 20 * 3600_000), { apiUrl: API, now: NOW });
+  assert.equal(at.reuse, true);
+});
+
+test('a saved session that still works now but ends during the run is not reused', () => {
+  // Good for another hour: /auth/profile answers, the run would outlive it.
+  const at = savedSessionLasts(stateWith(NOW + 3600_000), { apiUrl: API, now: NOW });
+  assert.equal(at.reuse, false);
+  assert.match(at.reason, /ends in 60 min/);
+  assert.ok(SESSION_MIN_LEFT_MS > 3600_000);
+});
+
+test('the token inside is checked, not only the cookie around it', () => {
+  // The browser keeps the cookie longer than the token in it is good for.
+  const state = stateWith(NOW + 30 * 60_000, { expires: (NOW + 48 * 3600_000) / 1000 });
+  assert.equal(savedSessionLasts(state, { apiUrl: API, now: NOW }).reuse, false);
+  // And a token that lasts, in a cookie that does not.
+  const short = stateWith(NOW + 20 * 3600_000, { expires: (NOW + 10 * 60_000) / 1000 });
+  assert.equal(savedSessionLasts(short, { apiUrl: API, now: NOW }).reuse, false);
+});
+
+test('no session, a cookie for another host, or an unreadable token signs in afresh', () => {
+  for (const state of [
+    null,
+    { cookies: [] },
+    stateWith(NOW + 20 * 3600_000, { domain: 'api.dev.almyty.com' }),
+    stateWith(NOW + 20 * 3600_000, { value: 'not-a-token' }),
+  ]) {
+    assert.equal(savedSessionLasts(state, { apiUrl: API, now: NOW }).reuse, false);
+  }
+});
+
+test('the reason never carries the token', () => {
+  const state = stateWith(NOW + 60_000);
+  const { reason } = savedSessionLasts(state, { apiUrl: API, now: NOW });
+  assert.ok(!reason.includes(state.cookies[0].value.split('.')[1]));
+});
+
+test('the gate setup checks the session lasts and that the app opens signed in', () => {
+  const setup = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'tests', 'staging', 'support', 'global-setup.ts'), 'utf8');
+  assert.match(setup, /savedSessionLasts\(/);
+  assert.match(setup, /landsSignedIn\(page\)/);
+});
