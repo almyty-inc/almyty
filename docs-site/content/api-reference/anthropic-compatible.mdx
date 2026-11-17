@@ -36,8 +36,8 @@ back the finished answer. Fields that would change that (client-declared tools,
 sampling the agent does not take per request, extended thinking) are refused
 with a 400 naming the field rather than accepted and ignored.
 
-Claude Code is not a client this endpoint serves: it always declares tools,
-and client-declared tools are refused for the reason under [Tools](#tools).
+A coding assistant that sends its own tools with every request cannot use this
+endpoint: client-declared tools are refused for the reason under [Tools](#tools).
 
 ## Endpoint
 

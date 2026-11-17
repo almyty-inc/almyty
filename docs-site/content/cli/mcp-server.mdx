@@ -1,6 +1,6 @@
 # MCP server
 
-MCP (Model Context Protocol) is the common way AI assistants such as Claude Desktop, Claude Code and Cursor pick up extra tools. The `@almyty/mcp-server` package plugs one of your almyty **gateways** (a published set of tools, for example "look up an order" and "issue a refund") into any of those assistants, so they can use your company's systems. It is for developers and for people setting up their own AI assistant; most assistants can also connect straight to the gateway's address, shown on the gateway's page in the app (see [MCP gateways](/gateways/mcp)).
+MCP (Model Context Protocol) is the common way AI assistants and code editors pick up extra tools. The `@almyty/mcp-server` package plugs one of your almyty **gateways** (a published set of tools, for example "look up an order" and "issue a refund") into any of those assistants, so they can use your company's systems. It is for developers and for people setting up their own AI assistant; most assistants can also connect straight to the gateway's address, shown on the gateway's page in the app (see [MCP gateways](/gateways/mcp)).
 
 You create a gateway in the almyty app, assign tools to it, then point this server at that gateway. The assistant sees your tools as its own.
 
@@ -20,7 +20,7 @@ $ npx @almyty/mcp-server acme/petstore
 
 The MCP server fetches tools from your almyty gateway and registers them as MCP tools (or skills). When the LLM calls a tool, the server proxies the request through the gateway to the real API. Authentication, rate limiting, and audit logging are handled by the gateway.
 
-It works with assistants on every MCP version in use: the newest, MCP 2026-07-28, and the earlier ones (2024-11-05 to 2025-11-25) that Claude Desktop, Cursor and most editors speak today. The assistant's first message decides which; there is nothing to set. Towards almyty the server speaks MCP 2026-07-28 too, and switches to the earlier protocol by itself when it reaches an almyty that does not speak 2026-07-28 yet.
+It works with assistants on every MCP version in use: the newest, MCP 2026-07-28, and the earlier ones (2024-11-05 to 2025-11-25) that most assistants and code editors speak today. The assistant's first message decides which; there is nothing to set. Towards almyty the server speaks MCP 2026-07-28 too, and switches to the earlier protocol by itself when it reaches an almyty that does not speak 2026-07-28 yet.
 
 ## Modes
 
@@ -63,6 +63,8 @@ $ npx @almyty/auth login
 ```
 
 almyty is a remote MCP server. Most clients can connect directly via URL, no npm install needed. Use the CLI proxy only if you want skill-first mode (lower token overhead).
+
+Each client keeps its MCP settings in a file or command of its own, so the sections below name the client each one is for.
 
 ### Claude Desktop
 
