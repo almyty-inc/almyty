@@ -24,13 +24,28 @@ export const ALMYTY_BIN = join(CLI_PREFIX, 'bin', 'almyty')
 /** `npm i -g @almyty/cli`, into the gate's own prefix. Run once per gate run (global setup). */
 export function installCli(version = process.env.GATE_CLI_VERSION || 'latest'): void {
   mkdirSync(CLI_PREFIX, { recursive: true })
-  const res = spawnSync('npm', ['i', '-g', '--prefix', CLI_PREFIX, '--no-audit', '--no-fund', `@almyty/cli@${version}`], {
-    encoding: 'utf-8',
-    timeout: 300_000,
-  })
-  if (res.status !== 0 || !existsSync(ALMYTY_BIN)) {
-    throw new Error(`npm i -g @almyty/cli failed (${res.status}): ${(res.stderr || res.stdout || '').slice(-400)}`)
+  // Right after a release publishes, npm can already list @almyty/cli at the
+  // new version while a dependency at that version is not served yet
+  // (ETARGET / notarget). That is the registry catching up, not a broken
+  // package, so wait and try again; any other failure is reported at once.
+  for (let attempt = 1; ; attempt++) {
+    const res = spawnSync('npm', ['i', '-g', '--prefix', CLI_PREFIX, '--no-audit', '--no-fund', `@almyty/cli@${version}`], {
+      encoding: 'utf-8',
+      timeout: 300_000,
+    })
+    if (res.status === 0 && existsSync(ALMYTY_BIN)) return
+    const output = res.stderr || res.stdout || ''
+    if (attempt < 6 && isRegistryCatchingUp(output)) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30_000)
+      continue
+    }
+    throw new Error(`npm i -g @almyty/cli failed (${res.status}): ${output.slice(-400)}`)
   }
+}
+
+/** npm's answer when a version it lists is not served yet. */
+export function isRegistryCatchingUp(npmOutput: string): boolean {
+  return /\bETARGET\b|notarget No matching version found/.test(npmOutput)
 }
 
 export interface CliResult {
