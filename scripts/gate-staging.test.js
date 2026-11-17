@@ -428,3 +428,16 @@ test('the gate setup checks the session lasts and that the app opens signed in',
   assert.match(setup, /savedSessionLasts\(/);
   assert.match(setup, /landsSignedIn\(page\)/);
 });
+// Right after a release, npm listed @almyty/cli 1.5.11 while @almyty/agents
+// 1.5.11 was not served yet (ETARGET), and three runner journeys failed on
+// the install, not on the runner. The install waits that out and retries.
+test('the gate retries the CLI install while npm catches up with a new release', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'tests', 'staging', 'support', 'cli.ts'), 'utf8');
+  const m = src.match(/return (\/\\bETARGET.*\/)\.test\(npmOutput\)/);
+  assert.ok(m, 'isRegistryCatchingUp has its pattern');
+  const catchingUp = eval(m[1]);
+  assert.ok(catchingUp.test('npm error code ETARGET\nnpm error notarget No matching version found for @almyty/agents@^1.5.11.'));
+  assert.ok(!catchingUp.test('npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/@almyty%2fnope'));
+  assert.ok(!catchingUp.test('npm error code EACCES'));
+  assert.match(src, /attempt < 6 && isRegistryCatchingUp\(output\)/, 'only a catching-up registry is retried, a bounded number of times');
+});
