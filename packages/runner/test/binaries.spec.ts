@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
-import { probe, probeAll, type ProbeExec } from '../src/binaries.js';
+import { probe, probeAll, realExec, type ProbeExec } from '../src/binaries.js';
 
 /**
  * Binary probe behavior. The execImpl injection point lets us cover
@@ -98,5 +101,66 @@ describe('probeTimeoutMs', () => {
     expect(probeTimeoutMs({ ALMYTY_PROBE_TIMEOUT_MS: '3000' })).toBe(3000);
     expect(probeTimeoutMs({ ALMYTY_PROBE_TIMEOUT_MS: '0' })).toBe(10_000);
     expect(probeTimeoutMs({ ALMYTY_PROBE_TIMEOUT_MS: 'soon' })).toBe(10_000);
+  });
+});
+
+/**
+ * The real probe against binaries that leave a child holding stdout, the
+ * way the mise shims for python/pip did in the gate's fresh HOME: the
+ * shim was killed at the timeout, its child kept the pipe, and `runner
+ * start` sat after "starting" without registering for as long as that
+ * child lived. Each case here waited the child's 30 s before the fix.
+ */
+describe.skipIf(process.platform === 'win32')('realExec bounds the whole probe', () => {
+  let dir = '';
+  let savedTimeout: string | undefined;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'runner-probe-'));
+    savedTimeout = process.env.ALMYTY_PROBE_TIMEOUT_MS;
+  });
+  afterEach(() => {
+    if (savedTimeout === undefined) delete process.env.ALMYTY_PROBE_TIMEOUT_MS;
+    else process.env.ALMYTY_PROBE_TIMEOUT_MS = savedTimeout;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** A script that starts `sleep 30` sharing its stdout, records its pid, then runs `rest`. */
+  function script(name: string, rest: string): { bin: string; childPid: () => number } {
+    const bin = join(dir, name);
+    const pidFile = join(dir, `${name}.pid`);
+    writeFileSync(bin, `#!/bin/sh\nsleep 30 &\necho $! > '${pidFile}'\n${rest}\n`);
+    chmodSync(bin, 0o755);
+    return { bin, childPid: () => Number(readFileSync(pidFile, 'utf-8').trim()) };
+  }
+
+  function alive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it('settles at the timeout and kills what the hung binary started', async () => {
+    const { bin, childPid } = script('hangs', 'sleep 30');
+    // Long enough for the script to have started its child before the kill.
+    process.env.ALMYTY_PROBE_TIMEOUT_MS = '1500';
+    const t0 = Date.now();
+    const result = await realExec(bin, ['--version']);
+    expect(result.timedOut).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(4_000);
+    const pid = childPid();
+    await expect.poll(() => alive(pid), { timeout: 2_000 }).toBe(false);
+  }, 15_000);
+
+  it('returns the version once the binary exits, without waiting for a child still holding stdout', async () => {
+    const { bin, childPid } = script('answers', "echo 'tool 1.2.3'\nexit 0");
+    process.env.ALMYTY_PROBE_TIMEOUT_MS = '20000';
+    const t0 = Date.now();
+    expect(await probe(bin, realExec)).toBe('tool 1.2.3');
+    expect(Date.now() - t0).toBeLessThan(3_000);
+    process.kill(childPid(), 'SIGKILL');
   });
 });
