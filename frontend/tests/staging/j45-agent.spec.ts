@@ -9,7 +9,7 @@
  * key. GATE_MAIN_MODEL / GATE_CHECK_MODEL pick other connected models.
  */
 import { test, expect } from './support/fixtures'
-import { connectApi, idFromUrl } from './support/flows'
+import { activateAgent, connectApi, idFromUrl } from './support/flows'
 import { BERLIN, OPEN_METEO_SPEC, berlinDaily } from './support/open-meteo'
 import type { Locator, Page } from '@playwright/test'
 
@@ -70,8 +70,7 @@ test.describe('J4/J5 autonomous agent with a real tool', () => {
     // Turn it on, and have a second vendor's model check every answer.
     await page.goto(`/agents/${agentId}`)
     await expect(page.getByRole('heading', { name: agentName, level: 1 })).toBeVisible()
-    await page.getByRole('button', { name: 'Activate', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Deactivate', exact: true })).toBeVisible()
+    await activateAgent(page)
     await page.getByRole('button', { name: 'Configure verification' }).click()
     const verify = page.getByTestId('verify-config-editor')
     await verify.getByRole('switch', { name: 'Enable verification' }).click()

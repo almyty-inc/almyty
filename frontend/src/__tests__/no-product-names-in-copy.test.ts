@@ -1,28 +1,65 @@
 /**
- * App copy that explains what a gateway or a tool is for says who can use
- * it in general words ("AI assistants, coding tools and other agents"),
- * never by naming other products. The per-client setup snippets on a
- * gateway's page are the exception: they are instructions for that client.
+ * The app names no other product. Copy that says who can use a gateway or a
+ * tool uses general words ("AI assistants, coding tools and other agents"),
+ * and the per-client setup snippets on a gateway's page are labelled by kind
+ * of client ("Command-line assistant", "Code editor (mcp.json)", "Desktop
+ * assistant", "Any MCP client"). This reads every source file under src,
+ * tests aside, so a name cannot come back in a new place either.
+ *
+ * Names that come from data (a runner reports the agents it found on its
+ * machine) are not in the source and are not affected.
  */
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
 
 const SRC = join(__dirname, '..')
-const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8')
 
-const FILES = [
-  'components/onboarding/page-intros.ts',
-  'components/onboarding/guide-steps.ts',
-  'pages/gateways.tsx',
-  'components/gateways/create-gateway-form.tsx',
+const PRODUCT_NAMES = /Claude Code|Claude Desktop|claude_desktop_config|Windsurf|Copilot|ChatGPT|VS Code|Codex|Gemini CLI|\.cursor\/|\bCursor\b/
+
+/**
+ * "Cursor" is also a word for a pagination position: the tool form's
+ * pagination fields say "Cursor", "Cursor path" and "Cursor param".
+ */
+const ALLOWED: Array<{ file: string; line: RegExp }> = [
+  { file: 'components/tools/tool-form.tsx', line: /value="cursor">Cursor<|label="Cursor (path|param)"/ },
 ]
 
-describe('copy about who can use a gateway', () => {
-  it.each(FILES)('%s names no other product', (file) => {
-    const strings = [...read(file).matchAll(/'([^'\n]*)'|"([^"\n]*)"|`([^`]*)`/g)].map((m) => m[1] ?? m[2] ?? m[3])
-    for (const text of strings) {
-      expect(text, file).not.toMatch(/Claude Code|Claude Desktop|Cursor|Windsurf|Copilot|ChatGPT/)
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const path = join(dir, entry)
+    if (statSync(path).isDirectory()) {
+      return entry === '__tests__' || entry === 'test' ? [] : sourceFiles(path)
+    }
+    return /\.(ts|tsx)$/.test(entry) && !/\.test\.(ts|tsx)$/.test(entry) ? [path] : []
+  })
+}
+
+describe('the app names no other product', () => {
+  const files = sourceFiles(SRC)
+
+  it('reads the whole source tree', () => {
+    expect(files.length).toBeGreaterThan(100)
+    expect(files.map((f) => relative(SRC, f))).toContain('lib/gateway-connect.ts')
+  })
+
+  it('has no product name in any source file', () => {
+    const hits: string[] = []
+    for (const path of files) {
+      const file = relative(SRC, path)
+      readFileSync(path, 'utf8').split('\n').forEach((line, i) => {
+        if (!PRODUCT_NAMES.test(line)) return
+        if (ALLOWED.some((a) => a.file === file && a.line.test(line))) return
+        hits.push(`${file}:${i + 1}: ${line.trim()}`)
+      })
+    }
+    expect(hits).toEqual([])
+  })
+
+  it('labels the gateway setup snippets by kind of client', () => {
+    const source = readFileSync(join(SRC, 'lib/gateway-connect.ts'), 'utf8')
+    for (const label of ['Command-line assistant', 'Code editor (mcp.json)', 'Desktop assistant', 'Any MCP client']) {
+      expect(source).toContain(`label: '${label}'`)
     }
   })
 })

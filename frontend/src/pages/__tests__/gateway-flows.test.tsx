@@ -191,13 +191,13 @@ describe('/gateways/new: create gateway', () => {
     await waitFor(() => expect(where()).toBe('/gateways/gw-9'))
     expect(await screen.findByTestId('initial-api-key')).toHaveTextContent('ak_secret_once')
     // The snippets carry the key, right away.
-    const claudeCode = await screen.findByTestId('snippet-claude-code')
-    expect(claudeCode).toHaveTextContent('claude mcp add petstore --transport http')
-    expect(claudeCode).toHaveTextContent('/acme/petstore --header "x-api-key: ak_secret_once"')
+    const terminal = await screen.findByTestId('snippet-terminal')
+    expect(terminal).toHaveTextContent('claude mcp add petstore --transport http')
+    expect(terminal).toHaveTextContent('/acme/petstore --header "x-api-key: ak_secret_once"')
     expect(screen.queryByTestId('key-placeholder-note')).toBeNull()
     const setups = within(screen.getByTestId('connect-snippets'))
-    expect(setups.getByRole('tab', { name: 'Cursor' })).toBeInTheDocument()
-    expect(setups.getByRole('tab', { name: 'Claude Desktop' })).toBeInTheDocument()
+    // One setup per kind of client, named by kind, not by product.
+    expect(setups.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Command-line assistant', 'Code editor (mcp.json)', 'Desktop assistant', 'Any MCP client'])
     // Only what speaks MCP: this gateway serves no UTCP manual and no skills.
     expect(setups.queryByRole('tab', { name: 'UTCP' })).toBeNull()
     expect(setups.queryByRole('tab', { name: 'Skills' })).toBeNull()
@@ -342,7 +342,7 @@ describe('a tool gateway, one protocol', () => {
     renderAt('/gateways/gw-9')
     const setups = await screen.findByTestId('connect-snippets')
     // No key in hand any more: a placeholder, and where a new one comes from.
-    expect(screen.getByTestId('snippet-claude-code')).toHaveTextContent('<your-access-key>')
+    expect(screen.getByTestId('snippet-terminal')).toHaveTextContent('<your-access-key>')
     expect(screen.getByTestId('key-placeholder-note')).toBeInTheDocument()
     expect(within(setups).queryByRole('tab', { name: 'UTCP' })).toBeNull()
     expect(within(setups).queryByRole('tab', { name: 'Skills' })).toBeNull()

@@ -23,7 +23,7 @@ import { RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { QueryError } from '@/components/ui/query-error'
+import { NotFoundState, QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DANGER_BUTTON_CLASSES, DangerZone } from '@/components/ui/danger-zone'
@@ -35,6 +35,7 @@ import { ConnectServiceForm, connectorIcon, useConnectOwners, useConnectors } fr
 import { NOT_CHECKED, connectionCheck, connectionWho, connectorCanCheck } from '@/components/connections/connection-status'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { credentialsApi } from '@/lib/api'
+import { isNotFoundError } from '@/lib/api-error'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
 import { cn, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
@@ -363,10 +364,15 @@ export function CredentialDetailPage() {
   }
   if (connection) return <CredentialDetail connection={connection} connector={connector} onDeleted={() => navigate(CREDENTIALS_PATH)} />
   if (storedQuery.data) return <StoredCredentialDetail credential={storedQuery.data} onDeleted={() => navigate(CREDENTIALS_PATH)} />
-  return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <DetailBackLink {...BACK} />
-      <p className="text-muted-foreground">This credential is gone. It may have been deleted.</p>
-    </div>
-  )
+  // A failure other than "not there" can be asked again; an unknown id
+  // gets the same answer every time, so it says so and offers the way back.
+  if (storedQuery.isError && !isNotFoundError(storedQuery.error)) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-4">
+        <DetailBackLink {...BACK} />
+        <QueryError error={storedQuery.error} onRetry={() => storedQuery.refetch()} title="Couldn't load this credential" />
+      </div>
+    )
+  }
+  return <NotFoundState thing="credential" backTo={CREDENTIALS_PATH} backLabel="Back to credentials" />
 }

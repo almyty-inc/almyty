@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen, fireEvent } from '@testing-library/react'
+import { screen, fireEvent, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../../../test/setup'
 import { AgentHeader } from '../agent-header'
 import type { Agent } from '@/types'
@@ -76,5 +77,39 @@ describe('AgentHeader', () => {
 
     expect(handlers.onActivate).toHaveBeenCalledTimes(1)
     expect(handlers.onDeactivate).not.toHaveBeenCalled()
+  })
+
+  describe('on a phone', () => {
+    it('keeps Run and Edit as buttons and hides the other actions below sm', () => {
+      renderHeader()
+      const run = screen.getByRole('button', { name: /^run$/i })
+      const edit = screen.getByRole('button', { name: /^edit$/i })
+      const desktopOnly = screen.getByRole('button', { name: /^duplicate$/i }).parentElement!
+      expect(desktopOnly).toHaveClass('hidden', 'sm:flex')
+      for (const name of [/^export$/i, /tech doc/i, /^deactivate$/i]) {
+        expect(desktopOnly).toContainElement(screen.getByRole('button', { name }))
+      }
+      expect(desktopOnly).not.toContainElement(run)
+      expect(desktopOnly).not.toContainElement(edit)
+      expect(screen.getByTestId('agent-actions-overflow')).toHaveClass('sm:hidden')
+    })
+
+    it('offers the other actions in an overflow menu', async () => {
+      const user = userEvent.setup()
+      const handlers = renderHeader()
+      await user.click(screen.getByRole('button', { name: 'More agent actions' }))
+      const menu = await screen.findByRole('menu')
+      expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Export', 'Tech doc', 'Duplicate', 'Deactivate'])
+      await user.click(within(menu).getByRole('menuitem', { name: 'Duplicate' }))
+      expect(handlers.onDuplicate).toHaveBeenCalledTimes(1)
+      expect(handlers.onExport).not.toHaveBeenCalled()
+    })
+
+    it('offers Activate in the menu, disabled while setup is not ready', async () => {
+      const user = userEvent.setup()
+      renderHeader({ agent: { ...agent, status: 'draft' } as Agent, activationDisabled: true })
+      await user.click(screen.getByRole('button', { name: 'More agent actions' }))
+      expect(await screen.findByRole('menuitem', { name: 'Activate' })).toHaveAttribute('data-disabled')
+    })
   })
 })

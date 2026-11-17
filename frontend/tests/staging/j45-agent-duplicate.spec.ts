@@ -10,7 +10,7 @@
  * key. GATE_MAIN_MODEL / GATE_CHECK_MODEL pick other connected models.
  */
 import { test, expect } from './support/fixtures'
-import { idFromUrl } from './support/flows'
+import { agentAction, idFromUrl } from './support/flows'
 import { data } from './support/qa-api'
 import type { Locator, Page } from '@playwright/test'
 
@@ -67,7 +67,7 @@ test.describe('J4 duplicate an agent', () => {
     await expect(page.getByTestId('verify-mode-badge')).toHaveText(/Reports only/)
 
     // Duplicate it: the page lands on the copy.
-    await page.getByRole('button', { name: 'Duplicate', exact: true }).click()
+    await (await agentAction(page, 'Duplicate')).click()
     await expect(page).not.toHaveURL(new RegExp(originalId), { timeout: 30_000 })
     await expect(page).toHaveURL(/\/agents\/[0-9a-f-]{36}$/)
     const copyId = idFromUrl(page)

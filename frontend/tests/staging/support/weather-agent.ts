@@ -9,7 +9,7 @@
  */
 import { expect, type Locator, type Page } from '@playwright/test'
 import type { Gate } from './fixtures'
-import { connectApi, escape, idFromUrl } from './flows'
+import { activateAgent, connectApi, escape, idFromUrl } from './flows'
 import { BERLIN, OPEN_METEO_SPEC, berlinDaily } from './open-meteo'
 
 export const MAIN_MODEL = process.env.GATE_MAIN_MODEL || 'gpt-4.1-mini'
@@ -89,8 +89,7 @@ export async function buildAgent(page: Page, gate: Gate, spec: AgentSpec): Promi
 
   await page.goto(`/agents/${id}`)
   await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
-  await page.getByRole('button', { name: 'Activate', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Deactivate', exact: true })).toBeVisible()
+  await activateAgent(page)
   return { id, name }
 }
 
