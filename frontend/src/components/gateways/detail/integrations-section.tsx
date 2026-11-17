@@ -1,7 +1,7 @@
 /**
  * IntegrationsSection — type-aware integration instructions for a gateway.
  *
- * Renders endpoint URLs, copy-paste configs (Claude Code, Cursor/Windsurf), and
+ * Renders endpoint URLs, copy-paste configs per kind of MCP client, and
  * Skills CLI commands depending on gateway type (mcp / a2a / utcp / skills).
  * Used by GatewayDetailPage's "Integrations" tab.
  */
@@ -16,9 +16,8 @@ import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { gatewaysApi } from '@/lib/api'
 import {
-  claudeCodeCommand,
-  gatewayClientName,
   gatewaySlugOf,
+  gatewaySnippets,
   mcpEndpointFor,
   skillsInstallCommand,
 } from '@/lib/gateway-connect'
@@ -149,7 +148,9 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
   // MCP gateway
   if (gatewayType === 'mcp') {
     const mcpEndpoint = mcpEndpointFor(gateway, orgSlug, backendUrl)
-    const claudeCmd = claudeCodeCommand(gateway, orgSlug, backendUrl)
+    // The same per-client snippets as "Connect a client", from one place,
+    // labelled by kind of client rather than by product.
+    const setups = gatewaySnippets(gateway, orgSlug, null, backendUrl)
     // No HTTP+SSE URL here: that transport is deprecated (MCP 2026-07-28)
     // and was never served on gateways. Streamable HTTP is the one URL.
     // No discovery URL: MCP defines none under the endpoint. A client asks
@@ -187,52 +188,18 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
         <Card>
           <CardHeader>
             <CardTitle>Quick setup</CardTitle>
-            <CardDescription>Copy-paste configs for popular MCP clients</CardDescription>
+            <CardDescription>Copy-paste configs by kind of MCP client</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Claude Desktop</h4>
-              <p className="text-xs text-muted-foreground">Paste into ~/Library/Application Support/Claude/claude_desktop_config.json, then restart Claude Desktop.</p>
-              <CodeBlock
-                value={JSON.stringify({
-                  mcpServers: {
-                    [gatewayClientName(gateway)]: {
-                      url: mcpEndpoint
-                    }
-                  }
-                }, null, 2)}
-                language="json"
-                maxHeight="160px"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Claude Code</h4>
-              <p className="text-xs text-muted-foreground">Run in your terminal:</p>
-              <div className="flex gap-2">
-                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{claudeCmd}</code>
-                <Button aria-label="Copy Claude Code install command" size="sm" variant="outline" onClick={() => copyToClipboard(claudeCmd, 'claude-code-cmd')}>
-                  {copiedField === 'claude-code-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
+            {setups.map((s) => (
+              <div key={s.id} className="space-y-2" data-testid={`quick-setup-${s.id}`}>
+                <h4 className="text-sm font-medium">{s.label}</h4>
+                <p className="text-xs text-muted-foreground">{s.hint}</p>
+                <CodeBlock value={s.value} language={s.language} maxHeight="160px" />
               </div>
-              <div className="rounded-md border border-info-border bg-info-subtle px-3 py-2 text-xs text-muted-foreground">
-                Point any MCP client at this and your tools are live. This is the moment almyty exists for.
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Cursor / Windsurf / VS Code</h4>
-              <CodeBlock
-                value={JSON.stringify({
-                  mcpServers: {
-                    [gatewayClientName(gateway)]: {
-                      url: mcpEndpoint
-                    }
-                  }
-                }, null, 2)}
-                language="json"
-                maxHeight="160px"
-              />
+            ))}
+            <div className="rounded-md border border-info-border bg-info-subtle px-3 py-2 text-xs text-muted-foreground">
+              Point any MCP client at this and your tools are live. This is the moment almyty exists for.
             </div>
           </CardContent>
         </Card>

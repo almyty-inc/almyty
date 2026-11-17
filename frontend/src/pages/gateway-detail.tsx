@@ -9,7 +9,7 @@ import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { QueryError } from '@/components/ui/query-error'
+import { NotFoundState, QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopyField } from '@/components/ui/copy-field'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -28,7 +28,7 @@ import {
 } from '@/components/gateways/detail/tools-tab'
 import { GatewayEventsTab } from '@/components/gateways/detail/events-tab'
 import { ManagedByChannelBanner, useManagedByChannel } from '@/components/gateways/managed-by-channel-banner'
-import { getApiErrorMessage } from '@/lib/api-error'
+import { getApiErrorMessage, isNotFoundError } from '@/lib/api-error'
 import { orgSlugOf } from '@/lib/gateway-connect'
 import { ConnectSnippets } from '@/components/gateways/connect-snippets'
 import { GatewayStatusSwitch } from '@/components/gateways/detail/gateway-status-switch'
@@ -70,6 +70,8 @@ export function GatewayDetailPage() {
     queryKey: ['gateway', id],
     queryFn: () => gatewaysApi.getById(id!),
     enabled: !!id,
+    // Asking again for a gateway that is not there gets the same answer.
+    retry: (count, err) => !isNotFoundError(err) && count < 1,
   })
 
   // The agent channel this gateway answers for, if any: its settings live there.
@@ -249,6 +251,12 @@ export function GatewayDetailPage() {
     )
   }
 
+  // An unknown id is not a failure "Try again" can fix: say it is not
+  // there and offer the way back.
+  if ((isError && isNotFoundError(gatewayError)) || (!isError && !gatewayData)) {
+    return <NotFoundState thing="gateway" backTo="/gateways" backLabel="Back to gateways" />
+  }
+
   if (isError) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -257,20 +265,6 @@ export function GatewayDetailPage() {
           onRetry={() => refetchGateway()}
           title="Couldn't load gateway"
         />
-      </div>
-    )
-  }
-
-  if (!gatewayData) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-muted-foreground">Gateway not found</p>
-          <Button className="mt-4" onClick={() => navigate('/gateways')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to gateways
-          </Button>
-        </div>
       </div>
     )
   }

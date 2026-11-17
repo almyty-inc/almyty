@@ -1,6 +1,6 @@
 # Gateways
 
-A gateway is one address that offers a set of your tools to AI apps and other software, with access rules to control who gets in. Make one, and an AI app such as Claude Code or Cursor can look up orders, track shipments or open tickets in your own systems, using only the tools you chose.
+A gateway is one address that offers a set of your tools to AI apps and other software, with access rules to control who gets in. Make one, and an AI assistant or coding tool can look up orders, track shipments or open tickets in your own systems, using only the tools you chose.
 
 For example, a "Northwind Support Tools" gateway can offer the order and helpdesk tools to the support team's AI apps, while an "Orders for partners" gateway offers only order lookups to logistics partners.
 
@@ -10,7 +10,7 @@ For example, a "Northwind Support Tools" gateway can offer the order and helpdes
 
 1. Open **Gateways** and click **Create gateway**.
 2. Under **Protocol**, pick how the apps that will use it connect (nothing is picked for you):
-   - **MCP**: AI apps such as Claude Code, Cursor, Claude Desktop and VS Code. The usual choice.
+   - **MCP**: AI apps such as AI assistants, coding tools and code editors. The usual choice.
    - **UTCP**: programs and partner systems that call tools over plain web requests.
    - **Skills**: AI coding assistants, as installable skill files.
 3. Under **Tools**, pick a whole API or single tools. A draft tool can't be offered until it is active.
@@ -29,7 +29,7 @@ Each gateway speaks one protocol, the one it was created with. To offer the same
 
 | Kind | Who uses it | Page |
 |----------|---------------|----------|
-| MCP | AI apps: Claude Code, Cursor, Claude Desktop, VS Code | [MCP gateway](/gateways/mcp) |
+| MCP | AI apps: AI assistants, coding tools, code editors | [MCP gateway](/gateways/mcp) |
 | UTCP | Programs and partner systems, over plain web requests | [UTCP gateway](/gateways/utcp) |
 | Skills | 30 AI coding assistants, through the Skills tool | [Skills gateway](/gateways/skills) |
 
@@ -57,7 +57,7 @@ Scripts have two conditions. Your administrator turns them on for the server, an
 
 ## For developers
 
-Every gateway is served at `https://api.almyty.com/{org}/{gateway}`. Add an MCP gateway to Claude Code in one line:
+Every gateway is served at `https://api.almyty.com/{org}/{gateway}`. Add an MCP gateway to a command-line assistant in one line:
 
 ```bash
 claude mcp add petstore --transport http https://api.almyty.com/acme/petstore \
@@ -71,5 +71,5 @@ Search and scripts: `configuration.exposure` is `tools`, `code` or `both`, and `
 ## Related
 
 - [Connect an API and turn it into tools](/tools)
-- [Give Claude Code your own API](/examples/give-claude-your-api)
+- [Give your AI assistant your own API](/examples/give-claude-your-api)
 - [MCP server CLI](/cli/mcp-server)

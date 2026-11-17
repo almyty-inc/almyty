@@ -390,10 +390,26 @@ describe('/credentials/:id', () => {
     expect(await screen.findByText('at /credentials')).toBeInTheDocument()
   })
 
-  it('says so when the credential is gone', async () => {
-    vi.mocked(credentialsApi.getById).mockRejectedValue(new Error('404'))
+  const apiError = (status: number) =>
+    Object.assign(new Error(`Request failed with status code ${status}`), {
+      isAxiosError: true,
+      response: { status, data: { success: false, error: { code: status === 404 ? 'NOT_FOUND' : 'INTERNAL', message: status === 404 ? 'Credential not found' : 'Server exploded', statusCode: status } } },
+    })
+
+  it('says an unknown credential is not found, with the way back and no "Try again"', async () => {
+    vi.mocked(credentialsApi.getById).mockRejectedValue(apiError(404))
     at('nope')
-    expect(await screen.findByText(/This credential is gone/)).toBeInTheDocument()
+    expect(await screen.findByText('Credential not found')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to credentials' })).toHaveAttribute('href', '/credentials')
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull()
+  })
+
+  it('offers "Try again" when loading the credential failed for another reason', async () => {
+    vi.mocked(credentialsApi.getById).mockRejectedValueOnce(apiError(500)).mockResolvedValueOnce(apiKey)
+    at('cred-api')
+    fireEvent.click(await screen.findByRole('button', { name: /try again/i }))
+    expect(await screen.findByRole('heading', { name: 'Petstore key' })).toBeInTheDocument()
+    expect(screen.queryByText('Credential not found')).toBeNull()
   })
 })
 
