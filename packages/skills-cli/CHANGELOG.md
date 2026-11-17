@@ -1,5 +1,11 @@
 # @almyty/skills
 
+## 1.5.11
+
+### Patch Changes
+
+- @almyty/client@1.5.11
+
 ## 1.5.10
 
 ### Patch Changes
