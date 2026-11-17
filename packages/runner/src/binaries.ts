@@ -52,33 +52,83 @@ export type ProbeExec = (
   args: string[],
 ) => Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }>;
 
+/**
+ * How long the probe still reads after the binary has exited. Output
+ * normally ends with the exit; a pipe still open after this is held by
+ * a process the binary left behind, and the probe stops waiting for it.
+ */
+export const PROBE_EXIT_GRACE_MS = 250;
+
+/**
+ * Run `bin args` and collect its output, bounded by probeTimeoutMs().
+ *
+ * The bound covers the whole probe, not only the binary. Waiting for
+ * the pipes to close is not enough: a version manager shim (mise, asdf,
+ * pyenv) or a CLI that checks for updates starts children of its own,
+ * they inherit stdout, and killing the binary leaves them holding it.
+ * In a fresh HOME the mise shims for python, python3 and pip did not
+ * answer within 10 s and a child kept the pipe open past the kill, so
+ * the probe, and with it `runner start` before it registers, waited as
+ * long as that child lived. So the binary runs in a process group of its
+ * own and a timeout kills the group, and the probe settles on the
+ * timeout or shortly after the exit, whichever comes first, instead of
+ * on the pipes closing.
+ */
 export const realExec: ProbeExec = (bin, args) => {
   return new Promise(resolve => {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let settled = false;
+    let grace: NodeJS.Timeout | undefined;
+    // A group of its own, so a timeout reaches whatever the binary started.
+    // Windows has no process groups; there the binary alone is killed.
+    const ownGroup = process.platform !== 'win32';
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: ownGroup });
     } catch {
       // ENOENT or similar; surface as exit code 127 (command not found).
       resolve({ stdout: '', stderr: '', exitCode: 127, timedOut: false });
       return;
     }
+    const settle = (exitCode: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(grace);
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      resolve({ stdout, stderr, exitCode, timedOut });
+    };
+    const killGroup = () => {
+      try {
+        if (ownGroup && child.pid) process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        try { child.kill('SIGKILL'); } catch { /* already gone */ }
+      }
+    };
     child.on('error', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(grace);
       resolve({ stdout: '', stderr: '', exitCode: 127, timedOut: false });
     });
     child.stdout?.on('data', d => { stdout += d.toString(); });
     child.stderr?.on('data', d => { stderr += d.toString(); });
     const timer = setTimeout(() => {
       timedOut = true;
-      try { child.kill('SIGKILL'); } catch { /* */ }
+      killGroup();
+      settle(null);
     }, probeTimeoutMs());
     timer.unref?.();
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr, exitCode: code, timedOut });
+    child.on('exit', (code) => {
+      grace = setTimeout(() => settle(code), PROBE_EXIT_GRACE_MS);
+      grace.unref?.();
     });
+    child.on('close', (code) => settle(code));
   });
 };
 
