@@ -39,6 +39,7 @@
 import { asJson, cutTextOf } from './checker-evidence';
 import { evidenceJson } from './checker-guards';
 import { compareVersions } from './version-order';
+import { dayOfIso } from './date-arithmetic';
 
 /** The name findings of these checks carry on the verify step. */
 export const CODE_CHECKER = 'code check';
@@ -580,7 +581,11 @@ function labelNames(v: unknown): string[] | null {
     .filter(Boolean);
 }
 
-/** Labels the answer gives an item that the tool does not, compared as sets (valueList). That it has none is noneClaimFindings'. */
+/**
+ * Labels the answer gives an item that the tool does not, compared as sets (valueList). That it has none is noneClaimFindings'.
+ * A note in brackets after a label is not part of it: "ppc, flaky-test (flaky-test)" gives ppc and flaky-test (run b60bacad);
+ * nor a word that says it is a label: "marked feature request (excluded from bugs)" gives feature request (run 3dc6c613).
+ */
 function labelFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   const said = labelled(entry, /^labels?$/);
   if (said === null || noneLike(said)) return [];
@@ -588,7 +593,13 @@ function labelFindings(entry: AnswerEntry, items: ToolItem[]): CodeFinding[] {
   if (!it) return [];
   const tool = labelNames(it.value.labels)!;
   const toolSet = new Set(tool.map((l) => normalValue(l)));
-  const extra = valueList(said).filter((l) => !toolSet.has(l));
+  // The label before a trailing "(...)", and after a leading "marked"/"labelled"/"tagged" ("as"), read without a regex.
+  const beforeNote = (l: string) => (l.endsWith(')') && l.lastIndexOf('(') > 0 ? l.slice(0, l.lastIndexOf('(')).trim() : l);
+  const afterMark = (l: string) => {
+    for (const lead of ['marked as ', 'labelled as ', 'labeled as ', 'tagged as ', 'marked ', 'labelled ', 'labeled ', 'tagged ']) if (l.startsWith(lead)) return l.slice(lead.length).trim();
+    return l;
+  };
+  const extra = valueList(said).filter((l) => !toolSet.has(l) && !toolSet.has(beforeNote(l)) && !toolSet.has(afterMark(beforeNote(l))));
   if (!extra.length) return [];
   const toolWords = tool.length ? tool.join(', ') : 'none';
   return [finding(it.label, 'labels', `${it.label}: the answer gives the label${extra.length === 1 ? '' : 's'} ${extra.join(', ')}, but the tool results give ${toolWords}`, `labels: ${toolWords}`, `Labels: ${said}`, 'item_field')];
@@ -717,6 +728,29 @@ function sameName(a: string, b: string): boolean {
   return x === y || x.includes(y) || y.includes(x);
 }
 
+/**
+ * Whether two person names can be one person, a given name written out in
+ * one and as an initial in the other: "Daniel Armstrong" and "D. M.
+ * Armstrong" (run f1e315e1). The family names must be the same, and each
+ * given name the shorter one has must start the matching one of the other.
+ * "D. Armstrong" and "Lucas Armstrong" are not.
+ */
+export function samePerson(a: string, b: string): boolean {
+  const words = (s: string) => plain(s).split(' ').filter(Boolean);
+  const x = words(a);
+  const y = words(b);
+  if (x.length < 2 || y.length < 2 || x[x.length - 1] !== y[y.length - 1]) return false;
+  const gx = x.slice(0, -1);
+  const gy = y.slice(0, -1);
+  // An initial stands for any given name it starts; a written-out name only for itself.
+  const fits = (p: string, q: string) => (p.length === 1 || q.length === 1 ? p[0] === q[0] : p === q);
+  if (!fits(gx[0], gy[0])) return false;
+  // Middle names: only those both give are compared.
+  const n = Math.min(gx.length, gy.length);
+  for (let i = 1; i < n; i++) if (gx.length === gy.length && !fits(gx[i], gy[i])) return false;
+  return true;
+}
+
 function pathOf(v: Obj, path: string[]): { present: boolean; value: unknown } {
   let cur: unknown = v;
   for (const key of path) {
@@ -748,7 +782,7 @@ function nameFindings(entry: AnswerEntry, items: ToolItem[], by: string | null):
   if (author !== null && Array.isArray(it.value.authorships)) {
     const first = pathOf(it.value, ['authorships', '0', 'author', 'display_name']);
     const name = first.value;
-    if (typeof name === 'string' && name.trim() && !sameName(author, name) && !startsNone(author)) {
+    if (typeof name === 'string' && name.trim() && !sameName(author, name) && !samePerson(author, name) && !startsNone(author)) {
       out.push(finding(it.label, 'first author', `${it.label}: the answer gives the first author as ${short(author, 60)}, but the tool results give ${name}`, `authorships[0].author.display_name: ${name}`, `First author: ${author}`, 'item_field'));
     }
   }
@@ -1057,8 +1091,9 @@ const PROBLEM_LABELS = ['bug', 'confirmed-bug', 'regression', 'security', 'crash
  * meets "titles indicate bugs", so the check never fails an issue a title
  * could let in.
  */
+// "should not" / "shouldn't" names what goes wrong: "sqlite integer parameters should not be bound as doubles" (#63826, run 85f89397).
 const PROBLEM_WORDS =
-  /\b(?:bugs?|regress|security|crash|vulnerab|cve|rce|exploit|segfault|segmentation|fail|error|broken|break|leak|hang|freez|panic|terminat|abort|incorrect|wrong|truncat|corrupt|overflow|deadlock|race|unexpected|invalid|unhandled|unable|cannot|can't|doesn't|does not|not work|mismatch|missing|undefined|throws?|exception|warning|flak|timeout|slow|stuck|los(?:e|es|t|ing)\b)/i;
+  /\b(?:bugs?|regress|security|crash|vulnerab|cve|rce|exploit|segfault|segmentation|fail|error|broken|break|leak|hang|freez|panic|terminat|abort|incorrect|wrong|truncat|corrupt|overflow|deadlock|race|unexpected|invalid|unhandled|unable|cannot|can't|doesn't|does not|should not|shouldn't|not work|mismatch|missing|undefined|throws?|exception|warning|flak|timeout|slow|stuck|los(?:e|es|t|ing)\b)/i;
 
 /**
  * The rule an agent's instructions give for which issues to list as
@@ -1108,7 +1143,18 @@ export function issueQualifies(
   return { qualifies: kinds.length ? false : null, problemLabel, kinds, labels, type };
 }
 
+/**
+ * A heading that sets what follows apart from the answer's list of
+ * problems: "Others that do not qualify as high-priority bugs", "Other
+ * notable open issues with feature request labels (not included in
+ * high-priority ...)" (run b60bacad). What stands under it is not listed
+ * as a problem.
+ */
+const NOT_LISTED_HEADING =
+  /\b(?:not\s+(?:included|listed|counted|qualifying|high[- ]priority|bugs?|a\s+bug)|(?:do|does|did)\s+not\s+(?:qualify|meet|match)|(?:don't|doesn't|didn't)\s+(?:qualify|meet|match)|non[- ]qualifying)\b/i;
+
 function issueCategoryFindings(entry: AnswerEntry, items: ToolItem[], rule: { labels: Set<string> } | null): CodeFinding[] {
+  if (entry.under && NOT_LISTED_HEADING.test(entry.under)) return [];
   const listedAsProblem = rule !== null || (!!entry.under && PROBLEM_WORDS.test(entry.under));
   if (!listedAsProblem) return [];
   const it = items.find((x) => x.numbers.length && labelNames(x.value.labels) !== null);
@@ -1178,10 +1224,18 @@ export function itemFieldFindings(parsed: ParsedAnswer, index: ToolItems, notes:
 }
 
 const NOUN = '(?:works|items|results|papers|articles|issues|entries|records|publications|packages|releases|hits)';
+/**
+ * Words that make a count a part of what the tool returned, not all of it:
+ * "I found 4 new papers related to the topic" says what the answer keeps,
+ * after "10 works returned by the tool" (run ed292817).
+ */
+const SUBSET_WORD = '(?:new|relevant|matching|related|unique|qualifying|remaining|additional|suitable|valid|eligible|applicable|other)\\b';
 const RETURNED_PATTERNS: RegExp[] = [
-  new RegExp(`\\b(?:returned|retrieved|found|gave|yielded)\\s+(?:only\\s+|exactly\\s+)?(\\d{1,4})\\s+(?:[\\w-]+\\s+){0,2}?(${NOUN})\\b`, 'i'),
+  new RegExp(`\\b(?:returned|retrieved|found|gave|yielded)\\s+(?:only\\s+|exactly\\s+)?(\\d{1,4})\\s+(?:(?!${SUBSET_WORD})[\\w-]+\\s+){0,2}?(${NOUN})\\b`, 'i'),
   new RegExp(`\\b(?:number|count|total)\\s+of\\s+(?:[\\w-]+\\s+){0,2}?(${NOUN})(?:\\s+[\\w-]+){0,4}?(?:[ \\t]*[:=][ \\t]*|[ \\t]+)(\\d{1,4})\\b`, 'i'),
   new RegExp(`\\b(${NOUN})\\s+(?:found|returned|retrieved)\\s*[:=]\\s*(\\d{1,4})\\b`, 'i'),
+  // "10 works returned by the tool", "4 works returned by the tool after removing 6" (run 47563c22).
+  new RegExp(`\\b(\\d{1,4})\\s+(${NOUN})\\s+(?:were\\s+)?(?:returned|retrieved|found)\\s+by\\s+the\\s+(?:tool|search|query|api)\\b`, 'i'),
 ];
 /**
  * A count the answer says it skipped, in any tense or word for it: "I
@@ -1197,6 +1251,29 @@ const COMPLETE_PATTERNS: RegExp[] = [
   new RegExp(`\\bno other\\s+(?:[\\w-]+\\s+){0,2}?${NOUN}\\b[^.\\n]{0,60}`, 'i'),
   new RegExp(`\\b(?:all|every)\\s+(?:of\\s+the\\s+)?(?:\\d{1,4}\\s+)?(?:[\\w-]+\\s+){0,2}?${NOUN}\\b[^.\\n]{0,40}?\\b(?:are|is)\\s+(?:listed|shown|included|below|above)\\b`, 'i'),
 ];
+
+/**
+ * What a "no other ..." claim limits itself to: "No other issues matching
+ * the required labels (confirmed-bug, bug, ...) were found" says nothing of
+ * the issues without such a label (run 3110d113, which was failed for
+ * leaving out 29 issues, feature requests among them).
+ */
+const QUALIFIED = new RegExp(`\\bno other\\s+(?:[\\w-]+\\s+){0,2}?${NOUN}\\b[ \\t,]*(?:that\\s+|which\\s+)?(?:match(?:ing|es)?|meet(?:ing|s)?|qualify(?:ing)?|with|labell?ed|tagged|marked|flagged|indicating)\\b`, 'i');
+
+/**
+ * Whether a tool item left out of a list the answer calls complete is
+ * shown to fall under what the claim limits itself to: for an issue, a
+ * problem label where the claim names labels, else the agent's own rule
+ * (issueQualifies). An issue whose labels the stored results do not carry
+ * cannot be shown to (a stored step drops an empty label list). Any other
+ * item does fall under it: its filter is the tool query's own.
+ */
+function underClaim(it: ToolItem, claim: string, rule: { labels: Set<string> } | null): boolean {
+  if (!QUALIFIED.test(claim) || !it.numbers.length) return true;
+  if (labelNames(it.value.labels) === null) return false;
+  const q = issueQualifies(it, rule);
+  return /\blabel/i.test(claim) && !/\btitle/i.test(claim) ? q.problemLabel : q.qualifies === true;
+}
 
 /** The first statement of how many items the tool returned, wherever in the text it is. */
 function statedReturned(text: string): { n: number; noun: string; words: string } | null {
@@ -1225,8 +1302,10 @@ const PARTIAL = / of \d+ items shown|\[result left out|the end was cut off|only 
 /**
  * The answer's own counts against its own list and the tool's list, and
  * the tool's items it leaves out while saying its list is complete.
+ * `instructions` are the agent's: the rule a "no other issues matching ..."
+ * claim is read against.
  */
-export function countFindings(parsed: ParsedAnswer, index: ToolItems, evidence: string): CodeFinding[] {
+export function countFindings(parsed: ParsedAnswer, index: ToolItems, evidence: string, instructions = ''): CodeFinding[] {
   const out: CodeFinding[] = [];
   const numbered = parsed.entries.filter((e) => e.kind === 'numbered');
   if (!numbered.length) return out;
@@ -1293,7 +1372,8 @@ export function countFindings(parsed: ParsedAnswer, index: ToolItems, evidence: 
   if (complete && toolList !== -1 && !partial) {
     const shown = new Set<ToolItem>();
     for (const e of entries) for (const it of itemsOfEntry(e, index).items) shown.add(it);
-    const missing = index.items.filter((it) => it.list === toolList && !shown.has(it));
+    const rule = issueRuleOf(instructions);
+    const missing = index.items.filter((it) => it.list === toolList && !shown.has(it) && underClaim(it, complete, rule));
     const allowed = skipped?.n ?? 0;
     if (missing.length > allowed) {
       if (allowed === 0) {
@@ -1547,6 +1627,189 @@ function earlierReports(earlier: string[]): (it: ToolItem) => boolean | null {
   };
 }
 
+/** The field a tool result's item carries, for the model, when an earlier answer of the agent listed it. */
+export const ALREADY_REPORTED_FIELD = '_already_reported';
+
+/**
+ * A tool result as the model of an agent told not to repeat itself reads
+ * it: each item an earlier answer listed (earlierReportedItems, the list
+ * the answer check holds the answer to) marked `"_already_reported": true`,
+ * and a `_note` at the head of the result that says how many, to leave
+ * out and count as skipped. Given the same items as a list in its prompt, the model still
+ * re-listed them and called others "already reported" (runs 21bfea69,
+ * 7e8388cd, d90db80e): it matched titles and DOIs across 9,000 characters
+ * and got it wrong. Here the match is the platform's, on the item itself.
+ * A result that is not JSON, or has no such item, is given back as it was.
+ */
+export function markAlreadyReported(content: string, earlier: EarlierItem[]): { content: string; marked: number; items: number } {
+  if (!earlier?.length) return { content, marked: 0, items: 0 };
+  return markItems(
+    content,
+    (m, it) => {
+      if (!it.ids.length && !it.dois.length && !it.numbers.length && tight(it.title).length < 20) return false;
+      if (!earlier.some((e) => sameItem(e, it))) return false;
+      m[ALREADY_REPORTED_FIELD] = true;
+      return true;
+    },
+    (marked, items) =>
+      `${marked} of the ${items} items in this result ${marked === 1 ? 'was' : 'were'} already reported in your earlier answers ` +
+      `(marked "${ALREADY_REPORTED_FIELD}": true). Your instructions say to leave out what you already reported: do not list ${marked === 1 ? 'it' : 'them'}, ` +
+      `list only the items without the mark, and say you skipped ${marked}.`,
+  );
+}
+
+/** The field each issue carries, for the model, with whether the agent's own rule for a problem lets it in, and why. */
+export const ISSUE_RULE_FIELD = '_meets_your_issue_rule';
+/** The field each issue carries, for the model, with its labels as one closed list: the only labels it has. */
+export const ISSUE_LABELS_FIELD = '_labels';
+
+/** Move `head` keys, in that order, to the front of an object, in place (the model reads an issue's number, title and labels together). */
+function keysFirst(m: Obj, head: string[]): void {
+  const all = { ...m };
+  for (const k of Object.keys(m)) delete m[k];
+  for (const k of head) if (k in all) m[k] = all[k];
+  for (const [k, v] of Object.entries(all)) if (!(k in m)) m[k] = v;
+}
+
+/**
+ * A tool result as the model of an agent with a rule for which issues are
+ * problems ("pick the ones whose labels or titles indicate bugs,
+ * regressions or security") reads it. Every issue leads with its number,
+ * its title, its labels as one closed list (`_labels`, "none" when it has
+ * none) and whether the rule lets it in (`_meets_your_issue_rule`: "yes",
+ * "no" or "unclear", with why; issueQualifies, the answer check's own
+ * test). The release watcher gave issues labels of the issue next to them
+ * ("stale" for #64333 in ac92571f, "4.x" for #2414 in 6aa65f19) and listed
+ * issues marked as feature requests as bugs (10 of 26 failed runs, and
+ * #67504 in 3dc6c613 and 4ee3fad1, which only marked it "not a bug").
+ */
+export function markOutsideIssueRule(content: string, rule: { labels: Set<string> } | null): { content: string; marked: number; items: number } {
+  if (!rule) return { content, marked: 0, items: 0 };
+  let yes = 0;
+  let no = 0;
+  return markItems(
+    content,
+    (m, it) => {
+      if (!it.numbers.length) return false;
+      const labels = labelNames(m.labels);
+      if (labels === null) return false;
+      const q = issueQualifies(it, rule);
+      m[ISSUE_LABELS_FIELD] = labels.length ? labels.join(', ') : 'none (this issue has no labels)';
+      if (q.qualifies === true) {
+        yes++;
+        m[ISSUE_RULE_FIELD] = q.problemLabel ? `yes: its labels include ${labels.filter((l) => rule.labels.has(normalValue(l)) || /\b(?:bug|regression|security|crash|vulnerab|cve|critical)/i.test(l)).join(', ')}` : 'yes: its title names a problem';
+      } else if (q.qualifies === false) {
+        no++;
+        m[ISSUE_RULE_FIELD] = `no: its labels mark it as ${q.kinds.join(', ')}, and its title names no problem`;
+      } else {
+        m[ISSUE_RULE_FIELD] = 'unclear: no problem label, and its title has no word for a problem';
+      }
+      keysFirst(m, ['number', 'title', ISSUE_LABELS_FIELD, ISSUE_RULE_FIELD, 'state', 'updated_at', 'html_url']);
+      return true;
+    },
+    (marked) =>
+      `Each of the ${marked} issues below starts with its number, title, "${ISSUE_LABELS_FIELD}" and "${ISSUE_RULE_FIELD}". ` +
+      `"${ISSUE_LABELS_FIELD}" is the whole list of that issue's labels: give an issue only those, never a label of another issue or a word from its title. ` +
+      `"${ISSUE_RULE_FIELD}" says whether your instructions let the issue in as a bug, regression or security issue: ${yes} say yes, ${no} say no. ` +
+      `List an issue as one only when it says yes (an "unclear" one only when you can say from its title what is broken); never list one that says no, not even with a note. ` +
+      `If fewer issues qualify than the most you may list, list fewer.`,
+  );
+}
+
+/** The field each dated item carries, for the model, with where its date falls against the window the request names. */
+export const WINDOW_FIELD = '_request_window';
+
+/** The date that makes an item new, in order of preference; never `updated_at` or `created_at` (an old issue can be open today). */
+const NEW_DATE_FIELDS = ['published_at', 'publication_date', 'release_date', 'released_at', 'publishedAt'];
+
+/**
+ * A tool result as the model reads it when the request names a window
+ * ("look back 30 days"): each item with a publication date marked inside
+ * or outside the window, with the dates (window-check.ts holds the answer
+ * to the same window). Told the window in its prompt, the model still
+ * listed v5.3.0 (2026-10-09) as new for 2026-10-17 to 2026-11-16
+ * (5c26460e, 6aa65f19).
+ */
+export function markRequestWindow(content: string, window: { start: number; startIso: string; todayIso: string } | null): { content: string; marked: number; items: number } {
+  if (!window) return { content, marked: 0, items: 0 };
+  let outside = 0;
+  return markItems(
+    content,
+    (m) => {
+      for (const field of NEW_DATE_FIELDS) {
+        const day = dayOfIso(m[field]);
+        if (day === null) continue;
+        const date = String(m[field]).slice(0, 10);
+        if (day >= window.start) m[WINDOW_FIELD] = `inside: ${field} ${date} is on or after ${window.startIso}`;
+        else {
+          outside++;
+          m[WINDOW_FIELD] = `outside: ${field} ${date} is before ${window.startIso}, so it is not new`;
+        }
+        return true;
+      }
+      return false;
+    },
+    (marked) =>
+      `The request's window runs from ${window.startIso} to ${window.todayIso}. Each of the ${marked} dated items below carries "${WINDOW_FIELD}": ` +
+      `${outside} ${outside === 1 ? 'is' : 'are'} outside it. List as new only items marked "inside"; an item marked "outside" is never new, even when it is the latest.`,
+    true,
+  );
+}
+
+/**
+ * Mark the items of a JSON tool result's lists that `mark` picks, and put
+ * `note(marked, items)` at the head of the result, inside the JSON (beside
+ * any note already there): the result stays JSON for every check that
+ * reads it back from the conversation. A result that is one item (a
+ * repository, a package, the latest release) is marked only when `single`
+ * says so; one that is not JSON, or has nothing to mark, is given back as it was.
+ */
+function markItems(
+  content: string,
+  mark: (m: Obj, it: ToolItem) => boolean,
+  note: (marked: number, items: number) => string,
+  single = false,
+): { content: string; marked: number; items: number } {
+  const unchanged = { content, marked: 0, items: 0 };
+  if (typeof content !== 'string') return unchanged;
+  let value: unknown;
+  try {
+    value = JSON.parse(content);
+  } catch {
+    return unchanged;
+  }
+  if (value === null || typeof value !== 'object' || (isItem(value) && !single)) return unchanged;
+  let marked = 0;
+  let items = 0;
+  const visit = (v: unknown, depth: number) => {
+    if (depth > 8 || v === null || typeof v !== 'object') return;
+    if (Array.isArray(v)) {
+      const members = v.filter(isItem);
+      if (members.length && members.length >= v.length / 2) {
+        for (const m of members) {
+          items++;
+          if (mark(m, toolItem(m, 0))) marked++;
+        }
+        return;
+      }
+      for (const x of v) visit(x, depth + 1);
+      return;
+    }
+    for (const x of Object.values(v as Obj)) visit(x, depth + 1);
+  };
+  if (isItem(value)) {
+    items = 1;
+    if (mark(value, toolItem(value, 0))) marked = 1;
+  } else visit(value, 0);
+  if (!marked) return { content, marked: 0, items };
+  const text = note(marked, items);
+  const before = !Array.isArray(value) && typeof (value as Obj)._note === 'string' ? `${(value as Obj)._note} ` : '';
+  const wrapped = Array.isArray(value) ? { _note: text, result: value } : { ...(value as Obj), _note: `${before}${text}` };
+  // The note first, where the model starts reading.
+  const { _note, ...rest } = wrapped as Obj;
+  return { content: JSON.stringify({ _note, ...rest }), marked, items };
+}
+
 function namedItem(it: ToolItem): string {
   const id = it.ids[0]?.toUpperCase() ?? it.numbers[0] ?? it.dois[0];
   return id && !it.label.includes(id) ? `${id} ${it.label}` : it.label;
@@ -1684,7 +1947,7 @@ export function answerCodeFindings(input: { answer: string; evidence: string; ea
   const instructions = input.instructions ?? '';
   const out = [
     ...itemFieldFindings(parsed, index, releaseNotesOf(index, input.whole), instructions),
-    ...countFindings(parsed, index, input.evidence),
+    ...countFindings(parsed, index, input.evidence, instructions),
     ...summaryFindings(parsed),
     ...skippedAsReportedFindings(input.answer, parsed, index, input.evidence, input.earlier),
     ...listedAsNewFindings(input.answer, parsed, index, input.evidence, input.earlier, instructions),

@@ -14,6 +14,7 @@ import { messageContentForModel } from './attached-files';
 import { memorySettings, type AgentMemoryConfig } from './agent-memory-settings';
 import { tagStoredMessage } from './agent-context-compactor.helper';
 import { REPORT_RULE } from './always-on/always-on-report';
+import { windowNote } from './date-arithmetic';
 
 /**
  * What the store_memory tool tells the model: when to save (every time it
@@ -29,6 +30,18 @@ export function storeMemoryDescription(agent: Pick<Agent, 'memoryConfig'>): stri
       ? 'Save something to your memory, only when the person asks you to remember it.'
       : 'Save an important fact, preference, or piece of context to your memory for later conversations.';
   return s.neverSave.length ? `${when} Never save: ${s.neverSave.join('; ')}.` : when;
+}
+
+/**
+ * The window a run's request names, worked out as dates for its model
+ * (windowNote), with what that means for an item listed as new. Null when
+ * the request names no window.
+ */
+export function requestWindowNote(input: unknown, now: Date): string | null {
+  const request = input && typeof input === 'object' && 'message' in (input as Record<string, unknown>) ? (input as Record<string, unknown>).message : input;
+  if (typeof request !== 'string' || !request.trim()) return null;
+  const note = windowNote([request], now);
+  return note ? `${note} Only an item whose own date is inside the window is new: list nothing dated before the window as new.` : null;
 }
 
 /**
@@ -101,6 +114,15 @@ export class AgentRuntimeBuilders {
     if (typeof alreadyReported === 'string' && alreadyReported.trim()) {
       parts.push(alreadyReported.trim());
     }
+
+    // [REQUEST WINDOW] — the window the request names ("look back 30 days"),
+    // as dates: the same window the answer check holds the answer to
+    // (window-check.ts). Asked for 30 days on 2026-11-13, the model listed
+    // a release of 2026-10-09 as new in every express run (dda8789a to
+    // 66499415); told the dates, it compares two ISO dates instead of
+    // counting days.
+    const windowText = requestWindowNote(run.input, new Date());
+    if (windowText) parts.push(`[REQUEST WINDOW]\n${windowText}`);
 
     // [ALWAYS ON] — a wake of the standing thread reports only what is worth
     // telling (always-on-report.ts): the rest is answered with the marker.

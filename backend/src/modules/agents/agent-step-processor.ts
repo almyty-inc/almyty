@@ -71,7 +71,8 @@ import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
 import { AlwaysOnService } from './always-on/always-on.service';
 import { MACHINE_FAILED, type MachineProblem, WORKSPACE_BUSY, WORKSPACE_WAKING, machineProblem } from '../runner/hosted-dispatch';
-import { earlierReportedItems, forbidsRepeats, speaksOfEarlierReports } from './answer-checks';
+import { earlierReportedItems, forbidsRepeats, issueRuleOf, markAlreadyReported, markOutsideIssueRule, markRequestWindow, speaksOfEarlierReports } from './answer-checks';
+import { requestWindow } from './date-arithmetic';
 import { NO_ANSWER_CODES, NO_ANSWER_REASONS, NO_ANSWER_RETRIES, type NoAnswerKind, noAnswerError, noAnswerNudge, noAnswerOf } from './no-answer';
 import { stoppedAtOutputLimit } from '../llm-providers/output-limit';
 
@@ -550,6 +551,13 @@ export class AgentStepProcessor {
       // start of the run; buildMessages puts it beside the instructions.
       if (forbidsRepeats(agent.instructions ?? '') && run.workingMemory?.alreadyReported === undefined) {
         await this.alreadyReportedFor(run);
+      }
+      // An agent whose instructions say which issues are problems ("labels
+      // or titles indicate bugs, ...") has its rule kept on the run: each
+      // tool result marks the issues the rule cannot let in (toolResultForModel).
+      if (run.workingMemory?.issueRuleLabels === undefined) {
+        const rule = issueRuleOf(agent.instructions ?? '');
+        if (rule) run.workingMemory = { ...(run.workingMemory ?? {}), issueRuleLabels: [...rule.labels] };
       }
 
       // Explore, extract, patch: the main role works from the brief the
@@ -1387,8 +1395,9 @@ export class AgentStepProcessor {
               // How much of a failure re-enters context is policy, not a
               // constant: some tools' errors echo the request payload
               // back, which is not always something the model should see.
+              // For an agent told not to repeat itself, what it already reported is marked on the result (toolResultForModel).
               const toolContent = toolResult.success
-                ? (typeof toolResult.data === 'string' ? toolResult.data : JSON.stringify(toolResult.data))
+                ? this.toolResultForModel(run, typeof toolResult.data === 'string' ? toolResult.data : JSON.stringify(toolResult.data))
                 : formatToolError(toolResult.error, resolvedLimits.toolErrorFeedback);
               const toolMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, toolContent, toolResult.success ? undefined : toolResult.error);
               toolMsg.runId = run.id;
@@ -2684,9 +2693,7 @@ export class AgentStepProcessor {
         });
         if (run.conversationId) {
           const content = result.success
-            ? typeof result.data === 'string'
-              ? result.data
-              : JSON.stringify(result.data)
+            ? this.toolResultForModel(run, typeof result.data === 'string' ? result.data : JSON.stringify(result.data))
             : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
           const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
           msg.runId = run.id;
@@ -3087,9 +3094,7 @@ export class AgentStepProcessor {
         });
         if (run.conversationId) {
           const content = result.success
-            ? typeof result.data === 'string'
-              ? result.data
-              : JSON.stringify(result.data)
+            ? this.toolResultForModel(run, typeof result.data === 'string' ? result.data : JSON.stringify(result.data))
             : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
           const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
           msg.runId = run.id;
@@ -3456,14 +3461,39 @@ export class AgentStepProcessor {
    * prompt, kept on the run (`workingMemory.alreadyReported`) so every step
    * reads the same: the items the agent's earlier answers listed
    * (earlierReportedItems over earlierAnswersOf), exactly what the answer
-   * check will hold this answer to. '' when there are none.
+   * check will hold this answer to. '' when there are none. The items
+   * themselves are kept too (`alreadyReportedList`): each tool result is
+   * marked with them before the model reads it (toolResultForModel).
    */
   async alreadyReportedFor(run: AgentRun): Promise<string> {
     const earlier = await this.earlierAnswersOf(run);
     const items = earlier ? earlierReportedItems(earlier) : [];
     const block = alreadyReportedBlock(items);
-    run.workingMemory = { ...(run.workingMemory ?? {}), alreadyReported: block, alreadyReportedItems: items.length };
+    run.workingMemory = { ...(run.workingMemory ?? {}), alreadyReported: block, alreadyReportedItems: items.length, alreadyReportedList: items };
     return block;
+  }
+
+  /**
+   * A tool result as the run's model reads it, marked where the platform
+   * can say what the answer check will hold the answer to: for an agent
+   * told to leave out what it already reported, the items its earlier
+   * answers listed (markAlreadyReported); for an agent with a rule for
+   * which issues are problems, each issue's labels as a closed list and
+   * whether the rule lets it in (markOutsideIssueRule); for a request that
+   * names a window, whether each dated item is inside it
+   * (markRequestWindow). Every other result is given as it is. The step
+   * keeps the result as the tool returned it.
+   */
+  toolResultForModel(run: AgentRun, content: string, now: Date = new Date()): string {
+    let out = content;
+    const items = run.workingMemory?.alreadyReportedList;
+    if (Array.isArray(items) && items.length) out = markAlreadyReported(out, items).content;
+    const labels = run.workingMemory?.issueRuleLabels;
+    if (Array.isArray(labels)) out = markOutsideIssueRule(out, { labels: new Set<string>(labels) }).content;
+    const input = run.input as unknown;
+    const request = input && typeof input === 'object' && 'message' in (input as Record<string, unknown>) ? (input as Record<string, unknown>).message : input;
+    if (typeof request === 'string' && request.trim()) out = markRequestWindow(out, requestWindow([request], now)).content;
+    return out;
   }
 
   /** Each checker's model card (its context window and most output), or null when it has none. */

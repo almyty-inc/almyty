@@ -17,6 +17,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { apisApi } from '@/lib/api'
 import { connectionTestMessage } from '@/lib/connection-test'
 import { toolsQuery } from '@/lib/list-queries'
+import { apisSummary } from '@/lib/api-operations'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
@@ -43,10 +44,6 @@ export function ApisPage() {
   })
 
   const allTools = allToolsPage?.items ?? []
-  // "X generated" on the APIs page should only count tools that came
-  // from an API operation, not custom JS/HTTP/SDK tools created
-  // manually. operationId is the entity field that distinguishes them.
-  const generatedToolsTotal = allTools.filter((t: any) => t.operationId).length
 
   const { confirm, dialog: confirmDialog } = useConfirm()
   // Old ?new=1 links (bookmarks, docs) land on the create page.
@@ -160,7 +157,7 @@ export function ApisPage() {
     <div className="space-y-6">
       <PageHeader
         title="APIs"
-        description={`${pluralized(apis.length, 'API', 'APIs')} · ${pluralized(apis.reduce((sum: number, a: any) => sum + (a.operationCount ?? a.operations?.length ?? 0), 0), 'operation')} · ${pluralized(generatedToolsTotal, 'tool')} generated`}
+        description={apisSummary(apis, allTools)}
         actions={
           <Button asChild>
             <Link to="/apis/new">
