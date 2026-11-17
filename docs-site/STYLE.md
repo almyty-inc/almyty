@@ -26,7 +26,12 @@ State what a thing does and show it working.
   gets and a picture of it working, not with architecture or a concept map.
 - **Follow the real user journey**, not the internal pipeline. The journey is:
   install the CLI, turn an API into tools, publish a gateway, see it running
-  inside Claude Code (or any MCP client). Show the payoff up front.
+  inside your AI assistant (any MCP client). Show the payoff up front.
+- **Name no other AI products.** Say "your AI assistant", "your code editor"
+  or "any MCP client". A name stays only where the feature targets that
+  product and the page says so plainly: the skills installer's per-agent
+  paths, the coding CLIs the runner drives, a real command such as
+  `claude mcp add`.
 - **Visual over prose.** Prefer a real screenshot or a short command +
   its real output to a wall of text. Every screenshot referenced must exist.
 - **Cut ruthlessly.** A page that was 247 lines is usually better at 90.

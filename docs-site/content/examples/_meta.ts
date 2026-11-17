@@ -40,7 +40,7 @@ export default {
   'air-gapped-self-host': 'Inside your own network',
 
   'engineering-separator': { type: 'separator', title: 'Engineering' },
-  'give-claude-your-api': 'Your API in a coding assistant',
+  'your-api-in-a-coding-assistant': 'Your API in a coding assistant',
   'npm-package-tools': 'A code library as tools',
   'expose-any-machine': 'Work on one of your machines',
 }

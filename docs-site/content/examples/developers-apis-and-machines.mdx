@@ -2,7 +2,7 @@
 
 This guide is for developers. It covers two things:
 
-1. **Your company's APIs as tools in your coding assistant.** Connect an API once, and Claude Code, Cursor, Claude Desktop or any other MCP client can call it: "look up order NW-10428", "open a ticket for this bug", right from the editor. MCP (Model Context Protocol) is the common way AI assistants plug in outside tools.
+1. **Your company's APIs as tools in your coding assistant.** Connect an API once, and your coding assistant, code editor or any other MCP client can call it: "look up order NW-10428", "open a ticket for this bug", right from the editor. MCP (Model Context Protocol) is the common way AI assistants plug in outside tools.
 2. **Agents that run jobs on your own machines.** Start a small program called a runner on a laptop, build server or cloud machine, and your agents can run commands there: builds, scripts, checks.
 
 It takes about 15 minutes. Unlike the other guides, this one ends in a terminal.
@@ -10,14 +10,14 @@ It takes about 15 minutes. Unlike the other guides, this one ends in a terminal.
 **What you need**
 
 - An almyty account, and an API connected under **APIs** (see step 2 of the [customer support guide](/examples/customer-support-assistant#2-connect-your-order-system); here it is Northwind Orders).
-- A coding assistant that speaks MCP, such as Claude Code or Cursor.
+- A coding assistant or code editor that speaks MCP.
 - For the runner: a machine with Node.js where you can install a package.
 
 ## 1. Publish your API's tools
 
 A gateway serves a set of tools at one address, for one kind of client. In the sidebar, open **Gateways** and click **Create gateway**.
 
-- Under **Protocol**, pick **MCP** (for Claude Code, Cursor and other MCP clients). **UTCP** and **Skills** serve the same tools to other kinds of clients.
+- Under **Protocol**, pick **MCP** (for AI assistants, code editors and other MCP clients). **UTCP** and **Skills** serve the same tools to other kinds of clients.
 - Under **Tools**, pick **Northwind Orders**: every tool of that API, including ones added later. Or search for single tools.
 - Give it a **Name**. Its address is made from the name.
 
@@ -27,11 +27,11 @@ Click **Create gateway**.
 
 ## 2. Add it to your coding assistant
 
-The gateway page shows **Your access key** once, so copy it now; later only its first characters are shown. Under **Connect a client**, pick your client (**Claude Code**, **Cursor**, **Claude Desktop** or **Other MCP clients**) and copy the ready-made setup, which already contains the address and the key.
+The gateway page shows **Your access key** once, so copy it now; later only its first characters are shown. Under **Connect a client**, pick your client from the list (or **Other MCP clients**) and copy the ready-made setup, which already contains the address and the key.
 
-![The access key and the ready-made Claude Code command](/screenshots/guides/dev-2-gateway-setup.png)
+![The access key and the ready-made setup command](/screenshots/guides/dev-2-gateway-setup.png)
 
-For Claude Code, it is one command:
+For a client set up with `claude mcp add`, it is one command:
 
 ```bash
 claude mcp add northwind-orders --transport http \
@@ -39,7 +39,7 @@ claude mcp add northwind-orders --transport http \
   --header "x-api-key: gw_..."
 ```
 
-Now ask Claude Code "What is the status of order NW-10428?" and it calls your API through the gateway. Every call shows up under **Analytics**, and more keys and the other ways to sign in are on the gateway's page. See [MCP gateways](/gateways/mcp) and [Gateway sign-in](/gateways/authentication).
+Now ask your assistant "What is the status of order NW-10428?" and it calls your API through the gateway. Every call shows up under **Analytics**, and more keys and the other ways to sign in are on the gateway's page. See [MCP gateways](/gateways/mcp) and [Gateway sign-in](/gateways/authentication).
 
 **Skills instead of MCP.** Some coding agents work better with skill files than with a live connection. Make a gateway with **Skills** instead, then install it into your agents from the terminal:
 
@@ -86,6 +86,6 @@ The agent can then run commands on that machine as part of its work: build a bra
 
 ## Related
 
-- [Give Claude Code your own API](/examples/give-claude-your-api)
+- [Give your coding assistant your own API](/examples/your-api-in-a-coding-assistant)
 - [Give an agent a machine to work on](/examples/expose-any-machine)
 - [Turn an npm package into tools](/examples/npm-package-tools)
