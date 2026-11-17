@@ -54,14 +54,14 @@ Inside the app, **Guide** at the bottom of the sidebar shows the same path as a 
 
 ## For developers: your API inside your coding assistant
 
-The same tools can go straight into Claude Code, Cursor or any other client that speaks MCP (Model Context Protocol, the common way AI assistants plug in outside tools). You publish them through a gateway: one address that serves a set of tools.
+The same tools can go straight into your AI assistant or code editor, or any other client that speaks MCP (Model Context Protocol, the common way AI assistants plug in outside tools). You publish them through a gateway: one address that serves a set of tools.
 
 1. Under **APIs**, click **Connect an API**, pick the kind (**OpenAPI / Swagger**, **GraphQL**, **SOAP / WSDL**, **gRPC / proto**, **SDK / npm** or **Manual HTTP**), give it the description as a link, a file or pasted text, and click **Connect API**. Every operation becomes a typed tool.
 2. Under **Gateways**, click **Create gateway**, pick **MCP**, pick the API and click **Create gateway**.
 
 ![A gateway with its tools](/screenshots/gateway-detail-tools.png)
 
-3. The gateway page shows its access key once, next to a ready-made setup for Claude Code, Cursor and Claude Desktop. For Claude Code:
+3. The gateway page shows its access key once, next to a ready-made setup for each kind of MCP client. For a client set up with `claude mcp add`, it is one command:
 
 ```bash
 claude mcp add petstore --transport http \
@@ -71,9 +71,9 @@ claude mcp add petstore --transport http \
 
 ![The client setup on the gateway page](/screenshots/quickstart-claude-config.png)
 
-Ask Claude to do something and it calls your API through the gateway:
+Ask your assistant to do something and it calls your API through the gateway:
 
-![Claude calling the gateway](/screenshots/quickstart-gateway-mcp.png)
+![An AI assistant calling the gateway](/screenshots/quickstart-gateway-mcp.png)
 
 A client that only speaks stdio can use the gateway through a local proxy: `npx @almyty/mcp-server your-org/petstore`. Everything in the app can also be done from the CLI:
 

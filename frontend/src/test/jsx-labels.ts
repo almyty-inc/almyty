@@ -143,8 +143,8 @@ export function jsxLabels(src: string, tags: string[]): JsxLabel[] {
  * acronyms, product and vendor names, and almyty's own proper nouns.
  */
 export const LABEL_PROPER_NOUNS = new Set([
-  'A2A', 'ACP', 'AI', 'API', 'APIs', 'AWS', 'Ctrl', 'JSONRPC', 'Linux', 'SSE', 'Shift', 'Twilio', 'Windows', 'Windsurf', 'Anthropic', 'Azure', 'BYOK', 'Bedrock', 'CLI', 'CSV', 'Claude',
-  'Codex', 'Copilot', 'Cursor', 'Discord', 'Face', 'Gemini', 'GitHub', 'Google', 'GraphQL', 'HTTP',
+  'A2A', 'ACP', 'AI', 'API', 'APIs', 'AWS', 'Ctrl', 'JSONRPC', 'Linux', 'SSE', 'Shift', 'Twilio', 'Windows', 'Anthropic', 'Azure', 'BYOK', 'Bedrock', 'CLI', 'CSV',
+  'Discord', 'Face', 'Gemini', 'GitHub', 'Google', 'GraphQL', 'HTTP',
   'Hugging', 'I', 'ID', 'IDs', 'IRC', 'JSON', 'JavaScript', 'KMS', 'LLM', 'MCP', 'Markdown', 'Matrix',
   'Microsoft', 'OAuth', 'OIDC', 'Ollama', 'OpenAI', 'OpenAPI', 'PDF', 'PNG', 'Protobuf',
   'RBAC', 'REST', 'S3', 'SAML', 'SDK', 'SMS', 'SOAP', 'SQL', 'SSO', 'SVG', 'Signal', 'Slack', 'Stripe',
@@ -156,8 +156,8 @@ export const LABEL_PROPER_NOUNS = new Set([
 
 /** Multi-word names that keep their capitals: named surfaces and specs. */
 export const LABEL_PROPER_PHRASES = [
-  'Tool Hub', 'Agent Skills', 'Hugging Face Hub', 'Hugging Face', 'Google Chat', 'Microsoft Teams', 'Claude Code', 'Claude Desktop',
-  'Amazon Bedrock', 'Cloud Storage', 'Universal Tool Call Protocol', 'Google Cloud Storage', 'VS Code', 'OpenID Connect',
+  'Tool Hub', 'Agent Skills', 'Hugging Face Hub', 'Hugging Face', 'Google Chat', 'Microsoft Teams',
+  'Amazon Bedrock', 'Cloud Storage', 'Universal Tool Call Protocol', 'Google Cloud Storage', 'OpenID Connect',
   'EU AI Act', 'App Store Connect', 'Twilio Account SID', 'Terms of Service', 'Privacy Policy',
   'Server-Sent Events', 'Google Cloud', 'Microsoft App ID', 'Azure AI Foundry', 'Ctrl+Z', 'Ctrl+Shift+Z', 'Ctrl+K', 'Ollama Cloud',
 ]

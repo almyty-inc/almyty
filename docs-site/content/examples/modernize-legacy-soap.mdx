@@ -2,7 +2,7 @@
 
 ## What you'll build
 
-Your sales team asks a plain question, "do we have 600 rolls of pallet wrap in Rotterdam? If so, reserve them for order SO-55120", and gets the answer from a stock system built in 2009 that only speaks SOAP. Nobody writes XML and nobody touches the old system: almyty reads the service's description (its WSDL), makes a tool for each thing the service can do, and turns tool calls into SOAP requests and the replies back into data. The same tools then go to an MCP gateway, so coding assistants such as Claude Code can use the old system too.
+Your sales team asks a plain question, "do we have 600 rolls of pallet wrap in Rotterdam? If so, reserve them for order SO-55120", and gets the answer from a stock system built in 2009 that only speaks SOAP. Nobody writes XML and nobody touches the old system: almyty reads the service's description (its WSDL), makes a tool for each thing the service can do, and turns tool calls into SOAP requests and the replies back into data. The same tools then go to an MCP gateway, so your developers' coding assistants can use the old system too.
 
 ![The stock assistant checked the stock in the SOAP system and reserved 600 rolls: reservation RSV-70411](/screenshots/examples/modernize-legacy-soap/00-result.png)
 
@@ -85,7 +85,7 @@ Reserving changes stock. If people should confirm each reservation, open **Setti
 
 ## 7. Open it to coding assistants
 
-An MCP gateway puts the same tools at one address that Claude Code, Cursor and other AI tools can use, with almyty checking who calls and recording every call.
+An MCP gateway puts the same tools at one address that your AI assistant, your code editor and other AI tools can use, with almyty checking who calls and recording every call.
 
 1. Open **Gateways** and click **Create gateway**. Pick **MCP**.
 2. Under **Tools**, click **Harbor stock system** to add all three of its tools.
@@ -93,15 +93,15 @@ An MCP gateway puts the same tools at one address that Claude Code, Cursor and o
 
 ![Create gateway: MCP, the stock system's tools, named Harbor stock](/screenshots/examples/modernize-legacy-soap/09-gateway-new.png)
 
-4. Click **Create gateway**. The gateway's page shows its address and, under **Connect a client**, the command for each app. For Claude Code:
+4. Click **Create gateway**. The gateway's page shows its address and, under **Connect a client**, the setup for each kind of client. For a client set up with `claude mcp add`:
 
 ```
 claude mcp add harbor-stock --transport http https://api.almyty.com/harbor-supply/harbor-stock
 ```
 
-![The gateway, live, with the command for Claude Code](/screenshots/examples/modernize-legacy-soap/10-gateway.png)
+![The gateway, live, with the command to connect a client](/screenshots/examples/modernize-legacy-soap/10-gateway.png)
 
-Run the command in a terminal. The gateway lets in only people of your organization who are signed in, so Claude Code asks you to sign in to almyty in your browser the first time (in Claude Code, type `/mcp` to see it connected). From then on you can ask Claude Code "how many HS-20817 pallets are in Antwerp?" while you work, and the answer comes from the stock system. Under **Who can use it** on the gateway's page you choose who may connect: only you, a team, your organization, or outside apps with a key.
+Run the command in a terminal. The gateway lets in only people of your organization who are signed in, so your assistant asks you to sign in to almyty in your browser the first time (after `claude mcp add`, type `/mcp` to see it connected). From then on you can ask your assistant "how many HS-20817 pallets are in Antwerp?" while you work, and the answer comes from the stock system. Under **Who can use it** on the gateway's page you choose who may connect: only you, a team, your organization, or outside apps with a key.
 
 ## Make it yours
 
@@ -118,9 +118,9 @@ Run the command in a terminal. The gateway lets in only people of your organizat
 | Every call fails with **ECONNREFUSED** or a timeout | almyty cannot reach the service's address. See "A way for almyty to reach the service" above. |
 | A call returns a SOAP fault like **Access denied: unknown user or wrong password** | The user name or password is wrong, or the service expects WS-Security instead of Basic authentication. |
 | A tool has no inputs except what you see on the WSDL's types | The WSDL describes its operations without types (some older services do). Make the tool by hand with **Create tool**, **SOAP**, and add the fields; see [SOAP tools](/tools/soap-tools). |
-| Claude Code says the server needs authentication and nothing opens | Run `/mcp` in Claude Code, pick `harbor-stock` and choose to authenticate. |
+| Your assistant says the server needs authentication and nothing opens | Open the assistant's list of MCP servers (after `claude mcp add`, that is `/mcp`), pick `harbor-stock` and choose to authenticate. |
 
 ## Related
 
 - [SOAP tools](/tools/soap-tools) · [MCP gateway](/gateways/mcp) · [Gateway authentication](/gateways/authentication)
-- [Your API in a coding assistant](/examples/give-claude-your-api)
+- [Your API in a coding assistant](/examples/your-api-in-a-coding-assistant)

@@ -16,4 +16,14 @@ export default withNextra({
   // with `node server.js` — matches the docs-site Dockerfile.
   output: 'standalone',
   reactStrictMode: true,
+  // Pages that moved keep their old address working.
+  async redirects() {
+    return [
+      {
+        source: '/examples/give-claude-your-api',
+        destination: '/examples/your-api-in-a-coding-assistant',
+        permanent: true,
+      },
+    ]
+  },
 })
