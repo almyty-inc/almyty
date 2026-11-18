@@ -8,7 +8,7 @@
  * credentials file, which is deleted with the HOME.
  */
 import { spawn, spawnSync, type ChildProcess } from 'child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { expect, type Browser } from '@playwright/test'
@@ -146,12 +146,32 @@ export async function cliLogin(browser: Browser, home: string, loginArgs?: strin
   }
 }
 
-/** Revoke the `CLI login` API keys minted since `since` (ms epoch). */
-export async function revokeCliKeys(qa: APIRequestContext, since: number): Promise<void> {
+/** How many leading characters of a personal key the server keeps (`keyPrefix`). */
+const KEY_PREFIX_LENGTH = 12
+
+/** The keyPrefix of the key `almyty login` saved in `home`, or null when nothing was saved. */
+export function savedKeyPrefix(home: string): string | null {
+  try {
+    const token = JSON.parse(readFileSync(join(home, '.almyty', 'credentials.json'), 'utf-8'))?.token
+    return typeof token === 'string' && token.length > KEY_PREFIX_LENGTH ? token.slice(0, KEY_PREFIX_LENGTH) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Revoke the key the login in `home` minted, and only that one. Two gate
+ * workers log in at once; revoking every `CLI login` key made since a
+ * test began signed the other worker's CLI out mid-test ("Not
+ * authenticated").
+ */
+export async function revokeCliKeys(qa: APIRequestContext, home: string): Promise<void> {
+  const prefix = savedKeyPrefix(home)
+  if (!prefix) return
   const body = await data<any>(await qa.get('/auth/api-keys'))
   const keys = Array.isArray(body) ? body : body?.keys || body?.apiKeys || []
   for (const k of keys) {
-    if (/^CLI login/.test(k.name || '') && Date.parse(k.createdAt) >= since - 60_000) {
+    if (/^CLI login/.test(k.name || '') && k.keyPrefix === prefix) {
       const res = await qa.delete(`/auth/api-keys/${k.id}`)
       if (!res.ok() && res.status() !== 404) throw new Error(`revoke CLI key: ${res.status()}`)
     }
@@ -165,8 +185,8 @@ export async function revokeCliKeys(qa: APIRequestContext, since: number): Promi
  */
 export async function cliSession(browser: Browser, gate: Gate, qa: APIRequestContext, what = 'cli'): Promise<CliSession> {
   const home = throwawayHome(gate, what)
-  const since = Date.now()
-  gate.defer('revoke the CLI login key', () => revokeCliKeys(qa, since))
+  // Deferred after the HOME's removal so it runs first (defers unwind last-in, first-out) and can still read the key.
+  gate.defer('revoke the CLI login key', () => revokeCliKeys(qa, home))
   await cliLogin(browser, home)
   const env = cliEnv(home)
   return {
