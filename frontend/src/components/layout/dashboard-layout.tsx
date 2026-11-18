@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { AlmytyMark } from './almyty-logo'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -301,7 +302,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {/* Logo */}
           <div className={cn("flex-shrink-0 flex items-center h-16", sidebarCollapsed ? "justify-center px-2" : "justify-between px-5")}>
             <div className="flex items-center gap-2.5">
-              <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8 shrink-0" />
+              <AlmytyMark label="almyty" />
               {!sidebarCollapsed && <span className="text-[1.375rem] font-heading font-semibold tracking-[-0.05em] text-foreground">almyty</span>}
             </div>
             {!sidebarCollapsed && (
@@ -549,7 +550,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <Menu className="h-6 w-6" />
             </Button>
             <div className="flex items-center gap-2">
-              <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8" />
+              <AlmytyMark label="almyty" />
               <span className="text-[1.375rem] font-heading font-semibold tracking-[-0.05em] text-foreground">almyty</span>
             </div>
             <NotificationBell />

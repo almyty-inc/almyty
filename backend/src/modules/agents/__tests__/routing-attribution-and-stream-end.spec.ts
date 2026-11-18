@@ -35,6 +35,16 @@ describe('routing attribution reaches every record of a step', () => {
     expect(source.slice(at, at + 900)).toContain('llmResponse.routing');
   });
 
+  it('names the answering model on every llm.response that reports a cost', () => {
+    // Routing is stamped only when the router chose; a pinned model has
+    // none, so without `model` a client showed the cost and no model
+    // (the CLI's --json said model: null).
+    const emits = [...source.matchAll(/emitEvent\(runId, 'llm\.response', \{[\s\S]{0,1200}?\n\s*\}\);/g)].map((m) => m[0]);
+    const costed = emits.filter((e) => /\bcost:/.test(e));
+    expect(costed.length).toBeGreaterThanOrEqual(2);
+    expect(costed.filter((e) => !/\bmodel:/.test(e)).map((e) => e.slice(0, 120))).toEqual([]);
+  });
+
   it('stamps routing on every llm_call step the processor records', () => {
     // Both branches: the one that got tool calls and the one that got an
     // answer. Either missing is a cost with no model behind it.

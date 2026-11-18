@@ -39,6 +39,8 @@ export interface AgentRun {
   output?: unknown;
   error?: string;
   steps?: unknown[];
+  /** Steps the run has taken (the loop's count, not the length of `steps`). */
+  currentStep?: number;
   totalCost?: number;
   totalTokens?: number;
 }

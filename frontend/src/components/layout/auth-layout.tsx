@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react'
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { AlmytyMark } from './almyty-logo'
 
 interface AuthLayoutProps {
   children: React.ReactNode
@@ -19,10 +20,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className="flex min-h-screen flex-col px-4 py-6 sm:px-8 lg:px-12">
         <header>
           <a href="/" className="inline-flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-            {/* width/height attrs give the logo an intrinsic size that holds
-                even with no CSS applied (e.g. rrweb session replays), so it
-                doesn't balloon to fill the frame. */}
-            <img src="/almyty-icon-48.svg" alt="" width={32} height={32} className="h-8 w-8" />
+            <AlmytyMark />
             <span className="font-heading text-xl font-bold tracking-tight text-foreground">almyty</span>
           </a>
         </header>
@@ -52,13 +50,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         data-testid="auth-product-field"
         className="relative hidden overflow-hidden bg-product-field lg:m-3 lg:flex lg:flex-col lg:justify-end lg:rounded-[24px] lg:p-12"
       >
-        <img
-          src="/almyty-icon-48.svg"
-          alt=""
-          width={64}
-          height={64}
-          className="absolute right-12 top-12 h-16 w-16"
-        />
+        <AlmytyMark className="absolute right-12 top-12 h-16" />
         <p className="max-w-[28ch] font-heading text-[40px] font-extrabold leading-[1.08] tracking-[-0.04em] text-foreground">
           Your APIs, your models, agents that do the work.
         </p>

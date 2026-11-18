@@ -20,6 +20,7 @@ import {
   initialStreamState,
   reduceStreamEvent,
   routingFromSteps,
+  stepsFromRun,
 } from './stream.js';
 
 /** The part of GatewayClient a turn needs. */
@@ -105,6 +106,7 @@ function settleUsage(usage: Usage, run: AgentRun | undefined): Usage {
   // events (a reconnect, or a fallback to polling).
   if (run && typeof run.totalCost === 'number' && run.totalCost > settled.cost) settled.cost = run.totalCost;
   if (run && typeof run.totalTokens === 'number' && run.totalTokens > settled.tokens) settled.tokens = run.totalTokens;
+  if (run) settled.steps = Math.max(settled.steps, stepsFromRun(run));
   return settled;
 }
 
