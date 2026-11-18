@@ -1,19 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen, fireEvent } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { render } from '../../../../test/setup'
-import { BuilderToolbar, DEFAULT_AGENT_NAME, type BuilderToolbarProps } from '../builder-toolbar'
+import { BuilderToolbar, AGENT_NAME_PLACEHOLDER, type BuilderToolbarProps } from '../builder-toolbar'
 
 /**
- * A new agent starts named "New agent". Clicking in and typing a name
- * used to add to it: "Morning weather briefNew agent" was saved and shown
- * as the agent's title. The starting name is selected on focus, so typing
- * replaces it; a name someone chose is left alone.
+ * A new agent used to start with the value "New agent". Typing a name as
+ * the page opened put the caret before it, and "Morning weather briefNew
+ * agent" was saved as the agent's title. The name now starts empty and the
+ * hint is a placeholder, which is never part of what is typed.
  */
-function renderToolbar(agentName: string) {
+function NameField({ onChange }: { onChange: (v: string) => void }) {
   const props: BuilderToolbarProps = {
-    agentName,
-    onAgentNameChange: vi.fn(),
+    agentName: '',
+    onAgentNameChange: onChange,
     agentStatus: 'draft',
     agentMode: 'autonomous',
     onAgentModeChange: vi.fn(),
@@ -30,22 +31,21 @@ function renderToolbar(agentName: string) {
     onExport: vi.fn(),
     onBack: vi.fn(),
   }
-  render(<BuilderToolbar {...props} />)
-  return screen.getByRole('textbox', { name: 'Agent name' }) as HTMLInputElement
+  return <BuilderToolbar {...props} />
 }
 
-describe('the agent name field', () => {
-  it('selects the starting name on focus, so typing replaces it', () => {
-    const input = renderToolbar(DEFAULT_AGENT_NAME)
-    fireEvent.focus(input)
-    expect(input.selectionStart).toBe(0)
-    expect(input.selectionEnd).toBe(DEFAULT_AGENT_NAME.length)
+describe('the agent name field of a new agent', () => {
+  it('starts empty, with the hint as a placeholder', () => {
+    render(<NameField onChange={vi.fn()} />)
+    const input = screen.getByRole('textbox', { name: 'Agent name' }) as HTMLInputElement
+    expect(input.value).toBe('')
+    expect(input.placeholder).toBe(AGENT_NAME_PLACEHOLDER)
   })
 
-  it('leaves a chosen name unselected', () => {
-    const input = renderToolbar('Morning weather brief')
-    input.setSelectionRange(3, 3)
-    fireEvent.focus(input)
-    expect(input.selectionEnd - input.selectionStart).toBe(0)
+  it('takes exactly what is typed', async () => {
+    const onChange = vi.fn()
+    render(<NameField onChange={onChange} />)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Agent name' }), 'W')
+    expect(onChange).toHaveBeenLastCalledWith('W')
   })
 })

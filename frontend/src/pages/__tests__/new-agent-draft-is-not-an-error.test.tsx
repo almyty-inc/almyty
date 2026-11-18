@@ -116,9 +116,12 @@ describe('a new agent draft nobody has touched yet', () => {
 
     await screen.findByTestId('builder-next-steps')
 
-    // Clearing the name is the user filling something in, badly, and that is
-    // exactly when an error is the honest word for it. No save needed.
-    await user.clear(screen.getByDisplayValue('New agent'))
+    // Naming it and clearing the name again is the user filling something
+    // in, badly, and that is exactly when an error is the honest word for it.
+    // No save needed.
+    const name = screen.getByRole('textbox', { name: 'Agent name' })
+    await user.type(name, 'Weather')
+    await user.clear(name)
 
     const banner = await screen.findByTestId('builder-validation-errors')
     expect(banner).toHaveTextContent(/name the agent/i)
