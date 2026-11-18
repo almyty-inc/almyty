@@ -174,4 +174,22 @@ test.describe('J7 compatible APIs', () => {
     expect(run.status, 'the run should complete').toBe('completed')
     expectTemperature(typeof run.output === 'string' ? run.output : JSON.stringify(run.output), expected)
   })
+
+  test('J7 almyty chat --json names the model and counts the steps', async ({ page, gate, qa, browser }) => {
+    // --json printed model: null and steps: 0 for a pinned model: the run
+    // event named the model only when the router chose it.
+    const apiName = await connectOpenMeteo(page, gate, 'cli-chat')
+    const agent = await buildAgent(page, gate, { what: 'cli-chat-agent', apiName })
+    const cli = await cliSession(browser, gate, qa, 'chat-json')
+    const [res, expected] = await Promise.all([
+      cli.run(['chat', agent.name, '-m', weatherQuestion(), '--json'], { timeout: 300_000 }),
+      openMeteoMax(),
+    ])
+    expect(res.code, `almyty chat should exit 0: ${res.stderr.slice(-400)}`).toBe(0)
+    const answer = JSON.parse(res.stdout)
+    expect(answer.status, 'the turn should complete').toBe('completed')
+    expect(answer.model, 'the answer should name the model that wrote it').toEqual(expect.stringMatching(/\S/))
+    expect(answer.usage.steps, 'the run took at least one step').toBeGreaterThanOrEqual(1)
+    expectTemperature(answer.output, expected)
+  })
 })

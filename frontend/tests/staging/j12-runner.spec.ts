@@ -120,8 +120,7 @@ test.describe('J12 runner on this machine', () => {
     const home = mkdtempSync(join(tmpdir(), `gate-${gate.runId}-runner-home-`))
     gate.defer('remove the runner HOME', () => rmSync(home, { recursive: true, force: true }))
     const env = { ...cliEnv(home), PATH: `${join(prefix, 'bin')}:${process.env.PATH}` }
-    const since = Date.now()
-    gate.defer('revoke the runner login key', () => revokeCliKeys(api, since))
+    gate.defer('revoke the runner login key', () => revokeCliKeys(api, home))
     await approveLogin(freshUser, bin, words(shown.login).slice(1), env)
 
     // Start the runner, named so the gate's own sweep recognises it, and leave it running.
