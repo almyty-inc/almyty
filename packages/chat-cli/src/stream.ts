@@ -307,23 +307,35 @@ export function formatUsage(usage: Usage): string {
 /**
  * Model attribution off a finished run's steps.
  *
- * The llm.response event does not carry the answering model, so a run
- * that streamed to completion has to be asked afterwards. Only the
- * tool-calling step records `routing` today, so a single-step answer
- * has no attribution to find and this returns null rather than
- * guessing.
+ * Used when the stream did not name the model (a reconnect, or a server
+ * that predates `model` on llm.response). Every llm_call step the run
+ * records carries the model that answered, and a routed one its
+ * `routing` too; the last one that says is the answer's.
  */
 export function routingFromSteps(steps: unknown): Pick<Usage, 'model' | 'rationale' | 'attempt'> | null {
   if (!Array.isArray(steps)) return null;
   for (let i = steps.length - 1; i >= 0; i--) {
-    const routing = (steps[i] as any)?.output?.routing;
-    if (routing && typeof routing === 'object') {
+    const output = (steps[i] as any)?.output;
+    const routing = output?.routing && typeof output.routing === 'object' ? output.routing : undefined;
+    const model = str(routing?.vendorModelId) ?? str(routing?.modelId) ?? str(output?.model);
+    if (model) {
       return {
-        model: str(routing.vendorModelId) ?? str(routing.modelId),
-        rationale: str(routing.rationale),
-        attempt: typeof routing.attempt === 'number' ? routing.attempt : undefined,
+        model,
+        rationale: str(routing?.rationale),
+        attempt: typeof routing?.attempt === 'number' ? routing.attempt : undefined,
       };
     }
   }
   return null;
+}
+
+/**
+ * How many steps a finished run took. The live stream only counts the
+ * steps that called tools (the answering step ends the run instead of
+ * emitting step.completed), so a one-step answer read as zero steps.
+ */
+export function stepsFromRun(run: { currentStep?: unknown; steps?: unknown }): number {
+  if (typeof run.currentStep === 'number' && Number.isFinite(run.currentStep)) return run.currentStep;
+  if (!Array.isArray(run.steps)) return 0;
+  return run.steps.filter((step) => (step as any)?.type === 'llm_call').length;
 }
