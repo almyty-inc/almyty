@@ -124,7 +124,12 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     });
 
     it('--help documents every slash command, flag, key and exit code', () => {
-      const out = run('chat-cli', ['--help']);
+      // This checks what --help says, not how fast it says it. chat-cli
+      // loads ink and React before parsing flags; on a gate machine whose
+      // virus scanner inspects every file Node opens, that cold load
+      // alone passed the 20s ceiling in most gate runs (0.3s of CPU,
+      // the rest waiting on the scanner).
+      const out = run('chat-cli', ['--help'], SLOW);
       for (const cmd of ['/agents', '/model', '/tools', '/cost', '/trace', '/resume', '/new', '/runners', '/code', '/code-stop', '/esc', '/help', '/clear', '/quit']) {
         expect(out, `${cmd} missing from --help`).toContain(cmd);
       }
