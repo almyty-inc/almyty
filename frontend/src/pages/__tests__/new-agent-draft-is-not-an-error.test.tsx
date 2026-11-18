@@ -110,15 +110,28 @@ describe('a new agent draft nobody has touched yet', () => {
     )
   })
 
+  it('opens with an empty name, so what is typed is the whole name', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<AgentBuilderPage />)
+    await screen.findByTestId('builder-next-steps')
+    const name = screen.getByRole('textbox', { name: 'Agent name' }) as HTMLInputElement
+    expect(name.value).toBe('')
+    await user.type(name, 'Morning weather brief')
+    expect(name.value).toBe('Morning weather brief')
+  })
+
   it('turns red on its own once the user has been in a field and left it empty', async () => {
     const user = userEvent.setup()
     renderWithProviders(<AgentBuilderPage />)
 
     await screen.findByTestId('builder-next-steps')
 
-    // Clearing the name is the user filling something in, badly, and that is
-    // exactly when an error is the honest word for it. No save needed.
-    await user.clear(screen.getByDisplayValue('New agent'))
+    // Naming it and clearing the name again is the user filling something
+    // in, badly, and that is exactly when an error is the honest word for it.
+    // No save needed.
+    const name = screen.getByRole('textbox', { name: 'Agent name' })
+    await user.type(name, 'Weather')
+    await user.clear(name)
 
     const banner = await screen.findByTestId('builder-validation-errors')
     expect(banner).toHaveTextContent(/name the agent/i)

@@ -204,6 +204,7 @@ describe('the autonomous agent page', () => {
     expect(slots()).toEqual([['main', 'Main']])
     expect(screen.getByTestId('builder-next-steps')).toHaveTextContent('Main: pick a model, or route it by policy')
 
+    await user.type(screen.getByRole('textbox', { name: 'Agent name' }), 'Helper')
     await user.type(screen.getByPlaceholderText('You are a helpful assistant that...'), 'Answer questions.')
     await pickModel(screen.getByTestId('slot-main'), /gpt-4o(?!-mini)/)
     await waitFor(() => expect(screen.queryByTestId('builder-next-steps')).not.toBeInTheDocument())

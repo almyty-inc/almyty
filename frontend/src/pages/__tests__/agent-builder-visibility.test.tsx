@@ -76,6 +76,7 @@ describe('agent visibility in the builder', () => {
     // The starting workflow graph saves with no further setup; a new agent
     // opens on Autonomous, which needs instructions and a model first.
     await user.click(await screen.findByRole('button', { name: 'Workflow' }))
+    await user.type(screen.getByRole('textbox', { name: 'Agent name' }), 'Private helper')
 
     await user.click(await screen.findByRole('button', { name: 'Visibility: Everyone' }))
     await user.click(screen.getByRole('radio', { name: /^Only you/ }))

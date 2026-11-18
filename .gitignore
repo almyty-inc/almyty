@@ -95,3 +95,7 @@ skills-lock.json
 # staging gate output (npm run gate:staging)
 gate-results/
 gate-report.md
+
+# showcase recordings (frontend/playwright.showcase.config.ts)
+showcase-results/
+

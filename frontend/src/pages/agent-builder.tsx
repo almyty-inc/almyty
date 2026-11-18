@@ -62,7 +62,7 @@ export function AgentBuilderPage() {
   const templateId = searchParams.get('template')
 
   // ── Agent metadata state ───────────────────────────────────────────────
-  const [agentName, setAgentName] = useState('New agent')
+  const [agentName, setAgentName] = useState('')
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
   // A new agent starts autonomous: a goal, tools and a model, and it works
@@ -294,12 +294,14 @@ export function AgentBuilderPage() {
   // about the rule changes: canSave still gates the mutation, and Save still
   // refuses and still explains.
   const [saveAttempted, setSaveAttempted] = useState(false)
+  // Typing a name and clearing it again is a field left empty, not a fresh draft.
+  const [nameEdited, setNameEdited] = useState(false)
 
   // An agent loaded from the server is not a blank draft: whatever is wrong
   // with it is wrong with saved data, and worth saying plainly at once.
   const draftTouched = useMemo(() => {
     const signals = [
-      agentName !== 'New agent',
+      nameEdited || agentName.trim() !== '',
       agentDescription.trim() !== '',
       agentInstructions.trim() !== '',
       agentPersonality.trim() !== '',
@@ -315,6 +317,7 @@ export function AgentBuilderPage() {
     return signals.some(Boolean)
   }, [
     agentName,
+    nameEdited,
     agentDescription,
     agentInstructions,
     agentPersonality,
@@ -522,6 +525,7 @@ export function AgentBuilderPage() {
         agentName={agentName}
         onAgentNameChange={(name) => {
           setAgentName(name)
+          setNameEdited(true)
           setNameError(null)
         }}
         nameError={nameError}

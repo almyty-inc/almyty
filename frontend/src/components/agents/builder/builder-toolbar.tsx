@@ -11,6 +11,9 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
+/** What the empty name field shows until the agent is named. */
+export const AGENT_NAME_PLACEHOLDER = 'Name your agent'
+
 export interface BuilderToolbarProps {
   agentName: string
   onAgentNameChange: (name: string) => void
@@ -109,10 +112,14 @@ export function BuilderToolbar({
             'h-10 min-w-[8ch] max-w-[160px] border-transparent bg-transparent px-2 font-heading text-lg font-bold tracking-[-0.02em] shadow-none hover:border-input hover:bg-transparent sm:max-w-[360px] sm:text-xl',
             nameError && 'text-destructive',
           )}
-          style={{ width: `${Math.max(8, agentName.length + 2)}ch` }}
+          style={{ width: `${Math.max(8, (agentName || AGENT_NAME_PLACEHOLDER).length + 2)}ch` }}
           value={agentName}
           onChange={(e) => onAgentNameChange(e.target.value)}
-          placeholder="Agent name"
+          // A new agent starts with an empty name. It used to start as the
+          // value "New agent", and typing in as the page opened added to it
+          // ("Morning weather briefNew agent" was saved). A placeholder is
+          // never part of what is typed.
+          placeholder={AGENT_NAME_PLACEHOLDER}
           aria-label="Agent name"
           aria-invalid={nameError ? true : undefined}
           aria-describedby={nameError ? 'agent-name-error' : undefined}
