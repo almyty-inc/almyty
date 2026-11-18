@@ -11,8 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
-/** The name a new agent starts with until someone names it. */
-export const DEFAULT_AGENT_NAME = 'New agent'
+/** What the empty name field shows until the agent is named. */
+export const AGENT_NAME_PLACEHOLDER = 'Name your agent'
 
 export interface BuilderToolbarProps {
   agentName: string
@@ -112,16 +112,14 @@ export function BuilderToolbar({
             'h-10 min-w-[8ch] max-w-[160px] border-transparent bg-transparent px-2 font-heading text-lg font-bold tracking-[-0.02em] shadow-none hover:border-input hover:bg-transparent sm:max-w-[360px] sm:text-xl',
             nameError && 'text-destructive',
           )}
-          style={{ width: `${Math.max(8, agentName.length + 2)}ch` }}
+          style={{ width: `${Math.max(8, (agentName || AGENT_NAME_PLACEHOLDER).length + 2)}ch` }}
           value={agentName}
           onChange={(e) => onAgentNameChange(e.target.value)}
-          // A new agent starts as "New agent". Clicking in and typing would
-          // otherwise add to it ("WeatherNew agent"), so the starting name is
-          // selected on focus and the first keystroke replaces it.
-          onFocus={(e) => {
-            if (e.target.value === DEFAULT_AGENT_NAME) e.target.select()
-          }}
-          placeholder="Agent name"
+          // A new agent starts with an empty name. It used to start as the
+          // value "New agent", and typing in as the page opened added to it
+          // ("Morning weather briefNew agent" was saved). A placeholder is
+          // never part of what is typed.
+          placeholder={AGENT_NAME_PLACEHOLDER}
           aria-label="Agent name"
           aria-invalid={nameError ? true : undefined}
           aria-describedby={nameError ? 'agent-name-error' : undefined}
