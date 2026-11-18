@@ -1,5 +1,12 @@
 # @almyty/models
 
+## 1.5.12
+
+### Patch Changes
+
+- Updated dependencies [c2d6b20]
+  - @almyty/client@1.5.12
+
 ## 1.5.11
 
 ### Patch Changes
