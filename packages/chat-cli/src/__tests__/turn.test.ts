@@ -157,6 +157,42 @@ describe('autonomous turn', () => {
     expect(result.usage.tokens).toBe(900);
     expect(result.usage.model).toBe('gpt-4o');
   });
+
+  it('a one-step answer from a pinned model reports its model and one step', async () => {
+    // A run that answers without calling a tool emits no step.completed,
+    // and an unrouted call records no routing: --json said model null, steps 0.
+    const { target } = fakeGateway({
+      script: [
+        { type: 'llm.response', data: { step: 0, content: 'Berlin: 14 C', usage: { inputTokens: 10, outputTokens: 5 }, cost: 0.001 } },
+        { type: 'run.completed', data: { output: 'Berlin: 14 C' } },
+      ],
+      final: { status: 'completed', currentStep: 1, steps: [{ type: 'llm_call', output: { status: 'completed', model: 'gpt-4.1-mini' } }] },
+    });
+    const result = await runTurn(target, 'q', { mode: 'autonomous' });
+    expect(result.usage.model).toBe('gpt-4.1-mini');
+    expect(result.usage.steps).toBe(1);
+  });
+
+  it('takes the model the live event names', async () => {
+    const { target } = fakeGateway({
+      script: [
+        { type: 'llm.response', data: { step: 0, content: 'hi', model: 'claude-haiku-4-5' } },
+        { type: 'run.completed', data: { output: 'hi' } },
+      ],
+      final: { status: 'completed' },
+    });
+    const result = await runTurn(target, 'q', { mode: 'autonomous' });
+    expect(result.usage.model).toBe('claude-haiku-4-5');
+  });
+
+  it('counts llm_call steps when the run does not say how many it took', async () => {
+    const { target } = fakeGateway({
+      script: [{ type: 'run.completed', data: { output: 'ok' } }],
+      final: { status: 'completed', steps: [{ type: 'llm_call', output: {} }, { type: 'tool_call' }, { type: 'llm_call', output: {} }] },
+    });
+    const result = await runTurn(target, 'q', { mode: 'autonomous' });
+    expect(result.usage.steps).toBe(2);
+  });
 });
 
 describe('workflow turn', () => {

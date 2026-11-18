@@ -880,6 +880,9 @@ export class AgentStepProcessor {
         toolCalls: responseMessage.toolCalls?.map(tc => ({ id: tc.id, name: tc.name })),
         usage: { inputTokens: stepInputTokens, outputTokens: stepOutputTokens },
         cost: stepCost,
+        // The model that answered, routed or pinned: a client shows it
+        // beside the cost (the CLI's attribution line and --json).
+        ...(llmResponse.model ? { model: llmResponse.model } : {}),
         // Which card answered, on the live event and not only on the
         // persisted step. A client watching a run could show the cost as
         // it accrued but not the model it was accruing on, which is the
@@ -2358,6 +2361,7 @@ export class AgentStepProcessor {
       content,
       usage: { inputTokens: spent.inputTokens, outputTokens: spent.outputTokens },
       cost: spent.cost,
+      ...(spent.model ? { model: spent.model } : {}),
       ...(spent.routing ? { routing: spent.routing } : {}),
       answer: true,
     });
