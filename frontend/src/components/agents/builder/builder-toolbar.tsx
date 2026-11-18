@@ -11,6 +11,9 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
+/** The name a new agent starts with until someone names it. */
+export const DEFAULT_AGENT_NAME = 'New agent'
+
 export interface BuilderToolbarProps {
   agentName: string
   onAgentNameChange: (name: string) => void
@@ -112,6 +115,12 @@ export function BuilderToolbar({
           style={{ width: `${Math.max(8, agentName.length + 2)}ch` }}
           value={agentName}
           onChange={(e) => onAgentNameChange(e.target.value)}
+          // A new agent starts as "New agent". Clicking in and typing would
+          // otherwise add to it ("WeatherNew agent"), so the starting name is
+          // selected on focus and the first keystroke replaces it.
+          onFocus={(e) => {
+            if (e.target.value === DEFAULT_AGENT_NAME) e.target.select()
+          }}
           placeholder="Agent name"
           aria-label="Agent name"
           aria-invalid={nameError ? true : undefined}

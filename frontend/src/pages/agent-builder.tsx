@@ -8,7 +8,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 import { useAgentPipeline } from '@/components/agents/builder/use-agent-pipeline'
-import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
+import { BuilderToolbar, DEFAULT_AGENT_NAME } from '@/components/agents/builder/builder-toolbar'
 import { NextStepsBar } from '@/components/agents/builder/next-steps-bar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
@@ -62,7 +62,7 @@ export function AgentBuilderPage() {
   const templateId = searchParams.get('template')
 
   // ── Agent metadata state ───────────────────────────────────────────────
-  const [agentName, setAgentName] = useState('New agent')
+  const [agentName, setAgentName] = useState(DEFAULT_AGENT_NAME)
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
   // A new agent starts autonomous: a goal, tools and a model, and it works
@@ -299,7 +299,7 @@ export function AgentBuilderPage() {
   // with it is wrong with saved data, and worth saying plainly at once.
   const draftTouched = useMemo(() => {
     const signals = [
-      agentName !== 'New agent',
+      agentName !== DEFAULT_AGENT_NAME,
       agentDescription.trim() !== '',
       agentInstructions.trim() !== '',
       agentPersonality.trim() !== '',
