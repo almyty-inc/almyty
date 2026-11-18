@@ -441,3 +441,17 @@ test('the gate retries the CLI install while npm catches up with a new release',
   assert.ok(!catchingUp.test('npm error code EACCES'));
   assert.match(src, /attempt < 6 && isRegistryCatchingUp\(output\)/, 'only a catching-up registry is retried, a bounded number of times');
 });
+
+test('a CLI test revokes only the key its own login minted', () => {
+  // Two workers log in at once. Revoking every "CLI login" key made since a
+  // test began signed the other worker's CLI out mid-test.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'tests', 'staging', 'support', 'cli.ts'), 'utf8');
+  const revoke = src.slice(src.indexOf('export async function revokeCliKeys'), src.indexOf('export async function cliSession'));
+  assert.match(revoke, /revokeCliKeys\(qa: APIRequestContext, home: string\)/, 'revoke takes the HOME whose key it owns');
+  assert.match(revoke, /k\.keyPrefix === prefix/, 'a key is revoked only when its prefix is this login\'s');
+  assert.doesNotMatch(revoke, /createdAt|since/, 'no revoking by time window');
+  for (const file of ['support/cli.ts', 'j12-runner.spec.ts']) {
+    const s = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'tests', 'staging', file), 'utf8');
+    assert.doesNotMatch(s, /revokeCliKeys\([^)]*since\)/, `${file} still revokes by time`);
+  }
+});
