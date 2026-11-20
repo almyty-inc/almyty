@@ -43,6 +43,8 @@ const protocolStyles: Record<string, string> = {
   desktop: TEAL,
   binary: TEAL,
   widget: BRAND,
+  // A web chat channel's gateway: the agent's channels call it "Web chat".
+  hosted_chat: BRAND,
 }
 
 const protocolLabels: Record<string, string> = {
@@ -56,6 +58,7 @@ const protocolLabels: Record<string, string> = {
   tui: 'Terminal',
   web: 'Web',
   widget: 'Widget',
+  hosted_chat: 'Web chat',
 }
 
 interface ProtocolBadgeProps {

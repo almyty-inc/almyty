@@ -188,12 +188,15 @@ export function MemoryAccountsTable({ overview, loading }: { overview: MemoryAcc
         header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => {
           const r = row.original
+          // The action column is pinned to the right edge; on a phone its
+          // buttons keep only their icons, or the pinned column covered the
+          // account's service ("almyt", "Clau").
           if (r.kind === 'service') {
             return (
               <div className="flex justify-end">
                 <Button asChild size="sm" variant="outline" onClick={(e) => e.stopPropagation()}>
-                  <Link to={addMemoryAccountPath(r.service.id)}>
-                    <Plus className="mr-1 h-3.5 w-3.5" /> Add account
+                  <Link to={addMemoryAccountPath(r.service.id)} aria-label={`Add account for ${r.service.name}`}>
+                    <Plus className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Add account</span>
                   </Link>
                 </Button>
               </div>
@@ -204,13 +207,13 @@ export function MemoryAccountsTable({ overview, loading }: { overview: MemoryAcc
             <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
               {a.id !== NATIVE_ACCOUNT_ID && (
                 <Button size="sm" variant="ghost" disabled={checking === a.id} onClick={() => check.mutate(a.id)} aria-label={`Check ${a.name}`}>
-                  <RefreshCw className={`mr-1 h-3.5 w-3.5 ${checking === a.id ? 'animate-spin' : ''}`} /> Check
+                  <RefreshCw className={`h-3.5 w-3.5 sm:mr-1 ${checking === a.id ? 'animate-spin' : ''}`} /> <span className="hidden sm:inline">Check</span>
                 </Button>
               )}
               {a.canMoveFrom && (
                 <Button asChild size="sm" variant="ghost">
                   <Link to={moveMemoriesPath(a.id)} aria-label={`Move memories from ${a.name}`}>
-                    <ArrowRightLeft className="mr-1 h-3.5 w-3.5" /> Move memories
+                    <ArrowRightLeft className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Move memories</span>
                   </Link>
                 </Button>
               )}
