@@ -13,7 +13,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis } = require('./capture-cli-help.js');
+const { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis, rendererProblems } = require('./capture-cli-help.js');
 
 const repo = path.join(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(repo, 'docs-site/public/screenshots/manifest.json'), 'utf8'));
@@ -93,4 +93,25 @@ test('--stale picks the images whose entry names another version than package.js
   assert.deepStrictEqual(staleClis(CLIS, at(readPackage(CLIS[0]).version)).map((c) => c.id), []);
   assert.deepStrictEqual(staleClis(CLIS, at('0.0.1')).map((c) => c.id), ['chat']);
   assert.deepStrictEqual(staleClis(CLIS, { screenshots: [] }).map((c) => c.id), CLIS.map((c) => c.id));
+});
+
+test('rendering needs rsvg-convert and JetBrains Mono, so freeze never takes its crashing fallback', () => {
+  const families = 'DejaVu Sans\nJetBrains Mono,JetBrains Mono ExtraBold\n';
+  assert.deepStrictEqual(rendererProblems({ onPath: () => true, fontFamilies: families }), []);
+  // No fc-list (some macOS setups): nothing to check the font against.
+  assert.deepStrictEqual(rendererProblems({ onPath: () => true, fontFamilies: null }), []);
+  const noRsvg = rendererProblems({ onPath: (cmd) => cmd !== 'rsvg-convert', fontFamilies: families });
+  assert.strictEqual(noRsvg.length, 1);
+  assert.match(noRsvg[0], /rsvg-convert is not on PATH.*librsvg2-bin/);
+  const noFont = rendererProblems({ onPath: () => true, fontFamilies: 'DejaVu Sans\nDejaVu Sans Mono\n' });
+  assert.strictEqual(noFont.length, 1);
+  assert.match(noFont[0], /JetBrains Mono is not installed.*fonts-jetbrains-mono/);
+});
+
+test('the post-release workflow installs rsvg-convert and JetBrains Mono before it recaptures', () => {
+  const wf = fs.readFileSync(path.join(repo, '.github/workflows/post-release.yml'), 'utf8');
+  const install = wf.search(/apt-get install[^\n]*\blibrsvg2-bin\b[^\n]*\bfonts-jetbrains-mono\b/);
+  const capture = wf.indexOf('node scripts/capture-cli-help.js');
+  assert.ok(install >= 0, 'post-release.yml must apt-get install librsvg2-bin and fonts-jetbrains-mono');
+  assert.ok(capture > install, 'the install must come before the capture step');
 });
