@@ -248,6 +248,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('runs.list_code_executions', 'AgentRunsController.listCodeExecutions'),
   op('runs.get_code_execution', 'AgentRunsController.getCodeExecution'),
   op('runs.cancel', 'AgentRunsController.cancelRun'),
+  op('runs.delete', 'AgentRunsController.deleteRun', { summary: 'Delete one finished run of an agent, with its steps and tool calls. It cannot be undone.' }),
   // ── Schedules and always-on ──
   op('schedules.get', 'AgentScheduleController.getSchedule'),
   op('schedules.preview', 'AgentScheduleController.previewSchedule', READ),

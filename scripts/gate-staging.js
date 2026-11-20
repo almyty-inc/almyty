@@ -297,6 +297,22 @@ async function runPlaywright(env) {
   return rows;
 }
 
+/**
+ * Run only the staging suite's global setup, which signs the QA user in
+ * afresh when the saved session no longer works. A grep that matches no
+ * test still runs the global setup.
+ */
+async function refreshSession(env, notes) {
+  ensureInstalled(FRONTEND);
+  log('refreshing the QA session');
+  const args = [
+    path.join(FRONTEND, 'node_modules', '@playwright', 'test', 'cli.js'), 'test', '--config=playwright.staging.config.ts',
+    '--grep=__gate_session_only__', '--pass-with-no-tests',
+  ];
+  const code = await shRedacted(process.execPath, args, { cwd: FRONTEND, env });
+  if (code !== 0) notes.push(`refreshing the QA session exited ${code}; the CLI login may use a stale one`);
+}
+
 /** Sign the CLI in as the QA user through `almyty login`'s real browser flow; returns the HOME holding its credentials. */
 async function cliLogin(qa, startedAt) {
   const { createRequire } = require('module');
@@ -463,6 +479,9 @@ async function main() {
   const h = only.includes('health') ? await health(qa.api) : null;
   // Playwright's global setup signs the QA user in and saves the session the CLI login reuses.
   const browser = only.includes('playwright') ? await runPlaywright(childEnv) : [];
+  // Without the suite, nothing would renew that session, and a CLI-only run
+  // reused yesterday's expired one: the login page never offered the picker.
+  if (only.includes('cli') && !only.includes('playwright')) await refreshSession(childEnv, notes);
   let cli = [];
   if (only.includes('cli')) {
     try {
