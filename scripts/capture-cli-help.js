@@ -22,8 +22,9 @@
 //   --out <dir>          keep the .txt and .png renders there
 //   --captured-at <iso>  what to record (default: now)
 //
-// Needs freeze (https://github.com/charmbracelet/freeze) on PATH for
-// anything but --text. --text prints the text that would be rendered.
+// Needs freeze (https://github.com/charmbracelet/freeze), rsvg-convert and
+// the JetBrains Mono font for anything but --text (rendererProblems below
+// says why). --text prints the text that would be rendered.
 
 'use strict';
 
@@ -85,7 +86,24 @@ function staleClis(clis, manifest, root = repoRoot) {
   });
 }
 
-module.exports = { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis };
+// What stops freeze from rendering these images reliably. freeze rasterizes
+// through rsvg-convert when it is on PATH and otherwise falls back to a
+// built-in renderer that crashes on the larger help screens on CI runners
+// (SIGSEGV, "split stack overflow"). rsvg-convert draws with the installed
+// fonts, so without JetBrains Mono the columns come out in a proportional
+// font. fontFamilies is `fc-list : family` output, or null without fc-list.
+function rendererProblems({ onPath, fontFamilies }) {
+  const problems = [];
+  if (!onPath('rsvg-convert')) {
+    problems.push('rsvg-convert is not on PATH; freeze would fall back to its built-in renderer, which crashes on the larger help screens (apt install librsvg2-bin, brew install librsvg)');
+  }
+  if (fontFamilies !== null && !/JetBrains Mono/i.test(fontFamilies)) {
+    problems.push('JetBrains Mono is not installed; rsvg-convert would draw the help in a proportional font (apt install fonts-jetbrains-mono, brew install --cask font-jetbrains-mono)');
+  }
+  return problems;
+}
+
+module.exports = { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis, rendererProblems };
 
 function fail(message) {
   console.error(`capture-cli-help: ${message}`);
@@ -126,7 +144,13 @@ function main(argv) {
       return;
     }
   }
-  if (!opts.text && sh('freeze', ['--version']).status !== 0) fail('freeze is not on PATH');
+  if (!opts.text) {
+    if (sh('freeze', ['--version']).status !== 0) fail('freeze is not on PATH');
+    const onPath = (cmd) => !spawnSync(cmd, ['--version'], { encoding: 'utf8' }).error;
+    const fc = onPath('fc-list') ? sh('fc-list', [':', 'family']).stdout : null;
+    const problems = rendererProblems({ onPath, fontFamilies: fc });
+    if (problems.length) fail(problems.join('\n'));
+  }
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-help-'));
   const out = opts.out || work;
