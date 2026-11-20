@@ -96,12 +96,12 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 
 | | Routes |
 | --- | ---: |
-| Controller routes (src/modules + ee/modules) | 591 |
+| Controller routes (src/modules + ee/modules) | 592 |
 | Excluded (an MCP client must not or cannot use them) | 143 |
-| In scope | 448 |
+| In scope | 449 |
 | Covered by a dedicated tool | 79 (17.6%) |
-| Covered by an operation | 369 (82.4%) |
-| Covered in total | 448 (100.0%) |
+| Covered by an operation | 370 (82.4%) |
+| Covered in total | 449 (100.0%) |
 | Held for a product decision | 0 (0.0%) |
 
 ## By resource
@@ -111,7 +111,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | a2a | 7 | 0 | 7 | 0 | 0 |
 | agent-channels | 21 | 12 | 8 | 0 | 1 |
 | agent-constraints | 4 | 0 | 4 | 0 | 0 |
-| agents | 65 | 10 | 46 | 0 | 9 |
+| agents | 66 | 10 | 47 | 0 | 9 |
 | apis | 31 | 6 | 21 | 0 | 4 |
 | approvals | 9 | 3 | 6 | 0 | 0 |
 | audit-log | 2 | 0 | 2 | 0 | 0 |
@@ -296,6 +296,7 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | agents | `POST /agents/:id/runs` (AgentRunsController.startRun) | `invoke_agent` | tool |
 | agents | `GET /agents/:id/runs` (AgentRunsController.listRuns) | `runs.list` (read) | operation |
 | agents | `GET /agents/:id/runs/:runId` (AgentRunsController.getRun) | `get_run` | tool |
+| agents | `DELETE /agents/:id/runs/:runId` (AgentRunsController.deleteRun) | `runs.delete` (destructive) | operation |
 | agents | `GET /agents/:id/runs/:runId/code-executions` (AgentRunsController.listCodeExecutions) | `runs.list_code_executions` (read) | operation |
 | agents | `GET /agents/:id/runs/:runId/code-executions/:codeExecutionId` (AgentRunsController.getCodeExecution) | `runs.get_code_execution` (read) | operation |
 | agents | `GET /agents/:id/runs/:runId/stream` (AgentRunsController.streamRun) |  | excluded |

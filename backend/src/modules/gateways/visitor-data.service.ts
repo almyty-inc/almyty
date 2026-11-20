@@ -10,7 +10,7 @@ import { EndUser } from '../../entities/end-user.entity';
 import { AgentFile } from '../../entities/file.entity';
 import type { Gateway } from '../../entities/gateway.entity';
 import { Message } from '../../entities/message.entity';
-import { ToolExecution } from '../../entities/tool-execution.entity';
+import { removeRuns } from '../agents/run-removal';
 import { FilesService } from '../files/files.service';
 import { visitorScopeId } from '../memory/canonical/canonical-memory.helpers';
 import { MemoryAccountsService, memoryAccountName, NATIVE_MEMORY_ACCOUNT } from '../memory/canonical/memory-accounts.service';
@@ -537,10 +537,10 @@ export class VisitorDataService {
         out.unanswered = removed.affected ?? unanswered.length;
       }
       if (runIds.length) {
-        const calls = await tx.getRepository(ToolExecution).delete({ runId: In(runIds), organizationId });
-        out.toolCalls = calls.affected ?? 0;
-        const removed = await tx.getRepository(AgentRun).delete({ id: In(runIds), organizationId });
-        out.runs = removed.affected ?? runIds.length;
+        // The same removal "Delete run" uses (agents/run-removal.ts).
+        const removed = await removeRuns(tx, organizationId, runIds);
+        out.toolCalls = removed.toolCalls;
+        out.runs = removed.runs;
       }
       if (conversationIds.length) {
         // Only conversations of this organization: the ids came from it,

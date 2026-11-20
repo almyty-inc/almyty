@@ -35,6 +35,8 @@ import type { AgentExecution, AgentRun } from '@/types'
 import { UnverifiedNote, VerifyStepCard, VerifySummary } from './verify-step'
 import { CodeStepCard, isCodeStep } from './code-step'
 import { PromoteRunSection } from './promote-run-section'
+import { DeleteRunButton } from './delete-run-button'
+import { useCanManageAgent } from '@/hooks/use-organization-role'
 import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
 import { DeliveryNote } from './schedule-card'
@@ -54,6 +56,8 @@ interface RunsTabProps {
   agentId?: string
   /** A run to show opened, from a link to /agents/:id/runs/:runId. */
   openRunId?: string
+  /** The agent's owner: they, and the organization's admins and owners, may delete its runs. */
+  ownerUserId?: string | null
   /**
    * How many runs the agent has in all (the lists' `pagination.total`).
    * The lists hold one page, so their length is the page size.
@@ -134,7 +138,8 @@ export function visibleRows(
   return rows.filter((r) => Date.parse(r.createdAt) >= cutoff)
 }
 
-export function RunsTab({ runs, executions = [], agentId, openRunId, total, runsTotal, executionsTotal }: RunsTabProps) {
+export function RunsTab({ runs, executions = [], agentId, openRunId, ownerUserId, total, runsTotal, executionsTotal }: RunsTabProps) {
+  const canManage = useCanManageAgent(ownerUserId)
   const [expandedRunId, setExpandedRunId] = useState<string | null>(openRunId ?? null)
   // A link to another run while this tab is showing opens that one.
   useEffect(() => {
@@ -194,7 +199,18 @@ export function RunsTab({ runs, executions = [], agentId, openRunId, total, runs
 
   if (opened) {
     return opened.kind === 'run' ? (
-      <OpenedRun key={`run-${opened.id}`} run={opened.run} agentId={agentId} onClose={() => setExpandedRunId(null)} />
+      <OpenedRun
+        key={`run-${opened.id}`}
+        run={opened.run}
+        agentId={agentId}
+        onClose={() => setExpandedRunId(null)}
+        canDelete={canManage}
+        onDeleted={(deletedId) => {
+          // Back to the list, without the run on any page read so far.
+          setLater((prev) => ({ ...prev, runs: prev.runs.filter((r) => r.id !== deletedId) }))
+          setExpandedRunId(null)
+        }}
+      />
     ) : (
       <OpenedExecution key={`execution-${opened.id}`} exec={opened.exec} agentId={agentId} onClose={() => setExpandedRunId(null)} />
     )
@@ -358,20 +374,24 @@ function OpenedRunHeader({
   facts,
   onClose,
   notes,
+  actions,
 }: {
   status: string
   createdAt: string
   facts: Array<[string, string]>
   onClose: () => void
   notes?: React.ReactNode
+  /** Controls for the run, beside "All runs" (Delete run). */
+  actions?: React.ReactNode
 }) {
   return (
     <CardHeader className="space-y-3">
-      <div>
+      <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" className="-ml-2 gap-1.5 text-muted-foreground" aria-expanded onClick={onClose}>
           <ArrowLeft className="h-4 w-4" aria-hidden />
           All runs
         </Button>
+        {actions}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <CardTitle className="text-base">Run of {formatDateTime(createdAt)}</CardTitle>
@@ -396,7 +416,20 @@ function OpenedRunHeader({
  * run's event log, and a connection that drops picks up after the last
  * event it showed (useLiveRun).
  */
-function OpenedRun({ run: listed, agentId, onClose }: { run: AgentRun; agentId?: string; onClose: () => void }) {
+function OpenedRun({
+  run: listed,
+  agentId,
+  onClose,
+  canDelete = false,
+  onDeleted,
+}: {
+  run: AgentRun
+  agentId?: string
+  onClose: () => void
+  /** Whether to offer "Delete run" (the person may manage the agent). */
+  canDelete?: boolean
+  onDeleted?: (runId: string) => void
+}) {
   const queryClient = useQueryClient()
   const { run, connection } = useLiveRun(agentId, listed, true, {
     // Finished: read the list again for what the log does not carry.
@@ -411,6 +444,11 @@ function OpenedRun({ run: listed, agentId, onClose }: { run: AgentRun; agentId?:
         status={run.status}
         createdAt={run.createdAt}
         onClose={onClose}
+        actions={
+          canDelete && agentId && onDeleted ? (
+            <DeleteRunButton agentId={agentId} runId={run.id} status={run.status} onDeleted={onDeleted} />
+          ) : undefined
+        }
         notes={
           <>
             <UnverifiedNote run={run} compact />

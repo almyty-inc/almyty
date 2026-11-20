@@ -414,6 +414,7 @@ export function AgentDetailPage() {
             executions={executions}
             agentId={agent.id}
             openRunId={runId}
+            ownerUserId={agent.createdBy}
             total={runsTotal}
             runsTotal={runsData?.total}
             executionsTotal={executionsData?.total}

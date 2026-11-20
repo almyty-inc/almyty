@@ -7,6 +7,7 @@ import {
   Optional,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -31,6 +32,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { CodeModeService } from '../code-mode/code-mode.service';
+import { AgentRunDeletionService } from './agent-run-deletion.service';
 import { resumeSeqOf, streamPosOf } from './run-stream-position';
 import { writeRunStream } from './run-stream-writer';
 import { openEventStream } from '../../common/utils/event-stream';
@@ -53,6 +55,8 @@ export class AgentRunsController {
     private readonly executions?: Repository<AgentExecution>,
     // Optional for the same reason: run_code traces (code mode).
     @Optional() private readonly codeMode?: CodeModeService,
+    // Optional for the same reason: "Delete run".
+    @Optional() private readonly runDeletion?: AgentRunDeletionService,
   ) {}
 
   /**
@@ -215,6 +219,45 @@ export class AgentRunsController {
       throw new HttpException(
         { success: false, message: error.message, error: 'RUN_FETCH_FAILED' },
         error.status || HttpStatus.NOT_FOUND,
+      );
+    }
+  }
+
+  /**
+   * Delete one finished run (AgentRunDeletionService): 404 for a run of
+   * another agent or organization, 403 for someone who may see or run the
+   * agent but not manage it, 409 for a run still going.
+   */
+  @Delete(':id/runs/:runId')
+  @Roles('member', 'admin', 'owner')
+  @RbacAction(RBAC_PERMISSIONS.AGENTS_UPDATE)
+  @ApiOperation({ summary: 'Delete a finished run' })
+  @ApiResponse({ status: 200, description: 'Run deleted' })
+  @ApiResponse({ status: 403, description: 'May not manage this agent' })
+  @ApiResponse({ status: 404, description: 'Run not found' })
+  @ApiResponse({ status: 409, description: 'Run is still going' })
+  async deleteRun(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @Request() req: any,
+  ) {
+    try {
+      const organizationId = req.user.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (!this.runDeletion) {
+        throw new HttpException('Deleting runs is not available here', HttpStatus.SERVICE_UNAVAILABLE);
+      }
+      const removed = await this.runDeletion.deleteRun(id, runId, organizationId, req.user.sub || req.user.id);
+      return { success: true, data: removed, message: 'Run deleted' };
+    } catch (error) {
+      throw new HttpException(
+        { success: false, message: error.message, error: 'RUN_DELETE_FAILED' },
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
