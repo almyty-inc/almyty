@@ -82,6 +82,7 @@ describe('OrganizationsService', () => {
             create: jest.fn(),
             save: jest.fn(),
             remove: jest.fn(),
+            delete: jest.fn(),
           },
         },
         {
@@ -121,8 +122,13 @@ describe('OrganizationsService', () => {
     // __tests__/member-removal-handover.spec.ts.
     const txManager = {
       getRepository: (entity: unknown) =>
-        entity === UserOrganization ? userOrganizationRepository : entity === Team ? teamRepository : undefined,
+        entity === UserOrganization ? userOrganizationRepository
+          : entity === Team ? teamRepository
+            : entity === UserTeam ? userTeamRepository
+              : undefined,
     };
+    teamRepository.find.mockResolvedValue([]);
+    userOrganizationRepository.find.mockResolvedValue([]);
     userOrganizationRepository.manager = { transaction: jest.fn((cb: any) => cb(txManager)) };
     teamRepository.manager = { transaction: jest.fn((cb: any) => cb(txManager)) };
   });
@@ -713,6 +719,24 @@ describe('OrganizationsService', () => {
 
       expect(result).toEqual(mockTeams);
       expect(teamRepository.find).toHaveBeenCalled();
+    });
+
+    // The "Everyone" team on staging said 9 members while Settings >
+    // Members said 1: team rows of people no longer in the org counted.
+    it('lists only active organization members in each team', async () => {
+      teamRepository.count.mockResolvedValue(1);
+      teamRepository.find.mockResolvedValue([
+        { id: 'everyone', members: [{ userId: 'here' }, { userId: 'left' }, { userId: 'paused' }] },
+      ]);
+      userOrganizationRepository.find.mockResolvedValue([{ userId: 'here' }]);
+
+      const [team] = await service.getTeams('org-1');
+
+      expect(team.members.map((m) => m.userId)).toEqual(['here']);
+      expect(userOrganizationRepository.find).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', isActive: true },
+        select: { userId: true },
+      });
     });
 
     it('self-heals by joining the owner to the default team when none exists', async () => {

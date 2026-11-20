@@ -173,6 +173,25 @@ describe('BillingTab', () => {
     expect(screen.getByText('Manage billing')).toBeInTheDocument()
   })
 
+  // Staging's QA org showed "Free" next to a "Canceled" badge: the status
+  // of a subscription that ended, read as if it were the Free plan's.
+  it('does not badge the Free plan with an old subscription status', async () => {
+    mocked.getStatus.mockResolvedValue({ ...freeStatus, status: 'canceled', hasSubscription: true })
+
+    render(<BillingTab organizationId={ORG} />)
+
+    await waitFor(() => expect(screen.getByText('Upgrade to Pro')).toBeInTheDocument())
+    expect(screen.queryByText(/canceled/i)).not.toBeInTheDocument()
+  })
+
+  it('still shows the subscription status on a paid plan', async () => {
+    mocked.getStatus.mockResolvedValue({ ...freeStatus, plan: 'pro', status: 'active', hasSubscription: true })
+
+    render(<BillingTab organizationId={ORG} />)
+
+    expect(await screen.findByText('active')).toBeInTheDocument()
+  })
+
   /* GET /billing/:organizationId is @Roles('admin','owner'), but Settings
    * renders the Billing tab for every role. The status query had no error
    * branch, so a 403 left `status` undefined and the component fell through
