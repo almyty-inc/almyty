@@ -405,7 +405,7 @@ export function AgentDetailPage() {
             setWebhookUrl={setWebhookUrl}
             onShowAllRuns={() => setActiveTab('runs')}
           />
-          <AgentApiAccessSection agentId={id!} ownerUserId={agent?.createdBy} />
+          <AgentApiAccessSection agentId={id!} ownerUserId={agent?.createdBy} viewerCanManage={agent?.viewerCanManage} />
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
@@ -415,6 +415,7 @@ export function AgentDetailPage() {
             agentId={agent.id}
             openRunId={runId}
             ownerUserId={agent.createdBy}
+            viewerCanManage={agent.viewerCanManage}
             total={runsTotal}
             runsTotal={runsData?.total}
             executionsTotal={executionsData?.total}
@@ -432,7 +433,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="channels" className="space-y-4">
-          <ChannelsTab agentId={id!} agentName={agent?.name} agentOwnerId={agent?.createdBy} />
+          <ChannelsTab agentId={id!} agentName={agent?.name} agentOwnerId={agent?.createdBy} viewerCanManage={agent?.viewerCanManage} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">

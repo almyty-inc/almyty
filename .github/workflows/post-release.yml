@@ -90,9 +90,16 @@ jobs:
         if: steps.v.outputs.published == 'true'
         run: node scripts/release-packages.js raise-ranges
 
+      # freeze rasterizes through rsvg-convert when it is on PATH. Without it
+      # freeze falls back to a built-in renderer that crashes on the larger
+      # help screens here (SIGSEGV, split stack overflow), so install it with
+      # the font freeze draws in; capture-cli-help.js refuses to render
+      # without either.
       - name: Install freeze
         if: steps.v.outputs.published == 'true'
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends librsvg2-bin fonts-jetbrains-mono
           TARBALL="freeze_${FREEZE_VERSION}_Linux_x86_64.tar.gz"
           curl -fsSLo "$RUNNER_TEMP/$TARBALL" "https://github.com/charmbracelet/freeze/releases/download/v${FREEZE_VERSION}/$TARBALL"
           echo "${FREEZE_SHA256}  $RUNNER_TEMP/$TARBALL" | sha256sum -c -

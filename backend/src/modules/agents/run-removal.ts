@@ -1,6 +1,7 @@
 import { EntityManager, In } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { CodeExecution } from '../../entities/code-execution.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 
 /**
@@ -20,23 +21,26 @@ export function isFinishedRunStatus(status: AgentRunStatus | string | null | und
 }
 
 /**
- * Delete runs and the tool calls they made, inside the caller's
- * transaction. The one way a run is removed on request: a visitor's
- * erasure (VisitorDataService.erase) and "Delete run" both go through it.
+ * Delete runs, the tool calls they made and the run_code scripts they ran,
+ * inside the caller's transaction. The one way a run is removed on request:
+ * a visitor's erasure (VisitorDataService.erase) and "Delete run" both go
+ * through it.
  *
  * What goes with the run row itself is the schema's: its event log
  * (agent_run_events) and approval requests by ON DELETE CASCADE; a skill
  * or constraint promoted from it keeps existing with sourceRunId set to
- * null. tool_executions has no foreign key to the run, so its rows are
- * deleted here, scoped to the organization like the runs.
+ * null. tool_executions and code_executions have no foreign key to the
+ * run, so their rows are deleted here, scoped to the organization like the
+ * runs. Tool calls go first: their codeExecutionId points at the script.
  */
 export async function removeRuns(
   tx: EntityManager,
   organizationId: string,
   runIds: string[],
-): Promise<{ runs: number; toolCalls: number }> {
-  if (runIds.length === 0) return { runs: 0, toolCalls: 0 };
+): Promise<{ runs: number; toolCalls: number; scripts: number }> {
+  if (runIds.length === 0) return { runs: 0, toolCalls: 0, scripts: 0 };
   const calls = await tx.getRepository(ToolExecution).delete({ runId: In(runIds), organizationId });
+  const scripts = await tx.getRepository(CodeExecution).delete({ runId: In(runIds), organizationId });
   const removed = await tx.getRepository(AgentRun).delete({ id: In(runIds), organizationId });
-  return { runs: removed.affected ?? runIds.length, toolCalls: calls.affected ?? 0 };
+  return { runs: removed.affected ?? runIds.length, toolCalls: calls.affected ?? 0, scripts: scripts.affected ?? 0 };
 }

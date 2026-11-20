@@ -244,6 +244,12 @@ export interface Agent {
   /** 'private' = only its owner (createdBy) can see or use it. */
   visibility?: 'private' | 'team' | 'org'
   teamId?: string | null
+  /**
+   * Whether the signed-in person may manage this agent, as the server
+   * decides it (org admin or owner, the agent's owner, or a lead of its
+   * team). Only GET /agents/:id carries it.
+   */
+  viewerCanManage?: boolean
   modelConfig?: {
     providerId?: string
     model?: string
