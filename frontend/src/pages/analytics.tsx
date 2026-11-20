@@ -110,11 +110,18 @@ export function AnalyticsPage() {
         }
       />
 
-      {/* Tabs — shared pill primitive, consistent with every other module */}
+      {/* Tabs — shared pill primitive, consistent with every other module.
+          Eleven tabs: tighter than the default padding so all of them sit
+          on one row at 1440 wide, and on a desktop the strip scrolls
+          sideways rather than drop "Audit trail" onto a second row. A
+          phone still wraps, like every other strip. */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as AnalyticsTab)}>
-        <TabsList className="h-auto flex-wrap justify-start">
+        <TabsList
+          className="h-auto flex-wrap justify-start lg:flex-nowrap lg:overflow-x-auto"
+          data-testid="analytics-tabs"
+        >
           {TAB_DEFINITIONS.map(({ key, label, icon: Icon }) => (
-            <TabsTrigger key={key} value={key} className="gap-1.5">
+            <TabsTrigger key={key} value={key} className="shrink-0 gap-1.5 px-2.5">
               <Icon className="h-4 w-4" />
               {label}
             </TabsTrigger>

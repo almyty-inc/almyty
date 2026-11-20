@@ -161,6 +161,28 @@ describe('ChannelsTab', () => {
     expect(gatewaysApi.getAll).not.toHaveBeenCalled()
   })
 
+  /* Built like the agent's other tabs (Runs, Memory, Files): one card, its
+   * title, description and "Add channel" in the card header, the settings
+   * line and the table in the card body. It used to put the title outside
+   * any card, with the settings line and the table as separate boxes. */
+  it('is one card with the title in its header, like the other agent tabs', async () => {
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([channel({ id: 'c-web', type: 'web', slug: 'acme-help' })])
+    render(<ChannelsTab agentId="agent-1" agentName="Support" />)
+
+    await screen.findByText('acme-help', { exact: false })
+    await screen.findByTestId('public-settings-summary')
+    const tab = screen.getByTestId('channels-tab')
+    expect(tab).toHaveClass('rounded-xl', 'border', 'shadow-panel')
+    const [header, body] = Array.from(tab.children) as HTMLElement[]
+    expect(tab.children).toHaveLength(2)
+    expect(within(header).getByRole('heading', { level: 3, name: 'Channels' })).toHaveClass('text-base')
+    expect(header).toHaveTextContent('Where people, or other agents, reach Support.')
+    expect(within(header).getByRole('link', { name: 'Add channel' })).toHaveAttribute('href', '/agents/agent-1/channels/new')
+    expect(within(body).getByTestId('public-settings-summary')).not.toHaveClass('shadow-panel')
+    expect(within(body).getByRole('table')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull()
+  })
+
   it('never says "app", "place" or "distribution" to the user', () => {
     const source = readFileSync(join(__dirname, '..', 'channels-tab.tsx'), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
