@@ -27,3 +27,21 @@ function inputText(input: unknown): string {
     .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
   return parts.join(' · ')
 }
+
+/**
+ * What one step of a run was given. A tool step's input is stored as
+ * `{ tool, toolId, parameters }`, which the step list printed as JSON with
+ * the tool's id in it; it reads `tool_name (latitude: 62.03 · longitude: 129.73)`.
+ */
+export function stepInputPreview(input: unknown, max = 400): string {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    const obj = input as Record<string, unknown>
+    if (typeof obj.tool === 'string') {
+      const params = obj.parameters ?? obj.arguments ?? obj.args
+      const inner = params && typeof params === 'object' ? inputText(params) : ''
+      const line = inner ? `${obj.tool} (${inner})` : obj.tool
+      return runInputPreview(line, max)
+    }
+  }
+  return runInputPreview(input, max)
+}
