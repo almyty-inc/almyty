@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table'
 
 import { formatDateTime, pluralized } from '@/lib/utils'
+import { runInputPreview } from '@/lib/run-input'
 import { agentsApi } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatDuration } from './constants'
@@ -315,7 +316,7 @@ function RunRow({ run, onOpen }: { run: AgentRun; onOpen: () => void }) {
         <DeliveryNote outcome={run.metadata?.channelDelivery} />
       </TableCell>
       <TableCell className="text-sm max-w-[200px] truncate">
-        {run.input ? JSON.stringify(run.input).slice(0, 80) : '--'}
+        {runInputPreview(run.input)}
       </TableCell>
       <TableCell className="text-sm">
         {run.currentStep}/{run.maxSteps}
@@ -347,7 +348,7 @@ function ExecutionRow({ exec, onOpen }: { exec: AgentExecution; onOpen: () => vo
         <DeliveryNote outcome={exec.metadata?.channelDelivery} />
       </TableCell>
       <TableCell className="text-sm max-w-[200px] truncate">
-        {exec.input ? JSON.stringify(exec.input).slice(0, 80) : '--'}
+        {runInputPreview(exec.input)}
       </TableCell>
       <TableCell className="text-sm">{steps.length}</TableCell>
       <TableCell className="text-sm">

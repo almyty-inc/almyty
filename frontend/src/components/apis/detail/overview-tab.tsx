@@ -22,19 +22,11 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { cn, pluralized } from '@/lib/utils'
 import { connectionTestMessage } from '@/lib/connection-test'
 import { addToolPath } from './operations-tab'
-import { isManualHttp, MANUAL_OPERATIONS_HINT, MANUAL_OPERATIONS_LABEL } from '@/lib/api-operations'
+import { authTypeLabel, isManualHttp, MANUAL_OPERATIONS_HINT, MANUAL_OPERATIONS_LABEL } from '@/lib/api-operations'
 
 /** The tool list filtered to one API's tools. */
 export function apiToolsPath(api: Pick<Api, 'id' | 'name'>): string {
   return `/tools?${new URLSearchParams({ apiId: api.id, apiName: api.name }).toString()}`
-}
-/** How the API's key is sent, as the overview's Key row says it. */
-const AUTH_WORDS: Record<string, string> = {
-  none: 'None',
-  api_key: 'API key',
-  bearer: 'Bearer token',
-  basic: 'Basic auth',
-  oauth2: 'OAuth 2.0',
 }
 interface OverviewTabProps {
   api: Api
@@ -126,7 +118,7 @@ export function OverviewTab({
         <StatTile
           icon={KeyRound}
           label="Key"
-          value={<span className="text-base font-semibold">{AUTH_WORDS[api.authentication?.type ?? 'none'] ?? api.authentication?.type}</span>}
+          value={<span className="text-base font-semibold">{authTypeLabel(api.authentication?.type)}</span>}
           footer={
             <Button variant="ghost" size="sm" className={inlineAction} onClick={onOpenAuthConfig} aria-label="Change the key">
               <Edit className="mr-1 h-3 w-3" aria-hidden />

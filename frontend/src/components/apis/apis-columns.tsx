@@ -14,7 +14,7 @@ import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import { VisibilityBadge, type Team } from '@/components/ui/team-filter'
 import { Api, ApiAuthType, ApiType } from '@/types'
-import { apiTools, isManualHttp, MANUAL_OPERATIONS_HINT, MANUAL_OPERATIONS_LABEL, operationCount } from '@/lib/api-operations'
+import { apiTools, authTypeLabel, isManualHttp, MANUAL_OPERATIONS_HINT, MANUAL_OPERATIONS_LABEL, operationCount } from '@/lib/api-operations'
 function getApiTypeIcon(type: ApiType) {
   switch (type) {
     case ApiType.OPENAPI: return Globe
@@ -86,7 +86,7 @@ export function createApisColumns({
                   />
                 </span>
               </div>
-              <div className="truncate text-sm text-muted-foreground">{api.baseUrl === 'internal://custom' ? 'Custom Tool' : api.baseUrl}</div>
+              <div className="truncate text-sm text-muted-foreground">{api.baseUrl === 'internal://custom' ? 'Custom tool' : api.baseUrl}</div>
             </div>
           </div>
         )
@@ -109,7 +109,7 @@ export function createApisColumns({
           <div className="flex items-center space-x-1">
             <AuthIcon className="h-4 w-4" />
             <span className="text-sm">
-              {!auth || auth === 'none' ? 'None' : auth.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              {authTypeLabel(auth)}
             </span>
           </div>
         )
@@ -140,7 +140,7 @@ export function createApisColumns({
         }
         return (
           <div className="text-center">
-            <span className="font-medium">{operationCount(api)}</span>
+            <span className="font-medium">{operationCount(api).toLocaleString('en-US')}</span>
           </div>
         )
       },
