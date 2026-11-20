@@ -77,6 +77,8 @@ A file a web chat or widget visitor uploads waits, with no conversation, for the
 
 Retention is the schedule; a person can also ask for their data to go now. The web chat and widget offer it to their visitors, and whoever may manage the agent (an organization owner or admin, or the member who owns it) answers anyone else from the agent's Channels tab (`/agents/:id/channels/visitor-data`). Either way `VisitorDataService.erase` removes the person's conversations, messages, runs with their tool executions, files (stored objects included), memories in almyty's store and in an outside memory service, channel events (with the text of messages that never became a run) and visitor rows at once, whatever the retention periods say, and records a `visitor_data_erase` audit entry with counts only. See `docs/channels.md` (Visitor data).
 
+One run can also be deleted on request: **Delete run** on an opened run, or `DELETE /agents/:id/runs/:runId`, for whoever may edit the agent. Finished runs only (409 for a run still going). It removes the run the way erasure does (`removeRuns` in `backend/src/modules/agents/run-removal.ts`, shared by both): the run with its event log and approval requests by ON DELETE CASCADE, and its tool executions. It records a `delete` audit entry on the `agent_run` with ids only. The agent's lifetime counters (`totalExecutions` and the rest) are left as they are, as the sweep leaves them.
+
 ## Entity snapshots
 
 `version` holds a full serialized copy of an entity on every update of a
