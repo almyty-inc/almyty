@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table'
 
 import { formatDateTime, pluralized } from '@/lib/utils'
+import { runInputPreview, stepInputPreview } from '@/lib/run-input'
 import { agentsApi } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatDuration } from './constants'
@@ -41,7 +42,7 @@ import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
 import { DeliveryNote } from './schedule-card'
 import { executionModels } from './routing-attribution'
-import { STEP_NAMES } from '../step-values'
+import { STEP_NAMES, stepNameOf } from '../step-values'
 import { MachineProblem } from '@/components/runners/machine-problem'
 import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
 import { useLiveRun, type LiveRunConnection } from '@/hooks/use-live-run'
@@ -315,7 +316,7 @@ function RunRow({ run, onOpen }: { run: AgentRun; onOpen: () => void }) {
         <DeliveryNote outcome={run.metadata?.channelDelivery} />
       </TableCell>
       <TableCell className="text-sm max-w-[200px] truncate">
-        {run.input ? JSON.stringify(run.input).slice(0, 80) : '--'}
+        {runInputPreview(run.input)}
       </TableCell>
       <TableCell className="text-sm">
         {run.currentStep}/{run.maxSteps}
@@ -347,7 +348,7 @@ function ExecutionRow({ exec, onOpen }: { exec: AgentExecution; onOpen: () => vo
         <DeliveryNote outcome={exec.metadata?.channelDelivery} />
       </TableCell>
       <TableCell className="text-sm max-w-[200px] truncate">
-        {exec.input ? JSON.stringify(exec.input).slice(0, 80) : '--'}
+        {runInputPreview(exec.input)}
       </TableCell>
       <TableCell className="text-sm">{steps.length}</TableCell>
       <TableCell className="text-sm">
@@ -499,14 +500,14 @@ function OpenedRun({
                 <div key={idx} className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border bg-card p-3 text-sm sm:flex-nowrap" data-testid={`run-step-${idx}`}>
                   <div className="flex items-center gap-2 shrink-0">
                     <StepNumber n={idx + 1} />
-                    <Badge variant="outline" className="font-mono">{step.type}</Badge>
+                    <Badge variant="outline">{STEP_NAMES[step.type] ?? step.type}</Badge>
                   </div>
                   <div className="order-last min-w-0 flex-1 basis-full space-y-0.5 sm:order-none sm:basis-auto">
                     <StepRoleLine step={step} />
                     {summary && <div className="text-sm">{summary}</div>}
                     {step.input && !hasStepSummary(step) && (
                       <div className="text-xs text-muted-foreground truncate">
-                        In: {typeof step.input === 'string' ? step.input : JSON.stringify(step.input)}
+                        In: {stepInputPreview(step.input)}
                       </div>
                     )}
                     {step.output && !hasStepSummary(step) && !machineError && (
@@ -624,7 +625,7 @@ function OpenedExecution({ exec, agentId, onClose }: { exec: AgentExecution; age
                 >
                   <div className="flex items-center gap-2 shrink-0">
                     <StepNumber n={idx + 1} />
-                    <Badge variant="outline">{STEP_NAMES[r?.nodeType ?? ''] ?? nodeId}</Badge>
+                    <Badge variant="outline" title={nodeId}>{stepNameOf(r?.nodeType, nodeId)}</Badge>
                   </div>
                   <div className="order-last min-w-0 flex-1 basis-full space-y-0.5 sm:order-none sm:basis-auto">
                     {(r as any)?.model && <div className="text-xs text-muted-foreground">{(r as any).model}</div>}

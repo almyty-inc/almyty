@@ -43,6 +43,7 @@ import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { Agent, ExternalAgent } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
 
@@ -310,21 +311,23 @@ export function AgentsPage() {
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    aria-label="Status"
-                    className="h-10 rounded-lg border border-input bg-field px-3 text-sm w-32 hover:bg-field-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    <option value="all">All status</option>
-                    <option value="draft">Draft</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                  {/* The same dropdown as every other list's filters, not the browser's own. */}
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="flex-1 min-w-[9rem] sm:flex-none sm:w-40" aria-label="Status">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All status</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <TeamFilter
                     organizationId={currentOrganization?.id}
                     value={teamFilter}
                     onChange={setTeamFilter}
+                    className="flex-1 min-w-[9rem] sm:flex-none sm:w-44"
                   />
                 </div>
               )}
@@ -335,7 +338,8 @@ export function AgentsPage() {
                   <tr className="border-b">
                     <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Name</th>
                     <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Status</th>
-                    <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Nodes</th>
+                    {/* "Steps", the builder's word for them; an autonomous agent has none and says so. */}
+                    <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Steps</th>
                     <th className="h-11 px-4 text-left text-xs font-semibold text-muted-foreground">Runs</th>
                     {/* Pinned to the right edge so each row's menu stays on screen while the other columns scroll. */}
                     <th className="sticky right-0 bg-card h-11 px-4 text-right text-xs font-semibold text-muted-foreground" data-testid="agents-actions-col"><span className="sr-only">Actions</span></th>

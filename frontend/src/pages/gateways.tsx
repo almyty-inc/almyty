@@ -21,7 +21,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { gatewaysApi } from '@/lib/api'
 import { gatewaysQuery } from '@/lib/list-queries'
-import { pluralized } from '@/lib/utils'
+import { pluralize, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
@@ -167,9 +167,9 @@ export function GatewaysPage() {
         // The list response carries a COUNT, not the tools themselves.
         const toolCount = gateway.toolCount ?? gateway.tools?.length ?? 0
         return (
-          <div className="text-center text-sm">
-            <span className="font-medium">{toolCount}</span>{' '}
-            <span className="text-muted-foreground">tools</span>
+          <div className="text-sm">
+            <span className="font-medium">{toolCount.toLocaleString('en-US')}</span>{' '}
+            <span className="text-muted-foreground">{pluralize(toolCount, 'tool')}</span>
           </div>
         )
       },
