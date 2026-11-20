@@ -24,7 +24,7 @@ export function AgentVisitorDataPage() {
 }
 
 function Loaded({ agent }: { agent: Agent }) {
-  const canManage = useCanManageAgent(agent.createdBy)
+  const canManage = useCanManageAgent(agent.createdBy, agent.viewerCanManage)
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: channelKeys.list(agent.id),
     queryFn: () => agentChannelsApi.list(agent.id),

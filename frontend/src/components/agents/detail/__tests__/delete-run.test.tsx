@@ -50,11 +50,17 @@ function signIn(userId: string, role: OrganizationRole) {
   })
 }
 
-function renderOpened(r: AgentRun, ownerUserId = 'user-owner') {
+function renderOpened(r: AgentRun, ownerUserId = 'user-owner', viewerCanManage?: boolean) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
   renderWithProviders(
-    <RunsTab runs={[r, run({ id: 'run-2', createdAt: '2026-11-18T10:00:00Z' })]} agentId="agent-1" openRunId={r.id} ownerUserId={ownerUserId} />,
+    <RunsTab
+      runs={[r, run({ id: 'run-2', createdAt: '2026-11-18T10:00:00Z' })]}
+      agentId="agent-1"
+      openRunId={r.id}
+      ownerUserId={ownerUserId}
+      viewerCanManage={viewerCanManage}
+    />,
     { queryClient },
   )
   return { invalidate }
@@ -115,6 +121,18 @@ describe('Delete run', () => {
     signIn('user-member', OrganizationRole.MEMBER)
     renderOpened(run())
     expect(screen.getByTestId('opened-run-run-1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete run' })).not.toBeInTheDocument()
+  })
+
+  it('is offered when the server says the viewer may manage the agent (a team lead, neither admin nor owner)', () => {
+    signIn('user-team-lead', OrganizationRole.MEMBER)
+    renderOpened(run(), 'user-owner', true)
+    expect(screen.getByRole('button', { name: 'Delete run' })).toBeEnabled()
+  })
+
+  it("follows the server's no over the org-role guess", () => {
+    signIn('user-admin', OrganizationRole.ADMIN)
+    renderOpened(run(), 'user-owner', false)
     expect(screen.queryByRole('button', { name: 'Delete run' })).not.toBeInTheDocument()
   })
 

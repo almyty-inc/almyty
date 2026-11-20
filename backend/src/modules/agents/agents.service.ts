@@ -35,7 +35,7 @@ import {
   assertAttachable,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
-import { assertManageable, canRead } from '../../common/authorization/read-rule';
+import { assertManageable, canManage, canRead } from '../../common/authorization/read-rule';
 import { assertNoSharedDependents, narrowsScope } from '../../common/authorization/private-dependents';
 import { collectAgentReferences, collectProviderReferences } from './agent-references';
 import { LlmProvider } from '../../entities/llm-provider.entity';
@@ -717,6 +717,16 @@ export class AgentsService {
     }
 
     return agent;
+  }
+
+  /**
+   * Whether `userId` may manage `agent` -- exactly what the agent manage
+   * paths' assertManageable(..., { ownerManages: true }) would allow, so an
+   * org admin, the agent's owner, or a lead of its team. The detail page
+   * reads it to decide which manage controls to offer.
+   */
+  async viewerCanManage(agent: Agent, userId: string | null | undefined): Promise<boolean> {
+    return canManage(this.accessPolicy, userId, agent, { ownerManages: true });
   }
 
   /**

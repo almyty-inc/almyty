@@ -58,6 +58,8 @@ interface RunsTabProps {
   openRunId?: string
   /** The agent's owner: they, and the organization's admins and owners, may delete its runs. */
   ownerUserId?: string | null
+  /** The server's answer to "may this person manage the agent" (GET /agents/:id); wins over the owner guess. */
+  viewerCanManage?: boolean
   /**
    * How many runs the agent has in all (the lists' `pagination.total`).
    * The lists hold one page, so their length is the page size.
@@ -138,8 +140,8 @@ export function visibleRows(
   return rows.filter((r) => Date.parse(r.createdAt) >= cutoff)
 }
 
-export function RunsTab({ runs, executions = [], agentId, openRunId, ownerUserId, total, runsTotal, executionsTotal }: RunsTabProps) {
-  const canManage = useCanManageAgent(ownerUserId)
+export function RunsTab({ runs, executions = [], agentId, openRunId, ownerUserId, viewerCanManage, total, runsTotal, executionsTotal }: RunsTabProps) {
+  const canManage = useCanManageAgent(ownerUserId, viewerCanManage)
   const [expandedRunId, setExpandedRunId] = useState<string | null>(openRunId ?? null)
   // A link to another run while this tab is showing opens that one.
   useEffect(() => {
