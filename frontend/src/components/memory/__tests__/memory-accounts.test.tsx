@@ -137,6 +137,15 @@ describe('the Accounts tab', () => {
     renderAtRoute(<MemoriesPage />, { path: '/memories', url: '/memories?tab=accounts' })
     expect(await screen.findByRole('link', { name: 'Move memories from Mem0 production' })).toHaveAttribute('href', '/memories/move?from=c1')
   })
+
+  it('keeps only the icons of the pinned row actions on a phone, so they do not cover the service', async () => {
+    renderAtRoute(<MemoriesPage />, { path: '/memories', url: '/memories?tab=accounts' })
+    const move = await screen.findByRole('link', { name: 'Move memories from Mem0 production' })
+    expect(within(move).getByText('Move memories')).toHaveClass('hidden', 'sm:inline')
+    expect(within(screen.getByRole('button', { name: 'Check Mem0 staging' })).getByText('Check')).toHaveClass('hidden', 'sm:inline')
+    const zepRow = screen.getByTestId('memory-service-not-set-up').closest('tr')!
+    expect(within(within(zepRow).getByRole('link', { name: /Add account/ })).getByText('Add account')).toHaveClass('hidden', 'sm:inline')
+  })
 })
 
 describe('/memories/accounts/new', () => {
