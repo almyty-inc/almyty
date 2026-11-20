@@ -10,10 +10,10 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useOrganizationStore } from '@/store/organization'
 import { useCanManageAgent } from '@/hooks/use-organization-role'
 
-export function AgentApiAccessSection({ agentId, ownerUserId }: { agentId: string; ownerUserId?: string }) {
+export function AgentApiAccessSection({ agentId, ownerUserId, viewerCanManage }: { agentId: string; ownerUserId?: string | null; viewerCanManage?: boolean }) {
   const { currentOrganization } = useOrganizationStore()
   const queryClient = useQueryClient()
-  const canManage = useCanManageAgent(ownerUserId)
+  const canManage = useCanManageAgent(ownerUserId, viewerCanManage)
   const key = ['agent-api-access', agentId]
   const access = useQuery({ queryKey: key, queryFn: () => agentsApi.getApiAccess(agentId) })
   const stored = access.data?.accessScope ?? 'org'

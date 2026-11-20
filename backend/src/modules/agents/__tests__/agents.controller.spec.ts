@@ -40,6 +40,7 @@ describe('AgentsController', () => {
       createAgent: jest.fn(),
       getAgents: jest.fn(),
       getAgent: jest.fn(),
+      viewerCanManage: jest.fn().mockResolvedValue(false),
       updateAgent: jest.fn(),
       deleteAgent: jest.fn(),
       activateAgent: jest.fn(),
@@ -234,12 +235,14 @@ describe('AgentsController', () => {
       } as any;
 
       agentsService.getAgent.mockResolvedValue(mockAgent);
+      agentsService.viewerCanManage.mockResolvedValue(true);
 
       const result = await controller.getAgent('agent-1', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(result.data).toBe(mockAgent);
+      expect(result.data).toEqual({ ...mockAgent, viewerCanManage: true });
       expect(agentsService.getAgent).toHaveBeenCalledWith('agent-1', 'org-1', { id: 'user-1' });
+      expect(agentsService.viewerCanManage).toHaveBeenCalledWith(mockAgent, 'user-1');
     });
 
     it('should handle not found error', async () => {
