@@ -10,7 +10,7 @@
  * demo agents. Models come from the QA org's connected providers.
  */
 import { test, expect, signUpFresh, dropFreshUser, screenshotThis, type FreshUser } from './support/fixtures'
-import { QA_ORG_NAME } from './support/env'
+import { API_URL, QA_ORG_NAME } from './support/env'
 import { data } from './support/qa-api'
 import {
   berlinTomorrow,
@@ -21,7 +21,7 @@ import {
   tryIt,
   weatherQuestion,
 } from './support/weather-agent'
-import type { APIRequestContext, Page, TestInfo } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 import type { Gate } from './support/fixtures'
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
@@ -156,52 +156,47 @@ async function joinQaOrg(gate: Gate, qa: APIRequestContext, orgId: string, perso
   return membership.userId
 }
 
-/** Sign a person up for this test; their account's own organization goes when the test ends. */
-async function person(browser: import('@playwright/test').Browser, gate: Gate, testInfo: TestInfo): Promise<FreshUser> {
-  const fresh = await signUpFresh(browser)
-  gate.defer(`fresh user ${fresh.email}`, () => dropFreshUser(fresh, testInfo))
-  return fresh
-}
-
 test.describe('J4 team lead manages a team agent', () => {
-  test('J4 the lead of the agent\'s team is offered Delete run; a member outside the team does not see the agent', async ({ browser, page, gate, qa, org }, testInfo) => {
-    // Two people let into the QA org as plain members.
-    const lead = await person(browser, gate, testInfo)
-    const outsider = await person(browser, gate, testInfo)
-    const leadId = await joinQaOrg(gate, qa, org.id, lead)
-    await joinQaOrg(gate, qa, org.id, outsider)
+  // One throwaway account plays both parts, first outside the team, then as
+  // its lead: staging throttles sign-ins per IP, and the gate already signs
+  // several fresh accounts in.
+  test('J4 a member outside the agent\'s team does not see it; made the team\'s lead, they are offered Delete run', async ({ browser, page, gate, qa, org }, testInfo) => {
+    const person = await signUpFresh(browser)
+    gate.defer(`fresh user ${person.email}`, () => dropFreshUser(person, testInfo))
+    const personId = await joinQaOrg(gate, qa, org.id, person)
 
-    // A team with the first as its lead.
+    // A team, and the QA user's agent, run once, then given to the team.
     const team = await data<any>(await qa.post(`/organizations/${org.id}/teams`, { data: { name: gate.name('team') } }))
     gate.track('team', team.id)
-    await data(await qa.post(`/organizations/${org.id}/teams/${team.id}/members`, { data: { userId: leadId, role: 'lead' } }))
-
-    // The QA user's agent, run once, then given to the team.
     const agent = await buildAgent(page, gate, { what: 'team-agent', instructions: ECHO_INSTRUCTIONS })
     await tryIt(page, 'Say hello.')
     const runId = await openLatestRun(page, agent.id)
     await data(await qa.patch(`/agents/${agent.id}`, { data: { visibility: 'team', teamId: team.id } }))
 
-    // The lead: the agent's page says they may manage it, and its run offers Delete run.
-    const leadPage = lead.page
-    screenshotThis(leadPage)
-    const leadRead = leadPage.waitForResponse((r) => r.url().endsWith(`/agents/${agent.id}`) && r.request().method() === 'GET')
-    await leadPage.goto(`/agents/${agent.id}/runs/${runId}`)
-    const agentForLead = (await (await leadRead).json()).data
-    expect(agentForLead.viewerCanManage, 'the team lead may manage the agent').toBe(true)
-    const leadRuns = leadPage.getByRole('tabpanel', { name: 'Runs' })
-    await expect(leadRuns.getByRole('heading', { name: 'Steps' })).toBeVisible({ timeout: 60_000 })
-    await expect(leadRuns.getByRole('button', { name: 'Delete run' }), 'the team lead should be offered Delete run').toBeVisible()
+    const theirs = person.page
+    screenshotThis(theirs)
+    const agentRead = () => theirs.waitForResponse((r) => r.url().endsWith(`/agents/${agent.id}`) && r.request().method() === 'GET')
 
-    // A member outside the team: the agent is not theirs to see, let alone manage.
-    const outsiderRead = outsider.page.waitForResponse((r) => r.url().endsWith(`/agents/${agent.id}`) && r.request().method() === 'GET')
-    await outsider.page.goto(`/agents/${agent.id}/runs/${runId}`)
-    expect((await outsiderRead).status(), 'a member outside the team should not read the agent').toBe(404)
-    await expect(outsider.page.getByRole('button', { name: 'Delete run' })).toHaveCount(0)
-    expect((await outsider.page.request.delete(`${new URL(page.url()).origin.replace('app.', 'api.')}/agents/${agent.id}/runs/${runId}`)).ok()).toBe(false)
+    // A plain member outside the team: the agent is not theirs to see, let alone manage.
+    const outside = agentRead()
+    await theirs.goto(`/agents/${agent.id}/runs/${runId}`)
+    expect((await outside).status(), 'a member outside the team should not read the agent').toBe(404)
+    await expect(theirs.getByRole('button', { name: 'Delete run' })).toHaveCount(0)
+    expect((await theirs.request.delete(`${API_URL}/agents/${agent.id}/runs/${runId}`)).ok(), 'nor delete its run').toBe(false)
+    expect(await runStatus(qa, agent.id, runId)).toBe(200)
+
+    // Made the team's lead: the agent's page says they may manage it, and its run offers Delete run.
+    await data(await qa.post(`/organizations/${org.id}/teams/${team.id}/members`, { data: { userId: personId, role: 'lead' } }))
+    const asLead = agentRead()
+    await theirs.goto(`/agents/${agent.id}/runs/${runId}`)
+    const agentForLead = (await (await asLead).json()).data
+    expect(agentForLead.viewerCanManage, 'the team lead may manage the agent').toBe(true)
+    const runs = theirs.getByRole('tabpanel', { name: 'Runs' })
+    await expect(runs.getByRole('heading', { name: 'Steps' })).toBeVisible({ timeout: 60_000 })
+    await expect(runs.getByRole('button', { name: 'Delete run' }), 'the team lead should be offered Delete run').toBeVisible()
 
     // And the lead's Delete run is honoured by the server.
-    await deleteOpenedRun(leadPage, agent.id, runId)
+    await deleteOpenedRun(theirs, agent.id, runId)
     expect(await runStatus(qa, agent.id, runId)).toBe(404)
   })
 })
