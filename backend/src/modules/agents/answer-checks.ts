@@ -962,6 +962,30 @@ function isIdentifier(word: string): boolean {
 }
 
 /**
+ * A line without the field label the answer lays its entry out with: the
+ * "**URL:**" of "**URL:** https://...", the "Published:" of a line with
+ * nothing after it but a link. Those name the answer's fields, not
+ * something in the release ("URL" is not the url module). A label whose
+ * colon stands outside the bold ("**url**: fix host parsing") with words
+ * after it is a changelog line and is kept.
+ */
+const FIELD_LABEL = /^(\*\*|__)?([A-Za-z][A-Za-z ()/-]{0,40}):(\*\*|__)?(.*)$/;
+
+function withoutFieldLabel(line: string): string {
+  // The indent and list marker before a label: "  - ", "1. ", "> ".
+  let at = 0;
+  while (at < line.length && (line[at] === ' ' || line[at] === '\t')) at++;
+  const marker = /^(?:[-*+>]|\d{1,3}\.) /.exec(line.slice(at));
+  if (marker) at += marker[0].length;
+  const m = FIELD_LABEL.exec(line.slice(at));
+  if (!m) return line;
+  const [, open, , close, rest] = m;
+  const boldLabel = !!open && open === close;
+  const nothingAfter = !rest.replace(/[\s<>[\]*_`]/g, '');
+  return boldLabel || nothingAfter ? `${line.slice(0, at)}${rest.trim()}` : line;
+}
+
+/**
  * The technical terms a release's entry in the answer names (code
  * identifiers, CVE ids, the subsystem names of the tool's release notes)
  * against that release's notes in the tool results. A term its notes never
@@ -978,13 +1002,12 @@ function releaseNoteFindings(entry: AnswerEntry, items: ToolItem[], by: string |
   const body = notes.byTag.get(tag.trim().toLowerCase());
   if (!body) return [];
   const text = unescapeMarkdown(body).toLowerCase();
-  // What the entry says about the release, without its heading line, links and addresses.
+  // What the entry says about the release, without its heading line, links, addresses and field labels.
   const said = entry.text
     .split('\n')
     .slice(1)
-    .join('\n')
-    .replace(/\]\([^)\s]{0,500}\)/g, ']')
-    .replace(/\bhttps?:\/\/\S{0,500}/g, ' ');
+    .map((line) => withoutFieldLabel(line.replace(/\]\([^)\s]{0,500}\)/g, ']').replace(/\bhttps?:\/\/\S{0,500}/g, ' ')))
+    .join('\n');
   const terms: string[] = [];
   for (const raw of said.split(/[\s,;:()[\]{}"'`*!?<>|]+/)) {
     let word = raw;

@@ -19,7 +19,11 @@ vi.mock('@/lib/api', () => ({
   getApiBaseUrl: () => 'https://api.test',
 }))
 vi.mock('@/store/app', () => ({ useNotifications: () => ({ success: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/store/organization-selection', () => ({ readCurrentOrgId: () => 'org-2' }))
+// Partial: the runs tab also reads the organization store (who may delete a run), which needs the rest of this module.
+vi.mock('@/store/organization-selection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/organization-selection')>()),
+  readCurrentOrgId: () => 'org-2',
+}))
 
 const running = (over: Partial<AgentRun> = {}): AgentRun => ({
   id: 'run-1', agentId: 'agent-1', organizationId: 'org-1', mode: 'autonomous', status: 'running',

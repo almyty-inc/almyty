@@ -37,6 +37,7 @@ import { ConnectionGrant } from '../../entities/connection-grant.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { AgentExecutionCancellationService } from './agent-execution-cancellation.service';
+import { AgentRunDeletionService } from './agent-run-deletion.service';
 import { AgentExecutionStateHelper } from './agent-execution-state.helper';
 import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
 import { CompatAgentInvoker } from './compat-agent-invoker.service';
@@ -155,6 +156,8 @@ import { BudgetsModule } from '../budgets/budgets.module';
   providers: [AgentApiAccessService, AgentReadinessService, AgentRunReaperService, RunWakeSweepService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentIdentityService, AgentIdentityReachService,
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, PushWakesService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService,
+    // "Delete run": one finished run, removed by someone who may manage its agent.
+    AgentRunDeletionService,
     // Carries a workflow run on once the change sets its Code steps wait on are decided.
     WorkflowApprovalResumeService,
     // Personal data hidden in the traces runs store.

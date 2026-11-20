@@ -23,7 +23,7 @@
  *   or, against your own login: cd packages/cli-tests && RUN_CLI_SMOKE=1 npx vitest run
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync, spawnSync, ExecFileSyncOptions } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
 import { join, resolve } from 'path';
@@ -64,6 +64,35 @@ function runOrFail(
   } catch (err: any) {
     return { stdout: (err.stdout || '') + (err.stderr || ''), exitCode: err.status ?? 1 };
   }
+}
+
+/**
+ * The signed-in account's API, for the setup the CLIs have no command
+ * for: copying an agent and deleting the copy again.
+ */
+async function api(method: string, path: string): Promise<any> {
+  const home = process.env.HOME ?? '';
+  const creds = JSON.parse(readFileSync(join(home, '.almyty', 'credentials.json'), 'utf8'));
+  const base = String(process.env.ALMYTY_URL || creds.url).replace(/\/$/, '');
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${process.env.ALMYTY_TOKEN || creds.token}` },
+  });
+  if (!res.ok) throw new Error(`${method} ${path} answered ${res.status}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+/** Copy an agent and switch the copy on; returns the copy. */
+async function duplicateAgent(id: string): Promise<{ id: string; slug?: string; name: string }> {
+  const body = await api('POST', `/agents/${id}/duplicate`);
+  const copy = body?.data ?? body;
+  if (copy?.status !== 'active') await api('POST', `/agents/${copy.id}/activate`);
+  return copy;
+}
+
+async function deleteAgent(id: string): Promise<void> {
+  await api('DELETE', `/agents/${id}`);
 }
 
 /** A HOME with no credentials file, so the auth path can be exercised. */
@@ -110,21 +139,40 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     /** An answer can outlast the suite-wide 20s ceiling. */
     const SLOW: ExecFileSyncOptions = { timeout: 90_000 };
 
-    beforeAll(() => {
+    /** The throwaway copy the questions go to, deleted when the suite ends. */
+    let copyId: string | null = null;
+
+    beforeAll(async () => {
       try {
         const agents = JSON.parse(run('agents-cli', ['list', '--json']));
         const usable = Array.isArray(agents)
           ? agents.filter((a: any) => a.status === 'active' && !/^gate-/.test(a.slug ?? a.name ?? ''))
           : [];
         const pick = usable.find((a: any) => a.mode === 'autonomous') ?? null;
-        agentRef = pick ? (pick.slug ?? pick.name) : null;
-      } catch {
+        if (!pick) { agentRef = null; return; }
+        // Talk to a copy, never the agent itself: the QA organization's
+        // agents are the demo workspace, and every question asked here
+        // would land in the run history visitors are shown.
+        const copy = await duplicateAgent(pick.id);
+        copyId = copy.id;
+        agentRef = copy.slug ?? copy.name;
+      } catch (err) {
+        console.warn(`could not make a copy of an agent to talk to: ${(err as Error).message}`);
         agentRef = null;
       }
-    });
+    }, 60_000);
+
+    afterAll(async () => {
+      if (copyId) await deleteAgent(copyId);
+    }, 60_000);
 
     it('--help documents every slash command, flag, key and exit code', () => {
-      const out = run('chat-cli', ['--help']);
+      // This checks what --help says, not how fast it says it. chat-cli
+      // loads ink and React before parsing flags; on a gate machine whose
+      // virus scanner inspects every file Node opens, that cold load
+      // alone passed the 20s ceiling in most gate runs (0.3s of CPU,
+      // the rest waiting on the scanner).
+      const out = run('chat-cli', ['--help'], SLOW);
       for (const cmd of ['/agents', '/model', '/tools', '/cost', '/trace', '/resume', '/new', '/runners', '/code', '/code-stop', '/esc', '/help', '/clear', '/quit']) {
         expect(out, `${cmd} missing from --help`).toContain(cmd);
       }

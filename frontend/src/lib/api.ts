@@ -1049,6 +1049,8 @@ export const agentsApi = {
   getExecutionsPage: (id: string, params?: any): Promise<PageOf<AgentExecution>> =>
     api.get(`/agents/${id}/executions`, { params }).then((r) => pageOf<AgentExecution>(r.data)),
   getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
+  /** Delete one finished run (its steps and tool calls go with it). */
+  deleteRun: (id: string, runId: string) => apiDel(`/agents/${id}/runs/${runId}`),
 }
 
 // Promoted Skills API (run -> skill)

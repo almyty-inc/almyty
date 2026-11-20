@@ -455,3 +455,28 @@ test('a CLI test revokes only the key its own login minted', () => {
     assert.doesNotMatch(s, /revokeCliKeys\([^)]*since\)/, `${file} still revokes by time`);
   }
 });
+
+test('the CLI chat tests talk to a copy of a demo agent, never the agent itself', () => {
+  // The QA organization is the demo workspace. Questions the smoke tests
+  // asked the weather agent itself made up 80 of its last 100 runs, which
+  // buried the recorded run visitors are meant to open.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'packages', 'cli-tests', 'cli-smoke.test.ts'), 'utf8');
+  const chat = src.slice(src.indexOf("describe('chat-cli'"));
+  assert.match(chat, /const copy = await duplicateAgent\(pick\.id\)/, 'the chat tests copy the agent they picked');
+  assert.match(chat, /agentRef = copy\.slug \?\? copy\.name/, 'and talk to the copy');
+  assert.doesNotMatch(chat, /agentRef = pick \?/, 'not to the picked agent');
+  assert.match(chat, /afterAll\(async \(\) => \{\s*if \(copyId\) await deleteAgent\(copyId\)/, 'the copy is deleted afterwards');
+  assert.match(src, /api\('POST', `\/agents\/\$\{id\}\/duplicate`\)/, 'copied through the duplicate endpoint');
+  assert.match(src, /api\('DELETE', `\/agents\/\$\{id\}`\)/, 'deleted through the delete endpoint');
+});
+
+test('a CLI-only gate run renews the QA session before the CLI login uses it', () => {
+  // GATE_ONLY=cli skipped the suite whose global setup renews the session,
+  // so the login page opened signed out and never showed the picker.
+  const src = fs.readFileSync(path.join(__dirname, 'gate-staging.js'), 'utf8');
+  assert.match(src, /if \(only\.includes\('cli'\) && !only\.includes\('playwright'\)\) await refreshSession\(childEnv, notes\)/);
+  const body = src.slice(src.indexOf('async function refreshSession'), src.indexOf('async function cliLogin'));
+  assert.match(body, /--grep=__gate_session_only__/, 'runs no test');
+  assert.match(body, /--pass-with-no-tests/, 'and does not fail for it');
+  assert.ok(src.indexOf('await refreshSession(') < src.indexOf('cli = await runCli('), 'before the CLI login');
+});
