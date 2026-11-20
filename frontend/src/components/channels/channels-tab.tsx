@@ -36,6 +36,8 @@ interface ChannelsTabProps {
   agentName?: string
   /** Who owns the agent (its createdBy), who may answer data requests for it. */
   agentOwnerId?: string | null
+  /** The server's answer to "may this person manage the agent"; wins over the owner guess. */
+  viewerCanManage?: boolean
 }
 
 /** Where a channel is, in one short line. */
@@ -47,12 +49,12 @@ function whereLine(channel: AgentChannel): string {
 
 const hasOwnSettings = (channel: AgentChannel) => !!channel.branding || !!channel.visitorRules
 
-export function ChannelsTab({ agentId, agentName, agentOwnerId }: ChannelsTabProps) {
+export function ChannelsTab({ agentId, agentName, agentOwnerId, viewerCanManage }: ChannelsTabProps) {
   const navigate = useNavigate()
   // Answering a person's data request is for whoever may manage the agent
-  // (an admin or owner, or the member who owns it); the server refuses
-  // anyone else, so the link is not offered to them.
-  const canAnswerDataRequests = useCanManageAgent(agentOwnerId)
+  // (an admin or owner, the member who owns it, or a lead of its team); the
+  // server refuses anyone else, so the link is not offered to them.
+  const canAnswerDataRequests = useCanManageAgent(agentOwnerId, viewerCanManage)
   const name = agentName || 'this agent'
 
   const channelsQuery = useQuery({

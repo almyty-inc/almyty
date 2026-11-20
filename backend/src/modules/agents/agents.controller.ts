@@ -243,11 +243,15 @@ export class AgentsController {
         );
       }
 
-      const agent = await this.agentsService.getAgent(id, organizationId, { id: req.user.sub || req.user.id });
+      const userId = req.user.sub || req.user.id;
+      const agent = await this.agentsService.getAgent(id, organizationId, { id: userId });
+      // Who may manage this agent is the server's rule (org admin, owner,
+      // or a lead of its team); the detail page shows manage controls by it.
+      const viewerCanManage = await this.agentsService.viewerCanManage(agent, userId);
 
       return {
         success: true,
-        data: agent,
+        data: { ...agent, viewerCanManage },
       };
     } catch (error) {
       throw new HttpException(

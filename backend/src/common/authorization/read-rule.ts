@@ -79,3 +79,23 @@ export async function assertManageable<T extends ResourceLike>(
   if (!decision.allowed) throw new ForbiddenException(decision.reason);
   return readable;
 }
+
+/**
+ * Would assertManageable let `userId` through on `row`? The gate itself,
+ * answered as a boolean, for telling a viewer which manage controls to
+ * offer. Its 404 and 403 are both "no"; anything else is a real failure.
+ */
+export async function canManage(
+  accessPolicy: Pick<AccessPolicyService, 'canAccess'>,
+  userId: string | null | undefined,
+  row: ResourceLike | null | undefined,
+  options: ManageOptions = {},
+): Promise<boolean> {
+  try {
+    await assertManageable(accessPolicy, userId, row, 'Resource', options);
+    return true;
+  } catch (error) {
+    if (error instanceof NotFoundException || error instanceof ForbiddenException) return false;
+    throw error;
+  }
+}

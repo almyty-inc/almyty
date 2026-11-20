@@ -51,15 +51,20 @@ export function useOrganizationRole(): OrganizationRoleState {
     }
   }, [user, currentOrganization?.id])
 }
-
 /**
- * Whether the signed-in person may manage this agent, as the server decides
- * it for agent editing: an admin or owner of the organization, or the member
- * who owns the agent. A convenience for the interface: the server decides,
- * and a team lead it also lets in is simply not offered the link.
+ * Whether the signed-in person may manage this agent. The server says so
+ * on GET /agents/:id (`viewerCanManage`), by the same rule its manage paths
+ * enforce, which also lets in a lead of the agent's team; when the page has
+ * it, that answer wins. Without it, the guess is an admin or owner of the
+ * organization, or the member who owns the agent. A convenience for the
+ * interface: the server decides.
  */
-export function useCanManageAgent(ownerId: string | null | undefined): boolean {
+export function useCanManageAgent(
+  ownerId: string | null | undefined,
+  viewerCanManage?: boolean | null,
+): boolean {
   const user = useAuthStore((s) => s.user)
   const { canManage } = useOrganizationRole()
+  if (typeof viewerCanManage === 'boolean') return viewerCanManage
   return canManage || (!!ownerId && !!user?.id && user.id === ownerId)
 }
