@@ -7,6 +7,7 @@ import { AgentRunDeletionService, RUN_STILL_GOING } from '../agent-run-deletion.
 import { AgentRunsController } from '../agent-runs.controller';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { ToolExecution } from '../../../entities/tool-execution.entity';
+import { CodeExecution } from '../../../entities/code-execution.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
@@ -34,6 +35,11 @@ function setup(opts: { runs?: Row[]; agentOrg?: string; visibility?: 'org' | 'te
     { id: 'te-1', runId: RUN, organizationId: ORG },
     { id: 'te-2', runId: RUN, organizationId: ORG },
     { id: 'te-3', runId: 'run-other', organizationId: ORG },
+  ];
+  // run_code scripts the run ran (code_executions): no foreign key to the run.
+  const scripts = [
+    { id: 'ce-1', runId: RUN, organizationId: ORG },
+    { id: 'ce-2', runId: 'run-other', organizationId: ORG },
   ];
   const agent = { id: AGENT, organizationId: opts.agentOrg ?? ORG, createdBy: OWNER, visibility: opts.visibility ?? 'org', teamId: null };
   const roles: Record<string, OrganizationRole> = {
@@ -75,6 +81,16 @@ function setup(opts: { runs?: Row[]; agentOrg?: string; visibility?: 'org' | 'te
           },
         };
       }
+      if (entity === CodeExecution) {
+        return {
+          delete: async (where: any) => {
+            deleted.push({ entity: 'code_executions', where });
+            const gone = scripts.filter((r) => matches(r, where));
+            for (const r of gone) scripts.splice(scripts.indexOf(r), 1);
+            return { affected: gone.length };
+          },
+        };
+      }
       throw new Error('unexpected repository');
     },
   };
@@ -82,17 +98,18 @@ function setup(opts: { runs?: Row[]; agentOrg?: string; visibility?: 'org' | 'te
   const agentRepo = { findOne: async ({ where }: any) => (where.id === agent.id && where.organizationId === agent.organizationId ? agent : null) };
   const audit = { log: jest.fn().mockResolvedValue(null) };
   const service = new AgentRunDeletionService(agentRepo as any, runRepo as any, accessPolicy, audit as any);
-  return { service, runs, toolCalls, deleted, audit };
+  return { service, runs, toolCalls, scripts, deleted, audit };
 }
 
 describe('AgentRunDeletionService.deleteRun', () => {
-  it('deletes a finished run and the tool calls it made, and nothing else', async () => {
-    const { service, runs, toolCalls, audit } = setup();
+  it('deletes a finished run, the tool calls it made and the scripts it ran, and nothing else', async () => {
+    const { service, runs, toolCalls, scripts, audit } = setup();
 
     await expect(service.deleteRun(AGENT, RUN, ORG, ADMIN)).resolves.toEqual({ id: RUN, toolCalls: 2 });
 
     expect(runs).toEqual([]);
     expect(toolCalls.map((t) => t.id)).toEqual(['te-3']);
+    expect(scripts.map((s) => s.id)).toEqual(['ce-2']);
     // Ids only: no input, output, thread or steps of the run.
     expect(audit.log).toHaveBeenCalledWith({
       organizationId: ORG,
@@ -164,11 +181,12 @@ describe('AgentRunDeletionService.deleteRun', () => {
     expect(runs).toHaveLength(1);
   });
 
-  it('scopes both deletes to the organization', async () => {
+  it('scopes every delete to the organization', async () => {
     const { service, deleted } = setup();
     await service.deleteRun(AGENT, RUN, ORG, ADMIN);
     expect(deleted).toEqual([
       { entity: 'tool_executions', where: { runId: In([RUN]), organizationId: ORG } },
+      { entity: 'code_executions', where: { runId: In([RUN]), organizationId: ORG } },
       { entity: 'agent_runs', where: { id: In([RUN]), organizationId: ORG } },
     ]);
   });
