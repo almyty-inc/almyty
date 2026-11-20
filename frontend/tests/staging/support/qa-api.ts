@@ -12,6 +12,7 @@ import { request, type APIRequestContext } from '@playwright/test'
 import { API_URL, QA_ORG_FILE, QA_STATE_FILE } from './env'
 // @ts-ignore -- a CommonJS script of the repo root, shared with the gate runner.
 import { redact as gateRedact } from '../../../../scripts/gate-redact.js'
+import { withRetriedReads } from './retry-reads'
 
 export interface QaOrg {
   id: string
@@ -23,11 +24,13 @@ export function qaOrg(): QaOrg {
 }
 
 export async function qaApi(orgId = qaOrg().id): Promise<APIRequestContext> {
-  return request.newContext({
-    baseURL: API_URL,
-    storageState: QA_STATE_FILE,
-    extraHTTPHeaders: { 'X-Organization-Id': orgId },
-  })
+  return withRetriedReads(
+    await request.newContext({
+      baseURL: API_URL,
+      storageState: QA_STATE_FILE,
+      extraHTTPHeaders: { 'X-Organization-Id': orgId },
+    }),
+  )
 }
 
 /** The `data` of the API's `{ success, data }` envelope, or throws with the status. */
