@@ -7,6 +7,15 @@ import {
   STRIPE_WEBHOOK_SECRET_ENV,
 } from './billing.constants';
 
+/** Stripe error types that mean Stripe, or our key for it, is the problem. */
+const UNAVAILABLE_STRIPE_ERRORS = new Set([
+  'StripeAuthenticationError',
+  'StripePermissionError',
+  'StripeConnectionError',
+  'StripeAPIError',
+  'StripeRateLimitError',
+]);
+
 /**
  * Thin, mockable wrapper over the Stripe SDK. Every Stripe call the billing
  * module needs goes through here so tests can substitute a fake with no network.
@@ -63,23 +72,46 @@ export class StripeService {
   }
 
   createCustomer(params: Stripe.CustomerCreateParams): Promise<Stripe.Customer> {
-    return this.stripe().customers.create(params);
+    return this.call('create a customer', () => this.stripe().customers.create(params));
   }
 
   createCheckoutSession(
     params: Stripe.Checkout.SessionCreateParams,
   ): Promise<Stripe.Checkout.Session> {
-    return this.stripe().checkout.sessions.create(params);
+    return this.call('start a checkout', () => this.stripe().checkout.sessions.create(params));
   }
 
   createBillingPortalSession(
     params: Stripe.BillingPortal.SessionCreateParams,
   ): Promise<Stripe.BillingPortal.Session> {
-    return this.stripe().billingPortal.sessions.create(params);
+    return this.call('open the billing portal', () => this.stripe().billingPortal.sessions.create(params));
   }
 
   listInvoices(customerId: string): Promise<Stripe.ApiList<Stripe.Invoice>> {
-    return this.stripe().invoices.list({ customer: customerId, limit: 20 });
+    return this.call('list invoices', () => this.stripe().invoices.list({ customer: customerId, limit: 20 }));
+  }
+
+  /**
+   * Stripe being unreachable or refusing our key (an expired or revoked
+   * secret, an outage, rate limiting) is not a fault in the request, and
+   * surfaced as an unhandled 500 on Settings > Billing. It becomes a clear
+   * 503; the Stripe message, which can name the key, stays in the log.
+   * Anything else (a request Stripe judged invalid, our own bugs) passes
+   * through unchanged.
+   */
+  private async call<T>(what: string, run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (err) {
+      const type = (err as { type?: string } | null)?.type;
+      if (type && UNAVAILABLE_STRIPE_ERRORS.has(type)) {
+        this.logger.error(`Stripe could not ${what}: ${type}: ${(err as Error).message}`);
+        throw new ServiceUnavailableException(
+          'The billing provider is unavailable right now. Try again later.',
+        );
+      }
+      throw err;
+    }
   }
 
   retrieveSubscription(subscriptionId: string): Promise<Stripe.Subscription> {

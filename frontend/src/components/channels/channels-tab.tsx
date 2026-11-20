@@ -14,7 +14,7 @@ import { ChevronRight, MessagesSquare, Plus } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTable } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
@@ -123,74 +123,83 @@ export function ChannelsTab({ agentId, agentName, agentOwnerId, viewerCanManage 
 
   const settings = settingsQuery.data?.effective
 
+  // One card, header and body, like the agent's other tabs (Runs, Memory,
+  // Files): the title, description and action in the card header, the
+  // shared settings line and the table in its body.
   return (
-    <div className="space-y-6" data-testid="channels-tab">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold">Channels</h2>
-          <p className="text-sm text-muted-foreground">Where people, or other agents, reach {name}.</p>
+    <Card data-testid="channels-tab">
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Channels</CardTitle>
+            <CardDescription className="text-xs mt-1">Where people, or other agents, reach {name}.</CardDescription>
+          </div>
+          <Button asChild size="sm">
+            <Link to={addPath}>
+              <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
+              Add channel
+            </Link>
+          </Button>
         </div>
-        <Button asChild className="gap-2">
-          <Link to={addPath}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add channel
-          </Link>
-        </Button>
-      </div>
-
-      {settings && (
-        <Card className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 text-sm" data-testid="public-settings-summary">
-          <span className="text-muted-foreground">Name people see:</span>
-          <span className="font-medium">{settings.branding.appName}</span>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground">Who can use it:</span>
-          <span>{AUTH_MODE_SUMMARY[settings.visitorRules.authMode]}</span>
-          <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
-            {canAnswerDataRequests && (
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {settings && (
+          <div
+            className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-4 py-3 text-sm"
+            data-testid="public-settings-summary"
+          >
+            <span className="text-muted-foreground">Name people see:</span>
+            <span className="font-medium">{settings.branding.appName}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">Who can use it:</span>
+            <span>{AUTH_MODE_SUMMARY[settings.visitorRules.authMode]}</span>
+            <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
+              {canAnswerDataRequests && (
+                <Link
+                  to={`/agents/${agentId}/channels/visitor-data`}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Visitor data
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              )}
               <Link
-                to={`/agents/${agentId}/channels/visitor-data`}
+                to={`/agents/${agentId}/channels/settings`}
                 className="inline-flex items-center gap-1 text-primary hover:underline"
               >
-                Visitor data
+                Branding and visitor rules
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </Link>
-            )}
-            <Link
-              to={`/agents/${agentId}/channels/settings`}
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              Branding and visitor rules
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </span>
-        </Card>
-      )}
+            </span>
+          </div>
+        )}
 
-      {channelsQuery.isError ? (
-        <QueryError error={channelsQuery.error} onRetry={() => channelsQuery.refetch()} title="Couldn't load the channels" />
-      ) : (
-        <DataTable
-          columns={columns}
-          data={channels}
-          loading={channelsQuery.isLoading}
-          onRowClick={(channel) => navigate(channelPath(channel))}
-          hideSelectionCount
-          hideColumnsButton
-          hidePaginationWhenSinglePage
-          emptyState={
-            <EmptyState
-              icon={MessagesSquare}
-              title="No channels yet"
-              description={`Add a web chat link, a website widget, Slack, WhatsApp or another channel to put ${name} in front of people.`}
-              action={
-                <Button asChild>
-                  <Link to={addPath}>Add channel</Link>
-                </Button>
-              }
-            />
-          }
-        />
-      )}
-    </div>
+        {channelsQuery.isError ? (
+          <QueryError error={channelsQuery.error} onRetry={() => channelsQuery.refetch()} title="Couldn't load the channels" />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={channels}
+            loading={channelsQuery.isLoading}
+            onRowClick={(channel) => navigate(channelPath(channel))}
+            hideSelectionCount
+            hideColumnsButton
+            hidePaginationWhenSinglePage
+            emptyState={
+              <EmptyState
+                icon={MessagesSquare}
+                title="No channels yet"
+                description={`Add a web chat link, a website widget, Slack, WhatsApp or another channel to put ${name} in front of people.`}
+                action={
+                  <Button asChild>
+                    <Link to={addPath}>Add channel</Link>
+                  </Button>
+                }
+              />
+            }
+          />
+        )}
+      </CardContent>
+    </Card>
   )
 }

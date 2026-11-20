@@ -3,6 +3,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { OrganizationsService } from '../organizations.service';
 import { OrganizationRole, UserOrganization } from '../../../entities/user-organization.entity';
 import { Team } from '../../../entities/team.entity';
+import { UserTeam } from '../../../entities/user-team.entity';
 import { ResourceHandoverHelper } from '../resource-handover.helper';
 
 /**
@@ -29,9 +30,15 @@ describe('OrganizationsService: resource handover', () => {
       remove: jest.fn(async () => { calls.push('membership.remove'); }),
       createQueryBuilder: jest.fn(() => qb),
     };
-    const txTeam = { remove: jest.fn(async () => { calls.push('team.remove'); }) };
+    const txTeam = {
+      remove: jest.fn(async () => { calls.push('team.remove'); }),
+      find: jest.fn(async () => [{ id: 'everyone-team' }, { id: 'platform-team' }]),
+    };
+    const txUserTeam = { delete: jest.fn(async (_criteria: any) => { calls.push('teams.leave'); }) };
     const manager: any = {
-      getRepository: jest.fn((entity: any) => (entity === UserOrganization ? txMembership : entity === Team ? txTeam : null)),
+      getRepository: jest.fn((entity: any) => (
+        entity === UserOrganization ? txMembership : entity === Team ? txTeam : entity === UserTeam ? txUserTeam : null
+      )),
     };
     const transaction = jest.fn(async (cb: any) => {
       calls.push('begin');
@@ -75,7 +82,7 @@ describe('OrganizationsService: resource handover', () => {
       handover as any,
       audit as any,
     );
-    return { service, memberships, teams, handover, audit, manager, txMembership, txTeam, qb, calls, auditRows, wiped };
+    return { service, memberships, teams, handover, audit, manager, txMembership, txTeam, txUserTeam, qb, calls, auditRows, wiped };
   }
 
   describe('removeMember', () => {
@@ -100,7 +107,7 @@ describe('OrganizationsService: resource handover', () => {
       // where a provider failing cannot undo the removal.
       // What the hosted-environment handover left for after commit (stopping
       // the leaver's pods, telling the new owner) runs only once it committed.
-      expect(t.calls).toEqual(['begin', 'handover', 'membership.remove', 'commit', 'publish', 'after commit', 'provider revoke']);
+      expect(t.calls).toEqual(['begin', 'handover', 'teams.leave', 'membership.remove', 'commit', 'publish', 'after commit', 'provider revoke']);
       expect(t.audit.publishCommitted).toHaveBeenCalledWith(t.auditRows);
       expect(t.handover.revokeWipedConnectionsAtProviders).toHaveBeenCalledWith([t.wiped], {
         userId: 'leaver',
@@ -160,6 +167,37 @@ describe('OrganizationsService: resource handover', () => {
 
       await expect(t.service.removeMember(org, 'owner-2', 'admin-1')).rejects.toBeInstanceOf(ForbiddenException);
       expect(t.handover.handOverPrivateResources).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Removing (or leaving) the organization left the person's user_teams
+     * rows behind, so the "Everyone" team on staging counted 9 people in
+     * an organization of 1. The team rows in this organization's teams go
+     * in the same transaction as the membership, and only those.
+     */
+    it('takes the member out of every team of this organization, inside the removal transaction', async () => {
+      const target = { id: 'm-1', userId: 'leaver', role: OrganizationRole.MEMBER };
+      const t = build({ target, actor: { id: 'm-2', role: OrganizationRole.OWNER } });
+
+      await t.service.removeMember(org, 'leaver', 'owner-1');
+
+      expect(t.txTeam.find).toHaveBeenCalledWith({ where: { organizationId: org }, select: { id: true } });
+      expect(t.txUserTeam.delete).toHaveBeenCalledTimes(1);
+      const [criteria] = t.txUserTeam.delete.mock.calls[0] as any[];
+      expect(criteria.userId).toBe('leaver');
+      expect(criteria.teamId.value).toEqual(['everyone-team', 'platform-team']);
+      expect(t.calls.indexOf('teams.leave')).toBeGreaterThan(t.calls.indexOf('begin'));
+      expect(t.calls.indexOf('teams.leave')).toBeLessThan(t.calls.indexOf('commit'));
+    });
+
+    it('takes the member out of no team when the removal is refused', async () => {
+      const t = build({
+        target: { id: 'm-1', role: OrganizationRole.OWNER },
+        actor: { id: 'm-2', role: OrganizationRole.ADMIN },
+      });
+
+      await expect(t.service.removeMember(org, 'owner-2', 'admin-1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(t.txUserTeam.delete).not.toHaveBeenCalled();
     });
   });
 
