@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { render } from '../../test/setup'
 import { AgentsPage } from '../agents'
-import { agentsApi } from '../../lib/api'
+import { agentsApi, externalAgentsApi } from '../../lib/api'
 
 // Mock the API module
 vi.mock('../../lib/api', () => ({
@@ -22,6 +22,9 @@ vi.mock('../../lib/api', () => ({
     getTemplates: vi.fn(),
     importAgent: vi.fn(),
     exportAgent: vi.fn(),
+  },
+  externalAgentsApi: {
+    getAll: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -198,6 +201,20 @@ describe('AgentsPage', () => {
         expect(screen.getByText('Chat Agent')).toBeInTheDocument()
         expect(screen.getByText('Research Agent')).toBeInTheDocument()
       })
+    })
+
+    it('shows no source badge on native agents, only on external ones', async () => {
+      vi.mocked(externalAgentsApi.getAll).mockResolvedValueOnce([
+        { id: 'ext-1', name: 'Partner Agent', description: 'Remote', agentCardUrl: 'https://x/.well-known/agent.json', status: 'active' },
+      ] as any)
+      renderAgentsPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('Chat Agent')).toBeInTheDocument()
+        expect(screen.getByText('Partner Agent')).toBeInTheDocument()
+      })
+      expect(screen.queryByText('Native')).not.toBeInTheDocument()
+      expect(screen.getAllByText('External A2A')).toHaveLength(1)
     })
 
     it('should show agent status badges', async () => {

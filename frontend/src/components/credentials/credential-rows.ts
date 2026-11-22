@@ -12,10 +12,13 @@ import type { ServiceCheck } from '@/components/connect/status-label'
 import type { Connection, Connector, ConnectorKind } from '@/types/connections'
 
 import { NOT_CHECKED, connectionCheck, connectionWhoShort } from '@/components/connections/connection-status'
-import { credentialPath } from './paths'
-import { connectProviderPath, providerPath } from '@/components/llm-providers/paths'
+import { CREDENTIALS_PATH, credentialPath } from './paths'
+import { connectProviderPath, providerPath as providerPagePath } from '@/components/llm-providers/paths'
 import { providerCheck } from '@/components/llm-providers/provider-status'
 import { providerTileLabel } from '@/components/llm-providers/provider-catalog'
+
+/** A provider connection opened from Credentials comes back to Credentials. */
+const providerPath = (id: string) => providerPagePath(id, null, CREDENTIALS_PATH)
 
 /** A row of GET /credentials. Secrets arrive masked, and are never read here. */
 export interface StoredCredential {

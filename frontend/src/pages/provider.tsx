@@ -34,6 +34,8 @@ import { CredentialSlot, CredentialRefSummary, isMaskedKey } from '@/components/
 import { ProviderStatus, canTurnBackOn, inactiveReason, providerCheck } from '@/components/llm-providers/provider-status'
 import { HOSTING_ADAPTER_FOR_TYPE, keyUrlFor, providerTileLabel, takesBaseUrl } from '@/components/llm-providers/provider-catalog'
 import { providerUsageApiSupport, usageApiSupported } from '@/components/llm-providers/provider-type-config'
+import { providerBack } from '@/components/llm-providers/paths'
+import { safeReturnTo } from '@/lib/return-to'
 import { BrandIcon } from '@/components/brand-icon'
 import { BASE_URL_PRIVATE_HOST_HINT, buildProviderUpdateBody } from '@/components/llm-providers/schema'
 import { WhoCanUse } from '@/components/connect/who-can-use'
@@ -64,6 +66,8 @@ export function ProviderPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
+  // Back to the page that opened it: Credentials, or Models (also when opened directly).
+  const backTo = providerBack(safeReturnTo(searchParams.get('returnTo')))
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const { confirm, dialog: confirmDialog } = useConfirm()
@@ -95,11 +99,11 @@ export function ProviderPage() {
   }
 
   useEffect(() => {
-    document.title = provider?.name ? `${provider.name} | Credentials | almyty` : 'Connection | almyty'
+    document.title = provider?.name ? `${provider.name} | ${backTo.label} | almyty` : 'Connection | almyty'
     return () => {
       document.title = 'almyty'
     }
-  }, [provider?.name])
+  }, [provider?.name, backTo.label])
 
   // /models links a model here as #model-<id>.
   useEffect(() => {
@@ -147,12 +151,12 @@ export function ProviderPage() {
       queryClient.invalidateQueries({ queryKey: ['models'] })
       queryClient.invalidateQueries({ queryKey: ['credentials'] })
       notifications.success('Connection removed', `${provider?.name ?? 'The connection'} and its models are gone.`)
-      navigate('/credentials')
+      navigate(backTo.to)
     },
     onError: (error) => notifications.error('Could not remove the connection', getApiErrorMessage(error, 'It was not removed.')),
   })
 
-  const back = <DetailBackLink to="/credentials" label="Credentials" />
+  const back = <DetailBackLink to={backTo.to} label={backTo.label} />
 
   if (providerQuery.isError) {
     return (
@@ -205,7 +209,7 @@ export function ProviderPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <DetailHeader
-        back={{ to: '/credentials', label: 'Credentials' }}
+        back={backTo}
         icon={<BrandIcon brand={provider.type} name={provider.name} />}
         title={<EditableName name={provider.name} saving={update.isPending} onSave={(name) => update.mutate({ name })} />}
         meta={[

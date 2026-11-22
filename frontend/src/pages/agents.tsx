@@ -375,7 +375,7 @@ export function AgentsPage() {
                         >
                           {agent.name}
                         </Link>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">Native</Badge>
+                        {/* Native agents carry no source badge; only external ones (below) say where they come from. */}
                         <VisibilityBadge
                           visibility={(agent as any).visibility}
                           teamId={(agent as any).teamId}
