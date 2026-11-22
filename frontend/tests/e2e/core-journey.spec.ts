@@ -278,7 +278,8 @@ test('core journey: sign up, credentials, API, gateway, agent, channel', async (
 
     await test.step('Channels: a web chat on the agent, published, answering a visitor', async () => {
       await page.goto(`${agentPath}?tab=channels`)
-      await expect(page.getByRole('heading', { name: 'Channels', level: 2 })).toBeVisible()
+      // Exact: an agent with no channel yet also shows a "No channels yet" heading.
+      await expect(page.getByRole('heading', { name: 'Channels', level: 3, exact: true })).toBeVisible()
       await page.getByRole('link', { name: 'Add channel' }).first().click()
       await expect(page.getByRole('heading', { name: 'Add channel', level: 1 })).toBeVisible()
       await page.getByRole('radio', { name: /^Web chat/ }).click()

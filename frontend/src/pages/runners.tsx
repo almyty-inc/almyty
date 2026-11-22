@@ -229,20 +229,22 @@ export function RunnersPage() {
     />
   ) : (
     <Card>
-      <CardContent className="pt-6 space-y-4">
-        <div className="flex items-center justify-end">
-          <TeamFilter
-            organizationId={currentOrganization?.id}
-            value={teamFilter}
-            onChange={setTeamFilter}
-          />
-        </div>
+      <CardContent className="pt-2">
+        {/* Search and the team filter on one row, as on every other list. */}
         <DataTable
           columns={columns}
           data={visibleRunners}
           loading={isLoading}
           searchKey="name"
           searchPlaceholder="Search runners..."
+          headerExtra={
+            <TeamFilter
+              organizationId={currentOrganization?.id}
+              value={teamFilter}
+              onChange={setTeamFilter}
+              className="flex-1 min-w-[9rem] sm:flex-none sm:w-44"
+            />
+          }
           onRowClick={(r) => navigate(`/runners/${r.id}`)}
           hideSelectionCount
           hideColumnsButton

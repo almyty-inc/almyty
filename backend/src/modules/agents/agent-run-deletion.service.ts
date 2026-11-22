@@ -19,9 +19,10 @@ export const RUN_STILL_GOING =
  * agent use: its owner, an org owner or admin, a team lead of its team).
  *
  * The run goes the way a visitor's erasure removes runs (run-removal.ts):
- * the run row with its event log and approval requests, and the tool
- * calls it made. The agent's counters (totalExecutions and the rest) are
- * lifetime counts and stay as they are, as they do when the retention
+ * calls it made. The agent's numbers (runs, completed, average time,
+ * cost) are worked out from the runs that still exist (agent-run-stats.ts),
+ * so they drop with it; the lifetime counters on the agent row are not
+ * shown anywhere and stay as they are, as they do when the retention
  * sweep deletes old runs.
  */
 @Injectable()

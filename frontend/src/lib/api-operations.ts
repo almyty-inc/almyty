@@ -53,3 +53,20 @@ export function apisSummary(
   ]
   return parts.join(' · ')
 }
+
+/** How an API's key is sent, in words: the list's Auth column and the overview's Key row say the same. */
+const AUTH_WORDS: Record<string, string> = {
+  none: 'None',
+  api_key: 'API key',
+  bearer: 'Bearer token',
+  basic: 'Basic auth',
+  oauth2: 'OAuth 2.0',
+}
+
+export function authTypeLabel(type: string | null | undefined): string {
+  if (!type) return AUTH_WORDS.none
+  if (AUTH_WORDS[type]) return AUTH_WORDS[type]
+  // Anything else in sentence case: "custom_header" reads "Custom header".
+  const words = type.replace(/_/g, ' ').trim().toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}

@@ -12,6 +12,7 @@ import { request, type APIRequestContext } from '@playwright/test'
 import { API_URL, QA_ORG_FILE, QA_STATE_FILE } from './env'
 // @ts-ignore -- a CommonJS script of the repo root, shared with the gate runner.
 import { redact as gateRedact } from '../../../../scripts/gate-redact.js'
+import { withRetriedReads } from './retry-reads'
 
 export interface QaOrg {
   id: string
@@ -23,11 +24,13 @@ export function qaOrg(): QaOrg {
 }
 
 export async function qaApi(orgId = qaOrg().id): Promise<APIRequestContext> {
-  return request.newContext({
-    baseURL: API_URL,
-    storageState: QA_STATE_FILE,
-    extraHTTPHeaders: { 'X-Organization-Id': orgId },
-  })
+  return withRetriedReads(
+    await request.newContext({
+      baseURL: API_URL,
+      storageState: QA_STATE_FILE,
+      extraHTTPHeaders: { 'X-Organization-Id': orgId },
+    }),
+  )
 }
 
 /** The `data` of the API's `{ success, data }` envelope, or throws with the status. */
@@ -39,7 +42,7 @@ export async function data<T = any>(res: Awaited<ReturnType<APIRequestContext['g
 }
 
 /** Kinds of things a gate test makes, and how each is deleted. */
-export type Kind = 'api' | 'tool' | 'agent' | 'mcp-source' | 'credential' | 'gateway' | 'approval-rule'
+export type Kind = 'api' | 'tool' | 'agent' | 'mcp-source' | 'credential' | 'gateway' | 'approval-rule' | 'team' | 'member'
 
 export function deletePath(kind: Kind, id: string, orgId: string): string {
   switch (kind) {
@@ -51,6 +54,9 @@ export function deletePath(kind: Kind, id: string, orgId: string): string {
     case 'gateway': return `/gateways/${id}`
     // A stranded rule would hold every later call to its tool for approval.
     case 'approval-rule': return `/approval-rules/${id}`
+    case 'team': return `/organizations/${orgId}/teams/${id}`
+    // A throwaway account let into the QA org: `id` is its user id.
+    case 'member': return `/organizations/${orgId}/members/${id}`
   }
 }
 
@@ -106,6 +112,10 @@ export async function list(api: APIRequestContext, kind: Kind, orgId: string): P
     case 'credential': return pick(await data(await api.get('/credentials')))
     case 'gateway': return pick(await paged(api, '/gateways', (d) => d?.gateways))
     case 'approval-rule': return pick(arr(await data(await api.get('/approval-rules'))))
+    case 'team': return pick(arr(await data(await api.get(`/organizations/${orgId}/teams`))))
+    // A member is named by its address and deleted by its user id.
+    case 'member':
+      return arr(await data(await api.get(`/organizations/${orgId}/members`))).map((m: any) => ({ id: m.userId, name: m.email, createdAt: m.joinedAt }))
   }
 }
 

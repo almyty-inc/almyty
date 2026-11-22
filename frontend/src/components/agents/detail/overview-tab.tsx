@@ -68,6 +68,7 @@ import { useNavigate } from 'react-router-dom'
 import { UnverifiedNote } from './verify-step'
 import { inputSchemaOf, messageInput } from '../step-values'
 import type { Agent, AgentExecution, AgentRun, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
+import { runNumbers } from '@/lib/agent-run-numbers'
 
 interface OverviewTabProps {
   agent: Agent
@@ -533,10 +534,10 @@ export function OverviewTab({
                 <span className="text-muted-foreground">Tool calls</span>
                 <span className="font-medium">{(agent.pipeline?.nodes || []).filter((n: any) => n.type === 'tool_call').length}</span>
               </div>
-              {agent.totalExecutions > 0 && (
+              {runNumbers(agent).runs > 0 && (
                 <div className="flex justify-between pt-1 border-t">
                   <span className="text-muted-foreground">Avg cost per run</span>
-                  <span className="font-medium">${(agent.totalCost / agent.totalExecutions).toFixed(4)}</span>
+                  <span className="font-medium">${(runNumbers(agent).totalCost / runNumbers(agent).runs).toFixed(4)}</span>
                 </div>
               )}
             </div>

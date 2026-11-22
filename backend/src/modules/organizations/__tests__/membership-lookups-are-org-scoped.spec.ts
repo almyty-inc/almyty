@@ -2,6 +2,8 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { OrganizationsService } from '../organizations.service';
 import { OrganizationRole, UserOrganization } from '../../../entities/user-organization.entity';
+import { Team } from '../../../entities/team.entity';
+import { UserTeam } from '../../../entities/user-team.entity';
 import { fakeManager, fakeRepository } from '../../../test/fake-repository';
 
 /**
@@ -28,20 +30,22 @@ describe('OrganizationsService membership lookups are organization-scoped', () =
     ...over,
   });
 
-  function build(memberships: Array<Partial<UserOrganization>> = []) {
+  function build(memberships: Array<Partial<UserOrganization>> = [], teamRows: any[] = []) {
     const userOrganizations = fakeRepository<any>({
       seed: memberships,
       make: () => new UserOrganization(),
     });
     const teams = fakeRepository<any>([
       { id: 'team-A', name: 'Team A', organizationId: HERE, isDefault: false, isActive: true },
+      { id: 'team-B', name: 'Team B', organizationId: ELSEWHERE, isDefault: false, isActive: true },
     ]);
+    const userTeams = fakeRepository<any>(teamRows);
 
     const service = new OrganizationsService(
       fakeRepository<any>() as any,
       userOrganizations as any,
       teams as any,
-      fakeRepository<any>() as any,
+      userTeams as any,
       fakeRepository<any>() as any,
       {} as any,
       {} as any,
@@ -55,9 +59,9 @@ describe('OrganizationsService membership lookups are organization-scoped', () =
       { handOverPrivateResources: jest.fn().mockResolvedValue([]), revokeWipedConnectionsAtProviders: jest.fn().mockResolvedValue(undefined) } as any,
       { publishCommitted: jest.fn() } as any,
     );
-    fakeManager([[UserOrganization, userOrganizations]]);
+    fakeManager([[UserOrganization, userOrganizations], [Team, teams], [UserTeam, userTeams]]);
 
-    return { service, userOrganizations, teams };
+    return { service, userOrganizations, teams, userTeams };
   }
 
   it('getMembers lists the org for a member of it', async () => {
@@ -105,6 +109,27 @@ describe('OrganizationsService membership lookups are organization-scoped', () =
     await service.removeMember(HERE, 'member', 'admin-1');
 
     expect(userOrganizations.rows().map((r) => r.userId)).toEqual(['admin-1']);
+  });
+
+  // Removal left the person's user_teams rows behind, so the "Everyone"
+  // team kept counting people who had left the organization.
+  it('removeMember takes the member out of this org\'s teams and leaves their teams elsewhere', async () => {
+    const { service, userTeams } = build(
+      [
+        membership({ userId: 'admin-1', role: OrganizationRole.ADMIN }),
+        membership({ userId: 'member' }),
+        membership({ userId: 'member', organizationId: ELSEWHERE }),
+      ],
+      [
+        { id: 'ut-1', userId: 'member', teamId: 'team-A', role: 'member', isActive: true },
+        { id: 'ut-2', userId: 'member', teamId: 'team-B', role: 'member', isActive: true },
+        { id: 'ut-3', userId: 'admin-1', teamId: 'team-A', role: 'member', isActive: true },
+      ],
+    );
+
+    await service.removeMember(HERE, 'member', 'admin-1');
+
+    expect(userTeams.rows().map((r) => r.id).sort()).toEqual(['ut-2', 'ut-3']);
   });
 
   it('updateMemberRole refuses an actor whose membership is in another organization', async () => {

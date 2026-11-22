@@ -54,6 +54,13 @@ describe('the builder mode toggle on a phone', () => {
     expect(screen.getByTestId('agent-mode-toggle').parentElement!.className).toMatch(/\bflex-wrap\b/)
   })
 
+  it('is never narrower than its two words, so it wraps instead of running off a 390px screen', () => {
+    renderToolbar()
+    const classes = screen.getByTestId('agent-mode-toggle').className.split(/\s+/)
+    expect(classes).toContain('min-w-fit')
+    expect(classes.filter((c) => /^min-w-\[/.test(c))).toEqual([])
+  })
+
   it('switches to autonomous and says which mode is on', () => {
     const props = renderToolbar()
     const toggle = screen.getByTestId('agent-mode-toggle')

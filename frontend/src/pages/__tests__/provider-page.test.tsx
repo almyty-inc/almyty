@@ -308,8 +308,30 @@ describe('ProviderPage', () => {
       expect(confirm).toHaveTextContent('No agent uses its models.')
       fireEvent.click(within(confirm).getByRole('button', { name: 'Remove connection' }))
       await waitFor(() => expect(llmProvidersApi.delete).toHaveBeenCalledWith('p1'))
-      // Back to Credentials, where connections live.
+      // Opened without a returnTo (from Models, or directly): back to Models.
+      expect(await screen.findByText('at /models')).toBeInTheDocument()
+    })
+
+    it('leads back to where it was opened from: Models by default, Credentials from Credentials', async () => {
+      const first = at('settings')
+      expect(await screen.findByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models')
+      expect(screen.queryByRole('link', { name: 'Credentials' })).not.toBeInTheDocument()
+      first.unmount()
+
+      vi.mocked(llmProvidersApi.delete).mockResolvedValue({} as any)
+      vi.mocked(llmProvidersApi.agents).mockResolvedValue({ agents: [], others: 0 })
+      renderAtRoute(<ProviderPage />, { path: '/models/providers/:id', url: '/models/providers/p1?tab=settings&returnTo=%2Fcredentials', paths: ['/models', '/credentials'] })
+      expect(await screen.findByRole('link', { name: 'Credentials' })).toHaveAttribute('href', '/credentials')
+      expect(screen.queryByRole('link', { name: 'Models' })).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+      const confirm = await screen.findByRole('alertdialog')
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Remove connection' }))
       expect(await screen.findByText('at /credentials')).toBeInTheDocument()
+    })
+
+    it('ignores a returnTo that leaves the app', async () => {
+      renderAtRoute(<ProviderPage />, { path: '/models/providers/:id', url: '/models/providers/p1?returnTo=https%3A%2F%2Fevil.example%2Fcredentials', paths: ['/models'] })
+      expect(await screen.findByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models')
     })
 
     it('names the agents that lose their model before removing, counting the ones the viewer cannot see', async () => {

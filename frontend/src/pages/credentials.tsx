@@ -124,14 +124,14 @@ function CredentialTable({ rows }: { rows: ReturnType<typeof useCredentialRows> 
   }
   return (
     <Card>
-      <CardContent className="pt-6" data-testid="credentials-table">
+      <CardContent className="pt-2" data-testid="credentials-table">
         <DataTable
           columns={columns}
           data={rows.data}
           loading={rows.isLoading}
           onRowClick={(row: CredentialRow) => navigate(row.href)}
           searchKey="name"
-          searchPlaceholder="Search credentials"
+          searchPlaceholder="Search credentials..."
           hideSelectionCount
           hideColumnsButton
         />

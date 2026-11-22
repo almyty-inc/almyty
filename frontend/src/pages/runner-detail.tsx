@@ -107,12 +107,16 @@ export function RunnerDetailPage() {
   const workspacesQuery = useRunnerWorkspaces(id, { poll: !runnerOffline })
 
   const { currentOrganization } = useOrganizationStore()
+  // Every tool of the organization (getAll without a page reads them all; the
+  // server refuses a page over 100), then this runner's. `{ limit: 200 }` was
+  // refused with a 400, and the answer's `tools` array was never read, so
+  // "Published capabilities" always said none had been published.
   const capabilitiesQuery = useQuery<Tool[]>({
     queryKey: ['runner-tools', id],
-    queryFn: () => toolsApi.getAll(currentOrganization?.id, { limit: 200 }),
+    queryFn: () => toolsApi.getAll(currentOrganization?.id),
     enabled: !!id && !!currentOrganization,
     select: (all: any) => {
-      const list = Array.isArray(all) ? all : (all?.data ?? [])
+      const list: any[] = Array.isArray(all) ? all : (all?.tools ?? all?.data ?? [])
       return list.filter((t: any) => t.runnerConfig?.runnerId === id) as Tool[]
     },
   })
@@ -392,7 +396,7 @@ export function RunnerDetailPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No capabilities published yet. Capabilities are minted automatically when the runner registers.
+              No capabilities published yet. The runner publishes them by itself when it registers.
             </p>
           )}
         </CardContent>

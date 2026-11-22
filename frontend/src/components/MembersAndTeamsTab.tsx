@@ -23,6 +23,11 @@ interface MembersAndTeamsTabProps {
   organizationId?: string
 }
 
+/** A role as the team pickers say it: "Owner", not the stored "owner". */
+export function roleLabel(role: string | null | undefined): string {
+  if (!role) return ''
+  return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()
+}
 export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) {
   const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
@@ -377,7 +382,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={member.role === 'owner' ? 'default' : 'outline'}>
-                        {member.role}
+                        {roleLabel(member.role)}
                       </Badge>
                       {member.role !== 'owner' && (
                         <Button
@@ -426,8 +431,8 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{invite.role}</Badge>
-                      {invite.isExpired && <Badge variant="destructive">expired</Badge>}
+                      <Badge variant="outline">{roleLabel(invite.role)}</Badge>
+                      {invite.isExpired && <Badge variant="destructive">Expired</Badge>}
                       <Button
                         variant="ghost"
                         size="sm"
