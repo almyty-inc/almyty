@@ -11,6 +11,7 @@ import { formatDuration } from './constants'
 import type { AgentRun, AgentRunStep } from '@/types'
 import { StepRoleLine } from './run-roles'
 import { pluralized } from '@/lib/utils'
+import { STEP_NAMES } from '../step-values'
 
 /**
  * One wording for a check everywhere a run is shown (the runs list, the run
@@ -86,7 +87,7 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
         ) : (
           <ShieldAlert className={`h-4 w-4 ${unavailable ? 'text-warning' : 'text-danger'}`} aria-hidden />
         )}
-        <Badge variant="outline" className="font-mono">verify</Badge>
+        <Badge variant="outline">{STEP_NAMES.verify}</Badge>
         {advisory && <Badge variant="outline">mid-run</Badge>}
         {blocking && <Badge variant="outline">blocking</Badge>}
         {typeof out.revision === 'number' && (
