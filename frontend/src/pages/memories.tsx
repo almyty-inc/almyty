@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Brain, Plus, Trash2, Search, ArrowRightLeft, Tags as TagsIcon, Building2 } from 'lucide-react'
+import { Brain, Plus, Search, ArrowRightLeft, Building2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,6 +31,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { MEMORY_TIER_LABELS, memoryBackendName } from '@/components/memory/memory-words'
+import { MemoryTable, deleteMemoryQuestion, type MemoryTableItem } from '@/components/memory/memory-table'
 
 /**
  * Memory, in plain words.
@@ -152,6 +153,15 @@ export function MemoriesPage() {
     },
   })
 
+  // Confirm first, quoting enough of the memory that you know which one you picked.
+  async function askDelete(m: MemoryTableItem) {
+    const ok = await confirm(deleteMemoryQuestion(m.content))
+    if (!ok) return
+    removeMut.mutate(
+      { id: m.id, mode: 'soft' },
+      { onSuccess: () => setSearchResults((rows) => rows.filter((r) => r.item.id !== m.id)) },
+    )
+  }
   // ── storage services ────────────────────────────────────────────────
   const backendsQ = useQuery({
     queryKey: ['memories', 'backends'],
@@ -263,49 +273,7 @@ export function MemoriesPage() {
               }
             />
           ) : (
-            <div className="grid gap-3">
-              {items.map((m) => (
-                <Card key={m.id}>
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex gap-2 items-center mb-2 flex-wrap">
-                          {m.tier && <Badge variant="outline">{MEMORY_TIER_LABELS[m.tier] ?? m.tier}</Badge>}
-                          {m.mode === 'document' && <Badge variant="secondary">Document</Badge>}
-                          {/* Only the case a person can act on: it will not come up in search. */}
-                          {(m.embedding_status === 'pending' || m.embedding_status === 'failed') && (
-                            <Badge variant="outline">{m.embedding_status === 'pending' ? 'Not in search yet' : 'Not searchable'}</Badge>
-                          )}
-                          {(m.tags ?? []).slice(0, 6).map((t) => (
-                            <Badge key={t} variant="outline" className="font-normal"><TagsIcon className="h-3 w-3 mr-1" />{t}</Badge>
-                          ))}
-                        </div>
-                        <p className="text-sm whitespace-pre-wrap">{m.content}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Saved {formatDateTime(m.created_at)}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={async () => {
-                          const ok = await confirm({
-                            title: 'Delete memory?',
-                            description: `No agent will find this memory again. It starts "${m.content.slice(0, 80)}${m.content.length > 80 ? '…' : ''}".`,
-                            confirmLabel: 'Delete memory',
-                            destructive: true,
-                          })
-                          if (ok) removeMut.mutate({ id: m.id, mode: 'soft' })
-                        }}
-                        title="Delete memory"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <MemoryTable items={items} onDelete={askDelete} />
           )}
         </TabsContent>
 
@@ -329,23 +297,12 @@ export function MemoriesPage() {
           </div>
           <p className="text-xs text-muted-foreground">Finds memories by meaning as well as by the exact words, best matches first.</p>
 
-          <div className="grid gap-3">
-            {searchResults.map((r) => (
-              <Card key={r.item.id}>
-                <CardContent className="p-4">
-                  {r.item.tier && (
-                    <div className="flex gap-2 items-center mb-2">
-                      <Badge variant="outline">{MEMORY_TIER_LABELS[r.item.tier] ?? r.item.tier}</Badge>
-                    </div>
-                  )}
-                  <p className="text-sm whitespace-pre-wrap">{r.item.content}</p>
-                </CardContent>
-              </Card>
-            ))}
-            {!searching && query && searchResults.length === 0 && (
-              <p className="text-sm text-muted-foreground">No results.</p>
-            )}
-          </div>
+          {searchResults.length > 0 && (
+            <MemoryTable items={searchResults.map((r) => r.item)} onDelete={askDelete} />
+          )}
+          {!searching && query && searchResults.length === 0 && (
+            <p className="text-sm text-muted-foreground">No results.</p>
+          )}
         </TabsContent>
 
         {/* ── Accounts ───────────────────────────────────────────── */}

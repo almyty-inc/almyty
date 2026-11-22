@@ -158,7 +158,10 @@ export function BuilderToolbar({
         role="group"
         aria-label="Agent mode"
         data-testid="agent-mode-toggle"
-        className="order-last flex min-w-[10rem] flex-1 items-center gap-1 rounded-lg bg-muted p-1 sm:order-none sm:mr-2 sm:min-w-0 sm:flex-none"
+        // min-w-fit, not a fixed 10rem: the two words need more than 10rem,
+        // so at 390px the toggle stayed beside the buttons and "Autonomous"
+        // ran off the screen. At its real width it wraps to a row of its own.
+        className="order-last flex min-w-fit flex-1 items-center gap-1 rounded-lg bg-muted p-1 sm:order-none sm:mr-2 sm:min-w-0 sm:flex-none"
       >
         {/* The segmented control's look: the picked mode sits on the card surface. */}
         <button

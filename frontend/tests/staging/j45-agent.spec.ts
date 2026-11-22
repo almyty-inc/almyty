@@ -116,10 +116,11 @@ test.describe('J4/J5 autonomous agent with a real tool', () => {
     // The steps list: each step's number, kind, input and output.
     const steps = (await runs.innerText()).replace(/\s+/g, ' ')
     const toolIdent = `${apiName.replace(/-/g, '_')}_get_v1_forecast`
-    expect(steps, 'the run should list the forecast tool call').toMatch(new RegExp(`#?\\d+ tool_call In: \\{"tool":"${toolIdent}"`))
+    // A tool step reads "Tool call  In: <tool> (latitude: … · longitude: …)", not its type code and JSON.
+    expect(steps, 'the run should list the forecast tool call').toMatch(new RegExp(`#?\\d+ Tool call In: ${toolIdent} \\(`))
     // What the tool returned is the number the answer gave.
     expect(steps).toMatch(new RegExp(`"temperature_2m_max":\\[[^\\]]*${String(expected).replace('.', '\\.')}[,\\]]`))
-    expect(steps, 'the run should list the answer check').toMatch(/#?\d+ verify .*?Answer check/)
+    expect(steps, 'the run should list the answer check').toMatch(/#?\d+ Verify .*?Answer check/)
     await expect(runs.getByText('No errors found').first(), 'a correct answer should pass its check').toBeVisible()
   })
 })

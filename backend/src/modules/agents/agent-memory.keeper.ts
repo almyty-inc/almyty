@@ -53,7 +53,21 @@ export function personWordsOf(run: Pick<AgentRun, 'input' | 'metadata'>): string
       .map((w: string) => w.trim())
       .join('\n\n');
   }
-  return asText(run.input).trim();
+  return inputWords(run.input);
+}
+
+/**
+ * A run's input as the person wrote it: a run started with `{ message }`
+ * is the message, not its JSON, so a saved conversation reads
+ * "Person: Sites: ..." rather than `Person: {"message":"Sites: ..."}`.
+ * Any other shape is kept whole, as JSON.
+ */
+export function inputWords(input: unknown): string {
+  if (typeof input === 'string') return input.trim();
+  if (input && typeof input === 'object' && typeof (input as { message?: unknown }).message === 'string') {
+    return (input as { message: string }).message.trim();
+  }
+  return asText(input).trim();
 }
 
 function rulesBlock(rules: string[]): string {
@@ -224,13 +238,7 @@ export function recallBlock(ranked: Array<Pick<RankedItem, 'item'>>): string {
  * the run carries none.
  */
 export function recallQueryOf(run: Pick<AgentRun, 'input' | 'metadata'>): string {
-  if (run.metadata?.triggerType === 'always_on') return personWordsOf(run);
-  const input = run.input as unknown;
-  if (typeof input === 'string') return input.trim();
-  if (input && typeof input === 'object' && typeof (input as { message?: unknown }).message === 'string') {
-    return ((input as { message: string }).message).trim();
-  }
-  return asText(input).trim();
+  return personWordsOf(run);
 }
 
 /**

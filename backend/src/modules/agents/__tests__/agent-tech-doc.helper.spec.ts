@@ -112,7 +112,9 @@ describe('AgentTechDocHelper', () => {
 
   const approvalCounts: Record<string, number> = { pending: 1, approved: 2, rejected: 3, expired: 4 };
 
-  let agentsService: { getAgent: jest.Mock };
+  let agentsService: { getAgent: jest.Mock; runStats: jest.Mock };
+  // What the agent's existing runs add up to (agent-run-stats.ts).
+  let runStats: { runs: number; completed: number; checked: number; checksPassed: number; averageRunTimeMs: number; totalCost: number };
   let constraintsService: { list: jest.Mock };
   let toolRepo: { find: jest.Mock };
   let providerRepo: { find: jest.Mock };
@@ -123,7 +125,11 @@ describe('AgentTechDocHelper', () => {
   let helper: AgentTechDocHelper;
 
   beforeEach(() => {
-    agentsService = { getAgent: jest.fn() };
+    runStats = { runs: 10, completed: 9, checked: 0, checksPassed: 0, averageRunTimeMs: 1200, totalCost: 1.23 };
+    agentsService = {
+      getAgent: jest.fn(),
+      runStats: jest.fn(async (ids: string[]) => new Map(ids.map((id) => [id, runStats]))),
+    };
     constraintsService = {
       list: jest.fn().mockResolvedValue([
         { rule: 'Never delete production data', origin: 'learned', active: true, createdAt: new Date('2026-03-01') },
@@ -284,6 +290,19 @@ describe('AgentTechDocHelper', () => {
       });
       expect(doc.loggingAndTraceability.entityVersioning.mechanism).toBe('typeorm-versions');
     });
+    it('reads the numbers from the runs the agent still has, not the counters on its row', async () => {
+      agentsService.getAgent.mockResolvedValue({ ...autonomousAgent(), totalExecutions: 142, successfulExecutions: 140, averageExecutionTime: 1600, totalCost: 9 });
+      runStats = { runs: 2, completed: 1, checked: 0, checksPassed: 0, averageRunTimeMs: 9500, totalCost: 0.02 };
+      const doc = await helper.build('agent-1', ORG, VIEWER);
+      expect(agentsService.runStats).toHaveBeenCalledWith(['agent-1']);
+      expect(doc.loggingAndTraceability.executions).toMatchObject({
+        total: 2,
+        successful: 1,
+        completedPercent: 50,
+        averageExecutionTimeMs: 9500,
+        totalCostUsd: 0.02,
+      });
+    });
 
     it('returns the last 10 version snapshots, newest first', async () => {
       const doc = await helper.build('agent-1', ORG, VIEWER);
@@ -430,7 +449,8 @@ describe('AgentTechDocHelper', () => {
 
     // "Success rate" counted finished runs and ignored the checks.
     it('says Completed and, for checked runs, No errors found, not a success rate', async () => {
-      agentsService.getAgent.mockResolvedValue({ ...autonomousAgent(), checkedExecutions: 8, passedCheckExecutions: 2 });
+      agentsService.getAgent.mockResolvedValue(autonomousAgent());
+      runStats = { ...runStats, checked: 8, checksPassed: 2 };
       const doc = await helper.build('agent-1', ORG, VIEWER);
       expect(doc.loggingAndTraceability.executions).toMatchObject({
         successRatePercent: 90,
@@ -448,7 +468,8 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('says one checked run, not one checked runs', async () => {
-      agentsService.getAgent.mockResolvedValue({ ...autonomousAgent(), checkedExecutions: 1, passedCheckExecutions: 1 });
+      agentsService.getAgent.mockResolvedValue(autonomousAgent());
+      runStats = { ...runStats, checked: 1, checksPassed: 1 };
       const doc = await helper.build('agent-1', ORG, VIEWER);
       expect(helper.renderMarkdown(doc)).toContain('- No errors found: 1 of 1 checked run (100%).');
     });

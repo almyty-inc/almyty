@@ -1,7 +1,8 @@
 /**
  * Summary stat cards displayed at the top of the agent detail page:
  * total runs, completed, no errors found (an agent with a check only),
- * avg run time, total cost.
+ * avg run time, total cost. All of them over the runs the agent still
+ * has (`agent.runStats`): a deleted or swept run drops out.
  *
  * "Run" is the one word for what a user starts and for the record it
  * leaves. The page used to say executions here, runs one tab over and
@@ -19,13 +20,15 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import type { Agent } from '@/types'
 import { pluralized } from '@/lib/utils'
-import { CHECKS_PASSED_HINT, CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent } from '@/lib/agent-run-numbers'
+import { CHECKS_PASSED_HINT, CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent, runNumbers } from '@/lib/agent-run-numbers'
 
 interface AgentStatsProps {
   agent: Agent
 }
 
 export function AgentStats({ agent }: AgentStatsProps) {
+  // From the runs the agent still has, worked out on the server.
+  const numbers = runNumbers(agent)
   const completed = completedPercent(agent)
   const checks = checksPassed(agent)
 
@@ -37,7 +40,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
             <Activity className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Total runs</span>
           </div>
-          <div className="text-2xl font-bold mt-1">{agent.totalExecutions}</div>
+          <div className="text-2xl font-bold mt-1" data-testid="agent-stat-total-runs">{numbers.runs}</div>
         </CardContent>
       </Card>
       <Card>
@@ -80,8 +83,8 @@ export function AgentStats({ agent }: AgentStatsProps) {
             <span className="text-sm text-muted-foreground">Avg run time</span>
           </div>
           <div className="text-2xl font-bold mt-1">
-            {agent.averageExecutionTime > 0
-              ? `${(agent.averageExecutionTime / 1000).toFixed(1)}s`
+            {numbers.averageRunTimeMs > 0
+              ? `${(numbers.averageRunTimeMs / 1000).toFixed(1)}s`
               : '--'}
           </div>
         </CardContent>
@@ -93,7 +96,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
             <span className="text-sm text-muted-foreground">Total cost</span>
           </div>
           <div className="text-2xl font-bold mt-1">
-            {agent.totalCost > 0 ? `$${agent.totalCost.toFixed(4)}` : '--'}
+            {numbers.totalCost > 0 ? `$${numbers.totalCost.toFixed(4)}` : '--'}
           </div>
         </CardContent>
       </Card>

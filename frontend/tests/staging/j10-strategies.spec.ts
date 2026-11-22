@@ -74,13 +74,13 @@ test.describe('J10 memory', () => {
 // Step numbers sit in a badge, with no "#" in front.
 const MODES: { key: string; label: string; models: string[]; shape: RegExp }[] = [
   // Drafter, Checker, Main: the checker checks the draft.
-  { key: 'cascade', label: 'Cascade', models: [MAIN_MODEL, CHECK_MODEL, MAIN_MODEL], shape: /#?\d+ verify/ },
+  { key: 'cascade', label: 'Cascade', models: [MAIN_MODEL, CHECK_MODEL, MAIN_MODEL], shape: /#?\d+ Verify/ },
   // Main, Checker: the main model writes candidates, the checker picks one.
-  { key: 'best_of_n', label: 'Best of N', models: [MAIN_MODEL, CHECK_MODEL], shape: /Candidate 2 .*#?\d+ judge .*Picked candidate \d of \d/ },
+  { key: 'best_of_n', label: 'Best of N', models: [MAIN_MODEL, CHECK_MODEL], shape: /Candidate 2 .*#?\d+ Judge .*Picked candidate \d of \d/ },
   // Main, Panelist 1, Panelist 2: each panelist answers, then one answer is judged from all.
-  { key: 'panel', label: 'Panel', models: [MAIN_MODEL, MAIN_MODEL, CHECK_MODEL], shape: /Panel answer.*Panel answer.*#?\d+ judge .*Judged a panel of \d/ },
+  { key: 'panel', label: 'Panel', models: [MAIN_MODEL, MAIN_MODEL, CHECK_MODEL], shape: /Panel answer.*Panel answer.*#?\d+ Judge .*Judged a panel of \d/ },
   // Explorer, Summariser, Main, Checker: explore, a brief, then the main model's answer checked.
-  { key: 'explore_extract_patch', label: 'Explore, extract, patch', models: [MAIN_MODEL, CHECK_MODEL, MAIN_MODEL, CHECK_MODEL], shape: /#?\d+ explore .*#?\d+ extract_context .*#?\d+ verify/ },
+  { key: 'explore_extract_patch', label: 'Explore, extract, patch', models: [MAIN_MODEL, CHECK_MODEL, MAIN_MODEL, CHECK_MODEL], shape: /#?\d+ Explore .*#?\d+ Extract context .*#?\d+ Verify/ },
 ]
 
 test.describe('J10 work modes', () => {

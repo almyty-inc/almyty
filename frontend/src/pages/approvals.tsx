@@ -71,11 +71,7 @@ export function ApprovalsPage() {
           variant="panel"
           icon={Check}
           title="No pending approvals"
-          description={
-            <>
-              When an agent calls the <code className="px-1 py-0.5 bg-muted rounded">request_approval</code> tool, it appears here for review.
-            </>
-          }
+          description="When an agent stops to ask a person before it goes on, the request appears here for review."
         />
       ) : (
         // The queue on the left (only when there is more than one), one

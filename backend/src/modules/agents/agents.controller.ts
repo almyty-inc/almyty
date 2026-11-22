@@ -32,6 +32,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RbacAction, RBAC_PERMISSIONS } from '../../common/authorization/rbac-actions';
 import { AgentStatus } from '../../entities/agent.entity';
 import { AgentRole } from '../../entities/agent-role.entity';
+import { withRunStats } from './agent-run-stats';
 
 class AgentSearchQueryDto {
   @IsOptional()
@@ -147,10 +148,12 @@ export class AgentsController {
       };
 
       const result = await this.agentsService.getAgents(filters);
+      // Each agent's numbers come from the runs it still has.
+      const stats = await this.agentsService.runStats(result.data.map((a) => a.id));
 
       return {
         success: true,
-        data: result.data,
+        data: result.data.map((a) => withRunStats(a, stats.get(a.id))),
         pagination: {
           total: result.total,
           page: result.page,
@@ -248,10 +251,12 @@ export class AgentsController {
       // Who may manage this agent is the server's rule (org admin, owner,
       // or a lead of its team); the detail page shows manage controls by it.
       const viewerCanManage = await this.agentsService.viewerCanManage(agent, userId);
+      // The header's numbers come from the runs the agent still has.
+      const stats = (await this.agentsService.runStats([agent.id])).get(agent.id);
 
       return {
         success: true,
-        data: { ...agent, viewerCanManage },
+        data: { ...withRunStats(agent, stats), viewerCanManage },
       };
     } catch (error) {
       throw new HttpException(

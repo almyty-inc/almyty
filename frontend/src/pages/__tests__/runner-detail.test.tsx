@@ -22,6 +22,9 @@ vi.mock('../../lib/api', () => ({
   organizationsApi: {
     getTeams: vi.fn().mockResolvedValue([]),
   },
+  toolsApi: {
+    getAll: vi.fn(),
+  },
 }))
 
 vi.mock('../../store/organization', () => ({
@@ -34,10 +37,11 @@ vi.mock('../../store/auth', () => ({
   useAuthStore: () => ({ user: { id: 'me' } }),
 }))
 
-import { runnersApi, workspacesApi } from '../../lib/api'
+import { runnersApi, toolsApi, workspacesApi } from '../../lib/api'
 
 const getRunner = runnersApi.getById as ReturnType<typeof vi.fn>
 const getWorkspaces = workspacesApi.getAll as ReturnType<typeof vi.fn>
+const getTools = toolsApi.getAll as ReturnType<typeof vi.fn>
 const unregister = runnersApi.unregister as ReturnType<typeof vi.fn>
 const update = runnersApi.update as ReturnType<typeof vi.fn>
 
@@ -45,9 +49,27 @@ describe('RunnerDetailPage', () => {
   beforeEach(() => {
     getRunner.mockReset()
     getWorkspaces.mockReset()
+    getTools.mockReset()
     unregister.mockReset()
     update.mockReset()
     getWorkspaces.mockResolvedValue([])
+    getTools.mockResolvedValue({ tools: [] })
+  })
+
+  it('lists the capabilities the runner published, read from every page of tools', async () => {
+    getRunner.mockResolvedValue(makeRunner({ state: 'online' }))
+    getTools.mockResolvedValue({
+      tools: [
+        { id: 't1', name: 'runner.mac.shell.exec', description: 'Run a shell command', runnerConfig: { runnerId: 'r1', method: 'shell.exec' } },
+        { id: 't2', name: 'runner.other.agent.list', runnerConfig: { runnerId: 'r2', method: 'agent.list' } },
+        { id: 't3', name: 'weather', runnerConfig: null },
+      ],
+    })
+    render(<RunnerDetailPage />)
+    expect(await screen.findByText('shell.exec')).toBeInTheDocument()
+    expect(screen.queryByText('agent.list')).toBeNull()
+    // No page size: the server refuses one over 100, and getAll alone reads every page.
+    expect(getTools).toHaveBeenCalledWith('o1')
   })
 
   it('renders runtime info and labels', async () => {
@@ -57,7 +79,6 @@ describe('RunnerDetailPage', () => {
     expect(screen.getByText('darwin / arm64')).toBeInTheDocument()
     expect(screen.getByText('env=dev')).toBeInTheDocument()
   })
-
   it('offers Delete only for an offline runner or one that never connected', async () => {
     getRunner.mockResolvedValue(makeRunner({ state: 'online' }))
     const { unmount } = render(<RunnerDetailPage />)

@@ -11,7 +11,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import { ArrowUpDown, ChevronDown, MoreHorizontal } from "lucide-react"
+import { ArrowUpDown, ChevronDown, MoreHorizontal, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -142,14 +142,20 @@ export function DataTable<TData, TValue>({
       // Wraps on a phone, so filters and Columns never push the page wider than the screen.
       <div className="flex flex-wrap items-center gap-3 py-4" data-testid="data-table-header">
         {searchKey && (
-          <Input
-            placeholder={searchPlaceholder}
-            value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ""}
-            onChange={(event) =>
-              table.getColumn(searchKey)?.setFilterValue(event.target.value)
-            }
-            className="max-w-sm"
-          />
+          // The same search box as the pages that filter their own lists
+          // (Agents, APIs, Gateways): icon inside, the row's spare width.
+          <div className="relative basis-full sm:basis-auto sm:flex-1 sm:min-w-[12rem]" data-testid="data-table-search">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder.replace(/(\.\.\.|…)$/, '')}
+              value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ""}
+              onChange={(event) =>
+                table.getColumn(searchKey)?.setFilterValue(event.target.value)
+              }
+              className="pl-10"
+            />
+          </div>
         )}
         {headerExtra}
         {!hideColumnsButton && (

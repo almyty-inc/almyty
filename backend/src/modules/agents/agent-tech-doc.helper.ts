@@ -17,6 +17,7 @@ import { isOthersPrivate } from '../../common/authorization/private-visibility';
 import { usableProviders } from '../llm-providers/private-provider';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { readAlwaysOn } from './always-on/always-on.types';
+import { EMPTY_RUN_STATS } from './agent-run-stats';
 
 // ── Document shape ──
 
@@ -238,6 +239,7 @@ export class AgentTechDocHelper {
   async build(agentId: string, organizationId: string, viewerId: string | null): Promise<AgentTechnicalDocumentation> {
     // Throws NotFoundException (404) for missing agents — reuse the canonical lookup.
     const agent = await this.agentsService.getAgent(agentId, organizationId, viewerId ? { id: viewerId } : null);
+    const runStats = (await this.agentsService.runStats([agent.id])).get(agent.id) ?? EMPTY_RUN_STATS;
     const organization = await this.organizationRepository.findOne({ where: { id: organizationId } });
 
     const nodes: AgentPipelineNode[] = agent.pipeline?.nodes ?? [];
@@ -383,15 +385,17 @@ export class AgentTechDocHelper {
 
       loggingAndTraceability: {
         executions: {
-          total: agent.totalExecutions ?? 0,
-          successful: agent.successfulExecutions ?? 0,
-          successRatePercent: percentOf(agent.successfulExecutions, agent.totalExecutions) ?? 0,
-          completedPercent: percentOf(agent.successfulExecutions, agent.totalExecutions) ?? 0,
-          checked: agent.checkedExecutions ?? 0,
-          checksPassed: agent.passedCheckExecutions ?? 0,
-          checksPassedPercent: percentOf(agent.passedCheckExecutions, agent.checkedExecutions),
-          averageExecutionTimeMs: agent.averageExecutionTime ?? 0,
-          totalCostUsd: agent.totalCost ?? 0,
+          // From the runs the agent still has (agent-run-stats.ts), not the
+          // lifetime counters a deleted or swept run leaves behind.
+          total: runStats.runs,
+          successful: runStats.completed,
+          successRatePercent: percentOf(runStats.completed, runStats.runs) ?? 0,
+          completedPercent: percentOf(runStats.completed, runStats.runs) ?? 0,
+          checked: runStats.checked,
+          checksPassed: runStats.checksPassed,
+          checksPassedPercent: percentOf(runStats.checksPassed, runStats.checked),
+          averageExecutionTimeMs: runStats.averageRunTimeMs,
+          totalCostUsd: runStats.totalCost,
           lastExecutedAt: agent.lastExecutedAt ?? null,
         },
         autonomousRuns: { total: runCount },

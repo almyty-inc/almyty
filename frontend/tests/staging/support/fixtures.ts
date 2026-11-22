@@ -17,7 +17,7 @@
 import { randomBytes } from 'crypto'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
-import { test as base, expect, type APIRequestContext, type Page, type TestInfo } from '@playwright/test'
+import { test as base, expect, type APIRequestContext, type Browser, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
 import { API_URL, APP_URL, RUN_ID, SHOTS_DIR } from './env'
 import { deleteThing, qaApi, qaOrg, redact, type Kind, type QaOrg } from './qa-api'
 
@@ -39,6 +39,7 @@ export interface Gate {
 
 export interface FreshUser {
   page: Page
+  context: BrowserContext
   email: string
   password: string
   organizationName: string
@@ -94,55 +95,11 @@ export const test = base.extend<{ gate: Gate; qa: APIRequestContext; org: QaOrg;
   },
 
   freshUser: async ({ browser }, use, testInfo) => {
-    const context = await browser.newContext({ baseURL: APP_URL, storageState: { cookies: [], origins: [] } })
-    const page = await context.newPage()
-    screenshotThis(page)
-    const stamp = `${RUN_ID}-${process.pid}-${++seq}`
-    const email = `gate-${stamp}@test.almyty.com`
-    // A throwaway account that lives for one test, with a random password.
-    const password = `${randomBytes(12).toString('base64url')}Aa1!`
-    const organizationName = `gate-${stamp}-org`
-
-    await page.goto('/auth/register')
-    await page.locator('#firstName').fill('Gate')
-    await page.locator('#lastName').fill('Runner')
-    await page.locator('#email').fill(email)
-    await page.locator('#organizationName').fill(organizationName)
-    await page.locator('#password').fill(password)
-    await page.locator('#confirmPassword').fill(password)
-    await page.locator('#terms').check()
-    // Turnstile's widget fills this once it has passed. Staging's build uses
-    // Cloudflare's always-pass test site key, so it passes on its own.
-    await expect(
-      page.locator('input[name="cf-turnstile-response"]'),
-      'the sign-up captcha never passed: is the staging build on the always-pass test site key?',
-    ).toHaveValue(/.+/, { timeout: 30_000 })
-    await page.getByRole('button', { name: 'Create account' }).click()
-
-    // staging confirms @test.almyty.com at once, so sign-up goes straight to sign-in.
-    await expect(page, 'sign-up should go straight to sign-in for a @test.almyty.com address').toHaveURL(/\/auth\/login/, { timeout: 45_000 })
-    await page.locator('#email').fill(email)
-    await page.locator('#password').fill(password)
-    await page.getByRole('button', { name: 'Sign in' }).click()
-    // Hand the page over only once the sign-in has landed: until then the
-    // context holds no session cookie, and a test that copies its storage
-    // state into an API context (J12's freshApi) gets 401s.
-    await page.waitForURL((url) => !url.pathname.startsWith('/auth/'), { timeout: 60_000 })
-
-    await use({ page, email, password, organizationName })
-    await finalShot(page, testInfo)
-
-    // Remove the account's organization (the account itself has no self-delete).
-    try {
-      const profile = await page.request.get(`${API_URL}/auth/profile`)
-      const orgs = (await profile.json()).data?.organizations || []
-      for (const o of orgs) {
-        await page.request.delete(`${API_URL}/organizations/${o.id}`, { headers: { 'X-Organization-Id': o.id } })
-      }
-    } catch (err) {
-      testInfo.annotations.push({ type: 'cleanup', description: redact(`fresh user org: ${String((err as Error).message).split('\n')[0]}`) })
-    }
-    await context.close()
+    const fresh = await signUpFresh(browser)
+    screenshotThis(fresh.page)
+    await use(fresh)
+    await finalShot(fresh.page, testInfo)
+    await dropFreshUser(fresh, testInfo)
   },
 
   // Every test leaves one screenshot behind, named after it.
@@ -179,4 +136,67 @@ async function finalShot(page: Page, testInfo: TestInfo): Promise<void> {
 /** Wait for a JSON response the page itself makes (never stubbed). */
 export async function responseOf(page: Page, url: RegExp, method = 'POST') {
   return page.waitForResponse((r) => url.test(r.url()) && r.request().method() === method, { timeout: 120_000 })
+}
+/**
+ * Sign a brand-new account up through the real sign-up page
+ * (`gate-<run id>-<n>@test.almyty.com`, which staging confirms at once) and
+ * sign it in, in a context of its own. `freshUser` is one of these; a test
+ * that needs several people makes the others with this and hands each to
+ * `dropFreshUser` through `gate.defer`.
+ */
+export async function signUpFresh(browser: Browser): Promise<FreshUser> {
+  const context = await browser.newContext({ baseURL: APP_URL, storageState: { cookies: [], origins: [] } })
+  const page = await context.newPage()
+  const stamp = `${RUN_ID}-${process.pid}-${++seq}`
+  const email = `gate-${stamp}@test.almyty.com`
+  // A throwaway account that lives for one test, with a random password.
+  const password = `${randomBytes(12).toString('base64url')}Aa1!`
+  const organizationName = `gate-${stamp}-org`
+
+  await page.goto('/auth/register')
+  await page.locator('#firstName').fill('Gate')
+  await page.locator('#lastName').fill('Runner')
+  await page.locator('#email').fill(email)
+  await page.locator('#organizationName').fill(organizationName)
+  await page.locator('#password').fill(password)
+  await page.locator('#confirmPassword').fill(password)
+  await page.locator('#terms').check()
+  // Turnstile's widget fills this once it has passed. Staging's build uses
+  // Cloudflare's always-pass test site key, so it passes on its own.
+  await expect(
+    page.locator('input[name="cf-turnstile-response"]'),
+    'the sign-up captcha never passed: is the staging build on the always-pass test site key?',
+  ).toHaveValue(/.+/, { timeout: 30_000 })
+  await page.getByRole('button', { name: 'Create account' }).click()
+
+  // staging confirms @test.almyty.com at once, so sign-up goes straight to sign-in.
+  await expect(page, 'sign-up should go straight to sign-in for a @test.almyty.com address').toHaveURL(/\/auth\/login/, { timeout: 45_000 })
+  await page.locator('#email').fill(email)
+  await page.locator('#password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  // Hand the page over only once the sign-in has landed: until then the
+  // context holds no session cookie, and a test that copies its storage
+  // state into an API context (J12's freshApi) gets 401s.
+  await page.waitForURL((url) => !url.pathname.startsWith('/auth/'), { timeout: 60_000 })
+  return { page, context, email, password, organizationName }
+}
+
+/**
+ * Remove the account's own organization (the account itself has no
+ * self-delete) and close its context. Never the QA organization, should the
+ * account still be a member of it.
+ */
+export async function dropFreshUser(fresh: FreshUser, testInfo: TestInfo): Promise<void> {
+  try {
+    const profile = await fresh.page.request.get(`${API_URL}/auth/profile`)
+    const orgs = (await profile.json()).data?.organizations || []
+    const qaOrgId = qaOrg().id
+    for (const o of orgs) {
+      if (o.id === qaOrgId) continue
+      await fresh.page.request.delete(`${API_URL}/organizations/${o.id}`, { headers: { 'X-Organization-Id': o.id } })
+    }
+  } catch (err) {
+    testInfo.annotations.push({ type: 'cleanup', description: redact(`fresh user org: ${String((err as Error).message).split('\n')[0]}`) })
+  }
+  await fresh.context.close()
 }

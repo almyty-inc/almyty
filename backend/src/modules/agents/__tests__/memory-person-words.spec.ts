@@ -34,6 +34,12 @@ describe('personWordsOf', () => {
     expect(personWordsOf({ input: 'I moved to Lisbon', metadata: { triggerType: 'chat' } } as any)).toBe('I moved to Lisbon');
   });
 
+  it('is the message of a run started with { message }, not its JSON', () => {
+    expect(personWordsOf({ input: { message: ' Sites: example.com ' }, metadata: { triggerType: 'chat' } } as any)).toBe('Sites: example.com');
+    // Any other shape is kept whole.
+    expect(personWordsOf({ input: { city: 'Lisbon' }, metadata: {} } as any)).toBe('{"city":"Lisbon"}');
+  });
+
   it("is only the owner's messages on an always-on run, never the wake prompt", () => {
     expect(personWordsOf(wakeRun(['I moved to Lisbon', ' ', 'Call me Ana']))).toBe('I moved to Lisbon\n\nCall me Ana');
     expect(personWordsOf(wakeRun([]))).toBe('');
@@ -68,6 +74,23 @@ describe('facts after an always-on run', () => {
     expect(exchange).toBe('Person: I moved to Lisbon\nAgent: Nothing new.');
     expect(exchange).not.toContain('You are always on');
     expect((memoryAccounts.put.mock.calls[0] as any[])[2]).toMatchObject({ content: 'The owner moved to Lisbon', metadata: { type: 'fact' } });
+  });
+});
+
+describe('a saved conversation', () => {
+  it('keeps what the person wrote, not the JSON the run was started with', async () => {
+    const { k, memoryAccounts, callModel } = keeper([]);
+    const agent = { ...AGENT, memoryConfig: { enabled: true, whose: 'agent', save: 'conversations' } };
+    const run = {
+      id: 'run-2', organizationId: 'org-1', userId: 'u-1', endUserId: null,
+      input: { message: 'Sites: example.com, example.org' }, output: 'Both are up.',
+      steps: [] as any[], totalCost: 0, metadata: { triggerType: 'chat' },
+    } as any;
+    await k.afterRun(agent, run, { main: MAIN } as any);
+    expect(callModel).not.toHaveBeenCalled();
+    const content = (memoryAccounts.put.mock.calls[0] as any[])[2].content as string;
+    expect(content).toBe('Person: Sites: example.com, example.org\nAgent: Both are up.');
+    expect(content).not.toContain('{"message"');
   });
 });
 

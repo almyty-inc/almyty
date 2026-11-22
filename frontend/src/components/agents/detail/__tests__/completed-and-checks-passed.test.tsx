@@ -4,7 +4,7 @@ import { screen, waitFor } from '@testing-library/react'
 import { render } from '../../../../test/setup'
 import { AgentStats } from '../agent-stats'
 import { AgentsTab } from '../../../analytics/agents-tab'
-import type { Agent } from '@/types'
+import type { Agent, AgentRunStats } from '@/types'
 
 vi.mock('@/lib/api', () => ({ agentsApi: { getExecutions: vi.fn(), getAll: vi.fn() } }))
 vi.mock('@/store/organization', () => ({
@@ -22,24 +22,61 @@ import { agentsApi } from '@/lib/api'
  * answers were right; a pass can't confirm everything an answer says.
  */
 
-const checked = (over: Partial<Agent> = {}): Agent =>
+const checked = (over: Partial<AgentRunStats> = {}): Agent =>
   ({
     id: 'a1',
     name: 'Release Watcher',
     status: 'active',
     mode: 'autonomous',
-    totalExecutions: 10,
-    successfulExecutions: 10,
-    checkedExecutions: 8,
-    passedCheckExecutions: 2,
-    averageExecutionTime: 1200,
-    totalCost: 0.5,
+    runStats: { runs: 10, completed: 10, checked: 8, checksPassed: 2, averageRunTimeMs: 1200, totalCost: 0.5, ...over },
     agentConfig: { verify: { enabled: true, checkers: [{ providerId: 'p1' }] } },
-    ...over,
   }) as Agent
 
 const unchecked = (): Agent =>
-  ({ ...checked(), id: 'a2', name: 'Plain', agentConfig: {}, checkedExecutions: 0, passedCheckExecutions: 0 }) as Agent
+  ({ ...checked({ checked: 0, checksPassed: 0 }), id: 'a2', name: 'Plain', agentConfig: {} }) as Agent
+
+/**
+ * The header's numbers are the runs the agent still has, worked out on the
+ * server (`runStats`). The lifetime counters kept every run ever made, so
+ * after runs were deleted the header read "142 runs" over two.
+ */
+describe('the agent header numbers', () => {
+  it('reads total runs, completed, avg run time and cost from the existing runs, not the counters', () => {
+    const agent = {
+      ...checked(),
+      agentConfig: {},
+      // Lifetime counters from runs since deleted: none of these may show.
+      totalExecutions: 142,
+      successfulExecutions: 142,
+      averageExecutionTime: 1600,
+      totalCost: 3.5,
+      runStats: { runs: 2, completed: 1, checked: 0, checksPassed: 0, averageRunTimeMs: 9500, totalCost: 0.02 },
+    } as Agent
+    render(<AgentStats agent={agent} />)
+    expect(screen.getByTestId('agent-stat-total-runs')).toHaveTextContent('2')
+    expect(screen.getByTestId('agent-stat-completed')).toHaveTextContent('50%')
+    expect(screen.getByText('9.5s')).toBeInTheDocument()
+    expect(screen.getByText('$0.0200')).toBeInTheDocument()
+    expect(screen.queryByText('142')).not.toBeInTheDocument()
+    expect(screen.queryByText('1.6s')).not.toBeInTheDocument()
+  })
+
+  it('shows no runs and dashes once every run is gone', () => {
+    const agent = {
+      ...checked(),
+      agentConfig: {},
+      totalExecutions: 142,
+      successfulExecutions: 142,
+      averageExecutionTime: 1600,
+      totalCost: 3.5,
+      runStats: { runs: 0, completed: 0, checked: 0, checksPassed: 0, averageRunTimeMs: 0, totalCost: 0 },
+    } as Agent
+    render(<AgentStats agent={agent} />)
+    expect(screen.getByTestId('agent-stat-total-runs')).toHaveTextContent('0')
+    expect(screen.getByTestId('agent-stat-completed')).toHaveTextContent('--')
+    expect(screen.queryByText('$3.5000')).not.toBeInTheDocument()
+  })
+})
 
 describe('the agent header', () => {
   it('shows Completed and No errors found, not a success rate', () => {
@@ -54,7 +91,7 @@ describe('the agent header', () => {
   })
 
   it('says one checked run, not one checked runs', () => {
-    render(<AgentStats agent={checked({ checkedExecutions: 1, passedCheckExecutions: 1 })} />)
+    render(<AgentStats agent={checked({ checked: 1, checksPassed: 1 })} />)
     expect(screen.getByText('1 of 1 checked run')).toBeInTheDocument()
   })
 
@@ -65,7 +102,7 @@ describe('the agent header', () => {
   })
 
   it('shows a dash, not 0%, before any run was checked', () => {
-    render(<AgentStats agent={checked({ checkedExecutions: 0, passedCheckExecutions: 0 })} />)
+    render(<AgentStats agent={checked({ checked: 0, checksPassed: 0 })} />)
     expect(screen.getByTestId('agent-stat-checks-passed')).toHaveTextContent('--')
   })
 })

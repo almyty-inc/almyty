@@ -34,7 +34,7 @@ describe('OrganizationsService.getTeams self-heal (#101)', () => {
         { provide: TeamMembershipHelper, useValue: teamMembershipHelper },
         { provide: getRepositoryToken(Organization), useValue: { findOne: jest.fn(), find: jest.fn(), create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(User), useValue: { findOne: jest.fn() } },
-        { provide: getRepositoryToken(UserOrganization), useValue: { findOne: jest.fn(), find: jest.fn() } },
+        { provide: getRepositoryToken(UserOrganization), useValue: { findOne: jest.fn(), find: jest.fn().mockResolvedValue([]) } },
         { provide: getRepositoryToken(Team), useValue: { find: jest.fn(), count: jest.fn() } },
         { provide: getRepositoryToken(UserTeam), useValue: { find: jest.fn() } },
         { provide: MailService, useValue: { send: jest.fn(), sendInvitation: jest.fn() } },
@@ -56,7 +56,11 @@ describe('OrganizationsService.getTeams self-heal (#101)', () => {
     await service.getTeams('org-1')
 
     expect(teamMembershipHelper.joinDefaultTeam).not.toHaveBeenCalled()
-    expect(userOrganizationRepository.find).not.toHaveBeenCalled()
+    // No owner lookup for the self-heal (the active-member read that
+    // filters the team lists is a different query).
+    expect(userOrganizationRepository.find).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ role: OrganizationRole.OWNER }) }),
+    )
   })
 
   it('joins every active OWNER as LEAD when no default team exists', async () => {

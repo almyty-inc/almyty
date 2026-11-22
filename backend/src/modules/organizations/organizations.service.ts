@@ -10,7 +10,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { Organization } from '../../entities/organization.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
@@ -486,6 +486,20 @@ export class OrganizationsService {
         wipedConnections,
         afterCommit,
       });
+      // Their team memberships in this organization go with the org
+      // membership: a team row for someone who is no longer in the org
+      // kept counting them in the team ("Everyone" said 9 while the org
+      // had 1 member). Teams of other organizations are not touched.
+      const orgTeams = await manager.getRepository(Team).find({
+        where: { organizationId },
+        select: { id: true },
+      });
+      if (orgTeams.length > 0) {
+        await manager.getRepository(UserTeam).delete({
+          userId,
+          teamId: In(orgTeams.map((t) => t.id)),
+        });
+      }
       await manager.getRepository(UserOrganization).remove(membership);
       return entries;
     });
@@ -699,11 +713,26 @@ export class OrganizationsService {
       }
     }
 
-    return this.teamRepository.find({
+    const teams = await this.teamRepository.find({
       where: { organizationId, isActive: true },
       relations: { members: { user: true } },
       order: { createdAt: 'DESC' },
     });
+
+    // A team lists only people who are active members of the organization,
+    // so its count agrees with Settings > Members. A deactivated member's
+    // team rows stay (reactivation brings them back); they are not shown.
+    const active = await this.userOrganizationRepository.find({
+      where: { organizationId, isActive: true },
+      select: { userId: true },
+    });
+    const activeIds = new Set(active.map((m) => m.userId));
+    for (const team of teams) {
+      if (Array.isArray(team.members)) {
+        team.members = team.members.filter((m) => activeIds.has(m.userId));
+      }
+    }
+    return teams;
   }
 
   async addTeamMember(

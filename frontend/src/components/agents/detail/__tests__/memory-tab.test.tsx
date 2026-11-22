@@ -11,7 +11,7 @@ import { renderWithProviders } from '@/test/setup'
 import { MemoryTab, type AgentMemoryItem } from '../memory-tab'
 import { memoriesApi } from '@/lib/api'
 
-vi.mock('@/lib/api', () => ({ memoriesApi: { put: vi.fn() } }))
+vi.mock('@/lib/api', () => ({ memoriesApi: { put: vi.fn(), remove: vi.fn() } }))
 const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
 vi.mock('@/store/app', () => ({ useNotifications: () => notify }))
 vi.mock('@/store/organization', () => ({
@@ -58,6 +58,35 @@ describe('MemoryTab list', () => {
     expect(screen.getByTestId('memory-full-content')).toHaveTextContent(long)
     await user.click(row)
     expect(screen.queryByTestId('memory-full-content')).toBeNull()
+  })
+
+  it('uses the Memory page table: same columns, text rather than JSON, markdown rendered', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <MemoryTab agentId="agent-1" memories={[{ ...memory, content: 'Person: {"message":"Sites: example.com"}\nAgent: **Both** are up.' }]} />,
+    )
+    const table = screen.getByTestId('memory-table')
+    expect([...table.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['', 'Content', 'Type', 'Kept', 'Tags', 'Used', 'Saved', 'Actions'])
+    expect(screen.getByTestId('memory-preview')).toHaveTextContent('Person: Sites: example.com Agent: Both are up.')
+    await user.click(screen.getByTestId('memory-preview'))
+    const full = screen.getByTestId('memory-full-content')
+    expect(await within(full).findByText('Both', { selector: 'strong' })).toBeInTheDocument()
+    expect(full.textContent).not.toMatch(/\{"message"|\*\*/)
+  })
+
+  it('deletes a memory only after "Delete memory?"', async () => {
+    const user = userEvent.setup()
+    vi.mocked(memoriesApi.remove).mockResolvedValue({} as any)
+    renderWithProviders(<MemoryTab agentId="agent-1" memories={[memory]} />)
+    await user.click(screen.getByRole('button', { name: 'Delete memory' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Delete memory?')
+    expect(dialog).toHaveTextContent('Customer prefers email')
+    expect(memoriesApi.remove).not.toHaveBeenCalled()
+    // Opening the confirm did not open the row.
+    expect(screen.queryByTestId('memory-full-content')).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: 'Delete memory' }))
+    await waitFor(() => expect(memoriesApi.remove).toHaveBeenCalledWith('m1', 'soft'))
   })
 })
 

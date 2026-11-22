@@ -29,6 +29,24 @@ export const STEP_NAMES: Record<string, string> = {
   extract_context: 'Extract context',
   decision: 'Decision',
   code: 'Code',
+  // Steps an autonomous run's work mode records (autonomous-strategy.runner.ts).
+  explore: 'Explore',
+  judge: 'Judge',
+  teammate_call: 'Teammate call',
+}
+
+/**
+ * A run step's name when the result does not say its type: read it off
+ * the step's id (`input_1`, `llm_1`, `verify_1794417938_3`). The run view
+ * used to print the id itself, so a step read "input_1".
+ */
+export function stepNameOf(nodeType: string | undefined | null, nodeId: string): string {
+  if (nodeType && STEP_NAMES[nodeType]) return STEP_NAMES[nodeType]
+  const base = nodeId.replace(/(_\d+)+$/, '')
+  if (STEP_NAMES[base]) return STEP_NAMES[base]
+  if (base === 'llm' || base === 'model') return STEP_NAMES.llm_call
+  if (base === 'tool') return STEP_NAMES.tool_call
+  return nodeId
 }
 
 export type TemplateSegment = { kind: 'text'; text: string } | { kind: 'ref'; path: string; raw: string }

@@ -203,7 +203,10 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                     {pluralized(status?.seats, 'seat')}
                   </span>
                 )}
-                {status?.status && (
+                {/* The status belongs to the paid subscription. On Free it is
+                    an old one's (canceled, expired), which says nothing
+                    about the plan in front of the reader. */}
+                {isPaid && status?.status && (
                   <Badge variant="outline" className="capitalize">
                     {status.status.replace('_', ' ')}
                   </Badge>

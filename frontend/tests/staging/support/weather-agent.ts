@@ -51,6 +51,8 @@ export interface AgentSpec {
   memory?: boolean
   /** Work mode as the dropdown names it ("Cascade", "Panel", …), and one model per slot, top to bottom. */
   workMode?: { label: string; models: string[] }
+  /** How the model sees its tools, as the Tool list dropdown names it ("Search, and write scripts", …). */
+  toolList?: string
 }
 
 /** Build, save and activate an autonomous agent; returns its id and name. */
@@ -81,6 +83,13 @@ export async function buildAgent(page: Page, gate: Gate, spec: AgentSpec): Promi
     await page.getByRole('textbox', { name: 'Search tools' }).fill(spec.apiName)
     await page.getByRole('checkbox', { name: new RegExp(`^All tools of ${escape(spec.apiName)}`) }).check()
     await expect(page.getByText(`${spec.apiName}, all tools`)).toBeVisible()
+  }
+  if (spec.toolList) {
+    // Capabilities › How the model sees its tools.
+    const toolList = page.getByRole('combobox', { name: 'Tool list' })
+    await toolList.click()
+    await page.getByRole('option', { name: spec.toolList, exact: true }).click()
+    await expect(toolList).toContainText(spec.toolList)
   }
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page, 'Save should open the new agent').toHaveURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 60_000 })

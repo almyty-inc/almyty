@@ -300,12 +300,13 @@ export function ToolsPage() {
         const isMcpTool = tool.type === 'mcp'
         return (
           <div className="flex items-center space-x-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isRunnerTool ? 'bg-teal-500/10' : 'bg-selection'}`}>
+            <div className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center ${isRunnerTool ? 'bg-teal-500/10' : 'bg-selection'}`}>
               {isRunnerTool ? <Server className="h-5 w-5 text-teal-600 dark:text-teal-400" /> : <Code className="h-5 w-5 text-selection-foreground" />}
             </div>
-            <div className="max-w-[300px]">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-primary hover:underline truncate" title={tool.name}>{tool.metadata?.displayName || tool.name}</span>
+            <div className="min-w-0 max-w-[420px]">
+              {/* Badges wrap under a long name rather than squeezing it to "r…". */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="tool-name-row">
+                <span className="max-w-full font-medium text-primary hover:underline truncate" title={tool.name}>{tool.metadata?.displayName || tool.name}</span>
                 {isRunnerTool && (
                   <Badge variant="outline" className="text-teal-700 border-teal-600/40 dark:border-teal-400/40 dark:text-teal-300 shrink-0">
                     runner: {tool.runnerConfig?.runnerName}
@@ -321,7 +322,7 @@ export function ToolsPage() {
                 />
               </div>
               <div className="text-sm text-muted-foreground truncate">
-                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : toolSourceApi(tool).name || (tool.type === 'api' ? DELETED_API_LABEL : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
+                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : toolSourceApi(tool).name || (tool.type === 'api' ? DELETED_API_LABEL : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model tool' : tool.executionMethod === 'graphql' ? 'GraphQL tool' : tool.executionMethod === 'http' ? 'HTTP tool' : tool.executionMethod === 'sdk' ? 'SDK tool' : 'Custom tool')}
               </div>
             </div>
           </div>
