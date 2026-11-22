@@ -67,7 +67,8 @@ describe('credentialRows', () => {
 
   it('puts a model provider\'s own key with the model providers, opening the provider', () => {
     const row = storedRow({ id: 'llm-p1', name: 'OpenAI API Key', type: 'api_key', _source: 'llm_provider', _sourceId: 'p1', usedBy: [{ type: 'llm_provider', id: 'p1', name: 'OpenAI' }] })
-    expect(row).toMatchObject({ href: '/models/providers/p1', uses: [{ label: 'OpenAI connection', href: '/models/providers/p1' }] })
+    // Opened from Credentials, the provider page comes back to Credentials.
+    expect(row).toMatchObject({ href: '/models/providers/p1?returnTo=%2Fcredentials', uses: [{ label: 'OpenAI connection', href: '/models/providers/p1?returnTo=%2Fcredentials' }] })
   })
 
   it('lists every model provider connection once, keyless ones included, and not its own key again', () => {
@@ -85,9 +86,9 @@ describe('credentialRows', () => {
       ],
     )
     expect(rows.map((r) => [r.id, r.href])).toEqual([
-      ['p1', '/models/providers/p1'],
+      ['p1', '/models/providers/p1?returnTo=%2Fcredentials'],
       ['saved-openai', '/credentials/saved-openai'],
-      ['p2', '/models/providers/p2'],
+      ['p2', '/models/providers/p2?returnTo=%2Fcredentials'],
     ])
     expect(rows[0]).toMatchObject({ service: 'Hugging Face', check: { state: 'ok', label: 'Key works' }, who: 'Everyone' })
     expect(rows[2]).toMatchObject({ service: 'Ollama', who: 'Only you' })
