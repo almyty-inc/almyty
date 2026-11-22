@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor, fireEvent } from '@testing-library/react'
+import { screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -163,6 +163,41 @@ describe('MemoriesPage', () => {
     await waitFor(() => {
       expect(memoriesApi.remove).toHaveBeenCalledWith('mem-1', 'soft')
     })
+  })
+  // Saved conversations embed the run's input as JSON and carry markdown;
+  // the page reads them as text, in the same table as an agent's Memory tab.
+  it('lists memories in the shared memory table, as text rather than JSON and markdown marks', async () => {
+    ;(memoriesApi.list as any).mockResolvedValue({
+      items: [
+        {
+          id: 'mem-2',
+          content: 'Task: {"message":"Sites: example.com"}\nResult: **Both** are up.',
+          tier: 'project',
+          mode: 'memory',
+          created_at: new Date().toISOString(),
+          tags: ['auto-saved'],
+          metadata: { type: 'episode' },
+          access_count: 3,
+          scope: { scope_type: 'org', scope_id: 'org-test' },
+        },
+      ],
+      next_cursor: null,
+    })
+    ;(memoriesApi.listBackends as any).mockResolvedValue([])
+    ;(memoriesApi.getConfig as any).mockResolvedValue({})
+
+    render(<MemoriesPage />)
+
+    const table = await screen.findByTestId('memory-table')
+    expect([...table.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['', 'Content', 'Type', 'Kept', 'Tags', 'Used', 'Saved', 'Actions'])
+    const preview = screen.getByTestId('memory-preview')
+    expect(preview).toHaveTextContent('Task: Sites: example.com Result: Both are up.')
+    expect(preview.textContent).not.toMatch(/\{"message"|\*\*/)
+
+    fireEvent.click(preview)
+    const full = screen.getByTestId('memory-full-content')
+    expect(await within(full).findByText('Both', { selector: 'strong' })).toBeInTheDocument()
+    expect(full.textContent).not.toContain('{"message"')
   })
 })
 
