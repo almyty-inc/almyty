@@ -226,6 +226,22 @@ export interface ChangeSetEntry {
   outcome?: 'ran' | 'failed' | 'not_run'
   error?: string
 }
+/** An agent's numbers from the runs it still has: finished runs only. */
+export interface AgentRunStats {
+  /** Finished runs that still exist. */
+  runs: number
+  /** Of those, the runs that completed ("Completed"), whatever their answer's check said. */
+  completed: number
+  /** Completed runs whose final answer a checker gave a verdict on. */
+  checked: number
+  /** Of those, the runs whose check passed ("No errors found": no mismatch with the tool results, not proof the answer is right). */
+  checksPassed: number
+  /** Mean run time, ms. */
+  averageRunTimeMs: number
+  /** Dollars. */
+  totalCost: number
+}
+
 export interface Agent {
 
   id: string
@@ -339,12 +355,16 @@ export interface Agent {
   }
   metadata?: Record<string, any>
   webhookUrl?: string
+  /**
+   * The agent's numbers, worked out on the server from the runs it still
+   * has (backend agent-run-stats.ts). What every screen shows; a deleted
+   * or swept run drops out of them.
+   */
+  runStats?: AgentRunStats
+  /** The same numbers as `runStats`, under the API's older field names. Read `runStats`. */
   totalExecutions: number
-  /** Runs that finished ("Completed"), whatever their answer's check said. */
   successfulExecutions: number
-  /** Finished runs whose final answer a checker gave a verdict on. */
   checkedExecutions?: number
-  /** Of those, the runs whose check passed ("No errors found": no mismatch with the tool results, not proof the answer is right). */
   passedCheckExecutions?: number
   totalCost: number
   averageExecutionTime: number

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { agentsApi } from '@/lib/api'
-import { CHECKS_PASSED_HINT, CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent } from '@/lib/agent-run-numbers'
+import { CHECKS_PASSED_HINT, CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent, runNumbers } from '@/lib/agent-run-numbers'
 import { cn, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { Agent, AgentExecution } from '@/types'
@@ -125,8 +125,8 @@ export function AgentsTab() {
 
       total24h += a24h
       total7d += a7d
-      totalSuccess += agent.successfulExecutions
-      totalExecs += agent.totalExecutions
+      totalSuccess += runNumbers(agent).completed
+      totalExecs += runNumbers(agent).runs
       const checks = checksPassed(agent)
       if (checks) {
         anyCheck = true
@@ -147,13 +147,13 @@ export function AgentsTab() {
             ? Math.round((aSuccess / executions.length) * 100)
             : completedPercent(agent) ?? 0,
         checks,
-        avgTime: aTimed > 0 ? aTime / aTimed : agent.averageExecutionTime,
+        avgTime: aTimed > 0 ? aTime / aTimed : runNumbers(agent).averageRunTimeMs,
         recentFailures: failures.slice(0, 3),
         unavailable,
       })
     }
 
-    perAgent.sort((a, b) => b.agent.totalExecutions - a.agent.totalExecutions)
+    perAgent.sort((a, b) => runNumbers(b.agent).runs - runNumbers(a.agent).runs)
 
     const allFailures = perAgent
       .flatMap((p) => p.recentFailures)
@@ -265,7 +265,7 @@ export function AgentsTab() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-right font-medium">
-                      {agent.totalExecutions.toLocaleString()}
+                      {runNumbers(agent).runs.toLocaleString()}
                     </td>
                     {/*
                       An agent whose executions could not be read is not
@@ -310,7 +310,7 @@ export function AgentsTab() {
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatMs(avgTime)}</td>
                     )}
                     <td className="px-4 py-3 text-right text-muted-foreground">
-                      {agent.totalCost > 0 ? `$${agent.totalCost.toFixed(4)}` : '--'}
+                      {runNumbers(agent).totalCost > 0 ? `$${runNumbers(agent).totalCost.toFixed(4)}` : '--'}
                     </td>
                   </tr>
                 ))}
