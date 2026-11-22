@@ -40,6 +40,7 @@ import {
 import { agentsApi, externalAgentsApi } from '@/lib/api'
 import { agentsQuery } from '@/lib/list-queries'
 import { pluralized } from '@/lib/utils'
+import { runNumbers } from '@/lib/agent-run-numbers'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
@@ -400,7 +401,7 @@ export function AgentsPage() {
                       nodeCount
                     )}
                   </td>
-                  <td className="py-3 px-4 text-sm text-muted-foreground">{agent.totalExecutions || 0}</td>
+                  <td className="py-3 px-4 text-sm text-muted-foreground" data-testid={`agent-runs-${agent.id}`}>{runNumbers(agent).runs}</td>
                   <td className="sticky right-0 bg-card py-3 px-4 text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

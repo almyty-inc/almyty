@@ -40,6 +40,7 @@ describe('AgentsController', () => {
       createAgent: jest.fn(),
       getAgents: jest.fn(),
       getAgent: jest.fn(),
+      runStats: jest.fn().mockResolvedValue(new Map()),
       viewerCanManage: jest.fn().mockResolvedValue(false),
       updateAgent: jest.fn(),
       deleteAgent: jest.fn(),
@@ -201,11 +202,19 @@ describe('AgentsController', () => {
       };
 
       agentsService.getAgents.mockResolvedValue(mockResult as any);
+      agentsService.runStats.mockResolvedValue(
+        new Map([['agent-1', { runs: 3, completed: 2, checked: 0, checksPassed: 0, averageRunTimeMs: 1200, totalCost: 0.3 }]]),
+      );
 
       const result = await controller.getAgents({} as any, mockRequest);
 
       expect(result.success).toBe(true);
-      expect(result.data).toBe(mockResult.data);
+      expect(agentsService.runStats).toHaveBeenCalledWith(['agent-1', 'agent-2']);
+      expect(result.data.map((a: any) => [a.id, a.totalExecutions, a.runStats.runs, a.averageExecutionTime])).toEqual([
+        ['agent-1', 3, 3, 1200],
+        // No runs left: zeros, not whatever the counter held.
+        ['agent-2', 0, 0, 0],
+      ]);
       expect(result.pagination).toEqual({
         total: 2,
         page: 1,
@@ -226,23 +235,43 @@ describe('AgentsController', () => {
   });
 
   describe('getAgent', () => {
-    it('should return agent by id', async () => {
+    it('should return agent by id, its numbers from the runs it still has', async () => {
       const mockAgent = {
         id: 'agent-1',
         name: 'Test Agent',
         organizationId: 'org-1',
         status: AgentStatus.ACTIVE,
+        // Lifetime counters from runs since deleted: not what is served.
+        totalExecutions: 142,
+        successfulExecutions: 140,
+        averageExecutionTime: 1600,
+        totalCost: 3.5,
       } as any;
+      const stats = { runs: 2, completed: 1, checked: 1, checksPassed: 1, averageRunTimeMs: 9500, totalCost: 0.02 };
 
       agentsService.getAgent.mockResolvedValue(mockAgent);
       agentsService.viewerCanManage.mockResolvedValue(true);
+      agentsService.runStats.mockResolvedValue(new Map([['agent-1', stats]]));
 
       const result = await controller.getAgent('agent-1', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(result.data).toEqual({ ...mockAgent, viewerCanManage: true });
+      expect(result.data).toEqual({
+        ...mockAgent,
+        runStats: stats,
+        totalExecutions: 2,
+        successfulExecutions: 1,
+        checkedExecutions: 1,
+        passedCheckExecutions: 1,
+        averageExecutionTime: 9500,
+        totalCost: 0.02,
+        viewerCanManage: true,
+      });
+      // The entity itself is not changed, so nothing can save these back.
+      expect(mockAgent.totalExecutions).toBe(142);
       expect(agentsService.getAgent).toHaveBeenCalledWith('agent-1', 'org-1', { id: 'user-1' });
       expect(agentsService.viewerCanManage).toHaveBeenCalledWith(mockAgent, 'user-1');
+      expect(agentsService.runStats).toHaveBeenCalledWith(['agent-1']);
     });
 
     it('should handle not found error', async () => {

@@ -158,6 +158,7 @@ describe('AgentsPage', () => {
         description: 'A chat agent',
         status: 'active',
         totalExecutions: 42,
+        runStats: { runs: 42, completed: 40, checked: 0, checksPassed: 0, averageRunTimeMs: 0, totalCost: 0 },
         pipeline: {
           nodes: [
             { id: 'input_1', type: 'input' },
@@ -175,6 +176,7 @@ describe('AgentsPage', () => {
         description: 'A research agent',
         status: 'draft',
         totalExecutions: 0,
+        runStats: { runs: 0, completed: 0, checked: 0, checksPassed: 0, averageRunTimeMs: 0, totalCost: 0 },
         pipeline: {
           nodes: [{ id: 'input_1', type: 'input' }],
           edges: [],
@@ -241,6 +243,7 @@ describe('AgentsPage', () => {
           status: 'active',
           mode: 'autonomous',
           totalExecutions: 7,
+          runStats: { runs: 7, completed: 7, checked: 0, checksPassed: 0, averageRunTimeMs: 0, totalCost: 0 },
           // Autonomous agents have no meaningful pipeline — the list
           // used to render a misleading "0" here.
           pipeline: { nodes: [], edges: [] },
@@ -254,6 +257,7 @@ describe('AgentsPage', () => {
           status: 'active',
           mode: 'workflow',
           totalExecutions: 2,
+          runStats: { runs: 2, completed: 2, checked: 0, checksPassed: 0, averageRunTimeMs: 0, totalCost: 0 },
           pipeline: {
             nodes: [
               { id: 'input_1', type: 'input' },
@@ -417,6 +421,7 @@ describe('AgentsPage', () => {
             name: 'Existing Agent',
             status: 'active',
             totalExecutions: 0,
+            runStats: { runs: 0, completed: 0, checked: 0, checksPassed: 0, averageRunTimeMs: 0, totalCost: 0 },
             pipeline: { nodes: [{ id: 'input_1', type: 'input' }], edges: [] },
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),

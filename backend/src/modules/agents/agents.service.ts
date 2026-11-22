@@ -40,6 +40,7 @@ import { assertNoSharedDependents, narrowsScope } from '../../common/authorizati
 import { collectAgentReferences, collectProviderReferences } from './agent-references';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { usableProviders } from '../llm-providers/private-provider';
+import { AgentRunStats, FINISHED_RUN_STATUSES, loadAgentRunStats } from './agent-run-stats';
 
 /**
  * The mode a new agent gets when the request names none: autonomous, the
@@ -720,6 +721,15 @@ export class AgentsService {
   }
 
   /**
+   * Each agent's numbers from the runs it still has (agent-run-stats.ts):
+   * what the header, the list, analytics and the tech doc show, rather
+   * than the lifetime counters on the agent row.
+   */
+  async runStats(agentIds: string[]): Promise<Map<string, AgentRunStats>> {
+    return loadAgentRunStats(this.agentRepository.manager, agentIds);
+  }
+
+  /**
    * Whether `userId` may manage `agent` -- exactly what the agent manage
    * paths' assertManageable(..., { ownerManages: true }) would allow, so an
    * org admin, the agent's owner, or a lead of its team. The detail page
@@ -869,7 +879,19 @@ export class AgentsService {
 
     const sortBy = filters.sortBy || 'createdAt';
     const sortOrder = filters.sortOrder || 'DESC';
-    queryBuilder.orderBy(`agent.${sortBy}`, sortOrder);
+    if (sortBy === 'totalExecutions') {
+      // By the runs the list shows: the agent's finished runs that still
+      // exist (agent-run-stats.ts), not the lifetime counter column.
+      queryBuilder
+        .orderBy(
+          '((SELECT COUNT(*) FROM agent_runs r WHERE r."agentId" = agent.id AND r.status IN (:...finishedRunStatuses))'
+            + ' + (SELECT COUNT(*) FROM agent_executions e WHERE e."agentId" = agent.id AND e.status::text IN (:...finishedRunStatuses)))',
+          sortOrder,
+        )
+        .setParameter('finishedRunStatuses', [...FINISHED_RUN_STATUSES]);
+    } else {
+      queryBuilder.orderBy(`agent.${sortBy}`, sortOrder);
+    }
 
     queryBuilder.skip(skip).take(limit);
 
