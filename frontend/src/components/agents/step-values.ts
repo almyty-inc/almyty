@@ -29,6 +29,10 @@ export const STEP_NAMES: Record<string, string> = {
   extract_context: 'Extract context',
   decision: 'Decision',
   code: 'Code',
+  // Steps an autonomous run's work mode records (autonomous-strategy.runner.ts).
+  explore: 'Explore',
+  judge: 'Judge',
+  teammate_call: 'Teammate call',
 }
 
 /**
