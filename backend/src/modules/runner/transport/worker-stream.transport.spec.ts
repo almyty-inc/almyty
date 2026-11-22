@@ -535,6 +535,65 @@ describe('WorkerStreamTransport', () => {
       await podA.shutdown(); await podB.shutdown();
     });
 
+    // A runner reconnects and lands on another pod while the first pod still
+    // holds its old stream (the socket's close not seen yet, or a second
+    // client loop). Both pods then wrote every published frame, so one
+    // dispatch reached the runner twice. The newer open must end the older.
+    it('a stream opened on another pod ends the older one, and frames arrive once', async () => {
+      const redis = makeRedisBus();
+      const podA = makeTransport(redis);
+      const podB = makeTransport(redis);
+      const podC = makeTransport(redis); // dispatches, holds nothing
+      const now = jest.spyOn(Date, 'now');
+      try {
+        const resMint = mockRes();
+        await podA.handlePost(mockReq({}, hb(1)), resMint, 'org');
+        const sid = resMint._headers['Mcp-Session-Id'];
+
+        now.mockReturnValue(1_000);
+        const streamA = mockRes();
+        await podA.handleStream(mockReq({ 'Mcp-Session-Id': sid }), streamA, 'org');
+        now.mockReturnValue(2_000);
+        const streamB = mockRes();
+        await podB.handleStream(mockReq({ 'Mcp-Session-Id': sid }), streamB, 'org');
+
+        expect(streamA._ended).toBe(true);
+        expect(streamB._ended).toBe(false);
+
+        podC.push(sid, 'request', { method: 'runner.info', params: {} }, 'corr-once');
+        const count = (writes: string[]) =>
+          parseEventFrames(writes).filter((f) => f.data?.id === 'corr-once').length;
+        expect(count(streamB._writes)).toBe(1);
+        expect(count(streamA._writes)).toBe(0);
+      } finally {
+        now.mockRestore();
+        await podA.shutdown(); await podB.shutdown(); await podC.shutdown();
+      }
+    });
+
+    it('an older claim arriving late does not end the newer stream', async () => {
+      const redis = makeRedisBus();
+      const podA = makeTransport(redis);
+      const podB = makeTransport(redis);
+      const now = jest.spyOn(Date, 'now');
+      try {
+        const resMint = mockRes();
+        await podA.handlePost(mockReq({}, hb(1)), resMint, 'org');
+        const sid = resMint._headers['Mcp-Session-Id'];
+        now.mockReturnValue(5_000);
+        const streamB = mockRes();
+        await podB.handleStream(mockReq({ 'Mcp-Session-Id': sid }), streamB, 'org');
+
+        // A claim stamped before B's open, as if published by a pod that
+        // opened first and was delivered after: B keeps its stream.
+        await redis.publish('strm:claim', JSON.stringify({ sessionId: sid, instance: 'other-pod', openedAt: 4_000 }));
+        expect(streamB._ended).toBe(false);
+      } finally {
+        now.mockRestore();
+        await podA.shutdown(); await podB.shutdown();
+      }
+    });
+
     it('delivers a push from one pod to the stream held on another pod', async () => {
       const redis = makeRedisBus();
       const podA = makeTransport(redis); // will dispatch (push)
