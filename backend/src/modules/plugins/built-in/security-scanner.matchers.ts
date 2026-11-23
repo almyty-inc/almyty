@@ -8,9 +8,10 @@
  *   /\$\(.*\)/g                      every `$(` rescanned its line
  *
  * 100 KB of `on`, `$(` or `<script` in a body held the event loop for
- * half a second to three seconds, on every request the plugin sees. Each
- * matcher returns what `text.match(regex)` returned (every match, or
- * null) and carries the regex's source, which threats report.
+ * half a second to three seconds, on every request the plugin sees. The
+ * tag and `$(` matchers return what `text.match(regex)` returned (every
+ * match, or null) and carry the regex's source, which threats report. The
+ * event-handler matcher has since narrowed to an HTML context (below).
  */
 
 export interface LinearMatcher {
@@ -93,12 +94,78 @@ export function tagBlockMatcher(tag: string): LinearMatcher {
 
 const WORD = /[A-Za-z0-9_]/;
 const SPACE = /\s/;
+const TAG_NAME_START = /[A-Za-z]/;
+const TAG_NAME = /[A-Za-z0-9-]/;
 
-/** `/on\w+\s*=/gi` */
+/** Whether the character at `i` follows an odd run of backslashes. */
+function isEscaped(text: string, i: number): boolean {
+  let n = 0;
+  while (i - 1 - n >= 0 && text[i - 1 - n] === '\\') n++;
+  return n % 2 === 1;
+}
+
+/**
+ * How many characters of whitespace end at `p`: 1 for a space character,
+ * 2 for a JSON escape (`\n`, `\r`, `\t`, `\f`) -- tool inputs are scanned
+ * as JSON, where a newline is a backslash and an `n` -- otherwise 0. With
+ * `horizontal`, only spaces and tabs count.
+ */
+function spaceWidth(text: string, p: number, horizontal = false): number {
+  if (p < 0) return 0;
+  const ch = text[p];
+  if (horizontal ? ch === ' ' || ch === '\t' : SPACE.test(ch)) return 1;
+  const escapes = horizontal ? 't' : 'nrtf';
+  if (p >= 1 && escapes.includes(ch) && text[p - 1] === '\\' && !isEscaped(text, p - 1)) return 2;
+  return 0;
+}
+
+/**
+ * For each position, whether it is inside an open HTML tag: after `<`, a
+ * tag name and a separator (`<img `, `<svg/`, `<svg\n`), before the next
+ * `>`. One pass.
+ */
+function openTags(text: string): Uint8Array {
+  const inTag = new Uint8Array(text.length + 1);
+  let open = false;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '>') {
+      open = false;
+      i++;
+      continue;
+    }
+    if (ch === '<' && i + 1 < text.length && TAG_NAME_START.test(text[i + 1])) {
+      let j = i + 2;
+      while (j < text.length && TAG_NAME.test(text[j])) j++;
+      if (j < text.length && (SPACE.test(text[j]) || text[j] === '/' || text[j] === '\\')) open = true;
+      inTag.fill(open ? 1 : 0, i, j);
+      i = j;
+      continue;
+    }
+    inTag[i] = open ? 1 : 0;
+    i++;
+  }
+  return inTag;
+}
+
+/**
+ * An HTML event-handler attribute, `on\w+\s*=`, where it can be one:
+ *
+ *   - inside a tag, after a separator: `<img src=x onerror=`, `<svg/onload=`,
+ *     `<img src="x"onerror=`;
+ *   - after a closing quote and a space, breaking out of an attribute value
+ *     the input lands in: `x" onmouseover="`.
+ *
+ * As a bare `/on\w+\s*=/gi` it matched code: `region_rev = {}`,
+ * `json_data =`, `con = ...` -- every word with `on` in it before an `=` --
+ * and refused ordinary Python sent to a runner's shell tool as XSS.
+ */
 export const eventHandlerMatcher: LinearMatcher = {
-  pattern: '/on\\w+\\s*=/gi',
+  pattern: '/(<tag ...[\\s\\/"\']|["\'][ \\t]+)on\\w+\\s*=/gi',
   match(text) {
     const lower = asciiLower(text);
+    let inTag: Uint8Array | null = null;
     const out: string[] = [];
     let at = 0;
     for (;;) {
@@ -112,13 +179,31 @@ export const eventHandlerMatcher: LinearMatcher = {
       }
       let eq = wordEnd;
       while (eq < text.length && SPACE.test(text[eq])) eq++;
-      if (text[eq] === '=') {
+      if (text[eq] !== '=') {
+        // Every `on` inside the same word ends at the same place and fails
+        // the same way.
+        at = wordEnd;
+        continue;
+      }
+      const p = start - 1;
+      const space = spaceWidth(text, p);
+      const separated = space > 0 || text[p] === '/' || text[p] === '"' || text[p] === "'";
+      let attribute = false;
+      if (separated) {
+        inTag ??= openTags(text);
+        if (inTag[start]) {
+          attribute = true;
+        } else if (spaceWidth(text, p, true) > 0) {
+          let q = p;
+          for (let w = spaceWidth(text, q, true); w > 0; w = spaceWidth(text, q, true)) q -= w;
+          attribute = text[q] === '"' || text[q] === "'";
+        }
+      }
+      if (attribute) {
         out.push(text.slice(start, eq + 1));
         at = eq + 1;
       } else {
-        // Every `on` inside the same word ends at the same place and fails
-        // the same way; `\w+` giving characters back leaves a word
-        // character next, which is neither space nor `=`.
+        // A later `on` inside this word has a word character before it.
         at = wordEnd;
       }
     }
