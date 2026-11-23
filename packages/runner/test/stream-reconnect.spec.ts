@@ -1,8 +1,11 @@
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   HEALTHY_STREAM_MS,
   RECONNECT_CAP_MS,
+  STREAM_OPEN_TIMEOUT_MS,
   StreamableClient,
   backoffDelay,
   envelope,
@@ -247,6 +250,142 @@ describe('stream loop: one loop, real backoff', () => {
     backend.streams[0].send(frame);
     await flush();
     expect(acks).toEqual(['hb-1']);
+  });
+});
+
+/**
+ * A server (or a proxy in front of it) that accepts the connection and
+ * never sends response headers held the stream GET forever: the runner
+ * never reconnected. The open now has a deadline; the body after it has none.
+ */
+describe('stream open timeout', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('aborts a GET with no headers after the default timeout and reconnects once', async () => {
+    vi.useFakeTimers();
+    const gets: AbortSignal[] = [];
+    const fetch = (async (_url: string, init: RequestInit) => {
+      if (init.method === 'POST') {
+        return new Response(null, { status: 202, headers: { 'Mcp-Session-Id': 'sess-1' } });
+      }
+      // Accepted, never answered: settles only when the client aborts.
+      const signal = init.signal!;
+      gets.push(signal);
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      });
+    }) as any;
+    const client = new StreamableClient({ baseUrl: 'http://x', token: 't', fetch, random: () => 0.5 });
+    const reconnects: Array<{ attempt: number; delayMs: number; reason: string }> = [];
+    client.on('reconnect', (r) => reconnects.push(r));
+    try {
+      await client.send(hello());
+      void client.startStream();
+      await flush();
+      expect(gets).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(STREAM_OPEN_TIMEOUT_MS - 1);
+      expect(gets[0].aborted).toBe(false);
+      expect(reconnects).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(gets[0].aborted).toBe(true);
+      expect(reconnects).toHaveLength(1);
+      expect(reconnects[0].attempt).toBe(1);
+      expect(reconnects[0].reason).toMatch(/timed out/);
+
+      // The one loop backs off, then opens again: one new GET, not several.
+      await vi.advanceTimersByTimeAsync(reconnects[0].delayMs - 1);
+      expect(gets).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(gets).toHaveLength(2);
+      expect(reconnects).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
+
+  it('puts no deadline on the stream once headers arrived', async () => {
+    vi.useFakeTimers();
+    const backend = fakeBackend();
+    const client = new StreamableClient({ baseUrl: 'http://x', token: 't', fetch: backend.fetch, random: () => 0.5 });
+    const reconnects: unknown[] = [];
+    client.on('reconnect', (r) => reconnects.push(r));
+    try {
+      await client.send(hello());
+      await client.startStream();
+      await vi.advanceTimersByTimeAsync(10 * STREAM_OPEN_TIMEOUT_MS);
+      expect(reconnects).toHaveLength(0);
+      expect(backend.streams[0].closed).toBe(false);
+      expect(backend.gets).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
+
+  describe('against a real server that accepts and never answers', () => {
+    let server: Server;
+    let baseUrl: string;
+    let getCount = 0;
+
+    beforeEach(async () => {
+      getCount = 0;
+      server = createServer((req, res) => {
+        if (req.method === 'POST') {
+          req.resume();
+          req.on('end', () => {
+            res.writeHead(202, { 'Mcp-Session-Id': 'sess-real' });
+            res.end();
+          });
+          return;
+        }
+        // GET: hold the connection open, send nothing.
+        getCount++;
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    });
+
+    afterEach(async () => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    });
+
+    it('aborts after the open timeout and the loop reconnects once with backoff', async () => {
+      const client = new StreamableClient({
+        baseUrl,
+        token: 't',
+        streamOpenTimeoutMs: 100,
+        random: () => 0, // first backoff: 500ms
+      });
+      const reconnects: Array<{ attempt: number; delayMs: number; reason: string; at: number }> = [];
+      client.on('reconnect', (r) => reconnects.push({ ...r, at: Date.now() }));
+      try {
+        await client.send(hello());
+        const started = Date.now();
+        // Resolves when the first attempt has failed and a reconnect is scheduled.
+        await client.startStream();
+        expect(getCount).toBe(1);
+        expect(reconnects).toHaveLength(1);
+        expect(reconnects[0].reason).toMatch(/timed out/);
+        expect(reconnects[0].delayMs).toBe(500);
+        expect(reconnects[0].at - started).toBeGreaterThanOrEqual(90);
+
+        // Before the backoff has passed, no second GET.
+        await new Promise((r) => setTimeout(r, 250));
+        expect(getCount).toBe(1);
+
+        // After it, exactly one new GET reaches the server.
+        const deadline = Date.now() + 2_000;
+        while (getCount < 2 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+        expect(getCount).toBe(2);
+        expect(Date.now() - reconnects[0].at).toBeGreaterThanOrEqual(490);
+      } finally {
+        client.stop();
+      }
+    });
   });
 });
 
