@@ -63,8 +63,11 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
       let input: any
       try {
         input = JSON.parse(invokeInput)
-      } catch {
-        throw new Error('Invalid JSON input')
+      } catch (err) {
+        // Say what is wrong and where: an extra `}` left by the editor's
+        // auto-close or text after the JSON is otherwise hard to spot.
+        const why = err instanceof Error && err.message ? `: ${err.message}` : ''
+        throw new Error(`Invalid JSON input${why}`)
       }
       // An autonomous run is answered while it is still going; wait for it.
       return invokeAndSettle(agent.id, input)
