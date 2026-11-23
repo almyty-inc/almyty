@@ -318,6 +318,45 @@ describe('RunnerService', () => {
     expect(after?.state).toBe(RunnerState.OFFLINE);
   });
 
+  // Staging, 2026-11-23: the runner's Mac slept past the grace window, the
+  // tick moved it STALE then OFFLINE, and on wake the daemon reconnected on
+  // its old session and heartbeated every 30s without registering again.
+  // The runner stayed OFFLINE ("offline" next to "last heartbeat just now")
+  // and every dispatch was refused until the daemon was restarted.
+  it('a heartbeat after the tick took a self-hosted runner OFFLINE brings it back and makes it dispatchable', async () => {
+    const { runner } = await service.register(
+      { name: 'r1', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
+      ownerUserId, organizationId,
+    );
+    await service.heartbeat(runner.id);
+    const asleepAt = Date.now() - STALE_THRESHOLD_MS - OFFLINE_GRACE_MS - 5_000;
+    await runners.update(runner.id, { lastHeartbeatAt: new Date(asleepAt) });
+    await service.tick(new Date());
+    await service.tick(new Date());
+    expect((await runners.findOne({ where: { id: runner.id } }))?.state).toBe(RunnerState.OFFLINE);
+    await expect(service.resolveForDispatch(runner.id, ownerUserId)).rejects.toBeInstanceOf(BadRequestException);
+
+    const beat = await service.heartbeat(runner.id);
+
+    expect(beat.state).toBe(RunnerState.ONLINE);
+    const after = await runners.findOne({ where: { id: runner.id } });
+    expect(after?.state).toBe(RunnerState.ONLINE);
+    expect(after?.lastHeartbeatAt!.getTime()).toBeGreaterThan(asleepAt);
+    await expect(service.resolveForDispatch(runner.id, ownerUserId)).resolves.toMatchObject({ id: runner.id });
+  });
+
+  // The hosted reconcile loop writes OFFLINE when it suspends or tears
+  // the machine down; a beat from the pod on its way out must not undo it.
+  it('a heartbeat does not bring a hosted runner back from OFFLINE', async () => {
+    runners.seed({
+      id: 'r-hosted', name: 'hosted-1', ownerUserId, organizationId, kind: 'hosted',
+      state: RunnerState.OFFLINE, lastHeartbeatAt: new Date(Date.now() - 60_000),
+    } as any);
+    const beat = await service.heartbeat('r-hosted');
+    expect(beat.state).toBe(RunnerState.OFFLINE);
+    expect((await runners.findOne({ where: { id: 'r-hosted' } }))?.state).toBe(RunnerState.OFFLINE);
+  });
+
   // ── sessions ────────────────────────────────────────────────────────
 
   it('onSessionConnect inserts a new session row when none exists', async () => {

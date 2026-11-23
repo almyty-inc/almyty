@@ -49,12 +49,42 @@ describe('runner-state nextState', () => {
     ).toBe(RunnerState.ONLINE);
   });
 
-  it('heartbeat is ignored when state is OFFLINE (must re-register)', () => {
+  // A self-hosted runner whose machine slept past the grace window comes
+  // back on its old session and heartbeats without registering again.
+  // That heartbeat used to be ignored, so the runner stayed OFFLINE while
+  // it beat every 30s, until its daemon was restarted.
+  it('heartbeat brings a self-hosted OFFLINE runner back to ONLINE', () => {
+    expect(
+      nextState({ state: RunnerState.OFFLINE, lastHeartbeatAt: longAgo, kind: 'self' }, {
+        kind: 'heartbeat', at: now, workspaceCount: 0,
+      }),
+    ).toBe(RunnerState.ONLINE);
+  });
+
+  it('heartbeat brings an OFFLINE runner of unknown kind back, to BUSY when it has workspaces', () => {
     expect(
       nextState(snap(RunnerState.OFFLINE, longAgo), {
+        kind: 'heartbeat', at: now, workspaceCount: 1,
+      }),
+    ).toBe(RunnerState.BUSY);
+  });
+
+  // The hosted reconcile loop writes OFFLINE when it suspends or tears a
+  // machine down; a late beat from the dying pod must not undo that.
+  it('heartbeat is ignored when a hosted runner is OFFLINE (it enrolls again)', () => {
+    expect(
+      nextState({ state: RunnerState.OFFLINE, lastHeartbeatAt: longAgo, kind: 'hosted' }, {
         kind: 'heartbeat', at: now, workspaceCount: 0,
       }),
     ).toBeNull();
+  });
+
+  it('heartbeat still recovers a hosted runner from STALE', () => {
+    expect(
+      nextState({ state: RunnerState.STALE, lastHeartbeatAt: longAgo, kind: 'hosted' }, {
+        kind: 'heartbeat', at: now, workspaceCount: 0,
+      }),
+    ).toBe(RunnerState.ONLINE);
   });
 
   it('heartbeat is ignored when state is DRAINING', () => {
