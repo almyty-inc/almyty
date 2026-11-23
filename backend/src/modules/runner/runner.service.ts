@@ -369,9 +369,15 @@ export class RunnerService {
    * graceful shutdown lands used to save its loaded ONLINE straight
    * back over the DRAINING the drain had committed, and
    * resolveForDispatch then kept handing work to a runner whose process
-   * had exited. The FSM already refuses to revive a DRAINING or OFFLINE
-   * runner — it just never saw the drain, because it was scoring a
-   * snapshot taken before it.
+   * had exited. The FSM already refuses to revive a DRAINING runner — it
+   * just never saw the drain, because it was scoring a snapshot taken
+   * before it.
+   *
+   * A heartbeat brings a self-hosted runner back from OFFLINE (see
+   * nextState): it is alive on a session bound to it, so it is no longer
+   * offline. Before, the runner stayed OFFLINE while lastHeartbeatAt
+   * kept moving, and the runners page read "offline" next to "last
+   * heartbeat just now" until the daemon was restarted.
    */
   async heartbeat(runnerId: string): Promise<Runner> {
     const runner = await this.runners.findOne({ where: { id: runnerId } });
@@ -390,6 +396,7 @@ export class RunnerService {
 
     // lastHeartbeatAt is a fact about the wire and is safe to write
     // unconditionally; the state is not.
+    const silentSince = runner.lastHeartbeatAt;
     await this.runners.update({ id: runner.id }, { lastHeartbeatAt: now });
     runner.lastHeartbeatAt = now;
 
@@ -400,6 +407,12 @@ export class RunnerService {
         // wins; report the row as it now stands.
         const fresh = await this.runners.findOne({ where: { id: runner.id } });
         return fresh ?? runner;
+      }
+      if (runner.state === RunnerState.OFFLINE) {
+        this.logger.log(
+          `runner ${runner.name} (${runner.id}) back ${transitioned} from offline: heartbeat on its session; ` +
+            `previous heartbeat ${silentSince?.toISOString() ?? 'never'}`,
+        );
       }
       const cameOnline = !canAcceptWork(runner.state) && canAcceptWork(transitioned);
       runner.state = transitioned;
@@ -827,7 +840,7 @@ export class RunnerService {
   // ── internals ───────────────────────────────────────────────────────
 
   private snapshot(runner: Runner): RunnerSnapshot {
-    return { state: runner.state, lastHeartbeatAt: runner.lastHeartbeatAt };
+    return { state: runner.state, lastHeartbeatAt: runner.lastHeartbeatAt, kind: runner.kind };
   }
 
   /**

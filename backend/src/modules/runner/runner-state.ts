@@ -1,4 +1,4 @@
-import { RunnerState } from '../../entities/runner.entity';
+import { RunnerKind, RunnerState } from '../../entities/runner.entity';
 
 /**
  * Pure functions over the runner state machine. No DI, no I/O. The
@@ -33,6 +33,8 @@ export type Event =
 export interface RunnerSnapshot {
   state: RunnerState;
   lastHeartbeatAt: Date | null;
+  /** Unset reads as 'self'. Decides whether a heartbeat can bring an OFFLINE runner back. */
+  kind?: RunnerKind;
 }
 
 /**
@@ -47,10 +49,23 @@ export function nextState(snapshot: RunnerSnapshot, event: Event): RunnerState |
   switch (event.kind) {
     case 'heartbeat':
       // Heartbeat clears stale-ness, brings registered up to online,
-      // and toggles online <-> busy by current workspace load. Once
-      // the runner is in DRAINING or OFFLINE, an inbound heartbeat
-      // is ignored — the runner has to re-register to come back.
-      if (state === RunnerState.OFFLINE || state === RunnerState.DRAINING) return null;
+      // and toggles online <-> busy by current workspace load.
+      //
+      // DRAINING ignores it: the runner itself said it is going away.
+      if (state === RunnerState.DRAINING) return null;
+      // OFFLINE means "not proven alive", and a heartbeat is that proof:
+      // it arrives on a session the runner's owner bound to it with
+      // runner.hello. A self-hosted runner whose machine slept past the
+      // grace window, or whose network dropped, reconnects on its old
+      // session and keeps heartbeating without registering again; it
+      // used to stay OFFLINE for good, beating every 30s, until its
+      // daemon was restarted. Its stranded workspaces stay stranded.
+      //
+      // A hosted runner's OFFLINE is also written by the hosted reconcile
+      // loop when it suspends or tears the machine down, and a late beat
+      // from the dying pod must not undo that; a hosted machine comes
+      // back by enrolling again.
+      if (state === RunnerState.OFFLINE && snapshot.kind === 'hosted') return null;
       return event.workspaceCount > 0 ? RunnerState.BUSY : RunnerState.ONLINE;
 
     case 'tick': {
