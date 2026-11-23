@@ -67,11 +67,21 @@ describe('security scanner matchers: same matches as the regexes', () => {
     for (const s of samples(alphabet)) expect({ s, m: matcher.match(s) }).toEqual({ s, m: s.match(regex) });
   });
 
-  it('event handlers', () => {
+  it('event handlers: a subset of the bare regex, the same inside a tag', () => {
+    // The matcher needs an HTML context (security-scanner.event-handlers.spec.ts),
+    // so it finds no more than `/on\w+\s*=/gi`, and inside an open tag after
+    // a space it finds exactly what the regex finds after a space.
     const regex = /on\w+\s*=/gi;
-    expect(eventHandlerMatcher.pattern).toBe(regex.toString());
-    for (const s of samples(['on', 'ON', 'o', 'n', 'a', '_', '1', ' ', '\n', '=', '-', '\u00a0'])) {
-      expect({ s, m: eventHandlerMatcher.match(s) }).toEqual({ s, m: s.match(regex) });
+    for (const s of samples(['on', 'ON', 'o', 'n', 'a', '_', '1', ' ', '\n', '=', '-', '\u00a0', '<a ', '>', '"'])) {
+      const found: string[] = eventHandlerMatcher.match(s) ?? [];
+      const all: string[] = [...(s.match(regex) ?? [])];
+      expect({ s, extra: found.filter((m) => !all.includes(m)) }).toEqual({ s, extra: [] });
+    }
+    for (const s of samples(['on', 'ON', 'a', '_', '1', '=', '\t'], 2000, 10)) {
+      const words = s.split(/\s+/).filter(Boolean).join(' ');
+      const inTag = `<a ${words}`;
+      const spaced = (inTag.match(/(?<=[\s])on\w+\s*=/gi) ?? []);
+      expect({ inTag, m: eventHandlerMatcher.match(inTag) ?? [] }).toEqual({ inTag, m: spaced });
     }
   });
 
