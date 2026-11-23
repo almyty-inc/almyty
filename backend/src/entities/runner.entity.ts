@@ -25,6 +25,8 @@ import { Organization } from './organization.entity';
  *   online|busy -> stale  3 missed heartbeats (~90s with the 30s heartbeat interval)
  *   stale -> online|busy  heartbeat resumes within the 5 min grace window
  *   stale -> offline      grace expires
+ *   offline -> online|busy  heartbeat on the runner's session (self-hosted only;
+ *                         a hosted machine enrolls again)
  *   any -> draining       clean shutdown signal received
  *   draining -> offline   in-flight jobs complete or grace expires
  */

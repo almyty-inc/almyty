@@ -78,11 +78,14 @@ online <-> busy              workspace count change
 online|busy -> stale         3 missed heartbeats (~90s)
 stale -> online|busy         heartbeat resumes within 5 min grace
 stale -> offline             grace expires
+offline -> online|busy       heartbeat on the runner's session (self-hosted only)
 any -> draining              clean shutdown signal
 draining -> offline          drain grace expires
 ```
 
 `canAcceptWork(state)` returns true for ONLINE and BUSY only; routing checks this before dispatching.
+
+OFFLINE means the runner has not been proven alive. A heartbeat is that proof: it arrives on a session the runner's owner bound to it with `runner.hello`. A machine that slept past the grace window reconnects on its old session and keeps heartbeating without registering again, and that heartbeat brings it back (logged as `runner <name> (<id>) back online from offline`). Workspaces stranded while it was offline stay stranded, and the next heartbeat ack reclaims their processes. A hosted runner is the exception: the hosted reconcile loop also writes OFFLINE when it suspends or tears the machine down, so a hosted machine comes back by enrolling again, never on a heartbeat. DRAINING ignores heartbeats: the runner said it is going away.
 
 ### Labels route work
 

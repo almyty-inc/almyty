@@ -27,6 +27,8 @@ import {
  *   - Exponential backoff with jitter, capped at 30s, and really waited.
  *     A 429 waits its Retry-After and never less than the cap. The
  *     backoff restarts only after a stream stayed up HEALTHY_STREAM_MS.
+ *   - A GET whose response headers have not arrived within
+ *     STREAM_OPEN_TIMEOUT_MS is aborted and counts as a failed attempt.
  *   - We track the last event id we successfully parsed; on reconnect
  *     we send `Last-Event-ID` so the backend can replay anything we
  *     missed. A frame whose id was already seen is dropped.
@@ -70,6 +72,8 @@ export interface StreamableClientOptions {
   random?: () => number;
   /** Test injection: the clock. */
   now?: () => number;
+  /** Test injection: the stream open timeout; default STREAM_OPEN_TIMEOUT_MS. */
+  streamOpenTimeoutMs?: number;
 }
 
 /** How many recent event ids are remembered to drop a frame seen twice. */
@@ -223,16 +227,33 @@ export class StreamableClient extends EventEmitter {
     };
     if (this.lastEventId) headers['Last-Event-ID'] = this.lastEventId;
 
+    // A server (or a proxy in front of it) can accept the connection and
+    // never send headers; without a limit the loop would wait on that GET
+    // forever. Only the open is timed: fetch resolves when the headers
+    // arrive, and the long-lived body after that has no deadline here.
+    const openTimeoutMs = this.opts.streamOpenTimeoutMs ?? STREAM_OPEN_TIMEOUT_MS;
+    const abort = this.streamAbort;
+    let openTimedOut = false;
+    const openTimer = this.setTimeoutFn(() => {
+      openTimedOut = true;
+      abort.abort();
+    }, openTimeoutMs);
+    (openTimer as any).unref?.();
+
     let res: Response;
     try {
       res = await this.fetchImpl(`${this.opts.baseUrl}${this.streamPath}`, {
         method: 'GET',
         headers,
-        signal: this.streamAbort.signal,
+        signal: abort.signal,
       });
     } catch (err: any) {
-      this.scheduleReconnect(err);
+      this.scheduleReconnect(openTimedOut
+        ? new Error(`stream open timed out: no response headers after ${openTimeoutMs}ms`)
+        : err);
       return;
+    } finally {
+      this.clearTimeoutFn(openTimer);
     }
 
     if (!res.ok) {
@@ -392,6 +413,8 @@ export const RECONNECT_BASE_MS = 1_000;
 export const RECONNECT_CAP_MS = 30_000;
 /** A stream open this long counts as healthy: its end restarts the backoff. */
 export const HEALTHY_STREAM_MS = 30_000;
+/** How long the stream GET may wait for response headers before it is aborted and retried. */
+export const STREAM_OPEN_TIMEOUT_MS = 30_000;
 
 /**
  * The wait before reconnect attempt `attempt` (1-based): exponential up to

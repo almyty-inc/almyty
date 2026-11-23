@@ -85,6 +85,15 @@ describe('agent invocation errors', () => {
     expect(agentsApi.invoke).not.toHaveBeenCalled()
   })
 
+  it('says where the JSON goes wrong, e.g. an extra brace after it', async () => {
+    renderWithProviders(<RunPanel agent={agent} onClose={() => {}} />)
+    fireEvent.change(screen.getByLabelText('JSON input'), { target: { value: '{"message":"Hi"}\n}' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Run agent' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/Invalid JSON input: .*position \d+/)
+    expect(agentsApi.invoke).not.toHaveBeenCalled()
+  })
+
   it('removes a stale successful result when a later invocation fails', async () => {
     vi.mocked(agentsApi.invoke).mockResolvedValueOnce({ output: 'Old result' } as any)
     renderWithProviders(<RunPanel agent={agent} onClose={() => {}} />)
