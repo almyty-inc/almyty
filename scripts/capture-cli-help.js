@@ -103,7 +103,26 @@ function rendererProblems({ onPath, fontFamilies }) {
   return problems;
 }
 
-module.exports = { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis, rendererProblems };
+// Post-release runs the moment the publish finishes, and npm serves a new
+// version's tarball a few minutes after it accepts it: v0.2.45's run failed
+// with E404 for @almyty/credentials-1.5.14.tgz, published a minute earlier.
+// A version npm does not serve yet is waited for; any other failure is not.
+const NOT_SERVED_YET = /\bE404\b|\bETARGET\b|No matching version found|could not be found/i;
+
+function installPublished({ run, sleep, log = () => {}, attempts = 20, delayMs = 30_000 }) {
+  let r;
+  for (let i = 1; i <= attempts; i++) {
+    r = run();
+    if (r.status === 0 || !NOT_SERVED_YET.test(r.stderr || '')) return r;
+    if (i < attempts) {
+      log(`npm does not serve the new version yet (attempt ${i} of ${attempts}); trying again in ${delayMs / 1000}s`);
+      sleep(delayMs);
+    }
+  }
+  return r;
+}
+
+module.exports = { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis, rendererProblems, installPublished };
 
 function fail(message) {
   console.error(`capture-cli-help: ${message}`);
@@ -163,7 +182,13 @@ function main(argv) {
   if (opts.from === 'npm') {
     prefix = path.join(work, 'npm');
     const specs = clis.map((c) => readPackage(c)).map((p) => `${p.name}@${p.version}`);
-    const r = sh('npm', ['install', '--prefix', prefix, '--no-audit', '--no-fund', '--ignore-scripts', ...specs], { stdio: ['ignore', 'ignore', 'inherit'] });
+    const run = () => {
+      const r = sh('npm', ['install', '--prefix', prefix, '--no-audit', '--no-fund', '--ignore-scripts', ...specs], { stdio: ['ignore', 'ignore', 'pipe'] });
+      if (r.stderr) process.stderr.write(r.stderr);
+      return r;
+    };
+    const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    const r = installPublished({ run, sleep, log: (m) => console.log(`capture-cli-help: ${m}`) });
     if (r.status !== 0) fail(`npm install ${specs.join(' ')} failed`);
   }
 
