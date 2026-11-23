@@ -493,6 +493,9 @@ export class RunnerDaemon {
     this.client.on('open', () => {
       this.updateState({ connectionState: 'online', sessionId: this.client?.getSessionId() ?? null });
     });
+    this.client.on('stream-error', (err: any) => {
+      process.stderr.write(`stream error: ${err?.message ?? err}\n`);
+    });
     this.client.on('session-lost', () => {
       // The backend forgot our session (404 UNKNOWN_SESSION). The common
       // cause is a multi-replica backend with pod-local streamable sessions:

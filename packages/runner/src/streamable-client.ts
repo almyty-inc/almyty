@@ -22,12 +22,15 @@ import {
  *      handler registry subscribes to.
  *
  * Reconnect policy:
- *   - Exponential backoff capped at 30s (1s, 2s, 4s, 8s, 16s, 30s, 30s).
+ *   - One stream loop per client: at most one GET open or one reconnect
+ *     pending at any time; every further trigger is a no-op.
+ *   - Exponential backoff with jitter, capped at 30s, and really waited.
+ *     A 429 waits its Retry-After and never less than the cap. The
+ *     backoff restarts only after a stream stayed up HEALTHY_STREAM_MS.
  *   - We track the last event id we successfully parsed; on reconnect
  *     we send `Last-Event-ID` so the backend can replay anything we
- *     missed.
- *   - Reconnect attempts emit `reconnect` events for observability;
- *     persistent failure emits `fatal` and the daemon exits.
+ *     missed. A frame whose id was already seen is dropped.
+ *   - Reconnect attempts emit `reconnect` events for observability.
  *
  * Auth: Bearer JWT in the Authorization header. A self-hosted runner
  * passes the login token from @almyty/client's resolveCredentials (the
@@ -61,7 +64,16 @@ export interface StreamableClientOptions {
   fetch?: typeof globalThis.fetch;
   /** Test injection: replace setTimeout with a controllable timer. */
   setTimeoutFn?: typeof setTimeout;
+  /** Test injection: the clearTimeout matching setTimeoutFn. */
+  clearTimeoutFn?: (t: any) => void;
+  /** Test injection: the jitter source, [0, 1). */
+  random?: () => number;
+  /** Test injection: the clock. */
+  now?: () => number;
 }
+
+/** How many recent event ids are remembered to drop a frame seen twice. */
+const SEEN_EVENT_IDS_MAX = 512;
 
 export class StreamableClient extends EventEmitter {
   private sessionId: string | null = null;
@@ -69,15 +81,29 @@ export class StreamableClient extends EventEmitter {
   private streamAbort: AbortController | null = null;
   private stopped = false;
   private reconnectAttempt = 0;
+  /**
+   * The one stream loop: idle (nothing running), opening (a GET in
+   * flight), open (being read) or waiting (a reconnect timer pending).
+   * Only idle may start a stream.
+   */
+  private state: 'idle' | 'opening' | 'open' | 'waiting' = 'idle';
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly seenEventIds = new Set<string>();
   /** The route this client talks to; see fellBackFrom404. */
   private streamPath: string = RUNNER_STREAM_PATH;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly setTimeoutFn: typeof setTimeout;
+  private readonly clearTimeoutFn: (t: any) => void;
+  private readonly random: () => number;
+  private readonly now: () => number;
 
   constructor(private readonly opts: StreamableClientOptions) {
     super();
     this.fetchImpl = opts.fetch ?? globalThis.fetch;
-    this.setTimeoutFn = opts.setTimeoutFn ?? setTimeout;
+    this.setTimeoutFn = opts.setTimeoutFn ?? ((fn: () => void, ms?: number) => setTimeout(fn, ms)) as typeof setTimeout;
+    this.clearTimeoutFn = opts.clearTimeoutFn ?? ((t) => clearTimeout(t));
+    this.random = opts.random ?? Math.random;
+    this.now = opts.now ?? (() => Date.now());
     if (opts.streamPath) this.streamPath = opts.streamPath;
   }
 
@@ -149,9 +175,12 @@ export class StreamableClient extends EventEmitter {
    * its first attempt failed and a reconnect is scheduled; the stream is
    * then read in the background. openStream() itself resolves only when
    * the stream ends, so a caller that awaited it (the daemon did) waited
-   * the whole life of the stream before its first heartbeat.
+   * the whole life of the stream before its first heartbeat. When the
+   * stream is already open, opening or waiting to reconnect, this starts
+   * nothing and resolves at once: the loop that is running reopens it.
    */
   startStream(): Promise<void> {
+    if (this.stopped || this.state !== 'idle') return Promise.resolve();
     return new Promise((resolve, reject) => {
       let settled = false;
       const settle = (fn: () => void) => {
@@ -167,12 +196,25 @@ export class StreamableClient extends EventEmitter {
       this.openStream().then(onReady, (err) => settle(() => reject(err)));
     });
   }
-  /** Open the GET stream and dispatch envelopes via emit('envelope'). */
+
+  /**
+   * Open the GET stream and dispatch envelopes via emit('envelope');
+   * resolves when that stream ends (its reconnect is then scheduled). A
+   * no-op while the client's one stream loop is already running, so
+   * however many callers ask, there is one stream and one reconnect.
+   */
   async openStream(): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped || this.state !== 'idle') return;
     if (!this.sessionId) {
       throw new Error('cannot open stream before any POST has assigned a session id');
     }
+    await this.runStream();
+  }
+
+  /** One open-read-end cycle of the stream loop; ends in a scheduled reconnect. */
+  private async runStream(): Promise<void> {
+    if (this.stopped || this.state !== 'idle' || !this.sessionId) return;
+    this.state = 'opening';
     this.streamAbort = new AbortController();
     const headers: Record<string, string> = {
       ...this.authHeaders(),
@@ -204,12 +246,20 @@ export class StreamableClient extends EventEmitter {
         this.scheduleReconnect(new Error('stream route not found; using the legacy route'));
         return;
       }
+      // Rate limited: wait what the server asked, and never less than the
+      // cap. Coming back sooner only spends more of the same budget, which
+      // is shared with everything else from this address.
+      const minDelay = res.status === 429
+        ? Math.max(retryAfterMs(res, this.now()), RECONNECT_CAP_MS)
+        : 0;
       if (res.status === 404) {
         this.sessionId = null;
         this.lastEventId = null;
-        this.emit('session-lost', text);
       }
-      this.scheduleReconnect(new Error(`stream open failed: ${res.status} ${text}`));
+      // Scheduled before session-lost is told, so whoever re-establishes
+      // the session finds the loop already waiting and starts no other.
+      this.scheduleReconnect(new Error(`stream open failed: ${res.status} ${text}`), minDelay);
+      if (res.status === 404) this.emit('session-lost', text);
       return;
     }
     if (!res.body) {
@@ -217,7 +267,8 @@ export class StreamableClient extends EventEmitter {
       return;
     }
 
-    this.reconnectAttempt = 0;
+    this.state = 'open';
+    const openedAt = this.now();
     this.emit('open');
 
     try {
@@ -225,11 +276,17 @@ export class StreamableClient extends EventEmitter {
     } catch (err: any) {
       this.emit('disconnect', err);
     }
-    if (!this.stopped) this.scheduleReconnect(new Error('stream ended'));
+    if (this.stopped) return;
+    // Only a stream that stayed up a while proves the backend is fine
+    // again; one that opens and drops at once keeps backing off.
+    if (this.now() - openedAt >= HEALTHY_STREAM_MS) this.reconnectAttempt = 0;
+    this.scheduleReconnect(new Error('stream ended'));
   }
 
   stop(): void {
     this.stopped = true;
+    if (this.reconnectTimer) this.clearTimeoutFn(this.reconnectTimer);
+    this.reconnectTimer = null;
     this.streamAbort?.abort();
   }
 
@@ -273,7 +330,17 @@ export class StreamableClient extends EventEmitter {
       else if (line.startsWith('event:')) { /* event name unused on this side */ }
     }
     if (dataLines.length === 0) return;
-    if (id) this.lastEventId = id;
+    if (id) {
+      this.lastEventId = id;
+      // A frame seen before (a replay overlapping what arrived live, or a
+      // backend that wrote it on two streams) is dropped: a request must
+      // not run twice, and a second ack for one heartbeat is noise.
+      if (this.seenEventIds.has(id)) return;
+      this.seenEventIds.add(id);
+      if (this.seenEventIds.size > SEEN_EVENT_IDS_MAX) {
+        this.seenEventIds.delete(this.seenEventIds.values().next().value as string);
+      }
+    }
     const dataText = dataLines.join('\n');
     let parsed: unknown;
     try { parsed = JSON.parse(dataText); } catch {
@@ -287,17 +354,66 @@ export class StreamableClient extends EventEmitter {
     this.emit('envelope', parsed);
   }
 
-  private scheduleReconnect(reason: Error): void {
-    if (this.stopped) return;
+  /**
+   * Wait, then open the stream again. At most one wait is ever pending:
+   * a second call while one is (the stream's end and its read error, a
+   * session-lost and the failed open that reported it) is dropped, so
+   * the client never runs two loops. The delay is the one logged, and it
+   * is really waited.
+   */
+  private scheduleReconnect(reason: Error, minDelayMs = 0): void {
+    if (this.stopped || this.reconnectTimer) return;
+    this.state = 'waiting';
     this.reconnectAttempt++;
-    const delays = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
-    const delay = delays[Math.min(this.reconnectAttempt - 1, delays.length - 1)];
+    const delay = Math.max(backoffDelay(this.reconnectAttempt, this.random), minDelayMs);
     this.emit('reconnect', { attempt: this.reconnectAttempt, delayMs: delay, reason: reason.message });
     const t = this.setTimeoutFn(() => {
-      if (!this.stopped) this.openStream().catch(err => this.emit('error', err));
+      this.reconnectTimer = null;
+      if (this.stopped) return;
+      this.state = 'idle';
+      if (!this.sessionId) {
+        // The session was dropped (404) and no new one has been minted
+        // (the re-mint failed or is still running). Wait again rather than
+        // open without one, and say the session is still missing so the
+        // daemon tries the re-mint again.
+        this.scheduleReconnect(new Error('no session yet'));
+        this.emit('session-lost', 'no session');
+        return;
+      }
+      this.runStream().catch(err => this.emit('stream-error', err));
     }, delay);
+    this.reconnectTimer = t;
     (t as any).unref?.();
   }
+}
+
+/** Reconnect backoff: 1s doubling per attempt, capped. */
+export const RECONNECT_BASE_MS = 1_000;
+export const RECONNECT_CAP_MS = 30_000;
+/** A stream open this long counts as healthy: its end restarts the backoff. */
+export const HEALTHY_STREAM_MS = 30_000;
+
+/**
+ * The wait before reconnect attempt `attempt` (1-based): exponential up to
+ * the cap, jittered over its upper half so a fleet of runners dropped by
+ * one deploy does not come back in lockstep.
+ */
+export function backoffDelay(attempt: number, random: () => number = Math.random): number {
+  const base = Math.min(RECONNECT_CAP_MS, RECONNECT_BASE_MS * 2 ** Math.min(attempt - 1, 20));
+  return Math.round(base / 2 + random() * (base / 2));
+}
+
+/**
+ * A 429's Retry-After in ms (delta-seconds or an HTTP date), or 0 when
+ * absent or unreadable.
+ */
+export function retryAfterMs(res: Response, now: number): number {
+  const raw = res.headers?.get?.('retry-after');
+  if (!raw) return 0;
+  const secs = Number(raw);
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - now) : 0;
 }
 
 /** A POST the backend answered with an error; `status` tells a sender whether to retry. */

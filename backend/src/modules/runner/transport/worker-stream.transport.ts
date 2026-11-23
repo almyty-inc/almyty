@@ -64,6 +64,8 @@ interface StreamableSession {
   replayQueue: BufferedEvent[] | null;
   /** Last time we saw any client activity (POST or GET reconnect). */
   lastActivity: Date;
+  /** When `stream` was opened (ms); orders opens of one session across pods. */
+  streamOpenedAt?: number;
 }
 
 const STALE_AFTER_MS = 5 * 60 * 1000;
@@ -76,6 +78,7 @@ const KEEPALIVE_INTERVAL_MS = 15_000;
 /** Redis channels for cross-replica delivery (see the multi-replica note). */
 const CH_OUT = 'strm:out';   // server->client frames, fan to the stream-holding pod
 const CH_RESP = 'strm:resp'; // client->server responses, fan to the dispatching pod
+const CH_CLAIM = 'strm:claim'; // a pod opened a session's stream; older holders end theirs
 /** Shared Last-Event-ID replay buffer, a list per session. */
 const SHARED_BUFFER_PREFIX = 'strm:buf:';
 
@@ -128,6 +131,8 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
   private subscriber?: Redis.Redis;
   /** This replica's id, for cross-pod diagnostic logs. */
   private readonly podId = process.env.HOSTNAME ?? process.env.POD_NAME ?? `pid${process.pid}`;
+  /** Unique per transport instance; tells this pod's own stream claims from others'. */
+  private readonly instanceId = randomUUID();
   /** Session ids this pod minted (vs adopted) — diagnostic only. */
   private readonly sessionMintedHere = new Set<string>();
 
@@ -326,7 +331,16 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
       try { session.stream!.end(); } catch { /* already gone */ }
     }
     session.stream = res;
+    session.streamOpenedAt = Date.now();
     session.lastActivity = new Date();
+    // ...and any older one another pod still holds (onStreamClaim). Opens
+    // of one session are a reconnect delay apart, far above the clock skew
+    // between pods, so the open time orders them.
+    if (this.redis) {
+      this.redis
+        .publish(CH_CLAIM, JSON.stringify({ sessionId: session.id, instance: this.instanceId, openedAt: session.streamOpenedAt }))
+        .catch((err) => this.logger.warn(`CH_CLAIM publish failed: ${err?.message ?? err}`));
+    }
 
     // SSE keep-alive: send a comment frame periodically so idle streams (no
     // events for a while) aren't closed by the client, nginx, or the LB.
@@ -745,19 +759,46 @@ export class WorkerStreamTransport extends EventEmitter implements OnModuleDestr
     try {
       this.subscriber = this.redis!.duplicate();
       this.subscriber.on('error', (err) => this.logger.warn(`subscriber error: ${err?.message ?? err}`));
-      this.subscriber.subscribe(CH_OUT, CH_RESP).catch((err) =>
+      this.subscriber.subscribe(CH_OUT, CH_RESP, CH_CLAIM).catch((err) =>
         this.logger.error(`failed to subscribe to streamable channels: ${err?.message ?? err}`),
       );
       this.subscriber.on('message', (channel, message) => this.onRedisMessage(channel, message));
-      this.logger.log('streamable cross-replica bridge active (CH_OUT/CH_RESP)');
+      this.logger.log('streamable cross-replica bridge active (CH_OUT/CH_RESP/CH_CLAIM)');
     } catch (err: any) {
       this.logger.error(`failed to start redis bridge: ${err?.message ?? err}`);
     }
   }
 
+  /**
+   * Another pod opened a stream for a session: if this pod still holds an
+   * older stream for it, end it. One session has one live stream across
+   * the whole deployment, not one per pod; two pods each holding one both
+   * wrote every CH_OUT frame (a dispatch arrived twice), and a holder whose
+   * client was long gone kept writing this pod's own pushes into a dead
+   * socket. Only a strictly newer claim wins, ties broken by instance id,
+   * so two opens racing on two pods leave exactly one stream, never none.
+   */
+  private onStreamClaim(claim: { sessionId?: unknown; instance?: unknown; openedAt?: unknown }): void {
+    if (typeof claim.sessionId !== 'string' || claim.instance === this.instanceId) return;
+    const session = this.sessions.get(claim.sessionId);
+    if (!session?.stream || session.stream.destroyed) return;
+    const theirs = Number(claim.openedAt) || 0;
+    const ours = session.streamOpenedAt ?? 0;
+    const newer = theirs > ours || (theirs === ours && String(claim.instance) > this.instanceId);
+    if (!newer) return;
+    const stale = session.stream;
+    session.stream = null;
+    this.logger.log(`[strm] superseded session=${session.id} pod=${this.podId}`);
+    try { stale.end(); } catch { /* already gone */ }
+  }
+
   private onRedisMessage(channel: string, message: string): void {
     let parsed: any;
     try { parsed = JSON.parse(message); } catch { return; }
+    if (channel === CH_CLAIM) {
+      this.onStreamClaim(parsed ?? {});
+      return;
+    }
     if (channel === CH_OUT) {
       // Another pod wants to push to this session; write it only if WE hold
       // the live stream. Other pods ignore it. The sender built the frame
