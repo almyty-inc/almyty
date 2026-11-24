@@ -221,23 +221,95 @@ describe('EmailAdapter', () => {
   });
 
   describe('formatOutbound', () => {
+    // The scheduled morning brief as the agent wrote it, with the
+    // disclosure line the channel puts first. It arrived with its table as
+    // rows of pipes.
+    const disclosure = 'You are chatting with an AI assistant.';
+    const brief = [
+      disclosure,
+      '',
+      '# Morning brief: Tue 24 Nov',
+      '',
+      '## 2. Today\'s meetings',
+      '| Time | Meeting | Calendar |',
+      '|---|---|---|',
+      '| 11:00–11:45 | Intro call: Priya Raman, **external** | Work |',
+      '| 12:00–12:30 | Weekly pipeline review | Work |',
+      '',
+      '## 3. Tasks',
+      '- **Approve payroll** (Work), *4 days late*',
+      '- Renew passport, see `passport.pdf`',
+      '',
+      '1. First',
+      '2. Second',
+    ].join('\n');
+
     it('produces both html and text fields', () => {
-      expect(adapter.formatOutbound({ text: 'reply' })).toEqual({ html: '<div style="white-space:pre-wrap">reply</div>', text: 'reply' });
+      const out = adapter.formatOutbound({ text: 'reply' });
+      expect(Object.keys(out).sort()).toEqual(['html', 'text']);
+      expect(out.text).toBe('reply');
+      expect(out.html).toContain('<p style="margin:0 0 12px;">reply</p>');
     });
 
-    it('keeps the line breaks of a multi-line answer and escapes what would read as markup', () => {
-      // A morning brief: several lines, and a "<" in the text. Sent raw as
-      // HTML it arrived as one run-on line with part of it swallowed.
-      const out = adapter.formatOutbound({ text: 'Meetings (2)\n- 10:00 Investor call\n- 14:00 Intro <Kestrel> & co' });
-      expect(out.text).toBe('Meetings (2)\n- 10:00 Investor call\n- 14:00 Intro <Kestrel> & co');
-      expect(out.html).toBe('<div style="white-space:pre-wrap">Meetings (2)<br>&bull; 10:00 Investor call<br>&bull; 14:00 Intro &lt;Kestrel&gt; &amp; co</div>');
+    it('renders a markdown table as a real table, with no pipes left', () => {
+      const { html } = adapter.formatOutbound({ text: brief });
+      expect(html).toMatch(/<table style="[^"]*border-collapse:collapse[^"]*">/);
+      expect(html).toContain('<th style="');
+      expect(html).toMatch(/<td style="[^"]*">11:00–11:45<\/td>/);
+      expect(html).toMatch(/<td style="[^"]*">Intro call: Priya Raman, <strong>external<\/strong><\/td>/);
+      expect(html).not.toContain('|');
+      // A wide table scrolls in its own box instead of widening the mail.
+      expect(html).toContain('overflow-x:auto');
+    });
+
+    it('renders headings, lists, emphasis and code in a column readable on a phone, all styled inline', () => {
+      const { html } = adapter.formatOutbound({ text: brief });
+      expect(html).toMatch(/<h1 style="[^"]*">Morning brief: Tue 24 Nov<\/h1>/);
+      expect(html).toMatch(/<h2 style="[^"]*">2\. Today's meetings<\/h2>/);
+      expect(html).toMatch(/<ul style="[^"]*">\n<li style="[^"]*"><strong>Approve payroll<\/strong> \(Work\), <em>4 days late<\/em><\/li>/);
+      expect(html).toMatch(/<code style="[^"]*">passport\.pdf<\/code>/);
+      expect(html).toMatch(/<ol style="[^"]*">/);
+      expect(html).toContain('max-width:640px');
+      expect(html).toContain('width="100%"');
+      // Mail clients drop <style> blocks; nothing may depend on one.
+      expect(html).not.toContain('<style');
+      expect(html).not.toMatch(/>#+ /);
+      expect(html).not.toContain('**');
+    });
+
+    it('sends a plain-text part with each table row on a line of its own and the markers out', () => {
+      const { text } = adapter.formatOutbound({ text: brief });
+      expect(text).toContain('Time · Meeting · Calendar\n- 11:00–11:45 · Intro call: Priya Raman, external · Work\n- 12:00–12:30 · Weekly pipeline review · Work');
+      expect(text).toContain('- Approve payroll (Work), 4 days late\n- Renew passport, see passport.pdf');
+      expect(text).toContain('1. First\n2. Second');
+      expect(text).toContain('Morning brief: Tue 24 Nov');
+      expect(text).not.toMatch(/[|*#`]/);
+    });
+
+    it('keeps the AI disclosure, first and as written, in both parts', () => {
+      const { html, text } = adapter.formatOutbound({ text: brief });
+      expect(text.startsWith(`${disclosure}\n\n`)).toBe(true);
+      expect(html).toMatch(new RegExp(`^<table[^>]*><tr><td[^>]*><div[^>]*><p style="[^"]*">${disclosure.replace(/\./g, '\\.')}</p>`));
+    });
+
+    it('escapes markup in the answer and drops script links', () => {
+      const out = adapter.formatOutbound({
+        text: 'Intro <Kestrel> & co\n<script>alert(1)</script>\n<img src=x onerror=alert(1)>\n[click](javascript:alert(1)) [ok](https://example.com/a?b=1&c=2)\n![pixel](https://track.example/p.gif)',
+      });
+      expect(out.html).toContain('Intro &lt;Kestrel&gt; &amp; co');
+      expect(out.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+      expect(out.html).not.toContain('<script');
+      expect(out.html).not.toContain('<img');
+      expect(out.html).not.toMatch(/href="javascript:/i);
+      expect(out.html).toMatch(/<a href="https:\/\/example\.com\/a\?b=1&amp;c=2" style="[^"]*">ok<\/a>/);
+      expect(out.text).toContain('Intro <Kestrel> & co');
+      expect(out.text).toContain('ok (https://example.com/a?b=1&c=2)');
     });
 
     it('shows the answer\'s markdown as formatting, and leaves the markers out of the text part', () => {
-      // The morning brief arrived with "**Conflicts**" in it.
       const out = adapter.formatOutbound({ text: '## Your brief\n**Conflicts**: two\nSee [the calendar](https://calendar.example.com)' });
-      expect(out.html).toBe('<div style="white-space:pre-wrap"><strong>Your brief</strong><br><strong>Conflicts</strong>: two<br>See <a href="https://calendar.example.com">the calendar</a></div>');
-      expect(out.text).toBe('Your brief\nConflicts: two\nSee the calendar (https://calendar.example.com)');
+      expect(out.html).toMatch(/<h2 style="[^"]*">Your brief<\/h2>\n<p style="[^"]*"><strong>Conflicts<\/strong>: two<br>\nSee <a href="https:\/\/calendar\.example\.com" style="[^"]*">the calendar<\/a><\/p>/);
+      expect(out.text).toBe('Your brief\n\nConflicts: two\nSee the calendar (https://calendar.example.com)');
     });
   });
 
