@@ -8,8 +8,8 @@
 # runner, which enrolls, sets the workspace up on its first start and
 # connects (`almyty-runner start --enroll`, docs/hosted-runners.md).
 #
-# Nothing secret is read or printed here: the enrollment token stays in
-# the environment for the runner, which removes it once read.
+# Nothing secret is read or printed here: the runner's tokens wait in
+# ALMYTY_HANDOVER_DIR for the runner, which deletes each once read.
 set -euo pipefail
 
 export HOME="${HOME:-/workspace/.home}"
@@ -37,9 +37,10 @@ export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 # never see the token: they talk to the runner's loopback proxy with a
 # placeholder key, and the runner forwards each call with the current
 # token, which it renews while the pod runs (packages/runner,
-# model-proxy.ts). The runner also takes ALMYTY_MODEL_TOKEN out of its
-# environment, so nothing it starts inherits it. Without a port (an older
-# backend) the CLIs get the token directly.
+# model-proxy.ts). The pod hands the runner the token as a file in
+# ALMYTY_HANDOVER_DIR, which the runner deletes once read; only its
+# presence is checked here. Without a port (an older backend, which passes
+# ALMYTY_MODEL_TOKEN as a variable) the CLIs get the token directly.
 #   Claude Code  ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN, sent as a bearer
 #                to POST /v1/messages. Not ANTHROPIC_API_KEY, which makes it
 #                ask which credential to use.
@@ -53,7 +54,7 @@ export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 #   Gemini CLI   no almyty endpoint speaks its API; a vendor key from the
 #                store (GEMINI_API_KEY) is the pod's to inject, on an
 #                environment that allows vendor keys.
-if [ -n "${ALMYTY_MODEL_TOKEN:-}" ] && [ -n "${ALMYTY_API_URL:-}" ]; then
+if { [ -n "${ALMYTY_MODEL_TOKEN:-}" ] || [ -s "${ALMYTY_HANDOVER_DIR:-/nonexistent}/model-token" ]; } && [ -n "${ALMYTY_API_URL:-}" ]; then
   # The proxy only when the image's runner has one: pointing the CLIs at a
   # port nothing listens on would leave them with no model at all.
   # (Found from the runner binary itself: `npm root -g` points under HOME

@@ -40,7 +40,7 @@ import { AgentOpenAICompatController } from '../../modules/agents/agent-openai-c
 import { AgentAnthropicCompatController } from '../../modules/agents/agent-anthropic-compat.controller';
 import { HostedAdapterRegistry } from '../../modules/hosted-runners/adapters/adapter.registry';
 import { StubHostedAdapter } from '../../modules/hosted-runners/adapters/stub.adapter';
-import { buildDeployment, buildSecret } from '../../modules/hosted-runners/adapters/kubernetes/manifests';
+import { buildDeployment, buildSecrets } from '../../modules/hosted-runners/adapters/kubernetes/manifests';
 import { DEFAULT_HOSTED_RUNNER_SETTINGS, HostedRunnerSettingsService, deepMerge } from '../../modules/hosted-runners/hosted-runner-settings';
 import { HostedRunnersService } from '../../modules/hosted-runners/hosted-runners.service';
 import { HostedRunnersProcessor } from '../../modules/hosted-runners/hosted-runners.processor';
@@ -285,7 +285,7 @@ describeIfDb('hosted runners follow-ups (real Postgres)', () => {
       const layout = settings.current.cluster;
       expect(JSON.stringify(buildDeployment(req, layout, 1))).not.toContain(token);
       expect(JSON.stringify(req)).not.toContain(token);
-      expect(JSON.stringify(buildSecret(req, secret, layout))).toContain(token);
+      expect(JSON.stringify(buildSecrets(req, secret, layout)[1])).toContain(token);
     });
 
     it('is refused until the machine is ready', async () => {
