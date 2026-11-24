@@ -1,5 +1,11 @@
 # @almyty/chat
 
+## 1.5.16
+
+### Patch Changes
+
+- @almyty/client@1.5.16
+
 ## 1.5.15
 
 ### Patch Changes
