@@ -69,6 +69,29 @@ describe('a run on a hosted machine that is waking or failed', () => {
     expect(second).not.toContain('workspace_waking');
   });
 
+  it('does not spend the step limit while it only waits for the machine', async () => {
+    // Staging, 2026-11-24: a cold start slept 25 times (one retry every
+    // 3 s), 27 of the run's 50 steps; a run with a smaller limit failed
+    // MAX_STEPS_EXCEEDED before its machine was up.
+    const executeTool = jest.fn();
+    for (let i = 0; i < 8; i++) executeTool.mockResolvedValueOnce(waking());
+    executeTool.mockResolvedValueOnce(ran());
+    const result = await runAgent({
+      models: null,
+      executeTool,
+      sleeps,
+      limits: { maxSteps: 4 },
+      streams: { [MODEL]: [anthropicTool(MODEL, 'crm_lookup', { account: '4411' }, 120, 20), anthropicText(MODEL, 180, ['The repository has a README.'], 12)] },
+    });
+    for (let i = 0; i < 10 && result.runRepository.row('run-1')!.workingMemory.wakingToolCalls; i++) await result.drive();
+
+    const run = result.runRepository.row('run-1')!;
+    expect(run.error ?? null).toBeNull();
+    expect(run.status).toBe(AgentRunStatus.COMPLETED);
+    expect(executeTool).toHaveBeenCalledTimes(9);
+    expect(sleeps).toHaveLength(8);
+  });
+
   it('fails the run, naming the machine problem, when the machine does not come up', async () => {
     const executeTool = jest.fn().mockResolvedValueOnce(waking()).mockResolvedValueOnce(failed());
     const result = await start(executeTool);
