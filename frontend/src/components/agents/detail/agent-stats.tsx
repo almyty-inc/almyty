@@ -1,6 +1,6 @@
 /**
  * Summary stat cards displayed at the top of the agent detail page:
- * total runs, completed, no errors found (an agent with a check only),
+ * total runs, completed, no contradictions found (an agent with a check only),
  * avg run time, total cost. All of them over the runs the agent still
  * has (`agent.runStats`): a deleted or swept run drops out.
  *

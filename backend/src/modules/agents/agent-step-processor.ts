@@ -1944,6 +1944,15 @@ export class AgentStepProcessor {
         run.currentStep++;
         run.executionTime += stepDuration;
 
+        // What the run leaves in memory (facts, or the exchange) is decided
+        // by a model call, which is the run's cost like any other. It is made
+        // before the completion is committed, so the totals the completion
+        // reports (run.completed, the run row a client reads then, the
+        // agent's stats) are the totals persisted and billed. Made after,
+        // its tokens landed on the row once clients had read it and reported
+        // less than the run cost. Only the writes wait for the commit.
+        const preparedSave = await memory.prepareSave(agent, run, team);
+
         // Commit the completion with a CAS first: if another worker already
         // advanced this step, abort without double-counting stats/cost.
         if (!(await this.commitStep(run, expectedStep))) return 'done';
@@ -1953,11 +1962,10 @@ export class AgentStepProcessor {
 
         this.s.emitEvent(runId, 'run.completed', { output: run.output });
 
-        // What the run leaves in memory (facts, or the exchange), after the
-        // answer is out so nobody waits on it. Its calls are the run's cost
-        // like any other, so the run row takes them and the memory_save step.
+        // The saves themselves, once the run is committed: a worker that
+        // lost the step race writes nothing.
         const stepsBefore = run.steps.length;
-        await memory.afterRun(agent, run, team);
+        await memory.afterRun(agent, run, team, preparedSave);
         if (run.steps.length !== stepsBefore) {
           // Logged like a commit: the memory_save step and its cost are
           // events too. The run is done, so nothing but its id (and this

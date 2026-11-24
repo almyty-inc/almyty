@@ -22,7 +22,7 @@ export interface AgentRunStats {
   runs: number;
   /** Of `runs`, those that completed (whatever their answer's check said). */
   completed: number;
-  /** Completed runs a checker gave a verdict on ("No errors found" counts these). */
+  /** Completed runs a checker gave a verdict on ("No contradictions found" counts these). */
   checked: number;
   /** Of `checked`, the runs whose check passed. */
   checksPassed: number;

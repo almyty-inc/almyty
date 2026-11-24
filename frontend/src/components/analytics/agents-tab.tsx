@@ -90,7 +90,7 @@ export function AgentsTab() {
       executions7d: number
       /** "Completed": the share of runs that finished, whatever their check said. */
       completed: number
-      /** "No errors found", for an agent with a check (agent-run-numbers.ts). */
+      /** "No contradictions found", for an agent with a check (agent-run-numbers.ts). */
       checks: ReturnType<typeof checksPassed>
       avgTime: number
       recentFailures: AgentExecution[]

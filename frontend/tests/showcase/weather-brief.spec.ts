@@ -95,7 +95,7 @@ test('weather brief: API to autonomous agent to checked answer', async ({ page, 
   await page.getByRole('row', { name: /^Open the run of/ }).first().click()
   const runs = page.getByRole('tabpanel', { name: 'Runs' })
   await expect(runs.getByText(/^completed$/i).first()).toBeVisible({ timeout: 60_000 })
-  await expect(runs.getByText('No errors found').first()).toBeVisible()
+  await expect(runs.getByText('No contradictions found').first()).toBeVisible()
   await beat(page, 1500)
   await runs.getByRole('heading', { name: 'Steps' }).scrollIntoViewIfNeeded()
   await beat(page, 4000)

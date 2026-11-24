@@ -12,6 +12,7 @@ import { AgentExecution } from '../../../entities/agent-execution.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { User } from '../../../entities/user.entity';
 import { AgentChannelsService } from '../../agent-channels/agent-channels.service';
+import { AGENT_SCHEDULE_SYNC } from '../agent-schedule-sync';
 
 // ─── Helper factories ───────────────────────────────────────────────────────
 
@@ -168,6 +169,8 @@ describe('AgentsService', () => {
           },
         },
         { provide: AgentChannelsService, useValue: channels },
+        // The scheduler's job sync; agent-schedule-resync.spec.ts runs the real one.
+        { provide: AGENT_SCHEDULE_SYNC, useValue: { syncSchedule: jest.fn(), removeSchedule: jest.fn() } },
       ],
     }).compile();
 
