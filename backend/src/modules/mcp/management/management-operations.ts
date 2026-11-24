@@ -343,6 +343,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('tools.export_skill', 'ToolsExportController.getToolSkill'),
   op('tools.export_cli', 'ToolsExportController.getToolCli'),
   op('tools.export_sdk', 'ToolsExportController.getToolSdk'),
+  op('mcp_sources.check_auth', 'McpSourcesController.checkAuth', { effect: 'read', openWorld: true }),
   op('mcp_sources.add', 'McpSourcesController.create', { ...OPEN, secretFields: ['body.bearerToken'] }),
   op('mcp_sources.list', 'McpSourcesController.findAll'),
   op('mcp_sources.get', 'McpSourcesController.findOne'),
@@ -401,6 +402,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('credentials.revoke_grant', 'GrantsController.revoke'),
   op('credentials.list_oauth_presets', 'OAuth2Controller.getPresets'),
   op('credentials.get_oauth_callback_url', 'OAuth2Controller.getCallbackUrl'),
+  op('credentials.get_sign_in_callback_url', 'CredentialsController.signInCallbackUrl'),
   // ── Providers and models ──
   // A provider's API key is added in the app; a keyless provider (Ollama) connects here.
   op('providers.connect', 'LlmProvidersController.connectProvider', { ...OPEN, secretPage: '/models/providers/new' }),
