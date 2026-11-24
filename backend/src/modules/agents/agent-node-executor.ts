@@ -44,6 +44,7 @@ import {
 import { DEFAULT_SCORING_MODE, scoreOptions } from '../model-catalog/decide/option-scoring';
 import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from './input-schema';
 import { describeLimitTrip } from './run-limits';
+import { isWaitingForMachine } from '../runner/hosted-dispatch';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import { bestOfNJudgePrompt, consensusJudgePrompt, parseBestOfNPick, parseConsensus } from './strategies/judging';
 import { inputAttachments } from './attached-files';
@@ -291,6 +292,45 @@ function parseDecideWeights(
   }
 
   return weights;
+}
+
+/**
+ * The longest a workflow tool step waits for its hosted machine. The wake
+ * budget (hosted-runner-settings, `wake.budgetSeconds`) normally ends the
+ * wait first: past it the dispatch fails the machine and the call returns
+ * that failure. This only bounds a workspace that stays busy.
+ */
+export const MACHINE_WAIT_CEILING_MS = 15 * 60 * 1000;
+
+/**
+ * Make a tool call, and while its hosted machine answers "starting" or
+ * "busy", sleep the retry interval it names and make the same call again
+ * (the autonomous path does this across run sleeps: retryWakingCalls).
+ * Stops on any other answer, on cancellation, or at the ceiling.
+ */
+export async function waitForMachine<T extends { success?: boolean; metadata?: Record<string, any> }>(
+  signal: AbortSignal | undefined,
+  call: () => Promise<T>,
+  ceilingMs: number = MACHINE_WAIT_CEILING_MS,
+): Promise<T> {
+  const deadline = Date.now() + ceilingMs;
+  let result = await call();
+  while (isWaitingForMachine(result) && !signal?.aborted && Date.now() < deadline) {
+    const retryMs = Math.max(Number(result.metadata?.retryAfterMs) || 0, 250);
+    const delay = Math.min(retryMs, Math.max(deadline - Date.now(), 0));
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(done, delay);
+      function done() {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', done);
+        resolve();
+      }
+      signal?.addEventListener('abort', done, { once: true });
+    });
+    if (signal?.aborted) break;
+    result = await call();
+  }
+  return result;
 }
 
 @Injectable()
@@ -763,7 +803,12 @@ export class AgentNodeExecutor {
       }
     }
 
-    const result = await this.toolExecutorService.executeTool(toolId, resolvedParams, {
+    // A hosted machine still starting (or busy with another job of the same
+    // person) answers "try again shortly": the step waits and makes the
+    // same call again, as an autonomous run does. It is one call against
+    // the budget above; the wake budget ends the wait (the dispatch fails
+    // the machine past it).
+    const result = await waitForMachine(options.signal, () => this.toolExecutorService.executeTool(toolId, resolvedParams, {
       organizationId: options.organizationId,
       userId: options.userId,
       // The run's principal, inherited: a tool_call node cannot run a team
@@ -783,7 +828,7 @@ export class AgentNodeExecutor {
       ...(typeof context.runLimits?.toolErrorRetries === 'number'
         ? { retries: context.runLimits.toolErrorRetries }
         : {}),
-    });
+    }));
 
     const executionTime = Date.now() - startTime;
 
