@@ -587,11 +587,11 @@ export class AgentTechDocHelper {
       `- Pipeline executions: ${l.executions.total} total, ${l.executions.successful} completed (${l.executions.completedPercent}%)`,
     );
     if (l.executions.checksPassedPercent !== null) {
-      // "No errors found", not "passed": a pass means the check found no
+      // "No contradictions found", not "passed": a pass means the check found no
       // mismatch with the tool results, not that the answer is right.
       const checked = l.executions.checked;
       lines.push(
-        `- No errors found: ${l.executions.checksPassed} of ${checked} checked run${checked === 1 ? '' : 's'} (${l.executions.checksPassedPercent}%). The check compares an answer's names, dates, versions, ids, counts and labels with what the tools returned; it can't confirm everything an answer says.`,
+        `- No contradictions found: ${l.executions.checksPassed} of ${checked} checked run${checked === 1 ? '' : 's'} (${l.executions.checksPassedPercent}%). The check compares an answer's names, dates, versions, ids, counts and labels with what the tools returned; it can't confirm everything an answer says.`,
       );
     }
     lines.push(`- Autonomous runs: ${l.autonomousRuns.total}`);

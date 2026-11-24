@@ -399,7 +399,7 @@ export class Agent {
   @Column({ default: 0 })
   checkedExecutions: number;
 
-  /** Of `checkedExecutions`, the runs whose check found no mismatch with the tool results. "No errors found" in the UI. */
+  /** Of `checkedExecutions`, the runs whose check found no mismatch with the tool results. "No contradictions found" in the UI. */
   @Column({ default: 0 })
   passedCheckExecutions: number;
 

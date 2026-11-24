@@ -51,11 +51,11 @@ Each reason names the item and what is wrong with it.
 
 ### Checker notes
 
-Anything else a reviewer says is a checker note: whether an item fits your instructions, which items it would have picked or left out, wording and style, and any complaint it could not back with tool data. You see the notes on the run, under **Checker notes** on the verify step. They never change the verdict, never count against **No errors found**, and never appear on the answer or in a chat with your visitors.
+Anything else a reviewer says is a checker note: whether an item fits your instructions, which items it would have picked or left out, wording and style, and any complaint it could not back with tool data. You see the notes on the run, under **Checker notes** on the verify step. They never change the verdict, never count against **No contradictions found**, and never appear on the answer or in a chat with your visitors.
 
 ### What the check can and can't catch
 
-When the check passes, the run shows **No errors found** and, under it: "The check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch. It can't confirm everything the answer says." When it fails, the run shows **Errors found** and what was found.
+When the check passes, the run shows **No contradictions found** and, under it: "The check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch. It can't confirm everything the answer says." When it fails, the run shows **Errors found** and what was found.
 
 The check can catch:
 
@@ -70,7 +70,7 @@ The check can't catch:
 - a claim with nothing to compare it with in the tool results. A dependency name made up for a release summary, or a quote reworded into words the source never used, passes;
 - whether the wording is right, whether an item is relevant, and which items should have been picked. A reviewer may say so, and you see it as a checker note, but it never decides the verdict.
 
-So **No errors found** means no mismatch was found, not that the answer is correct. Read the answer before you rely on it.
+So **No contradictions found** means no mismatch was found, not that the answer is correct. Read the answer before you rely on it.
 
 To set it up, open the agent's **Overview** tab and, on the **Models & verification** card, click **Configure verification**:
 
@@ -99,7 +99,7 @@ Reviewers are sometimes wrong, and a reworked answer can lose things that were r
 
 ### The numbers on the agent
 
-The agent's header and the **Agents** tab of Analytics show **Completed**, the share of runs that finished. For an agent with verification they also show **No errors found**, the share of checked runs whose check found no mismatch with the tool results. That is not the share of correct answers (see [What the check can and can't catch](#what-the-check-can-and-cant-catch)). A run no reviewer could give a verdict on isn't counted.
+The agent's header and the **Agents** tab of Analytics show **Completed**, the share of runs that finished. For an agent with verification they also show **No contradictions found**, the share of checked runs whose check found no mismatch with the tool results. That is not the share of correct answers (see [What the check can and can't catch](#what-the-check-can-and-cant-catch)). A run no reviewer could give a verdict on isn't counted.
 
 Workflow agents can do the same with a Verify step.
 

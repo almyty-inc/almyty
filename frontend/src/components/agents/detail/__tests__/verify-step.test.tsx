@@ -10,9 +10,9 @@ const step = (over: Partial<AgentRunStep>): AgentRunStep =>
 const run = (metadata: any): AgentRun => ({ metadata } as AgentRun)
 
 describe('VerifyStepCard', () => {
-  it('renders a passing gate verdict as "No errors found", with what that means', () => {
+  it('renders a passing gate verdict as "No contradictions found", with what that means', () => {
     render(<VerifyStepCard step={step({ output: { verdict: 'pass', failures: [] } })} index={0} />)
-    expect(screen.getByText('No errors found')).toBeInTheDocument()
+    expect(screen.getByText('No contradictions found')).toBeInTheDocument()
     expect(screen.getByTestId('verify-pass-explanation')).toHaveTextContent(/found no mismatch\. It can't confirm everything the answer says\./)
     expect(screen.getByText('blocking')).toBeInTheDocument()
   })
@@ -56,9 +56,9 @@ describe('VerifySummary', () => {
   })
 
   // A pass is no mismatch with the tool results, not a correct answer.
-  it('renders a passing verdict as "No errors found", with what that means', () => {
+  it('renders a passing verdict as "No contradictions found", with what that means', () => {
     render(<VerifySummary run={run({ verify: { verdict: 'pass', revisions: 0 } })} />)
-    expect(screen.getByText('No errors found')).toBeInTheDocument()
+    expect(screen.getByText('No contradictions found')).toBeInTheDocument()
     expect(screen.getByTestId('verify-summary-explanation')).toHaveTextContent(
       "The check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch. It can't confirm everything the answer says.",
     )

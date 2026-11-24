@@ -21,7 +21,7 @@ import { STEP_NAMES } from '../step-values'
  * against passes. `honest-check-label.test.ts` keeps wording that makes a
  * pass sound like a correct answer from coming back.
  */
-export const CHECK_PASSED = 'No errors found'
+export const CHECK_PASSED = 'No contradictions found'
 export const CHECK_PASSED_EXPLANATION =
   "The check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch. It can't confirm everything the answer says."
 export const CHECK_FAILED = 'Errors found'

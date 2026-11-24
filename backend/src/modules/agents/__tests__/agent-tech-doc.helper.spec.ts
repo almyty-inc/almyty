@@ -448,7 +448,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     // "Success rate" counted finished runs and ignored the checks.
-    it('says Completed and, for checked runs, No errors found, not a success rate', async () => {
+    it('says Completed and, for checked runs, No contradictions found, not a success rate', async () => {
       agentsService.getAgent.mockResolvedValue(autonomousAgent());
       runStats = { ...runStats, checked: 8, checksPassed: 2 };
       const doc = await helper.build('agent-1', ORG, VIEWER);
@@ -461,7 +461,7 @@ describe('AgentTechDocHelper', () => {
       });
       const md = helper.renderMarkdown(doc);
       expect(md).toContain('9 completed (90%)');
-      expect(md).toContain('- No errors found: 2 of 8 checked runs (25%).');
+      expect(md).toContain('- No contradictions found: 2 of 8 checked runs (25%).');
       // A pass is no mismatch with the tool results, and the line says so.
       expect(md).toContain("it can't confirm everything an answer says");
       expect(md).not.toMatch(/success rate|checks passed/i);
@@ -471,14 +471,14 @@ describe('AgentTechDocHelper', () => {
       agentsService.getAgent.mockResolvedValue(autonomousAgent());
       runStats = { ...runStats, checked: 1, checksPassed: 1 };
       const doc = await helper.build('agent-1', ORG, VIEWER);
-      expect(helper.renderMarkdown(doc)).toContain('- No errors found: 1 of 1 checked run (100%).');
+      expect(helper.renderMarkdown(doc)).toContain('- No contradictions found: 1 of 1 checked run (100%).');
     });
 
-    it('leaves No errors found out when no run was checked', async () => {
+    it('leaves No contradictions found out when no run was checked', async () => {
       agentsService.getAgent.mockResolvedValue(autonomousAgent());
       const doc = await helper.build('agent-1', ORG, VIEWER);
       expect(doc.loggingAndTraceability.executions.checksPassedPercent).toBeNull();
-      expect(helper.renderMarkdown(doc)).not.toContain('No errors found');
+      expect(helper.renderMarkdown(doc)).not.toContain('No contradictions found');
     });
 
     // An imported API's tool descriptions carry HTML and line breaks; either
