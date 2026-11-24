@@ -136,6 +136,14 @@ describe('PlanHostedCapacityProvider', () => {
     });
   });
 
+  it('offers only the plan sizes the install allows too', async () => {
+    const smallOnly = new HostedRunnerSettingsService({ ...DEFAULT_HOSTED_RUNNER_SETTINGS, capacity: { ...fallback, resourceClasses: ['small'] } }, {});
+    const pro = { id: 'o', plan: 'pro', billingInfo: { seats: 1 }, settings: {} };
+    expect((await new PlanHostedCapacityProvider(repo(pro), config(true), smallOnly).capacityFor('o')).resourceClasses).toEqual(['small']);
+    const business = { ...pro, plan: 'business' };
+    expect((await new PlanHostedCapacityProvider(repo(business), config(true), smallOnly).capacityFor('o')).resourceClasses).toEqual(['small']);
+  });
+
   it('gives a Free organization no hosted machines', async () => {
     const cap = await new PlanHostedCapacityProvider(repo({ id: 'o', plan: 'free', billingInfo: {} }), config(true), settings).capacityFor('o');
     expect(cap).toMatchObject({ hostedEnvironments: false, maxConcurrentRunners: 0, maxWorkspaces: 0, billed: false });

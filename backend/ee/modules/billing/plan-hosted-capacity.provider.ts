@@ -74,7 +74,12 @@ export class PlanHostedCapacityProvider implements HostedCapacityProvider {
       hostedEnvironments: row.hostedEnvironments,
       maxConcurrentRunners: row.maxConcurrentRunners ?? fallback?.maxConcurrentRunners ?? 0,
       maxWorkspaces: row.maxWorkspaces ?? fallback?.maxWorkspaces ?? 0,
-      resourceClasses: row.resourceClasses ?? fallback?.resourceClasses ?? null,
+      // The sizes the plan allows, among those the install allows: a plan
+      // never offers a size the install's machines cannot run.
+      resourceClasses:
+        row.resourceClasses && fallback?.resourceClasses
+          ? row.resourceClasses.filter((c) => fallback.resourceClasses!.includes(c))
+          : (row.resourceClasses ?? fallback?.resourceClasses ?? null),
       includedMinutes: includedMinutes(row, seats),
       monthlyCeilingMinutes: row.monthlyCeilingHours === null ? null : row.monthlyCeilingHours * 60,
       monthlyCeilingUsd: row.monthlyCeilingUsd,

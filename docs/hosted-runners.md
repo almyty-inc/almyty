@@ -667,8 +667,9 @@ On an install that sells plans through Stripe (`STRIPE_SECRET_KEY` set),
 each plan has its own hosted capacity, read from
 `ee/modules/billing/hosted-capacity.ts` and overridden by
 `HOSTED_PLAN_CAPACITY` (see `docs/enterprise.md`). A number a plan leaves
-open comes from `capacity` in the settings above. Without Stripe there are
-no plans, and every organization gets `capacity` from the settings.
+open comes from `capacity` in the settings above, and a plan offers only
+the sizes `capacity.resourceClasses` allows. Without Stripe there are no
+plans, and every organization gets `capacity` from the settings.
 
 | | Free | Pro | Business | Enterprise |
 |---|---|---|---|---|
