@@ -6,7 +6,7 @@
  *
  * 1. PLAN_HOSTED_CAPACITY below seeds a row per plan.
  * 2. The install overrides any of it with HOSTED_PLAN_CAPACITY, JSON keyed by
- *    plan, e.g. `{"pro":{"includedHoursPerSeat":{"small":40},"maxConcurrentRunners":2}}`.
+ *    plan, e.g. `{"pro":{"includedHoursPerSeat":{"small":40},"maxConcurrentRunners":2,"monthlyCeilingUsd":50}}`.
  * 3. An organization may tighten its own (`settings.hostedCapacity`), never
  *    loosen it, because the machines are the install's.
  *
@@ -34,25 +34,26 @@ export interface HostedPlanCapacity {
   includedHoursPerSeat: Record<string, number> | null;
   /** Runner-hours a month after which wakes are refused; null: no ceiling. */
   monthlyCeilingHours: number | null;
+  /**
+   * US dollars of overage a month (minutes beyond the allowance, at each
+   * size's per-minute price in STRIPE_HOSTED_METERS) after which wakes
+   * are refused. 0: nothing beyond the included hours. Null: no ceiling.
+   */
+  monthlyCeilingUsd: number | null;
   /** Whether minutes beyond the allowance are reported to Stripe as overage. */
   billed: boolean;
 }
 
 export const HOSTED_PLAN_CAPACITY_ENV = 'HOSTED_PLAN_CAPACITY';
 
-const PRO_ROW: HostedPlanCapacity = {
-  hostedEnvironments: true,
-  maxConcurrentRunners: null,
-  maxWorkspaces: null,
-  resourceClasses: null,
-  // The starting allowance of Decision 5 (Frane, 2026-10-08): small-class
-  // hours per seat a month, overage by the minute. A seeded default only.
-  includedHoursPerSeat: { small: 40 },
-  monthlyCeilingHours: null,
-  billed: true,
-};
-
-/** The seeded plan catalog. */
+/**
+ * The seeded plan catalog: the plan limits the owner approved
+ * (2026-11-24). Pro: 2 machines at once, 10 workspaces, small and medium
+ * machines, 40 small-machine hours per seat a month, $50 of overage a
+ * month. Business: 5, 50, every size, 100 small-machine hours per seat,
+ * $250. Medium and large hours are never included: every minute of them
+ * is overage.
+ */
 export const PLAN_HOSTED_CAPACITY: Record<string, HostedPlanCapacity> = {
   [PLAN_FREE]: {
     hostedEnvironments: false,
@@ -61,15 +62,41 @@ export const PLAN_HOSTED_CAPACITY: Record<string, HostedPlanCapacity> = {
     resourceClasses: [],
     includedHoursPerSeat: {},
     monthlyCeilingHours: 0,
+    monthlyCeilingUsd: 0,
     billed: false,
   },
-  [PLAN_PRO]: PRO_ROW,
-  // Business keeps Pro's allowance until the owner sets its own through
-  // HOSTED_PLAN_CAPACITY.
-  [PLAN_BUSINESS]: { ...PRO_ROW },
+  [PLAN_PRO]: {
+    hostedEnvironments: true,
+    maxConcurrentRunners: 2,
+    maxWorkspaces: 10,
+    resourceClasses: ['small', 'medium'],
+    includedHoursPerSeat: { small: 40 },
+    monthlyCeilingHours: null,
+    monthlyCeilingUsd: 50,
+    billed: true,
+  },
+  [PLAN_BUSINESS]: {
+    hostedEnvironments: true,
+    maxConcurrentRunners: 5,
+    maxWorkspaces: 50,
+    resourceClasses: null,
+    includedHoursPerSeat: { small: 100 },
+    monthlyCeilingHours: null,
+    monthlyCeilingUsd: 250,
+    billed: true,
+  },
   // Enterprise is metered against its contract: recorded and shown, never
-  // sent to Stripe.
-  [PLAN_ENTERPRISE]: { ...PRO_ROW, includedHoursPerSeat: null, billed: false },
+  // sent to Stripe. Its limits are the install's hosted runner settings.
+  [PLAN_ENTERPRISE]: {
+    hostedEnvironments: true,
+    maxConcurrentRunners: null,
+    maxWorkspaces: null,
+    resourceClasses: null,
+    includedHoursPerSeat: null,
+    monthlyCeilingHours: null,
+    monthlyCeilingUsd: null,
+    billed: false,
+  },
 };
 
 type Env = Record<string, string | undefined>;
@@ -111,7 +138,7 @@ export function hostedPlanCapacity(plan: string | null | undefined, env: Env = p
   if (!row || typeof row !== 'object') return out;
   if (typeof row.hostedEnvironments === 'boolean') out.hostedEnvironments = row.hostedEnvironments;
   if (typeof row.billed === 'boolean') out.billed = row.billed;
-  for (const field of ['maxConcurrentRunners', 'maxWorkspaces', 'monthlyCeilingHours'] as const) {
+  for (const field of ['maxConcurrentRunners', 'maxWorkspaces', 'monthlyCeilingHours', 'monthlyCeilingUsd'] as const) {
     if (row[field] === null) out[field] = null;
     else {
       const n = nonNegative(row[field]);
@@ -130,6 +157,7 @@ export interface OwnHostedCapacity {
   maxConcurrentRunners?: unknown;
   maxWorkspaces?: unknown;
   monthlyCeilingHours?: unknown;
+  monthlyCeilingUsd?: unknown;
 }
 
 function tighter(own: unknown, base: number | null): number | null {
@@ -151,6 +179,7 @@ export function orgHostedCapacity(
     maxConcurrentRunners: tighter(own.maxConcurrentRunners, base.maxConcurrentRunners),
     maxWorkspaces: tighter(own.maxWorkspaces, base.maxWorkspaces),
     monthlyCeilingHours: tighter(own.monthlyCeilingHours, base.monthlyCeilingHours),
+    monthlyCeilingUsd: tighter(own.monthlyCeilingUsd, base.monthlyCeilingUsd),
   };
 }
 

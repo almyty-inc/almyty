@@ -1,5 +1,5 @@
 import { HostedUsageReportService, billableDelta } from '../hosted-usage-report.service';
-import { STRIPE_HOSTED_METERS_ENV, hostedMeterPrices, hostedMeters, hostedUsageReporting, meterIdentifier } from '../hosted-metering.config';
+import { STRIPE_HOSTED_METERS_ENV, hostedMeterPrices, hostedMeters, hostedMinutePrices, hostedUsageReporting, meterIdentifier } from '../hosted-metering.config';
 
 /**
  * The hourly runner-usage-report (design: "Recording to Stripe"): one row
@@ -14,9 +14,21 @@ const METERS = JSON.stringify({ small: { eventName: 'hosted_minutes_small', pric
 describe('hosted metering configuration', () => {
   it('reads one meter per class and the prices to add to a subscription', () => {
     const env = { [STRIPE_HOSTED_METERS_ENV]: JSON.stringify({ small: { eventName: 'm_small', price: 'p_small' }, large: { eventName: 'm_large' }, bad: {} }) };
-    expect(hostedMeters(env)).toEqual({ small: { eventName: 'm_small', price: 'p_small' }, large: { eventName: 'm_large', price: null } });
+    expect(hostedMeters(env)).toEqual({ small: { eventName: 'm_small', price: 'p_small', usdPerMinute: null }, large: { eventName: 'm_large', price: null, usdPerMinute: null } });
     expect(hostedMeterPrices(env)).toEqual(['p_small']);
     expect(hostedMeters({ [STRIPE_HOSTED_METERS_ENV]: 'nope' })).toEqual({});
+  });
+
+  it('reads the per-minute price in dollars where it is given, and ignores one that is not a number', () => {
+    const env = {
+      [STRIPE_HOSTED_METERS_ENV]: JSON.stringify({
+        small: { eventName: 'm_small', price: 'p_small', usdPerMinute: 0.001 },
+        medium: { eventName: 'm_medium', price: 'p_medium', usdPerMinute: '0.002' },
+        large: { eventName: 'm_large', price: 'p_large', usdPerMinute: 'four' },
+      }),
+    };
+    expect(hostedMeters(env).small.usdPerMinute).toBe(0.001);
+    expect(hostedMinutePrices(env)).toEqual({ small: 0.001, medium: 0.002 });
   });
 
   it('runs hourly by default and can be turned off', () => {

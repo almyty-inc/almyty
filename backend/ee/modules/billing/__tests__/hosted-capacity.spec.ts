@@ -18,28 +18,71 @@ import { DEFAULT_HOSTED_RUNNER_SETTINGS, HostedRunnerSettingsService } from '../
  * fall back to the install's settings rather than to a number in code.
  */
 describe('hosted plan capacity', () => {
-  it('gives Free no hosted machines and Pro the seeded allowance', () => {
-    expect(hostedPlanCapacity('free', {})).toMatchObject({ hostedEnvironments: false, maxConcurrentRunners: 0, billed: false });
-    expect(hostedPlanCapacity('pro', {})).toMatchObject({ hostedEnvironments: true, billed: true, includedHoursPerSeat: { small: 40 } });
-    expect(hostedPlanCapacity('enterprise', {})).toMatchObject({ hostedEnvironments: true, billed: false, includedHoursPerSeat: null });
+  it('seeds the approved plan limits: Free none, Pro and Business their own, Enterprise the install settings', () => {
+    expect(hostedPlanCapacity('free', {})).toMatchObject({ hostedEnvironments: false, maxConcurrentRunners: 0, maxWorkspaces: 0, monthlyCeilingUsd: 0, billed: false });
+    expect(hostedPlanCapacity('pro', {})).toEqual({
+      hostedEnvironments: true,
+      maxConcurrentRunners: 2,
+      maxWorkspaces: 10,
+      resourceClasses: ['small', 'medium'],
+      includedHoursPerSeat: { small: 40 },
+      monthlyCeilingHours: null,
+      monthlyCeilingUsd: 50,
+      billed: true,
+    });
+    expect(hostedPlanCapacity('business', {})).toEqual({
+      hostedEnvironments: true,
+      maxConcurrentRunners: 5,
+      maxWorkspaces: 50,
+      resourceClasses: null,
+      includedHoursPerSeat: { small: 100 },
+      monthlyCeilingHours: null,
+      monthlyCeilingUsd: 250,
+      billed: true,
+    });
+    expect(hostedPlanCapacity('enterprise', {})).toMatchObject({
+      hostedEnvironments: true,
+      billed: false,
+      includedHoursPerSeat: null,
+      maxConcurrentRunners: null,
+      maxWorkspaces: null,
+      monthlyCeilingUsd: null,
+    });
     expect(hostedPlanCapacity('unknown-plan', {})).toEqual(PLAN_HOSTED_CAPACITY.free);
   });
 
   it('takes the install override from the environment, row by row', () => {
-    const env = { [HOSTED_PLAN_CAPACITY_ENV]: JSON.stringify({ pro: { includedHoursPerSeat: { small: 10, large: 2 }, maxConcurrentRunners: 4, monthlyCeilingHours: 100 }, free: { hostedEnvironments: true } }) };
-    expect(hostedPlanCapacity('pro', env)).toMatchObject({ includedHoursPerSeat: { small: 10, large: 2 }, maxConcurrentRunners: 4, monthlyCeilingHours: 100, maxWorkspaces: null });
+    const env = {
+      [HOSTED_PLAN_CAPACITY_ENV]: JSON.stringify({
+        pro: { includedHoursPerSeat: { small: 10, large: 2 }, maxConcurrentRunners: 4, monthlyCeilingHours: 100, monthlyCeilingUsd: 75 },
+        free: { hostedEnvironments: true },
+      }),
+    };
+    expect(hostedPlanCapacity('pro', env)).toMatchObject({
+      includedHoursPerSeat: { small: 10, large: 2 },
+      maxConcurrentRunners: 4,
+      monthlyCeilingHours: 100,
+      monthlyCeilingUsd: 75,
+      maxWorkspaces: 10,
+    });
     expect(hostedPlanCapacity('free', env).hostedEnvironments).toBe(true);
     expect(hostedPlanCapacity('pro', { [HOSTED_PLAN_CAPACITY_ENV]: 'not json' })).toEqual(PLAN_HOSTED_CAPACITY.pro);
+    expect(hostedPlanCapacity('pro', { [HOSTED_PLAN_CAPACITY_ENV]: '{"pro":{"monthlyCeilingUsd":null}}' }).monthlyCeilingUsd).toBeNull();
   });
 
   it('lets an organization tighten its own numbers, never loosen them', () => {
     const env = { [HOSTED_PLAN_CAPACITY_ENV]: JSON.stringify({ pro: { maxConcurrentRunners: 4, monthlyCeilingHours: 100 } }) };
-    expect(orgHostedCapacity({ plan: 'pro', settings: { hostedCapacity: { maxConcurrentRunners: 1, monthlyCeilingHours: 500 } } }, env)).toMatchObject({
+    expect(
+      orgHostedCapacity({ plan: 'pro', settings: { hostedCapacity: { maxConcurrentRunners: 1, monthlyCeilingHours: 500, monthlyCeilingUsd: 500 } } }, env),
+    ).toMatchObject({
       maxConcurrentRunners: 1,
       monthlyCeilingHours: 100,
+      monthlyCeilingUsd: 50,
     });
     // No plan ceiling: the organization's own is the ceiling.
     expect(orgHostedCapacity({ plan: 'pro', settings: { hostedCapacity: { monthlyCeilingHours: 20 } } }, {}).monthlyCeilingHours).toBe(20);
+    // Lower than the plan's dollar ceiling: the organization's own.
+    expect(orgHostedCapacity({ plan: 'pro', settings: { hostedCapacity: { monthlyCeilingUsd: 10 } } }, {}).monthlyCeilingUsd).toBe(10);
   });
 
   it('counts the allowance per seat, in minutes', () => {
@@ -57,21 +100,39 @@ describe('hosted plan capacity', () => {
 describe('PlanHostedCapacityProvider', () => {
   const settings = new HostedRunnerSettingsService(DEFAULT_HOSTED_RUNNER_SETTINGS, {});
   const fallback = DEFAULT_HOSTED_RUNNER_SETTINGS.capacity;
-  const config = (stripe: boolean): any => ({ get: (k: string) => (k === 'STRIPE_SECRET_KEY' && stripe ? 'sk_test_x' : undefined) });
+  const METERS = JSON.stringify({ small: { eventName: 'm_small', price: 'p_small', usdPerMinute: 0.001 }, medium: { eventName: 'm_medium', price: 'p_medium', usdPerMinute: 0.002 } });
+  const config = (stripe: boolean): any => ({
+    get: (k: string) => (k === 'STRIPE_SECRET_KEY' && stripe ? 'sk_test_x' : k === 'STRIPE_HOSTED_METERS' ? METERS : undefined),
+  });
   const repo = (org: any): any => ({ findOne: jest.fn(async () => org) });
 
-  it('fills a plan from its row, numbers the row leaves open from the install settings', async () => {
+  it('fills a plan from its row, with the per-minute prices of the configured meters', async () => {
     const org = { id: 'o', plan: 'pro', billingInfo: { seats: 2, stripeSubscriptionId: 'sub_1' }, settings: {} };
     const cap = await new PlanHostedCapacityProvider(repo(org), config(true), settings).capacityFor('o');
     expect(cap).toEqual({
       plan: 'pro',
       hostedEnvironments: true,
-      maxConcurrentRunners: fallback.maxConcurrentRunners,
-      maxWorkspaces: fallback.maxWorkspaces,
-      resourceClasses: null,
+      maxConcurrentRunners: 2,
+      maxWorkspaces: 10,
+      resourceClasses: ['small', 'medium'],
       includedMinutes: { small: 40 * 60 * 2 },
       monthlyCeilingMinutes: null,
+      monthlyCeilingUsd: 50,
+      usdPerMinute: { small: 0.001, medium: 0.002 },
       billed: true,
+    });
+  });
+
+  it('takes numbers an Enterprise row leaves open from the install settings', async () => {
+    const org = { id: 'o', plan: 'enterprise', billingInfo: { seats: 2, stripeSubscriptionId: 'sub_1' }, settings: {} };
+    const cap = await new PlanHostedCapacityProvider(repo(org), config(true), settings).capacityFor('o');
+    expect(cap).toMatchObject({
+      maxConcurrentRunners: fallback.maxConcurrentRunners,
+      maxWorkspaces: fallback.maxWorkspaces,
+      resourceClasses: fallback.resourceClasses ?? null,
+      includedMinutes: null,
+      monthlyCeilingUsd: null,
+      billed: false,
     });
   });
 

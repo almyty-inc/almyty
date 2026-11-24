@@ -14,9 +14,9 @@ needs, and every setting. The design is
 Status: built, and switched on in staging only (`HOSTED_RUNNERS_ENABLED=true`
 there; production and dev leave it off). The app has a Hosted tab on the
 Runners page (user guide: docs-site "Hosted machines"). The runner images are
-published on Docker Hub (`almyty/runner-env`) and pinned by digest. Usage is
-recorded, but billing and per-plan capacity are not built: nothing is
-charged, and every organization gets the same capacity from the settings.
+published on Docker Hub (`almyty/runner-env`) and pinned by digest. Each plan
+has its own limits, and minutes beyond a plan's included hours are billed
+through Stripe (see [Plans and billing](#plans-and-billing)).
 
 Checked end to end on staging on 2026-11-24: an agent wrote a file on its
 machine, the machine parked after its idle timeout, and the file was there
@@ -113,7 +113,7 @@ All numbers live here. Defaults in brackets.
 | `resourceClasses.<name>` | `cpu`, `memory`, `ephemeralStorage` and `volumeGi` of each size. [small 1/2Gi/4Gi/10, medium 2/4Gi/8Gi/20, large 4/8Gi/16Gi/40] |
 | `defaultResourceClass` | The size an environment gets when it names none. [small] |
 | `images.<name>` | The curated images an environment may pick, by name. Pin each by digest. Custom images are not offered. [standard, standard-browser] `images/runner-env/settings.json` lists the images CI builds (see [Images and enroll mode](#images-and-enroll-mode)). |
-| `capacity.maxConcurrentRunners` / `.maxWorkspaces` / `.resourceClasses` | What every organization may use: pods at once, workspaces kept, sizes allowed (`null` for all). [2, 10, all] There is no per-plan capacity; every organization gets these numbers. |
+| `capacity.maxConcurrentRunners` / `.maxWorkspaces` / `.resourceClasses` | What an organization may use where no plan says otherwise: pods at once, workspaces kept, sizes allowed (`null` for all). [2, 10, all] On an install that sells plans, the plan's numbers apply instead (see [Plans and billing](#plans-and-billing)). |
 | `cluster.namespacePrefix` | Each organization's namespace is this plus its id. [`almyty-rt-`] |
 | `cluster.storageClassName` | StorageClass of workspace volumes; `null` for the cluster default. |
 | `cluster.workspaceMountPath` | Where the volume is mounted. [`/workspace`] |
@@ -661,6 +661,38 @@ script) can still start anything. The boundary is the pod.
   `/v1/messages/count_tokens`, `/v1/models`) and by its own renewal
   (`POST /runners/hosted/model-token`) only. Everywhere else it is a 401.
 
+## Plans and billing
+
+On an install that sells plans through Stripe (`STRIPE_SECRET_KEY` set),
+each plan has its own hosted capacity, read from
+`ee/modules/billing/hosted-capacity.ts` and overridden by
+`HOSTED_PLAN_CAPACITY` (see `docs/enterprise.md`). A number a plan leaves
+open comes from `capacity` in the settings above. Without Stripe there are
+no plans, and every organization gets `capacity` from the settings.
+
+| | Free | Pro | Business | Enterprise |
+|---|---|---|---|---|
+| Machines running at once | 0 | 2 | 5 | the settings |
+| Workspaces kept | 0 | 10 | 50 | the settings |
+| Machine sizes | none | small, medium | all | all |
+| Small-machine hours included per seat a month | none | 40 | 100 | contract |
+| Medium and large hours included | none | none | none | contract |
+| Monthly spending limit beyond the included hours | none | $50 | $250 | none |
+
+Minutes beyond the included hours are billed by the minute: small $0.001,
+medium $0.002, large $0.004 ($0.06, $0.12 and $0.24 an hour). The prices
+are Stripe metered prices on one Billing Meter per size, named in
+`STRIPE_HOSTED_METERS` with their amount (`usdPerMinute`). The usage is
+reported hourly. Enterprise usage is recorded and shown, and never sent to
+Stripe.
+
+The spending limit counts the overage at those prices. Once it is reached,
+machines do not start again until the next month (UTC); running ones are
+not stopped. An organization may set lower limits for itself
+(`settings.hostedCapacity`: `maxConcurrentRunners`, `maxWorkspaces`,
+`monthlyCeilingHours`, `monthlyCeilingUsd`), never higher ones. The Hosted
+tab shows each limit with what is used (`GET /environments/capacity`).
+
 ## API
 
 | Route | What it does |
@@ -668,6 +700,7 @@ script) can still start anything. The boundary is the pod.
 | `GET /environments` | The environments you may see, each with `mine` (your own machine there: workspace, status, machine state and `desired.replicas`; null before you used it), whether hosted runners are on, and `settings` (as below). |
 | `GET /environments/settings` | What an environment form may offer, from the settings and the plan: curated image names, the sizes this organization may use, the default size, the idle-timeout default and bounds, how long a suspended workspace's files are kept and when its owner is told, the usage retention, and the capacity. |
 | `GET /environments/usage` | Runner minutes this month (UTC; or `?from=&to=`), per environment you may see and by size, and for the whole organization when you are an owner or admin (`null` otherwise). |
+| `GET /environments/capacity` | The plan's limits with what is used: machines running, workspaces kept, the sizes allowed, minutes this month per size against the included minutes (with each size's price a minute), the hours ceiling, the dollars used beyond the included hours against the spending limit, and always-on agents on a hosted machine. |
 | `POST /environments` | Create one. |
 | `GET /environments/:id` | One environment. |
 | `PATCH /environments/:id` | Change it. |
@@ -685,10 +718,8 @@ script) can still start anything. The boundary is the pod.
 
 ## Not built
 
-- Billing. Usage is recorded (`runner_usage_intervals`, `hosted_model_calls`)
-  but nothing is charged for it and nothing is reported to Stripe.
-- Plan capacity. Every organization gets the same `capacity` from the
-  settings; no plan changes those numbers.
+- A page where an organization lowers its own limits. They are read from
+  `organizations.settings.hostedCapacity`; nothing in the app sets them yet.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets.

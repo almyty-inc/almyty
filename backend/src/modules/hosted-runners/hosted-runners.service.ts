@@ -35,6 +35,9 @@ import {
   HostedCapacityProvider,
   SettingsCapacityProvider,
   ceilingReached,
+  overageUsd,
+  spendCeilingMessage,
+  spendCeilingReached,
 } from './hosted-capacity.provider';
 
 export const HOSTED_RECONCILE_QUEUE = 'hosted-runner-reconcile';
@@ -426,9 +429,16 @@ export class HostedRunnersService {
       throw new CapacityExhaustedError(`This organization already runs ${running} hosted machines at once, its limit`);
     }
     const ceiling = capacity.monthlyCeilingMinutes;
-    if (ceiling !== null && ceiling !== undefined) {
-      const used = Object.values(await this.minutesThisMonth(hr.organizationId, now)).reduce((a, b) => a + b, 0);
-      if (used >= ceiling) throw new CapacityExhaustedError(ceilingReached(ceiling));
+    const ceilingUsd = capacity.monthlyCeilingUsd;
+    const hasCeiling = ceiling !== null && ceiling !== undefined;
+    const hasSpendCeiling = ceilingUsd !== null && ceilingUsd !== undefined;
+    if (hasCeiling || hasSpendCeiling) {
+      const minutes = await this.minutesThisMonth(hr.organizationId, now);
+      const used = Object.values(minutes).reduce((a, b) => a + b, 0);
+      if (hasCeiling && used >= ceiling) throw new CapacityExhaustedError(ceilingReached(ceiling));
+      if (hasSpendCeiling && spendCeilingReached(overageUsd(minutes, capacity.includedMinutes, capacity.usdPerMinute), ceilingUsd)) {
+        throw new CapacityExhaustedError(spendCeilingMessage(ceilingUsd));
+      }
     }
     const desired: HostedRunnerDesired = { ...hr.desired, replicas: 1, wakeRequestedAt: now.toISOString() };
     await this.writeDesired(hr.id, desired, { lastActiveAt: now });
