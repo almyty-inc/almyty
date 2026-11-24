@@ -2,12 +2,8 @@
 
 import { formatDate as calendarDate } from '@/lib/utils'
 
-export function formatMs(ms: number): string {
-  if (!ms || ms === 0) return '--'
-  if (ms < 1) return '<1ms'
-  if (ms < 1000) return `${Math.round(ms)}ms`
-  return `${(ms / 1000).toFixed(2)}s`
-}
+/** Durations read the same here as everywhere else: "0.4s", "55s", "1m 18s". */
+export { formatDuration as formatMs } from '@/lib/format'
 
 export function formatDate(date: string | null): string {
   if (!date) return 'Never'

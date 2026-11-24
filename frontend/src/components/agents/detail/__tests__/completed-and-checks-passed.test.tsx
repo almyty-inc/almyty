@@ -50,15 +50,16 @@ describe('the agent header numbers', () => {
       successfulExecutions: 142,
       averageExecutionTime: 1600,
       totalCost: 3.5,
-      runStats: { runs: 2, completed: 1, checked: 0, checksPassed: 0, averageRunTimeMs: 9500, totalCost: 0.02 },
+      runStats: { runs: 2, completed: 1, checked: 0, checksPassed: 0, averageRunTimeMs: 76_600, totalCost: 2.4665 },
     } as Agent
     render(<AgentStats agent={agent} />)
     expect(screen.getByTestId('agent-stat-total-runs')).toHaveTextContent('2')
     expect(screen.getByTestId('agent-stat-completed')).toHaveTextContent('50%')
-    expect(screen.getByText('9.5s')).toBeInTheDocument()
-    expect(screen.getByText('$0.0200')).toBeInTheDocument()
+    // "1m 17s", not "76.6s"; "$2.47" with the exact amount in the tooltip, not "$2.4665".
+    expect(screen.getByText('1m 17s')).toBeInTheDocument()
+    expect(screen.getByText('$2.47')).toHaveAttribute('title', '$2.4665')
     expect(screen.queryByText('142')).not.toBeInTheDocument()
-    expect(screen.queryByText('1.6s')).not.toBeInTheDocument()
+    expect(screen.queryByText('2s')).not.toBeInTheDocument()
   })
 
   it('shows no runs and dashes once every run is gone', () => {
@@ -74,7 +75,7 @@ describe('the agent header numbers', () => {
     render(<AgentStats agent={agent} />)
     expect(screen.getByTestId('agent-stat-total-runs')).toHaveTextContent('0')
     expect(screen.getByTestId('agent-stat-completed')).toHaveTextContent('--')
-    expect(screen.queryByText('$3.5000')).not.toBeInTheDocument()
+    expect(screen.queryByText('$3.50')).not.toBeInTheDocument()
   })
 })
 

@@ -105,7 +105,7 @@ describe('an autonomous run with several models', () => {
     expect(within(drafted).getByTestId('step-role')).toHaveTextContent('Drafter')
     expect(drafted).toHaveTextContent('gpt-4o-mini')
     expect(drafted).toHaveTextContent('Drafted an answer for the checker')
-    expect(drafted).toHaveTextContent('$0.0012')
+    expect(drafted).toHaveTextContent('<$0.01')
     expect(drafted).toHaveTextContent('2,500 in / 500 out')
 
     const escalated = screen.getByTestId('run-step-2')
@@ -113,7 +113,8 @@ describe('an autonomous run with several models', () => {
     expect(escalated).toHaveTextContent('The draft failed the check; the main role redoes this step')
     // A routed call names the card that answered.
     expect(within(escalated).getByTestId('routing-attribution')).toHaveTextContent('gpt-4o')
-    expect(escalated).toHaveTextContent('$0.0204')
+    expect(escalated).toHaveTextContent('$0.02')
+    expect(escalated).not.toHaveTextContent('$0.0204')
 
     expect(screen.getByTestId('run-step-3')).toHaveTextContent('Picked candidate 2 of 3')
     const handed = screen.getByTestId('run-step-4')
@@ -137,8 +138,10 @@ describe('an autonomous run with several models', () => {
 
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows.map((r) => r.getAttribute('data-testid'))).toEqual(['role-cost-main', 'role-cost-checker', 'role-cost-drafter'])
-    expect(within(table).getByTestId('role-cost-main')).toHaveTextContent(/Main\s*Main\s*1\s*1,900\s*\$0\.0204/)
-    expect(within(table).getByTestId('role-cost-drafter')).toHaveTextContent(/Drafter\s*Drafter\s*2\s*3,000\s*\$0\.0012/)
+    expect(within(table).getByTestId('role-cost-main')).toHaveTextContent(/Main\s*Main\s*1\s*1,900\s*\$0\.02$/)
+    expect(within(table).getByTestId('role-cost-drafter')).toHaveTextContent(/Drafter\s*Drafter\s*2\s*3,000\s*<\$0\.01$/)
+    // The exact amount stays in the tooltip.
+    expect(within(within(table).getByTestId('role-cost-main')).getByText('$0.02')).toHaveAttribute('title', '$0.0204')
 
     // Above the steps, not after them.
     const steps = screen.getByRole('heading', { name: 'Steps' })
@@ -154,7 +157,7 @@ describe('an autonomous run with several models', () => {
     expect(screen.queryByTestId('role-costs')).not.toBeInTheDocument()
     expect(screen.queryByTestId('step-role')).not.toBeInTheDocument()
     expect(screen.getByTestId('run-step-0')).toHaveTextContent('Out: {"content":"hello"}')
-    expect(screen.getByTestId('run-step-0')).toHaveTextContent('$0.0020')
+    expect(screen.getByTestId('run-step-0')).toHaveTextContent('<$0.01')
   })
 })
 
@@ -171,7 +174,7 @@ describe('cost by role includes the answer check', () => {
         steps: [],
       }),
     )
-    expect(screen.getByTestId('role-cost-answer_check')).toHaveTextContent(/Answer check\s*Checker\s*3\s*38,000\s*\$0\.0453/)
+    expect(screen.getByTestId('role-cost-answer_check')).toHaveTextContent(/Answer check\s*Checker\s*3\s*38,000\s*\$0\.05/)
   })
 
   it('adds it from the verify steps of a run that did not record it', () => {
@@ -186,6 +189,6 @@ describe('cost by role includes the answer check', () => {
         ],
       }),
     )
-    expect(screen.getByTestId('role-cost-answer_check')).toHaveTextContent(/Answer check\s*Checker\s*3\s*0\s*\$0\.0453/)
+    expect(screen.getByTestId('role-cost-answer_check')).toHaveTextContent(/Answer check\s*Checker\s*3\s*0\s*\$0\.05/)
   })
 })

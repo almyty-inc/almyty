@@ -34,7 +34,7 @@ describe('script usage on the Tools tab', () => {
     const panel = await screen.findByTestId('script-usage')
     expect(panel).toHaveTextContent('Scripts run12')
     expect(panel).toHaveTextContent('Calls from scripts140')
-    expect(panel).toHaveTextContent('Sandbox CPU4.50s')
+    expect(panel).toHaveTextContent('Sandbox CPU5s')
     expect(panel).toHaveTextContent('Scripts that failed1')
   })
 

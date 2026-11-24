@@ -20,6 +20,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import type { Agent } from '@/types'
 import { pluralized } from '@/lib/utils'
+import { costTitle, formatCost, formatDuration } from '@/lib/format'
 import { CHECKS_PASSED_HINT, CHECKS_PASSED_LABEL, COMPLETED_LABEL, checksPassed, completedPercent, runNumbers } from '@/lib/agent-run-numbers'
 
 interface AgentStatsProps {
@@ -83,9 +84,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
             <span className="text-sm text-muted-foreground">Avg run time</span>
           </div>
           <div className="text-2xl font-bold mt-1">
-            {numbers.averageRunTimeMs > 0
-              ? `${(numbers.averageRunTimeMs / 1000).toFixed(1)}s`
-              : '--'}
+            {formatDuration(numbers.averageRunTimeMs)}
           </div>
         </CardContent>
       </Card>
@@ -95,8 +94,8 @@ export function AgentStats({ agent }: AgentStatsProps) {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Total cost</span>
           </div>
-          <div className="text-2xl font-bold mt-1">
-            {numbers.totalCost > 0 ? `$${numbers.totalCost.toFixed(4)}` : '--'}
+          <div className="text-2xl font-bold mt-1" title={costTitle(numbers.totalCost)}>
+            {formatCost(numbers.totalCost)}
           </div>
         </CardContent>
       </Card>

@@ -12,6 +12,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 
 import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatDate } from '@/lib/utils'
+import { formatCostCents } from '@/lib/format'
 
 interface SpendBucket {
   periodStart: string
@@ -45,7 +46,7 @@ interface ReconciliationRow {
   note?: string
 }
 
-const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+const usd = (cents: number) => formatCostCents(cents, { empty: '$0.00' })
 
 export function CostTab() {
   const { currentOrganization } = useOrganizationStore()

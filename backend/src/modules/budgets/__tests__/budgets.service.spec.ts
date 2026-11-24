@@ -200,16 +200,16 @@ describe('BudgetsService', () => {
     expect(alerts()).toHaveLength(0);
   });
 
-  it('a one-cent budget warns at 0.82 cents, in words with the fraction', async () => {
+  it('a one-cent budget warns at 0.82 cents, with the share and the amounts', async () => {
     await service.create('org-1', { limitCents: 1, behavior: 'warn_log', softThresholdPct: 80 }, 'owner-1');
     spend.periodToDateCents.mockResolvedValue(0.82);
 
     await service.enforceForRun('org-1', 'agent-1');
     await flush();
     expect(alerts()).toHaveLength(1);
-    // The history row keeps the fraction too (spend_alerts.spentCents is numeric).
+    // The history row keeps the fraction (spend_alerts.spentCents is numeric); the words round to the cent.
     expect(alerts()[0]).toMatchObject({ level: 'soft', spentCents: 0.82, limitCents: 1 });
-    expect(mail.send.mock.calls[0][0].subject).toContain('82% of budget ($0.0082 of $0.01)');
+    expect(mail.send.mock.calls[0][0].subject).toContain('82% of budget ($0.01 of $0.01)');
   });
 
   it('agent-scoped budget does not apply to a different agent', async () => {
