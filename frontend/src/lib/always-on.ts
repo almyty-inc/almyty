@@ -88,7 +88,7 @@ export interface AgentWakeRow {
 }
 
 export type AlwaysOnInput = Partial<
-  Pick<AlwaysOnConfig, 'enabled' | 'brief' | 'wakeOn' | 'ownerChannel' | 'actMode' | 'askFirstToolIds' | 'reportTo' | 'report' | 'maxWakesPerHour' | 'digest'>
+  Pick<AlwaysOnConfig, 'enabled' | 'brief' | 'wakeOn' | 'ownerChannel' | 'actMode' | 'askFirstToolIds' | 'reportTo' | 'report' | 'maxWakesPerHour' | 'digest' | 'home'>
 >
 
 /** The one line on the card that says how Always on differs from a schedule. */

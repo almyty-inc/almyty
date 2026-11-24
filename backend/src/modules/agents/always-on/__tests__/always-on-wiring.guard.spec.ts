@@ -85,8 +85,9 @@ describe('Always on is wired', () => {
     expect(counted).toMatch(/async hostedAgentsOn\([\s\S]*?hasHostedHome\(c\)/);
     expect(counted).toMatch(/async beyondIncluded\([^\n]*\n\s*if \(!hasHostedHome\(readAlwaysOn\(agent\.alwaysOn\)\)\) return null;/);
     expect(counted).toMatch(/async resumeWithinCapacity\([\s\S]*?hasHostedHome\(c\)/);
-    // Turning one on is refused only for a hosted-home agent.
-    expect(service).toMatch(/next\.enabled && !before\?\.enabled && hasHostedHome\(next\) && capacity\.includedAgents !== null/);
+    // Turning one on, or giving one that is on a hosted home, is refused only for a hosted-home agent.
+    expect(service).toMatch(/const becomesHosted = !before\?\.enabled \|\| !hasHostedHome\(before\);/);
+    expect(service).toMatch(/next\.enabled && becomesHosted && hasHostedHome\(next\) && capacity\.includedAgents !== null/);
     // Nothing counts every agent that is on.
     expect(service).not.toMatch(/async agentsOn\(/);
   });
