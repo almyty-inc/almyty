@@ -369,6 +369,9 @@ export class OAuth2Service {
       clientSecret,
       tokenUrl,
       codeVerifier,
+      // Whether the authorization request carried a code challenge; the
+      // token exchange sends the verifier only then.
+      usePKCE,
       redirectUri: callbackUri,
       scopes: resolvedScopes,
       credentialName: credentialName || `OAuth2 - ${provider || 'Custom'}`,
@@ -467,7 +470,10 @@ export class OAuth2Service {
     tokenParams.set('redirect_uri', redirectUri);
     tokenParams.set('client_id', clientId);
     tokenParams.set('client_secret', clientSecret);
-    tokenParams.set('code_verifier', codeVerifier);
+    // The verifier goes only with a sign-in that sent a code challenge.
+    // Google refuses the exchange outright ("code_verifier or verifier is
+    // not needed") when the authorization request carried no challenge.
+    if (statePayload.usePKCE) tokenParams.set('code_verifier', codeVerifier);
 
     const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
