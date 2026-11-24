@@ -1,8 +1,8 @@
 {
   "images": {
-    "standard": "almyty/runner-env:standard-1.5.14@sha256:a5cd4e3ab8939ced09ae8d6286997836dc1eab01246795fd9aca13abe102a294",
-    "standard-browser": "almyty/runner-env:standard-browser-1.5.14@sha256:b283937f8ca07ae04ea131c1d252aa9c4af356ac3e1b12029af2cf63cd61262f",
-    "node": "almyty/runner-env:node-1.5.14@sha256:109d95bce1676299e8b8dd209ee123d1380ae709c33e7e4529cf19d7b4d59066",
-    "python": "almyty/runner-env:python-1.5.14@sha256:a66b27c97d12b3cd0d99ff972e39673c87c0fef2dbfbe6be3b44e63ee4e830ce"
+    "standard": "almyty/runner-env:standard-1.5.15@sha256:8bb04fbeceb5fffd52ff9376538eb34c25f98b112682924f05a16e15e1ec3c53",
+    "standard-browser": "almyty/runner-env:standard-browser-1.5.15@sha256:507c1341923e74ed7ad792888b521609c5bfc7c85fc4d2e6e60d3de7c9f814f2",
+    "node": "almyty/runner-env:node-1.5.15@sha256:77119071623b49583f73e8488ef743226209559e7b28d6cd1ff9968b38d03206",
+    "python": "almyty/runner-env:python-1.5.15@sha256:aff45d551f7d13faf0c0bc9383e1bddff9ab9f9dc1447b2bd59b0e1b92012f19"
   }
 }
