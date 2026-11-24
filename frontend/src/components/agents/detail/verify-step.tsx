@@ -7,7 +7,7 @@
 import { CheckCircle2, XCircle, ShieldCheck, ShieldAlert } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
-import { formatDuration } from './constants'
+import { costTitle, formatCost, formatDuration } from '@/lib/format'
 import type { AgentRun, AgentRunStep } from '@/types'
 import { StepRoleLine } from './run-roles'
 import { pluralized } from '@/lib/utils'
@@ -171,7 +171,7 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
       </div>
       <div className="ml-auto text-xs text-muted-foreground shrink-0 text-right tabular-nums">
         {step.duration ? formatDuration(step.duration) : ''}
-        {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
+        {step.cost ? <span title={costTitle(step.cost)}>{` / ${formatCost(step.cost)}`}</span> : ''}
         {/* What the checker read: the evidence is most of it, and it is paid again on every check. */}
         {inputTokens > 0 && <div data-testid="verify-input-tokens">{pluralized(inputTokens, 'token')} read</div>}
       </div>

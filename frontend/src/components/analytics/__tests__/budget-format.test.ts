@@ -2,14 +2,16 @@ import { describe, it, expect } from 'vitest'
 
 import { formatBudgetCents, formatBudgetShare } from '@/types/budgets'
 
-/** A one-cent budget's spend reads as fractions of a cent and a real share, not "$0.00 (0%)". */
+/** A budget's spend reads as every cost does: "<$0.01" for a fraction of a cent, never "$0.0042". */
 describe('budget amounts and shares', () => {
-  it('keeps fractions of a cent under a dollar', () => {
+  it('shows two decimals, and "<$0.01" for a fraction of a cent', () => {
     expect(formatBudgetCents(0)).toBe('$0.00')
-    expect(formatBudgetCents(0.42)).toBe('$0.0042')
-    expect(formatBudgetCents(0.8)).toBe('$0.008')
+    expect(formatBudgetCents(0.42)).toBe('<$0.01')
+    expect(formatBudgetCents(0.4)).toBe('<$0.01')
+    expect(formatBudgetCents(0.8)).toBe('$0.01')
     expect(formatBudgetCents(1)).toBe('$0.01')
     expect(formatBudgetCents(2500)).toBe('$25.00')
+    expect(formatBudgetCents(123450)).toBe('$1,234.50')
   })
 
   it('shows "<1%" for any spend under one percent and never 100% below the limit', () => {

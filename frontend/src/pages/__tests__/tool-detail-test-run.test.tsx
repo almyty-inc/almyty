@@ -66,7 +66,7 @@ describe('ToolDetailPage test run', () => {
 
     expect(await screen.findByText('Success')).toBeInTheDocument()
     expect(document.body).toHaveTextContent('temperature_2m_max')
-    expect(document.body).toHaveTextContent('Ran in 42ms')
+    expect(document.body).toHaveTextContent('Ran in <0.1s')
     expect(screen.getByText('Response data:')).toBeInTheDocument()
     const result = screen.getByTestId('tool-run-result')
     expect(result.className).toContain('bg-success-subtle')

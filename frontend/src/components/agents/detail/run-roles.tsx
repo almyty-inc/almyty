@@ -16,6 +16,7 @@ import type { AutonomousStrategyKey, RoleCost, RolePurpose } from '@/types/agent
 import type { RouteAttribution } from '@/types/models'
 import { RoutingAttribution } from './routing-attribution'
 import { pluralized } from '@/lib/utils'
+import { costTitle, formatCost } from '@/lib/format'
 
 function purposeLabel(purpose: string): string {
   return PURPOSE_LABELS[purpose as RolePurpose] ?? purpose
@@ -27,9 +28,6 @@ function tokenCount(tokens: RoleCost['tokens'] | undefined): number {
   return 0
 }
 
-export function formatCost(cost: number | undefined): string {
-  return typeof cost === 'number' && cost > 0 ? `$${cost.toFixed(4)}` : '--'
-}
 
 /** The model a step ran on: the routed card when the router chose, else the pinned model. */
 export function stepModel(step: AgentRunStep): string | undefined {
@@ -190,7 +188,7 @@ export function RoleCostTable({ run }: { run: AgentRun }) {
                 <td className="px-2 py-1.5">{purposeLabel(line?.purpose ?? '')}</td>
                 <td className="px-2 py-1.5 text-right">{line?.calls ?? 0}</td>
                 <td className="px-2 py-1.5 text-right">{tokenCount(line?.tokens).toLocaleString()}</td>
-                <td className="px-2 py-1.5 text-right font-mono">{formatCost(line?.cost)}</td>
+                <td className="px-2 py-1.5 text-right font-mono" title={costTitle(line?.cost)}>{formatCost(line?.cost)}</td>
               </tr>
             ))}
           </tbody>

@@ -17,6 +17,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { RUNNER_HEARTBEAT_POLL_MS } from '@/pages/runners-shared'
 import { formatMinutes } from './hosted-shared'
+import { formatCost } from '@/lib/format'
 
 interface Used {
   used: number
@@ -77,7 +78,9 @@ function sizeName(resourceClass: string): string {
   return resourceClass.charAt(0).toUpperCase() + resourceClass.slice(1)
 }
 
-const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+/** Spend reads as every cost does ("$12.40", "<$0.01"); zero is "$0.00" here, a real amount. */
+const USD = { format: (dollars: number) => formatCost(dollars, { empty: '$0.00' }) }
+/** A per-minute price, not spend: it keeps the fraction of a cent it is set in. */
 const USD_PER_MINUTE = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })
 
 /** One plain sentence per size: used, included, and what is over. */

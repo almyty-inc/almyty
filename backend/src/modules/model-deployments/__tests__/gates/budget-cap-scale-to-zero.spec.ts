@@ -83,7 +83,7 @@ describe('gate 3: a budget cap scales a deployment to zero and audits it', () =>
       type: 'model.deployment.budget_stop',
       organizationId: ORG,
       userIds: ['owner-1'],
-      body: expect.stringContaining('0.03 of its 0.03 budget'),
+      body: expect.stringContaining('$0.03 of its $0.03 budget'),
     }));
     // User-visible copy says hosting, never deployment.
     const sent = notifications.emit.mock.calls[0][0];

@@ -10,6 +10,7 @@ import type { LlmUsageEntry } from '@/types'
 
 import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatNumber } from './format'
+import { costTitleCents, formatCostCents } from '@/lib/format'
 import { TimeframeSelector } from './timeframe-selector'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
@@ -78,8 +79,8 @@ export function LlmTab() {
                     {formatNumber(l.totalOutputTokens)}
                   </td>
                   <td className="px-4 py-3 text-right">{l.totalToolCalls.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right font-medium">
-                    ${(l.totalCostCents / 100).toFixed(4)}
+                  <td className="px-4 py-3 text-right font-medium" title={costTitleCents(l.totalCostCents)}>
+                    {formatCostCents(l.totalCostCents)}
                   </td>
                 </tr>
               ))}

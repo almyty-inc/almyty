@@ -69,7 +69,8 @@ describe('Recent runs on Overview', () => {
     // Newest first.
     expect(within(rows[0]).getByText('Waiting for input')).toBeInTheDocument()
     expect(within(rows[1]).getByText('gpt-4o-mini')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('$0.0123')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('$0.01')).toHaveAttribute('title', '$0.0123')
+    expect(within(rows[1]).getByText('3s')).toBeInTheDocument()
   })
 
   it('merges executions and runs, newest first', () => {

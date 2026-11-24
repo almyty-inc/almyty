@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { pluralized } from '@/lib/utils'
+import { costTitleCents, formatCostCents, formatDuration } from '@/lib/format'
 
 /**
  * Where a run's requests actually went.
@@ -50,8 +51,6 @@ const LAYER_TONE: Record<string, string> = {
   orchestrator: 'text-muted-foreground',
 }
 
-const cents = (c: number) => `$${(c / 100).toFixed(4)}`
-
 export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; executionId: string }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['run-trace', agentId, executionId],
@@ -89,7 +88,7 @@ export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; 
           </Badge>
         )}
         <span className="text-muted-foreground">
-          {cents(data?.summary.knownCostCents ?? 0)} known
+          <span title={costTitleCents(data?.summary.knownCostCents)}>{formatCostCents(data?.summary.knownCostCents ?? 0, { empty: '$0.00' })}</span> known
           {(data?.summary.opaqueHops ?? 0) > 0 && (
             // Named rather than folded into the total: the number above is
             // what we can see, not what the run cost.
@@ -116,7 +115,7 @@ export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; 
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-xs text-foreground">{step.nodeId}</span>
               <span className="text-[11px] text-muted-foreground">
-                {step.durationMs != null ? `${step.durationMs} ms` : ''}
+                {step.durationMs != null ? formatDuration(step.durationMs, { empty: '0s' }) : ''}
               </span>
             </div>
 
@@ -137,7 +136,7 @@ export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; 
                   {hop.opaqueCost ? (
                     <span className="text-muted-foreground/70">cost opaque</span>
                   ) : hop.costEstimateCents != null ? (
-                    <span className="text-muted-foreground/70">{cents(hop.costEstimateCents)}</span>
+                    <span className="text-muted-foreground/70" title={costTitleCents(hop.costEstimateCents)}>{formatCostCents(hop.costEstimateCents, { empty: '$0.00' })}</span>
                   ) : null}
                   {hop.divergent && (
                     <span data-testid="hop-divergent" className="text-warning">

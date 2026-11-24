@@ -112,7 +112,7 @@ describe('EnvironmentDetailPage', () => {
       { id: 'x1', kind: 'execution', agentId: 'a2', agentName: 'nightly-build', status: 'failed', userId: 'me', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     ])
     render(<EnvironmentDetailPage />)
-    expect(await screen.findByTestId('environment-usage')).toHaveTextContent('Ran 1 h 35 min this month')
+    expect(await screen.findByTestId('environment-usage')).toHaveTextContent('Ran 1h 35m this month')
     const runs = await screen.findByTestId('environment-runs')
     expect(await within(runs).findByRole('link', { name: /repo-helper/ })).toHaveAttribute('href', '/agents/a1?tab=runs')
     expect(within(runs).getByText('completed')).toBeInTheDocument()

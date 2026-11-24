@@ -1,20 +1,14 @@
 /**
- * Money and shares of a budget, in words people read in an alert. A
- * budget can be a cent and a model call a fraction of one, so an amount
- * under a dollar keeps up to four decimals ($0.0042) and a share above
- * nothing never reads as 0% ("<1%"), nor 100% before the limit is reached.
+ * Money and shares of a budget, in words people read in an alert. An
+ * amount reads as every cost does ($12.50, "<$0.01" for a fraction of a
+ * cent), and a share above nothing never reads as 0% ("<1%"), nor 100%
+ * before the limit is reached.
  */
+import { formatCostCents } from '../../common/utils/format';
 
-/** Decimals kept for an amount under a dollar ($0.0042). */
-const SMALL_AMOUNT_DECIMALS = 4;
-
-/** `cents` (fractions allowed) as dollars: $12.50, $0.01, $0.0042, $0.00. */
+/** `cents` (fractions allowed) as dollars: $12.50, $0.01, <$0.01, $0.00. */
 export function formatSpendCents(cents: number): string {
-  const dollars = (Number.isFinite(cents) ? cents : 0) / 100;
-  if (Math.abs(dollars) >= 1 || dollars === 0) return `$${dollars.toFixed(2)}`;
-  const fixed = dollars.toFixed(SMALL_AMOUNT_DECIMALS).replace(/(?<!0)0+$/, '');
-  const [whole, frac = ''] = fixed.split('.');
-  return `$${whole}.${frac.padEnd(2, '0')}`;
+  return formatCostCents(cents, { empty: '$0.00' });
 }
 
 /** The share of `limitCents` spent, without the % sign: "<1", "80", "100". */

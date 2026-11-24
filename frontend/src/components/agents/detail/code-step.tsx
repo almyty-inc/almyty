@@ -15,7 +15,7 @@ import { ChangeSetView, argumentsLine } from '@/components/approvals/change-set-
 import { api } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import type { AgentRunStep, ChangeSetEntry } from '@/types'
-import { formatDuration } from './constants'
+import { formatDuration } from '@/lib/format'
 
 interface CodeExecutionTrace {
   id: string
@@ -77,7 +77,7 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
             ) : (
               'A script'
             )}
-            {typeof step.output.cpuMs === 'number' && <span className="text-muted-foreground"> · {step.output.cpuMs} ms CPU</span>}
+            {typeof step.output.cpuMs === 'number' && <span className="text-muted-foreground"> · {formatDuration(step.output.cpuMs, { empty: '0s' })} CPU</span>}
           </div>
           {step.error && <div className="truncate text-xs text-danger">Error: {step.error}</div>}
         </div>
@@ -105,7 +105,7 @@ export function CodeStepCard({ step, index, agentId, runId }: { step: AgentRunSt
                   </TabsList>
                   <Badge variant={STATUS_TONE[trace.data.status]}>{STATUS_LABEL[trace.data.status]}</Badge>
                   <span className="font-normal tabular-nums text-muted-foreground">
-                    {formatDuration(trace.data.durationMs)} · {trace.data.cpuMs} ms CPU
+                    {formatDuration(trace.data.durationMs)} · {formatDuration(trace.data.cpuMs, { empty: '0s' })} CPU
                   </span>
                 </div>
                 <TabsContent value="code" className="mt-0">

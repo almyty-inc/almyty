@@ -47,22 +47,22 @@ describe('hosted plan capacity, in plain words', () => {
     expect(capacityLines(PRO).map((l) => l.text)).toEqual([
       'Machines running now: 1 of 2',
       'Workspaces kept: 3 of 10',
-      'Large machines: 30 min used this month (none included, 30 min over, billed by the minute)',
-      'Small machines: 41 h used this month (40 h included, 1 h over, billed by the minute)',
+      'Large machines: 30m used this month (none included, 30m over, billed by the minute)',
+      'Small machines: 41h used this month (40h included, 1h over, billed by the minute)',
       'Always-on agents living on a hosted machine: 2 of 3',
     ])
   })
 
   it('names a monthly ceiling and limits with none', () => {
     const lines = capacityLines({ ...PRO, alwaysOnHosted: { used: 1, limit: null }, minutesThisMonth: { used: 60, ceiling: 600, byClass: [] } })
-    expect(lines.map((l) => l.text)).toContain("Monthly limit: 1 h of 10 h used. Machines don't start once it is reached.")
+    expect(lines.map((l) => l.text)).toContain("Monthly limit: 1h of 10h used. Machines don't start once it is reached.")
     expect(lines.map((l) => l.text)).toContain('Always-on agents living on a hosted machine: 1, no limit')
   })
 
   it('does not say billed where nothing is billed, and shows minutes alone without an allowance', () => {
-    expect(sizeLine({ resourceClass: 'small', used: 90, included: 60 }, false)).toBe('Small machines: 1 h 30 min used this month (1 h included, 30 min over)')
-    expect(sizeLine({ resourceClass: 'small', used: 90, included: null }, true)).toBe('Small machines: 1 h 30 min used this month')
-    expect(sizeLine({ resourceClass: 'small', used: 30, included: 60 }, true)).toBe('Small machines: 30 min used of 1 h included this month')
+    expect(sizeLine({ resourceClass: 'small', used: 90, included: 60 }, false)).toBe('Small machines: 1h 30m used this month (1h included, 30m over)')
+    expect(sizeLine({ resourceClass: 'small', used: 90, included: null }, true)).toBe('Small machines: 1h 30m used this month')
+    expect(sizeLine({ resourceClass: 'small', used: 30, included: 60 }, true)).toBe('Small machines: 30m used of 1h included this month')
   })
 
   it('names the sizes the plan allows, the price a minute of overage and the monthly spending limit', () => {
@@ -83,8 +83,8 @@ describe('hosted plan capacity, in plain words', () => {
       'Machines running now: 1 of 2',
       'Workspaces kept: 3 of 10',
       'Machine sizes: Small and Medium',
-      'Medium machines: 1 h used this month (none included, 1 h over, billed at $0.002 a minute)',
-      'Small machines: 41 h used this month (40 h included, 1 h over, billed at $0.001 a minute)',
+      'Medium machines: 1h used this month (none included, 1h over, billed at $0.002 a minute)',
+      'Small machines: 41h used this month (40h included, 1h over, billed at $0.001 a minute)',
       "Monthly spending limit: $0.18 of $50.00 used beyond the included hours. Machines don't start once it is reached.",
       'Always-on agents living on a hosted machine: 2 of 3',
     ])
