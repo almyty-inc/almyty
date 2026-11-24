@@ -13,7 +13,7 @@ import { CHECKS_PASSED_HINT, CHECKS_PASSED_LABEL } from '@/lib/agent-run-numbers
  * passed with a made-up dependency name in a release summary and a
  * paraphrased quote, because there was nothing in the tool results to
  * compare them with. "Checks passed" read as "the answers are correct", so
- * the label is "No errors found" with a line on what was compared.
+ * the label is "No contradictions found" with a line on what was compared.
  *
  * These read the source of every surface that shows the check (the app,
  * both CLIs, the agent's technical document) and its docs, so wording
@@ -45,11 +45,16 @@ function readableStrings(source: string): string[] {
   return out.map((s) => s.trim()).filter(Boolean)
 }
 
-/** The old label, as a label. Prose may still say that a check passed. */
+/** The old labels, as a label. Prose may still say that a check passed. */
 const OLD_LABEL = /\bChecks? passed\b/
+/**
+ * "No errors found" claimed more than the check does: it is refute-only and
+ * flags values that contradict the tool results, not what an answer leaves out.
+ */
+const NO_ERRORS_LABEL = /\bno errors found\b/i
 /** A pass worded as if the answer were right. */
 const CORRECTNESS = /verified (as )?correct|correctness (was )?(verified|confirmed)|\banswers? (was |were )?verified\b|\bverified answers?\b|\bpassed verification\b|\ball checks passed\b/i
-const OVERCLAIM = { test: (s: string) => OLD_LABEL.test(s) || CORRECTNESS.test(s) }
+const OVERCLAIM = { test: (s: string) => OLD_LABEL.test(s) || NO_ERRORS_LABEL.test(s) || CORRECTNESS.test(s) }
 
 /** Where the answer check is shown: the app, both CLIs, the technical document. */
 const CODE = [
@@ -68,9 +73,9 @@ const DOCS = [
 ]
 
 describe('the answer check says what a pass means', () => {
-  it('labels a pass "No errors found", with what was compared and what it cannot confirm', () => {
-    expect(CHECK_PASSED).toBe('No errors found')
-    expect(CHECKS_PASSED_LABEL).toBe('No errors found')
+  it('labels a pass "No contradictions found", with what was compared and what it cannot confirm', () => {
+    expect(CHECK_PASSED).toBe('No contradictions found')
+    expect(CHECKS_PASSED_LABEL).toBe('No contradictions found')
     expect(CHECK_FAILED).toBe('Errors found')
     expect(CHECK_PASSED_EXPLANATION).toBe(
       "The check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch. It can't confirm everything the answer says.",
@@ -99,10 +104,10 @@ describe('the answer check says what a pass means', () => {
   })
 
   it('the guard itself catches the old wording', () => {
-    for (const old of ['Checks passed', 'Check passed', 'Answer verified', 'verified correct', 'passed verification']) {
+    for (const old of ['Checks passed', 'Check passed', 'Answer verified', 'verified correct', 'passed verification', 'No errors found', 'no errors found']) {
       expect(OVERCLAIM.test(old), old).toBe(true)
     }
-    for (const fine of ['No errors found', 'Errors found', 'Not checked', "Check didn't pass"]) {
+    for (const fine of ['No contradictions found', 'Errors found', 'Not checked', "Check didn't pass"]) {
       expect(OVERCLAIM.test(fine), fine).toBe(false)
     }
   })

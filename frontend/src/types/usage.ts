@@ -234,7 +234,7 @@ export interface AgentRunStats {
   completed: number
   /** Completed runs whose final answer a checker gave a verdict on. */
   checked: number
-  /** Of those, the runs whose check passed ("No errors found": no mismatch with the tool results, not proof the answer is right). */
+  /** Of those, the runs whose check passed ("No contradictions found": no mismatch with the tool results, not proof the answer is right). */
   checksPassed: number
   /** Mean run time, ms. */
   averageRunTimeMs: number

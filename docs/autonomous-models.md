@@ -179,7 +179,7 @@ no verdict finding, whatever its checker notes say.
 
 ### What the check can and can't catch
 
-A pass is shown as "No errors found", with one line under it: "The check
+A pass is shown as "No contradictions found", with one line under it: "The check
 compared the answer's names, dates, versions, ids, counts and labels with
 what the tools returned and found no mismatch. It can't confirm everything
 the answer says." A failed check is shown as "Errors found" with what was
@@ -210,7 +210,7 @@ It can't catch:
   out. A checker may say these, and they appear as checker notes on the
   verify step; they never decide the verdict.
 
-So "No errors found" means the check found no mismatch, not that the
+So "No contradictions found" means the check found no mismatch, not that the
 answer is correct.
 
 ### What a checker sees
