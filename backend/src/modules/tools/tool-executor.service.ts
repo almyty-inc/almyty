@@ -65,6 +65,7 @@ import { McpClientError } from '../mcp-sources/mcp-client.service';
 import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 import { isServableGatewayTool } from '../gateways/gateway-servable';
 import { HOSTED_DISPATCH, type HostedDispatch, MACHINE_FAILED, WORKSPACE_BUSY, WORKSPACE_WAKING, isWaitingForMachine, machineProblem } from '../runner/hosted-dispatch';
+import { withSafeResponseHeaders } from './executors/safe-response-headers';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -144,7 +145,9 @@ export class ToolExecutorService {
     parameters: Record<string, any>,
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
-    const result = await this.executeToolUnfiltered(toolId, parameters, options);
+    // The executors keep only safe upstream headers; this holds for any
+    // result that reaches a caller (a cached one, a runner's), too.
+    const result = withSafeResponseHeaders(await this.executeToolUnfiltered(toolId, parameters, options));
     // An answer that leaves almyty for an outside caller -- a gateway client
     // calling the tool itself, with no agent run of the organization's own
     // behind it -- has personal data hidden when the organization asks for
