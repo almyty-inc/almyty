@@ -120,6 +120,64 @@ function bodyText(body: unknown): string {
     return String(body);
   }
 }
+/** Code of a call the vendor refused because the account has no credits left. */
+export const PROVIDER_NO_CREDITS = 'PROVIDER_NO_CREDITS' as const;
+
+/** The reason, in plain words, a provider's models are unusable when its account is out of credits. */
+export const NO_CREDITS_REASON = "The provider's account has no credits.";
+
+/**
+ * The vendor accepted the key and refused the call because the account
+ * has no credits or its paid quota is used up: Google's 402 "prepayment
+ * credits are depleted", OpenAI's `insufficient_quota`, Anthropic's
+ * "credit balance is too low". Not a per-minute rate limit: a 429 counts
+ * only when its words say the money ran out, since a rate limit clears on
+ * its own and must not take every model away.
+ */
+export class ProviderOutOfCreditsError extends Error {
+  readonly code = PROVIDER_NO_CREDITS;
+  readonly status = 402;
+
+  constructor(
+    readonly providerId: string | undefined,
+    readonly providerType: string | undefined,
+    readonly vendorMessage?: string,
+  ) {
+    super(NO_CREDITS_REASON.replace(/\.$/, '') + (vendorMessage ? ` (${vendorMessage})` : '') + '.');
+    this.name = 'ProviderOutOfCreditsError';
+  }
+}
+
+const NO_CREDITS_TEXT =
+  /insufficient[_ ]quota|credit balance is too low|credits? (are |have been |is )?(depleted|exhausted|used up)|prepayment credits|out of credits|no (remaining )?credits|insufficient (credits?|balance|funds)|payment required|billing hard limit/i;
+
+/** Whether a vendor's answer (status and body) says the account has no credits. */
+export function isOutOfCreditsResponse(status: number | undefined, body: unknown): boolean {
+  if (status === 402) return true;
+  const text = bodyText(body);
+  return !!text && NO_CREDITS_TEXT.test(text);
+}
+
+/**
+ * Whether a failed provider call means the account has no credits. Reads
+ * the error chain like isKeyRejection: a typed error, a 402 status, or
+ * the vendor's words, which the listing and health-check steps keep only
+ * in the message.
+ */
+export function isOutOfCredits(err: unknown): boolean {
+  let cur: any = err;
+  for (let depth = 0; cur && depth < 5; depth++) {
+    if (cur instanceof ProviderOutOfCreditsError || cur?.code === PROVIDER_NO_CREDITS) return true;
+    if (!(cur instanceof HttpException)) {
+      const status = cur?.response?.status ?? cur?.status;
+      if (isOutOfCreditsResponse(status, cur?.response?.data ?? cur?.response?.body)) return true;
+      const text = cur instanceof Error ? cur.message : typeof cur === 'string' ? cur : '';
+      if (text && NO_CREDITS_TEXT.test(text)) return true;
+    }
+    cur = cur.cause;
+  }
+  return false;
+}
 
 /**
  * The model a provider call must use. Set by the dispatch layer (which

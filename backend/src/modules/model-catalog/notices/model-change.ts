@@ -28,6 +28,7 @@ export const MODEL_CHANGE_LISTENER = 'MODEL_CHANGE_LISTENER';
 export const GONE_REASONS = {
   notListed: 'The provider no longer lists it.',
   keyRejected: "The provider refused the connection's key.",
+  noCredits: "The provider's account has no credits.",
   modelNotFound: 'The provider says the model is gone.',
   connectionRemoved: 'Its connection was removed.',
 } as const;
