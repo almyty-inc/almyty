@@ -5,6 +5,7 @@ import { AccessPolicyService } from '../../common/authorization/access-policy.se
 import { EnvironmentsService } from './environments.service';
 import { HostedRunnerSettingsService } from './hosted-runner-settings';
 import { HostedRunnersService } from './hosted-runners.service';
+import { alwaysOnCapacity } from '../agents/always-on/always-on-capacity';
 
 /** Minutes per resource class, and their sum. */
 export interface UsageMinutes {
@@ -44,6 +45,55 @@ export class EnvironmentInsightsService {
       suspendedRetention: { ...s.suspendedRetention },
       usageRetentionMonths: s.usageRetention.months,
       capacity: { maxConcurrentRunners: capacity.maxConcurrentRunners, maxWorkspaces: capacity.maxWorkspaces },
+    };
+  }
+
+  /**
+   * The plan's hosted capacity as the Hosted tab shows it: for each limit,
+   * what is used now and what the limit is. A null limit is no limit.
+   * `plan` is null where no plan applies (an install that sells none).
+   */
+  async capacity(organizationId: string, now = new Date()) {
+    const capacity = await this.hosted.capacityFor(organizationId);
+    const [running, workspaces, minutes, orgRows, homeRows] = await Promise.all([
+      this.hosted.runningCount(organizationId),
+      this.hosted.workspaceCount(organizationId),
+      this.hosted.minutesThisMonth(organizationId, now),
+      this.dataSource.query(`SELECT plan, settings FROM organizations WHERE id = $1`, [organizationId]),
+      this.dataSource.query(
+        `SELECT COUNT(*)::int AS n FROM agents
+          WHERE "organizationId" = $1 AND status = 'active' AND mode = 'autonomous'
+            AND ("alwaysOn"::jsonb ->> 'enabled') = 'true'
+            AND COALESCE("alwaysOn"::jsonb -> 'home' ->> 'environmentId', '') <> ''`,
+        [organizationId],
+      ),
+    ]);
+    const included = capacity.includedMinutes ?? null;
+    const classes = Array.from(new Set([...Object.keys(included ?? {}), ...Object.keys(minutes)])).sort();
+    const usedMinutes = Object.values(minutes).reduce((a, b) => a + b, 0);
+    const ceiling = capacity.monthlyCeilingMinutes ?? null;
+    const plan = capacity.plan ?? null;
+    return {
+      plan,
+      hostedEnvironments: capacity.hostedEnvironments !== false,
+      billed: capacity.billed === true,
+      machinesRunning: { used: running, limit: capacity.maxConcurrentRunners },
+      workspacesKept: { used: workspaces, limit: capacity.maxWorkspaces },
+      minutesThisMonth: {
+        used: usedMinutes,
+        ceiling,
+        byClass: classes.map((resourceClass) => ({
+          resourceClass,
+          used: minutes[resourceClass] ?? 0,
+          included: included ? (included[resourceClass] ?? 0) : null,
+        })),
+      },
+      // Always-on agents whose home is a hosted machine: the only ones a plan limits.
+      alwaysOnHosted: {
+        used: Number(homeRows?.[0]?.n ?? 0),
+        // The same numbers Always on enforces (always-on-capacity.ts).
+        limit: alwaysOnCapacity(orgRows?.[0] ?? null).includedAgents,
+      },
     };
   }
 
