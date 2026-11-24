@@ -1,6 +1,6 @@
 import { LlmProvider, keyCheckPassed } from '../../entities/llm-provider.entity';
 import type { Model } from '../../entities/model.entity';
-import { NO_CREDITS_REASON } from '../llm-providers/model-errors';
+import { withNoCreditsReason } from '../llm-providers/model-errors';
 
 /**
  * Whether a provider's key check has passed, which is what makes its
@@ -34,6 +34,5 @@ export function withdrawCheckedCard(card: Model, reason: WithdrawnReason, error:
 }
 /** What a card withdrawn for an account out of credits says: the plain reason first, then the vendor's words. */
 export function noCreditsError(vendorWords?: string): string {
-  const words = (vendorWords ?? '').trim();
-  return words && !words.startsWith(NO_CREDITS_REASON) ? `${NO_CREDITS_REASON} ${words}` : words || NO_CREDITS_REASON;
+  return withNoCreditsReason(vendorWords);
 }

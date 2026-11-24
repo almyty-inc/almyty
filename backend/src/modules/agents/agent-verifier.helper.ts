@@ -12,7 +12,7 @@ import { itemsOutsideWindow } from './window-check';
 import { answerCodeFindings, CODE_CHECKER, type WholeToolResult } from './answer-checks';
 import { verifiedRule, verifyCheckerFinding } from './checker-findings';
 import { screenNotes } from './checker-notes';
-import { NO_CREDITS_REASON, isOutOfCredits } from '../llm-providers/model-errors';
+import { isOutOfCredits, withNoCreditsReason } from '../llm-providers/model-errors';
 
 /** Verdict-merge policy for a verify node's checker panel. */
 export type VerifyPolicy = 'all_pass' | 'majority' | 'any_fail_blocks';
@@ -734,7 +734,7 @@ export class AgentVerifierHelper {
         verdict: 'error',
         failures: [],
         passedRules: [],
-        error: noCredits && !text.startsWith(NO_CREDITS_REASON) ? `${NO_CREDITS_REASON} ${text}` : text,
+        error: noCredits ? withNoCreditsReason(text) : text,
         ...(noCredits ? { errorCode: 'no_credits' as const } : {}),
       };
     }

@@ -322,6 +322,8 @@ export const OPERATIONS: OperationEntry[] = [
   op('apis.set_status', 'ApisController.updateStatus'),
   op('apis.get_key', 'ApisCredentialsController.getKey'),
   op('apis.remove_key', 'ApisCredentialsController.removeKey'),
+  op('apis.list_shared_sign_ins', 'ApisCredentialsController.sharedSignIns'),
+  op('apis.use_shared_sign_in', 'ApisCredentialsController.useSharedSignIn'),
   op('apis.list_credentials', 'ApisCredentialsController.getCredentials'),
   op('apis.remove_credential', 'ApisCredentialsController.deleteCredential'),
   op('apis.test_credential', 'ApisCredentialsController.testCredential', { effect: 'read', openWorld: true }),

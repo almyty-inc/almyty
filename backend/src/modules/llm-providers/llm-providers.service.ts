@@ -20,7 +20,7 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
-import { NO_CREDITS_REASON, findModelNotFound, isKeyRejection, isOutOfCredits } from './model-errors';
+import { findModelNotFound, isKeyRejection, isOutOfCredits, withNoCreditsReason } from './model-errors';
 import { getProviderDisplayName, getProviderKeyUrl } from './llm-provider-catalog';
 import type { Model } from '../../entities/model.entity';
 import { ModelCatalogService } from '../model-catalog/model-catalog.service';
@@ -1055,7 +1055,7 @@ export class LlmProvidersService {
         // The caller only gets a response time when the request
         // actually started, so leave it undefined on the error path.
         responseTime: undefined,
-        error: outOfCredits ? `${NO_CREDITS_REASON} ${upstreamMessage}` : upstreamMessage,
+        error: outOfCredits ? withNoCreditsReason(upstreamMessage) : upstreamMessage,
         keyRejected,
         ...(outOfCredits ? { outOfCredits: true } : {}),
       };

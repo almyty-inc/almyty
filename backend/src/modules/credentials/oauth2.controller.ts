@@ -55,8 +55,12 @@ export class OAuth2Controller {
           HttpStatus.BAD_REQUEST,
         );
       }
+      // Adding access to an existing sign-in goes through the API's key
+      // route, which resolves that sign-in as the caller first; this route
+      // only ever starts a new one.
+      const { extendCredentialId: _notHere, ...params } = body ?? {};
       const result = await this.oauth2Service.generateAuthorizationUrl({
-        ...body,
+        ...params,
         organizationId,
         userId: req.user.sub || req.user.id,
       });

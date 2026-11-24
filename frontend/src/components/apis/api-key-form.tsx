@@ -24,6 +24,7 @@ import { SecretInput } from '@/components/ui/secret-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { OTHER_SERVICE_KEY } from '@/components/connections/connect-flow'
 import { CredentialPicker } from '@/components/credentials/credential-picker'
+import { SharedSignInOffer } from './shared-sign-in-offer'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { apisApi, credentialsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -208,6 +209,21 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }
         </p>
       )}
 
+      {oauth?.authorizationUrl && oauth.flow !== 'client_credentials' && (
+        <SharedSignInOffer
+          apiId={apiId}
+          authorizationUrl={oauth.authorizationUrl}
+          scopes={oauth.scopes.filter((s) => !skippedScopes.includes(s))}
+          returnTo={returnTo}
+          disabled={busy}
+          onSaved={(next) => {
+            setError(null)
+            onSaved(next)
+          }}
+          onRedirect={setRedirectTo}
+          onError={setError}
+        />
+      )}
       <CredentialPicker
         key={service}
         id="api-key-credential"

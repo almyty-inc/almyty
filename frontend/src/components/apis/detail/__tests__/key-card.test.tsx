@@ -23,7 +23,7 @@ import type { Connection, Connector } from '@/types/connections'
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
 vi.mock('@/lib/api', () => ({
-  apisApi: { getKey: vi.fn(), setKey: vi.fn(), removeKey: vi.fn() },
+  apisApi: { getKey: vi.fn(), setKey: vi.fn(), removeKey: vi.fn(), sharedSignIns: vi.fn().mockResolvedValue([]), useSharedSignIn: vi.fn() },
   credentialsApi: { oauth2Authorize: vi.fn(), oauth2ClientCredentials: vi.fn(), oauth2CallbackUrl: vi.fn().mockResolvedValue({ callbackUrl: 'https://api.example.com/credentials/oauth2/callback' }) },
   organizationsApi: { getById: vi.fn().mockResolvedValue({ id: 'org-1', plan: 'free', settings: {} }) },
 }))
@@ -256,6 +256,78 @@ describe('the Key card', () => {
     } finally {
       Object.defineProperty(window, 'location', { value: original, configurable: true })
     }
+  })
+
+  describe('one Google sign-in for several APIs', () => {
+    const G = 'https://www.googleapis.com/auth/'
+    const gmail = () =>
+      view({
+        type: 'oauth2',
+        headerName: null,
+        location: null,
+        oauth2: { flow: 'authorization_code', authorizationUrl: 'https://accounts.google.com/o/oauth2/auth', tokenUrl: 'https://oauth2.googleapis.com/token', scopes: [`${G}gmail.readonly`] },
+      })
+    const calendarSignIn = (granted: string[]) => ({
+      id: 'cred-cal',
+      name: 'Google Calendar sign-in',
+      accountLabel: 'ava@offbyte.com',
+      grantedScopes: granted,
+      missingScopes: [`${G}gmail.readonly`].filter((s) => !granted.includes(s)),
+      canAddAccess: true,
+    })
+
+    it('offers the existing sign-in when it already covers the API, and uses it without a consent', async () => {
+      vi.mocked(apisApi.getKey).mockResolvedValue(gmail())
+      vi.mocked(apisApi.sharedSignIns).mockResolvedValue([calendarSignIn([`${G}calendar.readonly`, `${G}gmail.readonly`])])
+      vi.mocked(apisApi.useSharedSignIn).mockResolvedValue({
+        key: view({ ...gmail(), source: 'connection', connection: { id: 'cred-cal', name: 'Google Calendar sign-in', accountLabel: 'ava@offbyte.com', connectorKey: 'oauth2' } }),
+        authorizationUrl: null,
+      })
+      const user = userEvent.setup()
+      at()
+      await user.click(await screen.findByRole('button', { name: 'Add a key' }))
+
+      const offer = await screen.findByTestId('api-shared-sign-ins')
+      await user.click(within(offer).getByRole('button', { name: 'Use your existing Google sign-in (ava@offbyte.com)' }))
+
+      await waitFor(() => expect(apisApi.useSharedSignIn).toHaveBeenCalledWith('api-1', 'cred-cal', expect.objectContaining({ scopes: [`${G}gmail.readonly`] })))
+      expect(credentialsApi.oauth2Authorize).not.toHaveBeenCalled()
+      expect(await screen.findByTestId('api-key-summary')).toHaveTextContent('Google Calendar sign-in')
+    })
+
+    it('offers to add access to the existing sign-in when scopes are missing, and goes to that consent', async () => {
+      vi.mocked(apisApi.getKey).mockResolvedValue(gmail())
+      vi.mocked(apisApi.sharedSignIns).mockResolvedValue([calendarSignIn([`${G}calendar.readonly`])])
+      vi.mocked(apisApi.useSharedSignIn).mockResolvedValue({ key: null, authorizationUrl: 'https://accounts.google.com/o/oauth2/auth?include_granted_scopes=true&state=s' })
+      const original = window.location
+      const assign = vi.fn()
+      Object.defineProperty(window, 'location', { value: { ...original, assign }, configurable: true })
+      try {
+        const user = userEvent.setup()
+        at()
+        await user.click(await screen.findByRole('button', { name: 'Add a key' }))
+
+        const offer = await screen.findByTestId('api-shared-sign-ins')
+        expect(offer).toHaveTextContent('gmail.readonly')
+        expect(within(offer).queryByRole('button', { name: /Use your existing/ })).not.toBeInTheDocument()
+        await user.click(within(offer).getByRole('button', { name: 'Add access to the existing Google sign-in (ava@offbyte.com)' }))
+
+        await waitFor(() => expect(assign).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/auth?include_granted_scopes=true&state=s'))
+        expect(apisApi.useSharedSignIn).toHaveBeenCalledWith('api-1', 'cred-cal', expect.objectContaining({ scopes: [`${G}gmail.readonly`] }))
+      } finally {
+        Object.defineProperty(window, 'location', { value: original, configurable: true })
+      }
+    })
+
+    it('shows nothing extra when there is no other sign-in with the provider', async () => {
+      vi.mocked(apisApi.getKey).mockResolvedValue(gmail())
+      vi.mocked(apisApi.sharedSignIns).mockResolvedValue([])
+      const user = userEvent.setup()
+      at()
+      await user.click(await screen.findByRole('button', { name: 'Add a key' }))
+      await waitFor(() => expect(apisApi.sharedSignIns).toHaveBeenCalledWith('api-1'))
+      expect(screen.queryByTestId('api-shared-sign-ins')).not.toBeInTheDocument()
+    })
   })
 
   it('removes the key after asking', async () => {

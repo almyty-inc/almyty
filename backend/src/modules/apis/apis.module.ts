@@ -28,6 +28,7 @@ import { SchemaParserModule } from '../schema-parser/schema-parser.module';
 import { ToolsModule } from '../tools/tools.module';
 import { NodeSandboxModule } from '../tools/node-sandbox/node-sandbox.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
+import { CredentialsModule } from '../credentials/credentials.module';
 
 @Module({
   imports: [
@@ -70,6 +71,8 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     ToolsModule,
     NodeSandboxModule,
     AuthorizationModule,
+    // OAuth2Service: adding access to a sign-in shared by several APIs.
+    CredentialsModule,
   ],
   controllers: [ApisController, ApisCredentialsController],
   providers: [ApisService, ApisImportHelper, ApisToolGeneratorHelper, ApisSdkAnalysisHelper, CredentialService, ApiConnectService, ApiKeyService],
