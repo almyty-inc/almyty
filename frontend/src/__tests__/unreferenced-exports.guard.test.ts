@@ -85,7 +85,6 @@ const KNOWN_UNREFERENCED_EXPORTS = [
   'lib/deployments-api.ts:runnableAdapters',
   'lib/return-to.ts:currentReturnPath',
   'lib/sentry.ts:isSentryEnabled',
-  'lib/utils.ts:formatCurrency',
   'store/organization.ts:getCurrentOrganizationId',
   'types/connections.ts:CONNECTION_OWNER_HINTS',
   'types/connections.ts:CONNECTION_OWNER_LABELS',

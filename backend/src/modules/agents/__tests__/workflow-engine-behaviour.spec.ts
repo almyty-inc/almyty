@@ -391,7 +391,7 @@ describe('workflow engine: cancellation and limits', () => {
     const execution = await h.run(agent);
 
     expect(execution.status).toBe(AgentExecutionStatus.FAILED);
-    expect(execution.error).toMatch(/Budget limit \(\$0\.03\) exceeded: \$0\.0500/);
+    expect(execution.error).toMatch(/Budget limit \(\$0\.03\) exceeded: \$0\.05$/);
     expect(h.promptsSent()).toEqual(['SLOW']);
   });
 

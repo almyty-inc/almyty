@@ -26,6 +26,7 @@ import { useOrganizationStore } from '@/store/organization'
 import type { TimelineEntry } from '@/types'
 
 import { computeYAxisMax, formatMs, formatNumber } from './format'
+import { formatCostCents } from '@/lib/format'
 import { StatCard } from './stat-card'
 
 export function OverviewTab() {
@@ -113,7 +114,7 @@ export function OverviewTab() {
           <StatCard
             icon={DollarSign}
             label="Model cost (7d)"
-            value={`$${((overview.last7d?.llmCostCents || 0) / 100).toFixed(4)}`}
+            value={formatCostCents(overview.last7d?.llmCostCents, { empty: '$0.00' })}
           />
         </div>
       ) : (

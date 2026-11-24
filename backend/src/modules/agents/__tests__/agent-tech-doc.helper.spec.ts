@@ -447,6 +447,23 @@ describe('AgentTechDocHelper', () => {
       expect(md).toContain('Never delete production data');
     });
 
+    // "$2.4665" and "76600 ms" read like a bug; the JSON form keeps the exact numbers.
+    it('prints cost and run time as the dashboard does, and keeps the raw numbers in the JSON', async () => {
+      agentsService.getAgent.mockResolvedValue(autonomousAgent());
+      runStats = { ...runStats, averageRunTimeMs: 76_600, totalCost: 2.4665 };
+      const doc = await helper.build('agent-1', ORG, VIEWER);
+      expect(doc.loggingAndTraceability.executions).toMatchObject({ averageExecutionTimeMs: 76_600, totalCostUsd: 2.4665 });
+      const md = helper.renderMarkdown(doc);
+      expect(md).toContain('- Average execution time: 1m 17s');
+      expect(md).toContain('- Accumulated cost: $2.47');
+      expect(md).not.toContain('2.4665');
+
+      runStats = { ...runStats, averageRunTimeMs: 0, totalCost: 0.0004 };
+      const tiny = helper.renderMarkdown(await helper.build('agent-1', ORG, VIEWER));
+      expect(tiny).toContain('- Average execution time: --');
+      expect(tiny).toContain('- Accumulated cost: <$0.01');
+    });
+
     // "Success rate" counted finished runs and ignored the checks.
     it('says Completed and, for checked runs, No contradictions found, not a success rate', async () => {
       agentsService.getAgent.mockResolvedValue(autonomousAgent());

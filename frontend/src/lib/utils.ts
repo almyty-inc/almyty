@@ -66,15 +66,6 @@ export function formatDateTime(date: Date | string): string {
   })
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  }).format(amount)
-}
-
 export function formatNumber(num: number): string {
   return new Intl.NumberFormat('en-US').format(num)
 }

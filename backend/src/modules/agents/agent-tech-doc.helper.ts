@@ -18,6 +18,7 @@ import { usableProviders } from '../llm-providers/private-provider';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { readAlwaysOn } from './always-on/always-on.types';
 import { EMPTY_RUN_STATS } from './agent-run-stats';
+import { formatCost, formatDuration } from '../../common/utils/format';
 
 // ── Document shape ──
 
@@ -595,8 +596,9 @@ export class AgentTechDocHelper {
       );
     }
     lines.push(`- Autonomous runs: ${l.autonomousRuns.total}`);
-    lines.push(`- Average execution time: ${l.executions.averageExecutionTimeMs} ms`);
-    lines.push(`- Accumulated cost: $${l.executions.totalCostUsd}`);
+    // Read as the dashboard reads them; the JSON form keeps the exact numbers.
+    lines.push(`- Average execution time: ${formatDuration(l.executions.averageExecutionTimeMs)}`);
+    lines.push(`- Accumulated cost: ${formatCost(l.executions.totalCostUsd)}`);
     lines.push(`- Last executed: ${fmt(l.executions.lastExecutedAt)}`);
     lines.push(`- Audit log: available at \`${l.auditLog.endpoint}\``);
     lines.push(`- Entity versioning: ${l.entityVersioning.mechanism} — ${l.entityVersioning.note}`);

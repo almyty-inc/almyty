@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPatch, apiDel, getApiBaseUrl } from './api'
 import { hostedChatBaseDomain } from './tenant-host'
+import { formatCostCents } from './format'
 
 /**
  * Channels on an agent: where people, or other agents, reach it.
@@ -488,10 +489,10 @@ export function formatBytes(bytes: string | null): string {
   return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(value / 1000)} kB`
 }
 
-/** Cents as the owner reads money: "$5", "$0.50". */
+/** Cents as the owner reads money: "$5" for a whole-dollar cap, else as every cost reads ("$0.50", "<$0.01"). */
 export function formatCents(cents: number): string {
   const dollars = cents / 100
-  return `$${Number.isInteger(dollars) ? dollars : dollars.toFixed(2)}`
+  return Number.isInteger(dollars) ? `$${dollars}` : formatCostCents(cents)
 }
 
 /** What an allowance has spent against its caps. */

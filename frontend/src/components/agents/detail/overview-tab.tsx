@@ -52,6 +52,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
+import { costTitle, formatCost, formatDuration } from '@/lib/format'
 import { diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
@@ -466,10 +467,10 @@ export function OverviewTab({
                         )}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {row.executionTime ? `${(row.executionTime / 1000).toFixed(2)}s` : '--'}
+                        {formatDuration(row.executionTime)}
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {row.totalCost > 0 ? `$${row.totalCost.toFixed(4)}` : '--'}
+                      <TableCell className="text-sm" title={costTitle(row.totalCost)}>
+                        {formatCost(row.totalCost)}
                       </TableCell>
                       <TableCell className="text-sm">
                         {row.totalTokens > 0 ? row.totalTokens.toLocaleString() : '--'}
@@ -537,7 +538,9 @@ export function OverviewTab({
               {runNumbers(agent).runs > 0 && (
                 <div className="flex justify-between pt-1 border-t">
                   <span className="text-muted-foreground">Avg cost per run</span>
-                  <span className="font-medium">${(runNumbers(agent).totalCost / runNumbers(agent).runs).toFixed(4)}</span>
+                  <span className="font-medium" title={costTitle(runNumbers(agent).totalCost / runNumbers(agent).runs)}>
+                    {formatCost(runNumbers(agent).totalCost / runNumbers(agent).runs)}
+                  </span>
                 </div>
               )}
             </div>

@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from '@/lib/api'
+import { formatCostCents } from '@/lib/format'
 import type {
   AdapterRefusal,
   ArtifactScheme,
@@ -279,5 +280,5 @@ export const BLANK = '—'
 
 export function formatCents(cents: number | null | undefined): string {
   if (cents === null || cents === undefined || Number.isNaN(cents)) return BLANK
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100)
+  return formatCostCents(cents, { empty: '$0.00' })
 }

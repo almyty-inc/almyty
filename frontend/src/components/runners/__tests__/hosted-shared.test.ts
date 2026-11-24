@@ -62,11 +62,11 @@ describe('readHostedSettings', () => {
 })
 
 describe('formatMinutes', () => {
-  it('says machine time plainly', () => {
-    expect(formatMinutes(0)).toBe('0 min')
-    expect(formatMinutes(41.6)).toBe('42 min')
-    expect(formatMinutes(185)).toBe('3 h 5 min')
-    expect(formatMinutes(120)).toBe('2 h')
+  it('says machine time as every duration reads, in whole minutes', () => {
+    expect(formatMinutes(0)).toBe('0m')
+    expect(formatMinutes(41.6)).toBe('42m')
+    expect(formatMinutes(185)).toBe('3h 5m')
+    expect(formatMinutes(120)).toBe('2h')
   })
 })
 

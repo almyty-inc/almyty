@@ -23,6 +23,7 @@ import { toolRunOutcome } from '@/lib/tool-run-outcome'
 import { toolQuery } from '@/lib/list-queries'
 import { getApiErrorMessage, isNotFoundError } from '@/lib/api-error'
 import { formatDateTime, pluralized } from '@/lib/utils'
+import { formatDuration } from '@/lib/format'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
@@ -550,7 +551,7 @@ export function ToolDetailPage() {
                         <CodeBlock value={JSON.stringify(executionResult.data, null, 2)} language="json" maxHeight="300px" />
                         {executionResult.metadata && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Ran in {executionResult.metadata.executionTime}ms
+                            Ran in {formatDuration(executionResult.metadata.executionTime, { empty: '0s' })}
                           </p>
                         )}
                       </div>
@@ -650,7 +651,7 @@ export function ToolDetailPage() {
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3" data-testid="tool-stats">
             <StatTile icon={Activity} label="Total runs" value={tool.usageCount || 0} />
             <StatTile icon={CheckCircle2} label="Succeeded" value={tool.usageCount ? `${tool.successRate || 0}%` : '--'} />
-            <StatTile icon={Clock} label="Avg response time" value={tool.usageCount ? `${tool.averageResponseTime || 0}ms` : '--'} />
+            <StatTile icon={Clock} label="Avg response time" value={tool.usageCount ? formatDuration(tool.averageResponseTime, { empty: '0s' }) : '--'} />
           </div>
           {tool.lastUsedAt && (
             <p className="text-xs text-muted-foreground">

@@ -13,6 +13,7 @@ import { useTeamLookup } from '@/components/ui/team-filter'
 import { useOrganizationStore } from '@/store/organization'
 import { agentsQuery } from '@/lib/list-queries'
 import { pluralized } from '@/lib/utils'
+import { formatCostCents } from '@/lib/format'
 
 /**
  * Who spent what: cost per team and per agent, plus a projection.
@@ -37,7 +38,7 @@ interface ChargebackReport {
   forecast: { projectedCents: number; perPeriodCents: number; periodsAhead: number; basis: 'linear' | 'insufficient-data' }
 }
 
-const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
+const money = (cents: number) => formatCostCents(cents, { empty: '$0.00' })
 
 const CHARGEBACK_FEATURE = 'chargeback'
 
