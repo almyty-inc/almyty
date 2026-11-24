@@ -27,6 +27,7 @@ import { usableProviders } from '../llm-providers/private-provider';
 import { batchAsync } from '../../common/utils/batch-async';
 import { assertManageable, canRead } from '../../common/authorization/read-rule';
 import { SECRET_PRESENT, redactSecrets } from './secret-redaction';
+import { credentialUses } from './credential-usage';
 
 /**
  * Whether `userId` may see this credential at all. A private ("just me")
@@ -88,6 +89,7 @@ export class CredentialsService {
     await this.accessPolicy.applyListFilter(providersQb, caller, organizationId, 'p', { ownerColumn: 'ownerUserId' });
     const providers = await providersQb.getMany();
 
+    await this.withUsedBy(credentials, organizationId, caller);
     const results: any[] = credentials.map((cred) => this.maskCredential(cred));
 
     for (const provider of providers) {
@@ -123,7 +125,20 @@ export class CredentialsService {
       throw new NotFoundException('Credential not found');
     }
 
+    await this.withUsedBy([credential], organizationId, caller);
     return this.maskCredential(credential);
+  }
+
+  /**
+   * `usedBy`, worked out from what points at each credential now
+   * (credential-usage.ts). The stored column is never written for a
+   * connection, so it read "nothing" for a sign-in APIs depend on.
+   */
+  private async withUsedBy(rows: Credential[], organizationId: string, caller?: { id: string }): Promise<void> {
+    const manager = (this.credentialRepository as any).manager;
+    if (rows.length === 0 || typeof manager?.getRepository !== 'function') return;
+    const uses = await credentialUses(manager, organizationId, rows, (row) => canRead(this.accessPolicy, caller ?? null, row));
+    for (const row of rows) row.usedBy = (uses.get(row.id) ?? []) as Credential['usedBy'];
   }
 
   async create(
