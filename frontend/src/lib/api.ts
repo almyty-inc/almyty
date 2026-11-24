@@ -1134,6 +1134,9 @@ export const environmentsApi = {
   runs: (id: string, limit?: number) => apiGet(`/environments/${id}/runs`, limit ? { params: { limit } } : undefined),
   usage: () => apiGet('/environments/usage'),
   capacity: () => apiGet('/environments/capacity'),
+  /** The organization's own lower hosted limits, the whole set: null follows the plan. Owners and admins. */
+  setLimits: (limits: { maxConcurrentRunners: number | null; maxWorkspaces: number | null; monthlyCeilingUsd: number | null }) =>
+    apiPut('/environments/capacity/limits', limits),
   suspend: (id: string, workspaceId: string) => apiPost(`/environments/${id}/workspaces/${workspaceId}/suspend`),
   release: (id: string, workspaceId: string) => apiPost(`/environments/${id}/workspaces/${workspaceId}/release`),
 }
