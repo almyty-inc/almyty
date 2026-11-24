@@ -1,5 +1,12 @@
 # @almyty/agents
 
+## 1.5.16
+
+### Patch Changes
+
+- e8b95e6: `almyty agents inspect` and `run --watch` say "no contradictions found" for a passing answer check: the check flags values that contradict the tool results and does not catch what an answer leaves out.
+- @almyty/client@1.5.16
+
 ## 1.5.15
 
 ### Patch Changes
