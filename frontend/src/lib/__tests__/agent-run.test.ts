@@ -92,6 +92,33 @@ describe('invokeAndSettle', () => {
     expect(runOutcome(run).error).toBe('Waiting for your approval. Open Approvals to decide; the run carries on once you do.')
   })
 
+  it('waits through the short sleeps of a run whose hosted machine is starting', async () => {
+    // Staging, 2026-11-24: Try it said "The run did not finish." two seconds
+    // in, while the run slept 3 s at a time for its machine and then answered.
+    const soon = () => new Date(Date.now() + 3000).toISOString()
+    invoke.mockResolvedValue({ id: 'run-1', mode: 'autonomous', status: 'running', output: null })
+    getRun
+      .mockResolvedValueOnce({ id: 'run-1', mode: 'autonomous', status: 'sleeping', nextWakeAt: soon(), output: null })
+      .mockResolvedValueOnce({ id: 'run-1', mode: 'autonomous', status: 'running', output: null })
+      .mockResolvedValueOnce({ id: 'run-1', mode: 'autonomous', status: 'sleeping', nextWakeAt: soon(), output: null })
+      .mockResolvedValueOnce({ id: 'run-1', mode: 'autonomous', status: 'completed', output: 'hosted-check written' })
+
+    const run = await invokeAndSettle('agent-1', {}, { wait: noWait })
+
+    expect(getRun).toHaveBeenCalledTimes(4)
+    expect(runOutcome(run)).toEqual({ output: 'hosted-check written' })
+  })
+
+  it('stops at a run that sleeps for long, and says it carries on by itself', async () => {
+    invoke.mockResolvedValue({ id: 'run-1', mode: 'autonomous', status: 'running' })
+    getRun.mockResolvedValue({ id: 'run-1', mode: 'autonomous', status: 'sleeping', nextWakeAt: new Date(Date.now() + 3_600_000).toISOString() })
+
+    const run = await invokeAndSettle('agent-1', {}, { wait: noWait })
+
+    expect(getRun).toHaveBeenCalledTimes(1)
+    expect(runOutcome(run).error).toBe('The run is sleeping and carries on by itself. Its answer will be on the Runs tab.')
+  })
+
   it('a workflow run waiting for approval says how many changes, in plain words', () => {
     const outcome = runOutcome({ status: 'waiting_approval', error: 'Waiting for your approval: 3 changes.' })
     expect(outcome.error).toBe('Waiting for your approval: 3 changes. Open Approvals to decide; the run carries on once you do.')

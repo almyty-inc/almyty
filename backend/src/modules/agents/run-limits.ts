@@ -270,6 +270,20 @@ export function describeLimitTrip(code: RunLimitReasonCode): RunLimitTrip {
 }
 
 /**
+ * The steps a run has spent against maxSteps: every step but the ones it
+ * only slept through while its hosted machine started
+ * (`workingMemory.machineWaitSteps`, counted by the step processor's
+ * retryWakingCalls). Those steps ask no model and run nothing; the wake
+ * budget bounds them. Counted, a cold start (about 80 s at one retry every
+ * 3 s on staging) spent half of the default 50 steps, and a run with a
+ * small step limit failed MAX_STEPS_EXCEEDED before its machine was up.
+ */
+export function stepsSpent(run: Pick<AgentRun, 'currentStep'> & { workingMemory?: Record<string, any> | null }): number {
+  const waits = Number(run.workingMemory?.machineWaitSteps) || 0;
+  return Math.max(0, run.currentStep - waits);
+}
+
+/**
  * Evaluate the ledger against the resolved ceilings.
  *
  * Unit note: `run.totalCost` accumulates `llmResponse.cost`, which
@@ -281,11 +295,11 @@ export function checkRunLimits(
   run: Pick<
     AgentRun,
     'currentStep' | 'totalCost' | 'totalTokens' | 'createdAt'
-  > & { recursionDepth?: number; toolCallCount?: number },
+  > & { recursionDepth?: number; toolCallCount?: number; workingMemory?: Record<string, any> | null },
   limits: ResolvedRunLimits,
   now: number = Date.now(),
 ): RunLimitTrip | null {
-  if (run.currentStep >= limits.maxSteps) return describeLimitTrip('MAX_STEPS_EXCEEDED');
+  if (stepsSpent(run) >= limits.maxSteps) return describeLimitTrip('MAX_STEPS_EXCEEDED');
   if ((run.totalCost ?? 0) * 100 >= limits.maxCostCents) return describeLimitTrip('BUDGET_EXCEEDED');
   if (run.createdAt && now - new Date(run.createdAt).getTime() > limits.maxDurationMs) {
     return describeLimitTrip('TIMEOUT');
