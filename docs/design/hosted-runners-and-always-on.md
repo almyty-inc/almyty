@@ -4,8 +4,13 @@ Design for two of Frane's specs: **hosted runners** ("cloud environments") and
 **always-on agents**. The second depends on the first in one place only, the
 agent's home machine. All fifteen open questions are decided (see
 [Decisions](#decisions)). Always on (phase 1) and agents that act as
-themselves have shipped; hosted runners are not built yet, and gVisor on
-DigitalOcean has been tested and works.
+themselves have shipped. Hosted runners (phase 2) are built and switched on
+in staging only; production and dev leave them off. They run under gVisor on
+a separate DigitalOcean cluster, and were checked end to end on staging on
+2026-11-24 (see [Phase 2](#phase-2-hosted-environments-staging-only)).
+Billing and per-plan capacity for hosted runners (phase 3) are not built:
+usage is recorded, nothing is charged, and every organization gets the same
+capacity from the settings.
 
 ## In plain words
 
@@ -64,16 +69,17 @@ Re-verified on `development` at `b0281c1a`, after #881/#882 (agent-made
 workspaces), #886 (schedules, channel posts, amount rules, held calls),
 #889, #890 and #892. The spec's recon was taken at `4aac2c5`; the last column
 says where it has moved. The rows phase 1 changed (always on #930, agent
-identity #927) were brought up to date on 2026-10-08.
+identity #927) were brought up to date on 2026-10-08; the provisioner,
+coding relay and billing rows on 2026-11-24.
 
 | Spec recon (4aac2c5) | Today | Status |
 |---|---|---|
-| No provisioner; no k8s client | Still true. `backend/package.json` has no Kubernetes client; runners exist only when a user runs `almyty-runner start`. There is no runner container image either: `packages/runner` ships as an npm package only. | unchanged |
+| No provisioner; no k8s client | Moved. `modules/hosted-runners/` provisions pods through its own Kubernetes client (`adapters/kubernetes/kube-api.client.ts`) from a reconcile loop, and `images/runner-env` builds the runner images, published as `almyty/runner-env` and pinned by digest. | done (phase 2) |
 | Unique index on (ownerUserId, organizationId) blocks pools | Still true, and enforced in three places: the schema (`UQ_runners_owner_org`, `migrations/1750790000000-UniquenessParity.ts`, asserted by `runner/uniqueness-parity.spec.ts`), the cap in `RunnerService.register` and `create` ("single runner per account in v1.0"), and a name unique per organization (`assertNameFreeInOrganization`). All three move for hosted runners. | unchanged |
 | Workspace = runner + cwd; STRANDED, no reattach | Moved. A workspace now also carries `name`, `agentId` and `runId`. An agent run gets one automatically (`RunWorkspaceService.acquire`): one per job and runner, shared with helpers down the `parentRunId` chain, released when the last run of the job ends (`workspace/run-end-release.ts`, plus `releaseForEndedRuns` on the tick). Default TTL one hour, cap 24 hours. Stranding is still one-way (`markStrandedForRunners`), and re-registering a runner also leaves the old incarnation's workspaces stranded. The folder stays on disk after release; the heartbeat ack kills its processes. | moved: a per-job lifecycle exists, persistence does not |
 | Container isolation not implemented (fails closed) | Still true. `packages/runner/src/policy.ts` `assertIsolationSupported()` refuses `container` and `networkBlocked`; host is what runs (`docs/runner.md`, "Isolation: host is what runs"). | unchanged |
-| Coding relay is pod-local | Still true (`runner/coding-relay.service.ts`, its multi-replica note). It already matters: `k8s/base/api-deployment.yaml` runs **2 API replicas**, so a coding session's output can land on the pod the viewer is not connected to. The transport's own Redis bridge (`strm:out`, `strm:resp`, `strm:sess:<id>` in `mcp/transports/streamable-http.transport.ts`) already carries dispatches and responses across pods; only `coding.*` events do not ride it. | unchanged, and a live bug at 2 replicas |
-| Billing is seats only | Still true. `ee/modules/billing` sells per-seat Pro and Business prices. `PLAN_ENTITLEMENTS[pro]` is empty and its comment says "hosted usage caps live outside the entitlement token", but nothing implements such caps. No meter, no usage record. | unchanged |
+| Coding relay is pod-local | Moved. `runner/coding-relay.service.ts` appends `coding.output` and `coding.exit` to a Redis stream per session and every pod reads it for its own viewers, so with the **2 API replicas** of `k8s/base/api-deployment.yaml` a viewer on either pod sees the session, and `Last-Event-ID` resumes on any pod. Steering rides the transport's `strm:out` / `strm:resp`. Without Redis it relays pod-locally. | done (464abbe2b, #1100, #1103) |
+| Billing is seats only | Still true for billing. `ee/modules/billing` sells per-seat Pro and Business prices. Hosted usage is recorded (`runner_usage_intervals`, `hosted_model_calls`), but there is no meter, no Stripe report and no per-plan hosted capacity: every organization gets the `capacity` from the hosted runner settings. | usage recorded, billing not built |
 | Heartbeat: fresh run, fixed prompt, every N minutes, `maxSteps: 10`, timer only | True at `b0281c1a`. Since #930 the Heartbeat is **Always on**: a standing thread, wakes from a timer, channels, webhooks, connection events and a button, the agent's real limits, timers restored at boot, and reports through the scheduled-post path (`agents/always-on/`). Schedule stays a separate thing (Decision 13). | done (#930); see Phase 1 status |
 | Tools go to any runner matching `runnerLabels` | Still true (`RunnerService.resolveByLabels`, `agentConfig.runnerLabels`). | unchanged |
 | Approval policies "(auto-review)" | There is no auto-review in the code. What exists: the `request_approval` built-in tool (the agent asks); **amount rules**, now free and outside the Business entitlement (`approvals/amount-rules.service.ts`, `ApprovalToolAmountTrigger`, `c77e85dd`); **held calls** for callers that cannot pause (`approval_requests.toolId`, `paramsHash`, `heldResult`, `executedAt`; `tools/tool-approval-gate.service.ts`); an autonomous run pauses in `WAITING_APPROVAL`; pending approvals expire on a sweep; multi-step and quorum policies are EE `approval_policy`. Since #930, Always on's propose/act and ask-first list sit in the same gate. The refute-only verifier (`agents/agent-verifier.helper.ts`) is the nearest thing to an automatic reviewer. | decided: no auto-approver; a later reviewer may only escalate (Decision 7) |
@@ -582,9 +588,8 @@ The change, in `runner/coding-relay.service.ts`:
 Authorization does not change (`getUsable` on the runner; coding session ids
 are scoped to the runner). Streams expire 24 hours after their last event.
 
-This was meant to ship first and on its own, because it fixes the
-two-replica deployment today. It has **not** shipped yet: as of 2026-10-08
-`coding-relay.service.ts` still relays pod-locally (see
+This is built: `coding-relay.service.ts` relays through Redis as above, so
+with two API replicas a viewer on either pod sees the session (see
 [Phase 1 status](#phase-1-status-on-development)).
 
 ### Environments UI
@@ -1083,8 +1088,7 @@ suites. Nothing reaches production before Frane signs off its phase.
 ### Phase 1: always on, on machines people already have
 
 Spec 2 items 1, 2 and 4 plus reporting, for self-hosted runners and for
-agents with no machine (Decision 12). It was also meant to ship the
-cross-pod coding relay, which is a live bug today.
+agents with no machine (Decision 12), and the cross-pod coding relay.
 
 - Heartbeat renamed Always on (column, card, endpoint, job, docs).
 - Timers restored at boot; `maxSteps: 10` gone; real limits.
@@ -1143,9 +1147,9 @@ start with `frontend/`.
 Acceptance, against the list above: one thread across wakes, a wake joining
 a live run, and reporting are unit-tested with a harness
 (`always-on/__tests__/always-on.service.spec.ts` and its siblings), not yet
-run end to end against live channels. The two-replica coding check fails
-until the relay lands. The relay is the one phase-1 item to finish before
-phase 2.
+run end to end against live channels. The two-replica coding check is
+covered by `src/test/integration/coding-relay-cross-pod.integration.spec.ts`,
+which runs two transport and relay pairs on one Redis.
 
 ### Phase 2: hosted environments, staging only
 
@@ -1174,6 +1178,32 @@ Acceptance:
   the same CDN IPs as an allowed one are unreachable; a host on the
   allowlist is reachable.
 - No user token appears in any pod spec, Secret or log (asserted).
+
+Phase 2 is built and on in staging (`HOSTED_RUNNERS_ENABLED=true`);
+production and dev leave it off. Checked on staging on 2026-11-24 through
+the app, on an environment without a repository:
+
+- An agent wrote a file on its machine and read it back; the pod ran under
+  gVisor as uid 1000.
+- Five minutes idle, the pod went and the workspace read "parked" (the app's
+  word for suspended); the volume stayed.
+- Called again, a new pod mounted the same volume and the file was there.
+  The wake took about 80 seconds on a node that had to download the image
+  (about 45 s download, 10 s volume attach), and about 25 seconds to a
+  started container on a node that already had it. The 30-second p50 is
+  not met on a node without the image. The staging runner cluster does not
+  run the pre-pull DaemonSet (`hosted-runners/image-prepull.yaml`), so each
+  sandbox node downloads the image on its first wake.
+- From inside the pod: the metadata address, the API server (service
+  address, endpoint, public name), node kubelets, cluster services and
+  another organization's runner pod were unreachable; `www.google.com`,
+  `github.com`, `registry.yarnpkg.com` (same CDN as an allowed host),
+  `api.anthropic.com`, `api.openai.com` and plain HTTP were unreachable;
+  the allowlisted `example.com` and `registry.npmjs.org` and the almyty
+  API were reachable, as was the pod's loopback model proxy.
+
+Not checked in that run: cloning a repository and a setup script, and the
+no-token assertion.
 
 ### Phase 3: metering, tiers, production
 
