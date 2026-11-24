@@ -449,7 +449,9 @@ export class ModelChangeNoticesService implements ModelChangeListener {
     if (!card) return null;
     if (card.status === 'inactive') return card.metadata?.retiredAt ? GONE_REASONS.notListed : 'It is switched off in the catalog.';
     if (card.validationStatus === 'failed') return GONE_REASONS.modelNotFound;
-    if (card.validationStatus === 'never' && card.lastValidationError) return GONE_REASONS.keyRejected;
+    if (card.validationStatus === 'never' && card.lastValidationError) {
+      return card.metadata?.unavailableReason === 'no_credits' ? GONE_REASONS.noCredits : GONE_REASONS.keyRejected;
+    }
     return null;
   }
 

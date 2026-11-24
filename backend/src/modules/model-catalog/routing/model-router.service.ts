@@ -15,6 +15,7 @@ import { type ActingAs, asPrincipal } from '../../../common/authorization/execut
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 import { assertModelAllowed, providerAllowsModel } from '../../llm-providers/allowed-models';
 import { GONE_REASONS, MODEL_CHANGE_LISTENER, type ModelChangeListener } from '../notices/model-change';
+import { noCreditsError, withdrawCheckedCard } from '../readiness';
 
 /** Why a plan leaves out a model: its connection's owner unticked it. */
 function notAllowedReason(connectionName: string): string {
@@ -375,6 +376,51 @@ export class ModelRouterService {
       }
     } catch (err: any) {
       this.logger.warn(`marking ${vendorModelId} unavailable failed: ${err?.message ?? err}`);
+    }
+  }
+
+  /**
+   * A real call came back "no credits" (402, insufficient_quota, "credit
+   * balance is too low"): the vendor took the key and refused to serve
+   * anything on this account. The provider reads as unhealthy with that
+   * error, and every model its check made usable goes back to waiting with
+   * the reason "The provider's account has no credits.", the way a refused
+   * key takes them out (docs/models.md, Readiness). The next passing key
+   * check brings them back. Never rejects.
+   */
+  async markProviderOutOfCredits(organizationId: string, providerId: string, error: string): Promise<void> {
+    if (!organizationId || !UUID_PATTERN.test(providerId ?? '')) return;
+    try {
+      const message = noCreditsError(error);
+      const now = new Date();
+      await this.providers.update({ id: providerId, organizationId }, { isHealthy: false, lastHealthCheckAt: now, lastError: message, lastErrorAt: now });
+      const cards = await this.models.find({ where: { organizationId, providerId } });
+      const changed: Model[] = [];
+      for (const card of cards) {
+        const wasUsable = card.status === 'active';
+        if (!withdrawCheckedCard(card, 'no_credits', message, now)) continue;
+        await this.models.save(card);
+        if (wasUsable) changed.push(card);
+      }
+      if (changed.length && this.changes) {
+        const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
+        const gone = changed.filter((card) => providerAllowsModel(provider, card.vendorModelId));
+        if (gone.length) await this.changes.modelsChanged({ organizationId, providerId, appeared: [], gone: gone.map((card) => ({ card, reason: GONE_REASONS.noCredits })) });
+      }
+      if (changed.length && this.auditLog) {
+        void this.auditLog
+          .log({
+            organizationId,
+            action: AuditAction.MODEL_VALIDATED,
+            resourceType: AuditResource.MODEL,
+            resourceId: changed[0].id,
+            resourceName: changed[0].name,
+            details: { passed: false, count: changed.length, error: message, reason: 'no_credits', source: 'call', providerId },
+          })
+          .catch((err) => this.logger.warn(`no-credits audit failed: ${err?.message ?? err}`));
+      }
+    } catch (err: any) {
+      this.logger.warn(`marking provider ${providerId} out of credits failed: ${err?.message ?? err}`);
     }
   }
 }

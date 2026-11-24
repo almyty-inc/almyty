@@ -20,7 +20,7 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
-import { findModelNotFound, isKeyRejection } from './model-errors';
+import { NO_CREDITS_REASON, findModelNotFound, isKeyRejection, isOutOfCredits } from './model-errors';
 import { getProviderDisplayName, getProviderKeyUrl } from './llm-provider-catalog';
 import type { Model } from '../../entities/model.entity';
 import { ModelCatalogService } from '../model-catalog/model-catalog.service';
@@ -877,6 +877,8 @@ export class LlmProvidersService {
     details?: Record<string, any>;
     /** The vendor refused the key (401/403 or its wording), as opposed to an outage. */
     keyRejected?: boolean;
+    /** The vendor took the key and refused the call for payment: the account has no credits. */
+    outOfCredits?: boolean;
     /** The model the check called (configured, or the vendor's current default). */
     probedModel?: string;
     /** The connection was off and this passing check turned it back on. */
@@ -1033,12 +1035,17 @@ export class LlmProvidersService {
       }
 
       // A key the vendor refuses takes every model of this provider out
-      // of the list until a check passes again. Other failures (outage,
-      // timeout) leave the models alone; the router skips the provider.
-      const keyRejected = !notFound && isKeyRejection(error);
+      // of the list until a check passes again, and so does an account
+      // with no credits (402, insufficient_quota), with that reason in
+      // plain words. Other failures (outage, timeout) leave the models
+      // alone; the router skips the provider.
+      const outOfCredits = !notFound && isOutOfCredits(error);
+      const keyRejected = !notFound && !outOfCredits && isKeyRejection(error);
       if (keyRejected && provider) {
         await this.applyCatalogCheck(provider, { passed: false, keyRejected: true, error: upstreamMessage });
         await this.deactivateOnRefusedKey(provider, upstreamMessage);
+      } else if (outOfCredits && provider) {
+        await this.applyCatalogCheck(provider, { passed: false, outOfCredits: true, error: upstreamMessage });
       }
 
       return {
@@ -1048,8 +1055,9 @@ export class LlmProvidersService {
         // The caller only gets a response time when the request
         // actually started, so leave it undefined on the error path.
         responseTime: undefined,
-        error: upstreamMessage,
+        error: outOfCredits ? `${NO_CREDITS_REASON} ${upstreamMessage}` : upstreamMessage,
         keyRejected,
+        ...(outOfCredits ? { outOfCredits: true } : {}),
       };
     }
   }
@@ -1281,7 +1289,7 @@ export class LlmProvidersService {
 
   private async applyCatalogCheck(
     provider: { id: string; organizationId: string },
-    outcome: { passed: boolean; keyRejected?: boolean; error?: string },
+    outcome: { passed: boolean; keyRejected?: boolean; outOfCredits?: boolean; error?: string },
   ): Promise<void> {
     if (!this.catalog) return;
     try {
