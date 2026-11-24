@@ -14,6 +14,7 @@ import type { Agent, AgentExecution } from '@/types'
 
 import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatDate, formatMs, formatNumber } from './format'
+import { costTitle, formatCost } from '@/lib/format'
 import { StatCard } from './stat-card'
 
 /** A share's card tint: none from 90%, amber from 70%, red below. Both halves: a light-only tint is invisible in dark mode. */
@@ -90,7 +91,7 @@ export function AgentsTab() {
       executions7d: number
       /** "Completed": the share of runs that finished, whatever their check said. */
       completed: number
-      /** "No errors found", for an agent with a check (agent-run-numbers.ts). */
+      /** "No contradictions found", for an agent with a check (agent-run-numbers.ts). */
       checks: ReturnType<typeof checksPassed>
       avgTime: number
       recentFailures: AgentExecution[]
@@ -309,8 +310,8 @@ export function AgentsTab() {
                     ) : (
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatMs(avgTime)}</td>
                     )}
-                    <td className="px-4 py-3 text-right text-muted-foreground">
-                      {runNumbers(agent).totalCost > 0 ? `$${runNumbers(agent).totalCost.toFixed(4)}` : '--'}
+                    <td className="px-4 py-3 text-right text-muted-foreground" title={costTitle(runNumbers(agent).totalCost)}>
+                      {formatCost(runNumbers(agent).totalCost)}
                     </td>
                   </tr>
                 ))}

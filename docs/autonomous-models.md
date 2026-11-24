@@ -179,7 +179,7 @@ no verdict finding, whatever its checker notes say.
 
 ### What the check can and can't catch
 
-A pass is shown as "No errors found", with one line under it: "The check
+A pass is shown as "No contradictions found", with one line under it: "The check
 compared the answer's names, dates, versions, ids, counts and labels with
 what the tools returned and found no mismatch. It can't confirm everything
 the answer says." A failed check is shown as "Errors found" with what was
@@ -210,7 +210,7 @@ It can't catch:
   out. A checker may say these, and they appear as checker notes on the
   verify step; they never decide the verdict.
 
-So "No errors found" means the check found no mismatch, not that the
+So "No contradictions found" means the check found no mismatch, not that the
 answer is correct.
 
 ### What a checker sees
@@ -404,7 +404,9 @@ The agent's other two sections are read by the same loop, on every step.
   and saves each fact (tier `long`); `conversations` saves the exchange
   (tier `project`); `asked` saves nothing on its own, and `store_memory`
   says so to the model. The after-run save is a `memory_save` step, and its
-  calls are the run's cost. Nothing is saved after a run whose answer
+  calls are the run's cost: they are made before the run is reported
+  complete, so the totals a client reads at completion are the ones
+  persisted and billed; the memories are written after. Nothing is saved after a run whose answer
   check did not pass, or in which a tool of the agent never answered
   (every call of it errored: "a tool call failed: openalex_search_works"
   on the step), and the facts call is told never to keep the state of a

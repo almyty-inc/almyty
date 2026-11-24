@@ -18,7 +18,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
 import { ApiKeyService } from './api-key.service';
 import { CreateApiCredentialBodyDto, UpdateApiCredentialBodyDto } from './dto/api-credential.dto';
-import { SetApiKeyDto } from './dto/api.dto';
+import { SetApiKeyDto, UseSharedSignInDto } from './dto/api.dto';
 
 @Controller('apis')
 @UseGuards(JwtAuthGuard, RolesGuard, PrivateApiGuard)
@@ -54,6 +54,35 @@ export class ApisCredentialsController {
     if (!orgId) throw new BadRequestException('Organization context required');
     const data = await this.apiKeys.remove(apiId, orgId, req.user.id ?? req.user.sub);
     return { success: true, data, message: 'Key removed' };
+  }
+
+  /** Existing sign-ins with this API's provider, and which of its scopes each already holds. */
+  @Get(':id/key/sign-ins')
+  @Roles('member', 'admin', 'owner')
+  async sharedSignIns(@Request() req: any, @Param('id') apiId: string) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    const data = await this.apiKeys.sharedSignIns(apiId, orgId, req.user.id ?? req.user.sub);
+    return { success: true, data };
+  }
+
+  /**
+   * Use an existing sign-in for this API: saved right away when it covers
+   * the API, otherwise answered with the consent address that adds the
+   * missing access to that same sign-in.
+   */
+  @Post(':id/key/sign-ins/:credentialId')
+  @Roles('admin', 'owner')
+  async useSharedSignIn(
+    @Request() req: any,
+    @Param('id') apiId: string,
+    @Param('credentialId') credentialId: string,
+    @Body() dto: UseSharedSignInDto,
+  ) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    const data = await this.apiKeys.useSharedSignIn(apiId, orgId, req.user.id ?? req.user.sub, credentialId, dto ?? {});
+    return { success: true, data };
   }
 
 

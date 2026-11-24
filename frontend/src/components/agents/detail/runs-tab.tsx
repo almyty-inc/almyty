@@ -29,7 +29,7 @@ import { formatDateTime, pluralized } from '@/lib/utils'
 import { runInputPreview, stepInputPreview } from '@/lib/run-input'
 import { agentsApi } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
-import { formatDuration } from './constants'
+import { costTitle, formatCost, formatDuration } from '@/lib/format'
 import { RunStatusBadge } from './run-status-badge'
 import { RunApproval } from '@/components/approvals/approval-inspector'
 import type { AgentExecution, AgentRun } from '@/types'
@@ -47,6 +47,7 @@ import { MachineProblem } from '@/components/runners/machine-problem'
 import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
 import { useLiveRun, type LiveRunConnection } from '@/hooks/use-live-run'
 import { AssistantMarkdown } from '@/components/hosted-chat/assistant-markdown'
+import { RecalledMemories } from './recalled-memories'
 
 interface RunsTabProps {
   /** Autonomous runs. */
@@ -321,14 +322,14 @@ function RunRow({ run, onOpen }: { run: AgentRun; onOpen: () => void }) {
       <TableCell className="text-sm">
         {run.currentStep}/{run.maxSteps}
       </TableCell>
-      <TableCell className="text-sm">
-        {run.totalCost > 0 ? `$${run.totalCost.toFixed(4)}` : '--'}
+      <TableCell className="text-sm" title={costTitle(run.totalCost)}>
+        {formatCost(run.totalCost)}
       </TableCell>
       <TableCell className="text-sm">
         {run.totalTokens > 0 ? run.totalTokens.toLocaleString() : '--'}
       </TableCell>
       <TableCell className="text-sm">
-        {run.executionTime > 0 ? formatDuration(run.executionTime) : '--'}
+        {formatDuration(run.executionTime)}
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">
         {formatDateTime(run.createdAt)}
@@ -351,14 +352,14 @@ function ExecutionRow({ exec, onOpen }: { exec: AgentExecution; onOpen: () => vo
         {runInputPreview(exec.input)}
       </TableCell>
       <TableCell className="text-sm">{steps.length}</TableCell>
-      <TableCell className="text-sm">
-        {exec.totalCost > 0 ? `$${exec.totalCost.toFixed(4)}` : '--'}
+      <TableCell className="text-sm" title={costTitle(exec.totalCost)}>
+        {formatCost(exec.totalCost)}
       </TableCell>
       <TableCell className="text-sm">
         {exec.totalTokens > 0 ? exec.totalTokens.toLocaleString() : '--'}
       </TableCell>
       <TableCell className="text-sm">
-        {exec.executionTime > 0 ? formatDuration(exec.executionTime) : '--'}
+        {formatDuration(exec.executionTime)}
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">
         {formatDateTime(exec.createdAt)}
@@ -381,7 +382,7 @@ function OpenedRunHeader({
 }: {
   status: string
   createdAt: string
-  facts: Array<[string, string]>
+  facts: Array<[label: string, value: string, title?: string]>
   onClose: () => void
   notes?: React.ReactNode
   /** Controls for the run, beside "All runs" (Delete run). */
@@ -402,10 +403,10 @@ function OpenedRunHeader({
         {notes}
       </div>
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm" data-testid="opened-run-facts">
-        {facts.map(([label, value]) => (
+        {facts.map(([label, value, title]) => (
           <div key={label} className="flex gap-1.5">
             <dt className="text-muted-foreground">{label}</dt>
-            <dd className="font-medium tabular-nums">{value}</dd>
+            <dd className="font-medium tabular-nums" title={title}>{value}</dd>
           </div>
         ))}
       </dl>
@@ -460,9 +461,9 @@ function OpenedRun({
         }
         facts={[
           ['Steps', `${run.currentStep}/${run.maxSteps}`],
-          ['Cost', run.totalCost > 0 ? `$${run.totalCost.toFixed(4)}` : '--'],
+          ['Cost', formatCost(run.totalCost), costTitle(run.totalCost)],
           ['Tokens', run.totalTokens > 0 ? run.totalTokens.toLocaleString() : '--'],
-          ['Duration', run.executionTime > 0 ? formatDuration(run.executionTime) : '--'],
+          ['Duration', formatDuration(run.executionTime)],
         ]}
       />
       <CardContent className="flow-root space-y-4">
@@ -515,6 +516,7 @@ function OpenedRun({
                         Out: {typeof step.output === 'string' ? step.output : JSON.stringify(step.output)}
                       </div>
                     )}
+                    <RecalledMemories step={step} index={idx} />
                     {machineError ? (
                       <MachineProblem problem={machineError} testId={`run-step-${idx}-machine`} />
                     ) : step.error && (
@@ -525,7 +527,7 @@ function OpenedRun({
                   </div>
                   <div className="ml-auto text-xs tabular-nums text-muted-foreground shrink-0 text-right sm:ml-0">
                     {step.duration ? formatDuration(step.duration) : ''}
-                    {step.cost ? ` / $${step.cost.toFixed(4)}` : ''}
+                    {step.cost ? <span title={costTitle(step.cost)}>{` / ${formatCost(step.cost)}`}</span> : ''}
                   </div>
                 </div>
                 )
@@ -596,9 +598,9 @@ function OpenedExecution({ exec, agentId, onClose }: { exec: AgentExecution; age
         }
         facts={[
           ['Steps', String(steps.length)],
-          ['Cost', exec.totalCost > 0 ? `$${exec.totalCost.toFixed(4)}` : '--'],
+          ['Cost', formatCost(exec.totalCost), costTitle(exec.totalCost)],
           ['Tokens', exec.totalTokens > 0 ? exec.totalTokens.toLocaleString() : '--'],
-          ['Duration', exec.executionTime > 0 ? formatDuration(exec.executionTime) : '--'],
+          ['Duration', formatDuration(exec.executionTime)],
         ]}
       />
       <CardContent className="space-y-4" data-testid={`execution-detail-${exec.id}`}>
@@ -638,7 +640,7 @@ function OpenedExecution({ exec, agentId, onClose }: { exec: AgentExecution; age
                   </div>
                   <div className="ml-auto text-xs tabular-nums text-muted-foreground shrink-0 text-right sm:ml-0">
                     {r?.executionTime ? formatDuration(r.executionTime) : ''}
-                    {r?.cost ? ` / $${r.cost.toFixed(4)}` : ''}
+                    {r?.cost ? <span title={costTitle(r.cost)}>{` / ${formatCost(r.cost)}`}</span> : ''}
                   </div>
                 </div>
               ))}

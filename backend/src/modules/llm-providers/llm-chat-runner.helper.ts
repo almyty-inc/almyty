@@ -20,7 +20,7 @@ import { ChatRequest, ChatResponse } from './dto/llm-providers.dto';
 import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
-import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
+import { ModelNotFoundError, ProviderOutOfCreditsError, isModelNotFoundResponse, isOutOfCredits, isOutOfCreditsResponse, vendorMessage } from './model-errors';
 import { batchAsync } from '../../common/utils/batch-async';
 
 /**
@@ -301,6 +301,22 @@ export class LlmChatRunnerHelper {
           throw notFound;
         }
 
+        // An account with no credits is not transient either, and says
+        // nothing about this one model: every model of the account is out
+        // until it is topped up. Take them out of the lists with that
+        // reason (the readiness rule), and surface a typed error whose
+        // words say so, instead of retrying a 429 insufficient_quota.
+        if (isOutOfCreditsResponse(statusCode, error.response?.data || error.response?.body) || isOutOfCredits(error)) {
+          const noCredits = new ProviderOutOfCreditsError(
+            provider.id,
+            provider.type,
+            vendorMessage(error.response?.data || error.response?.body) ?? (typeof error?.message === 'string' ? error.message.slice(0, 200) : undefined),
+          );
+          if (this.router && provider.organizationId) {
+            void this.router.markProviderOutOfCredits(provider.organizationId, provider.id, noCredits.vendorMessage ?? '');
+          }
+          throw noCredits;
+        }
         // Retry only on retryable status codes (429, 500, 502, 503)
 
         const isRetryable = [429, 500, 502, 503].includes(statusCode) ||

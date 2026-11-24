@@ -93,16 +93,16 @@ describe('HostedEnvironmentsTab', () => {
     list.mockResolvedValue({ success: true, enabled: true, settings: SETTINGS, data: [env('e1', 'web-app'), env('e2', 'data-jobs')] })
     usage.mockResolvedValue({ from: '', to: '', environments: [{ environmentId: 'e1', name: 'web-app', minutes: 185, byClass: {} }], organization: { minutes: 600, byClass: {} } })
     render(<HostedEnvironmentsTab />)
-    expect(await screen.findByText('3 h 5 min')).toBeInTheDocument()
-    expect(screen.getByText('0 min')).toBeInTheDocument()
-    expect(screen.getByTestId('hosted-org-usage')).toHaveTextContent("Your organization's hosted machines ran 10 h this month.")
+    expect(await screen.findByText('3h 5m')).toBeInTheDocument()
+    expect(screen.getByText('0m')).toBeInTheDocument()
+    expect(screen.getByTestId('hosted-org-usage')).toHaveTextContent("Your organization's hosted machines ran 10h this month.")
   })
 
   it('leaves the organization total out for a member', async () => {
     list.mockResolvedValue({ success: true, enabled: true, settings: SETTINGS, data: [env('e1', 'web-app')] })
     usage.mockResolvedValue({ from: '', to: '', environments: [{ environmentId: 'e1', name: 'web-app', minutes: 12, byClass: {} }], organization: null })
     render(<HostedEnvironmentsTab />)
-    expect(await screen.findByText('12 min')).toBeInTheDocument()
+    expect(await screen.findByText('12m')).toBeInTheDocument()
     expect(screen.queryByTestId('hosted-org-usage')).toBeNull()
   })
 

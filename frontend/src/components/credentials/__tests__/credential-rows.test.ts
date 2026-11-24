@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { credentialRows, managedUse, storedRow } from '../credential-rows'
+import { credentialRows, managedUse, storedRow, usesOf, usesSentence } from '../credential-rows'
 import type { Connection } from '@/types/connections'
 
 const connection = (overrides: Partial<Connection> = {}): Connection => ({
@@ -102,5 +102,36 @@ describe('managedUse', () => {
     expect(managedUse({ kind: 'gateway_channel', id: 'g1' })).toEqual({ label: 'A channel', href: '/gateways/g1' })
     expect(managedUse({ kind: 'something-new' })).toBeNull()
     expect(managedUse(null)).toBeNull()
+  })
+})
+
+describe('what uses a credential', () => {
+  const gmailUsers = [
+    { type: 'api', id: 'api-gmail', name: 'Gmail' },
+    { type: 'api', id: 'api-cal', name: 'Calendar' },
+    { type: 'agent_channel', id: 'ch-1', name: 'Desktop app', agentId: 'ag-1' },
+    { type: 'api', id: null, name: 'An API you cannot see' },
+  ]
+
+  it('a connection row lists what the server found pointing at it, each linking to its page', () => {
+    const [row] = credentialRows([connection({ usedBy: gmailUsers })], [])
+    expect(row.uses).toEqual([
+      { label: 'Gmail', kind: 'API', href: '/apis/api-gmail' },
+      { label: 'Calendar', kind: 'API', href: '/apis/api-cal' },
+      { label: 'Desktop app', kind: 'Channel', href: '/agents/ag-1/channels/ch-1' },
+      { label: 'An API you cannot see', kind: 'API' },
+    ])
+  })
+
+  it('a key one API keeps names that API rather than "An API"', () => {
+    const row = storedRow({ id: 's1', name: 'Petstore key', type: 'bearer_token', apiId: 'api-1', usedBy: [{ type: 'api', id: 'api-1', name: 'Petstore' }] })
+    expect(row.uses).toEqual([{ label: 'Petstore', kind: 'API', href: '/apis/api-1' }])
+  })
+
+  it('names the users for a delete warning', () => {
+    expect(usesSentence(usesOf(gmailUsers.slice(0, 1)))).toBe('Gmail')
+    expect(usesSentence(usesOf(gmailUsers.slice(0, 2)))).toBe('Gmail and Calendar')
+    expect(usesSentence(usesOf(gmailUsers.slice(0, 3)))).toBe('Gmail, Calendar and Desktop app')
+    expect(usesSentence(usesOf(gmailUsers))).toBe('Gmail, Calendar, Desktop app and 1 more')
   })
 })

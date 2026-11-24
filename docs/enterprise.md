@@ -166,28 +166,40 @@ sells plans through Stripe; a self-hosted pool uses its own
 `HOSTED_RUNNERS_SETTINGS` capacity and bills nobody.
 
 - `PLAN_HOSTED_CAPACITY` seeds a row per plan. Free has no hosted machines
-  (its own runners and always on are never gated). A number left null comes
-  from the install's hosted runner settings.
+  (its own runners and always on are never gated). Pro: 2 machines at once,
+  10 workspaces, small and medium machines, 40 small-machine hours per seat
+  a month, a $50 monthly spending limit. Business: 5, 50, every size, 100
+  small-machine hours per seat, $250. Medium and large hours are never
+  included. Enterprise leaves every number to the install's hosted runner
+  settings, as does any other number left null.
 - `HOSTED_PLAN_CAPACITY` (JSON keyed by plan) overrides any field:
   `hostedEnvironments`, `maxConcurrentRunners`, `maxWorkspaces`,
   `resourceClasses`, `includedHoursPerSeat` (per machine size),
-  `monthlyCeilingHours`, `billed`.
+  `monthlyCeilingHours`, `monthlyCeilingUsd`, `billed`.
 - `organizations.settings.hostedCapacity` may lower `maxConcurrentRunners`,
-  `maxWorkspaces` and `monthlyCeilingHours`, never raise them.
+  `maxWorkspaces`, `monthlyCeilingHours` and `monthlyCeilingUsd`, never
+  raise them.
 
 Minutes beyond the allowance are reported hourly (`runner-usage-report`,
 `HOSTED_USAGE_REPORTING`) as Stripe Billing Meter events, one per
 organization, machine size and hour, identified `<org>:<size>:<hour>`, and
 recorded in `runner_usage_reports`. The allowance is counted by almyty,
 not as a free Stripe tier, because it grows with seats.
-`STRIPE_HOSTED_METERS` names the meter event and the metered per-minute
-price for each size; checkout adds those prices to a Pro or Business
-subscription and the webhook adds any a live subscription lacks. An
-Enterprise contract is recorded and shown, and never sent to Stripe.
+`STRIPE_HOSTED_METERS` names, for each size, the meter event, the metered
+per-minute price and that price's amount in dollars:
 
-The price per minute of each size, the included hours per plan and the
-monthly ceiling are product decisions; they are set in Stripe and in
-`HOSTED_PLAN_CAPACITY`, not in code.
+    {"small":  {"eventName": "hosted_runner_minutes_small",  "price": "price_...", "usdPerMinute": 0.001},
+     "medium": {"eventName": "hosted_runner_minutes_medium", "price": "price_...", "usdPerMinute": 0.002},
+     "large":  {"eventName": "hosted_runner_minutes_large",  "price": "price_...", "usdPerMinute": 0.004}}
+
+Checkout adds those prices to a Pro or Business subscription and the
+webhook adds any a live subscription lacks. The prices are Stripe metered
+prices with sub-cent amounts (`unit_amount_decimal` 0.1, 0.2 and 0.4 cents),
+lookup keys `hosted_runner_minute_small`, `_medium` and `_large`.
+`usdPerMinute` must match the Stripe price: almyty uses it only to count
+the monthly spending limit (`monthlyCeilingUsd`), which refuses new wakes
+once the overage this month reaches it. An Enterprise contract is recorded
+and shown, and never sent to Stripe.
 
 ## What is deliberately not gated
 

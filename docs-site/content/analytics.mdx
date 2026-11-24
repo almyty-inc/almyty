@@ -29,7 +29,7 @@ Analytics shows what your assistants and tools have been doing and what it cost.
 
 **Routing.** For agents that can fall back from one model to another, how often every model they tried failed. Next to it, as a separate number, how often a better choice of models could have done better. An agent needs a minimum number of requests where more than one model was tried before a rate is shown; agents below that are listed in their own card, so "working fine" and "not measured yet" never look the same.
 
-**Agents.** For each agent: status, total runs, runs in the last 24 hours and 7 days, **Completed** (the share of runs that finished), **No errors found** (for an agent with verification, the share of checked runs whose check found no mismatch with the tool results; see [What the check can and can't catch](/agents/autonomous#what-the-check-can-and-cant-catch)), average time and cost, with the most recent failures underneath. A run that finished is counted as completed even when its answer's check found errors, so look at both numbers.
+**Agents.** For each agent: status, total runs, runs in the last 24 hours and 7 days, **Completed** (the share of runs that finished), **No contradictions found** (for an agent with verification, the share of checked runs whose check found no mismatch with the tool results; see [What the check can and can't catch](/agents/autonomous#what-the-check-can-and-cant-catch)), average time and cost, with the most recent failures underneath. A run that finished is counted as completed even when its answer's check found errors, so look at both numbers.
 
 ![Agents tab showing seeded demo agents and their execution metrics](/screenshots/analytics-agents.png)
 

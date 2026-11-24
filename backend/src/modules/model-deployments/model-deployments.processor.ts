@@ -1,4 +1,5 @@
 import { InjectQueue, OnQueueFailed, Process, Processor } from '@nestjs/bull';
+import { formatSpendCents } from '../budgets/budget-format';
 import { Injectable, Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -563,7 +564,7 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
           organizationId: d.organizationId,
           userIds: d.createdBy ? [d.createdBy] : [],
           title: 'Hosted model scaled to zero: budget reached',
-          body: `${d.modelRef ?? d.modelBase ?? 'Hosted model'} on ${d.providerType} spent ${(snapshot.spentCents / 100).toFixed(2)} of its ${(budget.limitCents / 100).toFixed(2)} budget.`,
+          body: `${d.modelRef ?? d.modelBase ?? 'Hosted model'} on ${d.providerType} spent ${formatSpendCents(snapshot.spentCents)} of its ${formatSpendCents(budget.limitCents)} budget.`,
         } as any)
         .catch(() => undefined);
     }

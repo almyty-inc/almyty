@@ -9,7 +9,7 @@
  * time. One table: a model provider's key is a credential like any other.
  */
 import type { ServiceCheck } from '@/components/connect/status-label'
-import type { Connection, Connector, ConnectorKind } from '@/types/connections'
+import type { Connection, ConnectionUsedBy as CredentialUsedBy, Connector, ConnectorKind } from '@/types/connections'
 
 import { NOT_CHECKED, connectionCheck, connectionWhoShort } from '@/components/connections/connection-status'
 import { CREDENTIALS_PATH, credentialPath } from './paths'
@@ -36,7 +36,7 @@ export interface StoredCredential {
   /** Set on a model provider key the server found on the provider itself. */
   _source?: 'llm_provider'
   _sourceId?: string
-  usedBy?: Array<{ type: string; id: string; name: string }>
+  usedBy?: CredentialUsedBy[]
 }
 
 /** A model provider connection, as GET /llm-providers lists it. */
@@ -56,6 +56,8 @@ export interface ProviderConnection {
 
 export interface CredentialUse {
   label: string
+  /** What kind of thing it is ("API", "Agent"), when known. */
+  kind?: string
   href?: string
 }
 
@@ -122,7 +124,7 @@ export function connectionRow(connection: Connection, connector?: Pick<Connector
     kind: connection.kind,
     check: connectionCheck(connection, connector),
     who: connectionWhoShort(connection),
-    uses: (connection.usedBy ?? []).map((u) => ({ label: u.name })),
+    uses: usesOf(connection.usedBy),
     createdAt: connection.createdAt ?? null,
     // A provider connection's key is changed on that connection's page, with its models.
     href: connection.providerId ? providerPath(connection.providerId) : credentialPath(connection.id),
@@ -134,6 +136,46 @@ export function modelConnectionUse(name: string, id: string): CredentialUse {
   return { label: `${name} connection`, href: providerPath(id) }
 }
 
+
+/** What each kind of user is called, and where its page is. */
+const USE_KINDS: Record<string, { kind: string; href?: (u: CredentialUsedBy) => string }> = {
+  api: { kind: 'API', href: (u) => `/apis/${u.id}` },
+  tool: { kind: 'Tool', href: (u) => `/tools/${u.id}` },
+  llm_provider: { kind: 'Model connection', href: (u) => providerPath(u.id!) },
+  mcp_source: { kind: 'MCP server', href: () => '/tools' },
+  gateway: { kind: 'Gateway', href: (u) => `/gateways/${u.id}` },
+  channel_installation: { kind: 'Channel', href: (u) => `/gateways/${u.id}` },
+  agent_channel: { kind: 'Channel', href: (u) => (u.agentId ? `/agents/${u.agentId}/channels/${u.id}` : `/agents`) },
+  agent: { kind: 'Agent', href: (u) => `/agents/${u.id}` },
+  external_agent: { kind: 'Outside agent' },
+  environment: { kind: 'Hosted runner environment', href: (u) => `/runners/hosted/${u.id}` },
+  model_deployment: { kind: 'Hosted model', href: (u) => `/models/hosting/${u.id}` },
+  push_subscription: { kind: 'Wake-up subscription' },
+}
+
+/**
+ * The server's `usedBy` (worked out from what points at the credential)
+ * as rows: the user's name, what kind of thing it is, and its page. One
+ * the caller may not see comes without an id and gets no link.
+ */
+export function usesOf(usedBy: CredentialUsedBy[] | null | undefined): CredentialUse[] {
+  return (usedBy ?? []).map((u) => {
+    const known = USE_KINDS[u.type]
+    return {
+      label: u.name,
+      ...(known ? { kind: known.kind } : {}),
+      ...(u.id && known?.href ? { href: known.href(u) } : {}),
+    }
+  })
+}
+
+/** "Gmail and Calendar", "Gmail, Calendar, Drive and 2 more": the users named, for a delete warning. */
+export function usesSentence(uses: CredentialUse[]): string {
+  const names = uses.map((u) => u.label)
+  if (names.length <= 1) return names[0] ?? ''
+  if (names.length <= 3) return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+}
 /** A model provider connection: its page, under Models, holds its key, its models and who can use it. */
 export function providerRow(provider: ProviderConnection): CredentialRow {
   const check = providerCheck(provider as Parameters<typeof providerCheck>[0])
@@ -155,13 +197,16 @@ export function providerRow(provider: ProviderConnection): CredentialRow {
 export function storedRow(credential: StoredCredential): CredentialRow {
   const fromProvider = credential._source === 'llm_provider'
   const managed = managedUse(credential.metadata?.managedBy)
+  const computed = usesOf(credential.usedBy)
   const uses: CredentialUse[] = fromProvider
-    ? (credential.usedBy ?? []).map((u) => modelConnectionUse(u.name, u.id))
-    : managed
-      ? [managed]
-      : credential.apiId
-        ? [{ label: 'An API', href: `/apis/${credential.apiId}` }]
-        : []
+    ? (credential.usedBy ?? []).map((u) => modelConnectionUse(u.name, u.id ?? ''))
+    : computed.length > 0
+      ? computed
+      : managed
+        ? [managed]
+        : credential.apiId
+          ? [{ label: 'An API', href: `/apis/${credential.apiId}` }]
+          : []
   const providerKind = credential.metadata?.managedBy?.kind === 'llm_provider' || credential.metadata?.managedBy?.kind === 'llm_provider_usage'
   return {
     id: credential.id,
@@ -194,7 +239,7 @@ export function credentialRows(connections: Connection[], stored: StoredCredenti
   const rows = connections.filter((c) => !ownKeyOfListed(null, c.providerId)).map((c) => connectionRow(c, byKey.get(c.connectorKey)))
   for (const credential of stored) {
     if (seen.has(credential.id) || credential.connectorKey) continue
-    if (ownKeyOfListed(credential.metadata?.managedBy) || (credential._source === 'llm_provider' && (credential.usedBy ?? []).some((u) => listed.has(u.id)))) continue
+    if (ownKeyOfListed(credential.metadata?.managedBy) || (credential._source === 'llm_provider' && (credential.usedBy ?? []).some((u) => !!u.id && listed.has(u.id)))) continue
     rows.push(storedRow(credential))
   }
   // A model the platform runs on your cloud account is reached through its hosting page, not here.

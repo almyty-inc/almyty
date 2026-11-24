@@ -264,16 +264,16 @@ describe('formatRunDetail', () => {
 // A pass means the check found no mismatch with the tool results, not
 // that the answer is right; the CLI says that and nothing more.
 describe('the answer check', () => {
-  it('says "no errors found" for a pass, with what that means, never "passed" or "verified"', () => {
+  it('says "no contradictions found" for a pass, with what that means, never "passed" or "verified"', () => {
     const detail = formatRunDetail({
       id: 'run-2',
       status: 'completed',
       metadata: { verify: { verdict: 'pass' } },
       steps: [{ type: 'verify', output: { verdict: 'pass' } }],
     });
-    expect(detail).toContain('check:     no errors found');
+    expect(detail).toContain('check:     no contradictions found');
     expect(detail).toContain("it can't confirm everything the answer says");
-    expect(detail).toContain('1. check: no errors found');
+    expect(detail).toContain('1. check: no contradictions found');
     expect(detail).not.toMatch(/passed|verified|correct/i);
   });
 

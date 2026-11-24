@@ -70,3 +70,14 @@ export interface SetApiKeyInput {
   location?: 'header' | 'query'
   connectionId?: string
 }
+
+/** An existing OAuth 2.0 sign-in with the same provider that this API can use too. Never a secret. */
+export interface SharedSignIn {
+  id: string
+  name: string
+  accountLabel: string | null
+  grantedScopes: string[]
+  /** What this API lists that the sign-in does not hold yet; empty when it covers the API. */
+  missingScopes: string[]
+  canAddAccess: boolean
+}

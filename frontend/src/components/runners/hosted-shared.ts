@@ -8,6 +8,7 @@
  * parks itself after the idle timeout and keeps its files while parked.
  */
 import type { BadgeProps } from '@/components/ui/badge'
+import { formatDuration } from '@/lib/format'
 
 type BadgeVariant = NonNullable<BadgeProps['variant']>
 
@@ -224,11 +225,8 @@ export interface EnvironmentRun {
   updatedAt: string
 }
 
-/** Machine time in plain words: "0 min", "42 min", "3 h 5 min". */
+/** Machine time, counted in whole minutes, as every duration reads: "0m", "42m", "3h 5m". */
 export function formatMinutes(minutes: number): string {
   const total = Math.max(0, Math.round(minutes))
-  if (total < 60) return `${total} min`
-  const h = Math.floor(total / 60)
-  const m = total % 60
-  return m ? `${h} h ${m} min` : `${h} h`
+  return formatDuration(total * 60_000, { empty: '0m' })
 }

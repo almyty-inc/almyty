@@ -10,7 +10,7 @@ import type { Agent, AgentRunStats } from '@/types'
  *   lifetime counters on the agent row kept counting it.
  * - "Completed": the share of runs that finished. It says nothing about
  *   whether an answer was right.
- * - "No errors found": for an agent whose answers a checker reviews, the
+ * - "No contradictions found": for an agent whose answers a checker reviews, the
  *   share of checked runs whose check found no mismatch with the tool
  *   results. That is not the share of correct answers: a detail the tool
  *   results hold nothing to compare with passes. A run no checker could
@@ -20,7 +20,7 @@ import type { Agent, AgentRunStats } from '@/types'
 type RunCounts = Pick<Agent, 'runStats' | 'agentConfig'>
 
 export const COMPLETED_LABEL = 'Completed'
-export const CHECKS_PASSED_LABEL = 'No errors found'
+export const CHECKS_PASSED_LABEL = 'No contradictions found'
 /** The hint beside the number: what a run counted there means. */
 export const CHECKS_PASSED_HINT = "Checked runs whose check found no mismatch with the tool results. It can't confirm everything an answer says."
 
@@ -51,7 +51,7 @@ export function hasAnswerCheck(agent: Pick<Agent, 'agentConfig'>): boolean {
 }
 
 /**
- * "No errors found" for an agent with a check: passed of checked, and the
+ * "No contradictions found" for an agent with a check: passed of checked, and the
  * percent (null until a run was checked). Null for an agent without a
  * check, which shows no such number at all.
  */

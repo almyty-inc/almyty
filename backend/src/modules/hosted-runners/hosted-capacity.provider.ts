@@ -19,6 +19,10 @@ export interface HostedCapacity {
   includedMinutes?: Record<string, number> | null;
   /** Runner-minutes a month after which wakes are refused; absent or null: no ceiling. */
   monthlyCeilingMinutes?: number | null;
+  /** US dollars of overage a month after which wakes are refused; absent or null: no ceiling. */
+  monthlyCeilingUsd?: number | null;
+  /** The price per minute of each size, in US dollars, where the install gives one. */
+  usdPerMinute?: Record<string, number> | null;
   /** Whether minutes beyond the allowance are billed as overage. */
   billed?: boolean;
 }
@@ -30,6 +34,13 @@ export interface HostedCapacity {
  */
 export interface HostedCapacityProvider {
   capacityFor(organizationId: string): Promise<HostedCapacity>;
+  /**
+   * The plan's limits before the organization's own lower ones
+   * (`settings.hostedCapacity`), so a page can offer lowering them and
+   * refuse a raise. Absent, or null for an organization: own limits do not
+   * apply there (no plan, as on an install that sells none).
+   */
+  planLimitsFor?(organizationId: string): Promise<HostedCapacity | null>;
 }
 
 export const HOSTED_CAPACITY_PROVIDER = Symbol('HOSTED_CAPACITY_PROVIDER');
@@ -61,4 +72,41 @@ export const HOSTED_NOT_INCLUDED =
 export function ceilingReached(ceilingMinutes: number): string {
   const hours = Math.round((ceilingMinutes / 60) * 10) / 10;
   return `Your organization's hosted machines have run ${hours} hours this month, its monthly limit. They start again next month, or when an admin raises the limit.`;
+}
+
+const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+/** A dollar amount as the product writes it: $50.00. */
+export function formatUsd(usd: number): string {
+  return USD.format(usd);
+}
+
+/**
+ * Dollars of overage this month: for each size, the minutes beyond its
+ * included minutes times its per-minute price. A size with no price adds
+ * nothing; with no allowance tracked (null), every minute is overage.
+ */
+export function overageUsd(
+  minutes: Record<string, number>,
+  included: Record<string, number> | null | undefined,
+  prices: Record<string, number> | null | undefined,
+): number {
+  let total = 0;
+  for (const [cls, used] of Object.entries(minutes)) {
+    const price = prices?.[cls];
+    if (!price) continue;
+    total += Math.max(0, used - (included?.[cls] ?? 0)) * price;
+  }
+  return total;
+}
+
+/** Whether the month's dollar ceiling stops new wakes. A ceiling of 0 allows the included hours and nothing beyond them. */
+export function spendCeilingReached(spentUsd: number, ceilingUsd: number | null | undefined): boolean {
+  if (ceilingUsd === null || ceilingUsd === undefined) return false;
+  return spentUsd >= ceilingUsd && (ceilingUsd > 0 || spentUsd > 0);
+}
+
+/** What a wake hears once the month's dollar ceiling is reached. */
+export function spendCeilingMessage(ceilingUsd: number): string {
+  return `Your organization's hosted machines have used ${formatUsd(ceilingUsd)} beyond the included hours this month, its monthly limit. They start again next month, or when an admin raises the limit.`;
 }

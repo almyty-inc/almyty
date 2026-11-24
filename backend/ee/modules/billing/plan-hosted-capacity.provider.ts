@@ -8,6 +8,7 @@ import { HostedCapacity, HostedCapacityProvider } from '../../../src/modules/hos
 import { HostedRunnerSettingsService } from '../../../src/modules/hosted-runners/hosted-runner-settings';
 import { STRIPE_SECRET_KEY_ENV } from './billing.constants';
 import { includedMinutes, orgHostedCapacity } from './hosted-capacity';
+import { STRIPE_HOSTED_METERS_ENV, hostedMinutePrices } from './hosted-metering.config';
 
 /** Nothing at all: what a lookup that failed answers on a Stripe-backed install. */
 const NONE: HostedCapacity = {
@@ -18,6 +19,7 @@ const NONE: HostedCapacity = {
   hostedEnvironments: false,
   includedMinutes: {},
   monthlyCeilingMinutes: 0,
+  monthlyCeilingUsd: 0,
   billed: false,
 };
 
@@ -57,24 +59,50 @@ export class PlanHostedCapacityProvider implements HostedCapacityProvider {
         resourceClasses: fallback?.resourceClasses ?? null,
       };
     }
-    let org: Organization | null;
+    const org = await this.readOrg(organizationId);
+    if (!org) return { ...NONE };
+    return this.fill(org, true);
+  }
+
+  /**
+   * The plan's limits without the organization's own lower ones: what the
+   * Hosted tab lets an admin lower from. Null where own limits do not
+   * apply: an install that sells no plans, or an organization it cannot read.
+   */
+  async planLimitsFor(organizationId: string): Promise<HostedCapacity | null> {
+    if (!this.stripeBacked()) return null;
+    const org = await this.readOrg(organizationId);
+    return org ? this.fill(org, false) : null;
+  }
+
+  private async readOrg(organizationId: string): Promise<Organization | null> {
     try {
-      org = await this.orgs.findOne({ where: { id: organizationId } });
+      return await this.orgs.findOne({ where: { id: organizationId } });
     } catch (err) {
       this.logger.warn(`hosted capacity for ${organizationId} could not be read: ${(err as Error)?.message ?? err}`);
-      org = null;
+      return null;
     }
-    if (!org) return { ...NONE };
-    const row = orgHostedCapacity(org as any);
+  }
+
+  private fill(org: Organization, withOwn: boolean): HostedCapacity {
+    const fallback = this.settings?.current.capacity;
+    const row = orgHostedCapacity(withOwn ? (org as any) : { plan: org.plan, settings: null });
     const seats = Number(org.billingInfo?.seats) || 1;
     return {
       plan: org.plan || 'free',
       hostedEnvironments: row.hostedEnvironments,
       maxConcurrentRunners: row.maxConcurrentRunners ?? fallback?.maxConcurrentRunners ?? 0,
       maxWorkspaces: row.maxWorkspaces ?? fallback?.maxWorkspaces ?? 0,
-      resourceClasses: row.resourceClasses ?? fallback?.resourceClasses ?? null,
+      // The sizes the plan allows, among those the install allows: a plan
+      // never offers a size the install's machines cannot run.
+      resourceClasses:
+        row.resourceClasses && fallback?.resourceClasses
+          ? row.resourceClasses.filter((c) => fallback.resourceClasses!.includes(c))
+          : (row.resourceClasses ?? fallback?.resourceClasses ?? null),
       includedMinutes: includedMinutes(row, seats),
       monthlyCeilingMinutes: row.monthlyCeilingHours === null ? null : row.monthlyCeilingHours * 60,
+      monthlyCeilingUsd: row.monthlyCeilingUsd,
+      usdPerMinute: hostedMinutePrices({ [STRIPE_HOSTED_METERS_ENV]: this.config.get<string>(STRIPE_HOSTED_METERS_ENV) }),
       billed: row.billed && this.stripeBacked() && !!org.billingInfo?.stripeSubscriptionId,
     };
   }

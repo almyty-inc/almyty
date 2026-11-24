@@ -58,7 +58,20 @@ describe('recall at the start of a run', () => {
     expect(query).toMatchObject({ scope: { scope_type: 'agent', scope_id: 'org-1:agent:agent-1' }, query: 'Check billing-service again and tell me what changed since your last check' });
     expect(conversationQuery).not.toHaveBeenCalled();
     expect(context).toContain('billing-service pinned lodash');
-    expect(r.steps).toEqual([expect.objectContaining({ type: 'memory_recall', output: { found: 1 } })]);
+    expect(r.steps).toEqual([expect.objectContaining({ type: 'memory_recall', output: expect.objectContaining({ found: 1 }) })]);
+  });
+
+  it('records which memories it read and which run saved each (recall provenance)', async () => {
+    const { k, memoryAccounts } = keeper();
+    memoryAccounts.search.mockResolvedValueOnce([
+      { item: { ...RANKED[0].item, created_at: new Date('2026-11-24T09:56:00Z'), provenance: { session_id: 'daf10ea8-a8f5-4e4f-84be-838a5888174c' } } as any, score: 0.9 },
+    ]);
+    const r = run();
+    await k.recallAtStart(agent({ enabled: true }), r, async () => '');
+    expect(r.steps[0].output).toEqual({
+      found: 1,
+      memories: [{ id: 'm1', kind: 'long', text: 'billing-service pinned lodash at 4.17.21 on 2026-11-04', savedAt: '2026-11-24T09:56:00.000Z', savedByRun: 'daf10ea8-a8f5-4e4f-84be-838a5888174c' }],
+    });
   });
 
   it('looks up once per run: later steps read the same memories, not a search on the verifier\'s feedback', async () => {

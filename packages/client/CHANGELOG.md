@@ -1,5 +1,9 @@
 # @almyty/client
 
+## 1.5.16
+
+No changes in this release.
+
 ## 1.5.15
 
 No changes in this release.

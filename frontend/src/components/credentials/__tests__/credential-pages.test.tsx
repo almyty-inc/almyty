@@ -346,6 +346,42 @@ describe('/credentials/:id', () => {
     expect(await screen.findByText('at /credentials')).toBeInTheDocument()
   })
 
+  it('names what uses a sign-in, on Used by and in the delete warning, instead of "Nothing uses it yet"', async () => {
+    const usedBy = [
+      { type: 'api', id: 'api-gmail', name: 'Gmail' },
+      { type: 'api', id: 'api-cal', name: 'Calendar' },
+    ]
+    vi.mocked(connectionsApi.list).mockResolvedValue([connection({ name: 'Google sign-in', usedBy })])
+    at()
+    expect(await screen.findByRole('tab', { name: 'Used by (2)' })).toBeInTheDocument()
+    const danger = screen.getByTestId('danger-zone')
+    expect(danger).toHaveTextContent('Gmail and Calendar still use it and will stop working.')
+    expect(danger).not.toHaveTextContent('Nothing uses it yet')
+    fireEvent.click(within(danger).getByRole('button', { name: 'Delete credential' }))
+    const confirm = await screen.findByRole('alertdialog')
+    expect(confirm).toHaveTextContent('Gmail and Calendar still use it and will stop working.')
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+    expect(connectionsApi.remove).not.toHaveBeenCalled()
+  })
+
+  it('lists each user on the Used by tab with a link to it', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([connection({ usedBy: [{ type: 'api', id: 'api-gmail', name: 'Gmail' }] })])
+    at()
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Used by (1)' }))
+    const list = await screen.findByTestId('used-by-list')
+    expect(within(list).getByRole('link', { name: 'Gmail' })).toHaveAttribute('href', '/apis/api-gmail')
+    expect(within(list).getByText('API')).toBeInTheDocument()
+  })
+
+  it('the list says what uses a connection instead of "Nothing yet"', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([connection({ usedBy: [{ type: 'api', id: 'api-gmail', name: 'Gmail' }] })])
+    renderAtRoute(<CredentialsPage />, { path: '/credentials', url: '/credentials', paths: PATHS })
+    const table = await screen.findByTestId('credentials-table')
+    const row = (await within(table).findByText('GitHub', { selector: 'span.truncate' })).closest('tr')!
+    expect(within(row).getByTestId('credential-used-by')).toHaveTextContent('Gmail')
+    expect(within(row).queryByText('Nothing yet')).not.toBeInTheDocument()
+  })
+
   it('changes who can use a private credential in place, as on a provider connection', async () => {
     vi.mocked(connectionsApi.setSharing).mockResolvedValue(connection({ id: 'conn-2', owner: 'org' }))
     at('conn-2')

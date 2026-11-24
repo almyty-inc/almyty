@@ -1,6 +1,6 @@
 {
   "name": "@almyty/mcp-mux",
-  "version": "1.5.15",
+  "version": "1.5.16",
   "publishConfig": {
     "access": "public"
   },

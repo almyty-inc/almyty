@@ -96,12 +96,12 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 
 | | Routes |
 | --- | ---: |
-| Controller routes (src/modules + ee/modules) | 593 |
+| Controller routes (src/modules + ee/modules) | 596 |
 | Excluded (an MCP client must not or cannot use them) | 143 |
-| In scope | 450 |
-| Covered by a dedicated tool | 79 (17.6%) |
-| Covered by an operation | 371 (82.4%) |
-| Covered in total | 450 (100.0%) |
+| In scope | 453 |
+| Covered by a dedicated tool | 79 (17.4%) |
+| Covered by an operation | 374 (82.6%) |
+| Covered in total | 453 (100.0%) |
 | Held for a product decision | 0 (0.0%) |
 
 ## By resource
@@ -112,7 +112,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | agent-channels | 21 | 12 | 8 | 0 | 1 |
 | agent-constraints | 4 | 0 | 4 | 0 | 0 |
 | agents | 66 | 10 | 47 | 0 | 9 |
-| apis | 31 | 6 | 21 | 0 | 4 |
+| apis | 33 | 6 | 23 | 0 | 4 |
 | approvals | 9 | 3 | 6 | 0 | 0 |
 | audit-log | 2 | 0 | 2 | 0 | 0 |
 | auth | 19 | 0 | 5 | 0 | 14 |
@@ -130,7 +130,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | files | 5 | 0 | 3 | 0 | 2 |
 | gateways | 79 | 6 | 40 | 0 | 33 |
 | health | 3 | 0 | 0 | 0 | 3 |
-| hosted-runners | 15 | 0 | 12 | 0 | 3 |
+| hosted-runners | 16 | 0 | 13 | 0 | 3 |
 | kms | 4 | 0 | 4 | 0 | 0 |
 | licensing | 1 | 0 | 1 | 0 | 0 |
 | lifecycle | 1 | 0 | 0 | 0 | 1 |
@@ -338,6 +338,8 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | apis | `GET /apis/:id/key` (ApisCredentialsController.getKey) | `apis.get_key` (read) | operation |
 | apis | `PUT /apis/:id/key` (ApisCredentialsController.setKey) |  | excluded |
 | apis | `DELETE /apis/:id/key` (ApisCredentialsController.removeKey) | `apis.remove_key` (destructive) | operation |
+| apis | `GET /apis/:id/key/sign-ins` (ApisCredentialsController.sharedSignIns) | `apis.list_shared_sign_ins` (read) | operation |
+| apis | `POST /apis/:id/key/sign-ins/:credentialId` (ApisCredentialsController.useSharedSignIn) | `apis.use_shared_sign_in` (write) | operation |
 | apis | `POST /apis/:id/credentials` (ApisCredentialsController.createCredential) |  | excluded |
 | apis | `GET /apis/:id/credentials` (ApisCredentialsController.getCredentials) | `apis.list_credentials` (read) | operation |
 | apis | `PUT /apis/:id/credentials/:credentialId` (ApisCredentialsController.updateCredential) |  | excluded |
@@ -520,6 +522,7 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | hosted-runners | `GET /environments/settings` (EnvironmentsController.settings) | `environments.get_settings` (read) | operation |
 | hosted-runners | `GET /environments/usage` (EnvironmentsController.usage) | `environments.get_usage` (read) | operation |
 | hosted-runners | `GET /environments/capacity` (EnvironmentsController.capacity) | `environments.get_capacity` (read) | operation |
+| hosted-runners | `PUT /environments/capacity/limits` (EnvironmentsController.setLimits) | `environments.set_limits` (write) | operation |
 | hosted-runners | `POST /environments` (EnvironmentsController.create) | `environments.create` (write) | operation |
 | hosted-runners | `GET /environments/:id` (EnvironmentsController.get) | `environments.get` (read) | operation |
 | hosted-runners | `PATCH /environments/:id` (EnvironmentsController.update) | `environments.update` (write) | operation |

@@ -18,6 +18,7 @@ import { usableProviders } from '../llm-providers/private-provider';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { readAlwaysOn } from './always-on/always-on.types';
 import { EMPTY_RUN_STATS } from './agent-run-stats';
+import { formatCost, formatDuration } from '../../common/utils/format';
 
 // ── Document shape ──
 
@@ -587,16 +588,17 @@ export class AgentTechDocHelper {
       `- Pipeline executions: ${l.executions.total} total, ${l.executions.successful} completed (${l.executions.completedPercent}%)`,
     );
     if (l.executions.checksPassedPercent !== null) {
-      // "No errors found", not "passed": a pass means the check found no
+      // "No contradictions found", not "passed": a pass means the check found no
       // mismatch with the tool results, not that the answer is right.
       const checked = l.executions.checked;
       lines.push(
-        `- No errors found: ${l.executions.checksPassed} of ${checked} checked run${checked === 1 ? '' : 's'} (${l.executions.checksPassedPercent}%). The check compares an answer's names, dates, versions, ids, counts and labels with what the tools returned; it can't confirm everything an answer says.`,
+        `- No contradictions found: ${l.executions.checksPassed} of ${checked} checked run${checked === 1 ? '' : 's'} (${l.executions.checksPassedPercent}%). The check compares an answer's names, dates, versions, ids, counts and labels with what the tools returned; it can't confirm everything an answer says.`,
       );
     }
     lines.push(`- Autonomous runs: ${l.autonomousRuns.total}`);
-    lines.push(`- Average execution time: ${l.executions.averageExecutionTimeMs} ms`);
-    lines.push(`- Accumulated cost: $${l.executions.totalCostUsd}`);
+    // Read as the dashboard reads them; the JSON form keeps the exact numbers.
+    lines.push(`- Average execution time: ${formatDuration(l.executions.averageExecutionTimeMs)}`);
+    lines.push(`- Accumulated cost: ${formatCost(l.executions.totalCostUsd)}`);
     lines.push(`- Last executed: ${fmt(l.executions.lastExecutedAt)}`);
     lines.push(`- Audit log: available at \`${l.auditLog.endpoint}\``);
     lines.push(`- Entity versioning: ${l.entityVersioning.mechanism} — ${l.entityVersioning.note}`);

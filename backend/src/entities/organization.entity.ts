@@ -72,13 +72,16 @@ export interface OrganizationSettings {
   };
   /**
    * Tighter hosted runner limits than the plan's (ee billing,
-   * hosted-capacity.ts): maxConcurrentRunners, maxWorkspaces and
-   * monthlyCeilingHours, each only lower. Data only, no page sets it yet.
+   * hosted-capacity.ts): maxConcurrentRunners, maxWorkspaces,
+   * monthlyCeilingHours and monthlyCeilingUsd, each only lower. Owners and
+   * admins set the first two and the dollar limit on the Hosted tab
+   * (PUT /environments/capacity/limits, hosted-limits.service.ts).
    */
   hostedCapacity?: {
     maxConcurrentRunners?: number;
     maxWorkspaces?: number;
     monthlyCeilingHours?: number;
+    monthlyCeilingUsd?: number;
   };
 }
 

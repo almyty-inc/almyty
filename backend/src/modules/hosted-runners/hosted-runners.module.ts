@@ -32,6 +32,7 @@ import { HOSTED_MODEL_TOKENS } from './hosted-model-token.contract';
 import { WorkspaceLeaseService } from './workspace-lease.service';
 import { EnvironmentHandoverService } from './environment-handover.service';
 import { EnvironmentInsightsService } from './environment-insights.service';
+import { HostedLimitsService } from './hosted-limits.service';
 
 /**
  * Hosted runners (docs/hosted-runners.md): environments, the persistent
@@ -78,6 +79,7 @@ import { EnvironmentInsightsService } from './environment-insights.service';
     WorkspaceLeaseService,
     EnvironmentHandoverService,
     EnvironmentInsightsService,
+    HostedLimitsService,
     { provide: HOSTED_DISPATCH, useExisting: HostedRunnersService },
     { provide: HOSTED_MODEL_TOKENS, useExisting: HostedModelTokenService },
   ],

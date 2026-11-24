@@ -175,13 +175,13 @@ export const CHECK_PASS_EXPLANATION =
   "the check compared the answer's names, dates, versions, ids, counts and labels with what the tools returned and found no mismatch; it can't confirm everything the answer says";
 
 /**
- * A check's outcome in plain words. A pass is "no errors found", never
+ * A check's outcome in plain words. A pass is "no contradictions found", never
  * "passed" or "verified": it means no mismatch with the tool results, not
  * that the answer is right.
  */
 export function formatCheck(verdict: { verdict?: string; unavailable?: boolean; reason?: string; failures?: Array<{ rule?: unknown }> } | undefined | null): string {
   if (!verdict) return 'not checked';
-  if (verdict.verdict === 'pass') return 'no errors found';
+  if (verdict.verdict === 'pass') return 'no contradictions found';
   if (verdict.unavailable === true) return 'not checked: no checker gave a verdict';
   const reasons = typeof verdict.reason === 'string' && verdict.reason.trim()
     ? [verdict.reason.trim()]

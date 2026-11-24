@@ -14,6 +14,8 @@
  * against org-wide spend. A budget is scoped either to the whole
  * organization (agentId null) or to exactly one agent.
  */
+
+import { formatCostCents } from '@/lib/format'
 export type SpendBudgetPeriod = 'day' | 'month'
 export type SpendBudgetBehavior = 'warn_log' | 'reject'
 
@@ -106,15 +108,11 @@ export function centsToDollars(cents: number): string {
 }
 
 /**
- * An amount in cents (fractions allowed) as dollars. Under a dollar it
- * keeps up to four decimals, so a model call's fraction of a cent on a
- * one-cent budget reads $0.0042, not $0.00.
+ * An amount in cents (fractions allowed) as dollars, the way every cost in
+ * the app reads: "$25.00", "<$0.01" for a fraction of a cent, "$0.00" for none.
  */
 export function formatBudgetCents(cents: number): string {
-  const dollars = (Number.isFinite(cents) ? cents : 0) / 100
-  if (Math.abs(dollars) >= 1 || dollars === 0) return `$${dollars.toFixed(2)}`
-  const [whole, frac = ''] = dollars.toFixed(4).replace(/0+$/, '').split('.')
-  return `$${whole}.${frac.padEnd(2, '0')}`
+  return formatCostCents(cents, { empty: '$0.00' })
 }
 
 /** The share of a budget spent: "<1%" for any spend under one percent, never 100% below the limit. */

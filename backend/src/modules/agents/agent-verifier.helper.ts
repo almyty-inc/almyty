@@ -12,6 +12,7 @@ import { itemsOutsideWindow } from './window-check';
 import { answerCodeFindings, CODE_CHECKER, type WholeToolResult } from './answer-checks';
 import { verifiedRule, verifyCheckerFinding } from './checker-findings';
 import { screenNotes } from './checker-notes';
+import { isOutOfCredits, withNoCreditsReason } from '../llm-providers/model-errors';
 
 /** Verdict-merge policy for a verify node's checker panel. */
 export type VerifyPolicy = 'all_pass' | 'majority' | 'any_fail_blocks';
@@ -78,6 +79,8 @@ export interface CheckerResult {
   passedRules: string[];
   /** Why the checker gave no verdict, in words a person can act on. */
   error?: string;
+  /** Machine code for why it gave no verdict, when the platform knows: `no_credits` (the provider's account has none). */
+  errorCode?: 'no_credits';
   /** What else happened reading the verdict: a cut-off reply read in part, items not counted. */
   note?: string;
   cost?: number;
@@ -157,6 +160,9 @@ export function checkerOutputLimit(maxOutputTokens?: number | null): number {
 
 /** What a person reads when no checker could give a verdict. Code: verification_unavailable. */
 export const UNAVAILABLE_RULE = 'the checker could not give a verdict';
+
+/** The same, when every checker's provider refused the call because its account has no credits. Code: verification_unavailable. */
+export const NO_CREDITS_RULE = "the checker could not give a verdict: its provider's account has no credits";
 
 /** Item statuses that mean "this claim is wrong". Any other status is not a failure. */
 const FAILED_STATUSES = new Set(['fail', 'failed', 'failure', 'wrong', 'incorrect', 'violation', 'contradicted', 'unsupported', 'error']);
@@ -719,12 +725,17 @@ export class AgentVerifierHelper {
     } catch (err: any) {
       const detail =
         err?.response?.data?.error?.message || err?.message || 'checker call failed';
+      const text = typeof detail === 'string' ? detail : JSON.stringify(detail);
+      // A provider whose account has no credits: said in plain words on
+      // the step and the run (its models are taken out of the lists too).
+      const noCredits = isOutOfCredits(err);
       return {
         checker: name,
         verdict: 'error',
         failures: [],
         passedRules: [],
-        error: typeof detail === 'string' ? detail : JSON.stringify(detail),
+        error: noCredits ? withNoCreditsReason(text) : text,
+        ...(noCredits ? { errorCode: 'no_credits' as const } : {}),
       };
     }
   }
@@ -854,6 +865,10 @@ export class AgentVerifierHelper {
         .map((r) => (r.error ? `${r.checker}: ${r.error}` : ''))
         .filter(Boolean)
         .join('; ');
+      // When every checker failed because its provider's account has no
+      // credits, the run says that, not only "could not give a verdict":
+      // it is the one thing the owner can fix.
+      const noCredits = results.length > 0 && results.every((r) => r.errorCode === 'no_credits');
       return {
         verdict: 'fail',
         unavailable: true,
@@ -861,7 +876,7 @@ export class AgentVerifierHelper {
           ? failures
           : [
               {
-                rule: UNAVAILABLE_RULE,
+                rule: noCredits ? NO_CREDITS_RULE : UNAVAILABLE_RULE,
                 evidence: why || 'no checker was configured',
                 checker: 'verify',
                 code: 'verification_unavailable',

@@ -1,6 +1,6 @@
 {
   "name": "@almyty/credentials",
-  "version": "1.5.15",
+  "version": "1.5.16",
   "publishConfig": {
     "access": "public"
   },
@@ -28,7 +28,7 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^1.5.14"
+    "@almyty/client": "^1.5.15"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

@@ -250,7 +250,10 @@ export class CredentialRefResolver {
     if (!credential.isActive) {
       throw new ForbiddenException({ code: 'CREDENTIAL_INACTIVE', message: 'credential is inactive' });
     }
-    if (credential.isExpired()) {
+    // An OAuth 2.0 sign-in's expiresAt is its access token's, which lasts an
+    // hour; with a refresh token the sign-in renews itself where it is sent
+    // (ToolAuthService), so it is not refused here as expired.
+    if (credential.isExpired() && !CredentialRefResolver.renewsItself(credential)) {
       throw new ForbiddenException({ code: 'CREDENTIAL_EXPIRED', message: 'credential has expired' });
     }
     const execution = CredentialRefResolver.executionPrincipalOf(opts.principal);
@@ -605,6 +608,11 @@ export class CredentialRefResolver {
       return (await this.executionAccess.canExecute(owner, credential)).allowed;
     }
     return false;
+  }
+
+  /** An OAuth 2.0 sign-in that holds a refresh token: an expired access token is renewed on use. */
+  static renewsItself(credential: Pick<Credential, 'type' | 'config'>): boolean {
+    return credential.type === CredentialType.OAUTH2 && !!credential.config?.refreshToken;
   }
 
   /** Whether `credential` was created by `managedBy` (same kind, and same id when one is given). */

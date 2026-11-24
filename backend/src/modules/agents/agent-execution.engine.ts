@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { formatCost } from '../../common/utils/format';
 import { findModelNotFound } from '../llm-providers/model-errors';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
@@ -576,7 +577,7 @@ export class AgentExecutionEngine {
         // Check budget
         if (totalCost > budgetLimit) {
           execution.status = AgentExecutionStatus.FAILED;
-          execution.error = `Budget limit ($${budgetLimit}) exceeded: $${totalCost.toFixed(4)}`;
+          execution.error = `Budget limit ($${budgetLimit}) exceeded: ${formatCost(totalCost)}`;
           execution.executionTime = Date.now() - startTime;
           execution.totalCost = totalCost;
           execution.totalTokens = totalTokens;
@@ -1104,7 +1105,7 @@ export class AgentExecutionEngine {
       // to the generic node-failure path below.
       if (totalCost > budgetLimit) {
         execution.status = AgentExecutionStatus.FAILED;
-        execution.error = `Budget limit ($${budgetLimit}) exceeded: $${totalCost.toFixed(4)}`;
+        execution.error = `Budget limit ($${budgetLimit}) exceeded: ${formatCost(totalCost)}`;
         execution.executionTime = Date.now() - startTime;
         execution.totalCost = totalCost;
         execution.totalTokens = totalTokens;

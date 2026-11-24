@@ -141,10 +141,15 @@ export interface ConnectionHealth {
   detail?: string | null
 }
 
+/** Something that points at a credential, worked out by the server when the credential is read. */
 export interface ConnectionUsedBy {
+  /** api, tool, llm_provider, mcp_source, gateway, agent, agent_channel, ... */
   type: string
-  id: string
+  /** Null when the caller may not see it: counted, not named. */
+  id: string | null
   name: string
+  /** The agent a channel belongs to. */
+  agentId?: string
 }
 
 export interface Connection {
@@ -162,7 +167,7 @@ export interface Connection {
   accountLabel?: string | null
   health: ConnectionHealth
   scopesGranted?: string[]
-  /** Not part of the list view yet; shown when the server sends it. */
+  /** What points at it (APIs, model connections, channels, ...), from GET /credentials. */
   usedBy?: ConnectionUsedBy[]
   createdAt: string
   updatedAt?: string
