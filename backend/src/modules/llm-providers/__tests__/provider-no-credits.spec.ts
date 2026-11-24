@@ -2,7 +2,7 @@ import { Model } from '../../../entities/model.entity';
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { fakeRepository } from '../../../test/fake-repository';
 import { LlmChatRunnerHelper } from '../llm-chat-runner.helper';
-import { NO_CREDITS_REASON, PROVIDER_NO_CREDITS, ProviderOutOfCreditsError, isKeyRejection, isOutOfCredits, isOutOfCreditsResponse } from '../model-errors';
+import { NO_CREDITS_REASON, PROVIDER_NO_CREDITS, ProviderOutOfCreditsError, isKeyRejection, isOutOfCredits, isOutOfCreditsResponse, withNoCreditsReason } from '../model-errors';
 import { ModelRouterService } from '../../model-catalog/routing/model-router.service';
 import { ModelCatalogService } from '../../model-catalog/model-catalog.service';
 import { GONE_REASONS } from '../../model-catalog/notices/model-change';
@@ -42,6 +42,12 @@ describe('a provider whose account has no credits', () => {
       expect(isOutOfCredits({ response: { status: 503 } })).toBe(false);
     });
 
+    it('says the reason once, also over the typed error a key check reads back (staging, 2026-11-24)', () => {
+      const typed = new ProviderOutOfCreditsError(PROVIDER, 'google', 'Your prepayment credits are depleted.').message;
+      expect(withNoCreditsReason(typed)).toBe(typed);
+      expect(withNoCreditsReason('Your prepayment credits are depleted.')).toBe(`${NO_CREDITS_REASON} Your prepayment credits are depleted.`);
+      expect(withNoCreditsReason('')).toBe(NO_CREDITS_REASON);
+    });
     it('the typed error says it in plain words and is not read as a refused key', () => {
       const err = new ProviderOutOfCreditsError(PROVIDER, 'google', 'Your prepayment credits are depleted.');
       expect(err.code).toBe(PROVIDER_NO_CREDITS);

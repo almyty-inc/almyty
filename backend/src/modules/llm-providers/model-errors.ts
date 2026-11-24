@@ -127,6 +127,17 @@ export const PROVIDER_NO_CREDITS = 'PROVIDER_NO_CREDITS' as const;
 export const NO_CREDITS_REASON = "The provider's account has no credits.";
 
 /**
+ * `text` led by the plain reason, once: the vendor's words after it, and
+ * nothing added when the text already says it (the typed error's message
+ * does, and is what a key check reads back).
+ */
+export function withNoCreditsReason(text?: string): string {
+  const words = (text ?? '').trim();
+  if (!words) return NO_CREDITS_REASON;
+  return words.startsWith(NO_CREDITS_REASON.replace(/\.$/, '')) ? words : `${NO_CREDITS_REASON} ${words}`;
+}
+
+/**
  * The vendor accepted the key and refused the call because the account
  * has no credits or its paid quota is used up: Google's 402 "prepayment
  * credits are depleted", OpenAI's `insufficient_quota`, Anthropic's
