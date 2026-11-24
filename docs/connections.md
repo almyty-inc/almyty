@@ -42,6 +42,16 @@ members may keep personal keys, custom connectors and the governance
 rules. A sign-in comes back to `/credentials?connection=<id>`, which
 opens what it made.
 
+"Used by" (the list column, the tab and the delete warning) is worked
+out each time the credential is read, from what points at it (the table
+under "What points at the store", plus tools with their own auth, agents'
+memory accounts, channel signing keys, outside agents, hosted runner
+environments, hosted models and wake-up subscriptions):
+`backend/src/modules/credentials/credential-usage.ts`. Delete names the
+users ("Gmail and Calendar still use it and will stop working"). One the
+reader may not see, such as another member's private API, is counted but
+not named.
+
 Access keys, the keys other programs use to call almyty, are not
 credentials: they are made on the gateway or agent they unlock.
 

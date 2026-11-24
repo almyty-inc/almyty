@@ -37,10 +37,10 @@ import type { Visibility, VisibilityValue } from '@/components/ui/visibility-fie
 import { credentialsApi } from '@/lib/api'
 import { isNotFoundError } from '@/lib/api-error'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
-import { cn, pluralized } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import type { Connection, Connector } from '@/types/connections'
-import { storedRow, type CredentialUse, type StoredCredential } from './credential-rows'
+import { storedRow, usesOf, usesSentence, type CredentialUse, type StoredCredential } from './credential-rows'
 import { CONNECTIONS_QUERY_KEY, CREDENTIALS_PATH, CREDENTIALS_QUERY_KEY } from './paths'
 
 const BACK = { to: CREDENTIALS_PATH, label: 'Credentials' }
@@ -75,14 +75,15 @@ function UsedByList({ uses }: { uses: CredentialUse[] }) {
   return (
     <ul className="divide-y rounded-md border" data-testid="used-by-list">
       {uses.map((u, i) => (
-        <li key={`${u.label}:${i}`} className="px-3 py-2 text-sm">
+        <li key={`${u.label}:${i}`} className="flex items-baseline justify-between gap-3 px-3 py-2 text-sm">
           {u.href ? (
             <Link to={u.href} className="text-primary hover:underline">
               {u.label}
             </Link>
           ) : (
-            u.label
+            <span>{u.label}</span>
           )}
+          {u.kind && <span className="text-xs text-muted-foreground">{u.kind}</span>}
         </li>
       ))}
     </ul>
@@ -90,9 +91,11 @@ function UsedByList({ uses }: { uses: CredentialUse[] }) {
 }
 
 /** The bordered remove box a provider connection's page ends with: what goes, what it costs, the button. */
-function DeleteCredential({ name, uses, pending, onDelete }: { name: string; uses: number; pending: boolean; onDelete: () => void }) {
+function DeleteCredential({ name, uses, pending, onDelete }: { name: string; uses: CredentialUse[]; pending: boolean; onDelete: () => void }) {
   const { confirm, dialog } = useConfirm()
-  const cost = uses > 0 ? `${pluralized(uses, 'thing')} still use${uses === 1 ? 's' : ''} it and will stop working.` : undefined
+  // Named, so "delete" is never read as harmless while an API signs in with it.
+  const plural = uses.length !== 1
+  const cost = uses.length > 0 ? `${usesSentence(uses)} still use${plural ? '' : 's'} it and will stop working.` : undefined
   return (
     <>
       <DangerZone
@@ -183,7 +186,7 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
   })
 
   const status = connectionCheck(connection, connector)
-  const uses: CredentialUse[] = (connection.usedBy ?? []).map((u) => ({ label: u.name }))
+  const uses: CredentialUse[] = usesOf(connection.usedBy)
   const service = connector?.displayName ?? connection.connectorDisplayName ?? connection.connectorKey
   const detail = status.state === 'ok' ? connection.health?.detail : null
 
@@ -257,7 +260,7 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
               options={shareOptions}
             />
           </FormSection>
-          <DeleteCredential name={connection.name} uses={uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
+          <DeleteCredential name={connection.name} uses={uses} pending={remove.isPending} onDelete={() => remove.mutate()} />
         </TabsContent>
         <TabsContent value="used-by" className="pt-2">
           <UsedByList uses={uses} />
@@ -310,7 +313,7 @@ export function StoredCredentialDetail({ credential, onDeleted }: { credential: 
             />
             <WhoCanUseLine summary={row.who} />
           </FormSection>
-          <DeleteCredential name={credential.name} uses={row.uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
+          <DeleteCredential name={credential.name} uses={row.uses} pending={remove.isPending} onDelete={() => remove.mutate()} />
         </TabsContent>
         <TabsContent value="used-by" className="pt-2">
           <UsedByList uses={row.uses} />

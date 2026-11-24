@@ -24,6 +24,7 @@ import { Organization } from '../../../entities/organization.entity';
 import { sanitizeHeaders } from '../../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { decideToolEgress } from './tool-egress';
+import { safeResponseHeaders } from './safe-response-headers';
 import { graphqlOperationRequest, graphqlTargetUrl } from './graphql-operation-request';
 import {
   decideToolRequest,
@@ -249,7 +250,7 @@ export class ToolProtocolExecutor {
           retryCount: 0,
           metadata: {
             httpStatus: error.response?.status,
-            headers: error.response?.headers as Record<string, string>,
+            headers: safeResponseHeaders(error.response?.headers),
             requestId:
               (error.response?.headers?.['x-request-id'] as string) || generateRequestId(),
           },
@@ -464,7 +465,7 @@ export class ToolProtocolExecutor {
           retryCount: 0,
           metadata: {
             httpStatus: error.response?.status,
-            headers: error.response?.headers as Record<string, string>,
+            headers: safeResponseHeaders(error.response?.headers),
             requestId:
               (error.response?.headers?.['x-request-id'] as string) || generateRequestId(),
           },
@@ -579,7 +580,7 @@ export class ToolProtocolExecutor {
   private httpMeta(response: AxiosResponse): Record<string, any> {
     return {
       httpStatus: response.status,
-      headers: response.headers as Record<string, string>,
+      headers: safeResponseHeaders(response.headers),
       requestId:
         (response.headers['x-request-id'] as string) || generateRequestId(),
     };
