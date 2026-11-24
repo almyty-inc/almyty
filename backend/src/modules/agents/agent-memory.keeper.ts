@@ -231,6 +231,34 @@ export function recallBlock(ranked: Array<Pick<RankedItem, 'item'>>): string {
   return '\n\n## Relevant Memories\n' + ranked.map((r) => `- [${recallLabel(r.item)}] ${recallText(r.item)}`).join('\n');
 }
 
+/** How much of a recalled memory's text its run step keeps: enough to tell which one it was. */
+export const RECALLED_PREVIEW_CHARS = 160;
+
+/**
+ * One recalled memory as the `memory_recall` step records it: its id, what
+ * kind it is, the start of its text, when it was saved and by which run.
+ * The run view lists them, so a later run's use of a memory can be traced
+ * to the run that wrote it.
+ */
+export function recalledMemoryOf(item: Pick<MemoryItem, 'id' | 'mode' | 'tier' | 'content' | 'created_at' | 'provenance'>): {
+  id: string;
+  kind: string;
+  text: string;
+  savedAt?: string;
+  savedByRun?: string;
+} {
+  const text = (item.content ?? '').replace(/\s+/g, ' ').trim();
+  const created = item.created_at ? new Date(item.created_at) : null;
+  const savedByRun = item.provenance?.session_id ?? undefined;
+  return {
+    id: item.id,
+    kind: recallLabel(item),
+    text: text.length > RECALLED_PREVIEW_CHARS ? `${text.slice(0, RECALLED_PREVIEW_CHARS - 1)}…` : text,
+    ...(created && !isNaN(created.getTime()) ? { savedAt: created.toISOString() } : {}),
+    ...(savedByRun ? { savedByRun } : {}),
+  };
+}
+
 /**
  * What a run's memory lookup searches with: what the person asked. A run
  * started with `{ message }` is searched with the message, not its JSON;
@@ -308,7 +336,13 @@ export class AgentMemoryKeeper {
     run.steps.push({
       type: 'memory_recall',
       input: { scope: scope.scope_type, account: s.account },
-      output: { found: ranked.length, ...(query ? {} : { skipped: 'nothing to search with' }) },
+      output: {
+        found: ranked.length,
+        // Which saved memories the run read, and which run saved each:
+        // recall provenance, shown on the step.
+        ...(ranked.length ? { memories: ranked.map((r) => recalledMemoryOf(r.item)) } : {}),
+        ...(query ? {} : { skipped: 'nothing to search with' }),
+      },
       duration: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
       ...(error ? { error } : {}),
@@ -383,13 +417,15 @@ export class AgentMemoryKeeper {
     const answerStands = asText(run.output).trim().length > 0 && !verificationFailed(run);
     let saved = 0;
     let dropped = 0;
+    const savedIds: string[] = [];
     for (const p of pending) {
       if (!answerStands && describesAnswer(p.content)) {
         dropped++;
         continue;
       }
       try {
-        await this.put(agent, run, scope, s, p.content, legacyTypeToTier(p.kind), p.tags ?? [], 'store_memory', p.kind);
+        const put = await this.put(agent, run, scope, s, p.content, legacyTypeToTier(p.kind), p.tags ?? [], 'store_memory', p.kind);
+        if (put?.id) savedIds.push(put.id);
         saved++;
       } catch (err: any) {
         this.s.logger.warn(`Failed to save memory for run ${run.id}: ${err?.message ?? err}`);
@@ -401,6 +437,8 @@ export class AgentMemoryKeeper {
       input: { save: 'store_memory', scope: scope.scope_type, account: s.account },
       output: {
         saved,
+        // Which memories this run wrote, so a later run's recall can be traced back to it.
+        ...(savedIds.length ? { memoryIds: savedIds } : {}),
         ...(dropped ? { dropped: `${dropped} about the answer: ${asText(run.output).trim() ? 'its check failed' : 'no answer was given'}` } : {}),
       },
       cost: 0,
@@ -472,9 +510,10 @@ export class AgentMemoryKeeper {
     }
 
     let saved = 0;
+    const savedIds: string[] = [];
     for (const content of entries) {
       try {
-        await this.put(
+        const put = await this.put(
           agent,
           run,
           scope,
@@ -485,6 +524,7 @@ export class AgentMemoryKeeper {
           s.save === 'facts' ? 'auto_save_facts' : 'auto_save_conversation',
           s.save === 'facts' ? 'fact' : 'episode',
         );
+        if (put?.id) savedIds.push(put.id);
         saved++;
       } catch (err: any) {
         this.s.logger.warn(`Failed to save memory for run ${run.id}: ${err?.message ?? err}`);
@@ -494,7 +534,7 @@ export class AgentMemoryKeeper {
       type: 'memory_save',
       role: stampOf(team.main),
       input: { save: s.save, scope: scope.scope_type, account: s.account },
-      output: { saved, ...(dropped ? { dropped: 'never-save rules' } : {}) },
+      output: { saved, ...(savedIds.length ? { memoryIds: savedIds } : {}), ...(dropped ? { dropped: 'never-save rules' } : {}) },
       cost: (run.totalCost || 0) - costBefore,
       duration: Date.now() - startedAt,
       timestamp: new Date().toISOString(),

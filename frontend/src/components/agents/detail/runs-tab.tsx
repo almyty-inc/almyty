@@ -47,6 +47,7 @@ import { MachineProblem } from '@/components/runners/machine-problem'
 import type { MachineProblemInfo } from '@/components/runners/hosted-shared'
 import { useLiveRun, type LiveRunConnection } from '@/hooks/use-live-run'
 import { AssistantMarkdown } from '@/components/hosted-chat/assistant-markdown'
+import { RecalledMemories } from './recalled-memories'
 
 interface RunsTabProps {
   /** Autonomous runs. */
@@ -515,6 +516,7 @@ function OpenedRun({
                         Out: {typeof step.output === 'string' ? step.output : JSON.stringify(step.output)}
                       </div>
                     )}
+                    <RecalledMemories step={step} index={idx} />
                     {machineError ? (
                       <MachineProblem problem={machineError} testId={`run-step-${idx}-machine`} />
                     ) : step.error && (
