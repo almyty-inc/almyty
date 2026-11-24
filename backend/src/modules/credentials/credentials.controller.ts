@@ -101,6 +101,21 @@ export class CredentialsController {
     return { success: true, data, message: 'Services retrieved successfully' };
   }
 
+  /**
+   * The redirect URL a sign-in started here comes back to, worked out the
+   * same way `connect` works it out. A server whose owner registers apps by
+   * hand (a client id and secret) needs it on that app, so the form shows it.
+   */
+  @Get('credentials/oauth/callback-url')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @RequirePermissions(CONNECTIONS_READ)
+  @ApiOperation({ summary: 'The redirect URL to register on an app a sign-in uses' })
+  signInCallbackUrl(@Request() req: any) {
+    this.requireOrg(req);
+    const callbackUrl = this.connectionsService().callbackUrl(requestBase(req));
+    return { success: true, data: { callbackUrl } };
+  }
+
   @Post('credentials/services')
   @Roles('admin', 'owner')
   @RequirePermissions(CONNECTIONS_MANAGE)

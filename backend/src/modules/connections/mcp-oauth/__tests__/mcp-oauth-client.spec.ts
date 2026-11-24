@@ -225,6 +225,36 @@ describe('McpOAuthClientService', () => {
     expect(http.calls).toHaveLength(0);
   });
 
+  describe('detectAuth: what the Add MCP server page offers first', () => {
+    it('says sign_in for a 401 whose challenge names its resource metadata', async () => {
+      const { service } = setup();
+      await expect(service.detectAuth(SERVER)).resolves.toEqual({ auth: 'sign_in' });
+    });
+
+    it('says sign_in for a 401 without a challenge when the metadata is at the well-known address', async () => {
+      const { service } = setup(world({ challenge: false }).routes);
+      await expect(service.detectAuth(SERVER)).resolves.toEqual({ auth: 'sign_in' });
+    });
+
+    it('says token for a 401 that publishes nowhere to sign in', async () => {
+      const { service } = setup([
+        { method: 'POST', url: SERVER, handle: () => ({ status: 401, body: { error: 'unauthorized' }, headers: { 'WWW-Authenticate': 'Bearer realm="api"' } }) },
+        { url: 'https://mcp.example.com/.well-known/', handle: () => ({ status: 404, body: {} }) },
+      ]);
+      await expect(service.detectAuth(SERVER)).resolves.toEqual({ auth: 'token' });
+    });
+
+    it('says none for a server that answers without asking, and unknown for one it cannot ask', async () => {
+      const open = setup([{ method: 'POST', url: SERVER, handle: () => ({ status: 200, body: { jsonrpc: '2.0', id: 1, result: {} } }) }]);
+      await expect(open.service.detectAuth(SERVER)).resolves.toEqual({ auth: 'none' });
+      const down = setup([{ method: 'POST', url: SERVER, handle: () => { throw new Error('ECONNREFUSED') } }]);
+      await expect(down.service.detectAuth(SERVER)).resolves.toEqual({ auth: 'unknown' });
+      const blocked = setup([]);
+      await expect(blocked.service.detectAuth('http://127.0.0.1:4000/mcp')).resolves.toEqual({ auth: 'unknown' });
+      expect(blocked.http.calls).toHaveLength(0);
+    });
+  });
+
   it('reads at most MCP_CLIENT_OAUTH_MAX_BYTES of an answer', async () => {
     process.env.MCP_CLIENT_OAUTH_MAX_BYTES = '1024';
     const w = world();
