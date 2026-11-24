@@ -6,6 +6,8 @@ import { Injectable, Logger, NotFoundException, BadRequestException, ConflictExc
 import { ModuleRef } from '@nestjs/core';
 import { AgentChannelsService } from '../agent-channels/agent-channels.service';
 import { PushWakesService } from './always-on/push-wakes/push-wakes.service';
+import { AGENT_SCHEDULE_SYNC, AgentScheduleSync } from './agent-schedule-sync';
+import { repeatFor, timingOf } from './agent-schedule-spec';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Raw, Repository } from 'typeorm';
@@ -955,6 +957,10 @@ export class AgentsService {
     }
 
     this.assertWebhookUrl(updateDto.webhookUrl);
+    // A schedule written through a plain update is refused here if the
+    // scheduler could not run it, rather than saved and never fired.
+    const nextSchedule = updateDto.settings?.schedule;
+    if (nextSchedule?.enabled) repeatFor(timingOf(nextSchedule));
     this.assertCollaboration(updateDto.collaboration);
     normaliseRunnerLabels(updateDto.agentConfig);
     this.assertModels(updateDto.models);
@@ -1083,6 +1089,14 @@ export class AgentsService {
     if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
     const saved = await this.saveNamed(agent);
 
+    // A save that writes the settings or the status moves the live
+    // scheduled job to match. The timing and input live in the job, not
+    // read from this row at tick time, so without this a changed time
+    // was stored while the old one went on firing.
+    if (updateDto.settings !== undefined || updateDto.status !== undefined) {
+      await this.scheduleSyncOf()?.syncSchedule(saved);
+    }
+
     // A changed retention applies to what the agent already saved, in
     // almyty's own store and in outside accounts alike.
     const retentionAfter = retentionSeconds(memorySettings(saved.memoryConfig as AgentMemoryConfig));
@@ -1133,6 +1147,9 @@ export class AgentsService {
     // channel, a mail watch) and drop their secrets; the rows would go with
     // the agent, the subscriptions would not.
     await this.pushWakesOf()?.removeAllFor(id, organizationId);
+    // Its scheduled job goes too; left behind it fired on until a tick
+    // found the agent gone.
+    await this.scheduleSyncOf()?.removeSchedule(id);
     await this.agentRepository.remove(agent);
     this.logger.log(
       `[DELETE_AGENT] Agent deleted: id=${id}` +
@@ -1160,6 +1177,16 @@ export class AgentsService {
     }
   }
 
+  /**
+   * The scheduler's job sync, or null in a positional unit spec built
+   * without the container. Inside the app a failed lookup throws: saving a
+   * schedule change without moving the live job is the bug this guards.
+   */
+  private scheduleSyncOf(): AgentScheduleSync | null {
+    if (!this.moduleRef) return null;
+    return this.moduleRef.get<string, AgentScheduleSync>(AGENT_SCHEDULE_SYNC, { strict: false });
+  }
+
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
     if (userId) await this.checkAgentPermission(agent, userId);
@@ -1168,6 +1195,8 @@ export class AgentsService {
     agent.status = AgentStatus.ACTIVE;
     const saved = await this.agentRepository.save(agent);
     this.logger.log(`[ACTIVATE_AGENT] Agent activated: id=${id}`);
+    // A schedule left on while the agent was inactive starts firing again.
+    await this.scheduleSyncOf()?.syncSchedule(saved);
 
     if (userId) {
       await this.auditService.log({ agentId: id, organizationId, userId, action: 'activated' });
@@ -1182,6 +1211,8 @@ export class AgentsService {
     agent.status = AgentStatus.INACTIVE;
     const saved = await this.agentRepository.save(agent);
     this.logger.log(`[DEACTIVATE_AGENT] Agent deactivated: id=${id}`);
+    // Its schedule stops firing now, not at its next tick.
+    await this.scheduleSyncOf()?.syncSchedule(saved);
 
     if (userId) {
       await this.auditService.log({ agentId: id, organizationId, userId, action: 'deactivated' });

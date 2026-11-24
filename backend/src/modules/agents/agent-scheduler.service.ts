@@ -33,6 +33,7 @@ import {
   ScheduleDelivery,
   ScheduledResultPoster,
 } from './scheduled-result-poster';
+import type { AgentScheduleSync } from './agent-schedule-sync';
 
 export { validateIntervalMinutes } from './agent-schedule-spec';
 
@@ -168,7 +169,7 @@ function asIssue(err: unknown): BrokenModel | undefined {
 
 @Injectable()
 @Processor(QUEUE_NAME)
-export class AgentSchedulerService implements OnModuleInit {
+export class AgentSchedulerService implements OnModuleInit, AgentScheduleSync {
   private readonly logger = new Logger(AgentSchedulerService.name);
 
   constructor(
@@ -600,6 +601,30 @@ export class AgentSchedulerService implements OnModuleInit {
 
     this.logger.log(`[UNSCHEDULE] Agent ${agentId} unscheduled — BullMQ job removed`);
     return saved;
+  }
+
+  /**
+   * Make the live repeatable job match the agent as saved: one job on the
+   * stored timing and input when the agent is active and its schedule is
+   * on, none otherwise. Called by every save outside this service that can
+   * change either (AgentsService.updateAgent, activate, deactivate).
+   *
+   * The timing lives in the job itself, not read from the row at tick
+   * time, so a save that changed `settings.schedule` without this left the
+   * old job firing on the old time and the new time never firing.
+   */
+  async syncSchedule(agent: Agent): Promise<void> {
+    const schedule = agent.settings?.schedule as AgentScheduleConfig | undefined;
+    if (agent.status !== AgentStatus.ACTIVE || !schedule?.enabled) {
+      await this.removeRepeatableJob(agent.id);
+      return;
+    }
+    await this.addRepeatableJob(agent);
+  }
+
+  /** Drop the agent's live job, if it has one. For an agent being deleted. */
+  async removeSchedule(agentId: string): Promise<void> {
+    await this.removeRepeatableJob(agentId);
   }
 
 
