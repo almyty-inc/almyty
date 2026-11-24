@@ -71,6 +71,28 @@ describe('/credentials routes', () => {
     expect((await controller.listServices({ user: member }, {} as any)).data).toEqual([{ key: 'github' }]);
   });
 
+  // The sign-in form shows the redirect URL an app registered by hand must
+  // list; it is the one connect sends, from config, else from the request.
+  it('answers the redirect URL a sign-in comes back to, from the API base URL', () => {
+    const { controller, connections } = build();
+    const config: Record<string, string | undefined> = { PUBLIC_API_URL: 'https://api.example.com/' };
+    const real = Object.create(ConnectionsService.prototype);
+    real.configService = { get: (key: string) => config[key] };
+    (connections as any).callbackUrl = real.callbackUrl.bind(real);
+
+    const req = { user: member, headers: { host: 'internal:3000', 'x-forwarded-proto': 'https' } };
+    expect(controller.signInCallbackUrl(req).data).toEqual({ callbackUrl: 'https://api.example.com/credentials/oauth/callback' });
+
+    delete config.PUBLIC_API_URL;
+    expect(controller.signInCallbackUrl({ ...req, headers: { host: 'api.staging.example.com', 'x-forwarded-proto': 'https' } }).data).toEqual({
+      callbackUrl: 'https://api.staging.example.com/credentials/oauth/callback',
+    });
+
+    const proto = CredentialsController.prototype as any;
+    expect(Reflect.getMetadata(PATH_METADATA, proto.signInCallbackUrl)).toBe('credentials/oauth/callback-url');
+    expect(Reflect.getMetadata(METHOD_METADATA, proto.signInCallbackUrl)).toBe(RequestMethod.GET);
+  });
+
   it('puts grants and the sign-in callback under /credentials, and nothing under /connections', () => {
     // Governance (EE) is under /ee/credentials: connections-governance.routes.spec.ts.
     expect(Reflect.getMetadata(PATH_METADATA, GrantsController)).toBe('credentials/:id/grants');
