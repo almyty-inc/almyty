@@ -96,12 +96,12 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 
 | | Routes |
 | --- | ---: |
-| Controller routes (src/modules + ee/modules) | 594 |
+| Controller routes (src/modules + ee/modules) | 596 |
 | Excluded (an MCP client must not or cannot use them) | 143 |
-| In scope | 451 |
-| Covered by a dedicated tool | 79 (17.5%) |
-| Covered by an operation | 372 (82.5%) |
-| Covered in total | 451 (100.0%) |
+| In scope | 453 |
+| Covered by a dedicated tool | 79 (17.4%) |
+| Covered by an operation | 374 (82.6%) |
+| Covered in total | 453 (100.0%) |
 | Held for a product decision | 0 (0.0%) |
 
 ## By resource
@@ -112,7 +112,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | agent-channels | 21 | 12 | 8 | 0 | 1 |
 | agent-constraints | 4 | 0 | 4 | 0 | 0 |
 | agents | 66 | 10 | 47 | 0 | 9 |
-| apis | 31 | 6 | 21 | 0 | 4 |
+| apis | 33 | 6 | 23 | 0 | 4 |
 | approvals | 9 | 3 | 6 | 0 | 0 |
 | audit-log | 2 | 0 | 2 | 0 | 0 |
 | auth | 19 | 0 | 5 | 0 | 14 |
@@ -338,6 +338,8 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | apis | `GET /apis/:id/key` (ApisCredentialsController.getKey) | `apis.get_key` (read) | operation |
 | apis | `PUT /apis/:id/key` (ApisCredentialsController.setKey) |  | excluded |
 | apis | `DELETE /apis/:id/key` (ApisCredentialsController.removeKey) | `apis.remove_key` (destructive) | operation |
+| apis | `GET /apis/:id/key/sign-ins` (ApisCredentialsController.sharedSignIns) | `apis.list_shared_sign_ins` (read) | operation |
+| apis | `POST /apis/:id/key/sign-ins/:credentialId` (ApisCredentialsController.useSharedSignIn) | `apis.use_shared_sign_in` (write) | operation |
 | apis | `POST /apis/:id/credentials` (ApisCredentialsController.createCredential) |  | excluded |
 | apis | `GET /apis/:id/credentials` (ApisCredentialsController.getCredentials) | `apis.list_credentials` (read) | operation |
 | apis | `PUT /apis/:id/credentials/:credentialId` (ApisCredentialsController.updateCredential) |  | excluded |

@@ -14,6 +14,7 @@ import { Credential, CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { validateUrl, validateResponseSize } from '../../common/security/url-validator';
 import { ssrfSafeDispatcher } from '../../common/security/safe-fetch';
+import { grantedScopesOf, parseScopeString, scopeUnion } from './oauth2-scopes';
 
 export interface OAuth2Preset {
   name: string;
@@ -37,7 +38,22 @@ interface AuthorizeParams {
   credentialName?: string;
   /** App path to return to after the callback (e.g. /apis/:id). */
   returnTo?: string;
+  /**
+   * Add access to this existing sign-in instead of making a new one. Set
+   * only by ApiKeyService after it resolved the sign-in as the caller; the
+   * public authorize route drops it from the request body.
+   */
+  extendCredentialId?: string;
 }
+
+/** What happened when access was added to a sign-in for an API. */
+export interface SignInExtended {
+  organizationId: string;
+  userId: string;
+  apiId: string;
+  credentialId: string;
+}
+export type SignInExtendedListener = (event: SignInExtended) => Promise<unknown>;
 
 interface ClientCredentialsParams {
   organizationId: string;
@@ -256,6 +272,8 @@ export class OAuth2Service {
 
   private static readonly STATE_TTL = 600; // 10 minutes
 
+  private extendedListener: SignInExtendedListener | null = null;
+
   constructor(
     @InjectRepository(Credential)
     private readonly credentialRepository: Repository<Credential>,
@@ -377,6 +395,10 @@ export class OAuth2Service {
       credentialName: credentialName || `OAuth2 - ${provider || 'Custom'}`,
       // Where the browser goes after the callback: a path in the app only.
       returnTo: safeReturnPath(params.returnTo),
+      // Kept on the credential, so access can be added to it later.
+      authorizationUrl,
+      // Set when this consent adds access to an existing sign-in.
+      extendCredentialId: params.extendCredentialId ?? null,
     };
 
     await this.redis.set(
@@ -408,6 +430,12 @@ export class OAuth2Service {
     if (url.hostname === 'accounts.google.com') {
       if (!url.searchParams.has('access_type')) url.searchParams.set('access_type', 'offline');
       if (!url.searchParams.has('prompt')) url.searchParams.set('prompt', 'consent');
+    }
+
+    // Adding access to an existing sign-in: incremental authorization, so
+    // the token that comes back carries what the sign-in already held too.
+    if (params.extendCredentialId) {
+      url.searchParams.set('include_granted_scopes', 'true');
     }
 
     this.logger.log(
@@ -506,6 +534,19 @@ export class OAuth2Service {
       expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
     }
 
+    // What the provider says it granted; when it does not say, what was asked for.
+    const granted = parseScopeString(tokenData.scope);
+
+    // Access added to an existing sign-in: the new token replaces the old
+    // one on the same credential, which now holds the union of scopes.
+    if (statePayload.extendCredentialId) {
+      const saved = await this.mergeIntoSignIn(statePayload, tokenData, expiresAt, granted);
+      if (apiId && this.extendedListener) {
+        await this.extendedListener({ organizationId, userId: statePayload.userId, apiId, credentialId: saved.id });
+      }
+      return { credentialId: saved.id, returnTo: safeReturnPath(statePayload.returnTo) };
+    }
+
     // Create credential entity: an "OAuth 2.0 sign-in" credential, listed
     // on Credentials and pickable wherever a key is used.
     const credential = this.credentialRepository.create({
@@ -513,13 +554,17 @@ export class OAuth2Service {
       type: CredentialType.OAUTH2,
       organizationId,
       apiId: apiId || null,
+      isActive: true,
       ...signInConnection(tokenUrl),
       scopes: scopes || [],
+      scopesGranted: granted.length > 0 ? granted : scopes || [],
       expiresAt,
       config: {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token || null,
         tokenEndpoint: tokenUrl,
+        // Where to send the browser to add access to this sign-in later.
+        authorizationUrl: statePayload.authorizationUrl ?? null,
         clientId,
         clientSecret,
         tokenType: tokenData.token_type || 'Bearer',
@@ -535,6 +580,55 @@ export class OAuth2Service {
     );
 
     return { credentialId: saved.id, returnTo: safeReturnPath(statePayload.returnTo) };
+  }
+
+  /** Called after access was added to a sign-in for an API, to point that API at it. */
+  onSignInExtended(listener: SignInExtendedListener): void {
+    this.extendedListener = listener;
+  }
+
+  /**
+   * Store the token of an incremental consent on the sign-in it extends.
+   * Only the same OAuth client's token is accepted; the refresh token is
+   * kept when the provider sends no new one; scopes become the union of
+   * what was held and what this consent granted, never more.
+   */
+  private async mergeIntoSignIn(
+    statePayload: Record<string, any>,
+    tokenData: Record<string, any>,
+    expiresAt: Date | null,
+    granted: string[],
+  ): Promise<Credential> {
+    const row = await this.credentialRepository.findOne({
+      where: { id: statePayload.extendCredentialId, organizationId: statePayload.organizationId },
+    });
+    if (!row || row.type !== CredentialType.OAUTH2) {
+      throw new BadRequestException('The sign-in to add access to no longer exists.');
+    }
+    await this.envelopeCrypto.warmOrg?.(row.organizationId);
+    const current = row.getDecryptedConfig();
+    if (current.clientId !== statePayload.clientId) {
+      throw new BadRequestException('The sign-in belongs to another OAuth client.');
+    }
+    const asked: string[] = Array.isArray(statePayload.scopes) ? statePayload.scopes : [];
+    row.config = {
+      ...current,
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token || current.refreshToken || null,
+      tokenType: tokenData.token_type || current.tokenType || 'Bearer',
+      authorizationUrl: current.authorizationUrl ?? statePayload.authorizationUrl ?? null,
+    };
+    row.scopes = scopeUnion(row.scopes, asked);
+    row.scopesGranted = scopeUnion(grantedScopesOf(row), granted.length > 0 ? granted : asked);
+    row.expiresAt = expiresAt as Date;
+    row.isActive = true;
+    row.healthStatus = 'valid';
+    row.healthCheckedAt = new Date();
+    row.healthError = null;
+    await row.encryptSensitiveDataForOrg(this.envelopeCrypto);
+    const saved = await this.credentialRepository.save(row);
+    this.logger.log(`OAuth2 sign-in ${saved.id} extended to ${saved.scopesGranted?.length ?? 0} scopes for org ${saved.organizationId}`);
+    return saved;
   }
 
   /**

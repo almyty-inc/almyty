@@ -347,3 +347,20 @@ export class SetApiKeyDto {
   @IsString()
   connectionId?: string;
 }
+
+/** POST /apis/:id/key/sign-ins/:credentialId: use an existing sign-in, adding the access this API needs. */
+export class UseSharedSignInDto {
+  /** The API's listed scopes to ask for; all of them when left out. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  @MaxLength(512, { each: true })
+  scopes?: string[];
+
+  /** App path to come back to after the consent. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  returnTo?: string;
+}
