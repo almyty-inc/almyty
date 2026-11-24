@@ -870,6 +870,7 @@ export class AgentStepProcessor {
             totalCost: run.totalCost,
             totalTokens: run.totalTokens,
             createdAt: run.createdAt,
+            workingMemory: run.workingMemory,
           },
           resolvedLimits,
         );
@@ -2209,7 +2210,7 @@ export class AgentStepProcessor {
     const retries = Number(run.workingMemory?.noAnswerRetries ?? 0);
     const reason = NO_ANSWER_REASONS[kind];
     const outOfRoom = !!checkRunLimits(
-      { currentStep: run.currentStep + 1, totalCost: run.totalCost, totalTokens: run.totalTokens, createdAt: run.createdAt },
+      { currentStep: run.currentStep + 1, totalCost: run.totalCost, totalTokens: run.totalTokens, createdAt: run.createdAt, workingMemory: run.workingMemory },
       call.resolvedLimits,
     );
     const retry = retries < NO_ANSWER_RETRIES && !outOfRoom;
@@ -2741,6 +2742,11 @@ export class AgentStepProcessor {
         duration: Date.now() - stepStart,
         timestamp: new Date().toISOString(),
       });
+      // A step that only slept for the machine is not spent against
+      // maxSteps (run-limits.ts stepsSpent); the wake budget bounds it.
+      if (still.length === pending.length && !gated.length && !unknown.length) {
+        run.workingMemory.machineWaitSteps = (Number(run.workingMemory.machineWaitSteps) || 0) + 1;
+      }
     }
     const askingPerson = gated.length > 0 || unknown.length > 0;
     if (askingPerson) run.status = AgentRunStatus.WAITING_APPROVAL;

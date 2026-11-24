@@ -3,14 +3,16 @@
  * while the pod model token stays out of their hands.
  *
  * The reconcile loop puts a short-lived pod model token into the pod's
- * Secret (ALMYTY_MODEL_TOKEN, with its expiry in
- * ALMYTY_MODEL_TOKEN_EXPIRES_AT) and tells the runner where to listen
- * (ALMYTY_MODEL_PROXY_PORT) and where to renew (ALMYTY_MODEL_RENEW_PATH).
+ * tokens Secret, handed to the runner as files in ALMYTY_HANDOVER_DIR
+ * (model-token, model-token-expires-at; handover.ts), and tells the runner
+ * where to listen (ALMYTY_MODEL_PROXY_PORT) and where to renew
+ * (ALMYTY_MODEL_RENEW_PATH).
  * The image's entrypoint points every CLI at http://127.0.0.1:<port> with a
  * placeholder key (images/runner-env/entrypoint.sh). This module:
  *
- *   - takes the token out of the runner's environment as soon as it is
- *     read, so nothing the runner starts inherits it;
+ *   - deletes the token's files as it reads them (an older backend: takes
+ *     its variables out of the runner's environment), so nothing the
+ *     runner starts can find it;
  *   - listens on the loopback port and forwards each /v1/... call to the
  *     almyty API, replacing whatever credential the CLI sent with the
  *     current token, streaming both ways;
@@ -26,6 +28,12 @@ import { createServer, IncomingMessage, request as httpRequest, Server, ServerRe
 import { request as httpsRequest } from 'node:https';
 import { AddressInfo } from 'node:net';
 
+import { HandoverFs, takeHandoverFile } from './handover.js';
+
+/** The handed-over files (ALMYTY_HANDOVER_DIR) the pod model token and its expiry come in. */
+export const MODEL_TOKEN_HANDOVER_FILE = 'model-token';
+export const MODEL_TOKEN_EXPIRES_HANDOVER_FILE = 'model-token-expires-at';
+/** From an older backend: variables, through envFrom. */
 export const MODEL_TOKEN_ENV = 'ALMYTY_MODEL_TOKEN';
 export const MODEL_TOKEN_EXPIRES_ENV = 'ALMYTY_MODEL_TOKEN_EXPIRES_AT';
 export const MODEL_PROXY_PORT_ENV = 'ALMYTY_MODEL_PROXY_PORT';
@@ -52,12 +60,13 @@ export interface ModelAccessSettings {
 
 /**
  * The pod model token and the proxy's settings, or null when the pod has
- * none (a runner outside a hosted pod, or an older backend). Removes the
- * token variables from `env` once read.
+ * none (a runner outside a hosted pod, or an older backend). The token
+ * comes as handed-over files, deleted as they are read (handover.ts), or
+ * from an older backend as variables, removed from `env` once read.
  */
-export function readModelAccess(env: Env = process.env): ModelAccessSettings | null {
-  const token = (env[MODEL_TOKEN_ENV] ?? '').trim();
-  const expires = (env[MODEL_TOKEN_EXPIRES_ENV] ?? '').trim();
+export function readModelAccess(env: Env = process.env, handoverFs?: HandoverFs): ModelAccessSettings | null {
+  const token = (env[MODEL_TOKEN_ENV] ?? '').trim() || takeHandoverFile(env, MODEL_TOKEN_HANDOVER_FILE, handoverFs) || '';
+  const expires = (env[MODEL_TOKEN_EXPIRES_ENV] ?? '').trim() || takeHandoverFile(env, MODEL_TOKEN_EXPIRES_HANDOVER_FILE, handoverFs) || '';
   delete env[MODEL_TOKEN_ENV];
   delete env[MODEL_TOKEN_EXPIRES_ENV];
   const port = Number((env[MODEL_PROXY_PORT_ENV] ?? '').trim());

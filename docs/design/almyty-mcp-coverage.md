@@ -96,12 +96,12 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 
 | | Routes |
 | --- | ---: |
-| Controller routes (src/modules + ee/modules) | 592 |
+| Controller routes (src/modules + ee/modules) | 593 |
 | Excluded (an MCP client must not or cannot use them) | 143 |
-| In scope | 449 |
+| In scope | 450 |
 | Covered by a dedicated tool | 79 (17.6%) |
-| Covered by an operation | 370 (82.4%) |
-| Covered in total | 449 (100.0%) |
+| Covered by an operation | 371 (82.4%) |
+| Covered in total | 450 (100.0%) |
 | Held for a product decision | 0 (0.0%) |
 
 ## By resource
@@ -130,7 +130,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | files | 5 | 0 | 3 | 0 | 2 |
 | gateways | 79 | 6 | 40 | 0 | 33 |
 | health | 3 | 0 | 0 | 0 | 3 |
-| hosted-runners | 14 | 0 | 11 | 0 | 3 |
+| hosted-runners | 15 | 0 | 12 | 0 | 3 |
 | kms | 4 | 0 | 4 | 0 | 0 |
 | licensing | 1 | 0 | 1 | 0 | 0 |
 | lifecycle | 1 | 0 | 0 | 0 | 1 |
@@ -519,6 +519,7 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | hosted-runners | `GET /environments` (EnvironmentsController.list) | `environments.list` (read) | operation |
 | hosted-runners | `GET /environments/settings` (EnvironmentsController.settings) | `environments.get_settings` (read) | operation |
 | hosted-runners | `GET /environments/usage` (EnvironmentsController.usage) | `environments.get_usage` (read) | operation |
+| hosted-runners | `GET /environments/capacity` (EnvironmentsController.capacity) | `environments.get_capacity` (read) | operation |
 | hosted-runners | `POST /environments` (EnvironmentsController.create) | `environments.create` (write) | operation |
 | hosted-runners | `GET /environments/:id` (EnvironmentsController.get) | `environments.get` (read) | operation |
 | hosted-runners | `PATCH /environments/:id` (EnvironmentsController.update) | `environments.update` (write) | operation |

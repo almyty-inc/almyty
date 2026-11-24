@@ -9,7 +9,7 @@ import {
   SANDBOX_RUNTIME_CLASS,
 } from './hosted-runner-adapter.interface';
 import { KubeApiClient, KubeConnection, kubeConnectionFrom } from './kubernetes/kube-api.client';
-import { ClusterLayout, KubeObject, buildHostedRunnerObjects, buildSecret, namesFor, podSelector } from './kubernetes/manifests';
+import { ClusterLayout, KubeObject, buildHostedRunnerObjects, buildSecrets, namesFor, podSelector, tokensSecretName } from './kubernetes/manifests';
 
 /** Builds the API client for a connection; a spec hands in one aimed at a fake API server. */
 export type KubeClientFactory = (conn: KubeConnection) => Pick<KubeApiClient, 'apply' | 'get' | 'delete' | 'scaleDeployment' | 'listPods'>;
@@ -95,12 +95,15 @@ export class KubernetesHostedAdapter implements HostedRunnerAdapter {
 
   async rotateEnrollment(ref: HostedRef, secretEnv: Record<string, string>, creds: HostedAdapterCredentials): Promise<void> {
     const r = ref as KubeRef;
-    await this.client(creds).apply(buildSecret(r as any, secretEnv, this.layout()));
+    const client = this.client(creds);
+    for (const secret of buildSecrets(r as any, secretEnv, this.layout())) await client.apply(secret);
   }
 
   async clearSecrets(ref: HostedRef, creds: HostedAdapterCredentials): Promise<void> {
     const r = ref as KubeRef;
-    await this.client(creds).delete('Secret', r.secret, r.namespace);
+    const client = this.client(creds);
+    await client.delete('Secret', r.secret, r.namespace);
+    await client.delete('Secret', tokensSecretName(r.deployment), r.namespace);
   }
 
   async teardown(ref: HostedRef, opts: { keepVolume: boolean }, creds: HostedAdapterCredentials): Promise<void> {
@@ -108,6 +111,7 @@ export class KubernetesHostedAdapter implements HostedRunnerAdapter {
     const client = this.client(creds);
     await client.delete('Deployment', r.deployment, r.namespace);
     await client.delete('Secret', r.secret, r.namespace);
+    await client.delete('Secret', tokensSecretName(r.deployment), r.namespace);
     await client.delete('PodDisruptionBudget', r.disruptionBudget, r.namespace);
     await client.delete('CiliumNetworkPolicy', r.egressPolicy, r.namespace);
     if (!opts.keepVolume) await client.delete('PersistentVolumeClaim', r.volume, r.namespace);

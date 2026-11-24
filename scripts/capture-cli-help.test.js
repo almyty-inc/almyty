@@ -13,7 +13,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis, rendererProblems } = require('./capture-cli-help.js');
+const { CLIS, FREEZE_ARGS, readPackage, helpText, recordArgs, staleClis, rendererProblems, installPublished } = require('./capture-cli-help.js');
 
 const repo = path.join(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(repo, 'docs-site/public/screenshots/manifest.json'), 'utf8'));
@@ -114,4 +114,27 @@ test('the post-release workflow installs rsvg-convert and JetBrains Mono before 
   const capture = wf.indexOf('node scripts/capture-cli-help.js');
   assert.ok(install >= 0, 'post-release.yml must apt-get install librsvg2-bin and fonts-jetbrains-mono');
   assert.ok(capture > install, 'the install must come before the capture step');
+});
+
+test('installPublished waits while npm does not serve the new version yet', () => {
+  const e404 = 'npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/@almyty/credentials/-/credentials-1.5.14.tgz - Not found';
+  const results = [{ status: 1, stderr: e404 }, { status: 1, stderr: 'npm error code ETARGET' }, { status: 0, stderr: '' }];
+  const slept = [];
+  const r = installPublished({ run: () => results.shift(), sleep: (ms) => slept.push(ms), delayMs: 5 });
+  assert.strictEqual(r.status, 0);
+  assert.deepStrictEqual(slept, [5, 5]);
+});
+
+test('installPublished does not retry a failure that is not a missing version', () => {
+  let runs = 0;
+  const r = installPublished({ run: () => (runs++, { status: 1, stderr: 'npm error code EACCES' }), sleep: () => assert.fail('slept') });
+  assert.strictEqual(r.status, 1);
+  assert.strictEqual(runs, 1);
+});
+
+test('installPublished gives up after its attempts', () => {
+  let runs = 0;
+  const r = installPublished({ run: () => (runs++, { status: 1, stderr: 'E404' }), sleep: () => {}, attempts: 3 });
+  assert.strictEqual(r.status, 1);
+  assert.strictEqual(runs, 3);
 });

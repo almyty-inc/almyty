@@ -24,7 +24,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { TimeZoneSelect } from '@/components/settings/time-zone-select'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { agentsApi } from '@/lib/api'
+import { agentsApi, environmentsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { CHANNEL_LABELS, OWNER_ADDRESS_HINTS, agentChannelsApi, isMessagingChannel, type AgentChannel } from '@/lib/agent-channels'
 import {
@@ -67,6 +67,8 @@ export interface AlwaysOnForm {
   /** With report 'daily_digest': when the summary goes out ("HH:MM") and in which zone. */
   digestTime: string
   digestTimezone: string
+  /** The hosted environment it lives on, or NO_CHANNEL for none. */
+  homeEnvironmentId: string
 }
 
 /** The form a stored setting opens as; a new one starts off, every 30 minutes, asking first. */
@@ -94,6 +96,7 @@ export function formFromView(view: AlwaysOnView | undefined): AlwaysOnForm {
     // The agent's own setting, else the default the server worked out: 09:00 in your time zone.
     digestTime: c?.digest?.time ?? view?.digest?.time ?? '',
     digestTimezone: c?.digest?.timezone ?? view?.digest?.timezone ?? '',
+    homeEnvironmentId: c?.home?.environmentId ?? NO_CHANNEL,
   }
 }
 
@@ -137,6 +140,7 @@ export function inputFromForm(form: AlwaysOnForm, floorMinutes: number, pushWake
         : null,
       report: form.report,
       ...(form.report === 'daily_digest' ? { digest: { time: form.digestTime, timezone: form.digestTimezone } } : {}),
+      home: form.homeEnvironmentId !== NO_CHANNEL ? { environmentId: form.homeEnvironmentId } : null,
     },
   }
 }
@@ -206,6 +210,11 @@ function AlwaysOnPage({
   const ownerChannel = channels.find((c) => c.id === form.ownerChannelId)
   const reportChannel = destinations?.channels.find((c) => c.channelId === form.reportChannelId)
 
+  // The hosted environments it may live on (Runners, Hosted tab).
+  const environments = useQuery({ queryKey: ['environments-for-home'], queryFn: () => environmentsApi.list() })
+  const hostedEnvironments: Array<{ id: string; name: string }> =
+    environments.data?.enabled !== false && Array.isArray(environments.data?.data) ? environments.data!.data : []
+
   const wakes = useQuery({
     queryKey: ['agent-always-on-wakes', agent.id],
     queryFn: () => agentsApi.listWakes(agent.id, 10),
@@ -270,6 +279,29 @@ function AlwaysOnPage({
           />
         </Field>
       </FormSection>
+
+      {(hostedEnvironments.length > 0 || form.homeEnvironmentId !== NO_CHANNEL) && (
+        <FormSection
+          title="Where it lives"
+          description="On a hosted machine it keeps its files between wakes: what it writes on Monday is there on Tuesday. Your plan counts the always-on agents that live on hosted machines."
+        >
+          <Field id="always-on-home" label="Home">
+            <Select value={form.homeEnvironmentId} onValueChange={(v) => set({ homeEnvironmentId: v })}>
+              <SelectTrigger id="always-on-home" data-testid="always-on-home">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_CHANNEL}>No hosted home: the machines its tools are set to</SelectItem>
+                {hostedEnvironments.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </FormSection>
+      )}
 
       <FormSection title="What wakes it" description="Everything that wakes it goes into the same conversation, so it picks up where it left off.">
         <div className="flex items-start gap-3">

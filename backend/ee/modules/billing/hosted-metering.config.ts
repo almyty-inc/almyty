@@ -1,0 +1,77 @@
+/**
+ * How hosted runner minutes reach Stripe. Configuration only: no price
+ * and no allowance lives here (the allowance is plan capacity,
+ * hosted-capacity.ts; the price per minute is the Stripe price itself).
+ *
+ * STRIPE_HOSTED_METERS, JSON keyed by resource class:
+ *
+ *   {"small": {"eventName": "hosted_minutes_small", "price": "price_..."},
+ *    "large": {"eventName": "hosted_minutes_large", "price": "price_..."}}
+ *
+ * `eventName` is the Stripe Billing Meter's event name (one meter per
+ * class, summing `value`); `price` is a metered price on that meter, per
+ * minute. Checkout adds each price to a Pro or Business subscription, and
+ * the webhook adds any the subscription lacks. A class with no entry is
+ * recorded and never sent.
+ *
+ * HOSTED_USAGE_REPORTING, JSON, tunes the hourly job:
+ *   cron          when it runs (default "5 * * * *"; "off" turns it off)
+ *   lookbackHours how many finished hours each run looks at, so a missed
+ *                 run or a Stripe outage is caught up (default 48)
+ */
+export const STRIPE_HOSTED_METERS_ENV = 'STRIPE_HOSTED_METERS';
+export const HOSTED_USAGE_REPORTING_ENV = 'HOSTED_USAGE_REPORTING';
+
+export interface HostedMeter {
+  eventName: string;
+  price: string | null;
+}
+
+export interface HostedUsageReporting {
+  cron: string | null;
+  lookbackHours: number;
+}
+
+export const DEFAULT_HOSTED_USAGE_REPORTING: HostedUsageReporting = { cron: '5 * * * *', lookbackHours: 48 };
+
+type Env = Record<string, string | undefined>;
+
+function parse(raw: string | undefined): any {
+  if (!raw || !raw.trim()) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** The configured meter per resource class; classes without a valid entry are left out. */
+export function hostedMeters(env: Env = process.env): Record<string, HostedMeter> {
+  const parsed = parse(env[STRIPE_HOSTED_METERS_ENV]);
+  const out: Record<string, HostedMeter> = {};
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return out;
+  for (const [cls, row] of Object.entries(parsed as Record<string, any>)) {
+    if (!row || typeof row !== 'object' || typeof row.eventName !== 'string' || !row.eventName.trim()) continue;
+    out[cls] = { eventName: row.eventName.trim(), price: typeof row.price === 'string' && row.price.trim() ? row.price.trim() : null };
+  }
+  return out;
+}
+
+/** The metered prices checkout and the webhook add to a subscription. */
+export function hostedMeterPrices(env: Env = process.env): string[] {
+  return Array.from(new Set(Object.values(hostedMeters(env)).map((m) => m.price).filter((p): p is string => !!p)));
+}
+
+export function hostedUsageReporting(env: Env = process.env): HostedUsageReporting {
+  const parsed = parse(env[HOSTED_USAGE_REPORTING_ENV]) ?? {};
+  const out: HostedUsageReporting = { ...DEFAULT_HOSTED_USAGE_REPORTING };
+  if (typeof parsed.cron === 'string' && parsed.cron.trim()) out.cron = parsed.cron.trim().toLowerCase() === 'off' ? null : parsed.cron.trim();
+  const hours = Number(parsed.lookbackHours);
+  if (Number.isInteger(hours) && hours > 0) out.lookbackHours = hours;
+  return out;
+}
+
+/** The identifier Stripe deduplicates a meter event on: one per (organization, class, hour). */
+export function meterIdentifier(organizationId: string, resourceClass: string, hourStart: Date): string {
+  return `${organizationId}:${resourceClass}:${hourStart.toISOString()}`;
+}

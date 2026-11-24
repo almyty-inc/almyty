@@ -12,13 +12,15 @@ import {
   buildNamespace,
   buildResourceQuota,
   buildRuntimeClass,
-  buildSecret,
+  buildSecrets,
   buildVolumeClaim,
   egressDenyCidrs,
   isAllowlistHost,
   multiplyQuantity,
   namespaceFor,
   podSpecOf,
+  RUNNER_SECRETS_DIR,
+  runnerReadsTokenFiles,
 } from '../adapters/kubernetes/manifests';
 import { SANDBOX_RUNTIME_CLASS } from '../adapters/hosted-runner-adapter.interface';
 import { DEFAULT_HOSTED_RUNNER_SETTINGS } from '../hosted-runner-settings';
@@ -61,6 +63,53 @@ describe('hosted runner Kubernetes objects', () => {
       expect(container.envFrom).toEqual([{ secretRef: { name: `hr-${req.workspaceId}-env`, optional: false } }]);
     });
 
+    // A variable a process starts with stays in /proc/<pid>/environ for its
+    // whole life, and every command an agent runs on the machine runs as the
+    // runner's user: on staging (2026-11-24) `tr '\0' '\n' < /proc/1/environ`
+    // from a shell.exec listed ALMYTY_MODEL_TOKEN and ALMYTY_ENROLLMENT_TOKEN.
+    // So the runner's own tokens never reach the runner container as
+    // variables, nor its Secret as a mount: a step copies them into memory,
+    // and the runner deletes each file once read.
+    it("hands the runner's tokens over as files, never as variables of the runner container", () => {
+      const tokens = `hr-${req.workspaceId}-tokens`;
+      const names = (container.env as any[]).map((e) => e.name);
+      expect(names).not.toEqual(expect.arrayContaining(['ALMYTY_ENROLLMENT_TOKEN']));
+      expect(names).not.toContain('ALMYTY_MODEL_TOKEN');
+      expect(container.env).toContainEqual({ name: 'ALMYTY_HANDOVER_DIR', value: RUNNER_SECRETS_DIR });
+      expect(JSON.stringify(container)).not.toContain(tokens);
+      expect(container.envFrom.map((f: any) => f.secretRef.name)).toEqual([`hr-${req.workspaceId}-env`]);
+
+      const [copier] = pod.initContainers;
+      expect(copier.volumeMounts).toEqual(expect.arrayContaining([expect.objectContaining({ mountPath: RUNNER_SECRETS_DIR })]));
+      expect(copier.env).toBeUndefined();
+      expect(copier.securityContext).toEqual(container.securityContext);
+      const tokenVolume = pod.volumes.find((v: any) => v.secret);
+      expect(tokenVolume.secret.secretName).toBe(tokens);
+      expect(copier.volumeMounts.map((m: any) => m.name)).toContain(tokenVolume.name);
+      expect(container.volumeMounts.map((m: any) => m.name)).not.toContain(tokenVolume.name);
+      const filesVolume = pod.volumes.find((v: any) => v.name === container.volumeMounts.find((m: any) => m.mountPath === RUNNER_SECRETS_DIR).name);
+      expect(filesVolume.emptyDir.medium).toBe('Memory');
+      expect(() => assertSandboxed(deployment)).not.toThrow();
+    });
+
+    it('keeps an image whose runner reads only variables on variables, by reference', () => {
+      for (const image of ['almyty/runner-env:standard-1.5.14@sha256:abc', 'almyty/runner-env@sha256:abc', 'example/custom:latest']) {
+        const legacy = buildDeployment({ ...req, image }, LAYOUT).spec.template.spec;
+        expect(legacy.initContainers).toBeUndefined();
+        const enroll = legacy.containers[0].env.find((e: any) => e.name === 'ALMYTY_ENROLLMENT_TOKEN');
+        expect(enroll).toEqual({ name: 'ALMYTY_ENROLLMENT_TOKEN', valueFrom: { secretKeyRef: { name: `hr-${req.workspaceId}-tokens`, key: 'enrollment-token', optional: false } } });
+      }
+    });
+
+    it('reads the runner version from the image tag', () => {
+      expect(runnerReadsTokenFiles('almyty/runner-env:standard-1.5.15@sha256:abc')).toBe(true);
+      expect(runnerReadsTokenFiles('almyty/runner-env:standard-browser-1.6.0@sha256:abc')).toBe(true);
+      expect(runnerReadsTokenFiles('almyty/runner-env:node-2.0.0')).toBe(true);
+      expect(runnerReadsTokenFiles('almyty/runner-env:standard-1.5.14@sha256:abc')).toBe(false);
+      expect(runnerReadsTokenFiles('almyty/runner-env:python-1.4.99@sha256:abc')).toBe(false);
+      expect(runnerReadsTokenFiles('almyty/runner-env@sha256:abc')).toBe(false);
+    });
+
     it('is a Deployment with Recreate (one ReadWriteOnce volume) at the replicas asked, 0 by default', () => {
       expect(deployment.kind).toBe('Deployment');
       expect(deployment.spec.strategy).toEqual({ type: 'Recreate' });
@@ -68,10 +117,11 @@ describe('hosted runner Kubernetes objects', () => {
       expect(buildDeployment(req, LAYOUT, 1).spec.replicas).toBe(1);
     });
 
-    it('mounts the workspace volume and a scratch /tmp, sized from the class', () => {
+    it('mounts the workspace volume, a scratch /tmp and the token handover, sized from the class', () => {
       expect(container.volumeMounts).toEqual([
         { name: 'workspace', mountPath: LAYOUT.workspaceMountPath },
         { name: 'tmp', mountPath: '/tmp' },
+        { name: 'almyty-tokens', mountPath: RUNNER_SECRETS_DIR },
       ]);
       expect(pod.volumes[0]).toEqual({ name: 'workspace', persistentVolumeClaim: { claimName: `ws-${req.workspaceId}` } });
       expect(container.resources.limits).toEqual({ cpu: req.resources.cpu, memory: req.resources.memory, 'ephemeral-storage': req.resources.ephemeralStorage });
@@ -303,9 +353,12 @@ describe('hosted runner Kubernetes objects', () => {
     });
   });
 
-  it('keeps the token and bound values in the Secret, and only there', () => {
-    const secret = buildSecret(req, req.secretEnv, LAYOUT);
-    expect(secret.stringData).toEqual(req.secretEnv);
+  it('keeps the token and bound values in the Secrets, and only there: variables apart from the runner\'s tokens', () => {
+    const [variables, tokens] = buildSecrets(req, req.secretEnv, LAYOUT);
+    expect(variables.metadata.name).toBe(`hr-${req.workspaceId}-env`);
+    expect(variables.stringData).toEqual({ NPM_TOKEN: BOUND_SECRET });
+    expect(tokens.metadata.name).toBe(`hr-${req.workspaceId}-tokens`);
+    expect(tokens.stringData).toEqual({ 'enrollment-token': ENROLLMENT_TOKEN });
     const others = buildHostedRunnerObjects(req, LAYOUT);
     expect(others.map((o) => o.kind)).toEqual([
       'Namespace', 'ResourceQuota', 'LimitRange', 'NetworkPolicy', 'CiliumNetworkPolicy', 'PodDisruptionBudget', 'PersistentVolumeClaim', 'Deployment',

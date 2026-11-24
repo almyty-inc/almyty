@@ -10,6 +10,8 @@ import { HostedRunner, HostedRunnerDesired, HostedRunnerState } from '../../enti
 import { Runner, RunnerIsolationTier, RunnerState } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { Agent } from '../../entities/agent.entity';
+import { activeHostedHome } from '../agents/always-on/always-on.types';
+import { agentOwnerUserId } from '../agents/agent-owner';
 import { LlmProviderType } from '../../entities/llm-provider-type';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -28,9 +30,11 @@ import { WorkspaceLeaseService } from './workspace-lease.service';
 import {
   CapacityExhaustedError,
   HOSTED_CAPACITY_PROVIDER,
+  HOSTED_NOT_INCLUDED,
   HostedCapacity,
   HostedCapacityProvider,
   SettingsCapacityProvider,
+  ceilingReached,
 } from './hosted-capacity.provider';
 
 export const HOSTED_RECONCILE_QUEUE = 'hosted-runner-reconcile';
@@ -142,6 +146,40 @@ export class HostedRunnersService {
     return this.capacity.capacityFor(organizationId);
   }
 
+  /** Hosted machines of the organization asked to run now, leaving one out (the one being woken). */
+  runningCount(organizationId: string, exceptId: string | null = null): Promise<number> {
+    const qb = this.hostedRunners
+      .createQueryBuilder('h')
+      .where('h."organizationId" = :org', { org: organizationId })
+      .andWhere(`(h.desired->>'replicas')::int = 1`)
+      .andWhere('h.state NOT IN (:...terminal)', { terminal: TERMINAL_HOSTED_STATES });
+    if (exceptId) qb.andWhere('h.id <> :id', { id: exceptId });
+    return qb.getCount();
+  }
+
+  /** Persistent workspaces the organization keeps (running or parked): what `maxWorkspaces` counts. */
+  workspaceCount(organizationId: string): Promise<number> {
+    return this.workspaces.count({
+      where: { organizationId, kind: 'persistent', status: In([WorkspaceStatus.ACTIVE, WorkspaceStatus.SUSPENDED]) },
+    });
+  }
+
+  /** Runner-minutes per resource class since the start of this calendar month (UTC), open intervals up to now. */
+  async minutesThisMonth(organizationId: string, now = new Date()): Promise<Record<string, number>> {
+    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const rows: Array<{ resourceClass: string; seconds: string }> = await this.dataSource.query(
+      `SELECT "resourceClass",
+              SUM(EXTRACT(EPOCH FROM (LEAST(COALESCE("endedAt", $3), $3) - GREATEST("startedAt", $2)))) AS seconds
+         FROM runner_usage_intervals
+        WHERE "organizationId" = $1 AND "startedAt" < $3 AND ("endedAt" IS NULL OR "endedAt" > $2)
+        GROUP BY "resourceClass"`,
+      [organizationId, from, now],
+    );
+    const out: Record<string, number> = {};
+    for (const row of rows) out[row.resourceClass] = Math.max(0, Number(row.seconds)) / 60;
+    return out;
+  }
+
   /** The adapter new hosted runners use: HOSTED_RUNNERS_PROVIDER, `kubernetes` unless set. */
   providerType(): string {
     return (process.env.HOSTED_RUNNERS_PROVIDER ?? '').trim() || 'kubernetes';
@@ -246,7 +284,9 @@ export class HostedRunnersService {
   async workspaceFor(environmentId: string, caller: HostedCaller): Promise<{ workspace: Workspace; hostedRunner: HostedRunner; environment: Environment }> {
     const env = await this.environments.findOne({ where: { id: environmentId, organizationId: caller.organizationId } });
     if (!env || !(await this.mayUse(env, caller))) throw new HostedDispatchError('runner_not_found', 'environment not found');
-    const owner = this.ownerOf(caller);
+    // An always-on agent at home here works in its own workspace; any
+    // other call in the caller's.
+    const owner = (await this.homeOwnerFor(env, caller)) ?? this.ownerOf(caller);
     // A call that names one of the caller's inherited, read-only
     // workspaces on this environment works there; nothing else reaches one.
     if (caller.workspaceId) {
@@ -269,9 +309,8 @@ export class HostedRunnersService {
       if (hr) return { workspace: existing, hostedRunner: hr, environment: env };
     }
     const capacity = await this.capacity.capacityFor(env.organizationId);
-    const live = await this.workspaces.count({
-      where: { organizationId: env.organizationId, kind: 'persistent', status: In([WorkspaceStatus.ACTIVE, WorkspaceStatus.SUSPENDED]) },
-    });
+    if (capacity.hostedEnvironments === false) throw new HostedDispatchError('capacity_exhausted', HOSTED_NOT_INCLUDED);
+    const live = await this.workspaceCount(env.organizationId);
     if (live >= capacity.maxWorkspaces) {
       throw new HostedDispatchError('capacity_exhausted', `This organization already keeps ${live} hosted workspaces, its limit; release one first`);
     }
@@ -371,8 +410,9 @@ export class HostedRunnersService {
   }
 
   /**
-   * Ask for the pod. Refused when the organization already runs as many
-   * hosted runners as its capacity allows.
+   * Ask for the pod. Refused when the organization's plan has no hosted
+   * machines, when it already runs as many hosted runners as its capacity
+   * allows, or when its machines have reached the month's ceiling.
    */
   async ensureAwake(hr: HostedRunner, now = new Date()): Promise<HostedRunner> {
     if (hr.desired.replicas === 1) {
@@ -380,15 +420,15 @@ export class HostedRunnersService {
       return hr;
     }
     const capacity = await this.capacity.capacityFor(hr.organizationId);
-    const running = await this.hostedRunners
-      .createQueryBuilder('h')
-      .where('h."organizationId" = :org', { org: hr.organizationId })
-      .andWhere('h.id <> :id', { id: hr.id })
-      .andWhere(`(h.desired->>'replicas')::int = 1`)
-      .andWhere('h.state NOT IN (:...terminal)', { terminal: TERMINAL_HOSTED_STATES })
-      .getCount();
+    if (capacity.hostedEnvironments === false) throw new CapacityExhaustedError(HOSTED_NOT_INCLUDED);
+    const running = await this.runningCount(hr.organizationId, hr.id);
     if (running >= capacity.maxConcurrentRunners) {
       throw new CapacityExhaustedError(`This organization already runs ${running} hosted machines at once, its limit`);
+    }
+    const ceiling = capacity.monthlyCeilingMinutes;
+    if (ceiling !== null && ceiling !== undefined) {
+      const used = Object.values(await this.minutesThisMonth(hr.organizationId, now)).reduce((a, b) => a + b, 0);
+      if (used >= ceiling) throw new CapacityExhaustedError(ceilingReached(ceiling));
     }
     const desired: HostedRunnerDesired = { ...hr.desired, replicas: 1, wakeRequestedAt: now.toISOString() };
     await this.writeDesired(hr.id, desired, { lastActiveAt: now });
@@ -488,6 +528,24 @@ export class HostedRunnersService {
     if (!ws.agentId) return false;
     const agent = await this.workspaces.manager.getRepository(Agent).findOne({ where: { id: ws.agentId }, select: { id: true, alwaysOn: true } as any });
     return (agent as any)?.alwaysOn?.enabled === true;
+  }
+
+  /**
+   * The always-on home a call works in: when the calling agent is always
+   * on and its home (`alwaysOn.home`) is this environment, its own
+   * persistent workspace there, held by its owner, whoever's run it is. So
+   * a file one wake writes is there at the next, and the volume is kept
+   * while the agent is on (isAlwaysOnHome). Null for any other call.
+   */
+  async homeOwnerFor(env: Environment, caller: HostedCaller): Promise<{ ownerUserId: string; agentId: string } | null> {
+    if (!caller.agentId) return null;
+    const agent = await this.workspaces.manager.getRepository(Agent).findOne({
+      where: { id: caller.agentId, organizationId: env.organizationId },
+      select: { id: true, alwaysOn: true, createdBy: true } as any,
+    });
+    if (!agent || activeHostedHome(agent.alwaysOn) !== env.id) return null;
+    const ownerUserId = agentOwnerUserId(agent);
+    return ownerUserId ? { ownerUserId, agentId: agent.id } : null;
   }
 
   /** Suspended -> expired, and its hosted runner torn down with the volume. Conditional, like every workspace transition. */

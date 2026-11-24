@@ -114,6 +114,20 @@ export class StripeService {
     }
   }
 
+  /**
+   * One Billing Meter event (hosted runner minutes). Not wrapped in `call`:
+   * the usage report keeps Stripe's own error, to tell a duplicate
+   * identifier (already recorded) from a failure to retry.
+   */
+  createMeterEvent(params: Stripe.Billing.MeterEventCreateParams): Promise<Stripe.Billing.MeterEvent> {
+    return this.stripe().billing.meterEvents.create(params);
+  }
+
+  /** Add a price (a metered hosted-minutes price) to a live subscription. */
+  createSubscriptionItem(params: Stripe.SubscriptionItemCreateParams): Promise<Stripe.SubscriptionItem> {
+    return this.call('add a subscription item', () => this.stripe().subscriptionItems.create(params));
+  }
+
   retrieveSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
     return this.stripe().subscriptions.retrieve(subscriptionId);
   }

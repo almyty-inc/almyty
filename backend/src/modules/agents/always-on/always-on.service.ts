@@ -26,6 +26,7 @@ import { AgentWake, WakeSource } from '../../../entities/agent-wake.entity';
 import { AgentPushWake } from '../../../entities/agent-push-wake.entity';
 import { AgentChannel, ChannelType } from '../../../entities/agent-channel.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { Environment } from '../../../entities/environment.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { User } from '../../../entities/user.entity';
 import { ApprovalRequest } from '../../../entities/approval-request.entity';
@@ -488,6 +489,12 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     }
     const before = readAlwaysOn(agent.alwaysOn);
     const next = mergeAlwaysOn(before, input ?? {}, { pushWakes: await this.pushWakeCount(agentId, organizationId) });
+    // A hosted home must be one of this organization's environments. Whether
+    // the plan has hosted machines is asked when it wakes there.
+    if (next.home && next.home.environmentId !== before?.home?.environmentId) {
+      const found = await this.agents.manager.getRepository(Environment).count({ where: { id: next.home.environmentId, organizationId } });
+      if (!found) throw new BadRequestException('Choose one of your organization\'s hosted environments as its home.');
+    }
     const capacity = await this.capacityFor(organizationId);
 
     if (next.enabled && agent.status !== AgentStatus.ACTIVE) {
@@ -506,7 +513,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     // refused here, with the ones that are on named; one beyond it after the
     // plan changed pauses at its next wake instead (process). An agent on
     // the owner's own machines, or with no machine, is never limited.
-    if (next.enabled && !before?.enabled && hasHostedHome(next) && capacity.includedAgents !== null) {
+    // Giving an agent that is already on a hosted home counts the same as turning one on.
+    const becomesHosted = !before?.enabled || !hasHostedHome(before);
+    if (next.enabled && becomesHosted && hasHostedHome(next) && capacity.includedAgents !== null) {
       const others = (await this.hostedAgentsOn(organizationId)).filter((a) => a.id !== agentId);
       if (others.length >= capacity.includedAgents) {
         throw new BadRequestException(capacityRefusal(capacity.includedAgents, others.map((a) => a.name)));
