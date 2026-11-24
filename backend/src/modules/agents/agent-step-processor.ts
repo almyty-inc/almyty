@@ -54,6 +54,7 @@ import { NamedTool, readableToolName } from '../tools/tool-readable-name';
  * execution shapes truncate at the same size and with the same marker.
  */
 import { capPersistedPayload } from './persist-cap';
+import { toolResultTextForModel } from './tool-result-for-model';
 import { canReference } from '../../common/authorization/private-visibility';
 import { describePrincipal, principalOfRun } from '../../common/authorization/execution-access.service';
 import { updateRequestContext } from '../../common/request-context';
@@ -3492,18 +3493,19 @@ export class AgentStepProcessor {
   }
 
   /**
-   * A tool result as the run's model reads it, marked where the platform
+   * A tool result as the run's model reads it: made readable and bounded
+   * first (toolResultTextForModel: an encoded mail body as its text, no
+   * larger than the step log keeps), then marked where the platform
    * can say what the answer check will hold the answer to: for an agent
    * told to leave out what it already reported, the items its earlier
    * answers listed (markAlreadyReported); for an agent with a rule for
    * which issues are problems, each issue's labels as a closed list and
    * whether the rule lets it in (markOutsideIssueRule); for a request that
    * names a window, whether each dated item is inside it
-   * (markRequestWindow). Every other result is given as it is. The step
-   * keeps the result as the tool returned it.
+   * (markRequestWindow). The step keeps the result as the tool returned it.
    */
   toolResultForModel(run: AgentRun, content: string, now: Date = new Date()): string {
-    let out = content;
+    let out = toolResultTextForModel(content);
     const items = run.workingMemory?.alreadyReportedList;
     if (Array.isArray(items) && items.length) out = markAlreadyReported(out, items).content;
     const labels = run.workingMemory?.issueRuleLabels;
