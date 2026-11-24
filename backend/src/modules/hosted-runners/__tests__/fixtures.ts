@@ -21,7 +21,8 @@ export function provisionRequest(overrides: Partial<HostedProvisionRequest> = {}
     environmentVersion: 1,
     workspaceId: '44444444-4444-4444-8444-444444444444',
     runnerId: '55555555-5555-4555-8555-555555555555',
-    image: 'almyty/runner-env@sha256:abc',
+    // A runner that takes its tokens as files (runnerReadsTokenFiles).
+    image: 'almyty/runner-env:standard-1.5.15@sha256:abc',
     resources: { name: 'small', ...small },
     egressHosts: ['github.com', 'registry.npmjs.org', 'api.almyty.com'],
     env: {

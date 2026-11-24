@@ -253,8 +253,8 @@ key or anybody's login (Decision 6).
 
 - At every pod start the reconcile loop mints one (`almyty_pod_...`),
   stores only its sha256 in `hosted_model_tokens`, and writes it into the
-  pod's Secret as `ALMYTY_MODEL_TOKEN`, with its expiry in
-  `ALMYTY_MODEL_TOKEN_EXPIRES_AT`. The pod's plain environment names the
+  pod's tokens Secret, handed to the runner as the files `model-token` and
+  `model-token-expires-at` in `ALMYTY_HANDOVER_DIR`. The pod's plain environment names the
   runner's model proxy (`ALMYTY_MODEL_PROXY_PORT`, from
   `modelAccess.localProxyPort`) and where to renew
   (`ALMYTY_MODEL_RENEW_PATH`).
@@ -275,7 +275,7 @@ key or anybody's login (Decision 6).
   as an unknown key.
 
 **The runner's model proxy.** The CLIs never hold the token. The runner
-takes `ALMYTY_MODEL_TOKEN` out of its environment as it starts (nothing it
+reads it from its handed-over file and deletes the file as it starts (nothing it
 starts inherits it), listens on `127.0.0.1:<ALMYTY_MODEL_PROXY_PORT>`, and
 forwards each `/v1/...` call to the almyty API with the current token in
 place of whatever key the CLI sent, streaming both ways. The image's
@@ -539,10 +539,14 @@ runner without a login. It takes `--url` and nothing that names an
 identity: `--name`, `--org`, `--label` and `--config` are refused, because
 the token decides which runner this is.
 
-1. It reads the token from `ALMYTY_ENROLLMENT_TOKEN` (the pod's Secret,
-   through `envFrom`), or from the file named by
-   `ALMYTY_ENROLLMENT_TOKEN_FILE`, and removes both variables from its
-   environment, so nothing it starts inherits them. The API is
+1. It reads the token from the file `enrollment-token` in
+   `ALMYTY_HANDOVER_DIR` and deletes the file. The pod's tokens Secret is
+   mounted only into a start-up step that copies its files into a
+   memory-backed folder; the runner container never gets them as
+   variables, because a variable stays readable in `/proc/<pid>/environ`
+   of tini and the runner for the pod's life, to every command run there.
+   Images whose runner predates this (1.5.14 and older) get
+   `ALMYTY_ENROLLMENT_TOKEN` by Secret reference instead. The API is
    `ALMYTY_API_URL` (`--url` overrides it); plain `http` is refused except
    to localhost.
 2. It sends `POST /runners/enroll` with the token and its runtime info

@@ -39,8 +39,8 @@ describe('KubernetesHostedAdapter', () => {
     await adapter.rotateEnrollment(ref, req.secretEnv, creds);
     await adapter.scale(ref, 1, creds);
     const withSecret = api.requests.filter((r) => JSON.stringify(r.body ?? {}).includes(ENROLLMENT_TOKEN));
-    expect(withSecret.map((r) => r.body.kind)).toEqual(['Secret']);
-    expect(api.requests.filter((r) => JSON.stringify(r.body ?? {}).includes(BOUND_SECRET)).map((r) => r.body.kind)).toEqual(['Secret']);
+    expect(withSecret.map((r) => `${r.body.kind}/${r.body.metadata.name}`)).toEqual([`Secret/hr-${req.workspaceId}-tokens`]);
+    expect(api.requests.filter((r) => JSON.stringify(r.body ?? {}).includes(BOUND_SECRET)).map((r) => `${r.body.kind}/${r.body.metadata.name}`)).toEqual([`Secret/hr-${req.workspaceId}-env`]);
     // And nothing the adapter hands back for the row carries one.
     expect(JSON.stringify(ref)).not.toContain(ENROLLMENT_TOKEN);
   });
@@ -56,8 +56,10 @@ describe('KubernetesHostedAdapter', () => {
   it('drops the Secret while scaled to zero, and tears down keeping or deleting the volume', async () => {
     const ref = await adapter.provision(req, creds);
     await adapter.rotateEnrollment(ref, req.secretEnv, creds);
+    expect(api.objects.has(`/api/v1/namespaces/${ns}/secrets/hr-${req.workspaceId}-tokens`)).toBe(true);
     await adapter.clearSecrets(ref, creds);
     expect(api.objects.has(`/api/v1/namespaces/${ns}/secrets/hr-${req.workspaceId}-env`)).toBe(false);
+    expect(api.objects.has(`/api/v1/namespaces/${ns}/secrets/hr-${req.workspaceId}-tokens`)).toBe(false);
     expect(api.objects.has(`/apis/policy/v1/namespaces/${ns}/poddisruptionbudgets/hr-${req.workspaceId}`)).toBe(true);
 
     await adapter.teardown(ref, { keepVolume: true }, creds);

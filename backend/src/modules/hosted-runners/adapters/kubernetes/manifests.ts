@@ -8,8 +8,9 @@ import { HostedProvisionRequest, HostedResourceSpec, SANDBOX_RUNTIME_CLASS } fro
  * that), and the pod template they write always runs under the gVisor
  * RuntimeClass, as a non-root user with every capability dropped, a
  * read-only root, no service-account token and nothing secret inline:
- * values that are secret reach the pod only through `envFrom` of the
- * runner's Secret. The client refuses to send a workload that is not
+ * the environment's secret variables reach the pod only through `envFrom`
+ * of its Secret, and the runner's own tokens as files it deletes once read
+ * (buildSecrets, tokenCopier). The client refuses to send a workload that is not
  * sandboxed (assertSandboxed), so a builder bug cannot reach a cluster
  * either.
  *
@@ -65,6 +66,8 @@ export interface HostedNames {
   deployment: string;
   volume: string;
   secret: string;
+  /** The runner's own tokens (RUNNER_TOKEN_FILES), apart from the environment's variables. */
+  tokens: string;
   egressPolicy: string;
   disruptionBudget: string;
 }
@@ -74,6 +77,11 @@ export function namespaceFor(organizationId: string, layout: Pick<ClusterLayout,
   return `${layout.namespacePrefix}${organizationId.toLowerCase()}`;
 }
 
+/** The tokens Secret of a runner, from its Deployment's name (so a ref written before it existed finds it too). */
+export function tokensSecretName(deployment: string): string {
+  return `${deployment}-tokens`;
+}
+
 export function namesFor(req: Pick<HostedProvisionRequest, 'organizationId' | 'workspaceId'>, layout: Pick<ClusterLayout, 'namespacePrefix'>): HostedNames {
   const ws = req.workspaceId.toLowerCase();
   return {
@@ -81,6 +89,7 @@ export function namesFor(req: Pick<HostedProvisionRequest, 'organizationId' | 'w
     deployment: `hr-${ws}`,
     volume: `ws-${ws}`,
     secret: `hr-${ws}-env`,
+    tokens: tokensSecretName(`hr-${ws}`),
     egressPolicy: `hr-${ws}-egress`,
     disruptionBudget: `hr-${ws}`,
   };
@@ -325,19 +334,78 @@ export function buildVolumeClaim(req: HostedProvisionRequest, layout: ClusterLay
 }
 
 /**
- * The runner's Secret: the enrollment token and the environment's
- * connection-backed variables. The only object that carries a secret
- * value; it is deleted while the pod is scaled to zero.
+ * The runner's own tokens, by the variable the processor names them with
+ * and the file (and tokens-Secret key) they travel as. They are almyty's,
+ * not the environment's: the enrollment token, and the pod model token
+ * the runner's model proxy holds for the coding CLIs.
  */
-export function buildSecret(req: Pick<HostedProvisionRequest, 'organizationId' | 'workspaceId' | 'hostedRunnerId' | 'environmentId'>, secretEnv: Record<string, string>, layout: ClusterLayout): KubeObject {
+export const RUNNER_TOKEN_FILES: Readonly<Record<string, string>> = {
+  ALMYTY_ENROLLMENT_TOKEN: 'enrollment-token',
+  ALMYTY_MODEL_TOKEN: 'model-token',
+  ALMYTY_MODEL_TOKEN_EXPIRES_AT: 'model-token-expires-at',
+};
+
+/** Where the runner finds its token files (ALMYTY_HANDOVER_DIR); a memory-backed volume. */
+export const RUNNER_SECRETS_DIR = '/run/almyty';
+const TOKEN_FILES_VOLUME = 'almyty-tokens';
+const TOKEN_SECRET_VOLUME = 'almyty-tokens-secret';
+
+/**
+ * The last runner version that reads its tokens only from variables.
+ *
+ * A variable a process started with stays readable in
+ * /proc/<pid>/environ for its whole life, whatever the process later
+ * deletes from its own environment, and every command an agent runs on the
+ * machine runs as the same user as the runner and tini. So a token passed
+ * as a variable could be read by any of those commands. Runners after this
+ * version take ALMYTY_HANDOVER_DIR instead: files they delete once read.
+ */
+export const LAST_RUNNER_WITH_TOKEN_VARIABLES = '1.5.14';
+
+/** The runner version an image carries, from its tag (`almyty/runner-env:standard-1.5.14@sha256:...`). */
+export function runnerVersionOfImage(image: string): number[] | null {
+  const m = /:(?:[a-z0-9-]+-)?(\d+\.\d+\.\d+)(?:@|$)/.exec(image);
+  return m ? m[1].split('.').map(Number) : null;
+}
+
+/** Whether the image's runner reads its tokens from files (anything after LAST_RUNNER_WITH_TOKEN_VARIABLES). */
+export function runnerReadsTokenFiles(image: string): boolean {
+  const version = runnerVersionOfImage(image);
+  if (!version) return false;
+  const last = LAST_RUNNER_WITH_TOKEN_VARIABLES.split('.').map(Number);
+  const differs = version.findIndex((part, i) => part !== last[i]);
+  return differs >= 0 && version[differs] > last[differs];
+}
+
+/** The environment's secret variables and the runner's own tokens, apart. */
+export function splitSecretEnv(secretEnv: Record<string, string>): { variables: Record<string, string>; tokens: Record<string, string> } {
+  const variables: Record<string, string> = {};
+  const tokens: Record<string, string> = {};
+  for (const [name, value] of Object.entries(secretEnv)) {
+    if (RUNNER_TOKEN_FILES[name]) tokens[RUNNER_TOKEN_FILES[name]] = value;
+    else variables[name] = value;
+  }
+  return { variables, tokens };
+}
+
+/**
+ * The runner's two Secrets: the environment's connection-backed variables
+ * (handed to the pod as variables, for the commands that need them) and
+ * the runner's own tokens (handed over as files, see
+ * LAST_RUNNER_WITH_TOKEN_VARIABLES). The only objects that carry a secret
+ * value; both are deleted while the pod is scaled to zero.
+ */
+export function buildSecrets(req: Pick<HostedProvisionRequest, 'organizationId' | 'workspaceId' | 'hostedRunnerId' | 'environmentId'>, secretEnv: Record<string, string>, layout: ClusterLayout): KubeObject[] {
   const names = namesFor(req, layout);
-  return {
+  const { variables, tokens } = splitSecretEnv(secretEnv);
+  const secret = (name: string, data: Record<string, string>): KubeObject => ({
     apiVersion: 'v1',
     kind: 'Secret',
     type: 'Opaque',
-    metadata: { name: names.secret, namespace: names.namespace, labels: runnerLabels(req as HostedProvisionRequest) },
-    stringData: { ...secretEnv },
-  };
+    metadata: { name, namespace: names.namespace, labels: runnerLabels(req as HostedProvisionRequest) },
+    stringData: { ...data },
+  });
+  return [secret(names.secret, variables), secret(names.tokens, tokens)];
 }
 
 function resourceBlock(r: HostedResourceSpec): Record<string, any> {
@@ -345,11 +413,44 @@ function resourceBlock(r: HostedResourceSpec): Record<string, any> {
   return { requests: { ...amounts }, limits: { ...amounts } };
 }
 
+function lockedDown(): Record<string, any> {
+  return {
+    runAsNonRoot: true,
+    allowPrivilegeEscalation: false,
+    readOnlyRootFilesystem: true,
+    privileged: false,
+    capabilities: { drop: ['ALL'] },
+    seccompProfile: { type: 'RuntimeDefault' },
+  };
+}
+
+/**
+ * The step that puts the runner's tokens where the runner reads them: from
+ * the tokens Secret (mounted here only) into a memory-backed volume, one
+ * file each, readable by the runner's user alone. The runner deletes each
+ * file once read, so nothing it later starts can find them.
+ */
+function tokenCopier(req: HostedProvisionRequest): Record<string, any> {
+  return {
+    name: 'tokens',
+    image: req.image,
+    imagePullPolicy: 'IfNotPresent',
+    command: ['sh', '-c', `umask 077; for f in /in/*; do [ -f "$f" ] && cat "$f" > "${RUNNER_SECRETS_DIR}/$(basename "$f")"; done; exit 0`],
+    resources: resourceBlock(req.resources),
+    securityContext: lockedDown(),
+    volumeMounts: [
+      { name: TOKEN_SECRET_VOLUME, mountPath: '/in', readOnly: true },
+      { name: TOKEN_FILES_VOLUME, mountPath: RUNNER_SECRETS_DIR },
+    ],
+  };
+}
+
 /**
  * The runner pod, under gVisor, at `replicas` (0 when provisioned; the
- * reconcile loop scales it). Plain settings go in `env`; every secret
- * value comes from the Secret through `envFrom`, so the pod spec itself
- * never holds one.
+ * reconcile loop scales it). Plain settings go in `env`; the environment's
+ * secret variables come from its Secret through `envFrom`, and the
+ * runner's own tokens as files (tokenCopier), so the pod spec itself never
+ * holds a secret.
  */
 export function buildDeployment(req: HostedProvisionRequest, layout: ClusterLayout, replicas: 0 | 1 = 0): KubeObject {
   const names = namesFor(req, layout);
@@ -359,9 +460,19 @@ export function buildDeployment(req: HostedProvisionRequest, layout: ClusterLayo
   // from); HOME then lives in /tmp, the one other writable place.
   const readOnly = req.readOnlyWorkspace === true;
   const home = readOnly ? '/tmp/.home' : `${mount}/.home`;
-  const env = Object.entries({ ...req.env, ALMYTY_WORKSPACE_ROOT: mount, HOME: home, ...(readOnly ? { ALMYTY_WORKSPACE_READ_ONLY: 'true' } : {}) })
+  const files = runnerReadsTokenFiles(req.image);
+  const plain: Record<string, string> = { ...req.env, ALMYTY_WORKSPACE_ROOT: mount, HOME: home, ...(readOnly ? { ALMYTY_WORKSPACE_READ_ONLY: 'true' } : {}) };
+  if (files) plain.ALMYTY_HANDOVER_DIR = RUNNER_SECRETS_DIR;
+  const env: Array<Record<string, any>> = Object.entries(plain)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, value]) => ({ name, value: String(value) }));
+  // An image whose runner reads only variables gets its tokens as such,
+  // from the tokens Secret.
+  if (!files) {
+    for (const [name, key] of Object.entries(RUNNER_TOKEN_FILES)) {
+      env.push({ name, valueFrom: { secretKeyRef: { name: names.tokens, key, optional: name !== 'ALMYTY_ENROLLMENT_TOKEN' } } });
+    }
+  }
   return {
     apiVersion: 'apps/v1',
     kind: 'Deployment',
@@ -387,6 +498,10 @@ export function buildDeployment(req: HostedProvisionRequest, layout: ClusterLayo
             fsGroup: layout.runAsGroup,
             seccompProfile: { type: 'RuntimeDefault' },
           },
+          // The runner's own tokens, as files the runner deletes once read
+          // (runnerReadsTokenFiles): copied into memory by this step, which
+          // alone mounts their Secret.
+          ...(files ? { initContainers: [tokenCopier(req)] } : {}),
           containers: [
             {
               name: 'runner',
@@ -395,23 +510,23 @@ export function buildDeployment(req: HostedProvisionRequest, layout: ClusterLayo
               env,
               envFrom: [{ secretRef: { name: names.secret, optional: false } }],
               resources: resourceBlock(req.resources),
-              securityContext: {
-                runAsNonRoot: true,
-                allowPrivilegeEscalation: false,
-                readOnlyRootFilesystem: true,
-                privileged: false,
-                capabilities: { drop: ['ALL'] },
-                seccompProfile: { type: 'RuntimeDefault' },
-              },
+              securityContext: lockedDown(),
               volumeMounts: [
                 { name: 'workspace', mountPath: mount, ...(readOnly ? { readOnly: true } : {}) },
                 { name: 'tmp', mountPath: '/tmp' },
+                ...(files ? [{ name: TOKEN_FILES_VOLUME, mountPath: RUNNER_SECRETS_DIR }] : []),
               ],
             },
           ],
           volumes: [
             { name: 'workspace', persistentVolumeClaim: { claimName: names.volume } },
             { name: 'tmp', emptyDir: { sizeLimit: req.resources.ephemeralStorage } },
+            ...(files
+              ? [
+                  { name: TOKEN_FILES_VOLUME, emptyDir: { medium: 'Memory', sizeLimit: '1Mi' } },
+                  { name: TOKEN_SECRET_VOLUME, secret: { secretName: names.tokens, defaultMode: 0o440, optional: false } },
+                ]
+              : []),
           ],
         },
       },
