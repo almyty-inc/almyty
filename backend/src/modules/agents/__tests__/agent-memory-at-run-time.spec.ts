@@ -113,6 +113,29 @@ describe("an agent's memory settings at run time", () => {
     expect(stored.totalTokens).toBe(100 + 8 + 60 + 20);
   });
 
+  // The staging gate's chat --json reported 9533 tokens for a run whose row
+  // said 9935: the facts call ran after run.completed, so a client reading
+  // the run at completion was told less than was persisted and billed.
+  it.each([
+    ['facts', { save: 'facts' }, '{"facts": ["Order 4411 belongs to Dana"]}'],
+    ['the screened exchange', { save: 'conversations', neverSave: 'card numbers' }, EXCHANGE],
+  ])("the save's model call is on the run's totals when the run is reported complete (%s)", async (_name, config, reply) => {
+    const seen = await run({ enabled: true, whose: 'agent', ...config }, [
+      anthropicText('claude-sonnet-5', 100, [ANSWER], 8),
+      anthropicText('claude-sonnet-5', 60, [reply], 20),
+    ]);
+    const stored = seen.runRepository.row('run-1')!;
+    expect(stored.totalTokens).toBe(100 + 8 + 60 + 20);
+    // What the row said when run.completed went out is what it says now.
+    expect(seen.atCompletion).toEqual({ status: AgentRunStatus.COMPLETED, totalTokens: stored.totalTokens, totalCost: stored.totalCost });
+    // And the save is still written only after the completion, and recorded.
+    const types = seen.events.map((e) => e.type);
+    expect(types).toContain('run.completed');
+    expect(seen.memoryAccounts.put).toHaveBeenCalledTimes(1);
+    expect(stored.steps.find((st: any) => st.type === 'memory_save')).toMatchObject({ output: { saved: 1 } });
+    expect((stored.steps.find((st: any) => st.type === 'memory_save') as any).cost).toBeGreaterThan(0);
+  });
+
   it('full conversations: the exchange is screened against the rules by the main model, and what is left is saved', async () => {
     const screened = `Person: ${QUESTION}\nAgent: ${ANSWER}`;
     const seen = await run(
