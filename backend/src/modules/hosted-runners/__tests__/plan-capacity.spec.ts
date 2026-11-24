@@ -4,7 +4,7 @@ import { EnvironmentsService } from '../environments.service';
 import { EnvironmentInsightsService } from '../environment-insights.service';
 import { DEFAULT_HOSTED_RUNNER_SETTINGS, HostedRunnerSettingsService } from '../hosted-runner-settings';
 import { HostedRunnersService } from '../hosted-runners.service';
-import { CapacityExhaustedError, HOSTED_NOT_INCLUDED, HostedCapacity } from '../hosted-capacity.provider';
+import { CapacityExhaustedError, HOSTED_NOT_INCLUDED, HostedCapacity, overageUsd, spendCeilingReached } from '../hosted-capacity.provider';
 
 /**
  * Plan capacity reaches hosted runners through HOSTED_CAPACITY_PROVIDER
@@ -60,6 +60,41 @@ describe('plan capacity on hosted machines', () => {
   });
 });
 
+describe('the monthly dollar ceiling', () => {
+  const PRICED: HostedCapacity = {
+    ...PRO,
+    monthlyCeilingMinutes: null,
+    monthlyCeilingUsd: 50,
+    includedMinutes: { small: 2400 },
+    usdPerMinute: { small: 0.001, medium: 0.002, large: 0.004 },
+  };
+
+  it('counts only minutes beyond the included ones, at each size\'s price', () => {
+    expect(overageUsd({ small: 2400, medium: 100 }, { small: 2400 }, PRICED.usdPerMinute)).toBeCloseTo(0.2);
+    expect(overageUsd({ small: 3400 }, { small: 2400 }, PRICED.usdPerMinute)).toBeCloseTo(1);
+    // A size with no price adds nothing.
+    expect(overageUsd({ xlarge: 1e6 }, {}, PRICED.usdPerMinute)).toBe(0);
+  });
+
+  it('refuses a wake once the overage reaches the ceiling, and allows one below it', async () => {
+    // 12,500 medium minutes at $0.002 = $25; 6,250 large at $0.004 = $25.
+    const over = hostedService(PRICED, { small: 2000, medium: 12_500, large: 6_250 });
+    await expect(over.service.ensureAwake(parked())).rejects.toThrow('used $50.00 beyond the included hours this month');
+    expect(over.hostedRunners.update).not.toHaveBeenCalled();
+
+    // Far past the included small hours is fine until the dollars reach the ceiling.
+    const under = hostedService(PRICED, { small: 2400 + 40_000 });
+    await expect(under.service.ensureAwake(parked())).resolves.toBeTruthy();
+  });
+
+  it('allows the included hours and nothing beyond them at a ceiling of 0', async () => {
+    const zero = { ...PRICED, monthlyCeilingUsd: 0 };
+    await expect(hostedService(zero, { small: 2400 }).service.ensureAwake(parked())).resolves.toBeTruthy();
+    await expect(hostedService(zero, { small: 2401 }).service.ensureAwake(parked())).rejects.toThrow(CapacityExhaustedError);
+    expect(spendCeilingReached(0, null)).toBe(false);
+  });
+});
+
 describe('making an environment on a plan without hosted machines', () => {
   function environments(capacity: HostedCapacity) {
     const rows: any = {
@@ -110,14 +145,16 @@ describe('GET /environments/capacity: used and limit for each number', () => {
       billed: true,
       machinesRunning: { used: 1, limit: 2 },
       workspacesKept: { used: 3, limit: 10 },
+      resourceClasses: null,
       minutesThisMonth: {
         used: 120,
         ceiling: 600,
         byClass: [
-          { resourceClass: 'large', used: 30, included: 0 },
-          { resourceClass: 'small', used: 90, included: 2400 },
+          { resourceClass: 'large', used: 30, included: 0, usdPerMinute: null },
+          { resourceClass: 'small', used: 90, included: 2400, usdPerMinute: null },
         ],
       },
+      spendThisMonth: { usd: 0, ceilingUsd: null },
       alwaysOnHosted: { used: 2, limit: 3 },
     });
   });
@@ -134,5 +171,24 @@ describe('GET /environments/capacity: used and limit for each number', () => {
     expect(view.plan).toBeNull();
     expect(view.billed).toBe(false);
     expect(view.minutesThisMonth).toEqual({ used: 0, ceiling: null, byClass: [] });
+    expect(view.spendThisMonth).toEqual({ usd: 0, ceilingUsd: null });
+  });
+
+  it('reports the dollars used beyond the included hours against the dollar ceiling, and each size\'s price', async () => {
+    const hosted: any = {
+      capacityFor: async () => ({ ...PRO, monthlyCeilingMinutes: null, monthlyCeilingUsd: 50, includedMinutes: { small: 2400 }, usdPerMinute: { small: 0.001, medium: 0.002 }, billed: true }),
+      runningCount: async () => 0,
+      workspaceCount: async () => 0,
+      minutesThisMonth: async () => ({ small: 3400, medium: 500 }),
+    };
+    const dataSource: any = { query: jest.fn(async (sql: string) => (sql.includes('FROM organizations') ? [{ plan: 'pro' }] : [{ n: 0 }])) };
+    const view = await new EnvironmentInsightsService(settings, hosted, {} as any, {} as any, dataSource).capacity(ORG);
+    // 1000 small minutes over at $0.001, 500 medium minutes (none included) at $0.002.
+    expect(view.spendThisMonth.ceilingUsd).toBe(50);
+    expect(view.spendThisMonth.usd).toBeCloseTo(2);
+    expect(view.minutesThisMonth.byClass).toEqual([
+      { resourceClass: 'medium', used: 500, included: 0, usdPerMinute: 0.002 },
+      { resourceClass: 'small', used: 3400, included: 2400, usdPerMinute: 0.001 },
+    ]);
   });
 });

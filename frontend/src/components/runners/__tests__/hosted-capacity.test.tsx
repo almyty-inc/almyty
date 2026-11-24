@@ -64,6 +64,35 @@ describe('hosted plan capacity, in plain words', () => {
     expect(sizeLine({ resourceClass: 'small', used: 90, included: null }, true)).toBe('Small machines: 1 h 30 min used this month')
     expect(sizeLine({ resourceClass: 'small', used: 30, included: 60 }, true)).toBe('Small machines: 30 min used of 1 h included this month')
   })
+
+  it('names the sizes the plan allows, the price a minute of overage and the monthly spending limit', () => {
+    const view: HostedCapacityView = {
+      ...PRO,
+      resourceClasses: ['small', 'medium'],
+      minutesThisMonth: {
+        used: 2520,
+        ceiling: null,
+        byClass: [
+          { resourceClass: 'medium', used: 60, included: 0, usdPerMinute: 0.002 },
+          { resourceClass: 'small', used: 2460, included: 2400, usdPerMinute: 0.001 },
+        ],
+      },
+      spendThisMonth: { usd: 0.18, ceilingUsd: 50 },
+    }
+    expect(capacityLines(view).map((l) => l.text)).toEqual([
+      'Machines running now: 1 of 2',
+      'Workspaces kept: 3 of 10',
+      'Machine sizes: Small and Medium',
+      'Medium machines: 1 h used this month (none included, 1 h over, billed at $0.002 a minute)',
+      'Small machines: 41 h used this month (40 h included, 1 h over, billed at $0.001 a minute)',
+      "Monthly spending limit: $0.18 of $50.00 used beyond the included hours. Machines don't start once it is reached.",
+      'Always-on agents living on a hosted machine: 2 of 3',
+    ])
+    // No dollar ceiling, every size allowed: neither line.
+    const open = capacityLines({ ...view, resourceClasses: null, spendThisMonth: { usd: 0, ceilingUsd: null } }).map((l) => l.key)
+    expect(open).not.toContain('sizes')
+    expect(open).not.toContain('spend')
+  })
 })
 
 describe('the Hosted tab shows the plan capacity', () => {
