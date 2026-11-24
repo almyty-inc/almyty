@@ -36,6 +36,7 @@ import {
   type MyMachine,
 } from './hosted-shared'
 import { MachineProblem } from './machine-problem'
+import { HostedCapacityCard, useHostedCapacity } from './hosted-capacity'
 
 export const NEW_ENVIRONMENT_PATH = '/runners/hosted/new'
 export const environmentPath = (id: string) => `/runners/hosted/${encodeURIComponent(id)}`
@@ -158,6 +159,7 @@ export function HostedEnvironmentsTab() {
   const { byId: teamLookup } = useTeamLookup(orgId)
   const list = useEnvironments()
   const usage = useEnvironmentUsage()
+  const capacity = useHostedCapacity()
   const keepDays = list.settings?.suspendedRetention.keepDays
   const minutesById = useMemo(
     () => new Map((usage.data?.environments ?? []).map((u) => [u.environmentId, u.minutes])),
@@ -169,25 +171,31 @@ export function HostedEnvironmentsTab() {
   if (list.isError) return <QueryError error={list.error as Error} onRetry={() => list.refetch()} title="Couldn't load hosted environments" />
   if (list.enabled === false) return <HostedUnavailable />
   if (!list.isLoading && list.environments.length === 0) {
+    // A plan without hosted machines: say so, and offer no form it would refuse.
+    if (capacity.data && !capacity.data.hostedEnvironments) return <HostedCapacityCard capacity={capacity.data} />
     return (
-      <EmptyState
-        variant="panel"
-        icon={Cloud}
-        title="No hosted environments yet"
-        description="A hosted environment is a machine almyty runs for you. Describe it once: the repository, what it starts with, the sites it may reach. It starts when an agent needs it and parks itself when nobody uses it."
-        action={
-          <Button onClick={() => navigate(NEW_ENVIRONMENT_PATH)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New environment
-          </Button>
-        }
-      />
+      <div className="space-y-4">
+        <HostedCapacityCard capacity={capacity.data} />
+        <EmptyState
+          variant="panel"
+          icon={Cloud}
+          title="No hosted environments yet"
+          description="A hosted environment is a machine almyty runs for you. Describe it once: the repository, what it starts with, the sites it may reach. It starts when an agent needs it and parks itself when nobody uses it."
+          action={
+            <Button onClick={() => navigate(NEW_ENVIRONMENT_PATH)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New environment
+            </Button>
+          }
+        />
+      </div>
     )
   }
   const organization = usage.data?.organization
   return (
     <Card>
       <CardContent className="pt-6 space-y-4" data-testid="hosted-environments">
+        <HostedCapacityCard capacity={capacity.data} />
         {organization && (
           <p className="text-sm text-muted-foreground" data-testid="hosted-org-usage">
             Your organization's hosted machines ran <span className="font-medium text-foreground">{formatMinutes(organization.minutes)}</span> this month.

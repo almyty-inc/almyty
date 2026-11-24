@@ -70,6 +70,16 @@ export interface OrganizationSettings {
     digestTime?: string;
     digestTimezone?: string;
   };
+  /**
+   * Tighter hosted runner limits than the plan's (ee billing,
+   * hosted-capacity.ts): maxConcurrentRunners, maxWorkspaces and
+   * monthlyCeilingHours, each only lower. Data only, no page sets it yet.
+   */
+  hostedCapacity?: {
+    maxConcurrentRunners?: number;
+    maxWorkspaces?: number;
+    monthlyCeilingHours?: number;
+  };
 }
 
 @Entity('organizations')

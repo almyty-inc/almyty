@@ -5,7 +5,7 @@ import { render } from '@/test/setup'
 import { HostedEnvironmentsTab, HostedIntro } from '../hosted-environments-tab'
 
 vi.mock('@/lib/api', () => ({
-  environmentsApi: { list: vi.fn(), usage: vi.fn(), workspaces: vi.fn() },
+  environmentsApi: { list: vi.fn(), usage: vi.fn(), workspaces: vi.fn(), capacity: vi.fn().mockResolvedValue(null) },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
 }))
 vi.mock('@/store/organization', () => {

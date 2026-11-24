@@ -3,8 +3,9 @@
  *
  * A hosted pod never holds anybody's login (docs/hosted-runners.md). The
  * reconcile loop writes a single-use enrollment token into the pod's
- * Secret, which the Deployment hands to the container as
- * ALMYTY_ENROLLMENT_TOKEN (envFrom). This module trades that token once,
+ * tokens Secret, which the pod hands to the runner as a file in
+ * ALMYTY_HANDOVER_DIR (handover.ts; an older backend: the variable
+ * ALMYTY_ENROLLMENT_TOKEN). This module trades that token once,
  * at POST /runners/enroll, for a runner credential that only works on the
  * runner's own stream and its renewal, and then keeps the credential fresh.
  *
@@ -14,8 +15,8 @@
  *     never put in process.env (where every spawned command would inherit
  *     it) and never printed: errors name the status and the server's
  *     words, not the request.
- *   - The enrollment token is removed from process.env as soon as it is
- *     read, for the same reason. It is spent after one use anyway.
+ *   - The enrollment token's file is deleted as it is read, and its
+ *     variable removed from process.env. It is spent after one use anyway.
  *   - Enrollment failing is fatal (EnrollmentError). The CLI exits
  *     non-zero, Kubernetes restarts the container, and the reconcile loop
  *     writes a fresh token if the pod does not enroll in time.
@@ -26,9 +27,12 @@
 import { readFileSync } from 'node:fs';
 
 import { assertSecureBackendUrl } from './config.js';
+import { HANDOVER_DIR_ENV, HandoverFs, takeHandoverFile } from './handover.js';
 import { RunnerConfig, RunnerRuntimeInfo } from './types.js';
 
-/** Where a pod finds the token: the Secret, through envFrom. */
+/** Where a pod hands the token over: a file in ALMYTY_HANDOVER_DIR, deleted once read (handover.ts). */
+export const ENROLLMENT_TOKEN_HANDOVER_FILE = 'enrollment-token';
+/** From an older backend: the Secret, through envFrom. */
 export const ENROLLMENT_TOKEN_ENV = 'ALMYTY_ENROLLMENT_TOKEN';
 /** Or a file, for a pod that mounts the Secret instead of injecting it. */
 export const ENROLLMENT_TOKEN_FILE_ENV = 'ALMYTY_ENROLLMENT_TOKEN_FILE';
@@ -60,13 +64,14 @@ export interface EnrollSettings {
 type Env = Record<string, string | undefined>;
 
 /**
- * The token and where to send it, from the environment the Deployment
- * sets. Removes the token variables from `env` once read, so nothing the
- * runner spawns later inherits them.
+ * The token and where to send it, from what the Deployment sets: the
+ * handed-over file (handover.ts, deleted as it is read) or, from an older
+ * backend, a variable or a file it names. Removes the token variables from
+ * `env` once read, so nothing the runner spawns later inherits them.
  */
 export function readEnrollSettings(
   env: Env = process.env,
-  opts: { url?: string; readFile?: (path: string) => string } = {},
+  opts: { url?: string; readFile?: (path: string) => string; handoverFs?: HandoverFs } = {},
 ): EnrollSettings {
   const readFile = opts.readFile ?? ((p: string) => readFileSync(p, 'utf-8'));
   let token = (env[ENROLLMENT_TOKEN_ENV] ?? '').trim();
@@ -78,10 +83,17 @@ export function readEnrollSettings(
       throw new EnrollmentError(`cannot read ${ENROLLMENT_TOKEN_FILE_ENV} (${file}): ${err?.code ?? err?.message ?? err}`);
     }
   }
+  if (!token) {
+    try {
+      token = takeHandoverFile(env, ENROLLMENT_TOKEN_HANDOVER_FILE, opts.handoverFs) ?? '';
+    } catch (err: any) {
+      throw new EnrollmentError(err.message);
+    }
+  }
   delete env[ENROLLMENT_TOKEN_ENV];
   delete env[ENROLLMENT_TOKEN_FILE_ENV];
   if (!token) {
-    throw new EnrollmentError(`no enrollment token: set ${ENROLLMENT_TOKEN_ENV} or ${ENROLLMENT_TOKEN_FILE_ENV}`);
+    throw new EnrollmentError(`no enrollment token: set ${HANDOVER_DIR_ENV}, ${ENROLLMENT_TOKEN_ENV} or ${ENROLLMENT_TOKEN_FILE_ENV}`);
   }
 
   const backendUrl = (opts.url ?? env.ALMYTY_API_URL ?? env.ALMYTY_URL ?? '').trim().replace(/\/+$/, '');

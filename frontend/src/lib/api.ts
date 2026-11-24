@@ -1133,6 +1133,7 @@ export const environmentsApi = {
   workspaces: (id: string) => apiGet(`/environments/${id}/workspaces`),
   runs: (id: string, limit?: number) => apiGet(`/environments/${id}/runs`, limit ? { params: { limit } } : undefined),
   usage: () => apiGet('/environments/usage'),
+  capacity: () => apiGet('/environments/capacity'),
   suspend: (id: string, workspaceId: string) => apiPost(`/environments/${id}/workspaces/${workspaceId}/suspend`),
   release: (id: string, workspaceId: string) => apiPost(`/environments/${id}/workspaces/${workspaceId}/release`),
 }

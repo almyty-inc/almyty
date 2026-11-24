@@ -39,6 +39,7 @@ import {
   TERMINAL_SUBSCRIPTION_STATUSES,
 } from './billing.constants';
 import { StripeService } from './stripe.service';
+import { STRIPE_HOSTED_METERS_ENV, hostedMeterPrices } from './hosted-metering.config';
 
 export interface BillingStatus {
   plan: string;
@@ -182,7 +183,9 @@ export class BillingService {
     const session = await this.stripe.createCheckoutSession({
       mode: 'subscription',
       customer: customerId,
-      line_items: [{ price: priceId, quantity: seats }],
+      // The seats, then a metered hosted-minutes price per machine size
+      // (no quantity: Stripe bills what the meter recorded).
+      line_items: [{ price: priceId, quantity: seats }, ...this.meterPrices().map((price) => ({ price }))],
       success_url: successUrl,
       cancel_url: cancelUrl,
       client_reference_id: org.id,
@@ -391,6 +394,7 @@ export class BillingService {
     org.billingInfo = info;
     await this.orgRepo.save(org);
     this.orgLicense?.invalidate(org.id);
+    await this.ensureMeteredItems(subscription, plan);
 
     this.logger.log(
       `Org ${org.id} set to plan=${plan} seats=${seats} status=${status}; entitlement token minted`,
@@ -482,14 +486,46 @@ export class BillingService {
     return PLAN_PRO;
   }
 
+  /** The metered hosted-minutes prices (STRIPE_HOSTED_METERS) this install adds to subscriptions. */
+  private meterPrices(): string[] {
+    return hostedMeterPrices({ [STRIPE_HOSTED_METERS_ENV]: this.config.get<string>(STRIPE_HOSTED_METERS_ENV) });
+  }
+
+  /**
+   * The subscription's plan item: the per-seat price, not one of the
+   * metered hosted-minutes items next to it, whatever order Stripe lists
+   * them in.
+   */
+  private planItem(subscription: Stripe.Subscription): any {
+    const items = (subscription.items?.data ?? []) as any[];
+    const metered = new Set(this.meterPrices());
+    return items.find((i) => !metered.has(i?.price?.id)) ?? items[0];
+  }
+
   private priceIdFromSubscription(subscription: Stripe.Subscription): string | undefined {
-    const item = subscription.items?.data?.[0] as any;
-    return item?.price?.id;
+    return this.planItem(subscription)?.price?.id;
   }
 
   private seatsFromSubscription(subscription: Stripe.Subscription): number {
-    const item = subscription.items?.data?.[0] as any;
-    return Math.max(1, Number(item?.quantity) || 1);
+    return Math.max(1, Number(this.planItem(subscription)?.quantity) || 1);
+  }
+
+  /**
+   * Add the hosted-minutes prices a live self-serve subscription lacks (one
+   * bought before they were configured), so its overage has somewhere to
+   * bill. Best effort: a failure is logged and tried again on the next event.
+   */
+  private async ensureMeteredItems(subscription: Stripe.Subscription, plan: string): Promise<void> {
+    if (!SELF_SERVE_PLANS.includes(plan)) return;
+    const have = new Set(((subscription.items?.data ?? []) as any[]).map((i) => i?.price?.id));
+    for (const price of this.meterPrices()) {
+      if (have.has(price)) continue;
+      try {
+        await this.stripe.createSubscriptionItem({ subscription: subscription.id, price });
+      } catch (err) {
+        this.logger.warn(`Could not add hosted-minutes price ${price} to ${subscription.id}: ${(err as Error)?.message ?? err}`);
+      }
+    }
   }
 
   private periodEndFromSubscription(subscription: Stripe.Subscription): Date | null {

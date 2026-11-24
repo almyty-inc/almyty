@@ -339,4 +339,39 @@ describe('BillingService', () => {
       expect(status.stripeConfigured).toBe(true);
     });
   });
+
+  describe('metered hosted-minutes prices', () => {
+    beforeEach(() => {
+      configMap.STRIPE_HOSTED_METERS = JSON.stringify({
+        small: { eventName: 'hosted_minutes_small', price: 'price_small_minute' },
+        large: { eventName: 'hosted_minutes_large', price: 'price_large_minute' },
+      });
+      stripe.createSubscriptionItem = jest.fn(async () => ({ id: 'si_new' }));
+    });
+
+    it('are added to checkout next to the seats, without a quantity', async () => {
+      await service.createCheckoutSession(ORG_ID, { plan: PLAN_PRO, seats: 2 });
+      expect(stripe.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          line_items: [{ price: 'price_pro', quantity: 2 }, { price: 'price_small_minute' }, { price: 'price_large_minute' }],
+        }),
+      );
+    });
+
+    it('do not confuse the plan or the seats, whatever order Stripe lists the items in', async () => {
+      const sub = fakeSubscription({
+        items: { data: [{ price: { id: 'price_small_minute' } }, { price: { id: 'price_biz' }, quantity: 4 }, { price: { id: 'price_large_minute' } }] },
+      });
+      await service.handleWebhookEvent(event('customer.subscription.updated', sub));
+      expect(org.plan).toBe(PLAN_BUSINESS);
+      expect(org.billingInfo.seats).toBe(4);
+      expect(stripe.createSubscriptionItem).not.toHaveBeenCalled();
+    });
+
+    it('are added to a live subscription that lacks them', async () => {
+      await service.handleWebhookEvent(event('customer.subscription.created', fakeSubscription()));
+      expect(stripe.createSubscriptionItem).toHaveBeenCalledWith({ subscription: 'sub_123', price: 'price_small_minute' });
+      expect(stripe.createSubscriptionItem).toHaveBeenCalledWith({ subscription: 'sub_123', price: 'price_large_minute' });
+    });
+  });
 });

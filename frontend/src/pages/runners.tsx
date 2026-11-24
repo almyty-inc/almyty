@@ -24,6 +24,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { PageIntro } from '@/components/onboarding/page-intro'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { HostedEnvironmentsTab, HostedIntro, NEW_ENVIRONMENT_PATH, useEnvironments } from '@/components/runners/hosted-environments-tab'
+import { useHostedCapacity } from '@/components/runners/hosted-capacity'
 import { isPendingRunner, runnerStateLabel, runnerStateVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 import { formatRelativeTime } from '@/lib/utils'
 import {
@@ -296,11 +297,12 @@ export function RunnersPage() {
   )
 }
 
-/** Shown on the Hosted tab once the server says hosted machines are on. */
+/** Shown on the Hosted tab once the server says hosted machines are on, and the plan includes them. */
 function NewEnvironmentButton() {
   const navigate = useNavigate()
   const { enabled } = useEnvironments()
-  if (!enabled) return null
+  const capacity = useHostedCapacity()
+  if (!enabled || capacity.data?.hostedEnvironments === false) return null
   return (
     <Button onClick={() => navigate(NEW_ENVIRONMENT_PATH)}>
       <Plus className="mr-2 h-4 w-4" />

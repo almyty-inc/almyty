@@ -14,6 +14,7 @@ import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { isAllowlistHost } from './adapters/kubernetes/manifests';
 import { HostedRunnerSettingsService } from './hosted-runner-settings';
+import { HOSTED_NOT_INCLUDED } from './hosted-capacity.provider';
 import { HostedRunnersService } from './hosted-runners.service';
 import { RunnerCapabilityPublisher } from '../runner/runner-capability.publisher';
 import { CreateEnvironmentDto, UpdateEnvironmentDto } from './dto/environment.dto';
@@ -63,6 +64,11 @@ export class EnvironmentsService {
 
   async create(dto: CreateEnvironmentDto, userId: string, organizationId: string): Promise<Environment> {
     this.hosted.refuseWhenDisabled();
+    // A plan without hosted machines (Free) cannot make one. Its own
+    // runners are never gated.
+    if ((await this.hosted.capacityFor(organizationId)).hostedEnvironments === false) {
+      throw new ForbiddenException(HOSTED_NOT_INCLUDED);
+    }
     const scope = normaliseVisibility(dto.visibility ?? 'private', dto.teamId);
     await this.assertMayShare(organizationId, scope.visibility);
     await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, scope.visibility, scope.teamId);

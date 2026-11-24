@@ -1,4 +1,5 @@
 import type { Agent } from '../../entities/agent.entity';
+import { activeHostedHome } from './always-on/always-on.types';
 
 /**
  * An autonomous agent's Capabilities section, as the server reads it.
@@ -66,8 +67,14 @@ export function agentRunnerId(agent: Pick<Agent, 'agentConfig'> | null | undefin
   return typeof id === 'string' && id ? id : null;
 }
 
-/** The hosted environment an agent's runner-backed tools run on, or null. */
-export function agentEnvironmentId(agent: Pick<Agent, 'agentConfig'> | null | undefined): string | null {
+/**
+ * The hosted environment an agent's runner-backed tools run on, or null:
+ * its always-on home while Always on is on (`alwaysOn.home`), else the
+ * environment its tools are set to (`agentConfig.environmentId`).
+ */
+export function agentEnvironmentId(agent: (Pick<Agent, 'agentConfig'> & { alwaysOn?: unknown }) | null | undefined): string | null {
+  const home = activeHostedHome(agent?.alwaysOn);
+  if (home) return home;
   const id = agent?.agentConfig?.environmentId;
   return typeof id === 'string' && id ? id : null;
 }

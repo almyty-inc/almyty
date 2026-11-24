@@ -12,7 +12,15 @@ import { agentsApi } from '@/lib/api'
  */
 
 /** Statuses a run does not leave on its own. */
-const SETTLED = new Set(['completed', 'failed', 'cancelled', 'timeout', 'waiting_input', 'waiting_approval', 'sleeping'])
+const SETTLED = new Set(['completed', 'failed', 'cancelled', 'timeout', 'waiting_input', 'waiting_approval'])
+
+/**
+ * A sleeping run wakes by itself. A short sleep is part of the run: the
+ * run waits a few seconds at a time for its hosted machine to start, or
+ * the model asked to wait a moment. Try it waits through those. A sleep
+ * longer than this is the run's own business, and the wait stops there.
+ */
+export const SHORT_SLEEP_MS = 5 * 60 * 1000
 
 /**
  * How long Try it and the Run panel wait for a run by default: the
@@ -41,11 +49,20 @@ export interface SettleOptions {
   wait?: (ms: number) => Promise<void>
 }
 
-type Run = { id?: string; mode?: string; status?: string; output?: unknown; error?: string | null }
+type Run = { id?: string; mode?: string; status?: string; output?: unknown; error?: string | null; nextWakeAt?: string | null }
+
+/** A run that will not move again without someone, or not soon. */
+function isSettled(run: Run): boolean {
+  if (run.status === 'sleeping') {
+    const wakeAt = run.nextWakeAt ? Date.parse(run.nextWakeAt) : NaN
+    return !(Number.isFinite(wakeAt) && wakeAt - Date.now() <= SHORT_SLEEP_MS)
+  }
+  return SETTLED.has(String(run.status))
+}
 
 function isStartedAutonomousRun(result: unknown): result is Run & { id: string } {
   const run = result as Run | null
-  return !!run && typeof run.id === 'string' && run.mode === 'autonomous' && !SETTLED.has(String(run.status))
+  return !!run && typeof run.id === 'string' && run.mode === 'autonomous' && !isSettled(run)
 }
 
 export async function invokeAndSettle(agentId: string, input: unknown, options: SettleOptions = {}): Promise<any> {
@@ -59,7 +76,7 @@ export async function invokeAndSettle(agentId: string, input: unknown, options: 
   // A long run is polled hundreds of times; one failed poll (a restart, a
   // dropped connection) is not the run failing. Several in a row are.
   let failedPolls = 0
-  while (!SETTLED.has(String(run.status)) && Date.now() < deadline) {
+  while (!isSettled(run) && Date.now() < deadline) {
     await wait(Date.now() - started < 60_000 ? intervalMs : Math.max(intervalMs, SLOW_INTERVAL_MS))
     try {
       run = (await agentsApi.getRun(agentId, first.id)) as Run
@@ -86,6 +103,9 @@ export function runOutcome(run: any): { output?: string; error?: string } {
     }
     if (run.status === 'waiting_input') {
       return { error: 'The run is waiting for someone. Open it on the Runs tab.' }
+    }
+    if (run.status === 'sleeping') {
+      return { error: 'The run is sleeping and carries on by itself. Its answer will be on the Runs tab.' }
     }
     return { error: run.error || `The run ${run.status === 'running' ? 'is still going' : 'did not finish'}.` }
   }

@@ -13,6 +13,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { AuditExportModule } from './modules/audit-export/audit-export.module';
 import { ApprovalPoliciesModule } from './modules/approval-policies/approval-policies.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { HostedCapacityModule } from './modules/billing/hosted-capacity.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { ChargebackModule } from './modules/chargeback/chargeback.module';
 import { ConnectionsGovernanceModule } from './modules/connections-governance/connections-governance.module';
@@ -25,6 +26,7 @@ export const EE_MODULES = [
   AuditExportModule,
   ApprovalPoliciesModule,
   BillingModule,
+  HostedCapacityModule,
   ComplianceModule,
   ChargebackModule,
   ConnectionsGovernanceHookModule,

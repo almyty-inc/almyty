@@ -1,5 +1,12 @@
 # @almyty/runner
 
+## 1.5.15
+
+### Patch Changes
+
+- f17166a: In a hosted pod, read the enrollment and model tokens from handed-over files in ALMYTY_HANDOVER_DIR and delete each once read, so no command run on the machine can find them in /proc/<pid>/environ.
+- @almyty/client@1.5.15
+
 ## 1.5.14
 
 ### Patch Changes

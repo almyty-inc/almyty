@@ -130,11 +130,15 @@ export interface AlwaysOnConfig {
   /** When it was last turned on; the hosted-home agents the plan includes are the ones turned on first. */
   enabledAt?: string | null;
   /**
-   * Its home machine, when that is a hosted environment (hosted runners,
-   * docs/design/hosted-runners-and-always-on.md). Only agents with a hosted
-   * home count toward the plan's `includedAgents`; an agent on the owner's
-   * own machines, or with no machine, is never limited by the plan. Set by
-   * the system once hosted homes ship; nothing sets it yet.
+   * Its home, when that is a hosted environment (hosted runners,
+   * docs/design/hosted-runners-and-always-on.md), chosen on its Always on
+   * settings. Only agents with a hosted home count toward the plan's
+   * `includedAgents`; an agent on the owner's own machines, or with no
+   * machine, is never limited by the plan. A hosted environment for its
+   * tools alone (`agentConfig.environmentId`) is not a home. While Always on
+   * is on, its runner tools go to the home (agentEnvironmentId) and every
+   * call there works in the agent's own persistent workspace, held by its
+   * owner, so what one wake writes the next one reads.
    */
   home?: { environmentId: string } | null;
 }
@@ -143,6 +147,12 @@ export interface AlwaysOnConfig {
 export function hasHostedHome(config: Pick<AlwaysOnConfig, 'home'> | null | undefined): boolean {
   const id = config?.home?.environmentId;
   return typeof id === 'string' && id.length > 0;
+}
+
+/** The environment an agent's always-on home is, while Always on is on; null otherwise. */
+export function activeHostedHome(raw: unknown): string | null {
+  const config = readAlwaysOn(raw);
+  return config?.enabled && hasHostedHome(config) ? config.home!.environmentId : null;
 }
 
 /** A new agent's always-on settings. It reports when it has something to tell you. */
@@ -219,6 +229,8 @@ export interface AlwaysOnInput {
   report?: AlwaysOnReport;
   maxWakesPerHour?: number | null;
   digest?: AlwaysOnDigest | null;
+  /** A hosted environment it lives on, its files kept there between wakes; null for none. */
+  home?: { environmentId: string } | null;
 }
 
 export const MAX_BRIEF_CHARS = 8000;
@@ -295,6 +307,16 @@ export function mergeAlwaysOn(
       const n = Number(input.maxWakesPerHour);
       if (!Number.isInteger(n) || n < 1) throw new BadRequestException('Wakes an hour has to be a whole number, 1 or more.');
       next.maxWakesPerHour = n;
+    }
+  }
+  if (input.home !== undefined) {
+    if (input.home === null) next.home = null;
+    else {
+      const environmentId = input.home?.environmentId;
+      if (typeof environmentId !== 'string' || !UUID_RE.test(environmentId)) {
+        throw new BadRequestException('Choose the hosted environment it lives on.');
+      }
+      next.home = { environmentId };
     }
   }
   // Turning it on, or changing it, is the acknowledgement of a pause.
