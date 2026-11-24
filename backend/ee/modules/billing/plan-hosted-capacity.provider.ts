@@ -59,15 +59,34 @@ export class PlanHostedCapacityProvider implements HostedCapacityProvider {
         resourceClasses: fallback?.resourceClasses ?? null,
       };
     }
-    let org: Organization | null;
+    const org = await this.readOrg(organizationId);
+    if (!org) return { ...NONE };
+    return this.fill(org, true);
+  }
+
+  /**
+   * The plan's limits without the organization's own lower ones: what the
+   * Hosted tab lets an admin lower from. Null where own limits do not
+   * apply: an install that sells no plans, or an organization it cannot read.
+   */
+  async planLimitsFor(organizationId: string): Promise<HostedCapacity | null> {
+    if (!this.stripeBacked()) return null;
+    const org = await this.readOrg(organizationId);
+    return org ? this.fill(org, false) : null;
+  }
+
+  private async readOrg(organizationId: string): Promise<Organization | null> {
     try {
-      org = await this.orgs.findOne({ where: { id: organizationId } });
+      return await this.orgs.findOne({ where: { id: organizationId } });
     } catch (err) {
       this.logger.warn(`hosted capacity for ${organizationId} could not be read: ${(err as Error)?.message ?? err}`);
-      org = null;
+      return null;
     }
-    if (!org) return { ...NONE };
-    const row = orgHostedCapacity(org as any);
+  }
+
+  private fill(org: Organization, withOwn: boolean): HostedCapacity {
+    const fallback = this.settings?.current.capacity;
+    const row = orgHostedCapacity(withOwn ? (org as any) : { plan: org.plan, settings: null });
     const seats = Number(org.billingInfo?.seats) || 1;
     return {
       plan: org.plan || 'free',

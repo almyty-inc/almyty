@@ -692,7 +692,12 @@ machines do not start again until the next month (UTC); running ones are
 not stopped. An organization may set lower limits for itself
 (`settings.hostedCapacity`: `maxConcurrentRunners`, `maxWorkspaces`,
 `monthlyCeilingHours`, `monthlyCeilingUsd`), never higher ones. The Hosted
-tab shows each limit with what is used (`GET /environments/capacity`).
+tab shows each limit with what is used (`GET /environments/capacity`, which
+also carries the plan's and the organization's own numbers as `ownLimits`),
+and owners and admins lower the machines running at once, the workspaces
+kept and the monthly spending limit right there, under each line ("Lower
+limits"). This applies where plans do: an install selling them through
+Stripe.
 
 ## API
 
@@ -702,6 +707,7 @@ tab shows each limit with what is used (`GET /environments/capacity`).
 | `GET /environments/settings` | What an environment form may offer, from the settings and the plan: curated image names, the sizes this organization may use, the default size, the idle-timeout default and bounds, how long a suspended workspace's files are kept and when its owner is told, the usage retention, and the capacity. |
 | `GET /environments/usage` | Runner minutes this month (UTC; or `?from=&to=`), per environment you may see and by size, and for the whole organization when you are an owner or admin (`null` otherwise). |
 | `GET /environments/capacity` | The plan's limits with what is used: machines running, workspaces kept, the sizes allowed, minutes this month per size against the included minutes (with each size's price a minute), the hours ceiling, the dollars used beyond the included hours against the spending limit, and always-on agents on a hosted machine. |
+| `PUT /environments/capacity/limits` | Owners and admins: set the organization's own lower limits, the whole set (`maxConcurrentRunners`, `maxWorkspaces`, `monthlyCeilingUsd`; null or left out follows the plan). A number above the plan's is refused (400); each change is audit-logged. |
 | `POST /environments` | Create one. |
 | `GET /environments/:id` | One environment. |
 | `PATCH /environments/:id` | Change it. |
@@ -719,8 +725,6 @@ tab shows each limit with what is used (`GET /environments/capacity`).
 
 ## Not built
 
-- A page where an organization lowers its own limits. They are read from
-  `organizations.settings.hostedCapacity`; nothing in the app sets them yet.
 - Gemini CLI through almyty: no almyty endpoint speaks its API, so it
   keeps a vendor key from the store (`allowVendorKeys`).
 - Bedrock, Vertex AI and Azure OpenAI as pass-through targets.

@@ -34,6 +34,13 @@ export interface HostedCapacity {
  */
 export interface HostedCapacityProvider {
   capacityFor(organizationId: string): Promise<HostedCapacity>;
+  /**
+   * The plan's limits before the organization's own lower ones
+   * (`settings.hostedCapacity`), so a page can offer lowering them and
+   * refuse a raise. Absent, or null for an organization: own limits do not
+   * apply there (no plan, as on an install that sells none).
+   */
+  planLimitsFor?(organizationId: string): Promise<HostedCapacity | null>;
 }
 
 export const HOSTED_CAPACITY_PROVIDER = Symbol('HOSTED_CAPACITY_PROVIDER');

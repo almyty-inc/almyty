@@ -8,6 +8,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Put,
   Post,
   Query,
   Request,
@@ -23,6 +24,8 @@ import { EnvironmentsService } from './environments.service';
 import { HostedRunnersService } from './hosted-runners.service';
 import { EnvironmentInsightsService } from './environment-insights.service';
 import { CreateEnvironmentDto, UpdateEnvironmentDto } from './dto/environment.dto';
+import { HostedLimitsDto } from './dto/hosted-limits.dto';
+import { HostedLimitsService } from './hosted-limits.service';
 
 const VALIDATE = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
 
@@ -39,6 +42,7 @@ export class EnvironmentsController {
     private readonly environments: EnvironmentsService,
     private readonly hosted: HostedRunnersService,
     private readonly insights: EnvironmentInsightsService,
+    private readonly limits: HostedLimitsService,
   ) {}
 
   private context(req: any): { userId: string; organizationId: string } {
@@ -86,7 +90,21 @@ export class EnvironmentsController {
   @Roles('viewer', 'member', 'admin', 'owner')
   async capacity(@Request() req: any) {
     const { organizationId } = this.context(req);
-    return { success: true, data: await this.insights.capacity(organizationId) };
+    const [capacity, ownLimits] = await Promise.all([this.insights.capacity(organizationId), this.limits.view(organizationId)]);
+    return { success: true, data: { ...capacity, ownLimits } };
+  }
+
+  /**
+   * Set the organization's own hosted limits: machines running at once,
+   * workspaces kept and the monthly spending limit, each only lower than
+   * the plan's. The whole set: a field left out or null follows the plan.
+   */
+  @Put('capacity/limits')
+  @Roles('admin', 'owner')
+  @UsePipes(VALIDATE)
+  async setLimits(@Request() req: any, @Body() body: HostedLimitsDto) {
+    const { userId, organizationId } = this.context(req);
+    return { success: true, data: await this.limits.set(organizationId, { userId, ipAddress: req.ip }, body) };
   }
 
   @Post()
