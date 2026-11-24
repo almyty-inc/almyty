@@ -64,6 +64,22 @@ picker. Where it is used:
   itself (the client ID and secret of the app at the provider); the
   credential it makes carries the refresh token and renews itself when
   a tool calls the API. No secret is typed into the API form.
+  One sign-in can serve several APIs of the same provider (Google
+  Calendar, Gmail and Tasks from one Google OAuth client). An API's
+  sign-in spot lists the org's other sign-ins with the same token host
+  (`GET /apis/:id/key/sign-ins`). "Use your existing Google sign-in"
+  points the API at it when it already holds every permission ticked
+  (`connectionId`, resolved as the caller and audited). "Add access to
+  the existing Google sign-in" starts one more consent on that same
+  credential and OAuth client (`POST /apis/:id/key/sign-ins/:credentialId`):
+  `include_granted_scopes=true` and the union of what the sign-in holds
+  and what this API asked for. Scopes are exact strings: never a scope
+  the API does not list, never a wider one for a read-only one. The new
+  token replaces the old one on the same credential (the refresh token
+  is kept when none comes back, `scopesGranted` grows), and the API then
+  points at it. Once a second API uses a sign-in, the API it was made on
+  points at it too and it is no longer bound to that API, so changing
+  one API's key leaves the others working.
 - An HTTP tool's key, bearer token or username and password
   (`tool.authConfig.config.credentialId`, resolved at call time as the
   caller by `ToolAuthService.applyToolAuth`).

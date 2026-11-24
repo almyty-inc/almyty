@@ -248,7 +248,8 @@ export class ToolAuthService {
         const { CredentialService } = await import('../../apis/credential.service');
         const credService = this.moduleRef?.get(CredentialService, { strict: false });
         if (credService) {
-          await credService.refreshOAuthToken(credential);
+          // Send the renewed token: the row passed in still holds the expired one.
+          credential = (await credService.refreshOAuthToken(credential)) ?? credential;
         }
       } catch (e: any) {
         this.logger.warn(

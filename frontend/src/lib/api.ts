@@ -6,7 +6,7 @@ import {
   readCurrentOrgId,
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
-import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
+import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput, SharedSignIn } from '@/types/api-connect'
 import type { AgentExecution, AgentRun, OperationOutline } from '@/types'
 import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 import type { AgentWakeRow, AlwaysOnInput, AlwaysOnView } from '@/lib/always-on'
@@ -686,6 +686,15 @@ export const apisApi = {
   getKey: (apiId: string): Promise<ApiKeyView> => apiGet(`/apis/${apiId}/key`),
   setKey: (apiId: string, data: SetApiKeyInput): Promise<ApiKeyView> => apiPut(`/apis/${apiId}/key`, data),
   removeKey: (apiId: string): Promise<ApiKeyView> => apiDel(`/apis/${apiId}/key`),
+  /** Existing sign-ins with this API's provider, and which of its scopes each already holds. */
+  sharedSignIns: (apiId: string): Promise<SharedSignIn[]> => apiGet(`/apis/${apiId}/key/sign-ins`),
+  /** Use an existing sign-in: saved at once when it covers the API, else the consent address that adds the missing access to it. */
+  useSharedSignIn: (
+    apiId: string,
+    credentialId: string,
+    data: { scopes?: string[]; returnTo?: string },
+  ): Promise<{ key: ApiKeyView | null; authorizationUrl: string | null }> =>
+    apiPost(`/apis/${apiId}/key/sign-ins/${encodeURIComponent(credentialId)}`, data),
 }
 
 // Tools API. The server pages tool lists at 100; a picker reads up to 50 pages.
