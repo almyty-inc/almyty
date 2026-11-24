@@ -404,7 +404,9 @@ The agent's other two sections are read by the same loop, on every step.
   and saves each fact (tier `long`); `conversations` saves the exchange
   (tier `project`); `asked` saves nothing on its own, and `store_memory`
   says so to the model. The after-run save is a `memory_save` step, and its
-  calls are the run's cost. Nothing is saved after a run whose answer
+  calls are the run's cost: they are made before the run is reported
+  complete, so the totals a client reads at completion are the ones
+  persisted and billed; the memories are written after. Nothing is saved after a run whose answer
   check did not pass, or in which a tool of the agent never answered
   (every call of it errored: "a tool call failed: openalex_search_works"
   on the step), and the facts call is told never to keep the state of a

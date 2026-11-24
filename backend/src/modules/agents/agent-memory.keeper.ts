@@ -231,6 +231,23 @@ export function recallBlock(ranked: Array<Pick<RankedItem, 'item'>>): string {
   return '\n\n## Relevant Memories\n' + ranked.map((r) => `- [${recallLabel(r.item)}] ${recallText(r.item)}`).join('\n');
 }
 
+/**
+ * A finished run's own save, decided and paid for before the run is
+ * reported complete (AgentMemoryKeeper.prepareSave), written after.
+ */
+export interface PreparedSave {
+  scope: ScopeRef;
+  /** What will be written: the facts, or the screened exchange. */
+  entries: string[];
+  /** The never-save rules left nothing of the exchange. */
+  dropped: boolean;
+  /** Why nothing is saved for this run (its check failed, a tool failed). */
+  skipped?: string;
+  /** What the model call cost the run; its tokens are on run.totalTokens already. */
+  cost: number;
+  duration: number;
+}
+
 /** How much of a recalled memory's text its run step keeps: enough to tell which one it was. */
 export const RECALLED_PREVIEW_CHARS = 160;
 
@@ -448,25 +465,28 @@ export class AgentMemoryKeeper {
   }
 
   /**
-   * What a finished run leaves in memory: what the model saved during it
-   * (commitPending), then its facts, or the exchange as said, per the
-   * agent's "what gets saved". Recorded as `memory_save` steps. Never
-   * throws; a save that fails is logged.
+   * What a finished run's own save will write, decided before the run
+   * completes: the facts the main model picked from the exchange, or the
+   * exchange as screened by the never-save rules. The model call is made
+   * here, so its tokens and cost are on the run's totals before the run is
+   * reported complete: a run's reported usage is what is persisted and
+   * billed. Nothing is written yet; afterRun writes it once the completion
+   * is committed. Null when the agent saves nothing on its own for this run.
+   * Never throws.
    */
-  async afterRun(agent: Agent, run: AgentRun, team: Team): Promise<void> {
-    await this.commitPending(agent, run, team);
+  async prepareSave(agent: Agent, run: AgentRun, team: Team): Promise<PreparedSave | null> {
     const s = this.settings(agent);
-    if (!s.enabled || s.save === 'asked') return;
+    if (!s.enabled || s.save === 'asked') return null;
     // An explorer's own run works for its parent; the parent saves.
-    if (run.metadata?.actAs) return;
+    if (run.metadata?.actAs) return null;
     const scope = memoryScopeFor(agent, run);
-    if (!scope || !runMayWriteSharedMemory(run)) return;
+    if (!scope || !runMayWriteSharedMemory(run)) return null;
     // Only what a person wrote is theirs. An always-on run's input is the
     // wake prompt the system wrote ("You are always on, and something woke
     // you..."); read as the person's words it became facts about them.
     const input = personWordsOf(run);
     // Nothing a person said: nothing to learn about them.
-    if (!input) return;
+    if (!input) return null;
     // An answer the verification panel rejected (it ran out of revisions
     // with the checks still failing) is not saved: facts drawn from it carry
     // the very conclusion the checks refuted, and a later run would recall
@@ -478,18 +498,7 @@ export class AgentMemoryKeeper {
       : broken.length
         ? `a tool call failed: ${broken.join(', ')}`
         : null;
-    if (skipped) {
-      run.steps.push({
-        type: 'memory_save',
-        role: stampOf(team.main),
-        input: { save: s.save, scope: scope.scope_type, account: s.account },
-        output: { saved: 0, skipped },
-        cost: 0,
-        duration: 0,
-        timestamp: new Date().toISOString(),
-      });
-      return;
-    }
+    if (skipped) return { scope, entries: [], dropped: false, skipped, cost: 0, duration: 0 };
     const output = asText(run.output).trim();
     const exchange = `Person: ${input}\nAgent: ${output}`;
     const startedAt = Date.now();
@@ -508,15 +517,42 @@ export class AgentMemoryKeeper {
       if (kept === null) dropped = true;
       else entries = [kept];
     }
+    return { scope, entries, dropped, cost: (run.totalCost || 0) - costBefore, duration: Date.now() - startedAt };
+  }
 
+  /**
+   * What a finished run leaves in memory: what the model saved during it
+   * (commitPending), then its facts, or the exchange as said, per the
+   * agent's "what gets saved" (prepareSave, made before the completion was
+   * committed; made here when the caller did not). Recorded as
+   * `memory_save` steps. Never throws; a save that fails is logged.
+   */
+  async afterRun(agent: Agent, run: AgentRun, team: Team, prepared?: PreparedSave | null): Promise<void> {
+    await this.commitPending(agent, run, team);
+    const p = prepared === undefined ? await this.prepareSave(agent, run, team) : prepared;
+    if (!p) return;
+    const s = this.settings(agent);
+    if (p.skipped) {
+      run.steps.push({
+        type: 'memory_save',
+        role: stampOf(team.main),
+        input: { save: s.save, scope: p.scope.scope_type, account: s.account },
+        output: { saved: 0, skipped: p.skipped },
+        cost: 0,
+        duration: 0,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    const startedAt = Date.now();
     let saved = 0;
     const savedIds: string[] = [];
-    for (const content of entries) {
+    for (const content of p.entries) {
       try {
         const put = await this.put(
           agent,
           run,
-          scope,
+          p.scope,
           s,
           content,
           s.save === 'facts' ? 'long' : 'project',
@@ -533,10 +569,10 @@ export class AgentMemoryKeeper {
     run.steps.push({
       type: 'memory_save',
       role: stampOf(team.main),
-      input: { save: s.save, scope: scope.scope_type, account: s.account },
-      output: { saved, ...(savedIds.length ? { memoryIds: savedIds } : {}), ...(dropped ? { dropped: 'never-save rules' } : {}) },
-      cost: (run.totalCost || 0) - costBefore,
-      duration: Date.now() - startedAt,
+      input: { save: s.save, scope: p.scope.scope_type, account: s.account },
+      output: { saved, ...(savedIds.length ? { memoryIds: savedIds } : {}), ...(p.dropped ? { dropped: 'never-save rules' } : {}) },
+      cost: p.cost,
+      duration: p.duration + (Date.now() - startedAt),
       timestamp: new Date().toISOString(),
     });
   }

@@ -319,6 +319,7 @@ export async function runAgent(opts: {
   };
 
   const events: Array<{ runId: string; type: string; data: any }> = [];
+  let atCompletion: { status: string; totalTokens: number; totalCost: number } | null = null;
   let sink: ((event: any) => void) | null = null;
   let processor: AgentStepProcessor;
   const drive = async (runId: string) => {
@@ -395,6 +396,10 @@ export async function runAgent(opts: {
     },
     emitEvent: (runId: string, type: string, data: any) => {
       events.push({ runId, type, data });
+      if (runId === 'run-1' && type === 'run.completed') {
+        const row = runRepository.row('run-1')!;
+        atCompletion = { status: row.status, totalTokens: row.totalTokens, totalCost: row.totalCost };
+      }
       if (runId === 'run-1') sink?.({ type, data });
     },
   };
@@ -451,6 +456,8 @@ export async function runAgent(opts: {
     bodies,
     events: events.filter((e) => e.runId === 'run-1'),
     allEvents: events,
+    /** The stored row's totals when run.completed went out: what a client reading the run then is told. */
+    atCompletion,
     visible,
     tokens,
     leftover: Object.fromEntries(Object.entries(queues).filter(([, q]) => q.length > 0)),
