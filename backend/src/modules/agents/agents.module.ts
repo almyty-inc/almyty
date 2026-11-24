@@ -45,7 +45,7 @@ import { AgentNodeExecutor } from './agent-node-executor';
 import { AgentTemplateResolver } from './agent-template-resolver';
 import { AgentWebhookService } from './agent-webhook.service';
 import { AgentSchedulerService } from './agent-scheduler.service';
-import { AGENT_SCHEDULE_SYNC } from './agent-schedule-sync';
+import { agentScheduleSyncProvider } from './agent-schedule-sync.provider';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
@@ -168,7 +168,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
     // Hosted pods' coding CLIs: their own calls, forwarded to an organization-wide provider.
     ModelPassThroughService,
     // How AgentsService moves an agent's live scheduled job when a save changes its schedule.
-    { provide: AGENT_SCHEDULE_SYNC, useExisting: AgentSchedulerService }],
+    agentScheduleSyncProvider],
   controllers: [AgentApiAccessController, AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
     // Push wakes: an agent's settings, and the address services push to.
     PushWakesController, PushWakeReceiverController,

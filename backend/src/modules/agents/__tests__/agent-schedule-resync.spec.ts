@@ -7,6 +7,7 @@ import { getQueueToken } from '@nestjs/bull';
 import { AgentsService } from '../agents.service';
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { AGENT_SCHEDULE_SYNC } from '../agent-schedule-sync';
+import { agentScheduleSyncProvider } from '../agent-schedule-sync.provider';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
@@ -92,7 +93,7 @@ async function build() {
     providers: [
       AgentsService,
       AgentSchedulerService,
-      { provide: AGENT_SCHEDULE_SYNC, useExisting: AgentSchedulerService },
+      agentScheduleSyncProvider,
       { provide: getRepositoryToken(Agent), useValue: agentRepo },
       { provide: getRepositoryToken(AgentExecution), useValue: fakeRepository<any>([]) },
       { provide: getRepositoryToken(Organization), useValue: fakeRepository<any>([{ id: 'org-1' }]) },
@@ -260,10 +261,14 @@ describe('an agent update that changes its schedule moves the live job', () => {
 describe('the sync is wired in the real module', () => {
   const read = (file: string) => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 
-  it('agents.module.ts provides AGENT_SCHEDULE_SYNC as the scheduler itself', () => {
-    expect(read('agents.module.ts')).toMatch(
-      /provide:\s*AGENT_SCHEDULE_SYNC,\s*useExisting:\s*AgentSchedulerService/,
-    );
+  it('agents.module.ts provides AGENT_SCHEDULE_SYNC, and not as an alias of the Bull processor', () => {
+    const mod = read('agents.module.ts');
+    expect(mod).toMatch(/\bagentScheduleSyncProvider\]/);
+    // An alias of a @Processor class is explored as a second processor and
+    // the app refuses to boot: "Cannot define the same handler twice".
+    expect(mod).not.toMatch(/useExisting:\s*AgentSchedulerService/);
+    expect(agentScheduleSyncProvider).toMatchObject({ provide: AGENT_SCHEDULE_SYNC, inject: [AgentSchedulerService] });
+    expect((agentScheduleSyncProvider as any).useExisting).toBeUndefined();
   });
 
   it('every AgentsService path that saves a schedule-relevant change syncs or removes the job', () => {
