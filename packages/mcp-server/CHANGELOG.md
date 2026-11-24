@@ -1,5 +1,11 @@
 # @almyty/mcp-server
 
+## 1.5.15
+
+### Patch Changes
+
+- @almyty/client@1.5.15
+
 ## 1.5.14
 
 ### Patch Changes

@@ -1,5 +1,20 @@
 # @almyty/cli
 
+## 1.5.15
+
+### Patch Changes
+
+- Updated dependencies [f17166a]
+  - @almyty/runner@1.5.15
+  - @almyty/acp-server@1.5.15
+  - @almyty/agents@1.5.15
+  - @almyty/auth@1.5.15
+  - @almyty/chat@1.5.15
+  - @almyty/credentials@1.5.15
+  - @almyty/mcp-server@1.5.15
+  - @almyty/models@1.5.15
+  - @almyty/skills@1.5.15
+
 ## 1.5.14
 
 ### Patch Changes
