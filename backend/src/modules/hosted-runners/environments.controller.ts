@@ -81,6 +81,14 @@ export class EnvironmentsController {
     return { success: true, data: await this.insights.usage(userId, organizationId, period.from, period.to) };
   }
 
+  /** The plan's hosted capacity: for each limit, what is used now and the limit (null: none). */
+  @Get('capacity')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  async capacity(@Request() req: any) {
+    const { organizationId } = this.context(req);
+    return { success: true, data: await this.insights.capacity(organizationId) };
+  }
+
   @Post()
   @Roles('member', 'admin', 'owner')
   @UsePipes(VALIDATE)

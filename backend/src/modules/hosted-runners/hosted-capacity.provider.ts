@@ -3,14 +3,25 @@ import { HostedRunnerSettingsService } from './hosted-runner-settings';
 /**
  * How much hosted capacity an organization has: how many hosted runners
  * may run at once, how many persistent workspaces it may keep, and which
- * resource classes it may use (null: any configured class).
+ * resource classes it may use (null: any configured class). The plan
+ * fields are filled only where a plan applies (the billing module in `ee`);
+ * the Apache build leaves them out, which means no plan limit.
  */
 export interface HostedCapacity {
   maxConcurrentRunners: number;
   maxWorkspaces: number;
   resourceClasses: string[] | null;
+  /** The plan these numbers come from; absent without a plan. */
+  plan?: string | null;
+  /** False when the plan has no hosted environments (creating one is refused). */
+  hostedEnvironments?: boolean;
+  /** Runner-minutes included this month per resource class; absent or null: no allowance tracked. */
+  includedMinutes?: Record<string, number> | null;
+  /** Runner-minutes a month after which wakes are refused; absent or null: no ceiling. */
+  monthlyCeilingMinutes?: number | null;
+  /** Whether minutes beyond the allowance are billed as overage. */
+  billed?: boolean;
 }
-
 /**
  * The seam plan capacity plugs into. The Apache build answers from the
  * hosted runner settings (`capacity`), the same for every organization;
@@ -40,4 +51,14 @@ export class CapacityExhaustedError extends Error {
     super(message);
     this.name = 'CapacityExhaustedError';
   }
+}
+
+/** What a create or a wake hears on a plan without hosted machines. */
+export const HOSTED_NOT_INCLUDED =
+  'Hosted machines are not part of your plan. Register a machine of your own as a runner, or upgrade.';
+
+/** What a wake hears once the month's ceiling is reached. */
+export function ceilingReached(ceilingMinutes: number): string {
+  const hours = Math.round((ceilingMinutes / 60) * 10) / 10;
+  return `Your organization's hosted machines have run ${hours} hours this month, its monthly limit. They start again next month, or when an admin raises the limit.`;
 }
