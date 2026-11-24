@@ -19,6 +19,7 @@ const SETTINGS = 'hosted-runner-settings.ts';
 const ALLOWED: Record<string, string> = {
   '0': 'zero: none, empty, scale to zero',
   '1': 'one: one pod per workspace, scale to one, a single-use token, an off-by-one',
+  '2': 'decimal places of a dollar amount (cents)',
   '24': 'hours in a day (unit conversion)',
   '60': 'minutes in an hour (unit conversion)',
   '1000': 'milliseconds in a second (unit conversion)',

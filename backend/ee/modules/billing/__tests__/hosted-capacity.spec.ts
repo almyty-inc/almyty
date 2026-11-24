@@ -166,4 +166,17 @@ describe('PlanHostedCapacityProvider', () => {
     expect(cap).toEqual({ maxConcurrentRunners: fallback.maxConcurrentRunners, maxWorkspaces: fallback.maxWorkspaces, resourceClasses: fallback.resourceClasses ?? null });
     expect(r.findOne).not.toHaveBeenCalled();
   });
+
+  it("answers the plan's limits without the organization's own lower ones, for the page that lowers them", async () => {
+    const org = { id: 'o', plan: 'pro', billingInfo: { seats: 1 }, settings: { hostedCapacity: { maxConcurrentRunners: 1, monthlyCeilingUsd: 5 } } };
+    const provider = new PlanHostedCapacityProvider(repo(org), config(true), settings);
+    expect(await provider.planLimitsFor('o')).toMatchObject({ maxConcurrentRunners: 2, maxWorkspaces: 10, monthlyCeilingUsd: 50 });
+    expect(await provider.capacityFor('o')).toMatchObject({ maxConcurrentRunners: 1, maxWorkspaces: 10, monthlyCeilingUsd: 5 });
+  });
+
+  it('has no plan limits to lower on an install that sells none, or for an organization it cannot read', async () => {
+    const org = { id: 'o', plan: 'pro', billingInfo: {}, settings: {} };
+    expect(await new PlanHostedCapacityProvider(repo(org), config(false), settings).planLimitsFor('o')).toBeNull();
+    expect(await new PlanHostedCapacityProvider(repo(null), config(true), settings).planLimitsFor('o')).toBeNull();
+  });
 });

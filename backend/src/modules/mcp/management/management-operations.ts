@@ -467,6 +467,7 @@ export const OPERATIONS: OperationEntry[] = [
   op('environments.get_settings', 'EnvironmentsController.settings'),
   op('environments.get_usage', 'EnvironmentsController.usage'),
   op('environments.get_capacity', 'EnvironmentsController.capacity'),
+  op('environments.set_limits', 'EnvironmentsController.setLimits'),
   op('environments.create', 'EnvironmentsController.create'),
   op('environments.get', 'EnvironmentsController.get'),
   op('environments.update', 'EnvironmentsController.update'),

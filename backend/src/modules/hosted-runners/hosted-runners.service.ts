@@ -149,6 +149,11 @@ export class HostedRunnersService {
     return this.capacity.capacityFor(organizationId);
   }
 
+  /** The plan's limits before the organization's own lower ones; null where own limits do not apply. */
+  async planLimitsFor(organizationId: string): Promise<HostedCapacity | null> {
+    return (await this.capacity.planLimitsFor?.(organizationId)) ?? null;
+  }
+
   /** Hosted machines of the organization asked to run now, leaving one out (the one being woken). */
   runningCount(organizationId: string, exceptId: string | null = null): Promise<number> {
     const qb = this.hostedRunners
