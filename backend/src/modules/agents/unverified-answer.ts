@@ -59,7 +59,12 @@ function oneReason(f: Failure): string {
  * which a visitor may not be meant to see. Checker notes are never here.
  */
 export function unverifiedReason(failures: Failure[] | null | undefined): string {
-  if (checkUnavailable(failures)) return 'the checker could not give a verdict';
+  if (checkUnavailable(failures)) {
+    // The platform's own words for why (e.g. the provider's account has no
+    // credits), else the plain "could not give a verdict".
+    const said = (failures ?? []).map(oneReason).find((r) => r.length > 0);
+    return said ?? 'the checker could not give a verdict';
+  }
   const shown = strongestFirst((failures ?? []).filter(Boolean))
     .filter((f) => f?.kind !== 'rule' && !(typeof f?.instruction === 'string' && f.instruction.trim() && f.instruction.trim() === String(f?.rule ?? '').trim()))
     .map(oneReason)

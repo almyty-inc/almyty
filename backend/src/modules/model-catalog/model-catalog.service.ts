@@ -18,7 +18,7 @@ import { ModelRouterService } from './routing/model-router.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { providerUsableByUser, usableProviders } from '../llm-providers/private-provider';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
-import { providerChecked } from './readiness';
+import { noCreditsError, providerChecked, withdrawCheckedCard } from './readiness';
 import { isKeyRejection } from '../llm-providers/model-errors';
 import { providerAllowsModel } from '../llm-providers/allowed-models';
 import { GONE_REASONS, MODEL_CHANGE_LISTENER, type ModelChangeListener } from './notices/model-change';
@@ -564,6 +564,10 @@ export class ModelCatalogService {
    *
    * Key rejected: the provider's checked cards go back to waiting, with
    * the reason, so nothing served by a key the vendor refuses is offered.
+   * Out of credits: the same, with the reason in plain words ("The
+   * provider's account has no credits."): the vendor took the key and
+   * refused the call for payment (402, insufficient_quota), so no model of
+   * that account can answer until it is topped up and a check passes.
    * Any other failure (an outage, a timeout) changes nothing here: the
    * router already skips an unhealthy provider, and a blip must not make
    * every model look unavailable.
@@ -571,9 +575,10 @@ export class ModelCatalogService {
   async applyProviderCheck(
     organizationId: string,
     providerId: string,
-    outcome: { passed: boolean; keyRejected?: boolean; error?: string },
+    outcome: { passed: boolean; keyRejected?: boolean; outOfCredits?: boolean; error?: string },
   ): Promise<number> {
-    if (!outcome.passed && !outcome.keyRejected) return 0;
+    if (!outcome.passed && !outcome.keyRejected && !outcome.outOfCredits) return 0;
+    const noCredits = !outcome.passed && !outcome.keyRejected && !!outcome.outOfCredits;
     const cards = await this.models.find({ where: { organizationId, providerId } });
     const now = new Date();
     const changed: Model[] = [];
@@ -582,22 +587,28 @@ export class ModelCatalogService {
         card.validationStatus = 'passed';
         card.lastValidatedAt = now;
         card.lastValidationError = null;
-        card.metadata = { ...(card.metadata ?? {}), checkedBy: 'provider_check' };
-      } else if (!outcome.passed && card.validationStatus === 'passed' && card.metadata?.checkedBy === 'provider_check') {
-        card.validationStatus = 'never';
-        card.lastValidatedAt = now;
-        card.lastValidationError = (outcome.error ?? 'The provider rejected its key').slice(0, 1000);
-      } else {
+        const { unavailableReason: _gone, ...rest } = card.metadata ?? {};
+        card.metadata = { ...rest, checkedBy: 'provider_check' };
+      } else if (
+        outcome.passed ||
+        !withdrawCheckedCard(
+          card,
+          noCredits ? 'no_credits' : 'key_rejected',
+          noCredits ? noCreditsError(outcome.error) : outcome.error ?? 'The provider rejected its key',
+          now,
+        )
+      ) {
         continue;
       }
       changed.push(await this.models.save(card));
     }
-    // A refused key takes every model of the connection away at once.
+    // A refused key, or an account out of credits, takes every model of the connection away at once.
     if (!outcome.passed && this.changes && changed.length > 0) {
       const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
       const gone = changed.filter((card) => card.status === 'active' && providerAllowsModel(provider, card.vendorModelId));
       if (gone.length > 0) {
-        await this.changes.modelsChanged({ organizationId, providerId, appeared: [], gone: gone.map((card) => ({ card, reason: GONE_REASONS.keyRejected })) });
+        const reason = noCredits ? GONE_REASONS.noCredits : GONE_REASONS.keyRejected;
+        await this.changes.modelsChanged({ organizationId, providerId, appeared: [], gone: gone.map((card) => ({ card, reason })) });
       }
     }
     if (changed.length) {
@@ -606,7 +617,7 @@ export class ModelCatalogService {
         passed: outcome.passed,
         count: changed.length,
         source: 'provider_check',
-        ...(outcome.passed ? {} : { error: outcome.error }),
+        ...(outcome.passed ? {} : { error: outcome.error, ...(noCredits ? { reason: 'no_credits' } : {}) }),
       });
     }
     return changed.length;
