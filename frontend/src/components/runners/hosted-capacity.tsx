@@ -24,11 +24,15 @@ export interface HostedCapacityView {
   billed: boolean
   machinesRunning: Used
   workspacesKept: Used
+  /** The sizes the plan allows; null or absent: every size the install offers. */
+  resourceClasses?: string[] | null
   minutesThisMonth: {
     used: number
     ceiling: number | null
-    byClass: Array<{ resourceClass: string; used: number; included: number | null }>
+    byClass: Array<{ resourceClass: string; used: number; included: number | null; usdPerMinute?: number | null }>
   }
+  /** Dollars used beyond the included hours this month, and the plan's dollar limit (null: none). */
+  spendThisMonth?: { usd: number; ceilingUsd: number | null }
   alwaysOnHosted: Used
 }
 
@@ -52,8 +56,14 @@ function sizeName(resourceClass: string): string {
   return resourceClass.charAt(0).toUpperCase() + resourceClass.slice(1)
 }
 
+const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const USD_PER_MINUTE = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })
+
 /** One plain sentence per size: used, included, and what is over. */
-export function sizeLine(row: { resourceClass: string; used: number; included: number | null }, billed: boolean): string {
+export function sizeLine(
+  row: { resourceClass: string; used: number; included: number | null; usdPerMinute?: number | null },
+  billed: boolean,
+): string {
   const name = `${sizeName(row.resourceClass)} machines`
   if (row.included === null) return `${name}: ${formatMinutes(row.used)} used this month`
   const over = row.used - row.included
@@ -63,7 +73,14 @@ export function sizeLine(row: { resourceClass: string; used: number; included: n
       : `${name}: ${formatMinutes(row.used)} used this month`
   }
   const head = row.included > 0 ? `${formatMinutes(row.included)} included, ` : 'none included, '
-  return `${name}: ${formatMinutes(row.used)} used this month (${head}${formatMinutes(over)} over${billed ? ', billed by the minute' : ''})`
+  const billing = !billed ? '' : row.usdPerMinute ? `, billed at ${USD_PER_MINUTE.format(row.usdPerMinute)} a minute` : ', billed by the minute'
+  return `${name}: ${formatMinutes(row.used)} used this month (${head}${formatMinutes(over)} over${billing})`
+}
+
+/** Sizes as a list in words: "Small and Medium", "Small, Medium and Large". */
+function sizeList(classes: string[]): string {
+  const names = classes.map(sizeName)
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
 /** The lines the card shows, in the order it shows them. */
@@ -72,11 +89,20 @@ export function capacityLines(c: HostedCapacityView): Array<{ key: string; text:
     { key: 'machines', text: `Machines running now: ${ofLimit(c.machinesRunning)}` },
     { key: 'workspaces', text: `Workspaces kept: ${ofLimit(c.workspacesKept)}` },
   ]
+  if (c.resourceClasses && c.resourceClasses.length > 0) {
+    lines.push({ key: 'sizes', text: `Machine sizes: ${sizeList(c.resourceClasses)}` })
+  }
   for (const row of c.minutesThisMonth.byClass) lines.push({ key: `size-${row.resourceClass}`, text: sizeLine(row, c.billed) })
   if (c.minutesThisMonth.ceiling !== null) {
     lines.push({
       key: 'ceiling',
       text: `Monthly limit: ${formatMinutes(c.minutesThisMonth.used)} of ${formatMinutes(c.minutesThisMonth.ceiling)} used. Machines don't start once it is reached.`,
+    })
+  }
+  if (c.spendThisMonth && c.spendThisMonth.ceilingUsd !== null) {
+    lines.push({
+      key: 'spend',
+      text: `Monthly spending limit: ${USD.format(c.spendThisMonth.usd)} of ${USD.format(c.spendThisMonth.ceilingUsd)} used beyond the included hours. Machines don't start once it is reached.`,
     })
   }
   if (c.alwaysOnHosted.limit !== null || c.alwaysOnHosted.used > 0) {

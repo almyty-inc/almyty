@@ -5,6 +5,7 @@ import { AccessPolicyService } from '../../common/authorization/access-policy.se
 import { EnvironmentsService } from './environments.service';
 import { HostedRunnerSettingsService } from './hosted-runner-settings';
 import { HostedRunnersService } from './hosted-runners.service';
+import { overageUsd } from './hosted-capacity.provider';
 import { alwaysOnCapacity } from '../agents/always-on/always-on-capacity';
 
 /** Minutes per resource class, and their sum. */
@@ -69,6 +70,7 @@ export class EnvironmentInsightsService {
       ),
     ]);
     const included = capacity.includedMinutes ?? null;
+    const prices = capacity.usdPerMinute ?? null;
     const classes = Array.from(new Set([...Object.keys(included ?? {}), ...Object.keys(minutes)])).sort();
     const usedMinutes = Object.values(minutes).reduce((a, b) => a + b, 0);
     const ceiling = capacity.monthlyCeilingMinutes ?? null;
@@ -79,6 +81,8 @@ export class EnvironmentInsightsService {
       billed: capacity.billed === true,
       machinesRunning: { used: running, limit: capacity.maxConcurrentRunners },
       workspacesKept: { used: workspaces, limit: capacity.maxWorkspaces },
+      // The sizes the plan allows; null: every size the install offers.
+      resourceClasses: capacity.resourceClasses ?? null,
       minutesThisMonth: {
         used: usedMinutes,
         ceiling,
@@ -86,7 +90,13 @@ export class EnvironmentInsightsService {
           resourceClass,
           used: minutes[resourceClass] ?? 0,
           included: included ? (included[resourceClass] ?? 0) : null,
+          usdPerMinute: prices?.[resourceClass] ?? null,
         })),
+      },
+      // Overage this month in dollars, against the plan's dollar ceiling.
+      spendThisMonth: {
+        usd: overageUsd(minutes, included, prices),
+        ceilingUsd: capacity.monthlyCeilingUsd ?? null,
       },
       // Always-on agents whose home is a hosted machine: the only ones a plan limits.
       alwaysOnHosted: {

@@ -8,6 +8,7 @@ import { HostedCapacity, HostedCapacityProvider } from '../../../src/modules/hos
 import { HostedRunnerSettingsService } from '../../../src/modules/hosted-runners/hosted-runner-settings';
 import { STRIPE_SECRET_KEY_ENV } from './billing.constants';
 import { includedMinutes, orgHostedCapacity } from './hosted-capacity';
+import { STRIPE_HOSTED_METERS_ENV, hostedMinutePrices } from './hosted-metering.config';
 
 /** Nothing at all: what a lookup that failed answers on a Stripe-backed install. */
 const NONE: HostedCapacity = {
@@ -18,6 +19,7 @@ const NONE: HostedCapacity = {
   hostedEnvironments: false,
   includedMinutes: {},
   monthlyCeilingMinutes: 0,
+  monthlyCeilingUsd: 0,
   billed: false,
 };
 
@@ -72,9 +74,16 @@ export class PlanHostedCapacityProvider implements HostedCapacityProvider {
       hostedEnvironments: row.hostedEnvironments,
       maxConcurrentRunners: row.maxConcurrentRunners ?? fallback?.maxConcurrentRunners ?? 0,
       maxWorkspaces: row.maxWorkspaces ?? fallback?.maxWorkspaces ?? 0,
-      resourceClasses: row.resourceClasses ?? fallback?.resourceClasses ?? null,
+      // The sizes the plan allows, among those the install allows: a plan
+      // never offers a size the install's machines cannot run.
+      resourceClasses:
+        row.resourceClasses && fallback?.resourceClasses
+          ? row.resourceClasses.filter((c) => fallback.resourceClasses!.includes(c))
+          : (row.resourceClasses ?? fallback?.resourceClasses ?? null),
       includedMinutes: includedMinutes(row, seats),
       monthlyCeilingMinutes: row.monthlyCeilingHours === null ? null : row.monthlyCeilingHours * 60,
+      monthlyCeilingUsd: row.monthlyCeilingUsd,
+      usdPerMinute: hostedMinutePrices({ [STRIPE_HOSTED_METERS_ENV]: this.config.get<string>(STRIPE_HOSTED_METERS_ENV) }),
       billed: row.billed && this.stripeBacked() && !!org.billingInfo?.stripeSubscriptionId,
     };
   }
