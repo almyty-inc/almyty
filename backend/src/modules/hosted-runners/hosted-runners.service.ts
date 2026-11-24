@@ -10,6 +10,8 @@ import { HostedRunner, HostedRunnerDesired, HostedRunnerState } from '../../enti
 import { Runner, RunnerIsolationTier, RunnerState } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { Agent } from '../../entities/agent.entity';
+import { activeHostedHome } from '../agents/always-on/always-on.types';
+import { agentOwnerUserId } from '../agents/agent-owner';
 import { LlmProviderType } from '../../entities/llm-provider-type';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -246,7 +248,9 @@ export class HostedRunnersService {
   async workspaceFor(environmentId: string, caller: HostedCaller): Promise<{ workspace: Workspace; hostedRunner: HostedRunner; environment: Environment }> {
     const env = await this.environments.findOne({ where: { id: environmentId, organizationId: caller.organizationId } });
     if (!env || !(await this.mayUse(env, caller))) throw new HostedDispatchError('runner_not_found', 'environment not found');
-    const owner = this.ownerOf(caller);
+    // An always-on agent at home here works in its own workspace; any
+    // other call in the caller's.
+    const owner = (await this.homeOwnerFor(env, caller)) ?? this.ownerOf(caller);
     // A call that names one of the caller's inherited, read-only
     // workspaces on this environment works there; nothing else reaches one.
     if (caller.workspaceId) {
@@ -488,6 +492,24 @@ export class HostedRunnersService {
     if (!ws.agentId) return false;
     const agent = await this.workspaces.manager.getRepository(Agent).findOne({ where: { id: ws.agentId }, select: { id: true, alwaysOn: true } as any });
     return (agent as any)?.alwaysOn?.enabled === true;
+  }
+
+  /**
+   * The always-on home a call works in: when the calling agent is always
+   * on and its home (`alwaysOn.home`) is this environment, its own
+   * persistent workspace there, held by its owner, whoever's run it is. So
+   * a file one wake writes is there at the next, and the volume is kept
+   * while the agent is on (isAlwaysOnHome). Null for any other call.
+   */
+  async homeOwnerFor(env: Environment, caller: HostedCaller): Promise<{ ownerUserId: string; agentId: string } | null> {
+    if (!caller.agentId) return null;
+    const agent = await this.workspaces.manager.getRepository(Agent).findOne({
+      where: { id: caller.agentId, organizationId: env.organizationId },
+      select: { id: true, alwaysOn: true, createdBy: true } as any,
+    });
+    if (!agent || activeHostedHome(agent.alwaysOn) !== env.id) return null;
+    const ownerUserId = agentOwnerUserId(agent);
+    return ownerUserId ? { ownerUserId, agentId: agent.id } : null;
   }
 
   /** Suspended -> expired, and its hosted runner torn down with the volume. Conditional, like every workspace transition. */

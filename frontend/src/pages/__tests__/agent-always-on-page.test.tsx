@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AgentAlwaysOnPage, formFromView, inputFromForm } from '../agent-always-on'
-import { agentsApi } from '@/lib/api'
+import { agentsApi, environmentsApi } from '@/lib/api'
 import { agentChannelsApi } from '@/lib/agent-channels'
 import { renderAtRoute } from '../../test/render-at-route'
 import { REPORT_LABELS, describeReport } from '@/lib/always-on'
@@ -18,6 +18,7 @@ vi.mock('@/lib/api', () => ({
     listWakes: vi.fn().mockResolvedValue([]),
     scheduleDestinations: vi.fn().mockResolvedValue({ webhookUrl: null, channels: [] }),
   },
+  environmentsApi: { list: vi.fn() },
 }))
 vi.mock('@/lib/agent-channels', async (importOriginal) => ({
   ...(await importOriginal<any>()),
@@ -110,6 +111,7 @@ describe('/agents/:id/always-on', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue(empty as any)
+    vi.mocked(environmentsApi.list).mockResolvedValue({ data: [], enabled: true } as any)
     vi.mocked(agentChannelsApi.list).mockResolvedValue([
       { id: 'c-slack', type: 'slack', name: 'Support Slack' },
       { id: 'c-hook', type: 'webhook', name: 'GitHub' },
@@ -293,5 +295,29 @@ describe('/agents/:id/always-on', () => {
     open()
     await screen.findByText('Set up always on')
     expect(screen.queryByTestId('always-on-included')).toBeNull()
+  })
+
+  it('offers a hosted home when the organization has hosted environments, and none otherwise', async () => {
+    open()
+    await screen.findByText('Set up always on')
+    expect(screen.queryByText('Where it lives')).toBeNull()
+  })
+
+  it('lets you choose a hosted environment as its home, on the page', async () => {
+    vi.mocked(environmentsApi.list).mockResolvedValue({ data: [{ id: 'e-1', name: 'refunds-box' }], enabled: true } as any)
+    open()
+    expect(await screen.findByText('Where it lives')).toBeInTheDocument()
+    expect(screen.getByText(/what it writes on Monday is there on Tuesday/)).toBeInTheDocument()
+    expect(screen.getByTestId('always-on-home')).toHaveTextContent('No hosted home')
+  })
+})
+
+describe('a hosted home in the Always on form', () => {
+  it('opens with the stored home and saves it, or none', () => {
+    const stored = { enabled: false, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_news', home: { environmentId: 'e-1' } }
+    const form = formFromView({ ...empty, alwaysOn: stored } as any)
+    expect(form.homeEnvironmentId).toBe('e-1')
+    expect(inputFromForm(form, 15).input!.home).toEqual({ environmentId: 'e-1' })
+    expect(inputFromForm({ ...formFromView(empty as any), brief: 'x' }, 15).input!.home).toBeNull()
   })
 })
