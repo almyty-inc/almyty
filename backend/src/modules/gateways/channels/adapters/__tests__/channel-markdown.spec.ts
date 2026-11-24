@@ -17,7 +17,7 @@ describe('markdown headings in channel posts', () => {
     expect(headingText(line)).toBe('x');
     expect(toSlackMrkdwn(line)).toBe('*x*');
     expect(markdownToPlainText(line)).toBe('x');
-    expect(markdownToEmailHtml(line)).toContain('<strong>x</strong>');
+    expect(markdownToEmailHtml(line)).toMatch(/<h1 style="[^"]*">x<\/h1>/);
     expect(Date.now() - started).toBeLessThan(500);
   });
 });
