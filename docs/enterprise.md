@@ -158,6 +158,37 @@ a channel or from the API act as whoever started them, as before.
   `AuditLogService` writes it as `details.actor` on every row written in
   that scope.
 
+## Hosted machines: plan capacity and metering
+
+Capacity is not an entitlement and never goes into the token. It lives in
+`ee/modules/billing/hosted-capacity.ts` and applies only on an install that
+sells plans through Stripe; a self-hosted pool uses its own
+`HOSTED_RUNNERS_SETTINGS` capacity and bills nobody.
+
+- `PLAN_HOSTED_CAPACITY` seeds a row per plan. Free has no hosted machines
+  (its own runners and always on are never gated). A number left null comes
+  from the install's hosted runner settings.
+- `HOSTED_PLAN_CAPACITY` (JSON keyed by plan) overrides any field:
+  `hostedEnvironments`, `maxConcurrentRunners`, `maxWorkspaces`,
+  `resourceClasses`, `includedHoursPerSeat` (per machine size),
+  `monthlyCeilingHours`, `billed`.
+- `organizations.settings.hostedCapacity` may lower `maxConcurrentRunners`,
+  `maxWorkspaces` and `monthlyCeilingHours`, never raise them.
+
+Minutes beyond the allowance are reported hourly (`runner-usage-report`,
+`HOSTED_USAGE_REPORTING`) as Stripe Billing Meter events, one per
+organization, machine size and hour, identified `<org>:<size>:<hour>`, and
+recorded in `runner_usage_reports`. The allowance is counted by almyty,
+not as a free Stripe tier, because it grows with seats.
+`STRIPE_HOSTED_METERS` names the meter event and the metered per-minute
+price for each size; checkout adds those prices to a Pro or Business
+subscription and the webhook adds any a live subscription lacks. An
+Enterprise contract is recorded and shown, and never sent to Stripe.
+
+The price per minute of each size, the included hours per plan and the
+monthly ceiling are product decisions; they are set in Stripe and in
+`HOSTED_PLAN_CAPACITY`, not in code.
+
 ## What is deliberately not gated
 
 Agents, tools, gateways, protocols, BYOK, memory, the runner, scheduling,
