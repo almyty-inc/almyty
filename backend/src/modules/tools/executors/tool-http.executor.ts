@@ -32,6 +32,7 @@ import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
 import { Operation } from '../../../entities/operation.entity';
 import { sanitizeHeaders } from '../../../common/security/url-validator';
+import { safeResponseHeaders } from './safe-response-headers';
 import {
   decideToolRequest,
   effectiveMaxResponseBytes,
@@ -483,7 +484,7 @@ export class ToolHttpExecutor {
         retryCount: 0,
         metadata: {
           httpStatus: response.status,
-          headers: response.headers as Record<string, string>,
+          headers: safeResponseHeaders(response.headers),
           requestId: (response.headers['x-request-id'] as string) || generateRequestId(),
         },
       };
@@ -515,7 +516,7 @@ export class ToolHttpExecutor {
           retryCount: 0,
           metadata: {
             httpStatus: status,
-            headers: error.response?.headers as Record<string, string>,
+            headers: safeResponseHeaders(error.response?.headers),
             requestId:
               (error.response?.headers?.['x-request-id'] as string) || generateRequestId(),
           },
