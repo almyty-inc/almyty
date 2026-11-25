@@ -1,6 +1,7 @@
 {
   "name": "@almyty/mcp-server",
   "version": "1.5.16",
+  "mcpName": "com.almyty/mcp-server",
   "publishConfig": {
     "access": "public"
   },

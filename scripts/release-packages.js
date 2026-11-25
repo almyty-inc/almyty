@@ -9,8 +9,8 @@
 //
 //   node scripts/release-packages.js version
 //       the Changesets action's version script: `changeset version`, then
-//       carry the new version into each package-lock.json and into the
-//       runner-env Dockerfile's RUNNER_VERSION
+//       carry the new version into each package-lock.json, the runner-env
+//       Dockerfile's RUNNER_VERSION and packages/mcp-server/server.json
 //
 //   node scripts/release-packages.js publish [--dry-run] [--provenance]
 //                                            [--only <dir>] [--prerelease <id>]
@@ -122,6 +122,29 @@ function syncRunnerEnvDockerfile(root = repoRoot) {
 }
 
 /**
+ * Carry each package's version into its MCP Registry server.json
+ * (packages/mcp-server/server.json): the entry's own version and the npm
+ * package it names. The registry refuses a server.json whose npm version
+ * does not exist, so it must move with the package.
+ */
+function syncServerJson(root = repoRoot) {
+  const changed = [];
+  for (const p of publishable(root)) {
+    const file = path.join(p.abs, 'server.json');
+    if (!fs.existsSync(file)) continue;
+    const server = readJson(file);
+    const { name, version } = p.manifest;
+    const entries = (server.packages || []).filter((e) => e.registryType === 'npm' && e.identifier === name);
+    if (server.version === version && entries.every((e) => e.version === version)) continue;
+    server.version = version;
+    for (const e of entries) e.version = version;
+    writeJson(file, server);
+    changed.push(`packages/${p.dir}/server.json -> ${version}`);
+  }
+  return changed;
+}
+
+/**
  * Set every internal range to ^<that package's version> in the manifests
  * under `root`. Returns the directories it changed.
  */
@@ -215,7 +238,7 @@ function pinRunnerEnv(root = repoRoot, { digestOf }) {
 }
 
 module.exports = {
-  publishable, internalDeps, order, syncLocks, syncRunnerEnvDockerfile,
+  publishable, internalDeps, order, syncLocks, syncRunnerEnvDockerfile, syncServerJson,
   raiseRanges, publishManifest, pinRunnerEnv,
 };
 
@@ -248,7 +271,7 @@ function dockerDigest(tag) {
 
 function cmdVersion() {
   run(path.join(repoRoot, 'node_modules', '.bin', 'changeset'), ['version'], { cwd: repoRoot });
-  for (const line of [...syncLocks(), ...syncRunnerEnvDockerfile()]) console.log(line);
+  for (const line of [...syncLocks(), ...syncRunnerEnvDockerfile(), ...syncServerJson()]) console.log(line);
 }
 
 function cmdPublish(argv) {

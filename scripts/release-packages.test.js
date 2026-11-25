@@ -105,6 +105,29 @@ test('the version PR carries the new version into every lockfile and the runner-
   assert.deepStrictEqual(rp.syncRunnerEnvDockerfile(root), []);
 });
 
+test('the version PR carries the new version into the MCP Registry server.json', (t) => {
+  const pkgs = suite('1.5.9');
+  pkgs['mcp-server'] = { name: '@almyty/mcp-server', version: '1.5.9', mcpName: 'com.almyty/mcp-server' };
+  const { root, json } = tree(t, pkgs, {
+    'packages/mcp-server/server.json': {
+      name: 'com.almyty/mcp-server',
+      version: '1.5.8',
+      packages: [{ registryType: 'npm', identifier: '@almyty/mcp-server', version: '1.5.8', transport: { type: 'stdio' } }],
+    },
+  });
+  assert.deepStrictEqual(rp.syncServerJson(root), ['packages/mcp-server/server.json -> 1.5.9']);
+  const server = json('packages/mcp-server/server.json');
+  assert.strictEqual(server.version, '1.5.9');
+  assert.strictEqual(server.packages[0].version, '1.5.9');
+  assert.deepStrictEqual(rp.syncServerJson(root), [], 'a second run changes nothing');
+});
+
+test('the committed server.json is written the way the version sync writes it', () => {
+  const file = path.join(repo, 'packages', 'mcp-server', 'server.json');
+  const text = fs.readFileSync(file, 'utf8');
+  assert.strictEqual(text, `${JSON.stringify(JSON.parse(text), null, 2)}\n`, 'a release would reformat it');
+});
+
 test('after the release, internal ranges move to the released version, but only once npm has it', (t) => {
   const { root, json } = tree(t, suite('1.5.9', '^1.5.8'));
   const onNpm = new Set(['@almyty/auth@1.5.9', '@almyty/client@1.5.9']);
