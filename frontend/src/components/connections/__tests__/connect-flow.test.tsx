@@ -28,6 +28,7 @@ vi.mock('../../../lib/connections-api', async () => {
       listGrants: vi.fn(),
       addGrant: vi.fn(),
       removeGrant: vi.fn(),
+      signInCallbackUrl: vi.fn().mockResolvedValue({ callbackUrl: 'https://api.test.almyty.com/credentials/oauth/callback' }),
     },
   }
 })
@@ -307,6 +308,10 @@ describe('ConnectFlow', () => {
     // The sign-in's own More options: the client id an owner hands out.
     if (!screen.queryByLabelText('Client id')) fireEvent.click(screen.getByRole('button', { name: 'More options' }))
     fireEvent.change(screen.getByLabelText('Client id'), { target: { value: 'pre-registered-id' } })
+    // Next to the client id: the redirect URL that app must list, from the API, with copy.
+    const redirectBox = await screen.findByTestId('sign-in-redirect-url')
+    expect(within(redirectBox).getByText('https://api.test.almyty.com/credentials/oauth/callback')).toBeInTheDocument()
+    expect(within(redirectBox).getByRole('button', { name: 'Copy redirect url' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() =>
@@ -438,6 +443,12 @@ describe('splitConnectSchema', () => {
     const { main, extra } = splitConnectSchema(mcpServer.connect[1].schema)
     expect(Object.keys(main.properties)).toEqual(['serverUrl'])
     expect(Object.keys(extra!.properties)).toEqual(['clientId', 'clientSecret'])
+  })
+
+  it('leaves nothing up front when all that is left are extras (the page already asked for the address)', () => {
+    const { main, extra } = splitConnectSchema({ type: 'object', properties: { clientId: { type: 'string', 'x-advanced': true }, scope: { type: 'string', 'x-advanced': true } } })
+    expect(Object.keys(main.properties)).toEqual([])
+    expect(Object.keys(extra!.properties)).toEqual(['clientId', 'scope'])
   })
 })
 

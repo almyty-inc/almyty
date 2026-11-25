@@ -1,6 +1,7 @@
 {
   "name": "@almyty/mcp-server",
-  "version": "1.5.16",
+  "version": "1.5.17",
+  "mcpName": "com.almyty/mcp-server",
   "publishConfig": {
     "access": "public"
   },
@@ -36,7 +37,7 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^1.5.15",
+    "@almyty/client": "^1.5.16",
     "@modelcontextprotocol/server": "^2.3.0",
     "zod": "^4.6.6"
   },

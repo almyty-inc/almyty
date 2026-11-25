@@ -34,3 +34,11 @@ export class CreateMcpSourceDto {
   @IsUUID()
   credentialId?: string;
 }
+
+/** A server to ask how it wants to be called, before it is added. */
+export class CheckMcpAuthDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  url: string;
+}

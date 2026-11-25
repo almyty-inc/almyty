@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.almyty.com
+    about: Guides, tutorials and the reference for the app, the CLI and self-hosting.
+  - name: Report a security vulnerability
+    url: https://github.com/almyty-inc/almyty/security/advisories/new
+    about: Please report vulnerabilities privately, never in a public issue.
+  - name: Other questions
+    url: mailto:hello@almyty.com
+    about: Anything that is not a bug or a feature request.

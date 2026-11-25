@@ -11,6 +11,8 @@ import {
   ValidationPipe,
   HttpException,
   HttpStatus,
+  HttpCode,
+  Optional,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -19,15 +21,36 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { McpSourcesService } from './mcp-sources.service';
 import { McpClientError } from './mcp-client.service';
-import { CreateMcpSourceDto } from './dto/mcp-sources.dto';
+import { CheckMcpAuthDto, CreateMcpSourceDto } from './dto/mcp-sources.dto';
+import { McpOAuthClientService } from '../connections/mcp-oauth/mcp-oauth-client.service';
 
 @Controller('organizations/:organizationId/mcp-sources')
 @ApiTags('MCP Sources')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class McpSourcesController {
-  constructor(private readonly mcpSourcesService: McpSourcesService) {}
+  constructor(
+    private readonly mcpSourcesService: McpSourcesService,
+    @Optional() private readonly mcpOAuth?: McpOAuthClientService,
+  ) {}
 
+  /**
+   * How the server wants to be called, asked before it is added: the Add
+   * MCP server page offers sign-in first for `sign_in` (it refuses an
+   * unauthenticated initialize and publishes where to sign in), a token
+   * otherwise. Saves nothing.
+   */
+  @Post('auth-check')
+  @HttpCode(HttpStatus.OK)
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Ask an MCP server whether it wants a sign-in (OAuth), a token, or nothing' })
+  async checkAuth(
+    @Param('organizationId', ParseUUIDPipe) _organizationId: string,
+    @Body(ValidationPipe) dto: CheckMcpAuthDto,
+  ) {
+    const data = this.mcpOAuth ? await this.mcpOAuth.detectAuth(dto.url.trim()) : { auth: 'unknown' as const };
+    return { success: true, data };
+  }
   @Post()
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Register an external MCP server and run initial tool discovery' })

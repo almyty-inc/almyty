@@ -778,6 +778,13 @@ export const mcpSourcesApi = {
   ) =>
     apiPost(`/organizations/${organizationId}/mcp-sources`, data),
 
+  /**
+   * Whether the server wants a sign-in (OAuth), a token, or nothing, asked
+   * before it is added. Saves nothing.
+   */
+  checkAuth: (organizationId: string, url: string): Promise<{ auth: 'sign_in' | 'token' | 'none' | 'unknown' }> =>
+    apiPost(`/organizations/${organizationId}/mcp-sources/auth-check`, { url }),
+
   sync: (organizationId: string, id: string) =>
     apiPost(`/organizations/${organizationId}/mcp-sources/${id}/sync`),
 

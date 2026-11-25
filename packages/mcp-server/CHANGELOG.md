@@ -1,5 +1,12 @@
 # @almyty/mcp-server
 
+## 1.5.17
+
+### Patch Changes
+
+- b5a1da9: Declare the MCP Registry name com.almyty/mcp-server so the server can be listed in the official MCP Registry.
+- @almyty/client@1.5.17
+
 ## 1.5.16
 
 ### Patch Changes

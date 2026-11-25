@@ -50,7 +50,8 @@ test.describe('J3 connect an API by OpenAPI link', () => {
     const params = { ...BERLIN, daily: 'temperature_2m_max', timezone: 'Europe/Berlin', forecast_days: '3' }
     const [outcome, direct] = await Promise.all([executeTool(panel, params), forecast(params)])
     expect(outcome, 'a real forecast call should show Success').toBe('Success')
-    await expect(panel.getByText(/^Ran in \d+ms$/)).toBeVisible()
+    // Durations read "Ran in <0.1s", "Ran in 0.4s", "Ran in 2s" or "Ran in 1m 5s" (lib/format.ts formatDuration).
+    await expect(panel.getByText(/^Ran in (<0\.1s|\d+\.\ds|\d+s|\d+m( \d+s)?)$/)).toBeVisible()
     const shown = await responseData(panel)
     const body = shown?.body ?? shown?.data ?? shown
     expect(body.daily.time).toEqual(direct.daily.time)
