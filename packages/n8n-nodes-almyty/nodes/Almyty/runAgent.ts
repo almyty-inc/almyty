@@ -114,13 +114,28 @@ export function getAgentRequest(baseUrl: string, agentId: string): IHttpRequestO
  * The request that starts the agent. An autonomous agent takes the text as
  * its task (as `almyty agents run` sends it); a workflow agent takes
  * `{ message }`, which its steps read as `{{input.message}}`.
+ *
+ * A workflow agent's /invoke holds the connection until the execution ends,
+ * so `timeoutMs` (the node's Max Wait) bounds that one call. An autonomous
+ * agent's start answers at once and needs no limit of its own.
  */
-export function startRequest(baseUrl: string, agent: AgentSummary, input: string): IHttpRequestOptions {
+export function startRequest(
+	baseUrl: string,
+	agent: AgentSummary,
+	input: string,
+	timeoutMs?: number,
+): IHttpRequestOptions {
 	const base = `${trimBaseUrl(baseUrl)}/agents/${encodeURIComponent(agent.id)}`;
 	if (agent.mode === 'autonomous') {
 		return { method: 'POST', url: `${base}/runs`, body: { input }, json: true };
 	}
-	return { method: 'POST', url: `${base}/invoke`, body: { input: { message: input } }, json: true };
+	return {
+		method: 'POST',
+		url: `${base}/invoke`,
+		body: { input: { message: input } },
+		json: true,
+		...(timeoutMs && timeoutMs > 0 ? { timeout: timeoutMs } : {}),
+	};
 }
 
 export function getRunRequest(baseUrl: string, agentId: string, runId: string): IHttpRequestOptions {
@@ -248,27 +263,30 @@ export interface RunAgentOptions {
 	now?: () => number;
 }
 
-/** Start the agent and, when asked to, wait for it to settle. */
+/**
+ * Start the agent and, when asked to, wait for it to settle. Whatever state
+ * the run is in when the node stops looking, it goes through mapRun, so a
+ * start that already answers failed or cancelled raises even with waiting
+ * off, and one that already answers completed carries its output.
+ */
 export async function runAgent(request: Request, options: RunAgentOptions): Promise<RunResult> {
 	const now = options.now ?? Date.now;
 	const appBase = appBaseUrl(options.baseUrl, options.appUrl);
 	const agent: AgentSummary = unwrap(await request(getAgentRequest(options.baseUrl, options.agentId)));
 	if (!agent?.id) throw new Error(`No agent with id ${options.agentId} in this organization.`);
 
-	let run: RunRecord = unwrap(await request(startRequest(options.baseUrl, agent, options.input)));
+	const maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
+	let run: RunRecord = unwrap(await request(startRequest(options.baseUrl, agent, options.input, maxWaitMs))) ?? {};
 
-	if (!options.waitForResult) {
-		return { runId: run?.id ? String(run.id) : null, status: String(run?.status ?? 'unknown') };
-	}
+	if (!options.waitForResult) return mapRun(run, agent.id, appBase);
 
 	// A workflow agent answers with the finished execution; an autonomous
 	// one with the run it has just started, which is polled until it settles.
-	const maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
 	const interval = options.pollIntervalMs ?? POLL_INTERVAL_MS;
 	const deadline = now() + maxWaitMs;
 	while (agent.mode === 'autonomous' && run?.id && !isSettled(run.status) && now() < deadline) {
 		await options.sleep(Math.min(interval, Math.max(0, deadline - now())));
-		run = unwrap(await request(getRunRequest(options.baseUrl, agent.id, String(run.id))));
+		run = unwrap(await request(getRunRequest(options.baseUrl, agent.id, String(run.id)))) ?? {};
 	}
 	return mapRun(run, agent.id, appBase);
 }

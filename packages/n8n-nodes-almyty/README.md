@@ -1,9 +1,6 @@
 # n8n-nodes-almyty
 
-Run an almyty agent from an n8n workflow. n8n builds the workflow; almyty is
-the agent underneath. A step in your workflow hands the agent a task, the
-agent does the work with its own tools and models, and the next step gets
-its answer.
+Run an almyty agent from an n8n workflow. Pass it input from an earlier node, choose the agent, and use its result or current run status in the next step.
 
 ## Install
 
@@ -43,8 +40,8 @@ The node has one action, **Run agent**.
 |-----------------|--------------|
 | Agent           | The agent to run, picked from your organization's agents. |
 | Input           | What you ask the agent to do. Use an expression to pass data from earlier steps. |
-| Wait for result | On (the default): wait for the agent's answer. Off: start the agent and carry on straight away. |
-| Max wait        | How long to wait for the answer, in seconds (default 300). Shown when Wait for result is on. |
+| Wait for result | On (the default): wait for the agent's answer. Off: start the agent and carry on straight away. Workflow agents always answer in one call; this applies to autonomous agents. |
+| Max wait        | How long to wait for the answer, in seconds (default 300). For a workflow agent, the time limit on its one call. |
 
 ### What comes out
 
@@ -63,8 +60,10 @@ The node has one action, **Run agent**.
 `cost` is in US dollars and `durationMs` in milliseconds. Either is `null`
 when almyty did not record it.
 
-**Wait for result off:** the run ID and status only, for example
-`{ "runId": "…", "status": "running" }`. Look the run up in almyty later.
+**Wait for result off:** the run as it stands right after it started. Usually
+that is the status `running` with the run ID and `runUrl`; look the run up in
+almyty later. A run that has already finished comes back finished, and one
+that has already failed fails the step, as below.
 
 **Waiting for someone:** when the agent stops to ask for an approval or for
 more input, the step does not fail. You get the status
@@ -76,16 +75,25 @@ the run in almyty where someone can approve or answer.
 moment (`running`, or `sleeping` while, say, its hosted machine starts). The
 agent keeps working in almyty.
 
-**Failed:** the step fails with the run's own error message. With n8n's
-**On Error → Continue** setting, the item goes on instead, carrying
+`waiting_approval`, `waiting_input` and `running` are status results, not
+pauses. The n8n execution does not pause and resume with the run: it goes on
+to the next step with that status. Running the node again starts a new run;
+it does not pick up the old one.
+
+**Failed:** the step fails with the run's own error message. This holds for
+`failed`, `cancelled` and `timeout`, and with Wait for result off too. With
+n8n's **On Error → Continue** setting, the item goes on instead, carrying
 `status`, `error`, `runId` and `runUrl`.
 
 ### Workflow agents and autonomous agents
 
 An autonomous agent gets your input as its task. A workflow agent gets it as
-`input.message`, which its steps read as `{{input.message}}`. A workflow
-agent answers in one request, so its result comes back whole even with Wait
-for result off.
+`input.message`, which its steps read as `{{input.message}}`.
+
+Workflow agents always answer in one call, so Wait for result applies to
+autonomous agents only: a workflow agent's result comes back whole even with
+it off. Max wait is the time limit on that one call; if the workflow agent
+has not answered by then, the step fails.
 
 ## Development
 

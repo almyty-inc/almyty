@@ -92,7 +92,7 @@ export class Almyty implements INodeType {
 				type: 'boolean',
 				default: true,
 				description:
-					'Whether to wait for the agent to finish and return its answer. Off returns the run ID and status straight away.',
+					'Whether to wait for the agent to finish and return its answer. Off returns the run ID and status as soon as the run has started. Workflow agents always answer in one call; this applies to autonomous agents. A run waiting for approval or input, or still running, comes back as a status: the n8n execution does not pause and resume with it, and running the node again starts a new run.',
 				displayOptions: { show: { operation: ['runAgent'] } },
 			},
 			{
@@ -100,10 +100,10 @@ export class Almyty implements INodeType {
 				name: 'maxWaitSeconds',
 				type: 'number',
 				typeOptions: { minValue: 1 },
-					default: 300,
+				default: 300,
 				description:
-					'How long to wait for the answer. If the agent is still working by then, you get the run ID and the status "running".',
-				displayOptions: { show: { operation: ['runAgent'], waitForResult: [true] } },
+					'How long to wait for the answer. For an autonomous agent with Wait for Result on: if it is still working by then, you get the run ID and the status "running". For a workflow agent: the time limit on its one call; if it has not answered by then, the step fails.',
+				displayOptions: { show: { operation: ['runAgent'] } },
 			},
 		],
 	};
@@ -132,9 +132,9 @@ export class Almyty implements INodeType {
 				const agentId = this.getNodeParameter('agentId', i) as string;
 				const input = this.getNodeParameter('input', i) as string;
 				const waitForResult = this.getNodeParameter('waitForResult', i, true) as boolean;
-				const maxWaitSeconds = waitForResult
-					? (this.getNodeParameter('maxWaitSeconds', i, DEFAULT_MAX_WAIT_MS / 1000) as number)
-					: 0;
+				// Read with waiting off too: it is the time limit on a workflow
+				// agent's one /invoke call either way.
+				const maxWaitSeconds = this.getNodeParameter('maxWaitSeconds', i, DEFAULT_MAX_WAIT_MS / 1000) as number;
 
 				const result = await runAgent(request, {
 					baseUrl: String(credentials.baseUrl),

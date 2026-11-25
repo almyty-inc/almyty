@@ -205,6 +205,10 @@ jobs:
   # smoke pass, which needs a live gateway + credentials) and
   # desktop-shell is excluded (private, no specs — `vitest run` with
   # zero test files exits 1).
+  #
+  # n8n-nodes-almyty (the n8n community node) is not an @almyty/* package
+  # and is not published yet, but runs here too: build, tests, and its own
+  # lint step below.
   packages-tests:
     name: Packages tests (${{ matrix.package }})
     needs: changes
@@ -228,6 +232,7 @@ jobs:
           - mcp-mux
           - mcp-server
           - models-cli
+          - n8n-nodes-almyty
           - runner
           - skills-cli
 
@@ -290,6 +295,17 @@ jobs:
       - name: Build (if the package has a build)
         working-directory: packages/${{ matrix.package }}
         run: npm run build --if-present
+
+      # The n8n community node is checked with n8n's own lint rules
+      # (`n8n-node lint` is `eslint .` over the package's unmodified
+      # eslint.config.mjs). One rule is switched off: n8n wants community
+      # packages under MIT and this one is Apache-2.0, like the rest of the
+      # repo. Which licence it ships under is still an open owner decision;
+      # drop the --rule override once that is settled.
+      - name: Lint (n8n community node rules)
+        if: ${{ matrix.package == 'n8n-nodes-almyty' }}
+        working-directory: packages/${{ matrix.package }}
+        run: npx eslint . --rule 'n8n-nodes-base/community-package-json-license-not-default: off'
 
       # vitest runs against src/ via esbuild, so nothing else needs a build.
       #
