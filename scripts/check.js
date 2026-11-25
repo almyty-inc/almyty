@@ -40,6 +40,8 @@ const STEPS = [
   { name: 'Check no build/deploy value was eaten', cmd: 'node scripts/check-empty-values.js' },
   { name: 'Test the runner-env image check', cmd: 'node --test scripts/check-runner-env-images.test.js' },
   { name: 'Check the runner-env images agree with their settings list', cmd: 'node scripts/check-runner-env-images.js' },
+  { name: 'Test the MCP Registry server.json check', cmd: 'node --test scripts/check-server-json.test.js' },
+  { name: 'Check the MCP Registry server.json agrees with @almyty/mcp-server', cmd: 'node scripts/check-server-json.js' },
   { name: 'Test the release config check', cmd: 'node --test scripts/check-release-config.test.js' },
   { name: 'Check the release tooling covers every publishable package', cmd: 'node scripts/check-release-config.js' },
   { name: 'Test the release PR opener', cmd: 'node --test scripts/open-release-pr.test.js' },

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.almyty/mcp-server",
+  "title": "almyty",
+  "description": "Use your almyty tools, skills and agents from any MCP client.",
+  "version": "1.5.16",
+  "websiteUrl": "https://docs.almyty.com/cli/mcp-server",
+  "repository": {
+    "url": "https://github.com/almyty-inc/almyty",
+    "source": "github",
+    "id": "1101116456",
+    "subfolder": "packages/mcp-server"
+  },
+  "icons": [
+    {
+      "src": "https://almyty.com/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@almyty/mcp-server",
+      "version": "1.5.16",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "gateway",
+          "description": "Serve one gateway, as orgSlug/gatewaySlug. Leave it out to serve every gateway the token can see.",
+          "isRequired": false
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "ALMYTY_TOKEN",
+          "description": "An almyty API key or login token. Without it the server reads ~/.almyty/credentials.json, written by `almyty login`.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ALMYTY_URL",
+          "description": "The almyty API to connect to. Set it for a self-hosted install.",
+          "default": "https://api.almyty.com",
+          "format": "string"
+        },
+        {
+          "name": "ALMYTY_GATEWAY_ID",
+          "description": "Serve one gateway, as orgSlug/gatewaySlug. Same as the positional argument."
+        },
+        {
+          "name": "ALMYTY_MODE",
+          "description": "skill-first registers two tools and serves skills as prompts; full registers every gateway tool on its own.",
+          "default": "skill-first",
+          "choices": [
+            "skill-first",
+            "full"
+          ]
+        },
+        {
+          "name": "ALMYTY_MCP_PROTOCOL",
+          "description": "How the server talks to almyty: auto tries MCP 2026-07-28 first and falls back to the earlier protocol.",
+          "default": "auto",
+          "choices": [
+            "auto",
+            "modern",
+            "legacy"
+          ]
+        },
+        {
+          "name": "ALMYTY_DISCOVERY_WAIT_MS",
+          "description": "How long the client's first message waits for the gateway's tool list, in milliseconds (0 to 60000).",
+          "default": "5000",
+          "format": "number"
+        }
+      ]
+    }
+  ]
+}
