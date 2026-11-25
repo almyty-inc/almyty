@@ -52,6 +52,9 @@ export function defaultMcpOAuthHttp(): McpOAuthHttp {
 /** How almyty is known to the authorization server. */
 export type McpClientRegistration = 'pre_registered' | 'cimd' | 'dcr';
 
+/** How an MCP server wants to be called (`McpOAuthClientService.detectAuth`). */
+export type McpServerAuth = 'sign_in' | 'token' | 'none' | 'unknown';
+
 /**
  * What a sign-in needs between the authorize redirect and the callback.
  * Kept server-side in the connect state; the client secret (only for a
@@ -227,17 +230,50 @@ export class McpOAuthClientService {
 
   /** The server's challenge and its Protected Resource Metadata: who issues tokens for it. */
   async discoverResource(serverUrl: string): Promise<{ challenge: WwwAuthenticateBearer | null; resource: ProtectedResource }> {
-    this.guard(serverUrl);
-    const probe = await this.call(serverUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: mcpOAuthClientSettings().clientName, version: '1' } } }),
-    });
+    const probe = await this.probe(serverUrl);
     const challenge = probe.status === 401 ? parseWwwAuthenticate(probe.headers.get('www-authenticate')) : null;
     if (probe.status !== 401 && probe.status !== 403) {
       refuse(`${host(serverUrl)} did not ask for sign-in (it answered ${probe.status}). Add it with a token, or without one.`);
     }
     return { challenge, resource: await this.protectedResource(serverUrl, challenge) };
+  }
+
+  /**
+   * How a server wants to be called, asked before anything is saved (the
+   * Add MCP server page picks its default from this): `sign_in` when it
+   * refuses an unauthenticated initialize and publishes Protected Resource
+   * Metadata (named in its WWW-Authenticate challenge or at the well-known
+   * address), `token` when it refuses but says nothing about where to sign
+   * in, `none` when it answers without asking, `unknown` when it cannot be
+   * reached or answers something else.
+   */
+  async detectAuth(serverUrl: string): Promise<{ auth: McpServerAuth }> {
+    let probe: { status: number; headers: Headers };
+    try {
+      probe = await this.probe(serverUrl);
+    } catch {
+      return { auth: 'unknown' };
+    }
+    if (probe.status !== 401 && probe.status !== 403) {
+      return { auth: probe.status >= 200 && probe.status < 300 ? 'none' : 'unknown' };
+    }
+    const challenge = probe.status === 401 ? parseWwwAuthenticate(probe.headers.get('www-authenticate')) : null;
+    try {
+      await this.protectedResource(serverUrl, challenge);
+      return { auth: 'sign_in' };
+    } catch {
+      return { auth: 'token' };
+    }
+  }
+
+  /** An initialize without a token: what the server says to a caller it does not know. */
+  private async probe(serverUrl: string) {
+    this.guard(serverUrl);
+    return this.call(serverUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: mcpOAuthClientSettings().clientName, version: '1' } } }),
+    });
   }
 
   private async protectedResource(serverUrl: string, challenge: WwwAuthenticateBearer | null): Promise<ProtectedResource> {

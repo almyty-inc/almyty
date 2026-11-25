@@ -73,6 +73,8 @@ export const connectionsApi = {
   addGrant: (id: string, body: { principalType: 'agent'; principalId: string }) =>
     apiPost(`/credentials/${encodeURIComponent(id)}/grants`, body),
 
+  /** The redirect URL a sign-in comes back to: an app registered by hand (client id and secret) must list it. */
+  signInCallbackUrl: () => apiGet<{ callbackUrl: string }>('/credentials/oauth/callback-url'),
 }
 
 /**

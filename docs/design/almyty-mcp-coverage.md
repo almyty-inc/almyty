@@ -96,12 +96,12 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 
 | | Routes |
 | --- | ---: |
-| Controller routes (src/modules + ee/modules) | 596 |
+| Controller routes (src/modules + ee/modules) | 598 |
 | Excluded (an MCP client must not or cannot use them) | 143 |
-| In scope | 453 |
+| In scope | 455 |
 | Covered by a dedicated tool | 79 (17.4%) |
-| Covered by an operation | 374 (82.6%) |
-| Covered in total | 453 (100.0%) |
+| Covered by an operation | 376 (82.6%) |
+| Covered in total | 455 (100.0%) |
 | Held for a product decision | 0 (0.0%) |
 
 ## By resource
@@ -118,7 +118,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | auth | 19 | 0 | 5 | 0 | 14 |
 | budgets | 7 | 2 | 5 | 0 | 0 |
 | connections | 5 | 2 | 1 | 0 | 2 |
-| credentials | 21 | 4 | 11 | 0 | 6 |
+| credentials | 22 | 4 | 12 | 0 | 6 |
 | ee/approval-policies | 5 | 0 | 5 | 0 | 0 |
 | ee/audit-export | 5 | 0 | 5 | 0 | 0 |
 | ee/billing | 5 | 0 | 4 | 0 | 1 |
@@ -136,7 +136,7 @@ this page is stale: run `npm run mcp:coverage` in `backend/`.
 | lifecycle | 1 | 0 | 0 | 0 | 1 |
 | llm-providers | 19 | 2 | 17 | 0 | 0 |
 | mcp | 22 | 0 | 0 | 0 | 22 |
-| mcp-sources | 5 | 0 | 5 | 0 | 0 |
+| mcp-sources | 6 | 0 | 6 | 0 | 0 |
 | memory | 22 | 11 | 11 | 0 | 0 |
 | model-catalog | 10 | 5 | 5 | 0 | 0 |
 | model-deployments | 7 | 1 | 6 | 0 | 0 |
@@ -411,6 +411,7 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | connections | `POST /credentials/:id/grants` (GrantsController.create) | `grant_connection` | tool |
 | connections | `DELETE /credentials/:id/grants/:grantId` (GrantsController.revoke) | `credentials.revoke_grant` (destructive) | operation |
 | credentials | `GET /credentials/services` (CredentialsController.listServices) | `list_connectors` | tool |
+| credentials | `GET /credentials/oauth/callback-url` (CredentialsController.signInCallbackUrl) | `credentials.get_sign_in_callback_url` (read) | operation |
 | credentials | `POST /credentials/services` (CredentialsController.createService) | `credentials.add_connector` (write) | operation |
 | credentials | `POST /credentials/connect/:connectorKey` (CredentialsController.connect) | `start_connection` | tool |
 | credentials | `POST /credentials/connect/:connectorKey/complete` (CredentialsController.completeConnect) | `complete_connection` | tool |
@@ -559,6 +560,7 @@ Status: **tool** = a dedicated MCP tool; **operation** = `search_operations` / `
 | llm-providers | `GET /llm-providers/sessions/:sessionId` (LlmSessionsController.getSession) | `providers.get_session` (read) | operation |
 | llm-providers | `PUT /llm-providers/sessions/:sessionId` (LlmSessionsController.updateSession) | `providers.update_session` (write) | operation |
 | llm-providers | `DELETE /llm-providers/sessions/:sessionId` (LlmSessionsController.deleteSession) | `providers.delete_session` (destructive) | operation |
+| mcp-sources | `POST /organizations/:organizationId/mcp-sources/auth-check` (McpSourcesController.checkAuth) | `mcp_sources.check_auth` (read) | operation |
 | mcp-sources | `POST /organizations/:organizationId/mcp-sources` (McpSourcesController.create) | `mcp_sources.add` (write) | operation |
 | mcp-sources | `GET /organizations/:organizationId/mcp-sources` (McpSourcesController.findAll) | `mcp_sources.list` (read) | operation |
 | mcp-sources | `GET /organizations/:organizationId/mcp-sources/:id` (McpSourcesController.findOne) | `mcp_sources.get` (read) | operation |

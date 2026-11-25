@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest something almyty should do, or do differently.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us about the problem you want solved. A clear problem is more useful to us than a finished design.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+      placeholder: When I connect an API with hundreds of operations, I ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How you picture it working. Rough is fine.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you do now
+      description: Any workaround you use today, and what you have already tried.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Agents and the agent builder
+        - Tools and API import
+        - Gateways (MCP, UTCP, Skills)
+        - Channels (web chat, widget, messaging apps, A2A, desktop, terminal)
+        - Models and providers
+        - Credentials
+        - Runners
+        - CLI and MCP server
+        - Self-hosting
+        - Docs
+        - Other
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to work on this myself.

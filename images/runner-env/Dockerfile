@@ -38,7 +38,7 @@
 FROM scratch AS runner-pkg
 
 FROM node:26-bookworm-slim AS base
-ARG RUNNER_VERSION=1.5.16
+ARG RUNNER_VERSION=1.5.17
 
 LABEL org.opencontainers.image.source="https://github.com/almyty-inc/almyty" \
       org.opencontainers.image.description="almyty hosted runner environment" \

@@ -16,6 +16,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ExternalLink, KeyRound, Loader2, LockKeyhole, LogIn, Plug, Settings2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { CopyField } from '@/components/ui/copy-field'
 import { Form } from '@/components/ui/form'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
@@ -153,12 +154,49 @@ export function splitConnectSchema(schema: JsonSchemaObject | null | undefined):
     else if (required.has(key) || isSecretProperty(prop)) main[key] = prop
     else extra[key] = prop
   }
-  // A schema with nothing required and nothing secret still asks for something.
-  if (Object.keys(main).length === 0) return { main: { ...(schema ?? { type: 'object' }), properties: props } as JsonSchemaObject, extra: null }
+  // A schema with nothing required and nothing secret still asks for something,
+  // unless all it has left are extras (a sign-in whose address the page already asked for).
+  const allAdvanced = Object.keys(props).length > 0 && Object.values(props).every((prop: any) => prop?.['x-advanced'])
+  if (Object.keys(main).length === 0 && !allAdvanced) return { main: { ...(schema ?? { type: 'object' }), properties: props } as JsonSchemaObject, extra: null }
   return {
     main: { ...(schema as JsonSchemaObject), properties: main, required: [...required].filter((k) => k in main) },
     extra: Object.keys(extra).length > 0 ? ({ ...(schema as JsonSchemaObject), properties: extra, required: [] } as JsonSchemaObject) : null,
   }
+}
+
+/** The schema without the fields the surrounding page already asked for. */
+function withoutProperties(schema: JsonSchemaObject | null | undefined, keys: string[]): JsonSchemaObject | null | undefined {
+  if (!schema || keys.length === 0) return schema
+  const properties = Object.fromEntries(Object.entries(schema.properties ?? {}).filter(([key]) => !keys.includes(key)))
+  return { ...schema, properties, required: (schema.required ?? []).filter((key) => !keys.includes(key)) }
+}
+
+/** A sign-in form that asks for an app's client id or secret: that app must list the redirect URL. */
+function asksForClient(schema: JsonSchemaObject | null | undefined): boolean {
+  const props = schema?.properties ?? {}
+  return 'clientId' in props || 'clientSecret' in props
+}
+
+/**
+ * Where a sign-in comes back to, with a copy button. A server whose owner
+ * registers apps by hand refuses the sign-in unless their app lists it;
+ * the API says what it is on this install.
+ */
+export function SignInRedirectUrl() {
+  const query = useQuery({
+    queryKey: ['sign-in-callback-url'],
+    queryFn: () => connectionsApi.signInCallbackUrl(),
+    staleTime: Infinity,
+  })
+  const url = query.data?.callbackUrl
+  if (!url) return null
+  return (
+    <div className="space-y-1.5" data-testid="sign-in-redirect-url">
+      <p className="text-sm font-medium">Redirect URL</p>
+      <p className="text-xs text-muted-foreground">If you enter a client id, the app it belongs to must list this redirect URL, or the sign-in is refused.</p>
+      <CopyField id="sign-in-redirect-url" value={url} label="Redirect URL" />
+    </div>
+  )
 }
 
 /** A refused connect, in plain words; the service's own answer goes under Details. */
@@ -191,6 +229,10 @@ export interface ConnectServiceFormProps {
   onNameMissing?: () => void
   /** Told whether a value has been typed and not saved yet. */
   onDirtyChange?: (dirty: boolean) => void
+  /** Use this way in and offer no other (a page that has its own choice of token or sign-in). */
+  onlyMethod?: ConnectMethod['type']
+  /** Values the surrounding page already asked for (an MCP server's URL): sent, not asked again. */
+  fixedValues?: SchemaFormValues
 }
 
 /**
@@ -198,9 +240,9 @@ export interface ConnectServiceFormProps {
  * Save. Saving checks it with the service; a refusal is said in plain
  * words next to the key and the form stays filled.
  */
-export function ConnectServiceForm({ connector, onConnected, embedded = false, rotateConnection, pollIntervalMs = 2000, onCancel, name, onNameMissing, onDirtyChange }: ConnectServiceFormProps) {
+export function ConnectServiceForm({ connector, onConnected, embedded = false, rotateConnection, pollIntervalMs = 2000, onCancel, name, onNameMissing, onDirtyChange, onlyMethod, fixedValues }: ConnectServiceFormProps) {
   const owners = useConnectOwners()
-  const [methodType, setMethodType] = useState<ConnectMethod['type'] | null>(rotateConnection?.method ?? null)
+  const [methodType, setMethodType] = useState<ConnectMethod['type'] | null>(rotateConnection?.method ?? onlyMethod ?? null)
   const [who, setWho] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [values, setValues] = useState<SchemaFormValues>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -210,7 +252,8 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   const pollAbort = useRef<AbortController | null>(null)
 
   const method: ConnectMethod | null = useMemo(() => connector.connect.find((m) => m.type === methodType) ?? bestConnectMethod(connector), [connector, methodType])
-  const { main, extra } = useMemo(() => splitConnectSchema(method?.schema), [method?.schema])
+  const fixedKeys = Object.keys(fixedValues ?? {}).join(',')
+  const { main, extra } = useMemo(() => splitConnectSchema(withoutProperties(method?.schema, fixedKeys ? fixedKeys.split(',') : [])), [method?.schema, fixedKeys])
   const keyPageUrl = method?.keyPageUrl ?? connector.keyPageUrl ?? null
   const newName = !rotateConnection && name !== undefined ? name.trim() : undefined
   const nameMissing = newName !== undefined && !newName
@@ -306,7 +349,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     e.stopPropagation()
     if (!method) return
     const errors: Record<string, string> = {}
-    const check = validateSchemaValues(method.schema, values, { mode: 'create' })
+    const check = validateSchemaValues(method.schema, { ...values, ...fixedValues }, { mode: 'create' })
     if (!check.ok) Object.assign(errors, check.errors)
     setFieldErrors(errors)
     if (nameMissing) onNameMissing?.()
@@ -331,7 +374,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     // A sign-in that needs to know where first (an MCP server's address).
     // Signing in again reuses what the connection already has.
     if (method && !rotateConnection && Object.keys(method.schema?.properties ?? {}).length > 0) {
-      const check = validateSchemaValues(method.schema, values, { mode: 'create' })
+      const check = validateSchemaValues(method.schema, { ...values, ...fixedValues }, { mode: 'create' })
       setFieldErrors(check.ok ? {} : check.errors)
       if (!check.ok) return
       connect.mutate(check.value)
@@ -353,7 +396,8 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   const redirect = !!method && isRedirectMethod(method.type)
   // A sign-in that asks where first (an MCP server): its form comes before the button.
   const signInForm = redirect && !rotateConnection && Object.keys(method?.schema?.properties ?? {}).length > 0
-  const others = connector.connect.filter((m) => m.type !== method?.type)
+  const hasMain = Object.keys(main.properties ?? {}).length > 0
+  const others = onlyMethod ? [] : connector.connect.filter((m) => m.type !== method?.type)
 
   if (!method) return <p className="text-sm text-muted-foreground">This service can't be added yet.</p>
 
@@ -411,6 +455,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
         </div>
       )}
       {extra && (!redirect || signInForm) && signIn.phase === 'idle' && <JsonSchemaForm schema={extra} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
+      {redirect && signIn.phase === 'idle' && asksForClient(extra) && <SignInRedirectUrl />}
       {redirect && signIn.phase !== 'idle' && !signIn.byCode && <PasteCode embedded={embedded} code={code} onCode={setCode} onSubmit={submitCode} busy={busy} submitType={submitType} pending={complete.isPending} />}
     </Disclosure>
   )
@@ -419,14 +464,15 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     return (
       <div className="space-y-4" data-testid="connect-form">
         <p className="text-sm text-muted-foreground">
-          {signInForm
+          {signInForm && hasMain
             ? `Enter where it is, then sign in at ${connector.displayName} and come back here.`
             : `You sign in at ${connector.displayName} and come back here. Nothing to paste.`}
         </p>
         {failureBox}
         {signIn.phase === 'idle' && (
           <>
-            {signInForm && <JsonSchemaForm schema={main} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
+            {signInForm && hasMain && <JsonSchemaForm schema={main} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />}
+            {signInForm && asksForClient(main) && <SignInRedirectUrl />}
             {whoLine}
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={startSignIn} disabled={busy}>
