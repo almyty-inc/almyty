@@ -51,6 +51,7 @@ describe('hosted runner warm start: ready on the first heartbeat', () => {
     const service = {
       clusterCredentialsFor: jest.fn(async () => ({})),
       resolveSecretEnv: jest.fn(async () => ({})),
+      capacityFor: jest.fn(async () => ({ maxConcurrentRunners: 2, maxWorkspaces: 10, resourceClasses: null })),
       audit: jest.fn(),
       enqueue: jest.fn(async (id: string) => {
         enqueued.push(id);

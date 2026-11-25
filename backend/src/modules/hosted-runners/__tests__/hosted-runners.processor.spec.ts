@@ -161,8 +161,10 @@ describe('hosted runner reconcile loop (stub adapter)', () => {
     expect(stub.pods.get(HR)).toMatchObject({ volume: true, secretEnv: null, replicas: 0 });
 
     await want(1);
+    stub.calls.length = 0;
     await processor.reconcile(HR);
-    expect(stub.calls.filter((c) => c.startsWith('provision')).length).toBe(1);
+    // The objects are re-applied before the token goes in and the pod starts.
+    expect(stub.calls).toEqual([`read:${HR}`, `provision:${HR}`, `rotate:${HR}`, `scale:${HR}:1`]);
     expect(stub.pods.get(HR)!.secretEnv!.ALMYTY_ENROLLMENT_TOKEN).toBe('token-2');
     await runnerOnline();
     await processor.reconcile(HR);
@@ -179,6 +181,26 @@ describe('hosted runner reconcile loop (stub adapter)', () => {
     expect(stub.calls.filter((c) => c.startsWith('provision')).length).toBe(2);
     expect(row().environmentVersion).toBe(2);
     expect(stub.pods.get(HR)!.request.env.ALMYTY_SETUP_SCRIPT).toBe('pnpm i');
+
+    // A pod is up: nothing is re-applied under it.
+    const applied = stub.calls.filter((c) => c.startsWith('provision')).length;
+    await processor.reconcile(HR);
+    expect(stub.calls.filter((c) => c.startsWith('provision')).length).toBe(applied);
+  });
+
+  it('re-applies a machine made by an earlier almyty on its next start, same environment version', async () => {
+    // A Deployment made before a change to the pod template (on staging: the
+    // template before tokens moved to their own Secret, which crashed on
+    // every start with "no enrollment token").
+    await processor.reconcile(HR);
+    const made = stub.pods.get(HR)!;
+    made.request = { ...made.request, image: 'template-of-an-earlier-almyty', env: {} };
+    expect(row().environmentVersion).toBe(1);
+
+    await want(1);
+    await processor.reconcile(HR);
+    expect(stub.pods.get(HR)!.request).toMatchObject({ image: 'almyty/runner-env:standard', env: expect.objectContaining({ ALMYTY_RUNNER_ID: RUNNER }) });
+    expect(stub.pods.get(HR)).toMatchObject({ replicas: 1, secretEnv: { ALMYTY_ENROLLMENT_TOKEN: 'token-1' } });
   });
 
   it('restarts a pod that has not enrolled within the wait, with a new token', async () => {
