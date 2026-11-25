@@ -305,7 +305,8 @@ jobs:
       - name: Lint (n8n community node rules)
         if: ${{ matrix.package == 'n8n-nodes-almyty' }}
         working-directory: packages/${{ matrix.package }}
-        run: npx eslint . --rule 'n8n-nodes-base/community-package-json-license-not-default: off'
+        run: |
+          npx eslint . --rule 'n8n-nodes-base/community-package-json-license-not-default: off'
 
       # vitest runs against src/ via esbuild, so nothing else needs a build.
       #
