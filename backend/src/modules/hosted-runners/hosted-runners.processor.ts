@@ -218,13 +218,16 @@ export class HostedRunnersProcessor implements OnApplicationBootstrap, OnModuleI
     }
 
     if (actual.replicas === 0) {
-      // A newer environment version is applied while there is no pod yet,
-      // and an inherited workspace's objects are re-applied with its volume
-      // read-only (it may have been handed over since they were made).
-      if (hr.environmentVersion !== env.version || workspace.readOnly) {
-        await adapter.provision(await this.provisionRequest(hr, env, workspace), creds);
-        await this.writeObserved(hr, { environmentVersion: env.version });
-      }
+      // Every start re-applies the machine's objects while there is no pod
+      // yet: a newer environment version, an inherited workspace's volume
+      // read-only (it may have been handed over since they were made), and
+      // a pod template from the almyty that is running now. A Deployment
+      // made by an earlier almyty keeps its old template otherwise, and a
+      // template that reads its token from where tokens no longer go
+      // (rotateEnrollment writes today's place) crashes on every start.
+      // Server-side apply leaves unchanged objects as they are.
+      await adapter.provision(await this.provisionRequest(hr, env, workspace), creds);
+      if (hr.environmentVersion !== env.version) await this.writeObserved(hr, { environmentVersion: env.version });
       // A fresh single-use token and freshly resolved variables every
       // start, so a secret rotated in the store reaches this wake. The
       // pod model token is minted here too (the previous one of this
