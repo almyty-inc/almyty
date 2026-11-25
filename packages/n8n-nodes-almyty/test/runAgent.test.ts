@@ -120,7 +120,7 @@ describe('outputText', () => {
 });
 
 describe('runAgent', () => {
-	it('with wait off returns only the run id and status, and does not poll', async () => {
+	it('with wait off returns the run as it started, with a link, and does not poll', async () => {
 		const api = fakeApi(AUTONOMOUS, { id: 'run-1', status: 'pending', totalCost: 0, output: null });
 		const clock = fakeClock();
 		const result = await runAgent(api.request, {
@@ -130,9 +130,44 @@ describe('runAgent', () => {
 			waitForResult: false,
 			...clock,
 		});
-		expect(result).toEqual({ runId: 'run-1', status: 'pending' });
+		expect(result).toEqual({
+			runId: 'run-1',
+			status: 'running',
+			runStatus: 'pending',
+			runUrl: 'https://app.example.test/agents/a-1/runs/run-1',
+		});
 		expect(api.calls.map((c) => c.method)).toEqual(['GET', 'POST']);
 		expect(clock.sleep).not.toHaveBeenCalled();
+	});
+
+	it('with wait off a start that already failed raises the run’s error', async () => {
+		const api = fakeApi(AUTONOMOUS, { id: 'run-1', status: 'failed', error: 'No model is connected' });
+		const promise = runAgent(api.request, { baseUrl: BASE, agentId: 'a-1', input: 'hi', waitForResult: false, ...fakeClock() });
+		await expect(promise).rejects.toBeInstanceOf(RunFailedError);
+		await expect(promise).rejects.toMatchObject({
+			message: 'No model is connected',
+			result: { runId: 'run-1', status: 'failed', error: 'No model is connected' },
+		});
+	});
+
+	it('with wait off a start that is already cancelled raises too', async () => {
+		const api = fakeApi(AUTONOMOUS, { id: 'run-1', status: 'cancelled' });
+		await expect(
+			runAgent(api.request, { baseUrl: BASE, agentId: 'a-1', input: 'hi', waitForResult: false, ...fakeClock() }),
+		).rejects.toThrow('The run ended with status "cancelled".');
+	});
+
+	it('with wait off a workflow agent that failed raises the execution’s error', async () => {
+		const api = fakeApi(WORKFLOW, { id: 'exec-1', status: 'failed', error: 'Step 2 threw' });
+		await expect(
+			runAgent(api.request, { baseUrl: BASE, agentId: 'w-1', input: 'x', waitForResult: false, ...fakeClock() }),
+		).rejects.toThrow('Step 2 threw');
+	});
+
+	it('with wait off a completed start returns its output', async () => {
+		const api = fakeApi(WORKFLOW, { id: 'exec-1', status: 'completed', output: { content: 'Summary' }, totalCost: 0.0002, executionTime: 800 });
+		const result = await runAgent(api.request, { baseUrl: BASE, agentId: 'w-1', input: 'x', waitForResult: false, ...fakeClock() });
+		expect(result).toEqual({ runId: 'exec-1', status: 'completed', output: 'Summary', cost: 0.0002, durationMs: 800 });
 	});
 
 	it('completed: polls until done and returns output, cost and duration', async () => {
@@ -227,6 +262,24 @@ describe('runAgent', () => {
 		expect(result).toEqual({ runId: 'exec-1', status: 'completed', output: 'Summary here', cost: 0.0002, durationMs: 800 });
 		expect(api.calls).toHaveLength(2);
 		expect(clock.sleep).not.toHaveBeenCalled();
+	});
+
+	it('a workflow agent’s one call is bounded by Max Wait as its HTTP timeout', async () => {
+		const api = fakeApi(WORKFLOW, { id: 'exec-1', status: 'completed', output: 'ok' });
+		await runAgent(api.request, { baseUrl: BASE, agentId: 'w-1', input: 'x', waitForResult: true, maxWaitMs: 30_000, ...fakeClock() });
+		expect(api.calls[1]).toMatchObject({ method: 'POST', url: 'https://api.example.test/agents/w-1/invoke', timeout: 30_000 });
+	});
+
+	it('with wait off a workflow agent’s call is still bounded by Max Wait', async () => {
+		const api = fakeApi(WORKFLOW, { id: 'exec-1', status: 'completed', output: 'ok' });
+		await runAgent(api.request, { baseUrl: BASE, agentId: 'w-1', input: 'x', waitForResult: false, maxWaitMs: 45_000, ...fakeClock() });
+		expect(api.calls[1].timeout).toBe(45_000);
+	});
+
+	it('an autonomous agent’s start carries no timeout: it answers at once and is polled', async () => {
+		const api = fakeApi(AUTONOMOUS, { id: 'run-1', status: 'pending' });
+		await runAgent(api.request, { baseUrl: BASE, agentId: 'a-1', input: 'x', waitForResult: false, maxWaitMs: 45_000, ...fakeClock() });
+		expect(api.calls[1].timeout).toBeUndefined();
 	});
 });
 

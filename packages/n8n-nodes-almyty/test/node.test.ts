@@ -78,11 +78,50 @@ describe('Almyty node execute', () => {
 		});
 	});
 
-	it('wait off returns the run id and status only', async () => {
+	it('wait off returns the run as it started, without polling', async () => {
 		const { ctx, http } = executeContext({ ...PARAMS, waitForResult: false }, autonomousApi({ status: 'completed' }));
 		const [items] = await new Almyty().execute.call(ctx);
-		expect(items[0].json).toEqual({ runId: 'run-1', status: 'running' });
+		expect(items[0].json).toEqual({
+			runId: 'run-1',
+			status: 'running',
+			runStatus: 'running',
+			runUrl: 'https://app.almyty.com/agents/a-1/runs/run-1',
+		});
 		expect(http).toHaveBeenCalledTimes(2);
+	});
+
+	/** An autonomous agent whose start already answers with a settled run. */
+	function startsAs(run: Record<string, unknown>): Handler {
+		return (o) => {
+			if (o.method === 'GET') {
+				return { success: true, data: { id: 'a-1', name: 'Researcher', mode: 'autonomous', status: 'active' } };
+			}
+			return { success: true, data: { id: 'run-1', ...run } };
+		};
+	}
+
+	it('wait off: a start that already failed is a node error', async () => {
+		const { ctx } = executeContext({ ...PARAMS, waitForResult: false }, startsAs({ status: 'failed', error: 'Out of credit' }));
+		await expect(new Almyty().execute.call(ctx)).rejects.toThrow('The agent run failed: Out of credit');
+	});
+
+	it('wait off: a failed start with Continue On Fail becomes an output item', async () => {
+		const { ctx } = executeContext({ ...PARAMS, waitForResult: false }, startsAs({ status: 'cancelled' }), true);
+		const [items] = await new Almyty().execute.call(ctx);
+		expect(items[0].json).toMatchObject({ runId: 'run-1', status: 'cancelled' });
+	});
+
+	it('passes Max Wait to a workflow agent’s /invoke as its timeout, waiting or not', async () => {
+		for (const waitForResult of [true, false]) {
+			const { ctx, http } = executeContext({ ...PARAMS, agentId: 'w-1', waitForResult, maxWaitSeconds: 20 }, (o) =>
+				o.method === 'GET'
+					? { success: true, data: { id: 'w-1', name: 'Summariser', mode: 'workflow', status: 'active' } }
+					: { success: true, data: { id: 'exec-1', status: 'completed', output: 'done' } },
+			);
+			const [items] = await new Almyty().execute.call(ctx);
+			expect(items[0].json).toMatchObject({ status: 'completed', output: 'done' });
+			expect(http.mock.calls[1][1]).toMatchObject({ url: 'https://api.almyty.com/agents/w-1/invoke', timeout: 20_000 });
+		}
 	});
 });
 
