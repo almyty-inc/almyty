@@ -3,7 +3,7 @@
   "name": "com.almyty/mcp-server",
   "title": "almyty",
   "description": "Connect an MCP client to your almyty tools, skills and agents over stdio.",
-  "version": "1.5.16",
+  "version": "1.5.17",
   "websiteUrl": "https://docs.almyty.com/cli/mcp-server",
   "repository": {
     "url": "https://github.com/almyty-inc/almyty",
@@ -25,7 +25,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@almyty/mcp-server",
-      "version": "1.5.16",
+      "version": "1.5.17",
       "transport": {
         "type": "stdio"
       },
