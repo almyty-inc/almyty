@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.almyty/mcp-server",
   "title": "almyty",
-  "description": "Use your almyty tools, skills and agents from any MCP client.",
+  "description": "Connect an MCP client to your almyty tools, skills and agents over stdio.",
   "version": "1.5.16",
   "websiteUrl": "https://docs.almyty.com/cli/mcp-server",
   "repository": {
@@ -41,7 +41,7 @@
         {
           "name": "ALMYTY_TOKEN",
           "description": "An almyty API key or login token. Without it the server reads ~/.almyty/credentials.json, written by `almyty login`.",
-          "isRequired": true,
+          "isRequired": false,
           "isSecret": true
         },
         {
@@ -56,7 +56,7 @@
         },
         {
           "name": "ALMYTY_MODE",
-          "description": "skill-first registers two tools and serves skills as prompts; full registers every gateway tool on its own.",
+          "description": "skill-first exposes gateway actions through search and execute, with skills as prompts; full lists gateway tools individually. Management tools are available in both modes.",
           "default": "skill-first",
           "choices": [
             "skill-first",
