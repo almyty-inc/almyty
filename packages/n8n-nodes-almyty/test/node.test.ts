@@ -123,6 +123,54 @@ describe('Almyty node execute', () => {
 			expect(http.mock.calls[1][1]).toMatchObject({ url: 'https://api.almyty.com/agents/w-1/invoke', timeout: 20_000 });
 		}
 	});
+
+	/** An autonomous agent whose run waits for approval, then completes. */
+	function approvedLater(): Handler {
+		let polls = 0;
+		return (o) => {
+			const url = String(o.url);
+			if (o.method === 'GET' && url.endsWith('/agents/a-1')) {
+				return { success: true, data: { id: 'a-1', name: 'Researcher', mode: 'autonomous', status: 'active' } };
+			}
+			if (o.method === 'POST') return { success: true, data: { id: 'run-1', status: 'running' } };
+			polls++;
+			return polls < 3
+				? { success: true, data: { id: 'run-1', status: 'waiting_approval' } }
+				: { success: true, data: { id: 'run-1', status: 'completed', output: 'Approved answer' } };
+		};
+	}
+
+	it('If the Run Needs a Person, left as it is, returns the waiting status at once', async () => {
+		const { ctx, http } = executeContext(PARAMS, approvedLater());
+		const [items] = await new Almyty().execute.call(ctx);
+		expect(items[0].json).toMatchObject({ status: 'waiting_approval', waitingFor: 'approval', runId: 'run-1' });
+		expect(http).toHaveBeenCalledTimes(3);
+	});
+
+	it('If the Run Needs a Person set to Keep Waiting returns the answer after the approval', async () => {
+		const { ctx, http } = executeContext({ ...PARAMS, ifRunNeedsPerson: 'keepWaiting' }, approvedLater());
+		const [items] = await new Almyty().execute.call(ctx);
+		expect(items[0].json).toMatchObject({ status: 'completed', output: 'Approved answer', runId: 'run-1' });
+		expect(http).toHaveBeenCalledTimes(5);
+	});
+});
+
+describe('Almyty node description', () => {
+	const properties = new Almyty().description.properties;
+
+	it('offers the person-wait choice, defaulting to the old behaviour, shown only while waiting for the result', () => {
+		const option = properties.find((p) => p.name === 'ifRunNeedsPerson');
+		expect(option?.displayName).toBe('If the Run Needs a Person');
+		expect(option?.default).toBe('returnStatus');
+		expect(option?.options?.map((o) => ('value' in o ? o.value : undefined))).toEqual(['returnStatus', 'keepWaiting']);
+		expect(option?.displayOptions?.show?.waitForResult).toEqual([true]);
+	});
+
+	it('bounds Max Wait at 24 hours and says so', () => {
+		const maxWait = properties.find((p) => p.name === 'maxWaitSeconds');
+		expect(maxWait?.typeOptions?.maxValue).toBe(86400);
+		expect(maxWait?.description).toContain('at most 86400 (24 hours)');
+	});
 });
 
 describe('Almyty node agent list', () => {
