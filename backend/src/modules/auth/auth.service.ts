@@ -34,6 +34,8 @@ import { AuthSessionService } from './auth-session.service';
 import { ssoSessionOrganization } from './sso-session';
 import { EMAIL_VERIFY_TOKEN_AUDIENCE, REFRESH_TOKEN_AUDIENCE, isAccessTokenPayload } from './token-kinds';
 import { AUTO_VERIFY_EMAIL_DOMAIN_ENV, autoVerifyEmailDomain, isOnAutoVerifyDomain } from './auto-verify-domain';
+import { ProductAnalyticsService } from '../product-analytics/product-analytics.service';
+import { sanitizeSignupAttribution } from '../product-analytics/signup-attribution';
 
 /**
  * A personal API key: one a user mints for themselves (Settings > API
@@ -123,6 +125,9 @@ export class AuthService implements OnModuleInit {
     @Optional()
     @InjectQueue(LIFECYCLE_EMAIL_QUEUE)
     private readonly lifecycleQueue?: Queue,
+    // Funnel analytics (global, ships dark without POSTHOG_API_KEY).
+    @Optional()
+    private readonly productAnalytics?: ProductAnalyticsService,
   ) {}
 
   private readonly logger = new Logger(AuthService.name);
@@ -222,6 +227,7 @@ export class AuthService implements OnModuleInit {
         lastName: createUserDto.lastName,
         isVerified: autoVerified,
         ...(autoVerified ? { verifiedAt: new Date() } : {}),
+        signupAttribution: sanitizeSignupAttribution(createUserDto.attribution),
       });
       const saved = await tx.save(User, user);
 
@@ -313,6 +319,10 @@ export class AuthService implements OnModuleInit {
     // mailed for it.
     if (!autoVerified) {
       this.requestEmailVerification(savedUser.id).catch(() => {});
+    } else {
+      // Confirmed at creation, so the sign-up is complete now. Not awaited,
+      // never throws.
+      void this.productAnalytics?.signupCompleted(savedUser.id);
     }
     if (this.notifications) {
       const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
@@ -918,6 +928,11 @@ export class AuthService implements OnModuleInit {
     user.verificationToken = null;
 
     await this.userRepository.save(user);
+
+    // Funnel: the account is now verified. Not awaited, never throws; the
+    // claim on the user row keeps it to one event however often a link is
+    // opened (a changed address verified again sends nothing).
+    void this.productAnalytics?.signupCompleted(user.id);
 
     // Activation lifecycle: enqueue the welcome email on the FIRST
     // verification only. Best-effort and fully isolated — email must

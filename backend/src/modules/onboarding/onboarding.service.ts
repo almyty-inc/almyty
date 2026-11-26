@@ -20,6 +20,7 @@ import {
 } from './dto/onboarding.dto';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { inViewerScopeGateway, inViewerScopeTool } from '../monitoring/private-rows';
+import { SAMPLE_WORKSPACE_FLAG } from './real-activation';
 
 type Viewer = { id: string };
 
@@ -340,7 +341,7 @@ export class OnboardingService {
       .where('gw.organizationId = :organizationId', { organizationId })
       .andWhere('gw.isSystem = false')
       .andWhere(
-        "(gw.metadata IS NULL OR gw.metadata->>'sampleWorkspace' IS NULL)",
+        `(gw.metadata IS NULL OR gw.metadata->>'${SAMPLE_WORKSPACE_FLAG}' IS NULL)`,
       );
     await this.accessPolicy.applyListFilter(qb, viewer, organizationId, 'gw', { ownerColumn: 'ownerUserId' });
     const nonSampleGateway = await qb.getCount();

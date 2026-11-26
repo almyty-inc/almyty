@@ -1274,6 +1274,8 @@ export class AgentExecutionEngine {
 
       // 9. Update agent stats atomically via SQL UPDATE.
       await this.state.bumpAgentStats(agent.id, true, executionTime, totalCost);
+      // Funnel event (once per user, own agents only); never awaited.
+      this.state.reportRunSucceeded?.(agent.id, execution.userId);
 
       this.logger.log(`[EXECUTE] Agent ${agent.id} execution completed in ${executionTime}ms, cost=${totalCost}`);
 
