@@ -36,12 +36,13 @@ n8n checks the key when you save the credential by listing your agents.
 
 The node has one action, **Run agent**.
 
-| Field           | What it does |
-|-----------------|--------------|
-| Agent           | The agent to run, picked from your organization's agents. |
-| Input           | What you ask the agent to do. Use an expression to pass data from earlier steps. |
-| Wait for result | On (the default): wait for the agent's answer. Off: start the agent and carry on straight away. Workflow agents always answer in one call; this applies to autonomous agents. |
-| Max wait        | How long this step waits for the answer, in seconds (default 300). For a workflow agent, the time limit on its one call. The limit only stops the waiting: the run may carry on in almyty, and running the node again starts a new run. |
+| Field                     | What it does |
+|---------------------------|--------------|
+| Agent                     | The agent to run, picked from your organization's agents. |
+| Input                     | What you ask the agent to do. Use an expression to pass data from earlier steps. |
+| Wait for result           | On (the default): wait for the agent's answer. Off: start the agent and carry on straight away. Workflow agents always answer in one call; this applies to autonomous agents. |
+| If the run needs a person | Shown while Wait for result is on. What the step does when an autonomous agent stops for an approval or for more input. **Return the status now** (the default) ends the step at once with the waiting status and a link to the run. **Keep waiting** keeps checking the run while someone approves or answers in almyty, and returns the answer once the run completes. |
+| Max wait                  | How long this step waits for the answer, in seconds (default 300, at most 86400, which is 24 hours). For a workflow agent, the time limit on its one call. The limit only stops the waiting: the run may carry on in almyty, and running the node again starts a new run. |
 
 ### What comes out
 
@@ -66,9 +67,18 @@ almyty later. A run that has already finished comes back finished, and one
 that has already failed fails the step, as below.
 
 **Waiting for someone:** when the agent stops to ask for an approval or for
-more input, the step does not fail. You get the status
-(`waiting_approval` or `waiting_input`), the run ID, and `runUrl`, a link to
-the run in almyty where someone can approve or answer.
+more input, the step does not fail. With **If the run needs a person** set to
+**Return the status now**, you get the status (`waiting_approval` or
+`waiting_input`), the run ID, and `runUrl`, a link to the run in almyty
+where someone can approve or answer.
+
+With **Keep waiting**, the step checks the run every 10 seconds while it
+waits for the person, and comes back when the run ends: with the answer when
+it completes, as a failed step when it fails or is cancelled. If Max wait runs
+out first, you get the waiting status, the run ID and `runUrl` as above. The
+step never reports an unfinished run as finished. Set Max wait to how long
+the person may take. The n8n execution keeps running that whole time, so an
+execution timeout set in n8n ends it sooner.
 
 **Still working when the max wait runs out:** you get the run ID, the status
 `running`, and `runUrl`. `runStatus` says what the run was doing at that
