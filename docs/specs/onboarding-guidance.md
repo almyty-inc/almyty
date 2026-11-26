@@ -167,9 +167,12 @@ moment: `signupEventAt` for anyone confirmed (`verifiedAt` or `isVerified`), sig
 (`lastLoginAt`) or with an earlier own-agent run; `firstRunEventAt` = their earliest
 completed own-agent run (`agent_runs` and `agent_executions`, credited to the starting user,
 else the agent's creator, as at send time). So earlier users are never counted as new. An
-account that existed but was never confirmed or used counts when it is. With the key set
-later than the migration, accounts made in between are not marked and count on their next
-transition after the key is set.
+account that existed but was never confirmed or used counts when it is.
+
+The claim is written with or without the key; only the send needs it. Without a key nothing
+is sent, but each account still records when it reached the two milestones, so turning
+PostHog on later never reports an old milestone as new: events count only for milestones
+reached while the key is set, and one reached without it is never sent afterwards.
 
 Delivery is best effort, at most once: the claim is written before the send, so a capture
 lost after its claim is not retried, and nothing is ever sent twice.

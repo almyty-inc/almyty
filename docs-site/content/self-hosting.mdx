@@ -325,7 +325,7 @@ With no DSN set, both stay dark, so you can adopt error tracking without changin
 
 ### Product analytics (PostHog)
 
-Also **off by default**. With no key set, nothing is loaded, stored or sent.
+Also **off by default**. With no key set, nothing is loaded or sent.
 
 - **Frontend:** the `ALMYTY_POSTHOG_KEY` build-arg. The app then counts page views and a few product events (an agent created, a gateway deployed, onboarding steps) in production only. It sets no cookies and writes nothing to the browser's storage; session replay masks every form field.
 - **Backend:** set `POSTHOG_API_KEY` on the API (the same project key) to send two sign-up funnel events from the server, each at most once per user:
@@ -334,9 +334,11 @@ Also **off by default**. With no key set, nothing is loaded, stored or sent.
 
   Each event is keyed by the user's id and carries the organization id, its plan, how the person signed up, and the `utm_source`, `utm_medium`, `utm_campaign`, `utm_content` and `cta` values of the link they signed up from, if it had any. Never an email address, a name or anything the person typed. `POSTHOG_HOST` defaults to `https://eu.i.posthog.com`; `POSTHOG_ENVIRONMENT` (falling back to `SENTRY_ENVIRONMENT`, then `NODE_ENV`) tags events so staging and production stay apart. A failed send is dropped and never affects sign-up or the run.
 
-  Counting starts when the API's database migration for these events runs. Every account that exists at that moment is treated as already counted: one that is confirmed or has signed in never sends `signup_completed`, and one that has already run one of its organization's own agents successfully never sends `first_run_succeeded`, so earlier users do not show up as new sign-ups or new activations. An account that existed but was never confirmed or used still counts when it is. If you set the key long after that migration ran, people who joined in between are not marked, and are counted the first time they confirm or run an agent after the key is set.
+  Without the key nothing is sent. almyty still notes on each account when it reached these two milestones, with or without a key, so that turning PostHog on later never reports an old milestone as new. An event is sent only for a milestone reached while the key is set; one reached while it was off is never sent afterwards.
 
-  Sending is best effort, at most once: each event is marked as sent on the user's record just before it goes out, so a send that fails after that point is not retried, and an event is never sent twice.
+  Counting starts when the API's database migration for these events runs. Every account that exists at that moment is treated as already counted: one that is confirmed or has signed in never sends `signup_completed`, and one that has already run one of its organization's own agents successfully never sends `first_run_succeeded`, so earlier users do not show up as new sign-ups or new activations. An account that existed but was never confirmed or used still counts when it is.
+
+  Sending is best effort, at most once: the milestone is noted on the user's record just before the event goes out, so a send that fails after that point is not retried, and an event is never sent twice.
 
 ## Database migrations
 
