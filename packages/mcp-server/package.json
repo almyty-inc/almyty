@@ -5,7 +5,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Serve any almyty gateway to Claude Code or any MCP client — turn your APIs into MCP tools with a single command.",
+  "description": "Connect an MCP client to your almyty tools, skills and agents over stdio.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

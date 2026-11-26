@@ -41,7 +41,7 @@ The node has one action, **Run agent**.
 | Agent           | The agent to run, picked from your organization's agents. |
 | Input           | What you ask the agent to do. Use an expression to pass data from earlier steps. |
 | Wait for result | On (the default): wait for the agent's answer. Off: start the agent and carry on straight away. Workflow agents always answer in one call; this applies to autonomous agents. |
-| Max wait        | How long to wait for the answer, in seconds (default 300). For a workflow agent, the time limit on its one call. |
+| Max wait        | How long this step waits for the answer, in seconds (default 300). For a workflow agent, the time limit on its one call. The limit only stops the waiting: the run may carry on in almyty, and running the node again starts a new run. |
 
 ### What comes out
 
