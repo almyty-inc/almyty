@@ -41,7 +41,8 @@ export interface ApprovalRequest {
   payload: Record<string, any> | null
   /** The held tool's parameter schema, for its own parameter titles; absent when there is no tool. */
   parameterSchema?: Record<string, any> | null
-  status: 'pending' | 'approved' | 'rejected' | 'expired'
+  /** 'cancelled': closed undecided because its run was cancelled; only pending ones are listed. */
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled'
   decidedBy: string | null
   decidedAt: string | null
   decisionReason: string | null

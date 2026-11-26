@@ -15,6 +15,7 @@ import { CaptchaWidget, isCaptchaEnabled } from '@/components/auth/captcha-widge
 import { CheckEmail } from '@/components/auth/check-email'
 import { AuthAlert, AuthField, AuthHeading, PasswordInput } from '@/components/auth/auth-form'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { readSignupAttribution } from '@/lib/signup-attribution'
 
 /** The documents the consent checkbox names, on the website. */
 export const TERMS_URL = 'https://almyty.com/terms'
@@ -47,6 +48,9 @@ export function RegisterPage() {
   const [searchParams] = useSearchParams()
   const inviteToken = searchParams.get('invite')
   const referralCode = searchParams.get('ref')
+  // Where the sign-up came from (utm_* / cta on the marketing site's link).
+  // Read from this page's URL and sent with the form, never stored.
+  const attribution = React.useMemo(() => readSignupAttribution(searchParams), [searchParams])
   // Where to sign in once the address is confirmed; an invite comes back.
   const signInTo = inviteToken
     ? `/auth/login?returnTo=${encodeURIComponent(`/invite/accept?token=${encodeURIComponent(inviteToken)}`)}`
@@ -93,7 +97,7 @@ export function RegisterPage() {
       return
     }
     try {
-      const { email, verificationRequired } = await registerUser(data.email, data.password, data.firstName, data.lastName, data.organizationName, captchaToken || undefined)
+      const { email, verificationRequired } = await registerUser(data.email, data.password, data.firstName, data.lastName, data.organizationName, captchaToken || undefined, attribution)
       // No session yet: signing in needs the confirmed address. An invite
       // is accepted after that sign-in (returnTo below). An address the
       // server confirmed at once (a test stack's AUTO_VERIFY_EMAIL_DOMAIN)

@@ -15,11 +15,13 @@ import {
 } from 'n8n-workflow';
 
 import {
+	DEFAULT_IF_RUN_NEEDS_PERSON,
 	DEFAULT_MAX_WAIT_MS,
 	RunFailedError,
 	agentOptions,
 	listAgents,
 	runAgent,
+	type IfRunNeedsPerson,
 	type Request,
 } from './runAgent';
 
@@ -92,17 +94,41 @@ export class Almyty implements INodeType {
 				type: 'boolean',
 				default: true,
 				description:
-					'Whether to wait for the agent to finish and return its answer. Off returns the run ID and status as soon as the run has started. Workflow agents always answer in one call; this applies to autonomous agents. A run waiting for approval or input, or still running, comes back as a status: the n8n execution does not pause and resume with it, and running the node again starts a new run.',
+					'Whether to wait for the agent to finish and return its answer. Off returns the run ID and status as soon as the run has started. Workflow agents always answer in one call; this applies to autonomous agents.',
 				displayOptions: { show: { operation: ['runAgent'] } },
+			},
+			{
+				displayName: 'If the Run Needs a Person',
+				name: 'ifRunNeedsPerson',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Return the Status Now',
+						value: 'returnStatus',
+						description:
+							'The step ends at once with the status waiting_approval or waiting_input, the run ID and a link to the run. The workflow goes on without the answer.',
+					},
+					{
+						name: 'Keep Waiting',
+						value: 'keepWaiting',
+						description:
+							'The step keeps checking the run while someone approves or answers in almyty, and returns the answer once the run completes. If Max Wait runs out first, you get the waiting status and the link.',
+					},
+				],
+				default: 'returnStatus',
+				description:
+					'What the step does when an autonomous agent stops for an approval or for more input from a person',
+				displayOptions: { show: { operation: ['runAgent'], waitForResult: [true] } },
 			},
 			{
 				displayName: 'Max Wait (Seconds)',
 				name: 'maxWaitSeconds',
 				type: 'number',
-				typeOptions: { minValue: 1 },
+				typeOptions: { minValue: 1, maxValue: 86400 },
 				default: 300,
 				description:
-					'How long this step waits for the answer. For an autonomous agent with Wait for Result on: if it is still working by then, you get the run ID and the status "running". For a workflow agent: the time limit on its one call; if it has not answered by then, the step fails. Either way the limit only stops the waiting: the run may carry on in almyty, and running the node again starts a new run.',
+					'How long this step waits for the answer, at most 86400 (24 hours). The n8n execution keeps running all that time, and an execution timeout set in n8n ends it sooner. For an autonomous agent: if the run is still working, or still waiting for a person, when the time is up, you get the run ID, its status and a link to it. For a workflow agent: the time limit on its one call; if it has not answered by then, the step fails. The limit only stops the waiting: the run may carry on in almyty, and running the node again starts a new run.',
 				displayOptions: { show: { operation: ['runAgent'] } },
 			},
 		],
@@ -132,6 +158,9 @@ export class Almyty implements INodeType {
 				const agentId = this.getNodeParameter('agentId', i) as string;
 				const input = this.getNodeParameter('input', i) as string;
 				const waitForResult = this.getNodeParameter('waitForResult', i, true) as boolean;
+				const ifRunNeedsPerson = (
+					waitForResult ? this.getNodeParameter('ifRunNeedsPerson', i, DEFAULT_IF_RUN_NEEDS_PERSON) : DEFAULT_IF_RUN_NEEDS_PERSON
+				) as IfRunNeedsPerson;
 				// Read with waiting off too: it is the time limit on a workflow
 				// agent's one /invoke call either way.
 				const maxWaitSeconds = this.getNodeParameter('maxWaitSeconds', i, DEFAULT_MAX_WAIT_MS / 1000) as number;
@@ -142,6 +171,7 @@ export class Almyty implements INodeType {
 					agentId,
 					input,
 					waitForResult,
+					ifRunNeedsPerson,
 					maxWaitMs: maxWaitSeconds * 1000,
 					sleep,
 				});

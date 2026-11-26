@@ -223,6 +223,9 @@ The `:?` form makes Compose refuse to start rather than silently fall back. Rota
 | `AUTO_VERIFY_EMAIL_DOMAIN` | **Test environments only. Never set it in production.** New accounts on exactly this email domain (e.g. `test.example.com`) are confirmed at sign-up and get no verification email, so automated tests can sign up and sign in without an inbox. A subdomain or look-alike domain does not match. The API logs a warning at boot while it is set | -- (off) |
 | `PLATFORM_METRICS_TOKEN` | Bearer token for `/monitoring/health/details` and `/monitoring/metrics*`. Unset means those endpoints refuse every request | -- (endpoints disabled) |
 | `OLLAMA_ALLOW_PRIVATE_URLS` | Allow Ollama providers to target localhost/private-network URLs (see [Local models with Ollama](#local-models-with-ollama)) | `false` |
+| `POSTHOG_API_KEY` | PostHog project key for the two server-side sign-up funnel events (see [Product analytics](#product-analytics-posthog)). Unset sends nothing | -- (off) |
+| `POSTHOG_HOST` | PostHog ingestion host | `https://eu.i.posthog.com` |
+| `POSTHOG_ENVIRONMENT` | `environment` property on those events, so staging and production stay apart | `SENTRY_ENVIRONMENT`, then `NODE_ENV` |
 
 ## Outbound email
 
@@ -319,6 +322,17 @@ almyty ships with optional [Sentry](https://sentry.io) integration on both the A
 - **Frontend:** set the `ALMYTY_SENTRY_DSN` build-arg when building the frontend image. It captures unhandled errors and errors caught by the app's error boundary. The environment tag is inferred from the host (development stays untracked).
 
 With no DSN set, both stay dark, so you can adopt error tracking without changing anything else about your deployment.
+
+### Product analytics (PostHog)
+
+Also **off by default**. With no key set, nothing is loaded, stored or sent.
+
+- **Frontend:** the `ALMYTY_POSTHOG_KEY` build-arg. The app then counts page views and a few product events (an agent created, a gateway deployed, onboarding steps) in production only. It sets no cookies and writes nothing to the browser's storage; session replay masks every form field.
+- **Backend:** set `POSTHOG_API_KEY` on the API (the same project key) to send two sign-up funnel events from the server, each at most once per user:
+  - `signup_completed`, when an account's email address is confirmed.
+  - `first_run_succeeded`, when a person's first run of an agent their organization built finishes successfully. Samples and the temporary copies a run makes for a sub-agent step do not count.
+
+  Each event is keyed by the user's id and carries the organization id, its plan, how the person signed up, and the `utm_source`, `utm_medium`, `utm_campaign`, `utm_content` and `cta` values of the link they signed up from, if it had any. Never an email address, a name or anything the person typed. `POSTHOG_HOST` defaults to `https://eu.i.posthog.com`; `POSTHOG_ENVIRONMENT` (falling back to `SENTRY_ENVIRONMENT`, then `NODE_ENV`) tags events so staging and production stay apart. A failed send is dropped and never affects sign-up or the run.
 
 ## Database migrations
 

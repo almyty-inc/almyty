@@ -617,6 +617,15 @@ export class AgentRuntimeService implements OnModuleInit {
     }
     run.status = AgentRunStatus.CANCELLED;
     await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
+    // Its pending approval requests close with it: a decision on them would
+    // mean nothing now (handleApprovalDecided ignores a run that no longer
+    // waits), and left pending they sat in the queue until they expired.
+    // No decision event, so nothing they held runs and the run stays ended.
+    try {
+      await this.approvals?.closeForRun?.(run.id, organizationId, userId ?? null);
+    } catch (err: any) {
+      this.logger.warn(`Could not close the approval requests of cancelled run ${run.id}: ${err?.message ?? err}`);
+    }
     this.emitEvent(runId, 'run.cancelled', {});
 
     // RUN_CANCEL was declared on AuditAction and emitted by nothing.

@@ -62,7 +62,19 @@ const FAILED = new Set(['failed', 'cancelled', 'timeout']);
 const WAITING = new Set(['waiting_approval', 'waiting_input']);
 
 export const DEFAULT_MAX_WAIT_MS = 5 * 60 * 1000;
+/** The longest Max Wait the node accepts: a day, as long as an approval stays open by default. */
+export const MAX_WAIT_LIMIT_MS = 24 * 60 * 60 * 1000;
 export const POLL_INTERVAL_MS = 2000;
+/** How often a run that waits for a person is checked: people take minutes, not seconds. */
+export const PERSON_POLL_INTERVAL_MS = 10_000;
+
+/**
+ * What the node does when the run stops for a person (an approval or more
+ * input): hand back the status at once, or keep checking until the run ends
+ * or Max Wait runs out.
+ */
+export type IfRunNeedsPerson = 'returnStatus' | 'keepWaiting';
+export const DEFAULT_IF_RUN_NEEDS_PERSON: IfRunNeedsPerson = 'returnStatus';
 
 export function trimBaseUrl(baseUrl: string): string {
 	return String(baseUrl || '').trim().replace(/\/+$/, '');
@@ -207,9 +219,17 @@ function reported(value: unknown): number | null {
 	return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-export function isSettled(status: string | undefined): boolean {
+/**
+ * Whether the node stops checking a run in this state. A run waiting for a
+ * person counts as settled unless the node was told to keep waiting.
+ */
+export function isSettled(status: string | undefined, keepWaitingForPerson = false): boolean {
 	const s = String(status ?? '');
-	return COMPLETED.has(s) || FAILED.has(s) || WAITING.has(s);
+	return COMPLETED.has(s) || FAILED.has(s) || (!keepWaitingForPerson && WAITING.has(s));
+}
+
+export function isWaitingForPerson(status: string | undefined): boolean {
+	return WAITING.has(String(status ?? ''));
 }
 
 /**
@@ -257,10 +277,20 @@ export interface RunAgentOptions {
 	agentId: string;
 	input: string;
 	waitForResult: boolean;
+	/** What to do when the run stops for a person. Default: return the status. */
+	ifRunNeedsPerson?: IfRunNeedsPerson;
 	maxWaitMs?: number;
 	pollIntervalMs?: number;
+	/** How often to check a run that waits for a person. */
+	personPollIntervalMs?: number;
 	sleep: (ms: number) => Promise<void>;
 	now?: () => number;
+}
+
+/** Max Wait as the node uses it: the default when unset, never more than a day. */
+export function effectiveMaxWaitMs(maxWaitMs: number | undefined): number {
+	const ms = typeof maxWaitMs === 'number' && Number.isFinite(maxWaitMs) && maxWaitMs > 0 ? maxWaitMs : DEFAULT_MAX_WAIT_MS;
+	return Math.min(ms, MAX_WAIT_LIMIT_MS);
 }
 
 /**
@@ -268,6 +298,12 @@ export interface RunAgentOptions {
  * the run is in when the node stops looking, it goes through mapRun, so a
  * start that already answers failed or cancelled raises even with waiting
  * off, and one that already answers completed carries its output.
+ *
+ * With ifRunNeedsPerson "keepWaiting", a run waiting for an approval or for
+ * input is checked on (every personPollIntervalMs) until it completes or
+ * fails. If Max Wait runs out first, the run's waiting status comes back as
+ * it is, with the link to it: the node never reports an unfinished run as
+ * finished.
  */
 export async function runAgent(request: Request, options: RunAgentOptions): Promise<RunResult> {
 	const now = options.now ?? Date.now;
@@ -275,17 +311,20 @@ export async function runAgent(request: Request, options: RunAgentOptions): Prom
 	const agent: AgentSummary = unwrap(await request(getAgentRequest(options.baseUrl, options.agentId)));
 	if (!agent?.id) throw new Error(`No agent with id ${options.agentId} in this organization.`);
 
-	const maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
+	const maxWaitMs = effectiveMaxWaitMs(options.maxWaitMs);
 	let run: RunRecord = unwrap(await request(startRequest(options.baseUrl, agent, options.input, maxWaitMs))) ?? {};
 
 	if (!options.waitForResult) return mapRun(run, agent.id, appBase);
 
 	// A workflow agent answers with the finished execution; an autonomous
 	// one with the run it has just started, which is polled until it settles.
+	const keepWaiting = (options.ifRunNeedsPerson ?? DEFAULT_IF_RUN_NEEDS_PERSON) === 'keepWaiting';
 	const interval = options.pollIntervalMs ?? POLL_INTERVAL_MS;
+	const personInterval = options.personPollIntervalMs ?? PERSON_POLL_INTERVAL_MS;
 	const deadline = now() + maxWaitMs;
-	while (agent.mode === 'autonomous' && run?.id && !isSettled(run.status) && now() < deadline) {
-		await options.sleep(Math.min(interval, Math.max(0, deadline - now())));
+	while (agent.mode === 'autonomous' && run?.id && !isSettled(run.status, keepWaiting) && now() < deadline) {
+		const pause = isWaitingForPerson(run.status) ? personInterval : interval;
+		await options.sleep(Math.min(pause, Math.max(0, deadline - now())));
 		run = unwrap(await request(getRunRequest(options.baseUrl, agent.id, String(run.id)))) ?? {};
 	}
 	return mapRun(run, agent.id, appBase);

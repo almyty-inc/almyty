@@ -283,6 +283,113 @@ describe('runAgent', () => {
 	});
 });
 
+describe('runAgent when the run needs a person', () => {
+	it('return the status now (the default): stops at waiting_approval and polls no further', async () => {
+		const api = fakeApi(AUTONOMOUS, { id: 'run-5', status: 'running' }, [
+			{ id: 'run-5', status: 'waiting_approval' },
+			{ id: 'run-5', status: 'completed', output: 'too late' },
+		]);
+		const result = await runAgent(api.request, {
+			baseUrl: BASE,
+			agentId: 'a-1',
+			input: 'hi',
+			waitForResult: true,
+			ifRunNeedsPerson: 'returnStatus',
+			...fakeClock(),
+		});
+		expect(result).toMatchObject({ runId: 'run-5', status: 'waiting_approval', waitingFor: 'approval' });
+		expect(api.calls).toHaveLength(3);
+	});
+
+	it('keep waiting: checks on through the approval and returns the answer once the run completes', async () => {
+		const api = fakeApi(AUTONOMOUS, { id: 'run-6', status: 'running' }, [
+			{ id: 'run-6', status: 'waiting_approval' },
+			{ id: 'run-6', status: 'waiting_approval' },
+			{ id: 'run-6', status: 'running' },
+			{ id: 'run-6', status: 'completed', output: 'Approved and sent', totalCost: 0.02, executionTime: 161_000 },
+		]);
+		const clock = fakeClock();
+		const result = await runAgent(api.request, {
+			baseUrl: BASE,
+			agentId: 'a-1',
+			input: 'send the invoice',
+			waitForResult: true,
+			ifRunNeedsPerson: 'keepWaiting',
+			pollIntervalMs: 2_000,
+			personPollIntervalMs: 10_000,
+			...clock,
+		});
+		expect(result).toEqual({
+			runId: 'run-6',
+			status: 'completed',
+			output: 'Approved and sent',
+			cost: 0.02,
+			durationMs: 161_000,
+		});
+		// Every check while a person is deciding waits the longer interval.
+		expect(clock.sleep.mock.calls.map(([ms]) => ms)).toEqual([2_000, 10_000, 10_000, 2_000]);
+	});
+
+	it('keep waiting: a run that ends badly after the person answered is a RunFailedError with its link', async () => {
+		const api = fakeApi(AUTONOMOUS, { id: 'run-7', status: 'running' }, [
+			{ id: 'run-7', status: 'waiting_input' },
+			{ id: 'run-7', status: 'cancelled' },
+		]);
+		const promise = runAgent(api.request, {
+			baseUrl: BASE,
+			agentId: 'a-1',
+			input: 'hi',
+			waitForResult: true,
+			ifRunNeedsPerson: 'keepWaiting',
+			...fakeClock(),
+		});
+		await expect(promise).rejects.toBeInstanceOf(RunFailedError);
+		await expect(promise).rejects.toMatchObject({
+			result: { runId: 'run-7', status: 'cancelled', runUrl: 'https://app.example.test/agents/a-1/runs/run-7' },
+		});
+	});
+
+	it('keep waiting: still waiting when Max Wait runs out gives the waiting status and the link, never a finish', async () => {
+		const api = fakeApi(AUTONOMOUS, { id: 'run-8', status: 'running' }, [{ id: 'run-8', status: 'waiting_approval' }]);
+		const clock = fakeClock();
+		const result = await runAgent(api.request, {
+			baseUrl: BASE,
+			agentId: 'a-1',
+			input: 'hi',
+			waitForResult: true,
+			ifRunNeedsPerson: 'keepWaiting',
+			maxWaitMs: 60_000,
+			personPollIntervalMs: 10_000,
+			...clock,
+		});
+		expect(result).toEqual({
+			runId: 'run-8',
+			status: 'waiting_approval',
+			waitingFor: 'approval',
+			runUrl: 'https://app.example.test/agents/a-1/runs/run-8',
+		});
+		const waited = clock.sleep.mock.calls.reduce((sum, [ms]) => sum + ms, 0);
+		expect(waited).toBe(60_000);
+	});
+
+	it('Max Wait is capped at 24 hours, whatever the expression gives', async () => {
+		const api = fakeApi(AUTONOMOUS, { id: 'run-4', status: 'running' }, [{ id: 'run-4', status: 'waiting_input' }]);
+		const clock = fakeClock();
+		await runAgent(api.request, {
+			baseUrl: BASE,
+			agentId: 'a-1',
+			input: 'hi',
+			waitForResult: true,
+			ifRunNeedsPerson: 'keepWaiting',
+			maxWaitMs: 48 * 60 * 60 * 1000,
+			personPollIntervalMs: 60 * 60 * 1000,
+			...clock,
+		});
+		const waited = clock.sleep.mock.calls.reduce((sum, [ms]) => sum + ms, 0);
+		expect(waited).toBe(24 * 60 * 60 * 1000);
+	});
+});
+
 describe('mapRun', () => {
 	it('treats cancelled and timeout as failures', () => {
 		expect(() => mapRun({ id: 'r', status: 'cancelled' }, 'a', 'https://app.x')).toThrow('The run ended with status "cancelled".');

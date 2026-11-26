@@ -166,4 +166,47 @@ describe('RegisterPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Tick “Verify you are human” above to continue.')
     expect(ctl.register).not.toHaveBeenCalled()
   })
+
+  // The marketing site's links carry utm_* / cta. The page sends the
+  // whitelisted ones with the form and keeps them nowhere else.
+  it('sends the sign-up link attribution with the form, whitelisted and capped, and stores none of it', async () => {
+    ctl.search = new URLSearchParams({
+      utm_source: 'almyty.com',
+      utm_medium: 'website',
+      utm_campaign: 'c'.repeat(300),
+      utm_content: 'dana@example.com',
+      cta: 'hero',
+      utm_term: 'agents',
+      gclid: 'abc',
+    }).toString()
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+    const cookieBefore = document.cookie
+    const user = userEvent.setup()
+    render(<RegisterPage />)
+
+    await fillValidForm(user)
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await waitFor(() => expect(ctl.register).toHaveBeenCalled())
+    expect(ctl.register.mock.calls[0][6]).toEqual({
+      utm_source: 'almyty.com',
+      utm_medium: 'website',
+      utm_campaign: 'c'.repeat(100),
+      cta: 'hero',
+    })
+    expect(setItem).not.toHaveBeenCalled()
+    expect(document.cookie).toBe(cookieBefore)
+    setItem.mockRestore()
+  })
+
+  it('sends no attribution when the link carried none', async () => {
+    const user = userEvent.setup()
+    render(<RegisterPage />)
+
+    await fillValidForm(user)
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await waitFor(() => expect(ctl.register).toHaveBeenCalled())
+    expect(ctl.register.mock.calls[0][6]).toBeUndefined()
+  })
 })

@@ -153,6 +153,17 @@ Distinct id is already the logged-in user (`identify()` shipped); org id as grou
 No new PostHog config needed. green-lynx builds the funnel dashboard
 (site visit → signup → each step → activation) once events flow on staging.
 
+The backend sends two more, server-side, once per user (modules/product-analytics,
+`POSTHOG_API_KEY`; distinct id = user id, same as `identify()`):
+
+- `signup_completed` `{ organization_id, plan, signup_method, utm_*, cta }`: email verified
+  (or auto-verified at creation on a test stack).
+- `first_run_succeeded` `{ organization_id, plan, agent_mode, utm_*, cta }`: first completed
+  run of an own agent (real-activation.ts: not `isTemporary`, no `metadata.sampleWorkspace`).
+
+`utm_source/utm_medium/utm_campaign/utm_content/cta` come from the marketing site's link
+into /auth/register; the page forwards them with the form and stores nothing in the browser.
+
 ## Acceptance criteria
 
 1. New org, empty: dashboard shows the card at step 1; every empty state shows its guided copy.

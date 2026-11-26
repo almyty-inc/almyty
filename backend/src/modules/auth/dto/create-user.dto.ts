@@ -1,8 +1,9 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty, IsOptional, IsObject } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
+import { SignupAttribution, sanitizeSignupAttribution } from '../../product-analytics/signup-attribution';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -66,4 +67,15 @@ export class CreateUserDto {
   @IsString()
   @MaxLength(4096)
   captchaToken?: string;
+
+  @ApiProperty({
+    description:
+      'Where the sign-up came from: the utm_source, utm_medium, utm_campaign, utm_content and cta values of the link into the register page. Each value is cut to 100 characters; other keys, and values that are not plain identifiers, are dropped.',
+    required: false,
+    example: { utm_source: 'almyty.com', utm_medium: 'website', utm_campaign: 'launch', cta: 'hero' },
+  })
+  @IsOptional()
+  @Transform(({ value }) => sanitizeSignupAttribution(value) ?? undefined)
+  @IsObject()
+  attribution?: SignupAttribution;
 }

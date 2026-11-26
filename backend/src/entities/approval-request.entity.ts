@@ -7,7 +7,12 @@ import {
   Index,
 } from 'typeorm';
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+/**
+ * 'cancelled': the run that asked was cancelled while the request was still
+ * pending, so the decision no longer means anything. Nobody decided it;
+ * nothing ran and the run was not resumed (ApprovalsService.closeForRun).
+ */
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
 
 /**
  * Human-in-the-loop approval gate. Created by an agent run when it

@@ -274,8 +274,11 @@ export class ToolApprovalGateService implements OnModuleInit {
     const row = await this.requests.findOne({ where: { id: approvalId, organizationId } }).catch(() => null);
     if (!row || row.toolId !== hit.toolId || row.fingerprint !== hit.paramsHash) return null;
     if (row.status === 'pending') return { status: 'waiting' };
-    if (row.status === 'rejected' || row.status === 'expired') {
-      return { status: 'refused', reason: row.status === 'expired' ? 'nobody decided in time' : row.decisionReason || 'a person rejected it' };
+    // 'cancelled': the run that waited on it was cancelled, so it was closed undecided.
+    if (row.status === 'rejected' || row.status === 'expired' || row.status === 'cancelled') {
+      const reason =
+        row.status === 'expired' ? 'nobody decided in time' : row.decisionReason || (row.status === 'cancelled' ? 'the run was cancelled' : 'a person rejected it');
+      return { status: 'refused', reason };
     }
     if (row.resultAt && row.result) return { status: 'done', result: row.result };
     // Approved, and running now (or about to).
