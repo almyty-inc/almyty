@@ -93,3 +93,16 @@ test('leaves full URLs and code alone when making links absolute', () => {
   assert.equal(absolutize('[a](https://x.y/z) [b](/p) <img src="/i.png" />'),
     '[a](https://x.y/z) [b](https://docs.almyty.com/p) <img src="https://docs.almyty.com/i.png" />')
 })
+
+test('the sitemap lists every page once, and robots.txt points at it', (t) => {
+  const { root } = fixture(t)
+  const { sections, sitemap, robots } = buildLlms(join(root, 'content'))
+  const pages = sections.flatMap((s) => s.pages.map((p) => p.url))
+  const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
+  assert.ok(sitemap.startsWith('<?xml'))
+  assert.deepEqual(locs.sort(), [...new Set(pages)].sort())
+  assert.ok(locs.includes('https://docs.almyty.com/'))
+  assert.ok(locs.includes('https://docs.almyty.com/tools/http'))
+  assert.match(robots, /^User-agent: \*\nAllow: \/\n/)
+  assert.match(robots, /Sitemap: https:\/\/docs\.almyty\.com\/sitemap\.xml/)
+})

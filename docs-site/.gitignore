@@ -7,3 +7,7 @@ node_modules/
 # llms.txt and llms-full.txt (generated from content/ by prebuild)
 /public/llms.txt
 /public/llms-full.txt
+
+# sitemap.xml and robots.txt (same prebuild, same page list)
+/public/sitemap.xml
+/public/robots.txt
