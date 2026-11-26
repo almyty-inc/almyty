@@ -10,6 +10,7 @@ import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput, Sha
 import type { AgentExecution, AgentRun, OperationOutline } from '@/types'
 import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 import type { AgentWakeRow, AlwaysOnInput, AlwaysOnView } from '@/lib/always-on'
+import type { SignupAttribution } from '@/lib/signup-attribution'
 
 const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
@@ -339,7 +340,7 @@ api.interceptors.response.use(
 // Auth API
 export const authApi = {
   /** Creates the account and emails a confirmation link. Sets no session cookie. */
-  register: (data: { email: string; password: string; firstName: string; lastName: string; organizationName: string; captchaToken?: string }) =>
+  register: (data: { email: string; password: string; firstName: string; lastName: string; organizationName: string; captchaToken?: string; attribution?: SignupAttribution }) =>
     apiPost<{ email: string; verificationRequired: boolean }>('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>

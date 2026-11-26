@@ -298,6 +298,30 @@ spec:
               name: almyty-secrets
               key: TURNSTILE_SECRET
               optional: true
+        # Server-side funnel events (signup_completed, first_run_succeeded)
+        # to PostHog. Optional: with POSTHOG_API_KEY unset nothing is read,
+        # stored or sent. The key is the same public project key the
+        # frontend is built with (ALMYTY_POSTHOG_KEY). POSTHOG_HOST defaults
+        # to https://eu.i.posthog.com; POSTHOG_ENVIRONMENT tags events
+        # (staging vs production) and falls back to SENTRY_ENVIRONMENT.
+        - name: POSTHOG_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: almyty-secrets
+              key: POSTHOG_API_KEY
+              optional: true
+        - name: POSTHOG_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: POSTHOG_HOST
+              optional: true
+        - name: POSTHOG_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: POSTHOG_ENVIRONMENT
+              optional: true
         # CORS allowlist env var — the new CORS config in main.ts
         # replaces the old `origin: true` wildcard with a concrete
         # allowlist derived from these fields. CORS_ALLOWED_ORIGINS

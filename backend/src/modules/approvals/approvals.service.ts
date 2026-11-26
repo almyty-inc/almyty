@@ -52,6 +52,8 @@ export interface ApprovalDecision {
 
 const DEFAULT_TTL_SECONDS = 24 * 60 * 60; // 24h
 const MAX_TTL_SECONDS = 7 * 24 * 60 * 60; // 7d
+/** Why the requests of a cancelled run were closed, as reviewers read it. */
+export const RUN_CANCELLED_REASON = 'run cancelled';
 
 /**
  * HITL approval gate.
@@ -64,6 +66,9 @@ const MAX_TTL_SECONDS = 7 * 24 * 60 * 60; // 7d
  *   4. ApprovalsService emits 'approval.decided' with the row. The
  *      runtime listens and either resumes the run with the decision
  *      result (approve) or marks it CANCELLED (reject).
+ *
+ * Cancelling a run closes its pending requests as 'cancelled' (closeForRun),
+ * without a decision event: they leave the queue and nothing runs.
  *
  * Auto-expiry: a sweep flips pending rows past expiresAt to 'expired'
  * and treats them as rejections, on an interval started here.
@@ -741,6 +746,66 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       this.notifyDecided(row).catch(() => {});
     }
     return flipped;
+  }
+
+  /**
+   * Close the still-pending requests of a run that was cancelled, so they
+   * leave the queue instead of waiting there for their expiry: a decision
+   * on them would mean nothing (the approval.decided handler ignores a run
+   * that no longer waits), yet reviewers kept seeing them as open.
+   *
+   * Closed as 'cancelled' with `reason`, by nobody (decidedBy stays null;
+   * the canceller is on the audit row). Same conditional flip as decide()
+   * and the sweep, so a request approved a moment earlier keeps its
+   * decision. Deliberately NOT an 'approval.decided' event: no listener has
+   * anything to do for a cancelled run, and none may run a held call or
+   * resume the run on it. Returns the rows closed.
+   */
+  async closeForRun(
+    runId: string,
+    organizationId: string,
+    closedBy: string | null = null,
+    reason: string = RUN_CANCELLED_REASON,
+  ): Promise<ApprovalRequest[]> {
+    const rows = await this.approvals.find({ where: { runId, organizationId, status: 'pending' } });
+    return this.closeRows(rows, closedBy, reason);
+  }
+
+  /**
+   * closeForRun for requests a run waits on without carrying its runId (a
+   * workflow run's change sets and held calls), by id within the org.
+   */
+  async closeRequests(
+    ids: string[],
+    organizationId: string,
+    closedBy: string | null = null,
+    reason: string = RUN_CANCELLED_REASON,
+  ): Promise<ApprovalRequest[]> {
+    if (!ids.length) return [];
+    const rows = await this.approvals.find({ where: { id: In(ids), organizationId, status: 'pending' } });
+    return this.closeRows(rows, closedBy, reason);
+  }
+
+  private async closeRows(rows: ApprovalRequest[], closedBy: string | null, reason: string): Promise<ApprovalRequest[]> {
+    const closed: ApprovalRequest[] = [];
+    const now = new Date();
+    for (const row of rows) {
+      const claim = await this.approvals
+        .createQueryBuilder()
+        .update()
+        .set({ status: 'cancelled', decidedBy: null, decidedAt: now, decisionReason: reason })
+        .where('id = :id', { id: row.id })
+        .andWhere('status = :pending', { pending: 'pending' })
+        .execute();
+      if (!claim.affected) continue;
+      row.status = 'cancelled';
+      row.decidedBy = null;
+      row.decidedAt = now;
+      row.decisionReason = reason;
+      closed.push(row);
+      this.auditDecision(row, 'cancelled', closedBy, reason);
+    }
+    return closed;
   }
 
   // ── Notifications (best-effort, fire-and-forget) ─────────────────

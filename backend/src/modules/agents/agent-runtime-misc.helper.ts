@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -12,6 +12,7 @@ import {
   checkRunLimits,
   resolveRunLimits,
 } from './run-limits';
+import { ProductAnalyticsService } from '../product-analytics/product-analytics.service';
 
 /**
  * Small private helpers split out of AgentRuntimeService:
@@ -33,6 +34,8 @@ export class AgentRuntimeMiscHelper {
     private readonly runRepository: Repository<AgentRun>,
     @InjectRepository(Organization)
     private readonly organizationRepository: Repository<Organization>,
+    @Optional()
+    private readonly productAnalytics?: ProductAnalyticsService,
   ) {}
 
   async cleanupTemporaryAgents(runId: string): Promise<void> {
@@ -166,5 +169,14 @@ export class AgentRuntimeMiscHelper {
     } catch (err: any) {
       this.logger.error(`Failed to update agent stats: ${err.message}`);
     }
+  }
+
+  /**
+   * A run reached completed: tell the funnel (first_run_succeeded is sent
+   * once per user, for the org's own agents only). Not awaited; it never
+   * throws and never slows the run.
+   */
+  reportRunSucceeded(agentId: string, userId: string | null | undefined): void {
+    void this.productAnalytics?.runSucceeded({ agentId, userId });
   }
 }

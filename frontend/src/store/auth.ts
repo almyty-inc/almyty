@@ -8,6 +8,7 @@ import {
   clearOrganizationSelection,
 } from './organization-selection'
 import { identifyUser, resetAnalytics } from '@/lib/analytics'
+import type { SignupAttribution } from '@/lib/signup-attribution'
 
 // Identify the logged-in user in PostHog. Called only after auth succeeds
 // (contract basis). Carries the minimum: user id + current org id + plan.
@@ -27,7 +28,7 @@ interface AuthState {
   authChecked: boolean
   login: (email: string, password: string) => Promise<void>
   /** Creates the account and emails a confirmation link; opens no session. */
-  register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => Promise<{ email: string; verificationRequired: boolean }>
+  register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string, attribution?: SignupAttribution) => Promise<{ email: string; verificationRequired: boolean }>
   /** Resolves false when the server never confirmed the session was ended. */
   logout: () => Promise<boolean>
   updateProfile: (data: Partial<User>) => Promise<void>
@@ -96,14 +97,14 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => {
+      register: async (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string, attribution?: SignupAttribution) => {
         set({ isLoading: true })
         try {
           // Sign-up opens no session: signing in needs the address confirmed
           // first (the backend refuses an unconfirmed one with
           // EMAIL_NOT_VERIFIED), so it sets no cookie and there is no
           // profile to fetch. The page tells the person to check their email.
-          const registration = await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken })
+          const registration = await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken, ...(attribution ? { attribution } : {}) })
           set({ isLoading: false })
           return {
             email: registration?.email ?? email,
