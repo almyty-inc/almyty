@@ -104,6 +104,29 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   modelDigestSentAt: Date | null;
 
+  /**
+   * Where the sign-up came from: the whitelisted `utm_*` / `cta` keys of the
+   * link into the register page (product-analytics/signup-attribution.ts).
+   * Null when the link carried none.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  @Exclude()
+  signupAttribution: Record<string, string> | null;
+
+  /**
+   * When the `signup_completed` analytics event was claimed for this user.
+   * Set by a conditional UPDATE (only while NULL), so the event goes out
+   * once across restarts and replicas. See ProductAnalyticsService.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  @Exclude()
+  signupEventAt: Date | null;
+
+  /** Same, for `first_run_succeeded`. */
+  @Column({ type: 'timestamptz', nullable: true })
+  @Exclude()
+  firstRunEventAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

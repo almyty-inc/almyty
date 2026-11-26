@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -9,6 +9,7 @@ import { principalOfRun } from '../../common/authorization/execution-access.serv
 import { AgentRuntimeService } from './agent-runtime.service';
 import { notDone, runStateOf, writeRun } from './run-event-writer';
 import { heldBy } from './run-lease';
+import { ProductAnalyticsService } from '../product-analytics/product-analytics.service';
 import {
   AgentCollaboration,
   CollaborationParticipant,
@@ -83,6 +84,8 @@ export class AgentCollaborationHelper {
     private readonly runRepository: Repository<AgentRun>,
     @Inject(forwardRef(() => AgentRuntimeService))
     private readonly runtime: AgentRuntimeService,
+    @Optional()
+    private readonly productAnalytics?: ProductAnalyticsService,
   ) {}
 
   async processCollaborationStep(run: AgentRun, agent: Agent): Promise<'continue' | 'done' | 'waiting'> {
@@ -588,6 +591,8 @@ export class AgentCollaborationHelper {
     run.executionTime += stepDuration;
     await this.persist(run);
     this.runtime.emitEvent(run.id, 'run.completed', { output: run.output });
+    // Funnel event (once per user, own agents only); never awaited.
+    void this.productAnalytics?.runSucceeded({ agentId: run.agentId, userId: run.userId });
     return 'done';
   }
 

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -6,6 +6,7 @@ import { Agent } from '../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
 import { ExecutionErrorType } from './agent-execution-validators.helper';
 import { StreamEvent } from './stream-event.types';
+import { ProductAnalyticsService } from '../product-analytics/product-analytics.service';
 
 export interface FailureOpts {
   status: AgentExecutionStatus;
@@ -26,6 +27,8 @@ export class AgentExecutionStateHelper {
     private readonly agentRepository: Repository<Agent>,
     @InjectRepository(AgentExecution)
     private readonly agentExecutionRepository: Repository<AgentExecution>,
+    @Optional()
+    private readonly productAnalytics?: ProductAnalyticsService,
   ) {}
 
   /**
@@ -60,6 +63,15 @@ export class AgentExecutionStateHelper {
     } catch (err: any) {
       this.logger.error(`Failed to update agent stats: ${err.message}`);
     }
+  }
+
+  /**
+   * An execution reached completed: tell the funnel (first_run_succeeded is
+   * sent once per user, for the org's own agents only). Not awaited; it
+   * never throws and never slows the execution.
+   */
+  reportRunSucceeded(agentId: string, userId: string | null | undefined): void {
+    void this.productAnalytics?.runSucceeded({ agentId, userId });
   }
 
   /**

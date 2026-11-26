@@ -100,6 +100,7 @@ import { ProviderUsageModule } from './modules/provider-usage/provider-usage.mod
 import { ReferralsModule } from './modules/referrals/referrals.module';
 import { RetentionModule } from './modules/retention/retention.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ProductAnalyticsModule } from './modules/product-analytics/product-analytics.module';
 import { LifecycleModule } from './modules/lifecycle/lifecycle.module';
 import { ModelCatalogModule } from './modules/model-catalog/model-catalog.module';
 import { ModelRegistryModule } from './modules/model-registry/model-registry.module';
@@ -279,6 +280,7 @@ import { appDataSourceFactory } from './common/errors/redact-query-error';
     ReferralsModule,
     RetentionModule,
     NotificationsModule,
+    ProductAnalyticsModule,
     KmsModule,
     ModelCatalogModule,
     ModelRegistryModule,

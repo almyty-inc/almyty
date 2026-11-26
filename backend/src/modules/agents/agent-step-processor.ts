@@ -1960,6 +1960,8 @@ export class AgentStepProcessor {
 
         // Update agent stats atomically (see bumpAgentStats rationale).
         await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost, answerCheck);
+        // Funnel event (once per user, own agents only); never awaited.
+        this.s.misc.reportRunSucceeded?.(agent.id, run.userId);
 
         this.s.emitEvent(runId, 'run.completed', { output: run.output });
 

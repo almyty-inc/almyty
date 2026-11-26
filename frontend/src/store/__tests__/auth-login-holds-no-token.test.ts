@@ -76,4 +76,20 @@ describe('signing in keeps no token in the page', () => {
     expect(JSON.stringify(useAuthStore.getState())).not.toContain(JWT)
     for (const value of stored.values()) expect(value).not.toContain(JWT)
   })
+
+  // Sign-up attribution goes to the server with the request and nowhere
+  // else: not into the persisted store, not into localStorage.
+  it('register forwards the sign-up attribution and keeps none of it', async () => {
+    const { useAuthStore } = await import('../auth')
+    const { authApi } = await import('@/lib/api')
+    ;(authApi.register as any).mockClear()
+
+    await useAuthStore.getState().register('u@example.com', 'pw', 'U', 'Ser', 'Org', undefined, { utm_source: 'almyty.com', cta: 'hero' })
+
+    expect(authApi.register).toHaveBeenCalledWith(
+      expect.objectContaining({ attribution: { utm_source: 'almyty.com', cta: 'hero' } }),
+    )
+    expect(JSON.stringify(useAuthStore.getState())).not.toContain('almyty.com')
+    for (const value of stored.values()) expect(value).not.toContain('almyty.com')
+  })
 })
