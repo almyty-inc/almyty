@@ -1,5 +1,7 @@
 import {
   ConflictException,
+  Inject,
+  forwardRef,
   Injectable,
   Logger,
   NotFoundException,
@@ -19,6 +21,8 @@ import {
 } from '../../entities/agent-execution.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { ApprovalsService } from '../approvals/approvals.service';
+import type { WorkflowWaitState } from './workflow-approval';
 
 /**
  * Statuses a workflow execution never leaves. Cancelling one of these is a
@@ -112,6 +116,11 @@ export class AgentExecutionCancellationService implements OnModuleInit, OnModule
     private readonly redis?: Redis,
     @Optional()
     private readonly auditLog?: AuditLogService,
+    // Closes what a cancelled run waited on in Approvals. forwardRef: the
+    // approvals module and this one reach each other.
+    @Optional()
+    @Inject(forwardRef(() => ApprovalsService))
+    private readonly approvals?: ApprovalsService,
   ) {}
 
   /**
@@ -296,6 +305,10 @@ export class AgentExecutionCancellationService implements OnModuleInit, OnModule
     // refuse to overwrite.
     this.publishCancel({ executionId, organizationId });
 
+    // What the run waited on in Approvals closes with it, so the queue does
+    // not keep asking about a run that is gone (see closeApprovals).
+    await this.closeApprovals(execution, organizationId, userId);
+
     // Cancelling stops work somebody is paying for and any org member can
     // do it, so it leaves a row. Fire-and-forget: AuditLogService.log
     // never throws, and a missing audit row must not fail the cancel.
@@ -323,6 +336,42 @@ export class AgentExecutionCancellationService implements OnModuleInit, OnModule
     return execution;
   }
 
+  /**
+   * Close the requests a cancelled run waited on (its metadata's
+   * waitingForApproval), so they leave the Approvals queue with the reason
+   * 'run cancelled' rather than waiting there for their expiry. Approving
+   * one later would carry nothing on (the run no longer waits) or, for a
+   * held call, make a call nobody is waiting for. Closing emits no decision
+   * event, so nothing they hold runs.
+   *
+   * A Code step's change set is the run's own. A held call is the approval
+   * gate's, and one request can stand for several runs: it closes only when
+   * no other run still waits on it. Best effort: the run is cancelled
+   * either way.
+   */
+  private async closeApprovals(execution: AgentExecution, organizationId: string, userId?: string): Promise<void> {
+    if (!this.approvals) return;
+    const stepsOf = (e: AgentExecution) => (e.metadata?.waitingForApproval as WorkflowWaitState | undefined)?.steps ?? [];
+    const steps = stepsOf(execution);
+    if (!steps.length) return;
+    try {
+      const ids = new Set(steps.filter((s) => s.kind !== 'tool_call' && s.approvalId).map((s) => s.approvalId));
+      const heldCalls = steps.filter((s) => s.kind === 'tool_call' && s.approvalId).map((s) => s.approvalId);
+      if (heldCalls.length) {
+        const others = await this.executionRepository.find({
+          where: { organizationId, status: AgentExecutionStatus.WAITING_APPROVAL },
+          take: 500,
+        });
+        const stillWaitedOn = new Set(
+          others.filter((o) => o.id !== execution.id).flatMap((o) => stepsOf(o).map((s) => s.approvalId)),
+        );
+        for (const id of heldCalls) if (!stillWaitedOn.has(id)) ids.add(id);
+      }
+      await this.approvals.closeRequests([...ids], organizationId, userId ?? null);
+    } catch (err: any) {
+      this.logger.warn(`Could not close the approval requests of cancelled execution ${execution.id}: ${err?.message ?? err}`);
+    }
+  }
   /**
    * Abort the execution if this process is the one running it. Idempotent:
    * a second call (a duplicate pub/sub delivery, or the publishing replica

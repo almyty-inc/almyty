@@ -71,10 +71,24 @@ export class FakeApprovals extends EventEmitter {
     return this.rows.findOne({ where: { id, organizationId } });
   }
   async decide(id: string, status: 'approved' | 'rejected' | 'expired', decisionReason: string | null = null) {
-    await this.rows.update({ id }, { status, decisionReason });
+    // Only a pending request is decided, as ApprovalsService.decide refuses the rest.
+    const flipped = await this.rows.update({ id, status: 'pending' }, { status, decisionReason });
+    if (!flipped.affected) {
+      const current = await this.rows.findOne({ where: { id } });
+      throw new Error(`approval already ${current?.status ?? 'decided'}`);
+    }
     const row = await this.rows.findOne({ where: { id } });
     this.emit('approval.decided', row);
     return row;
+  }
+  /** As ApprovalsService.closeRequests: pending ones only, closed as 'cancelled', no decision event. */
+  async closeRequests(ids: string[], organizationId: string, _closedBy: string | null = null, reason = 'run cancelled') {
+    const closed: any[] = [];
+    for (const id of ids) {
+      const flipped = await this.rows.update({ id, organizationId, status: 'pending' }, { status: 'cancelled', decisionReason: reason });
+      if (flipped.affected) closed.push(await this.rows.findOne({ where: { id } }));
+    }
+    return closed;
   }
 }
 
