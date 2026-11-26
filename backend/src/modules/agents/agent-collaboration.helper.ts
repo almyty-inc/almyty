@@ -279,7 +279,10 @@ export class AgentCollaborationHelper {
       if (!h.runId) continue;
       try {
         // Only a loser still going: one that finished keeps its own ending.
-        await writeRun(this.runRepository, { id: h.runId, status: notDone() }, { status: AgentRunStatus.CANCELLED });
+        const cancelled = await writeRun(this.runRepository, { id: h.runId, status: notDone() }, { status: AgentRunStatus.CANCELLED });
+        // A loser that stopped to ask a person closes its requests as
+        // cancelRun does, or they stay in the queue for a run that is gone.
+        if (cancelled) await this.runtime.closeApprovalsOfCancelledRun(h.runId, run.organizationId);
       } catch (_) { /* best effort */ }
     }
 

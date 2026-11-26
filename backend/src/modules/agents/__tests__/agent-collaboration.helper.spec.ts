@@ -4,6 +4,9 @@ import { Agent } from '../../../entities/agent.entity';
 import { principalOfRun } from '../../../common/authorization/execution-access.service';
 import { fakeRepository } from '../../../test/fake-repository';
 import { expectRunProjectionsHold, withRunEvents } from '../../../test/fake-run-events';
+import { ApprovalsService, RUN_CANCELLED_REASON } from '../../approvals/approvals.service';
+import { fakeApprovalsRepo } from '../../approvals/__tests__/approvals-repo.fixture';
+import { AgentRuntimeService } from '../agent-runtime.service';
 
 /**
  * Per-strategy unit tests for the four collaboration modes the product exposes:
@@ -189,6 +192,43 @@ describe('AgentCollaborationHelper', () => {
     expect(cancelled).toHaveLength(3);
     for (const id of cancelled) expect(repo.events.rows(id).some((e) => e.type === 'status_changed')).toBe(true);
     expect(run.steps[0].type).toBe('collaboration_race');
+  });
+
+  it('race: a losing racer waiting for approval has its pending requests closed, as cancelRun does', async () => {
+    const runtime: any = makeRuntime();
+    // a2 stopped to ask a person and never finishes; a1 wins.
+    runtime.waitForRun.mockImplementation(async (id: string) => {
+      const a = runtime._idToAgent.get(id)!;
+      if (a.agentId === 'a2') return new Promise(() => {});
+      return { agentId: a.agentId, output: `out:${a.agentId}`, totalCost: 1, totalTokens: 10 };
+    });
+    const repo = makeRepo(5);
+    await repo.update({ id: 'r2' }, { status: AgentRunStatus.WAITING_APPROVAL, organizationId: 'org-1' } as any);
+    const requests = fakeApprovalsRepo([
+      { id: 'asked', organizationId: 'org-1', runId: 'r2', toolCallId: 'tc-1', visibility: 'org', reason: 'Send it', payload: null, status: 'pending', decidedBy: null, decidedAt: null, decisionReason: null },
+      { id: 'winner-asked', organizationId: 'org-1', runId: 'r1', toolCallId: 'tc-2', visibility: 'org', reason: 'x', payload: null, status: 'approved', decidedBy: 'u-ana', decidedAt: null, decisionReason: null },
+    ]);
+    const approvals = new ApprovalsService(
+      requests as any,
+      repo as any,
+      { find: jest.fn(async () => []), save: jest.fn(async (r: any) => r), create: (p: any) => p } as any,
+      { canAccess: jest.fn(async () => ({ allowed: true })), applyListFilter: jest.fn(async () => ({ bypass: true })) } as any,
+    );
+    const decided = jest.fn();
+    approvals.on('approval.decided', decided);
+    // The runtime's own closing, as cancelRun uses it.
+    runtime.closeApprovalsOfCancelledRun = (id: string, org: string, by?: string | null) =>
+      AgentRuntimeService.prototype.closeApprovalsOfCancelledRun.call({ approvals, logger: { warn: jest.fn() } }, id, org, by);
+    const helper = new AgentCollaborationHelper(repo as any, runtime);
+    const run = makeRun();
+
+    await helper.runRaceCollaboration(run, agentWith({ strategy: 'race', participants: [ag('a1'), ag('a2')] }));
+
+    expect(run.output).toBe('out:a1');
+    expect(repo.row('r2')!.status).toBe(AgentRunStatus.CANCELLED);
+    expect(requests.row('asked')).toMatchObject({ status: 'cancelled', decisionReason: RUN_CANCELLED_REASON });
+    expect(requests.row('winner-asked')!.status).toBe('approved');
+    expect(decided).not.toHaveBeenCalled();
   });
 
   it('debate: maxRounds rounds × every debater, then the judge summarizes', async () => {
