@@ -327,12 +327,13 @@ describeIfDb('funnel analytics backfill of existing accounts (real Postgres)', (
     await service.runSucceeded({ agentId: earlyAgent.id, userId: early.id });
     expect(fetchMock).not.toHaveBeenCalled();
 
-    // Someone new from here on is reported once per event.
+    // Someone new from here on is reported once per event, even with
+    // callers racing for each claim.
     const late = await user('keyedNewcomer', { isVerified: true, verifiedAt: new Date() });
     const lateAgent = await agent('keyedNewcomer', late.id);
+    await Promise.all(Array.from({ length: 5 }, () => service.signupCompleted(late.id)));
+    await Promise.all(Array.from({ length: 5 }, () => service.runSucceeded({ agentId: lateAgent.id, userId: late.id })));
     await service.signupCompleted(late.id);
-    await service.signupCompleted(late.id);
-    await service.runSucceeded({ agentId: lateAgent.id, userId: late.id });
     await service.runSucceeded({ agentId: lateAgent.id, userId: late.id });
     expect(events().map((e) => [e.event, e.distinct_id])).toEqual([
       [SIGNUP_COMPLETED_EVENT, late.id],

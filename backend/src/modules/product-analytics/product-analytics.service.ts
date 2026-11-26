@@ -36,7 +36,9 @@ export interface RunSucceeded {
  *
  * distinct_id is the user id, the same id the frontend passes to
  * identify(). Properties are ids, the plan, the sign-up method and the
- * sign-up link's attribution: never an email, a name or free text.
+ * sign-up link's attribution. Email and name fields are never sent; the
+ * attribution is whitelisted and filtered (signup-attribution.ts), so a
+ * campaign label chosen by whoever made the link goes out as-is.
  *
  * Once-only: each event is claimed with a conditional UPDATE on the user
  * row (`signupEventAt` / `firstRunEventAt` set only while NULL). Postgres
