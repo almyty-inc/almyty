@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>APIs to tools to agents. One platform, every protocol.</strong>
+  <strong>Build your team's AI assistant with the models and tools you choose, then use it in Slack, web chat or your application.</strong>
 </p>
 
 <p align="center">

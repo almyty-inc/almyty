@@ -164,8 +164,8 @@ export const DEFAULT_HOSTED_RUNNER_SETTINGS: HostedRunnerSettings = {
   // ones, then one follow-up pins the new digests (docs/hosted-runners.md).
   // scripts/check-runner-env-images.js keeps these equal to images/runner-env/settings.json.
   images: {
-    standard: 'almyty/runner-env:standard-1.5.16@sha256:953cf94768d715078e4d9b6a74aac276a93abc3f944318fdaab2894248a599a6',
-    'standard-browser': 'almyty/runner-env:standard-browser-1.5.16@sha256:4322ee5f509b17a65d64179b1504f44a289a35d2e1eb55d1086ecbc9e2da524a',
+    standard: 'almyty/runner-env:standard-1.5.17@sha256:9b83c6d184c888a9d4f7b61f3c68e6348e74164fb9f3f0397185fc35f091de2d',
+    'standard-browser': 'almyty/runner-env:standard-browser-1.5.17@sha256:984a9b9684adc61d803cc32c60127a16849a7080cd9aeca36f930ba86ac6fe5a',
   },
   capacity: { maxConcurrentRunners: 2, maxWorkspaces: 10, resourceClasses: null },
   cluster: {

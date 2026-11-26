@@ -1,0 +1,18 @@
+{
+	"node": "n8n-nodes-almyty.almyty",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Productivity"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://github.com/almyty-inc/almyty/tree/development/packages/n8n-nodes-almyty#credentials"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/almyty-inc/almyty/tree/development/packages/n8n-nodes-almyty#readme"
+			}
+		]
+	}
+}

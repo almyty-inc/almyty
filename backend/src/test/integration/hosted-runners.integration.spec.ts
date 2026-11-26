@@ -312,8 +312,13 @@ describeIfDb('hosted runners (real Postgres)', () => {
       const again = await hosted.resolveTarget(env.id, caller());
       expect(again).toMatchObject({ kind: 'waking', workspaceId: first.workspaceId, hostedRunnerId: first.hostedRunnerId });
       const provisions = stub.calls.filter((c) => c === `provision:${first.hostedRunnerId}`).length;
+      const before = await hrRow(first.hostedRunnerId);
       await processor.reconcile(first.hostedRunnerId);
-      expect(stub.calls.filter((c) => c === `provision:${first.hostedRunnerId}`).length).toBe(provisions);
+      // The start from zero re-applies the machine's objects (a template
+      // from an earlier almyty is replaced), on the volume it already has.
+      expect(stub.calls.filter((c) => c === `provision:${first.hostedRunnerId}`).length).toBe(provisions + 1);
+      expect(stub.pods.get(first.hostedRunnerId)!.ref).toEqual({ stubId: first.hostedRunnerId, volume: `ws-${first.workspaceId}` });
+      expect((await hrRow(first.hostedRunnerId)).externalRef).toEqual(before.externalRef);
       await podStarts(first.hostedRunnerId, organizationId);
       await processor.reconcile(first.hostedRunnerId);
       expect((await hrRow(first.hostedRunnerId)).state).toBe('ready');
