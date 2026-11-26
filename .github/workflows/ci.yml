@@ -298,15 +298,12 @@ jobs:
 
       # The n8n community node is checked with n8n's own lint rules
       # (`n8n-node lint` is `eslint .` over the package's unmodified
-      # eslint.config.mjs). One rule is switched off: n8n wants community
-      # packages under MIT and this one is Apache-2.0, like the rest of the
-      # repo. Which licence it ships under is still an open owner decision;
-      # drop the --rule override once that is settled.
+      # eslint.config.mjs). The package is MIT, as n8n requires of
+      # community nodes; the rest of the repo stays Apache-2.0.
       - name: Lint (n8n community node rules)
         if: ${{ matrix.package == 'n8n-nodes-almyty' }}
         working-directory: packages/${{ matrix.package }}
-        run: |
-          npx eslint . --rule 'n8n-nodes-base/community-package-json-license-not-default: off'
+        run: npx eslint .
 
       # vitest runs against src/ via esbuild, so nothing else needs a build.
       #

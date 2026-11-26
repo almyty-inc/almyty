@@ -102,7 +102,7 @@ export class Almyty implements INodeType {
 				typeOptions: { minValue: 1 },
 				default: 300,
 				description:
-					'How long to wait for the answer. For an autonomous agent with Wait for Result on: if it is still working by then, you get the run ID and the status "running". For a workflow agent: the time limit on its one call; if it has not answered by then, the step fails.',
+					'How long this step waits for the answer. For an autonomous agent with Wait for Result on: if it is still working by then, you get the run ID and the status "running". For a workflow agent: the time limit on its one call; if it has not answered by then, the step fails. Either way the limit only stops the waiting: the run may carry on in almyty, and running the node again starts a new run.',
 				displayOptions: { show: { operation: ['runAgent'] } },
 			},
 		],
