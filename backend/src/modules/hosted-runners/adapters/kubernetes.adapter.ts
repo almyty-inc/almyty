@@ -34,9 +34,10 @@ interface KubeRef extends HostedRef {
  * builders in kubernetes/manifests.ts; this file only sends them.
  *
  * `provision` is called by the reconcile loop only while the runner has
- * no pod (first provision, or a new environment version while
- * suspended), so applying the Deployment at replicas 0 never stops a
- * running pod; `scale` moves replicas through the scale subresource.
+ * no pod (first provision, and again before every start from zero, so a
+ * Deployment made by an earlier almyty gets today's pod template), so
+ * applying the Deployment at replicas 0 never stops a running pod; `scale`
+ * moves replicas through the scale subresource.
  */
 export class KubernetesHostedAdapter implements HostedRunnerAdapter {
   readonly key = 'kubernetes';

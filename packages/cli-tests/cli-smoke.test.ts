@@ -145,8 +145,13 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     beforeAll(async () => {
       try {
         const agents = JSON.parse(run('agents-cli', ['list', '--json']));
+        // Never a "Copy of ..." agent: a run that died before afterAll
+        // leaves its copy behind, and picking that copy made each gate copy
+        // the previous copy (four deep by 2026-11-25).
         const usable = Array.isArray(agents)
-          ? agents.filter((a: any) => a.status === 'active' && !/^gate-/.test(a.slug ?? a.name ?? ''))
+          ? agents.filter((a: any) => a.status === 'active'
+              && !/^gate-/.test(a.slug ?? a.name ?? '')
+              && !/^Copy of /.test(a.name ?? ''))
           : [];
         const pick = usable.find((a: any) => a.mode === 'autonomous') ?? null;
         if (!pick) { agentRef = null; return; }

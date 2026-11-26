@@ -1,0 +1,56 @@
+{
+  "name": "n8n-nodes-almyty",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Run almyty agents from n8n workflows.",
+  "keywords": [
+    "n8n-community-node-package",
+    "almyty",
+    "agents",
+    "ai"
+  ],
+  "license": "MIT",
+  "homepage": "https://almyty.com",
+  "author": {
+    "name": "Almyty Inc.",
+    "email": "hello@almyty.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/almyty-inc/almyty.git",
+    "directory": "packages/n8n-nodes-almyty"
+  },
+  "bugs": {
+    "url": "https://github.com/almyty-inc/almyty/issues"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "n8n-node build",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "test": "vitest run"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/credentials/AlmytyApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Almyty/Almyty.node.js"
+    ]
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "^0.58.6",
+    "@types/node": "^26.6.10",
+    "eslint": "^9.29.0",
+    "n8n-workflow": "^2.49.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.1"
+  }
+}

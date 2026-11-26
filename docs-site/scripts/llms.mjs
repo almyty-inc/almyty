@@ -290,17 +290,42 @@ export function renderFull(sections) {
   return parts.join('\n') + '\n'
 }
 
+/** sitemap.xml: every page llms.txt lists, so search engines find them all. */
+export function renderSitemap(sections) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const urls = [...new Set(sections.flatMap((s) => s.pages.map((p) => p.url)))]
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urls.map((u) => `  <url><loc>${esc(u)}</loc></url>`),
+    '</urlset>',
+    '',
+  ].join('\n')
+}
+
+export function renderRobots() {
+  return `User-agent: *\nAllow: /\n\nSitemap: ${DOCS_URL}/sitemap.xml\n`
+}
+
 export function buildLlms(contentDir) {
   const sections = collectSections(contentDir)
-  return { sections, index: renderIndex(sections), full: renderFull(sections) }
+  return {
+    sections,
+    index: renderIndex(sections),
+    full: renderFull(sections),
+    sitemap: renderSitemap(sections),
+    robots: renderRobots(),
+  }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const { sections, index, full } = buildLlms()
+  const { sections, index, full, sitemap, robots } = buildLlms()
   const out = join(siteRoot, 'public')
   mkdirSync(out, { recursive: true })
   writeFileSync(join(out, 'llms.txt'), index)
   writeFileSync(join(out, 'llms-full.txt'), full)
+  writeFileSync(join(out, 'sitemap.xml'), sitemap)
+  writeFileSync(join(out, 'robots.txt'), robots)
   const count = sections.reduce((n, s) => n + s.pages.length, 0)
-  console.log(`llms: ${count} pages in ${sections.length} sections -> public/llms.txt, public/llms-full.txt`)
+  console.log(`llms: ${count} pages in ${sections.length} sections -> public/llms.txt, public/llms-full.txt, public/sitemap.xml, public/robots.txt`)
 }
