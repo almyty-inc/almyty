@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
-import { Repository } from 'typeorm';
+import { Not, Raw, Repository } from 'typeorm';
 import type Redis from 'ioredis';
 
 import {
@@ -346,32 +346,47 @@ export class AgentExecutionCancellationService implements OnModuleInit, OnModule
    *
    * A Code step's change set is the run's own. A held call is the approval
    * gate's, and one request can stand for several runs: it closes only when
-   * no other run still waits on it. Best effort: the run is cancelled
-   * either way.
+   * no other run still waits on it (isStillWaitedOn). Best effort: the run
+   * is cancelled either way.
    */
   private async closeApprovals(execution: AgentExecution, organizationId: string, userId?: string): Promise<void> {
     if (!this.approvals) return;
-    const stepsOf = (e: AgentExecution) => (e.metadata?.waitingForApproval as WorkflowWaitState | undefined)?.steps ?? [];
-    const steps = stepsOf(execution);
+    const steps = (execution.metadata?.waitingForApproval as WorkflowWaitState | undefined)?.steps ?? [];
     if (!steps.length) return;
     try {
       const ids = new Set(steps.filter((s) => s.kind !== 'tool_call' && s.approvalId).map((s) => s.approvalId));
-      const heldCalls = steps.filter((s) => s.kind === 'tool_call' && s.approvalId).map((s) => s.approvalId);
-      if (heldCalls.length) {
-        const others = await this.executionRepository.find({
-          where: { organizationId, status: AgentExecutionStatus.WAITING_APPROVAL },
-          take: 500,
-        });
-        const stillWaitedOn = new Set(
-          others.filter((o) => o.id !== execution.id).flatMap((o) => stepsOf(o).map((s) => s.approvalId)),
-        );
-        for (const id of heldCalls) if (!stillWaitedOn.has(id)) ids.add(id);
+      for (const s of steps) {
+        if (s.kind !== 'tool_call' || !s.approvalId || ids.has(s.approvalId)) continue;
+        if (!(await this.isStillWaitedOn(s.approvalId, execution.id, organizationId))) ids.add(s.approvalId);
       }
       await this.approvals.closeRequests([...ids], organizationId, userId ?? null);
     } catch (err: any) {
       this.logger.warn(`Could not close the approval requests of cancelled execution ${execution.id}: ${err?.message ?? err}`);
     }
   }
+
+  /**
+   * Does any other execution of the org still wait on this approval
+   * request? One EXISTS over every waiting execution, asked in SQL: a JSON
+   * containment on the steps its metadata.waitingForApproval records, so a
+   * waiter is found however many executions wait, and none is loaded.
+   */
+  private isStillWaitedOn(approvalId: string, exceptExecutionId: string, organizationId: string): Promise<boolean> {
+    return this.executionRepository.exists({
+      where: {
+        organizationId,
+        status: AgentExecutionStatus.WAITING_APPROVAL,
+        id: Not(exceptExecutionId),
+        metadata: Raw(
+          (column) =>
+            `(${column})::jsonb -> 'waitingForApproval' -> 'steps' @> ` +
+            `jsonb_build_array(jsonb_build_object('approvalId', CAST(:waitedApprovalId AS text)))`,
+          { waitedApprovalId: approvalId },
+        ),
+      },
+    });
+  }
+
   /**
    * Abort the execution if this process is the one running it. Idempotent:
    * a second call (a duplicate pub/sub delivery, or the publishing replica

@@ -617,15 +617,7 @@ export class AgentRuntimeService implements OnModuleInit {
     }
     run.status = AgentRunStatus.CANCELLED;
     await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
-    // Its pending approval requests close with it: a decision on them would
-    // mean nothing now (handleApprovalDecided ignores a run that no longer
-    // waits), and left pending they sat in the queue until they expired.
-    // No decision event, so nothing they held runs and the run stays ended.
-    try {
-      await this.approvals?.closeForRun?.(run.id, organizationId, userId ?? null);
-    } catch (err: any) {
-      this.logger.warn(`Could not close the approval requests of cancelled run ${run.id}: ${err?.message ?? err}`);
-    }
+    await this.closeApprovalsOfCancelledRun(run.id, organizationId, userId ?? null);
     this.emitEvent(runId, 'run.cancelled', {});
 
     // RUN_CANCEL was declared on AuditAction and emitted by nothing.
@@ -652,6 +644,23 @@ export class AgentRuntimeService implements OnModuleInit {
       });
 
     return run;
+  }
+
+  /**
+   * Close the pending approval requests of a run that was just cancelled,
+   * by cancelRun or by anything else that ends a run as CANCELLED (a race's
+   * losing participants). A decision on them would mean nothing now
+   * (handleApprovalDecided ignores a run that no longer waits), and left
+   * pending they sat in the queue until they expired. No decision event,
+   * so nothing they held runs and the run stays ended. Best effort: the run
+   * is cancelled either way.
+   */
+  async closeApprovalsOfCancelledRun(runId: string, organizationId: string, closedBy: string | null = null): Promise<void> {
+    try {
+      await this.approvals?.closeForRun?.(runId, organizationId, closedBy);
+    } catch (err: any) {
+      this.logger.warn(`Could not close the approval requests of cancelled run ${runId}: ${err?.message ?? err}`);
+    }
   }
 
   /**
