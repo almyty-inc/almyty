@@ -161,6 +161,19 @@ The backend sends two more, server-side, once per user (modules/product-analytic
 - `first_run_succeeded` `{ organization_id, plan, agent_mode, utm_*, cta }`: first completed
   run of an own agent (real-activation.ts: not `isTemporary`, no `metadata.sampleWorkspace`).
 
+Who counts: events count only from the claim columns' backfill
+(`BackfillUserFunnelClaims1791002000000`) onward. It marks every account existing at that
+moment: `signupEventAt` for anyone confirmed (`verifiedAt` or `isVerified`), signed in
+(`lastLoginAt`) or with an earlier own-agent run; `firstRunEventAt` = their earliest
+completed own-agent run (`agent_runs` and `agent_executions`, credited to the starting user,
+else the agent's creator, as at send time). So earlier users are never counted as new. An
+account that existed but was never confirmed or used counts when it is. With the key set
+later than the migration, accounts made in between are not marked and count on their next
+transition after the key is set.
+
+Delivery is best effort, at most once: the claim is written before the send, so a capture
+lost after its claim is not retried, and nothing is ever sent twice.
+
 `utm_source/utm_medium/utm_campaign/utm_content/cta` come from the marketing site's link
 into /auth/register; the page forwards them with the form and stores nothing in the browser.
 

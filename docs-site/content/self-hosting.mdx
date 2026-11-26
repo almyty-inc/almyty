@@ -334,6 +334,10 @@ Also **off by default**. With no key set, nothing is loaded, stored or sent.
 
   Each event is keyed by the user's id and carries the organization id, its plan, how the person signed up, and the `utm_source`, `utm_medium`, `utm_campaign`, `utm_content` and `cta` values of the link they signed up from, if it had any. Never an email address, a name or anything the person typed. `POSTHOG_HOST` defaults to `https://eu.i.posthog.com`; `POSTHOG_ENVIRONMENT` (falling back to `SENTRY_ENVIRONMENT`, then `NODE_ENV`) tags events so staging and production stay apart. A failed send is dropped and never affects sign-up or the run.
 
+  Counting starts when the API's database migration for these events runs. Every account that exists at that moment is treated as already counted: one that is confirmed or has signed in never sends `signup_completed`, and one that has already run one of its organization's own agents successfully never sends `first_run_succeeded`, so earlier users do not show up as new sign-ups or new activations. An account that existed but was never confirmed or used still counts when it is. If you set the key long after that migration ran, people who joined in between are not marked, and are counted the first time they confirm or run an agent after the key is set.
+
+  Sending is best effort, at most once: each event is marked as sent on the user's record just before it goes out, so a send that fails after that point is not retried, and an event is never sent twice.
+
 ## Database migrations
 
 How migrations run depends on how you deploy.
