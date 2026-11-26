@@ -11,6 +11,8 @@ import { membershipFixture } from '../../../test/execution-access.fixture';
 import { userPrincipal } from '../../../common/authorization/execution-access.service';
 import { gatedExecutor } from '../../tools/__tests__/gated-executor.harness';
 import { WorkflowApprovalResumeService } from '../workflow-approval-resume.service';
+import { AgentExecutionCancellationService } from '../agent-execution-cancellation.service';
+import { RUN_CANCELLED_REASON } from '../../approvals/approvals.service';
 
 jest.mock('axios', () => {
   const fn: any = jest.fn();
@@ -168,5 +170,40 @@ describe('approval over an amount in a workflow agent', () => {
     const after = executions.row(execution.id)!;
     expect(after.status).toBe(AgentExecutionStatus.FAILED);
     expect(after.nodeResults.refund.error).toMatch(/^Approved, but the call failed/);
+  });
+
+  describe('the run is cancelled while it waits', () => {
+    const cancellations = () => new AgentExecutionCancellationService(executions as any, undefined, undefined, harness.approvals as any);
+
+    it('its held refund leaves the queue as cancelled, is never made, and approving it later carries nothing on', async () => {
+      const execution = await run({ amount: 820, order: 'NW-44120' });
+      const [asked] = harness.approvals.created;
+
+      await cancellations().cancel(execution.id, 'org-1', undefined, 'u-1');
+      await settle();
+
+      expect(harness.approvalRequests.row(asked.id)).toMatchObject({ status: 'cancelled', decisionReason: RUN_CANCELLED_REASON });
+      await expect(harness.approvals.decide(asked.id, 'approved')).rejects.toThrow('approval already cancelled');
+      await settle();
+      expect(mockedAxios).not.toHaveBeenCalled();
+      const after = executions.row(execution.id)!;
+      expect(after.status).toBe(AgentExecutionStatus.CANCELLED);
+      expect(after.nodeResults.out).toMatchObject({ skipped: true });
+    });
+
+    it('two runs on the same refund: cancelling one leaves the request open for the other', async () => {
+      const first = await run({ amount: 820, order: 'NW-44120' });
+      const second = await run({ amount: 820, order: 'NW-44120' });
+      const [asked] = harness.approvals.created;
+
+      await cancellations().cancel(first.id, 'org-1', undefined, 'u-1');
+      expect(harness.approvalRequests.row(asked.id)!.status).toBe('pending');
+
+      await harness.approvals.decide(asked.id, 'approved');
+      await settle();
+      expect(mockedAxios).toHaveBeenCalledTimes(1);
+      expect(executions.row(first.id)!.status).toBe(AgentExecutionStatus.CANCELLED);
+      expect(executions.row(second.id)!.status).toBe(AgentExecutionStatus.COMPLETED);
+    });
   });
 });
