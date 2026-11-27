@@ -161,8 +161,27 @@ The backend sends two more, server-side, once per user (modules/product-analytic
 - `first_run_succeeded` `{ organization_id, plan, agent_mode, utm_*, cta }`: first completed
   run of an own agent (real-activation.ts: not `isTemporary`, no `metadata.sampleWorkspace`).
 
+Who counts: the claim columns' backfill (`BackfillUserFunnelClaims1791002000000`) marks
+milestones reached before it: `signupEventAt` for anyone confirmed (`verifiedAt` or
+`isVerified`), signed in (`lastLoginAt`) or with an earlier own-agent run; `firstRunEventAt` =
+their earliest completed own-agent run (`agent_runs` and `agent_executions`, credited to the
+starting user, else the agent's creator, as at send time). An existing account can still
+produce an event if it reaches its first qualifying milestone after measurement is enabled
+(e.g. confirms for the first time, or runs its first own agent). These events measure
+milestones, not newly created accounts.
+
+The claim is written with or without the key; only the send needs it. Without a PostHog key
+no events are sent, but almyty still records on the account when the two milestones happened.
+Enabling a key does not replay earlier milestones.
+
+Delivery is best effort, at most once: the claim is written before the send, so a failed send
+is not retried, and nothing is ever sent twice.
+
 `utm_source/utm_medium/utm_campaign/utm_content/cta` come from the marketing site's link
 into /auth/register; the page forwards them with the form and stores nothing in the browser.
+Email and name fields are never sent. The link values are filtered (signup-attribution.ts:
+whitelisted keys, at most 100 chars, a plain identifier alphabet without `@`), so a campaign
+label chosen by whoever made the link is sent as-is.
 
 ## Acceptance criteria
 

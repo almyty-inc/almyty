@@ -36,7 +36,9 @@ export interface RunSucceeded {
  *
  * distinct_id is the user id, the same id the frontend passes to
  * identify(). Properties are ids, the plan, the sign-up method and the
- * sign-up link's attribution: never an email, a name or free text.
+ * sign-up link's attribution. Email and name fields are never sent; the
+ * attribution is whitelisted and filtered (signup-attribution.ts), so a
+ * campaign label chosen by whoever made the link goes out as-is.
  *
  * Once-only: each event is claimed with a conditional UPDATE on the user
  * row (`signupEventAt` / `firstRunEventAt` set only while NULL). Postgres
@@ -44,12 +46,17 @@ export interface RunSucceeded {
  * the claim survives restarts. A capture lost after its claim is not sent
  * again: at most once, never twice.
  *
+ * The claim is written whether or not POSTHOG_API_KEY is set: it is a
+ * timestamp on the user's own row noting that the milestone happened.
+ * Only the send needs the key, and a milestone reached without one is
+ * never sent later, so turning PostHog on never reports an old milestone
+ * as new. Without a key nothing leaves the system.
+ *
  * Delivery is one fetch to PostHog's /capture/ endpoint rather than
  * posthog-node: two events per user do not need a batching client, its
  * flush-on-shutdown lifecycle, or another dependency. Every method here
  * swallows its own errors and callers do not await it, so analytics can
- * neither fail nor slow the request that triggered it. With no
- * POSTHOG_API_KEY nothing is read, claimed or sent.
+ * neither fail nor slow the request that triggered it.
  */
 @Injectable()
 export class ProductAnalyticsService {
@@ -74,13 +81,14 @@ export class ProductAnalyticsService {
   /** Call when an account may just have become verified. Never throws. */
   async signupCompleted(userId: string): Promise<void> {
     try {
-      if (!this.isEnabled() || !userId) return;
-      // Only a verified account, and only the first time.
+      if (!userId) return;
+      // Only a verified account, and only the first time. Claimed with or
+      // without a key, so a key set later never reports it as new.
       const claimed = await this.users.update(
         { id: userId, verifiedAt: Not(IsNull()), signupEventAt: IsNull() },
         { signupEventAt: new Date() },
       );
-      if (!claimed?.affected) return;
+      if (!claimed?.affected || !this.isEnabled()) return;
 
       const user = await this.users.findOne({ where: { id: userId }, select: { id: true, signupAttribution: true } });
       const membership = await this.memberships.findOne({
@@ -102,7 +110,7 @@ export class ProductAnalyticsService {
   /** Call when a run reached completed. Never throws. */
   async runSucceeded(run: RunSucceeded): Promise<void> {
     try {
-      if (!this.isEnabled() || !run?.agentId) return;
+      if (!run?.agentId) return;
       const agent = await this.agents.findOne({
         where: { id: run.agentId },
         select: { id: true, organizationId: true, isTemporary: true, metadata: true, createdBy: true, mode: true },
@@ -113,11 +121,13 @@ export class ProductAnalyticsService {
       const userId = run.userId || agent.createdBy;
       if (!userId) return;
 
+      // Claimed with or without a key: the milestone is noted on the
+      // user's row either way, so a key set later never reports it as new.
       const claimed = await this.users.update(
         { id: userId, firstRunEventAt: IsNull() },
         { firstRunEventAt: new Date() },
       );
-      if (!claimed?.affected) return;
+      if (!claimed?.affected || !this.isEnabled()) return;
 
       const [user, organization] = await Promise.all([
         this.users.findOne({ where: { id: userId }, select: { id: true, signupAttribution: true } }),

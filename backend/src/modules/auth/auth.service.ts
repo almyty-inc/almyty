@@ -125,7 +125,7 @@ export class AuthService implements OnModuleInit {
     @Optional()
     @InjectQueue(LIFECYCLE_EMAIL_QUEUE)
     private readonly lifecycleQueue?: Queue,
-    // Funnel analytics (global, ships dark without POSTHOG_API_KEY).
+    // Funnel analytics (global; sends nothing without POSTHOG_API_KEY).
     @Optional()
     private readonly productAnalytics?: ProductAnalyticsService,
   ) {}
