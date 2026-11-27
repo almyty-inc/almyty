@@ -1,5 +1,12 @@
 # @almyty/mcp-server
 
+## 1.5.18
+
+### Patch Changes
+
+- a9fa2b9: Describe the package as connecting an MCP client to your almyty tools, skills and agents over stdio.
+- @almyty/client@1.5.18
+
 ## 1.5.17
 
 ### Patch Changes

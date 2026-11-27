@@ -1,6 +1,6 @@
 {
   "name": "@almyty/auth",
-  "version": "1.5.17",
+  "version": "1.5.18",
   "publishConfig": {
     "access": "public"
   },

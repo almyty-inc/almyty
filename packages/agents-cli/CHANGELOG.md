@@ -1,5 +1,11 @@
 # @almyty/agents
 
+## 1.5.18
+
+### Patch Changes
+
+- @almyty/client@1.5.18
+
 ## 1.5.17
 
 ### Patch Changes

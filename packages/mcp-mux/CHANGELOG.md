@@ -1,5 +1,9 @@
 # @almyty/mcp-mux
 
+## 1.5.18
+
+No changes in this release.
+
 ## 1.5.17
 
 No changes in this release.
