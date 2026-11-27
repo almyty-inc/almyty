@@ -22,6 +22,7 @@ import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.en
 import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
 import {
   FIRST_RUN_SUCCEEDED_EVENT,
+  MILESTONE_FRESH_MS,
   ProductAnalyticsService,
   SIGNUP_COMPLETED_EVENT,
 } from '../../modules/product-analytics/product-analytics.service';
@@ -291,6 +292,50 @@ describeIfDb('funnel analytics backfill of existing accounts (real Postgres)', (
     await service.runSucceeded({ agentId: own.id, userId: fresh.id });
     await service.runSucceeded({ agentId: own.id, userId: fresh.id });
 
+    expect(events().map((e) => [e.event, e.distinct_id])).toEqual([
+      [SIGNUP_COMPLETED_EVENT, fresh.id],
+      [FIRST_RUN_SUCCEEDED_EVENT, fresh.id],
+    ]);
+  });
+
+  it('never reports a milestone an older server wrote after the backfill without claiming it', async () => {
+    // A server from before the claim (still running during a rolling
+    // deploy) confirms an address and finishes first runs: rows written,
+    // claims left NULL, the service never called. The key is set more than
+    // MILESTONE_FRESH_MS later.
+    const past = new Date(Date.now() - MILESTONE_FRESH_MS - 60_000);
+    const confirmedByOld = await user('confirmedByOld', { isVerified: true, verifiedAt: past });
+    const ranByOld = await user('ranByOld', { isVerified: true, verifiedAt: past });
+    const ranAgent = await agent('ranByOld', ranByOld.id);
+    await run(ranAgent, ranByOld.id, AgentRunStatus.COMPLETED, past);
+    const executedByOld = await user('executedByOld', { isVerified: true, verifiedAt: past });
+    const executedAgent = await agent('executedByOld', executedByOld.id, { mode: 'workflow' } as any);
+    await execution(executedAgent, null, AgentExecutionStatus.COMPLETED, past);
+    for (const key of ['confirmedByOld', 'ranByOld', 'executedByOld']) {
+      expect((await row(key)).signupEventAt).toBeNull();
+      expect((await row(key)).firstRunEventAt).toBeNull();
+    }
+
+    // Key on, new code: re-confirmations and their next completed runs.
+    process.env.POSTHOG_API_KEY = 'phc_integration';
+    await service.signupCompleted(confirmedByOld.id);
+    await service.signupCompleted(ranByOld.id);
+    await run(ranAgent, ranByOld.id, AgentRunStatus.COMPLETED, new Date());
+    await service.runSucceeded({ agentId: ranAgent.id, userId: ranByOld.id });
+    await execution(executedAgent, null, AgentExecutionStatus.COMPLETED, new Date());
+    await service.runSucceeded({ agentId: executedAgent.id, userId: null });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await row('confirmedByOld')).signupEventAt).toBeInstanceOf(Date);
+    expect((await row('ranByOld')).firstRunEventAt).toBeInstanceOf(Date);
+    expect((await row('executedByOld')).firstRunEventAt).toBeInstanceOf(Date);
+
+    // A user whose first run is the one just finished is still reported.
+    const fresh = await user('freshAfterDeploy', { isVerified: true, verifiedAt: new Date() });
+    const freshAgent = await agent('freshAfterDeploy', fresh.id);
+    await service.signupCompleted(fresh.id);
+    await run(freshAgent, fresh.id, AgentRunStatus.COMPLETED, new Date());
+    await service.runSucceeded({ agentId: freshAgent.id, userId: fresh.id });
     expect(events().map((e) => [e.event, e.distinct_id])).toEqual([
       [SIGNUP_COMPLETED_EVENT, fresh.id],
       [FIRST_RUN_SUCCEEDED_EVENT, fresh.id],

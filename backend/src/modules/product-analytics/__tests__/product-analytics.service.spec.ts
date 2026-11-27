@@ -2,6 +2,7 @@ import { snapshotEnv } from '../../../test/env';
 import {
   DEFAULT_POSTHOG_HOST,
   FIRST_RUN_SUCCEEDED_EVENT,
+  MILESTONE_FRESH_MS,
   ProductAnalyticsService,
   SIGNUP_COMPLETED_EVENT,
 } from '../product-analytics.service';
@@ -50,13 +51,13 @@ function fakeRepo(rows: Record<string, any>[]) {
 const USER_ID = 'user-1';
 const ORG_ID = 'org-1';
 
-function setup(overrides: { user?: Record<string, any>; agent?: Record<string, any> } = {}) {
+function setup(overrides: { user?: Record<string, any>; agent?: Record<string, any>; earlierRun?: boolean } = {}) {
   const user = {
     id: USER_ID,
     email: 'dana@example.com',
     firstName: 'Dana',
     lastName: 'Lind',
-    verifiedAt: new Date('2026-11-26T10:00:00Z'),
+    verifiedAt: new Date(),
     signupAttribution: { utm_source: 'almyty.com', utm_campaign: 'launch', cta: 'hero' },
     signupEventAt: null,
     firstRunEventAt: null,
@@ -71,7 +72,10 @@ function setup(overrides: { user?: Record<string, any>; agent?: Record<string, a
     mode: 'autonomous',
     ...overrides.agent,
   };
-  const users = fakeRepo([user]);
+  const users = Object.assign(fakeRepo([user]), {
+    // hasEarlierQualifyingRun: an own-agent run that finished before the window.
+    manager: { query: jest.fn(async (_sql: string, _params: string[]) => [{ earlier: !!overrides.earlierRun }]) },
+  });
   const agents = fakeRepo([agent]);
   const organizations = fakeRepo([{ id: ORG_ID, plan: 'pro', name: 'Lind Labs' }]);
   const memberships = {
@@ -249,6 +253,35 @@ describe('ProductAnalyticsService', () => {
 
       expect(user.signupEventAt).toBeNull();
       expect(user.firstRunEventAt).toBeNull();
+    });
+  });
+
+  describe('a milestone written earlier without a claim (an older server during a deploy)', () => {
+    it('does not send signup_completed for an address confirmed before the window', async () => {
+      const { service, user } = setup({
+        user: { verifiedAt: new Date(Date.now() - MILESTONE_FRESH_MS - 60_000) },
+      });
+      await service.signupCompleted(USER_ID);
+      expect(user.signupEventAt).toBeInstanceOf(Date);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('does not send first_run_succeeded when an earlier own-agent run finished before the window', async () => {
+      const { service, users, user } = setup({ earlierRun: true });
+      const before = Date.now();
+      await service.runSucceeded({ agentId: 'agent-1', userId: USER_ID });
+      expect(user.firstRunEventAt).toBeInstanceOf(Date);
+      expect(fetchMock).not.toHaveBeenCalled();
+      const [, [who, cutoff]] = users.manager.query.mock.calls[0];
+      expect(who).toBe(USER_ID);
+      expect(Math.abs(new Date(cutoff).getTime() - (before - MILESTONE_FRESH_MS))).toBeLessThan(5_000);
+    });
+
+    it('still sends both for a milestone that just happened', async () => {
+      const { service } = setup({ earlierRun: false });
+      await service.signupCompleted(USER_ID);
+      await service.runSucceeded({ agentId: 'agent-1', userId: USER_ID });
+      expect(sentEvents(fetchMock).map((e) => e.body.event)).toEqual([SIGNUP_COMPLETED_EVENT, FIRST_RUN_SUCCEEDED_EVENT]);
     });
   });
 

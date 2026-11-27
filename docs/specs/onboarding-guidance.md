@@ -172,7 +172,7 @@ milestones, not newly created accounts.
 
 The claim is written with or without the key; only the send needs it. Without a PostHog key
 no events are sent, but almyty still records on the account when the two milestones happened.
-Enabling a key does not replay earlier milestones.
+Enabling a key does not replay earlier milestones. An event is also sent only when the milestone is recent: the address was confirmed, or the account's earliest qualifying run finished, within the last 10 minutes. This covers milestones that an older server recorded during an upgrade without noting them. Set the key at least 10 minutes after the upgrade has finished.
 
 Delivery is best effort, at most once: the claim is written before the send, so a failed send
 is not retried, and nothing is ever sent twice.
