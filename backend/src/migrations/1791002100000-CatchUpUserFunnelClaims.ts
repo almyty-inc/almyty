@@ -8,11 +8,14 @@ import { BackfillUserFunnelClaims1791002000000 } from './1791002000000-BackfillU
  * Migrations run before the new API is rolled out. While the release with
  * BackfillUserFunnelClaims1791002000000 rolled out, servers from before
  * it were still confirming addresses and finishing runs without writing
- * the claim, so those accounts kept NULL claims. Every server running when
- * this migration runs writes the claim itself (ProductAnalyticsService
- * claims with or without a PostHog key), so this pass leaves no milestone
- * unmarked. The same rules and the same NULL-only updates as the backfill:
- * running it again changes nothing.
+ * the claim, so those accounts kept NULL claims. This pass marks them,
+ * with the same rules and NULL-only updates (running it again changes
+ * nothing), provided that every server still running when it runs
+ * already claims: the previous release finished rolling out first.
+ *
+ * An install that skips that release, and so runs both migrations before
+ * one rollout, does not have that guarantee. It runs
+ * scripts/catch-up-funnel-claims.ts after its rollout instead.
  */
 export class CatchUpUserFunnelClaims1791002100000 implements MigrationInterface {
   name = 'CatchUpUserFunnelClaims1791002100000';

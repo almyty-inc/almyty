@@ -23,6 +23,7 @@ import {
   ProductAnalyticsService,
   SIGNUP_COMPLETED_EVENT,
 } from '../../modules/product-analytics/product-analytics.service';
+import { catchUpFunnelClaims } from '../../scripts/catch-up-funnel-claims';
 import { ensureSchema } from './isolated-schema.helper';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
@@ -235,5 +236,47 @@ describeIfDb('funnel analytics catch-up after the backfill rollout (real Postgre
     await new CatchUpUserFunnelClaims1791002100000().up(qr);
     await qr.release();
     expect(await ds.query(`SELECT "id", "signupEventAt", "firstRunEventAt" FROM "users" ORDER BY "id"`)).toEqual(before);
+  });
+
+  it('direct upgrade past both migrations: the catch-up script marks what older servers wrote during the rollout', async () => {
+    // Both migrations already ran (beforeAll). Older servers write
+    // milestones without claims while the one rollout runs.
+    await user('jumpConfirmed', { isVerified: true, verifiedAt: CONFIRMED });
+    const jumpRan = await user('jumpRan', { isVerified: true, verifiedAt: CONFIRMED });
+    const jumpRun = await run(await agent('jumpRan', jumpRan.id), jumpRan.id, FINISHED);
+    await ds.query(`UPDATE "agent_runs" SET "updatedAt" = now() WHERE "id" = $1`, [jumpRun]);
+    const jumpScheduled = await user('jumpScheduled', { isVerified: true, verifiedAt: CONFIRMED });
+    await execution(await agent('jumpScheduled', jumpScheduled.id, { mode: 'workflow' } as any), null, FINISHED);
+    for (const key of ['jumpConfirmed', 'jumpRan', 'jumpScheduled']) {
+      const r = await row(key);
+      expect([r.signupEventAt, r.firstRunEventAt]).toEqual([null, null]);
+    }
+
+    // Rollout done, no old server left: the operator runs the script.
+    const { before, after } = await catchUpFunnelClaims(ds);
+    expect(after.signupClaimed - before.signupClaimed).toBe(3);
+    expect(after.firstRunClaimed - before.firstRunClaimed).toBe(2);
+    expect((await catchUpFunnelClaims(ds)).after).toEqual(after);
+
+    // Key on: email change and re-confirmation, more runs. Nothing old is sent.
+    await ds.getRepository(User).update({ id: people.jumpConfirmed.id }, { isVerified: false, verifiedAt: null });
+    await ds.getRepository(User).update({ id: people.jumpConfirmed.id }, { isVerified: true, verifiedAt: new Date() });
+    await service.signupCompleted(people.jumpConfirmed.id);
+    await run(agents.jumpRan, people.jumpRan.id, new Date());
+    await service.runSucceeded({ agentId: agents.jumpRan.id, userId: people.jumpRan.id });
+    await execution(agents.jumpScheduled, null, new Date());
+    await service.runSucceeded({ agentId: agents.jumpScheduled.id, userId: null });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Someone new afterwards is reported once per event.
+    const fresh = await user('jumpFresh', { isVerified: true, verifiedAt: new Date() });
+    const freshAgent = await agent('jumpFresh', fresh.id);
+    await Promise.all(Array.from({ length: 3 }, () => service.signupCompleted(fresh.id)));
+    await run(freshAgent, fresh.id, new Date());
+    await Promise.all(Array.from({ length: 3 }, () => service.runSucceeded({ agentId: freshAgent.id, userId: fresh.id })));
+    expect(events().map((e) => [e.event, e.distinct_id])).toEqual([
+      [SIGNUP_COMPLETED_EVENT, fresh.id],
+      [FIRST_RUN_SUCCEEDED_EVENT, fresh.id],
+    ]);
   });
 });
