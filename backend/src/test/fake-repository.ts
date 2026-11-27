@@ -106,6 +106,8 @@ export interface MatchContext {
  *  - `<col> IS NULL`
  *  - `(<col> IS NULL OR <shape>)`
  *  - `(<col>)::jsonb ->> '<key>' = '<text>'`: one key of a JSON column, as text
+ *  - `(<col>)::jsonb -> '<a>' -> '<b>' @> jsonb_build_array(jsonb_build_object('<key>', CAST(:<param> AS text)))`:
+ *    the JSON array at that path holds an object whose key is that text
  *  - the "not someone else's private resource" fragment the helpers in
  *    `monitoring/private-rows.ts` build for gateways, providers, tools and
  *    agents:
@@ -121,6 +123,10 @@ const RAW_COLUMN_RE = RAW_COLUMN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const RAW_OR_NULL = new RegExp(`^\\(${RAW_COLUMN_RE} IS NULL OR (.+)\\)$`);
 const RAW_IS_NULL = new RegExp(`^${RAW_COLUMN_RE} IS NULL$`);
 const RAW_JSON_TEXT_EQUALS = new RegExp(`^\\(${RAW_COLUMN_RE}\\)::jsonb ->> '([A-Za-z_]+)' = '([^']*)'$`);
+const RAW_JSON_ARRAY_HAS = new RegExp(
+  `^\\(${RAW_COLUMN_RE}\\)::jsonb((?: -> '[A-Za-z_]+')+) @> ` +
+    `jsonb_build_array\\(jsonb_build_object\\('([A-Za-z_]+)', CAST\\(:([A-Za-z_]+) AS text\\)\\)\\)$`,
+);
 const RAW_NOT_OTHERS_PRIVATE = new RegExp(
   `^NOT EXISTS \\(SELECT 1 FROM ([a-z_]+) ([a-z_]+) WHERE \\2\\.id = ${RAW_COLUMN_RE} ` +
     `AND \\2\\.visibility = 'private' ` +
@@ -142,6 +148,16 @@ function rawExpressionMatches(sql: string, cell: any, params: Record<string, any
     if (value === undefined) throw new UnmodelledQueryError(`a Raw predicate binds :${sameName[1]}, which has no value`);
     if (cell === null || cell === undefined || value === null) return false;
     return String(cell).trim().toLowerCase() === String(value).trim().toLowerCase();
+  }
+  const arrayHas = RAW_JSON_ARRAY_HAS.exec(sql);
+  if (arrayHas) {
+    const [, path, key, param] = arrayHas;
+    const value = params[param];
+    if (value === undefined) throw new UnmodelledQueryError(`a Raw predicate binds :${param}, which has no value`);
+    let node: any = cell;
+    for (const [, step] of path.matchAll(/ -> '([A-Za-z_]+)'/g)) node = node && typeof node === 'object' ? node[step] : undefined;
+    // jsonb @> on an array: some element holds the key with that exact text.
+    return Array.isArray(node) && node.some((el) => isPlainObject(el) && el[key] === String(value));
   }
   const jsonText = RAW_JSON_TEXT_EQUALS.exec(sql);
   if (jsonText) {

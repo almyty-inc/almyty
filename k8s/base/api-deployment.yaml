@@ -299,9 +299,11 @@ spec:
               key: TURNSTILE_SECRET
               optional: true
         # Server-side funnel events (signup_completed, first_run_succeeded)
-        # to PostHog. Optional: with POSTHOG_API_KEY unset nothing is read,
-        # stored or sent. The key is the same public project key the
-        # frontend is built with (ALMYTY_POSTHOG_KEY). POSTHOG_HOST defaults
+        # to PostHog. Optional: with POSTHOG_API_KEY unset nothing is sent
+        # (each account still records when it reached the milestones, so a
+        # key set later never reports an old one as new). The key is the
+        # same public project key the frontend is built with
+        # (ALMYTY_POSTHOG_KEY). POSTHOG_HOST defaults
         # to https://eu.i.posthog.com; POSTHOG_ENVIRONMENT tags events
         # (staging vs production) and falls back to SENTRY_ENVIRONMENT.
         - name: POSTHOG_API_KEY

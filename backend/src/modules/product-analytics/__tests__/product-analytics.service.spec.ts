@@ -214,17 +214,41 @@ describe('ProductAnalyticsService', () => {
   });
 
   describe('without POSTHOG_API_KEY', () => {
-    it('reads nothing, claims nothing and sends nothing', async () => {
+    it('claims both milestones on the user row and sends nothing', async () => {
       delete process.env.POSTHOG_API_KEY;
-      const { service, users, agents, user } = setup();
+      const { service, user } = setup();
       await service.signupCompleted(USER_ID);
       await service.runSucceeded({ agentId: 'agent-1', userId: USER_ID });
 
       expect(service.isEnabled()).toBe(false);
       expect(fetchMock).not.toHaveBeenCalled();
-      expect(users.update).not.toHaveBeenCalled();
-      expect(agents.findOne).not.toHaveBeenCalled();
+      expect(user.signupEventAt).toBeInstanceOf(Date);
+      expect(user.firstRunEventAt).toBeInstanceOf(Date);
+    });
+
+    it('never sends a milestone reached without a key once a key is set', async () => {
+      delete process.env.POSTHOG_API_KEY;
+      const { service, user } = setup();
+      await service.signupCompleted(USER_ID);
+      await service.runSucceeded({ agentId: 'agent-1', userId: USER_ID });
+
+      process.env.POSTHOG_API_KEY = 'phc_test';
+      await service.signupCompleted(USER_ID);
+      await service.runSucceeded({ agentId: 'agent-1', userId: USER_ID });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(user.signupEventAt).toBeInstanceOf(Date);
+      expect(user.firstRunEventAt).toBeInstanceOf(Date);
+    });
+
+    it('still claims nothing for an unverified account or a sample agent', async () => {
+      delete process.env.POSTHOG_API_KEY;
+      const { service, user } = setup({ user: { verifiedAt: null }, agent: { metadata: { sampleWorkspace: true } } });
+      await service.signupCompleted(USER_ID);
+      await service.runSucceeded({ agentId: 'agent-1', userId: USER_ID });
+
       expect(user.signupEventAt).toBeNull();
+      expect(user.firstRunEventAt).toBeNull();
     });
   });
 
