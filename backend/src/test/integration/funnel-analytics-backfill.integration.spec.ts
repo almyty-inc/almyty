@@ -296,4 +296,48 @@ describeIfDb('funnel analytics backfill of existing accounts (real Postgres)', (
       [FIRST_RUN_SUCCEEDED_EVENT, fresh.id],
     ]);
   });
+
+  it('notes milestones reached while no key is set, and never reports them once a key is set', async () => {
+    // Migration done, key not set yet.
+    delete process.env.POSTHOG_API_KEY;
+
+    // An existing account that never ran an own agent runs one now.
+    const builderAgent = await agent('builderOwn', people.builder.id);
+    await service.runSucceeded({ agentId: builderAgent.id, userId: people.builder.id });
+    // An existing account confirms its address for the first time.
+    await ds.getRepository(User).update({ id: people.neverConfirmed.id }, { isVerified: true, verifiedAt: new Date() });
+    await service.signupCompleted(people.neverConfirmed.id);
+    // Someone signs up, confirms and runs their first agent.
+    const early = await user('keylessNewcomer', { isVerified: true, verifiedAt: new Date() });
+    const earlyAgent = await agent('keylessNewcomer', early.id);
+    await service.signupCompleted(early.id);
+    await service.runSucceeded({ agentId: earlyAgent.id, userId: early.id });
+
+    expect((await row('builder')).firstRunEventAt).toBeInstanceOf(Date);
+    expect((await row('neverConfirmed')).signupEventAt).toBeInstanceOf(Date);
+    expect((await row('keylessNewcomer')).signupEventAt).toBeInstanceOf(Date);
+    expect((await row('keylessNewcomer')).firstRunEventAt).toBeInstanceOf(Date);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // The key is set: their next run or re-confirmation sends nothing.
+    process.env.POSTHOG_API_KEY = 'phc_integration';
+    await service.runSucceeded({ agentId: builderAgent.id, userId: people.builder.id });
+    await service.signupCompleted(people.neverConfirmed.id);
+    await service.signupCompleted(early.id);
+    await service.runSucceeded({ agentId: earlyAgent.id, userId: early.id });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Someone new from here on is reported once per event, even with
+    // callers racing for each claim.
+    const late = await user('keyedNewcomer', { isVerified: true, verifiedAt: new Date() });
+    const lateAgent = await agent('keyedNewcomer', late.id);
+    await Promise.all(Array.from({ length: 5 }, () => service.signupCompleted(late.id)));
+    await Promise.all(Array.from({ length: 5 }, () => service.runSucceeded({ agentId: lateAgent.id, userId: late.id })));
+    await service.signupCompleted(late.id);
+    await service.runSucceeded({ agentId: lateAgent.id, userId: late.id });
+    expect(events().map((e) => [e.event, e.distinct_id])).toEqual([
+      [SIGNUP_COMPLETED_EVENT, late.id],
+      [FIRST_RUN_SUCCEEDED_EVENT, late.id],
+    ]);
+  });
 });
