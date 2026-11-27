@@ -19,19 +19,6 @@ export const FIRST_RUN_SUCCEEDED_EVENT = 'first_run_succeeded';
 /** How long one capture may take before it is abandoned. */
 const CAPTURE_TIMEOUT_MS = 5_000;
 
-/**
- * How recent a milestone must be to be sent. A claim is only won by the
- * first caller that sees the milestone, but a milestone can also be
- * written by code that never claims it: a server from before the claim
- * existed, still running during a rolling deploy. Its user row keeps a
- * NULL claim, and without this check the next keyed call would report an
- * old milestone as new. So the send also checks the evidence: the address
- * was confirmed, or the user's earliest qualifying run finished, within
- * this window. Turn the key on at least this long after the last such
- * server is gone.
- */
-export const MILESTONE_FRESH_MS = 10 * 60_000;
-
 /** A run that reached completed. */
 export interface RunSucceeded {
   agentId: string;
@@ -63,8 +50,7 @@ export interface RunSucceeded {
  * timestamp on the user's own row noting that the milestone happened.
  * Only the send needs the key, and a milestone reached without one is
  * never sent later, so turning PostHog on never reports an old milestone
- * as new. Without a key nothing leaves the system. A milestone that older
- * code wrote without claiming is caught at send time (MILESTONE_FRESH_MS).
+ * as new. Without a key nothing leaves the system.
  *
  * Delivery is one fetch to PostHog's /capture/ endpoint rather than
  * posthog-node: two events per user do not need a batching client, its
@@ -104,12 +90,7 @@ export class ProductAnalyticsService {
       );
       if (!claimed?.affected || !this.isEnabled()) return;
 
-      const user = await this.users.findOne({
-        where: { id: userId },
-        select: { id: true, signupAttribution: true, verifiedAt: true },
-      });
-      // Confirmed earlier, by a server that did not claim it: not new.
-      if (!user?.verifiedAt || new Date(user.verifiedAt).getTime() < Date.now() - MILESTONE_FRESH_MS) return;
+      const user = await this.users.findOne({ where: { id: userId }, select: { id: true, signupAttribution: true } });
       const membership = await this.memberships.findOne({
         where: { userId },
         relations: { organization: true },
@@ -147,8 +128,6 @@ export class ProductAnalyticsService {
         { firstRunEventAt: new Date() },
       );
       if (!claimed?.affected || !this.isEnabled()) return;
-      // An earlier qualifying run finished without a claim: not new.
-      if (await this.hasEarlierQualifyingRun(userId, new Date(Date.now() - MILESTONE_FRESH_MS))) return;
 
       const [user, organization] = await Promise.all([
         this.users.findOne({ where: { id: userId }, select: { id: true, signupAttribution: true } }),
@@ -163,38 +142,6 @@ export class ProductAnalyticsService {
     } catch (err) {
       this.logger.warn(`first_run_succeeded for agent ${run?.agentId} not sent: ${(err as Error)?.message}`);
     }
-  }
-
-  /**
-   * Whether the user has a completed run of an own agent that finished
-   * before `before`. The same rules as the claim (onboarding/real-activation.ts)
-   * and the backfill migration (BackfillUserFunnelClaims1791002000000):
-   * not `isTemporary`, no `metadata.sampleWorkspace`, counted for the user
-   * who started it, else the agent's creator, autonomous runs and workflow
-   * executions both, `updatedAt` as the finish time.
-   */
-  private async hasEarlierQualifyingRun(userId: string, before: Date): Promise<boolean> {
-    const rows: Array<{ earlier: boolean }> = await this.users.manager.query(
-      `SELECT EXISTS (
-         SELECT 1 FROM "agent_runs" r
-           JOIN "agents" a ON a."id"::text = r."agentId"::text
-          WHERE r."status" = 'completed'
-            AND a."isTemporary" IS NOT TRUE
-            AND (a."metadata" IS NULL OR a."metadata"->>'sampleWorkspace' IS NULL)
-            AND COALESCE(r."userId"::text, a."createdBy"::text) = $1
-            AND r."updatedAt"::timestamptz < $2::timestamptz
-         UNION ALL
-         SELECT 1 FROM "agent_executions" e
-           JOIN "agents" a ON a."id"::text = e."agentId"::text
-          WHERE e."status" = 'completed'
-            AND a."isTemporary" IS NOT TRUE
-            AND (a."metadata" IS NULL OR a."metadata"->>'sampleWorkspace' IS NULL)
-            AND COALESCE(e."userId"::text, a."createdBy"::text) = $1
-            AND e."updatedAt"::timestamptz < $2::timestamptz
-       ) AS "earlier"`,
-      [userId, before.toISOString()],
-    );
-    return !!rows?.[0]?.earlier;
   }
 
   private async capture(distinctId: string, event: string, properties: Record<string, unknown>): Promise<void> {
